@@ -89,6 +89,8 @@ export interface Category {
   waveId: string | null;
   /** Choix individuel : id d'une vague, « none » (en attente) ou null (règles). */
   waveOverride: string | null;
+  /** Tranches des combattants d'origine (non recasés), qui décident de la vague. */
+  waveBands: string[];
   /** Rang de passage sur la zone. */
   order: number;
   registrationIds: string[];

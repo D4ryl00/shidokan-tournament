@@ -395,3 +395,52 @@ describe('pesée par vague', () => {
     expect(waves.map((w) => w.weighInClosed)).toEqual([true, false]);
   });
 });
+
+describe('pesée par vague (relecture)', () => {
+  const bands = ['poussin', 'pupille', 'benjamin', 'minime', 'cadet', 'junior', 'senior'];
+  test('catégorie d’arrivée d’un recasement : garde sa vague', async () => {
+    const minime = await reg({ lastName: 'MINI', ageBandCode: 'minime', weightClassId: 'minime:F:-50' });
+    for (let i = 0; i < 3; i++) await reg({ lastName: `CAD${i}`, weightClassId: 'cadet:F:-54' });
+    const [matin, aprem] = (await call('PUT', '/waves', [
+      { name: 'Matin', rules: { ageBandCodes: ['poussin', 'pupille', 'benjamin', 'minime'], disciplines: [] } },
+      { name: 'Après-midi', rules: { ageBandCodes: ['cadet', 'junior', 'senior'], disciplines: [] } },
+    ])).json() as { id: string }[];
+    const cadets = (await categories()).find((c) => c.label.includes('Cadets'))!;
+    expect((await call('POST', '/replacement/move', { registrationId: minime.id, categoryId: cadets.id })).statusCode).toBe(200);
+    const after = ((await call('GET', '/categories')).json() as { id: string; waveId: string | null }[]).find((c) => c.id === cadets.id)!;
+    expect(after.waveId).toBe(aprem!.id);
+    void matin;
+  });
+
+  test('sans vague : clôturer ne marque pas absent un combattant déjà présent (inscrit ensuite sur place en kata)', async () => {
+    const a = await reg({ lastName: 'PESEE' });
+    await call('PUT', `/weigh-in/${a.fighterId}`, { weighInKg: 53 });
+    await call('POST', '/registrations', { clubId: null, lastName: 'PESEE', firstName: 'x', sex: 'F', ageBandCode: 'cadet', discipline: 'kata', ruleset: null, weightClassId: null, source: 'onsite' });
+    const closed = (await call('POST', '/weigh-in/close')).json() as { markedAbsent: number };
+    expect(closed.markedAbsent).toBe(0);
+    const regs = (await call('GET', '/registrations')).json() as { presence: string }[];
+    expect(regs.map((r) => r.presence)).toEqual(['present', 'present']);
+  });
+
+  test('avec des vagues : pointage et clôture sans vague refusés (400), poids non enregistré', async () => {
+    const a = await reg({ lastName: 'X' });
+    await call('PUT', '/waves', [{ name: 'Tous', rules: { ageBandCodes: bands, disciplines: [] } }]);
+    expect((await call('POST', '/weigh-in/close')).statusCode).toBe(400);
+    expect((await call('PUT', `/weigh-in/${a.fighterId}`, { presence: 'present' })).statusCode).toBe(400);
+    expect((await call('PUT', `/weigh-in/${a.fighterId}`, { weighInKg: 77, waveId: 'inconnue' })).statusCode).toBe(404);
+    const w = (await call('GET', '/registrations')).json() as { fighter: { weighInKg: number | null } }[];
+    expect(w[0]!.fighter.weighInKg).toBeNull();
+  });
+
+  test('compteurs du recasement : un combattant présent dans une vague compte comme présent', async () => {
+    const a = await reg({ lastName: 'DEUX' });
+    await call('POST', '/registrations', { clubId: null, lastName: 'DEUX', firstName: 'x', sex: 'F', ageBandCode: 'cadet', discipline: 'kata', ruleset: null, weightClassId: null, source: 'manual' });
+    const [kata, combat] = (await call('PUT', '/waves', [
+      { name: 'Kata', rules: { ageBandCodes: [], disciplines: ['kata'] } },
+      { name: 'Combats', rules: { ageBandCodes: bands, disciplines: [] } },
+    ])).json() as { id: string }[];
+    await call('PUT', `/weigh-in/${a.fighterId}`, { presence: 'present', waveId: kata!.id });
+    await call('PUT', `/weigh-in/${a.fighterId}`, { presence: 'absent', waveId: combat!.id });
+    expect((await replacement()).summary).toMatchObject({ present: 1, absent: 0, unknown: 0 });
+  });
+});

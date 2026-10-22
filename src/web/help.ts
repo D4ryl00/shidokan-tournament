@@ -186,7 +186,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Une vague a sa propre pesée et son propre recasement ; pendant qu’une vague combat, la suivante peut déjà se peser.',
       [
         '« Ajouter une vague », nommez-la, puis cochez les tranches d’âge (et, si besoin, les disciplines) qu’elle prend.',
-        'Une catégorie suit sa plus jeune tranche d’âge ; une catégorie créée plus tard (inscription sur place) rejoint d’office la vague qui lui correspond.',
+        'Une catégorie suit la plus jeune tranche d’âge de ses combattants ; un combattant recasé depuis une autre tranche ne la fait pas changer de vague. Une catégorie créée plus tard (inscription sur place) rejoint d’office la vague qui lui correspond.',
         'Si une catégorie correspond à deux vagues, elle va dans la première (dans l’ordre des cartes) et une alerte l’indique.',
         '« Retirer » met une catégorie en attente ; « Ajouter à… » la place à la main dans une vague (marquée « ajoutée à la main ») ; « Revenir aux règles » annule ce choix.',
         '« Enregistrer les vagues » enregistre les noms, l’ordre et les règles ; les retraits et ajouts à la main s’appliquent tout de suite.',

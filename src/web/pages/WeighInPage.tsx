@@ -1,5 +1,5 @@
 import '../print.css';
-import { Badge, Button, Group, Modal, NumberInput, SegmentedControl, Stack, Table, Text, TextInput } from '@mantine/core';
+import { Badge, Button, Group, Loader, Modal, NumberInput, SegmentedControl, Stack, Table, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
@@ -42,17 +42,17 @@ function WeightCell({ fighter, index, onSave }: { fighter: WeighInFighter; index
 
 /** Vague choisie (adresse `?vague=`), par défaut la première ; null sans vague. */
 function useSelectedWave(id: string) {
-  const { data: waves = [] } = useWaves(id);
+  const { data: waves = [], isSuccess } = useWaves(id);
   const [params, setParams] = useSearchParams();
   const asked = params.get('vague');
   const waveId = waves.find((w) => w.id === asked)?.id ?? waves[0]?.id ?? null;
   const select = (v: string) => setParams((p) => { p.set('vague', v); return p; }, { replace: true });
-  return { waves, waveId, select };
+  return { waves, waveId, select, ready: isSuccess };
 }
 
 export function WeighInPage() {
   const { id = '' } = useParams();
-  const { waves, waveId, select } = useSelectedWave(id);
+  const { waves, waveId, select, ready } = useSelectedWave(id);
   const { data } = useWeighIn(id, waveId);
   const sheetQuery = waveId ? `vague=${encodeURIComponent(waveId)}` : '';
   const { data: grid } = useGrid(id);
@@ -64,6 +64,8 @@ export function WeighInPage() {
   const all = data?.fighters ?? [];
   const count = (p: Presence) => all.filter((f) => f.presence === p).length;
 
+  // Tant que les vagues ne sont pas chargées, on ne sait pas quelle pesée afficher (jamais « toute la compétition » par erreur).
+  if (!ready) return <Loader />;
   return (
     <Stack>
       {waves.length > 0 && (

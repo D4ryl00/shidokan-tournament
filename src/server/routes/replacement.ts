@@ -19,8 +19,7 @@ import {
   unrefuseProposal,
   setWeighIn,
   undoRecasement,
-  weighInList,
-} from '../repositories/replacement.js';
+  weighInList, fighterPresence } from '../repositories/replacement.js';
 
 type P = { Params: { id: string } };
 const mode = z.enum(['simple', 'all']);
@@ -51,8 +50,10 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
     const state = await loadState(db, req.params.id);
     const proposals = allProposals(state);
     const shown = displayedProposals(state);
-    const fighters = new Map(state.members.map((m) => [m.fighterId, m.presence]));
-    const presence = [...fighters.values()];
+    // Par combattant, d'après toutes ses inscriptions (présent s'il l'est dans une vague).
+    const byFighter = new Map<string, typeof state.members>();
+    for (const m of state.members) byFighter.set(m.fighterId, [...(byFighter.get(m.fighterId) ?? []), m]);
+    const presence = [...byFighter.values()].map(fighterPresence);
     const cases = detectCases(state);
     return {
       cases,

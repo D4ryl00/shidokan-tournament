@@ -44,6 +44,8 @@ interface Context {
   entrants: Map<string, Entrant>;
   waves: Wave[];
   grid: CategoryGrid;
+  /** Tranches des combattants d'origine (non recasés) de chaque catégorie. */
+  waveBands: Map<string, string[]>;
 }
 
 async function loadContext(db: AppDb, competitionId: string): Promise<Context> {
@@ -54,14 +56,19 @@ async function loadContext(db: AppDb, competitionId: string): Promise<Context> {
   const members = new Map<string, string[]>();
   const active = new Map<string, string[]>();
   const entrants = new Map<string, Entrant>();
+  const waveBands = new Map<string, Set<string>>();
   for (const r of regs) {
     const f = fs.get(r.fighterId)!;
     entrants.set(r.id, { registrationId: r.id, clubId: f.clubId, label: `${f.lastName} ${f.firstName}`.trim() });
     if (!r.categoryId) continue;
+    if (!r.placementLocked) waveBands.set(r.categoryId, (waveBands.get(r.categoryId) ?? new Set()).add(f.ageBandCode));
     members.set(r.categoryId, [...(members.get(r.categoryId) ?? []), r.id]);
     if (r.presence !== 'absent') active.set(r.categoryId, [...(active.get(r.categoryId) ?? []), r.id]);
   }
-  return { settings: competition.settings, members, active, entrants, waves: await listWaves(db, competitionId), grid: await getGrid(db, competitionId) };
+  return {
+    settings: competition.settings, members, active, entrants, waves: await listWaves(db, competitionId), grid: await getGrid(db, competitionId),
+    waveBands: new Map([...waveBands].map(([k, v]) => [k, [...v]])),
+  };
 }
 
 function effectiveFormat(row: Row, key: CategoryKey, count: number, ctx: Context): BracketFormat {
@@ -216,8 +223,9 @@ function toCategory(row: Row, ctx: Context): Category {
     seed: row.seed,
     bracket: withCurrentLabels(row.bracketJson ? (JSON.parse(row.bracketJson) as Bracket) : null, ctx),
     zoneId: row.zoneId,
-    waveId: waveOfCategory({ key, waveOverride: row.waveOverride }, ctx.waves, ctx.grid),
+    waveId: waveOfCategory({ key, waveOverride: row.waveOverride, waveBands: ctx.waveBands.get(row.id) ?? [] }, ctx.waves, ctx.grid),
     waveOverride: row.waveOverride,
+    waveBands: ctx.waveBands.get(row.id) ?? [],
     order: row.sortOrder,
     registrationIds: [...ids].sort(),
     absentIds: ids.filter((id) => !(ctx.active.get(row.id) ?? []).includes(id)).sort(),

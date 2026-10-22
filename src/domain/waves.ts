@@ -28,19 +28,26 @@ export const WAVE_NONE = 'none';
 export const WAVE_MAX = 20;
 export const WAVE_NAME_MAX = 40;
 
-/** Tranche la plus jeune d'une catégorie (une catégorie fusionnée suit sa plus jeune tranche). */
-function youngestBand(key: CategoryKey, grid: CategoryGrid): string | undefined {
+/** Tranche la plus jeune parmi `codes`. */
+function youngestBand(codes: string[], grid: CategoryGrid): string | undefined {
   const index = (code: string) => {
     const i = grid.ageBands.findIndex((b) => b.code === code);
     return i < 0 ? Number.MAX_SAFE_INTEGER : i;
   };
-  return [...key.ageBandCodes].sort((a, b) => index(a) - index(b))[0];
+  return [...codes].sort((a, b) => index(a) - index(b))[0];
 }
 
+/**
+ * Tranches qui décident de la vague : celles des combattants d'origine de la catégorie (`waveBands`, sans les recasés),
+ * pour qu'une catégorie d'arrivée garde sa vague ; à défaut, celles de sa clé.
+ */
+type WaveSubject = { key: CategoryKey; waveBands?: string[] };
+const bandsOf = (c: WaveSubject) => (c.waveBands && c.waveBands.length ? c.waveBands : c.key.ageBandCodes);
+
 /** La règle prend la catégorie : tranche et discipline acceptées ; une règle vide ne prend rien. */
-export function ruleMatches(rules: WaveRules, key: CategoryKey, grid: CategoryGrid): boolean {
+export function ruleMatches(rules: WaveRules, key: CategoryKey, grid: CategoryGrid, waveBands?: string[]): boolean {
   if (rules.ageBandCodes.length === 0 && rules.disciplines.length === 0) return false;
-  const band = youngestBand(key, grid);
+  const band = youngestBand(bandsOf({ key, waveBands }), grid);
   const bandOk = rules.ageBandCodes.length === 0 || (band !== undefined && rules.ageBandCodes.includes(band));
   const disciplineOk = rules.disciplines.length === 0 || rules.disciplines.includes(key.discipline);
   return bandOk && disciplineOk;
@@ -49,22 +56,22 @@ export function ruleMatches(rules: WaveRules, key: CategoryKey, grid: CategoryGr
 const byOrder = (waves: Wave[]) => [...waves].sort((a, b) => a.order - b.order);
 
 /** Vague d'une catégorie : choix individuel, sinon la première vague dont la règle la prend, sinon aucune (en attente). */
-export function waveOfCategory(c: { key: CategoryKey; waveOverride: string | null }, waves: Wave[], grid: CategoryGrid): string | null {
+export function waveOfCategory(c: WaveSubject & { waveOverride: string | null }, waves: Wave[], grid: CategoryGrid): string | null {
   if (c.waveOverride === WAVE_NONE) return null;
   if (c.waveOverride && waves.some((w) => w.id === c.waveOverride)) return c.waveOverride;
-  return byOrder(waves).find((w) => ruleMatches(w.rules, c.key, grid))?.id ?? null;
+  return byOrder(waves).find((w) => ruleMatches(w.rules, c.key, grid, c.waveBands))?.id ?? null;
 }
 
 /** Catégories (sans choix individuel) prises par les règles de plusieurs vagues : elles vont dans la première. */
 export function waveConflicts(
-  cats: { id: string; key: CategoryKey; waveOverride: string | null }[],
+  cats: (WaveSubject & { id: string; waveOverride: string | null })[],
   waves: Wave[],
   grid: CategoryGrid,
 ): { categoryId: string; waveIds: string[] }[] {
   const ordered = byOrder(waves);
   return cats
     .filter((c) => !c.waveOverride || (c.waveOverride !== WAVE_NONE && !waves.some((w) => w.id === c.waveOverride)))
-    .map((c) => ({ categoryId: c.id, waveIds: ordered.filter((w) => ruleMatches(w.rules, c.key, grid)).map((w) => w.id) }))
+    .map((c) => ({ categoryId: c.id, waveIds: ordered.filter((w) => ruleMatches(w.rules, c.key, grid, c.waveBands)).map((w) => w.id) }))
     .filter((x) => x.waveIds.length > 1);
 }
 

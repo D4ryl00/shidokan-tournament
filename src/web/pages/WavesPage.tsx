@@ -33,9 +33,9 @@ export function WavesPage() {
   // Aperçu immédiat : la vague de chaque catégorie est recalculée avec les vagues en cours d'édition.
   const editing: Wave[] = drafts.map((d, order) => ({ id: d.id ?? d.key, name: d.name, order, rules: d.rules, weighInClosed: false }));
   const listed = categories.filter((c) => c.registrationIds.length > 0);
-  const waveOf = (c: Category) => (grid ? waveOfCategory({ key: c.key, waveOverride: c.waveOverride }, editing, grid) : null);
+  const waveOf = (c: Category) => (grid ? waveOfCategory({ key: c.key, waveOverride: c.waveOverride, waveBands: c.waveBands }, editing, grid) : null);
   const conflicts = useMemo(
-    () => (grid ? waveConflicts(listed.map((c) => ({ id: c.id, key: c.key, waveOverride: c.waveOverride })), editing, grid) : []),
+    () => (grid ? waveConflicts(listed.map((c) => ({ id: c.id, key: c.key, waveOverride: c.waveOverride, waveBands: c.waveBands })), editing, grid) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [grid, categories, drafts],
   );

@@ -56,3 +56,10 @@ test('validation des vagues', () => {
   expect(validateWaves(Array.from({ length: 21 }, (_, i) => ({ name: `V${i}`, rules: r })))).toEqual(['Pas plus de 20 vagues.']);
   expect(validateWaves([{ id: 'w', name: 'A', rules: r }, { id: 'w', name: 'B', rules: r }])).toEqual(['La même vague apparaît deux fois dans la liste.']);
 });
+
+test('relecture : catégorie d’arrivée d’un recasement — sa vague suit ses propres combattants', () => {
+  // Cadets ayant reçu un minime recasé : clé « minime + cadet », mais tranches des combattants d'origine = cadet
+  expect(waveOfCategory({ key: key(['cadet', 'minime']), waveOverride: null, waveBands: ['cadet'] }, [MATIN, APREM], grid)).toBe('aprem');
+  // Sans combattant d'origine (catégorie créée par le recasement) : clé de la catégorie
+  expect(waveOfCategory({ key: key(['cadet', 'minime']), waveOverride: null, waveBands: [] }, [MATIN, APREM], grid)).toBe('matin');
+});

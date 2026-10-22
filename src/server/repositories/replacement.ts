@@ -21,11 +21,10 @@ import {
 } from '../../domain/replacement/index.js';
 import type { AppDb } from '../db/client.js';
 import { categories, clubs, competitions, fighters, recasements, refusals, registrations, waves } from '../db/schema.js';
-import { waveOfCategory } from '../../domain/waves.js';
 import { listWaves } from './waves.js';
-import { CategoryLockedError, syncCategories } from './categories.js';
+import { CategoryLockedError, listCategories, syncCategories } from './categories.js';
 import { getCompetition, getGrid } from './competitions.js';
-import { NotFoundError } from './registrations.js';
+import { NotFoundError, RegistrationValidationError } from './registrations.js';
 
 export class StaleProposalError extends Error {
   constructor(message = "La situation a changé depuis l'affichage : rechargez les propositions.") {
@@ -332,30 +331,29 @@ export async function listRecasements(db: AppDb, competitionId: string) {
 
 /** Inscriptions des catégories d'une vague (vague inconnue : erreur 404). */
 async function registrationsOfWave(db: AppDb, competitionId: string, waveId: string): Promise<Set<string>> {
-  const all = await listWaves(db, competitionId);
-  if (!all.some((w) => w.id === waveId)) throw new NotFoundError('Vague introuvable');
-  const grid = await getGrid(db, competitionId);
-  const inWave = new Set(
-    db.select().from(categories).where(eq(categories.competitionId, competitionId)).all()
-      .filter((c) => waveOfCategory({ key: JSON.parse(c.keyJson), waveOverride: c.waveOverride }, all, grid) === waveId)
-      .map((c) => c.id),
-  );
-  return new Set(
-    db.select().from(registrations).where(eq(registrations.competitionId, competitionId)).all()
-      .filter((r) => r.categoryId !== null && inWave.has(r.categoryId))
-      .map((r) => r.id),
-  );
+  if (!(await listWaves(db, competitionId)).some((w) => w.id === waveId)) throw new NotFoundError('Vague introuvable');
+  // Même calcul que l'écran (vague des catégories d'après leurs combattants d'origine).
+  return new Set((await listCategories(db, competitionId)).filter((c) => c.waveId === waveId).flatMap((c) => c.registrationIds));
+}
+
+/** Avec des vagues, la pesée se fait toujours dans une vague : refus d'un pointage ou d'une clôture « toutes vagues ». */
+async function requireWave(db: AppDb, competitionId: string, waveId: string | undefined): Promise<void> {
+  if (!waveId && (await listWaves(db, competitionId)).length > 0) {
+    throw new RegistrationValidationError(['Choisissez la vague de la pesée (rechargez la page si les vagues viennent d’être créées).']);
+  }
 }
 
 /** Pesée d'un combattant ; avec une vague, la présence ne porte que sur ses inscriptions de cette vague. */
 export async function setWeighIn(db: AppDb, competitionId: string, fighterId: string, data: { presence?: Presence; weighInKg?: number | null; waveId?: string }): Promise<void> {
   const f = db.select().from(fighters).where(and(eq(fighters.id, fighterId), eq(fighters.competitionId, competitionId))).get();
   if (!f) throw new NotFoundError('Combattant introuvable');
+  await requireWave(db, competitionId, data.waveId);
+  // Vague vérifiée avant toute écriture (une vague inconnue n'enregistre pas le poids).
+  const scope = data.waveId ? [...(await registrationsOfWave(db, competitionId, data.waveId))] : null;
   if (data.weighInKg !== undefined) db.update(fighters).set({ weighInKg: data.weighInKg }).where(eq(fighters.id, fighterId)).run();
   // Un poids relevé vaut présence ; la présence se note sur les inscriptions du combattant.
   const presence = data.presence ?? (data.weighInKg !== undefined && data.weighInKg !== null ? 'present' : undefined);
   if (presence) {
-    const scope = data.waveId ? [...(await registrationsOfWave(db, competitionId, data.waveId))] : null;
     db.update(registrations)
       .set({ presence })
       .where(and(eq(registrations.fighterId, fighterId), scope ? inArray(registrations.id, scope) : undefined))
@@ -364,20 +362,29 @@ export async function setWeighIn(db: AppDb, competitionId: string, fighterId: st
   await recomputeKeys(db, competitionId, mergedCategoryIds);
 }
 
-/** Clôture de la pesée : non pesés → absents ; avec une vague, seulement ceux de cette vague. */
+/**
+ * Clôture de la pesée (avec une vague : seulement celle-ci). Un combattant déjà présent (inscription ajoutée après sa pesée,
+ * sur place par exemple) le reste pour toutes ses inscriptions de la vague ; les autres non pesés deviennent absents.
+ */
 export async function closeWeighIn(db: AppDb, competitionId: string, waveId?: string): Promise<{ markedAbsent: number }> {
-  const scope = waveId ? [...(await registrationsOfWave(db, competitionId, waveId))] : null;
-  const unknownRegs = and(eq(registrations.competitionId, competitionId), eq(registrations.presence, 'unknown'), scope ? inArray(registrations.id, scope) : undefined);
-  const unknown = new Set(db.select().from(registrations).where(unknownRegs).all().map((r) => r.fighterId));
-  db.update(registrations).set({ presence: 'absent' }).where(unknownRegs).run();
+  await requireWave(db, competitionId, waveId);
+  const scope = waveId ? await registrationsOfWave(db, competitionId, waveId) : null;
+  const regs = db.select().from(registrations).where(eq(registrations.competitionId, competitionId)).all().filter((r) => !scope || scope.has(r.id));
+  const present = new Set(regs.filter((r) => r.presence === 'present').map((r) => r.fighterId));
+  const unknown = regs.filter((r) => r.presence === 'unknown');
+  const promote = unknown.filter((r) => present.has(r.fighterId)).map((r) => r.id);
+  const absent = unknown.filter((r) => !present.has(r.fighterId));
+  if (promote.length) db.update(registrations).set({ presence: 'present' }).where(inArray(registrations.id, promote)).run();
+  if (absent.length) db.update(registrations).set({ presence: 'absent' }).where(inArray(registrations.id, absent.map((r) => r.id))).run();
+  const markedAbsent = new Set(absent.map((r) => r.fighterId));
   if (waveId) db.update(waves).set({ weighInClosed: true }).where(eq(waves.id, waveId)).run();
   else db.update(competitions).set({ weighInClosed: true }).where(eq(competitions.id, competitionId)).run();
   await recomputeKeys(db, competitionId, mergedCategoryIds);
-  return { markedAbsent: unknown.size };
+  return { markedAbsent: markedAbsent.size };
 }
 
 /** Présence d'un combattant d'après ses inscriptions : présent si l'une l'est, absent si toutes le sont, sinon non pesé. */
-function fighterPresence(members: Member[]): Presence {
+export function fighterPresence(members: Pick<Member, 'presence'>[]): Presence {
   if (members.some((m) => m.presence === 'present')) return 'present';
   if (members.length > 0 && members.every((m) => m.presence === 'absent')) return 'absent';
   return 'unknown';
