@@ -26,7 +26,7 @@ Le projet est découpé en étapes (1 à 7 : première version ; 8 à 14 : conce
 
 ## État au 2026-10-22
 
-Les étapes 1 à 14 sont réalisées, relues et fusionnées dans `main` (659 tests unitaires, 43 parcours d'interface sur Chrome, image Docker construite et démarrée, migrations 0012 et 0013 comprises). Décisions prises, corrections après relecture et points mineurs : `docs/superpowers/plans/2026-10-21-99-bilan.md`. La conception principale renvoie au second document pour les vagues, les zones et l'ordre de passage. Reste : la **répétition générale** sur le PC de la table centrale.
+Les étapes 1 à 14 sont réalisées, relues et fusionnées dans `main` (659 tests unitaires, 43 parcours d'interface sur Chrome, image Docker construite et démarrée, migrations 0012 et 0013 comprises). Décisions prises, corrections après relecture et points mineurs : `docs/superpowers/plans/2026-10-21-99-bilan.md`. La conception principale renvoie au second document pour les vagues, les zones et l'ordre de passage. Retours de l'organisateur sur la compétition Démo traités le 2026-10-23 (666 tests unitaires, 44 parcours d'interface ; voir le bilan). Reste : la **répétition générale** sur le PC de la table centrale.
 
 ## Pourquoi cet ordre
 - **La fiche club part en premier** (étape 2) : les clubs doivent la recevoir plusieurs semaines avant la compétition, alors que l'export FFK n'arrive qu'à la clôture. Solution de secours si l'étape 2 prend du retard : le modèle .ods peut être produit et envoyé seul ; son import suivra.

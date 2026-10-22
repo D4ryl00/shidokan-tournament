@@ -1,7 +1,7 @@
 # App de tableaux pour compétitions Shidokan : document de conception
 
 > **Statut : conception validée le 2026-10-21, construite** (étapes 1 à 14, voir `docs/superpowers/plans/2026-10-21-00-feuille-de-route.md`). Complétée par `docs/superpowers/specs/2026-10-22-ordre-de-passage-et-aides-design.md` (vagues, zones de combat, ordre de passage, aides) : en cas de différence, ce second document fait foi.
-> Dernière mise à jour : 2026-10-22. Mainteneur : Remi.
+> Dernière mise à jour : 2026-10-23. Mainteneur : Remi.
 >
 > Légende : ✅ décidé par l'équipe · 🟡 présumé, en attente de confirmation de la personne qui fait les tableaux · 💡 choix de Claude, à valider ou à corriger
 >
@@ -86,7 +86,7 @@ Valables pour les disciplines de combat :
 | **Shobu ippon kumite** | oui | **adultes uniquement** |
 
 - Le combattant choisit son règlement. **On ne tient pas compte du grade ni du niveau.**
-- Passage de **shobu à jiyu** : possible, avec validation. Passage de **jiyu à shobu** : jamais.
+- Passage de **shobu à jiyu** : possible, avec validation, **seulement si le réglage de la compétition l'autorise** ✅ (2026-10-23, désactivé par défaut). Passage de **jiyu à shobu** : jamais.
 - Le règlement fait partie de la catégorie : une catégorie jiyu et une catégorie shobu sont deux tableaux distincts.
 - 💡 Règlement absent de l'import (cas fréquent dans l'export FFK) : **jiyu par défaut**. On le complète avec la fiche club, sinon on le corrige à la main.
 
@@ -204,6 +204,7 @@ Kata et triathlon : inscription possible sur la fiche ✅, mais **jamais dans le
 - ✅ (2026-10-22) La pesée se fait **par vague** (« Samedi matin », « Dimanche »…) quand la compétition en a : liste, compteurs, feuilles de pesée et clôture ne portent que sur les catégories de la vague choisie. La **présence est tenue par inscription** : un combattant inscrit en kata le matin et en combat l'après-midi est pointé dans chaque vague ; son poids relevé reste le même. Détails : second document, §1.3 et §1.4.
 - Écran de pesée rapide : recherche par nom ou club, saisie du poids, case « présent ».
 - **Tolérance** réglable, par défaut 300 g pour les hommes et 500 g pour les femmes (FFK).
+- ✅ (2026-10-23, règle FFK confirmée) La limite fait partie de la catégorie : en -40 kg, 40,0 kg reste en -40 kg (et jusqu'à 40,3 kg pour un homme). La dernière catégorie, ouverte (« +84 kg »), prend tous les poids au-dessus.
 - Un poids hors de la catégorie (tolérance comprise) crée **une proposition de recasement** vers la catégorie qui correspond au poids réel. Rien n'est appliqué sans validation (§2).
 - À la clôture de la pesée (de la vague), l'organisateur confirme que les non-pesés sont **absents** ; un combattant déjà présent (inscrit ensuite sur place) le reste.
 - Feuilles de pesée imprimables, par club ou par catégorie.
@@ -232,6 +233,7 @@ Tous réglables **pour chaque compétition**.
 | Mélange mineurs / adultes | **désactivé** (si activé : proposé, validation manuelle) |
 | Mélange seniors / vétérans | **activé** 🟡, désactivable, validation manuelle |
 | Mélange filles / garçons | **désactivé** ; si activé, choix des catégories concernées |
+| Passage de shobu à jiyu (type G) | **désactivé** ✅ (2026-10-23) ; si activé : proposé, validation manuelle |
 | Plusieurs disciplines de combat le même jour | désactivé |
 
 💡 L'écart de poids d'une catégorie se mesure entre **le plus léger et le plus lourd** de ses combattants, avec les poids réels de la pesée (ou la limite de la catégorie si le combattant n'est pas encore pesé).
@@ -245,7 +247,7 @@ Tous réglables **pour chaque compétition**.
 | D | Mélange seniors / vétérans | manuelle, si l'option est activée 🟡 |
 | E | Mélange mineurs / adultes | manuelle, si l'option est activée ✅ |
 | F | Mélange filles / garçons | manuelle, si l'option est activée pour la catégorie ✅ |
-| G | Shobu → jiyu | manuelle ✅ |
+| G | Shobu → jiyu | manuelle ✅, seulement si le réglage l'autorise |
 | H | Autre discipline, selon les préférences | manuelle ✅ |
 | R | **Retour dans la catégorie d'origine** | 💡 cas simple, comme A ✅ (le retour lui-même est décidé) |
 
@@ -264,9 +266,12 @@ Tous réglables **pour chaque compétition**.
   - une discipline que le combattant n'a pas acceptée ;
   - une option de la compétition désactivée ;
   - une catégorie **déjà lancée** (§11.3).
+- ✅ (2026-10-23) **« Split »** : un combattant **seul** peut aussi recevoir le plus lourd, ou les deux plus lourds (pour former une poule de 3), de la catégorie de poids **juste en dessous** (même discipline, règlement, sexe et tranche d'âge), s'il y en reste au moins deux. Jamais dans l'autre sens (on ne fait pas descendre un combattant vers une catégorie plus légère). Ces combattants n'avaient pas de problème : la proposition est **toujours manuelle**, jamais validée en masse, et ils ne « reviennent » pas d'eux-mêmes. Chacun a sa ligne dans l'historique (annulable).
 - Si le club a donné son **pré-accord**, les propositions C et B portent la mention « pré-accord coach ».
 - **Écart d'âge** : quand un combattant affronte un plus jeune, une alerte s'affiche sur la fiche du combat. Le coach du plus âgé lui demande en général d'y aller plus doucement.
 - Si aucune solution n'existe : le combattant est signalé « **sans adversaire** ». L'organisateur peut le déplacer à la main n'importe où (avec avertissement si une règle est enfreinte), ou le retirer.
+- ✅ (2026-10-23) **Déplacement manuel** : la liste ne propose d'abord que les catégories **cohérentes avec les réglages** ; « Toutes les catégories » ajoute les autres, marquées « règle(s) enfreinte(s) », avec le détail avant confirmation. En déplacement manuel, deux tranches d'âge **voisines** se mélangent **dans les deux sens** sans avertissement (une benjamine avec des pupilles) ; les propositions automatiques, elles, ne font toujours que monter d'une tranche.
+- ✅ (2026-10-23) Chaque cas affiche le combattant en une ligne : tranche d'âge et sexe, discipline et règlement, catégorie de poids, poids (pesé ou approximatif), disciplines acceptées.
 
 ### 9.5 Validation
 - Chaque proposition peut être **validée**, **refusée** ou **modifiée** à la main, après avoir vu un **aperçu**.
@@ -341,7 +346,7 @@ Tous réglables **pour chaque compétition**.
 
 ## 13. Impressions et exports ✅
 
-- **Tableaux et poules pour le gymnase** : simples, lisibles de loin. Noms, clubs, rencontres, résultats. **Sans** badges ni motifs de recasement. ✅ (2026-10-22) Chaque tableau porte **le nom de sa zone** et, sur chaque combat, son **numéro de passage** (« Combat 31 ») ; une finale déplacée porte « Zone des finales : Ring » ; un tableau renuméroté après le figeage porte « mis à jour à HH:MM ». Impression vague par vague.
+- **Tableaux et poules pour le gymnase** : simples, lisibles de loin. Noms, clubs, rencontres, résultats. ✅ (2026-10-23) L'élimination directe s'affiche en **arbre relié** (un trait mène chaque paire au combat suivant), à l'écran comme à l'impression ; une poule imprimée liste aussi **ses combats dans l'ordre des numéros** sous la grille. **Sans** badges ni motifs de recasement. ✅ (2026-10-22) Chaque tableau porte **le nom de sa zone** et, sur chaque combat, son **numéro de passage** (« Combat 31 ») ; une finale déplacée porte « Zone des finales : Ring » ; un tableau renuméroté après le figeage porte « mis à jour à HH:MM ». Impression vague par vague.
 - **Podiums** ✅ : par catégorie, 1er, 2e, 3e (deux 3es s'il n'y a pas de combat pour la 3e place), avec le club.
   - Formats 💡 : **PDF** pour l'annonce et la remise des médailles, **.ods / .xlsx** pour l'archivage et la fédération.
   - 💡 **Classement des clubs** par médailles (or, argent, bronze) dans le même export.
@@ -457,6 +462,7 @@ Hypothèses à faire confirmer (🟡) :
 | 2026-10-21 | Thèmes clair et sombre ; logo Shidokan France (WebP optimisé) ; interface testée sur Chrome. |
 | 2026-10-21 | Feuilles de résultats = mode d'affichage et d'impression des tableaux de combat, remplis avec les résultats. |
 | 2026-10-21 | Kata : tour 1 pour tous (note sur 10), finale à deux avec un 2e kata ; nombre d'arbitres variable ; moyenne simple s'il y a moins de 5 arbitres. |
+| 2026-10-23 | Pesée : règle FFK gardée (poids ≤ limite, tolérance comprise). Shobu → jiyu : réglage de la compétition, désactivé par défaut. « Split » vers la catégorie du combattant seul, jusqu'à une poule de 3, toujours manuel. Tranches voisines dans les deux sens en déplacement manuel seulement. |
 
 ## 20. Prochaines étapes
 1. ~~Valider ce document~~ ✅ validé le 2026-10-21.
