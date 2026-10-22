@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { applyProposal, bulkPlan, casesOfWave, categoryWave, detectCases, memberWave, stateFingerprint } from '../../domain/replacement/index.js';
 import type { AppDb } from '../db/client.js';
 import { getCompetition } from '../repositories/competitions.js';
-import { NotFoundError } from '../repositories/registrations.js';
 import {
   allProposals,
   displayedProposals,
@@ -11,6 +10,7 @@ import {
   bulkApply,
   bulkWave,
   closeWeighIn,
+  knownWave,
   findProposal,
   listRecasements,
   loadState,
@@ -51,8 +51,7 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
   /** Tableau de bord ; avec `?vague=` : cas, propositions et compteurs des catégories de cette vague. */
   app.get<P & { Querystring: { vague?: string } }>('/api/competitions/:id/replacement', async (req) => {
     const state = await loadState(db, req.params.id);
-    const waveId = req.query.vague || null;
-    if (waveId && !state.waves.some((w) => w.id === waveId)) throw new NotFoundError('Vague introuvable');
+    const waveId = knownWave(state.waves, req.query.vague || undefined);
     const cases = casesOfWave(state, detectCases(state), waveId);
     const proposals = allProposals(state, cases);
     const shown = displayedProposals(state, cases);

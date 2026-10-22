@@ -18,12 +18,13 @@ import {
   type Presence,
   type Proposal,
   type State,
-  memberWave,
-  waveChangeOf,
+  waveEffects,
+  waveMoves,
 } from '../../domain/replacement/index.js';
 import type { AppDb } from '../db/client.js';
 import { categories, clubs, competitions, fighters, recasements, refusals, registrations, waves } from '../db/schema.js';
 import { listWaves } from './waves.js';
+import type { Wave } from '../../domain/waves.js';
 import { CategoryLockedError, listCategories, syncCategories } from './categories.js';
 import { getCompetition, getGrid } from './competitions.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
@@ -150,11 +151,17 @@ function persist(db: AppDb, competitionId: string, before: State, after: State, 
         discipline: regRow.discipline,
         ruleset: regRow.ruleset,
         weightClassId: regRow.weightClassId,
-        presence: regRow.presence,
       },
       categories: snapshotCategories,
+      /** Présence d'avant des inscriptions remises « non pesé » (changement de vague), rétablie par l'annulation. */
+      presences: [] as { id: string; presence: Presence }[],
     };
-    const changesWave = memberWave(before, m0) !== memberWave(after, m1);
+    // Le combattant déplacé, et ceux que sa catégorie emmène, repassent « non pesé » s'ils changent de vague.
+    const moved = waveMoves(before, after).map((x) => x.registrationId);
+    if (moved.length) {
+      snapshot.presences = t.select({ id: registrations.id, presence: registrations.presence }).from(registrations).where(inArray(registrations.id, moved)).all();
+      t.update(registrations).set({ presence: 'unknown' }).where(inArray(registrations.id, moved)).run();
+    }
     t.update(registrations)
       .set({
         categoryId: idMap.get(m1.categoryId!) ?? m1.categoryId,
@@ -164,7 +171,6 @@ function persist(db: AppDb, competitionId: string, before: State, after: State, 
         discipline: m1.discipline,
         ruleset: m1.ruleset,
         weightClassId: m1.weightClassId,
-        ...(changesWave ? { presence: 'unknown' as const } : {}),
       })
       .where(eq(registrations.id, p.registrationId))
       .run();
@@ -196,16 +202,19 @@ export async function applyProposalById(db: AppDb, competitionId: string, propos
   await syncCategories(db, competitionId);
 }
 
+/** Vague demandée par l'écran (`null` : toutes) ; 404 si elle n'existe pas. */
+export function knownWave(waves: Pick<Wave, 'id'>[], waveId: string | undefined): string | null {
+  if (waveId && !waves.some((w) => w.id === waveId)) throw new NotFoundError('Vague introuvable');
+  return waveId ?? null;
+}
+
 /**
  * Vague d'une validation en masse : avec des vagues, elle se fait toujours dans une vague (400 sinon, 404 si inconnue) ;
  * sans vague, `null` (tous les cas).
  */
 export async function bulkWave(db: AppDb, competitionId: string, waveId: string | undefined): Promise<string | null> {
   const all = await listWaves(db, competitionId);
-  if (waveId) {
-    if (!all.some((w) => w.id === waveId)) throw new NotFoundError('Vague introuvable');
-    return waveId;
-  }
+  if (waveId) return knownWave(all, waveId);
   if (all.length > 0) throw new RegistrationValidationError(['Choisissez la vague du recasement (rechargez la page si les vagues viennent d’être créées).']);
   return null;
 }
@@ -246,7 +255,7 @@ export function manualProposal(state: State, registrationId: string, categoryId:
   const warnings = moveViolations(state, m, t);
   const toKata = !DISCIPLINES[t.key.discipline].hasWeight && DISCIPLINES[m.discipline].hasWeight;
   if (toKata) warnings.push(`Passage en ${DISCIPLINES[t.key.discipline].label.toLowerCase()} : règlement et catégorie de poids retirés.`);
-  const p: Omit<Proposal, 'waveChange'> = {
+  const p: Omit<Proposal, 'waveChange' | 'waveShifts'> = {
     id: `M:${registrationId}>${categoryId}`,
     caseId: 'manual',
     type: 'M',
@@ -263,7 +272,7 @@ export function manualProposal(state: State, registrationId: string, categoryId:
     reason: 'Déplacement manuel',
     rank: 0,
   };
-  return { p: { ...p, waveChange: waveChangeOf(state, p) }, warnings };
+  return { p: { ...p, ...waveEffects(state, p) }, warnings };
 }
 
 export async function manualMove(db: AppDb, competitionId: string, registrationId: string, categoryId: string): Promise<{ warnings: string[] }> {
@@ -281,10 +290,10 @@ export async function undoRecasement(db: AppDb, competitionId: string, recasemen
     registration: {
       categoryId: string | null; placementLocked: boolean; originalJson: string | null; recasementType: string | null;
       discipline: Member['discipline']; ruleset: Member['ruleset']; weightClassId: string | null;
-      /** Absente des instantanés d'avant les vagues. */
-      presence?: Presence;
     };
     categories: { id: string; keyString: string; keyJson: string; aliasKeys: string; label: string }[];
+    /** Absente des instantanés d'avant les vagues. */
+    presences?: { id: string; presence: Presence }[];
   };
   const reg = db.select().from(registrations).where(eq(registrations.id, entry.registrationId)).get();
   if (!reg) throw new NotFoundError('Inscription introuvable');
@@ -315,6 +324,7 @@ export async function undoRecasement(db: AppDb, competitionId: string, recasemen
       .set({ ...previous, categoryId: exists ? previous.categoryId : null })
       .where(eq(registrations.id, entry.registrationId))
       .run();
+    for (const r of snapshot.presences ?? []) t.update(registrations).set({ presence: r.presence }).where(eq(registrations.id, r.id)).run();
     t.update(recasements).set({ status: 'undone' }).where(eq(recasements.id, recasementId)).run();
   });
   // Les clés des catégories touchées sont recalculées d'après leurs membres actuels.

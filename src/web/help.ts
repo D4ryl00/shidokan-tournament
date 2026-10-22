@@ -231,6 +231,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Certains déplacements demandent normalement l’accord des coachs ; en les validant vous en prenez la responsabilité.',
       'Avec des vagues : choisissez la vague en haut de l’écran (la même que pour la pesée). Les cas, les compteurs et les validations automatiques ne portent que sur ses catégories.',
       'Le badge « ↪ change de vague : Matin → Dimanche » signale une proposition qui ferait passer le combattant dans une catégorie d’une autre vague. Elle n’est jamais validée automatiquement : validez-la une par une. Le combattant repasse alors « non pesé » dans sa nouvelle vague, à pointer à sa pesée ; son poids déjà relevé est gardé.',
+      'Le badge « ↪ emmène N autre(s) combattant(s) dans une autre vague » signale un déplacement qui fait changer de vague une catégorie entière (ses derniers combattants d’origine la quittent, par exemple) : mêmes règles, validation une par une, les combattants emmenés repassent « non pesés ».',
     ],
   },
   'recasement.valides': {

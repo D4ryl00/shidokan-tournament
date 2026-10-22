@@ -4,7 +4,7 @@ import { DISCIPLINES } from '../disciplines.js';
 import { neighborWeightClasses } from '../weights.js';
 import { categoryForKey, isLocked, originalCategory } from './detect.js';
 import type { Case, CategoryState, Member, Proposal, ProposalType, State } from './types.js';
-import { waveChangeOf } from './waves.js';
+import { waveEffects } from './waves.js';
 import { activeMembers, categoryWeightGap, gapThreshold, weighInClass } from './weights.js';
 
 /**
@@ -107,9 +107,10 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
   const make = (type: ProposalType, target: Proposal['target'], toKey: CategoryKey, ev: Omit<Evaluation, 'type'>, members: number, extra: (number | string)[] = []) => {
     const targetId = 'categoryId' in target ? target.categoryId : keyString(target.newKey);
     const weightText = DISCIPLINES[toKey.discipline].hasWeight ? ` (écart ${ev.checks.weightGapKg.toFixed(1).replace('.', ',')} kg)` : '';
-    const waveChange = waveChangeOf(state, { type, registrationId: m.registrationId, target, changes: ev.changes });
+    const id = `${type}:${m.registrationId}>${targetId}`;
+    const waves = waveEffects(state, { caseId: c.id, type, registrationId: m.registrationId, target, changes: ev.changes });
     out.push({
-      id: `${type}:${m.registrationId}>${targetId}`,
+      id,
       caseId: c.id,
       type,
       registrationId: m.registrationId,
@@ -117,8 +118,8 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
       changes: ev.changes,
       checks: ev.checks,
       manual: type !== 'A' && type !== 'R',
-      waveChange,
-      preApproved: !waveChange && m.clubPreApproval && ['B', 'C', 'D', 'E'].includes(type),
+      ...waves,
+      preApproved: !waves.waveChange && waves.waveShifts.length === 0 && m.clubPreApproval && ['B', 'C', 'D', 'E'].includes(type),
       reason: `${m.label} : ${from} → ${labelOf(toKey)}${weightText}`,
       sortKey: [order(m).indexOf(type), ...extra, members === 1 ? 0 : 1, ev.checks.weightGapKg, labelOf(toKey)],
     });

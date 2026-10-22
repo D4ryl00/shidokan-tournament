@@ -3,6 +3,7 @@ import { notifications } from '@mantine/notifications';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import type { CaseKind, Proposal, ProposalType } from '../../domain/replacement/index.js';
+import type { Wave } from '../../domain/waves.js';
 import {
   useApplyProposal,
   useBulkReplacement,
@@ -30,6 +31,38 @@ type Dialog =
 
 const CASE_KINDS: Record<CaseKind, string> = { alone: 'Sans adversaire', weight_out: 'Poids hors catégorie', weight_gap: 'Écart de poids', return: 'Retour possible' };
 const kg = (x: number) => Number(x.toFixed(1)).toString().replace('.', ',');
+
+/**
+ * Ce qu'entraîne un changement de vague : le combattant (et ceux que sa catégorie emmène) repasse « non pesé »
+ * dans sa nouvelle vague ; vague d'arrivée déjà clôturée ou catégorie en attente signalées.
+ */
+function WaveChangeWarning({ proposal, waves, name }: { proposal: Proposal | undefined; waves: Wave[]; name: (registrationId: string) => string }) {
+  if (!proposal || (!proposal.waveChange && proposal.waveShifts.length === 0)) return null;
+  const waveName = (w: string | null) => waves.find((x) => x.id === w)?.name ?? 'en attente';
+  const where = (to: string | null) => (to === null ? 'dans une catégorie en attente (dans aucune vague)' : `dans la vague « ${waveName(to)} »`);
+  const then = (to: string | null) =>
+    to === null
+      ? 'il n’apparaîtra dans aucune pesée tant qu’elle n’est pas placée dans une vague (écran Vagues).'
+      : waves.find((w) => w.id === to)?.weighInClosed
+        ? 'la pesée de cette vague est déjà clôturée : pointez-le à la main dans l’écran Pesée.'
+        : 'à pointer (et à peser si besoin) dans cette vague.';
+  return (
+    <Alert color="grape" data-testid="wave-change-warning">
+      <Stack gap={4}>
+        {proposal.waveChange && (
+          <Text size="sm">
+            {name(proposal.registrationId)} passera {where(proposal.waveChange.to)} : {then(proposal.waveChange.to)} Son poids déjà relevé est gardé.
+          </Text>
+        )}
+        {proposal.waveShifts.map((x) => (
+          <Text size="sm" key={x.registrationId}>
+            {x.label}, dont la catégorie change de vague, passera {where(x.to)} : {then(x.to)}
+          </Text>
+        ))}
+      </Stack>
+    </Alert>
+  );
+}
 
 function Stat({ label, value, color }: { label: string; value: number; color?: string }) {
   return (
@@ -169,6 +202,11 @@ export function ReplacementPage() {
                           ↪ change de vague : {waveName(p.waveChange.from)} → {waveName(p.waveChange.to)}
                         </Badge>
                       )}
+                      {p.waveShifts.length > 0 && (
+                        <Badge color="grape" variant="light" size="sm" tt="none" data-testid="wave-shift">
+                          ↪ emmène {p.waveShifts.length} autre(s) combattant(s) dans une autre vague
+                        </Badge>
+                      )}
                     </Group>
                     <Group gap={4} wrap="nowrap">
                       <Button size="xs" variant="default" data-testid="proposal-preview" onClick={() => openProposal(p, false)}>Aperçu</Button>
@@ -244,10 +282,8 @@ export function ReplacementPage() {
           {preview.data?.warnings && preview.data.warnings.length > 0 && (
             <Alert color="orange" title="Règles enfreintes" data-testid="move-warnings">{preview.data.warnings.join(' ')}</Alert>
           )}
-          {dialog?.kind === 'proposal' && dialog.proposal.waveChange && (
-            <Alert color="grape" data-testid="wave-change-warning">
-              {name(dialog.proposal.registrationId)} passera dans la vague « {waveName(dialog.proposal.waveChange.to)} » : à pointer (et à peser si besoin) dans cette vague. Son poids déjà relevé est gardé.
-            </Alert>
+          {(dialog?.kind === 'proposal' || dialog?.kind === 'move') && (
+            <WaveChangeWarning proposal={dialog.kind === 'proposal' ? dialog.proposal : preview.data?.steps[0]?.proposal} waves={waves} name={name} />
           )}
           {preview.data && <ProposalPreview data={preview.data} />}
           {dialog?.kind === 'bulk' && dialog.mode === 'all' && (preview.data?.steps.some((x) => x.manual) ?? false) && (

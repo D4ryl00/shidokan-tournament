@@ -83,6 +83,8 @@ export interface Proposal {
   manual: boolean;
   /** Vague de départ et d'arrivée quand elles diffèrent (`null` = en attente) : jamais pré-approuvée ni validée en masse. */
   waveChange: { from: string | null; to: string | null } | null;
+  /** Autres combattants que le déplacement ferait changer de vague (leur catégorie change de vague) : même traitement. */
+  waveShifts: { registrationId: string; label: string; from: string | null; to: string | null }[];
   preApproved: boolean;
   reason: string;
   rank: number;

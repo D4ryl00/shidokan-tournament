@@ -1,6 +1,6 @@
 import { Button, Group, Loader, Modal, Stack, Tabs, Text, Title } from '@mantine/core';
 import { useState } from 'react';
-import { Outlet, useLocation, useNavigate, useParams } from 'react-router';
+import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useCompetition } from '../api.js';
 import { HELP, type HelpTopicId } from '../help.js';
 import { COMPETITION_TABS } from '../tabs.js';
@@ -15,7 +15,10 @@ export function CompetitionLayout() {
   const current = useLocation().pathname.split('/')[3] ?? 'reglages';
   const unsaved = useHasUnsaved();
   const [pending, setPending] = useState<string | null>(null);
-  const go = (tab: string) => (unsaved ? setPending(tab) : navigate(`/competitions/${id}/${tab}`));
+  // La vague choisie (`?vague=`) suit d'un onglet à l'autre : de la pesée d'une vague à son recasement.
+  const vague = useSearchParams()[0].get('vague');
+  const path = (tab: string) => `/competitions/${id}/${tab}${vague ? `?vague=${encodeURIComponent(vague)}` : ''}`;
+  const go = (tab: string) => (unsaved ? setPending(tab) : navigate(path(tab)));
   if (isLoading) return <Loader />;
   if (!data) return <Text>Compétition introuvable.</Text>;
   return (
@@ -47,7 +50,7 @@ export function CompetitionLayout() {
           <Text size="sm">La saisie en cours n’est pas enregistrée : elle sera perdue si vous quittez cet onglet.</Text>
           <Group justify="flex-end">
             <Button variant="default" data-testid="leave-stay" onClick={() => setPending(null)}>Rester</Button>
-            <Button color="red" data-testid="leave-go" onClick={() => { const tab = pending; setPending(null); if (tab) navigate(`/competitions/${id}/${tab}`); }}>
+            <Button color="red" data-testid="leave-go" onClick={() => { const tab = pending; setPending(null); if (tab) navigate(path(tab)); }}>
               Quitter sans enregistrer
             </Button>
           </Group>

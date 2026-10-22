@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { detectCases } from '../../../src/domain/replacement/detect.js';
 import { proposalsFor } from '../../../src/domain/replacement/propose.js';
 import { applyProposal, bulkPlan, stateFingerprint } from '../../../src/domain/replacement/apply.js';
-import { casesOfWave, categoryWave, memberWave } from '../../../src/domain/replacement/waves.js';
+import { casesOfWave, categoryWave, memberWave, waveMoves } from '../../../src/domain/replacement/waves.js';
 import type { State } from '../../../src/domain/replacement/types.js';
 import type { Wave } from '../../../src/domain/waves.js';
 import { makeState, member } from './fixtures.js';
@@ -102,5 +102,22 @@ describe('recasement par vague', () => {
     const s2 = structuredClone(s);
     s2.categories.find((c) => c.id === cadet.categoryId)!.waveOverride = 'matin';
     expect(stateFingerprint(s2)).not.toBe(base);
+  });
+
+  test('changement de vague entraîné : la catégorie qui perd ses derniers combattants d’origine change de vague avec ses recasés', () => {
+    const { s, mini, cadet } = minimeAlone();
+    const s1 = applyProposal(s, props(s, mini.registrationId)[0]!);
+    // Les deux cadettes d'origine pèsent 52 kg : hors catégorie, vers les -54.
+    const [c1, c2] = s1.members.filter((m) => m.categoryId === cadet.categoryId && m.registrationId !== mini.registrationId);
+    for (const c of [c1!, c2!]) Object.assign(c, { weighInKg: 52, presence: 'present' });
+    const p1 = props(s1, c1!.registrationId)[0]!;
+    expect(p1).toMatchObject({ type: 'A', waveChange: null, waveShifts: [] });
+    const s2 = applyProposal(s1, p1);
+    // La dernière cadette d'origine partie, la catégorie redevient « Minimes » : la minime repasse au Matin.
+    const p2 = props(s2, c2!.registrationId)[0]!;
+    expect(p2).toMatchObject({ type: 'A', waveChange: null, preApproved: false, waveShifts: [{ registrationId: mini.registrationId, label: mini.label, from: 'aprem', to: 'matin' }] });
+    expect(waveMoves(s2, applyProposal(s2, p2))).toEqual([{ registrationId: mini.registrationId, from: 'aprem', to: 'matin' }]);
+    // La validation globale ne la prend pas.
+    expect(bulkPlan(s1, 'simple', 'aprem').steps.map((x) => x.proposal.registrationId)).toEqual([c1!.registrationId]);
   });
 });

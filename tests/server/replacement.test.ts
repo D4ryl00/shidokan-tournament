@@ -446,7 +446,10 @@ describe('pesée par vague (relecture)', () => {
 });
 
 describe('recasement par vague', () => {
-  type P = { id: string; type: string; preApproved: boolean; waveChange: { from: string | null; to: string | null } | null };
+  type P = {
+    id: string; type: string; preApproved: boolean; waveChange: { from: string | null; to: string | null } | null;
+    waveShifts: { registrationId: string; from: string | null; to: string | null }[];
+  };
   /**
    * Matin (poussins à minimes) : une minime seule dont la seule proposition est la catégorie cadette (Après-midi).
    * Après-midi : une cadette -61 seule, recasable en +61 (cas simple).
@@ -541,5 +544,40 @@ describe('recasement par vague', () => {
     const cat = ((await call('GET', '/categories')).json() as { id: string; waveId: string | null }[]).find((c) => c.waveId === aprem)!;
     await call('PATCH', `/categories/${cat.id}`, { waveOverride: 'none' });
     expect((await call('POST', '/replacement/bulk', { mode: 'all', fingerprint: r2.fingerprint, waveId: aprem })).statusCode).toBe(409);
+  });
+
+  test('changement de vague entraîné : les recasés qui changent de vague avec leur catégorie repassent « non pesé » ; annuler rétablit', async () => {
+    const { mini, matin, aprem } = await setup();
+    let r = await ofWave(matin);
+    await call('POST', '/replacement/apply', { proposalId: r.proposals[r.cases[0]!.id]![0]!.id });
+    const cads = ((await call('GET', '/registrations')).json() as { id: string; fighterId: string; fighter: { lastName: string } }[]).filter((x) => x.fighter.lastName.startsWith('CAD'));
+    for (const c of cads) await call('PUT', `/weigh-in/${c.fighterId}`, { weighInKg: 52, waveId: aprem });
+    await call('PUT', `/weigh-in/${mini.fighterId}`, { presence: 'present', waveId: aprem });
+    r = await ofWave(aprem);
+    expect((await call('POST', '/replacement/bulk', { mode: 'simple', fingerprint: r.fingerprint, waveId: aprem })).json()).toEqual({ applied: 2 }); // CAD0 et SEULE
+    expect(await waveOfReg(mini.id)).toBe(aprem);
+    r = await ofWave(aprem);
+    const last = r.cases.find((c) => c.registrationId === cads[1]!.id)!;
+    const p = r.proposals[last.id]![0]!;
+    expect(p.waveShifts).toMatchObject([{ registrationId: mini.id, from: aprem, to: matin }]);
+    await call('POST', '/replacement/apply', { proposalId: p.id });
+    expect(await waveOfReg(mini.id)).toBe(matin);
+    expect((await regRow(mini.id)).presence).toBe('unknown');
+    expect((await regRow(cads[1]!.id)).presence).toBe('present');
+    const entry = (await replacement()).recasements.find((x) => x.registrationId === cads[1]!.id)!;
+    await call('POST', '/replacement/undo', { recasementId: entry.id });
+    expect(await waveOfReg(mini.id)).toBe(aprem);
+    expect((await regRow(mini.id)).presence).toBe('present');
+  });
+
+  test('sans vague : annuler ne touche pas à la présence (pointée absente après le recasement)', async () => {
+    const a = await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+    await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
+    await call('PUT', `/weigh-in/${a.fighterId}`, { presence: 'present' });
+    const r = await replacement();
+    await call('POST', '/replacement/apply', { proposalId: r.proposals[r.cases.find((c) => c.registrationId === a.id)!.id]![0]!.id });
+    await call('PUT', `/weigh-in/${a.fighterId}`, { presence: 'absent' });
+    await call('POST', '/replacement/undo', { recasementId: (await replacement()).recasements[0]!.id });
+    expect((await regRow(a.id)).presence).toBe('absent');
   });
 });

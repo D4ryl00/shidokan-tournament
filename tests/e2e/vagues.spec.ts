@@ -183,3 +183,38 @@ test('recasement par vague : cas de la vague, changement de vague signalé et va
   await expect(row.getByTestId('weighin-presence').locator('input[value="unknown"]')).toBeChecked();
   await expect(row.getByTestId('weighin-weight')).toHaveValue('45 kg');
 });
+
+test('recasement par vague (relecture) : vague gardée d’un onglet à l’autre, avertissements du déplacement manuel', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe recasement vagues relecture');
+  const reg = (lastName: string, ageBandCode: string, weightClassId: string) =>
+    request.post(`/api/competitions/${id}/registrations`, {
+      data: { clubId: null, lastName, firstName: 'Léa', sex: 'F', ageBandCode, discipline: 'karate', ruleset: 'jiyu', weightClassId, approxWeightKg: 46, source: 'manual' },
+    });
+  const mini = (await (await reg('MINI', 'minime', 'minime:F:-45')).json()).row as { fighterId: string };
+  for (const n of ['CADA', 'CADB']) await reg(n, 'cadet', 'cadet:F:-47');
+  await reg('JUNIOR', 'junior', 'junior:F:-48');
+  const [matin] = (await (await request.put(`/api/competitions/${id}/waves`, { data: [
+    { name: 'Matin', rules: { ageBandCodes: ['minime'], disciplines: [] } },
+    { name: 'Après-midi', rules: { ageBandCodes: ['cadet'], disciplines: [] } },
+  ] })).json()) as { id: string }[];
+  // La pesée du Matin est close : le recasement du Matin vient ensuite.
+  await request.put(`/api/competitions/${id}/weigh-in/${mini.fighterId}`, { data: { presence: 'present', waveId: matin!.id } });
+  await request.post(`/api/competitions/${id}/weigh-in/close`, { data: { waveId: matin!.id } });
+  await page.goto(`/competitions/${id}/pesee`);
+  await page.getByTestId('weighin-wave').getByText('Matin', { exact: true }).click();
+  await page.getByRole('tab', { name: 'Recasement' }).click();
+  await expect(page.getByTestId('replacement-wave').locator(`input[value="${matin!.id}"]`)).toBeChecked();
+  const cases = page.getByTestId('replacement-case');
+  await expect(cases).toContainText('MINI');
+  // Déplacement manuel vers une catégorie d'une autre vague, puis vers une catégorie en attente.
+  const select = cases.getByTestId('manual-move-select');
+  await select.click();
+  await page.getByRole('option', { name: /Cadets F.*vague Après-midi/ }).click();
+  await cases.getByTestId('manual-move').click();
+  await expect(page.getByTestId('wave-change-warning')).toContainText('passera dans la vague « Après-midi »');
+  await page.keyboard.press('Escape');
+  await select.click();
+  await page.getByRole('option', { name: /Juniors F.*vague en attente/ }).click();
+  await cases.getByTestId('manual-move').click();
+  await expect(page.getByTestId('wave-change-warning')).toContainText('dans aucune vague');
+});
