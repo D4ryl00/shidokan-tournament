@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
@@ -348,4 +348,50 @@ test('catégorie mixte (F/M) : le libellé suit les présents, et revient à F/M
   expect(await labels()).toEqual(['Karaté · Jiyu · Cadets M · -52 kg [3]']);
   await call('PUT', `/weigh-in/${f.fighterId}`, { presence: 'present' });
   expect(await labels()).toEqual(['Karaté · Jiyu · Cadets F/M · -52 / -54 kg [3]']);
+});
+
+describe('pesée par vague', () => {
+  type W = { fighters: { fighterId: string; presence: string; registrations: { discipline: string }[] }[]; closed: boolean };
+  async function twoWaves() {
+    const both = await reg({ lastName: 'DEUX' });
+    await call('POST', '/registrations', { clubId: null, lastName: 'DEUX', firstName: 'x', sex: 'F', ageBandCode: 'cadet', discipline: 'kata', ruleset: null, weightClassId: null, source: 'manual' });
+    await reg({ lastName: 'COMBAT' });
+    const bands = ['poussin', 'pupille', 'benjamin', 'minime', 'cadet', 'junior', 'senior'];
+    const [kata, combat] = (await call('PUT', '/waves', [
+      { name: 'Kata', rules: { ageBandCodes: [], disciplines: ['kata'] } },
+      { name: 'Combats', rules: { ageBandCodes: bands, disciplines: [] } },
+    ])).json() as { id: string }[];
+    return { both, kata: kata!.id, combat: combat!.id };
+  }
+  const list = async (wave: string) => (await call('GET', `/weigh-in?vague=${wave}`)).json() as W;
+  const presences = async () =>
+    ((await call('GET', '/registrations')).json() as { discipline: string; presence: string; fighter: { lastName: string } }[])
+      .map((r) => `${r.fighter.lastName}:${r.discipline}:${r.presence}`).sort();
+
+  test('liste limitée aux combattants de la vague', async () => {
+    const { kata, combat } = await twoWaves();
+    expect((await list(kata)).fighters.map((f) => f.registrations.map((r) => r.discipline))).toEqual([['kata']]);
+    expect((await list(combat)).fighters).toHaveLength(2);
+  });
+
+  test('combattant dans deux vagues : présence indépendante', async () => {
+    const { both, kata, combat } = await twoWaves();
+    await call('PUT', `/weigh-in/${both.fighterId}`, { presence: 'absent', waveId: combat });
+    expect(await presences()).toEqual(['COMBAT:karate:unknown', 'DEUX:karate:absent', 'DEUX:kata:unknown']);
+    await call('PUT', `/weigh-in/${both.fighterId}`, { weighInKg: 50, waveId: kata });
+    expect(await presences()).toEqual(['COMBAT:karate:unknown', 'DEUX:karate:absent', 'DEUX:kata:present']);
+    expect((await list(kata)).fighters[0]!.presence).toBe('present');
+    expect((await list(combat)).fighters.find((f) => f.fighterId === both.fighterId)!.presence).toBe('absent');
+  });
+
+  test('clôture de la vague du matin : les autres vagues ne bougent pas', async () => {
+    const { kata, combat } = await twoWaves();
+    const closed = (await call('POST', '/weigh-in/close', { waveId: kata })).json() as { markedAbsent: number };
+    expect(closed.markedAbsent).toBe(1);
+    expect(await presences()).toEqual(['COMBAT:karate:unknown', 'DEUX:karate:unknown', 'DEUX:kata:absent']);
+    expect((await list(kata)).closed).toBe(true);
+    expect((await list(combat)).closed).toBe(false);
+    const waves = (await call('GET', '/waves')).json() as { id: string; weighInClosed: boolean }[];
+    expect(waves.map((w) => w.weighInClosed)).toEqual([true, false]);
+  });
 });

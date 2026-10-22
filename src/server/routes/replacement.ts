@@ -31,18 +31,21 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
     if (id && !(await getCompetition(db, id))) return reply.status(404).send({ error: 'Compétition introuvable' });
   });
 
-  app.get<P>('/api/competitions/:id/weigh-in', async (req) => weighInList(db, req.params.id));
+  app.get<P & { Querystring: { vague?: string } }>('/api/competitions/:id/weigh-in', async (req) => weighInList(db, req.params.id, req.query.vague || undefined));
 
   app.put<{ Params: { id: string; fighterId: string } }>('/api/competitions/:id/weigh-in/:fighterId', async (req, reply) => {
     const data = z
-      .object({ presence: z.enum(['unknown', 'present', 'absent']).optional(), weighInKg: z.number().positive().max(250).nullable().optional() })
+      .object({ presence: z.enum(['unknown', 'present', 'absent']).optional(), weighInKg: z.number().positive().max(250).nullable().optional(), waveId: z.string().optional() })
       .strict()
       .parse(req.body);
     await setWeighIn(db, req.params.id, req.params.fighterId, data);
     return reply.status(204).send();
   });
 
-  app.post<P>('/api/competitions/:id/weigh-in/close', async (req) => closeWeighIn(db, req.params.id));
+  app.post<P>('/api/competitions/:id/weigh-in/close', async (req) => {
+    const { waveId } = z.object({ waveId: z.string().optional() }).strict().parse(req.body ?? {});
+    return closeWeighIn(db, req.params.id, waveId);
+  });
 
   app.get<P>('/api/competitions/:id/replacement', async (req) => {
     const state = await loadState(db, req.params.id);

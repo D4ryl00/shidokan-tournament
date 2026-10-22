@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { defaultFormat, generateBracket, resolveBracket } from '../../domain/brackets/index.js';
 import { categoryLabel, compareKeys, keyString } from '../../domain/categories.js';
 import { DISCIPLINES } from '../../domain/disciplines.js';
@@ -20,7 +20,9 @@ import {
   type State,
 } from '../../domain/replacement/index.js';
 import type { AppDb } from '../db/client.js';
-import { categories, clubs, competitions, fighters, recasements, refusals, registrations } from '../db/schema.js';
+import { categories, clubs, competitions, fighters, recasements, refusals, registrations, waves } from '../db/schema.js';
+import { waveOfCategory } from '../../domain/waves.js';
+import { listWaves } from './waves.js';
 import { CategoryLockedError, syncCategories } from './categories.js';
 import { getCompetition, getGrid } from './competitions.js';
 import { NotFoundError } from './registrations.js';
@@ -328,21 +330,48 @@ export async function listRecasements(db: AppDb, competitionId: string) {
 
 // --- Pesée ---
 
-export async function setWeighIn(db: AppDb, competitionId: string, fighterId: string, data: { presence?: Presence; weighInKg?: number | null }): Promise<void> {
+/** Inscriptions des catégories d'une vague (vague inconnue : erreur 404). */
+async function registrationsOfWave(db: AppDb, competitionId: string, waveId: string): Promise<Set<string>> {
+  const all = await listWaves(db, competitionId);
+  if (!all.some((w) => w.id === waveId)) throw new NotFoundError('Vague introuvable');
+  const grid = await getGrid(db, competitionId);
+  const inWave = new Set(
+    db.select().from(categories).where(eq(categories.competitionId, competitionId)).all()
+      .filter((c) => waveOfCategory({ key: JSON.parse(c.keyJson), waveOverride: c.waveOverride }, all, grid) === waveId)
+      .map((c) => c.id),
+  );
+  return new Set(
+    db.select().from(registrations).where(eq(registrations.competitionId, competitionId)).all()
+      .filter((r) => r.categoryId !== null && inWave.has(r.categoryId))
+      .map((r) => r.id),
+  );
+}
+
+/** Pesée d'un combattant ; avec une vague, la présence ne porte que sur ses inscriptions de cette vague. */
+export async function setWeighIn(db: AppDb, competitionId: string, fighterId: string, data: { presence?: Presence; weighInKg?: number | null; waveId?: string }): Promise<void> {
   const f = db.select().from(fighters).where(and(eq(fighters.id, fighterId), eq(fighters.competitionId, competitionId))).get();
   if (!f) throw new NotFoundError('Combattant introuvable');
   if (data.weighInKg !== undefined) db.update(fighters).set({ weighInKg: data.weighInKg }).where(eq(fighters.id, fighterId)).run();
   // Un poids relevé vaut présence ; la présence se note sur les inscriptions du combattant.
   const presence = data.presence ?? (data.weighInKg !== undefined && data.weighInKg !== null ? 'present' : undefined);
-  if (presence) db.update(registrations).set({ presence }).where(eq(registrations.fighterId, fighterId)).run();
+  if (presence) {
+    const scope = data.waveId ? [...(await registrationsOfWave(db, competitionId, data.waveId))] : null;
+    db.update(registrations)
+      .set({ presence })
+      .where(and(eq(registrations.fighterId, fighterId), scope ? inArray(registrations.id, scope) : undefined))
+      .run();
+  }
   await recomputeKeys(db, competitionId, mergedCategoryIds);
 }
 
-export async function closeWeighIn(db: AppDb, competitionId: string): Promise<{ markedAbsent: number }> {
-  const unknownRegs = and(eq(registrations.competitionId, competitionId), eq(registrations.presence, 'unknown'));
+/** Clôture de la pesée : non pesés → absents ; avec une vague, seulement ceux de cette vague. */
+export async function closeWeighIn(db: AppDb, competitionId: string, waveId?: string): Promise<{ markedAbsent: number }> {
+  const scope = waveId ? [...(await registrationsOfWave(db, competitionId, waveId))] : null;
+  const unknownRegs = and(eq(registrations.competitionId, competitionId), eq(registrations.presence, 'unknown'), scope ? inArray(registrations.id, scope) : undefined);
   const unknown = new Set(db.select().from(registrations).where(unknownRegs).all().map((r) => r.fighterId));
   db.update(registrations).set({ presence: 'absent' }).where(unknownRegs).run();
-  db.update(competitions).set({ weighInClosed: true }).where(eq(competitions.id, competitionId)).run();
+  if (waveId) db.update(waves).set({ weighInClosed: true }).where(eq(waves.id, waveId)).run();
+  else db.update(competitions).set({ weighInClosed: true }).where(eq(competitions.id, competitionId)).run();
   await recomputeKeys(db, competitionId, mergedCategoryIds);
   return { markedAbsent: unknown.size };
 }
@@ -354,27 +383,32 @@ function fighterPresence(members: Member[]): Presence {
   return 'unknown';
 }
 
-export async function weighInList(db: AppDb, competitionId: string) {
+/** Liste de pesée ; avec une vague : ses combattants et leurs inscriptions de la vague seulement. */
+export async function weighInList(db: AppDb, competitionId: string, waveId?: string) {
   const state = await loadState(db, competitionId);
   const competition = db.select().from(competitions).where(eq(competitions.id, competitionId)).get()!;
+  const scope = waveId ? await registrationsOfWave(db, competitionId, waveId) : null;
+  const inScope = (m: Member) => !scope || scope.has(m.registrationId);
+  const closed = waveId ? (await listWaves(db, competitionId)).find((w) => w.id === waveId)!.weighInClosed : competition.weighInClosed;
   const fs = db.select().from(fighters).where(eq(fighters.competitionId, competitionId)).all();
   const cs = new Map(db.select().from(clubs).where(eq(clubs.competitionId, competitionId)).all().map((c) => [c.id, c.name]));
   const label = (id: string | null) => (id ? (state.grid.weightClasses.find((w) => w.id === id)?.label ?? '?') : null);
   // Rang de chaque catégorie dans l'ordre de la grille (feuilles de pesée par catégorie).
   const categoryOrder = new Map([...state.categories].sort((a, b) => compareKeys(a.key, b.key, state.grid)).map((c, i) => [c.id, i]));
   return {
-    closed: competition.weighInClosed,
+    closed,
     fighters: fs
+      .filter((f) => !scope || state.members.some((m) => m.fighterId === f.id && inScope(m)))
       .map((f) => ({
         fighterId: f.id,
         label: `${f.lastName} ${f.firstName}`.trim(),
         club: f.clubId ? (cs.get(f.clubId) ?? '') : '',
         sex: f.sex,
         ageBandCode: f.ageBandCode,
-        presence: fighterPresence(state.members.filter((m) => m.fighterId === f.id)),
+        presence: fighterPresence(state.members.filter((m) => m.fighterId === f.id && inScope(m))),
         weighInKg: f.weighInKg,
         registrations: state.members
-          .filter((m) => m.fighterId === f.id)
+          .filter((m) => m.fighterId === f.id && inScope(m))
           .map((m) => {
             // Un recasé est jugé sur la catégorie où il a été placé (sa catégorie de poids d'inscription ne compte plus).
             const wic = m.placementLocked ? overweightInCategory(m, state) : isOverweight(m, state);
