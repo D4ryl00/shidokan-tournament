@@ -18,12 +18,14 @@ import {
   type Presence,
   type Proposal,
   type State,
+  categoryWaves,
   waveEffects,
   waveMoves,
 } from '../../domain/replacement/index.js';
 import type { AppDb } from '../db/client.js';
 import { categories, clubs, competitions, fighters, recasements, refusals, registrations, waves } from '../db/schema.js';
 import { listWaves } from './waves.js';
+import { launchedWaveKeys } from './launch-state.js';
 import type { Wave } from '../../domain/waves.js';
 import { CategoryLockedError, listCategories, syncCategories } from './categories.js';
 import { getCompetition, getGrid } from './competitions.js';
@@ -73,7 +75,7 @@ export async function loadState(db: AppDb, competitionId: string): Promise<State
         recasementType: (r.recasementType as Member['recasementType']) ?? null,
       };
     });
-  return {
+  const state: State = {
     grid,
     settings: competition.settings,
     categories: db
@@ -86,6 +88,16 @@ export async function loadState(db: AppDb, competitionId: string): Promise<State
     waves: await listWaves(db, competitionId),
     refused: db.select().from(refusals).where(eq(refusals.competitionId, competitionId)).all().map((r) => r.proposalId),
   };
+  // Vague lancée : fermée au recasement (vague implicite '' quand il n'y a pas de vague).
+  const launched = launchedWaveKeys(db, competitionId);
+  if (launched.size) {
+    const waveOf = categoryWaves(state);
+    for (const c of state.categories) {
+      const key = state.waves.length === 0 ? '' : waveOf.get(c.id);
+      c.frozen = key !== null && key !== undefined && launched.has(key);
+    }
+  }
+  return state;
 }
 
 export function allProposals(state: State, cases = detectCases(state)): Map<string, Proposal[]> {

@@ -3,7 +3,7 @@ import { DISCIPLINES } from '../disciplines.js';
 import type { Case, CategoryState, Member, State } from './types.js';
 import { activeMembers, categoryWeightGap, effectiveWeight, gapThreshold, isOverweight } from './weights.js';
 
-export const isLocked = (c: CategoryState | undefined) => c !== undefined && (c.status === 'started' || c.status === 'finished');
+export const isLocked = (c: CategoryState | undefined) => c !== undefined && (c.status === 'started' || c.status === 'finished' || c.frozen === true);
 
 /** Catégorie qui accueille une clé naturelle (clé propre ou absorbée par une fusion). */
 export function categoryForKey(state: State, ks: string): CategoryState | undefined {

@@ -45,6 +45,8 @@ export interface CategoryState {
   aliasKeys: string[];
   /** Choix individuel de vague (`WAVE_NONE` = en attente), sinon les règles des vagues décident. */
   waveOverride: string | null;
+  /** Catégorie d'une vague lancée : fermée au recasement (ni départ ni arrivée). */
+  frozen?: boolean;
 }
 
 export interface State {

@@ -5,6 +5,7 @@ import type { AppDb } from '../db/client.js';
 import { categories, zones } from '../db/schema.js';
 import { CategoryLockedError } from './categories.js';
 import { GridValidationError } from './competitions.js';
+import { frozenZoneIds } from './launch-state.js';
 
 export async function listZones(db: AppDb, competitionId: string): Promise<Zone[]> {
   return db
@@ -31,6 +32,8 @@ export async function replaceZones(db: AppDb, competitionId: string, input: Zone
   const known = new Set(current.map((z) => z.id));
   const keptIds = input.map((z) => z.id).filter((id): id is string => !!id && known.has(id));
   const removed = current.filter((z) => !keptIds.includes(z.id)).map((z) => z.id);
+  const numbered = current.find((z) => removed.includes(z.id) && frozenZoneIds(db, competitionId).has(z.id));
+  if (numbered) throw new CategoryLockedError(`Zone impossible à supprimer : des combats figés y sont numérotés (« ${numbered.name} »).`);
   if (removed.length) {
     const busy = db
       .select()

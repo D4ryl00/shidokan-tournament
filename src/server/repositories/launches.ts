@@ -4,7 +4,10 @@ import { DISCIPLINES } from '../../domain/disciplines.js';
 import { appendPassages, planPassages, waveKey, type FrozenPassage } from '../../domain/passages/index.js';
 import type { AppDb } from '../db/client.js';
 import { categories, frozenPassages, waveLaunches } from '../db/schema.js';
+import { launchRows } from './launch-state.js';
+import { syncCategories, CategoryLockedError } from './categories.js';
 import { listCategories } from './categories.js';
+import { launchedCategoryIds } from './launch-state.js';
 import { planInput } from './passages.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
 import { listWaves } from './waves.js';
@@ -14,26 +17,7 @@ export type WaveState = 'preparation' | 'launched' | 'reopened' | 'finished';
 const playable = (c: Category) => !!c.bracket && activeEntrantCount(c) >= 2;
 const now = () => new Date().toISOString();
 
-function launches(db: AppDb, competitionId: string) {
-  return new Map(db.select().from(waveLaunches).where(eq(waveLaunches.competitionId, competitionId)).all().map((r) => [r.waveKey, r]));
-}
-
-/** Catégories portant des numéros figés d'une vague actuellement lancée (sans synchronisation : utilisable par elle). */
-export function launchedCategoryIds(db: AppDb, competitionId: string): Set<string> {
-  const launched = [...launches(db, competitionId).values()].filter((r) => r.launched).map((r) => r.waveKey);
-  if (launched.length === 0) return new Set();
-  return new Set(
-    db.select({ id: frozenPassages.categoryId }).from(frozenPassages)
-      .where(and(eq(frozenPassages.competitionId, competitionId), inArray(frozenPassages.waveKey, launched)))
-      .all()
-      .map((r) => r.id),
-  );
-}
-
-/** Clés des vagues actuellement lancées. */
-export function launchedWaveKeys(db: AppDb, competitionId: string): Set<string> {
-  return new Set([...launches(db, competitionId).values()].filter((r) => r.launched).map((r) => r.waveKey));
-}
+const launches = launchRows;
 
 /** Vague demandée : une vague connue, ou la vague implicite (null) d'une compétition sans vague. */
 async function checkWave(db: AppDb, competitionId: string, waveId: string | null) {
@@ -149,4 +133,17 @@ export async function numberPending(db: AppDb, competitionId: string, waveId: st
     t.update(waveLaunches).set({ launched: true }).where(and(eq(waveLaunches.competitionId, competitionId), eq(waveLaunches.waveKey, key))).run();
   });
   return { changes };
+}
+
+/**
+ * « Régénérer (renuméroté à la suite) » : une catégorie non commencée d'une vague lancée retrouve un tableau à jour
+ * de ses inscrits, puis des numéros à la suite sur sa zone (confirmation demandée par l'écran).
+ */
+export async function regenerateCategory(db: AppDb, competitionId: string, categoryId: string) {
+  const cat = (await listCategories(db, competitionId)).find((c) => c.id === categoryId);
+  if (!cat) throw new NotFoundError('Catégorie introuvable');
+  if (cat.status === 'started' || cat.status === 'finished') throw new CategoryLockedError();
+  if (!launchedCategoryIds(db, competitionId).has(categoryId)) throw new RegistrationValidationError(['La vague de cette catégorie n’est pas lancée : son tableau se met à jour tout seul.']);
+  await syncCategories(db, competitionId, { regenerate: categoryId });
+  return numberPending(db, competitionId, cat.waveId, [categoryId]);
 }

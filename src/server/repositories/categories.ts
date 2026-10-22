@@ -24,6 +24,7 @@ import { categories, fighters, registrations, tieBreaks, zones } from '../db/sch
 import { getCompetition, getGrid } from './competitions.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
 import { listWaves } from './waves.js';
+import { launchedCategoryIds } from './launch-state.js';
 
 export class CategoryLockedError extends Error {
   constructor(message = "Catégorie lancée : déverrouillez-la d'abord") {
@@ -112,8 +113,12 @@ function upToDate(row: Row, ctx: Context): boolean {
  * Place chaque inscription non verrouillée dans sa catégorie naturelle (créée si besoin), supprime les catégories
  * vides non lancées et régénère les tableaux non lancés qui ne correspondent plus.
  */
-export async function syncCategories(db: AppDb, competitionId: string): Promise<void> {
+export async function syncCategories(db: AppDb, competitionId: string, opts: { regenerate?: string } = {}): Promise<void> {
   const grid = await getGrid(db, competitionId);
+  // Catégories d'une vague lancée : traitées comme lancées (tableau gardé) ; `regenerate` : sauf celle-ci (confirmation donnée).
+  const frozen = launchedCategoryIds(db, competitionId);
+  if (opts.regenerate) frozen.delete(opts.regenerate);
+  const kept = (c: Row) => LOCKED.includes(c.status) || frozen.has(c.id);
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     const regs = t.select().from(registrations).where(eq(registrations.competitionId, competitionId)).all();
@@ -134,7 +139,7 @@ export async function syncCategories(db: AppDb, competitionId: string): Promise<
       offer(c.keyString, c, true);
       for (const alias of JSON.parse(c.aliasKeys) as string[]) offer(alias, c, false);
     }
-    const lockedIds = new Set(cats.filter((c) => LOCKED.includes(c.status)).map((c) => c.id));
+    const lockedIds = new Set(cats.filter(kept).map((c) => c.id));
     for (const r of regs) {
       if (r.placementLocked && r.categoryId && cats.some((c) => c.id === r.categoryId)) continue;
       // Une catégorie lancée garde ses inscrits, même si leur clé change (le tableau est figé).
@@ -178,11 +183,11 @@ export async function syncCategories(db: AppDb, competitionId: string): Promise<
       const count = ctx.members.get(row.id)?.length ?? 0;
       const key = JSON.parse(row.keyJson) as CategoryKey;
       const label = categoryLabel(key, grid);
-      if (count === 0 && !LOCKED.includes(row.status)) {
+      if (count === 0 && !kept(row)) {
         t.delete(categories).where(eq(categories.id, row.id)).run();
         continue;
       }
-      if (LOCKED.includes(row.status)) {
+      if (kept(row)) {
         const stored = row.bracketJson ? (JSON.parse(row.bracketJson) as Bracket) : null;
         const stale = bracketMembers(stored) !== [...(ctx.active.get(row.id) ?? [])].sort().join(',');
         if (stale !== row.stale || label !== row.label) t.update(categories).set({ stale, label }).where(eq(categories.id, row.id)).run();
@@ -269,6 +274,10 @@ export async function updateCategory(
   patch: { format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null; status?: CategoryStatus; zoneId?: string | null; waveOverride?: string | null; order?: number; unlock?: boolean },
 ): Promise<Category> {
   const row = getRow(db, competitionId, categoryId);
+  if (launchedCategoryIds(db, competitionId).has(categoryId)) {
+    const blocked = patch.zoneId !== undefined || patch.waveOverride !== undefined || patch.format !== undefined || patch.repechage !== undefined || patch.thirdPlace !== undefined;
+    if (blocked) throw new CategoryLockedError('La vague est lancée : rouvrez-la pour changer la zone, la vague ou le tableau de cette catégorie.');
+  }
   const locked = LOCKED.includes(row.status);
   const unlocking = locked && patch.status !== undefined && !LOCKED.includes(patch.status);
   if (unlocking && !patch.unlock) throw new CategoryLockedError();
@@ -306,7 +315,7 @@ export async function updateCategory(
 
 export async function redraw(db: AppDb, competitionId: string, categoryId: string): Promise<Category> {
   const row = getRow(db, competitionId, categoryId);
-  if (LOCKED.includes(row.status)) throw new CategoryLockedError();
+  if (LOCKED.includes(row.status) || launchedCategoryIds(db, competitionId).has(categoryId)) throw new CategoryLockedError();
   let seed = newSeed();
   while (seed === row.seed) seed = newSeed();
   db.update(categories).set({ seed }).where(eq(categories.id, categoryId)).run();
@@ -316,7 +325,7 @@ export async function redraw(db: AppDb, competitionId: string, categoryId: strin
 /** Échange deux inscrits dans le tableau (tirage manuel). */
 export async function swapEntrants(db: AppDb, competitionId: string, categoryId: string, a: string, b: string): Promise<Category> {
   const row = getRow(db, competitionId, categoryId);
-  if (LOCKED.includes(row.status)) throw new CategoryLockedError();
+  if (LOCKED.includes(row.status) || launchedCategoryIds(db, competitionId).has(categoryId)) throw new CategoryLockedError();
   if (!row.bracketJson) throw new NotFoundError('Tableau introuvable');
   const swap = (id: string) => (id === a ? b : id === b ? a : id);
   const bracket = JSON.parse(row.bracketJson) as Bracket;

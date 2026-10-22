@@ -126,3 +126,77 @@ describe('lancer une vague', () => {
     expect((await catOf('-54')).numbersUpdatedAt).toBeNull();
   });
 });
+
+describe('vague lancée : verrous', () => {
+  test('absent tardif : tableau gardé sans confirmation ; « Régénérer » → numéros à la suite pour elle seule', async () => {
+    const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
+    await call('PUT', '/zones', [{ id: t1!.id, name: 'Tatami 1' }]);
+    const a = await many(4);
+    await many(4, { weightClassId: 'cadet:F:-61' });
+    await readyAll();
+    await launch(null);
+    const before = await plan();
+    await call('PUT', `/weigh-in/${a[0]!.fighterId}`, { presence: 'absent' });
+    const catA = await catOf('-54');
+    expect(catA.stale).toBe(true);
+    expect((await plan()).zones).toEqual(before.zones);
+    const res = await call('POST', `/categories/${catA.id}/regenerate`);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().changes).toEqual([{ categoryId: catA.id, label: catA.label, numbers: [7, 8, 9] }]);
+    const after = await plan();
+    const catB = await catOf('-61');
+    const numbersOf = (p: Plan, id: string) => p.zones[0]!.passages.filter((x) => x.categoryId === id).map((x) => x.number);
+    expect(numbersOf(after, catB.id)).toEqual(numbersOf(before, catB.id));
+    expect(numbersOf(after, catA.id)).toEqual([7, 8, 9]);
+    expect((await catOf('-54')).stale).toBe(false);
+  });
+
+  test('recasement fermé pendant la vague lancée, rouvert ensuite', async () => {
+    await many(4);
+    await many(1, { weightClassId: 'cadet:F:-47', approxWeightKg: 47 });
+    await readyAll();
+    expect(((await call('GET', '/replacement')).json() as { cases: unknown[] }).cases).toHaveLength(1);
+    await launch(null);
+    expect(((await call('GET', '/replacement')).json() as { cases: unknown[] }).cases).toEqual([]);
+    await call('POST', '/launch/reopen', { waveId: null });
+    expect(((await call('GET', '/replacement')).json() as { cases: unknown[] }).cases).toHaveLength(1);
+  });
+
+  test('zone, vague, format d’une catégorie de la vague lancée : 409 ; rouverte : permis', async () => {
+    await many(4);
+    await readyAll();
+    const [matin] = (await call('PUT', '/waves', [{ name: 'Tous', rules: { ageBandCodes: ['cadet'], disciplines: [] } }])).json() as { id: string }[];
+    await launch(matin!.id);
+    const c = await catOf('Cadets');
+    const [, t2] = (await call('GET', '/zones')).json() as { id: string }[];
+    expect((await call('PATCH', `/categories/${c.id}`, { zoneId: t2!.id })).statusCode).toBe(409);
+    expect((await call('PATCH', `/categories/${c.id}`, { waveOverride: 'none' })).statusCode).toBe(409);
+    expect((await call('PATCH', `/categories/${c.id}`, { format: 'round_robin' })).statusCode).toBe(409);
+    await call('POST', '/launch/reopen', { waveId: matin!.id });
+    expect((await call('PATCH', `/categories/${c.id}`, { zoneId: t2!.id })).statusCode).toBe(200);
+  });
+
+  test('vague lancée une fois : suppression refusée ; compétition lancée sans vague : pas de vagues ; zone portant des numéros figés : non supprimable', async () => {
+    await many(4);
+    await readyAll();
+    const [matin, aprem] = await twoWaves();
+    await launch(aprem!.id).then(() => launch(matin!.id));
+    const kept = await call('PUT', '/waves', [{ id: aprem!.id, name: 'Après-midi', rules: { ageBandCodes: ['cadet'], disciplines: [] } }]);
+    expect(kept.statusCode).toBe(409);
+    expect(kept.json().error).toBe('La vague « Matin » a été lancée : elle ne peut plus être supprimée.');
+  });
+
+  test('sans vague, lancée : création de vagues refusée ; zone portant des numéros figés non supprimable', async () => {
+    await many(4);
+    await readyAll();
+    await launch(null);
+    const res = await call('PUT', '/waves', [{ name: 'Matin', rules: { ageBandCodes: ['cadet'], disciplines: [] } }]);
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toBe('La compétition a été lancée sans vague : impossible de créer des vagues maintenant.');
+    const zones = (await call('GET', '/zones')).json() as { id: string; name: string }[];
+    const used = (await plan()).zones.find((z) => z.passages.length)!.zoneId;
+    const res2 = await call('PUT', '/zones', zones.filter((z) => z.id !== used).map((z) => ({ id: z.id, name: z.name })));
+    expect(res2.statusCode).toBe(409);
+    expect(res2.json().error).toContain('des combats figés y sont numérotés');
+  });
+});

@@ -225,3 +225,14 @@ describe('corrections de la relecture (étape 5)', () => {
     expect(detectCases(makeState([a, b])).filter((c) => c.kind === 'weight_out')).toEqual([]);
   });
 });
+
+test('catégorie d’une vague lancée (frozen) : ni cas ni cible', () => {
+  const a = member({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  const b = member({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
+  const s = makeState([a, b]);
+  expect(props(s, a.registrationId)).toHaveLength(1);
+  s.categories.find((c) => c.id === b.categoryId)!.frozen = true;
+  expect(props(s, a.registrationId)).toEqual([]);
+  expect(detectCases(s).some((c) => c.registrationId === b.registrationId)).toBe(false);
+});
+

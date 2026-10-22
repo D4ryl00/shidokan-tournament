@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
 import { getCompetition } from '../repositories/competitions.js';
-import { launchStatus, launchWave, numberPending, reopenWave } from '../repositories/launches.js';
+import { launchStatus, launchWave, numberPending, regenerateCategory, reopenWave } from '../repositories/launches.js';
 
 type P = { Params: { id: string } };
 const wave = z.object({ waveId: z.string().nullable() });
@@ -29,6 +29,7 @@ export async function launchRoutes(app: FastifyInstance, { db }: { db: AppDb }) 
     const body = number.parse(req.body);
     return numberPending(db, req.params.id, body.waveId, body.categoryIds);
   });
+  app.post<{ Params: { id: string; cid: string } }>('/api/competitions/:id/categories/:cid/regenerate', async (req) => regenerateCategory(db, req.params.id, req.params.cid));
   app.post<P>('/api/competitions/:id/launch/number/preview', async (req) => {
     const body = number.parse(req.body);
     return numberPending(db, req.params.id, body.waveId, body.categoryIds, true);
