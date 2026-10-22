@@ -85,6 +85,10 @@ export interface Category {
   bracket: Bracket | null;
   /** Zone de combat (null : pas encore affectée). */
   zoneId: string | null;
+  /** Vague de la catégorie, calculée (règles des vagues ou choix individuel) ; null : en attente ou aucune vague. */
+  waveId: string | null;
+  /** Choix individuel : id d'une vague, « none » (en attente) ou null (règles). */
+  waveOverride: string | null;
   /** Rang de passage sur la zone. */
   order: number;
   registrationIds: string[];

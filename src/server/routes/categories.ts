@@ -12,6 +12,7 @@ const patchSchema = z
     thirdPlace: z.boolean().nullable().optional(),
     status: z.enum(['provisional', 'ready', 'started', 'finished']).optional(),
     zoneId: z.string().nullable().optional(),
+    waveOverride: z.string().nullable().optional(),
     order: z.number().int().min(0).max(1000).optional(),
     unlock: z.boolean().optional(),
   })

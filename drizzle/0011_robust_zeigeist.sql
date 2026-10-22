@@ -1,0 +1,1 @@
+ALTER TABLE `fighters` DROP COLUMN `presence`;

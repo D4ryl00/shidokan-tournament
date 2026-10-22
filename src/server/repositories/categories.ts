@@ -17,10 +17,13 @@ import {
   type CategoryStatus,
 } from '../../domain/categories.js';
 import type { CompetitionSettings } from '../../domain/settings.js';
+import type { CategoryGrid } from '../../domain/types.js';
+import { WAVE_NONE, waveOfCategory, type Wave } from '../../domain/waves.js';
 import type { AppDb } from '../db/client.js';
 import { categories, fighters, registrations, tieBreaks, zones } from '../db/schema.js';
 import { getCompetition, getGrid } from './competitions.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
+import { listWaves } from './waves.js';
 
 export class CategoryLockedError extends Error {
   constructor(message = "Catégorie lancée : déverrouillez-la d'abord") {
@@ -39,6 +42,8 @@ interface Context {
   /** Inscrits non absents : ceux qui figurent dans le tableau. */
   active: Map<string, string[]>;
   entrants: Map<string, Entrant>;
+  waves: Wave[];
+  grid: CategoryGrid;
 }
 
 async function loadContext(db: AppDb, competitionId: string): Promise<Context> {
@@ -54,9 +59,9 @@ async function loadContext(db: AppDb, competitionId: string): Promise<Context> {
     entrants.set(r.id, { registrationId: r.id, clubId: f.clubId, label: `${f.lastName} ${f.firstName}`.trim() });
     if (!r.categoryId) continue;
     members.set(r.categoryId, [...(members.get(r.categoryId) ?? []), r.id]);
-    if (f.presence !== 'absent') active.set(r.categoryId, [...(active.get(r.categoryId) ?? []), r.id]);
+    if (r.presence !== 'absent') active.set(r.categoryId, [...(active.get(r.categoryId) ?? []), r.id]);
   }
-  return { settings: competition.settings, members, active, entrants };
+  return { settings: competition.settings, members, active, entrants, waves: await listWaves(db, competitionId), grid: await getGrid(db, competitionId) };
 }
 
 function effectiveFormat(row: Row, key: CategoryKey, count: number, ctx: Context): BracketFormat {
@@ -146,6 +151,7 @@ export async function syncCategories(db: AppDb, competitionId: string): Promise<
           aliasKeys: '[]',
           stale: false,
           zoneId: null,
+          waveOverride: null,
           sortOrder: 0,
         };
         t.insert(categories).values(row).run();
@@ -210,6 +216,8 @@ function toCategory(row: Row, ctx: Context): Category {
     seed: row.seed,
     bracket: withCurrentLabels(row.bracketJson ? (JSON.parse(row.bracketJson) as Bracket) : null, ctx),
     zoneId: row.zoneId,
+    waveId: waveOfCategory({ key, waveOverride: row.waveOverride }, ctx.waves, ctx.grid),
+    waveOverride: row.waveOverride,
     order: row.sortOrder,
     registrationIds: [...ids].sort(),
     absentIds: ids.filter((id) => !(ctx.active.get(row.id) ?? []).includes(id)).sort(),
@@ -248,7 +256,7 @@ export async function updateCategory(
   db: AppDb,
   competitionId: string,
   categoryId: string,
-  patch: { format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null; status?: CategoryStatus; zoneId?: string | null; order?: number; unlock?: boolean },
+  patch: { format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null; status?: CategoryStatus; zoneId?: string | null; waveOverride?: string | null; order?: number; unlock?: boolean },
 ): Promise<Category> {
   const row = getRow(db, competitionId, categoryId);
   const locked = LOCKED.includes(row.status);
@@ -274,6 +282,12 @@ export async function updateCategory(
       throw new RegistrationValidationError(['Zone de combat inconnue pour cette compétition.']);
     }
     set.zoneId = patch.zoneId;
+  }
+  if (patch.waveOverride !== undefined) {
+    if (patch.waveOverride !== null && patch.waveOverride !== WAVE_NONE && !(await listWaves(db, competitionId)).some((w) => w.id === patch.waveOverride)) {
+      throw new RegistrationValidationError(['Vague inconnue pour cette compétition.']);
+    }
+    set.waveOverride = patch.waveOverride;
   }
   if (patch.order !== undefined) set.sortOrder = patch.order;
   if (Object.keys(set).length) db.update(categories).set(set).where(eq(categories.id, categoryId)).run();

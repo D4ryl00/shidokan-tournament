@@ -4,6 +4,7 @@ import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
+import { olderDb } from '../helpers/older-db.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
@@ -97,29 +98,8 @@ test('modèles de grille : enregistrer, charger, créer une compétition à part
   expect((await app.inject({ method: 'GET', url: `/api/competitions/${c.id}/grid` })).json()).toEqual(grid);
 });
 
-/** Base au niveau de migration `upTo` (index du journal), comme une sauvegarde faite avec une version antérieure de l'app. */
-async function olderDb(upTo: number): Promise<string> {
-  const os = await import('node:os');
-  const { closeDb, openDb } = await import('../../src/server/db/client.js');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ancienne-'));
-  const src = path.resolve('drizzle');
-  fs.mkdirSync(path.join(dir, 'meta'));
-  const journal = JSON.parse(fs.readFileSync(path.join(src, 'meta/_journal.json'), 'utf8')) as { entries: { idx: number; tag: string }[] };
-  const kept = journal.entries.filter((e) => e.idx <= upTo);
-  for (const e of kept) fs.copyFileSync(path.join(src, `${e.tag}.sql`), path.join(dir, `${e.tag}.sql`));
-  fs.writeFileSync(path.join(dir, 'meta/_journal.json'), JSON.stringify({ ...journal, entries: kept }));
-  const file = path.join(dir, 'ancienne.sqlite');
-  process.env.MIGRATIONS_DIR = dir;
-  try {
-    closeDb(openDb(file));
-  } finally {
-    delete process.env.MIGRATIONS_DIR;
-  }
-  return file;
-}
-
 test('restauration d’une sauvegarde d’une version antérieure : mise à niveau puis restaurée', async () => {
-  const file = await olderDb(7);
+  const file = olderDb(7);
   const raw = new Database(file);
   raw.prepare("INSERT INTO competitions (id, name, date, tatami_count, settings_json) VALUES ('c1', 'Ancienne coupe', '2026-11-22', 2, '{}')").run();
   raw.prepare("INSERT INTO categories (id, competition_id, key_string, key_json, label, status, seed, tatami) VALUES ('k1', 'c1', 'k', '{}', 'Cat', 'ready', 1, 2)").run();

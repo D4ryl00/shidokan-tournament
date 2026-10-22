@@ -54,6 +54,18 @@ export const ageLinks = sqliteTable('age_links', {
   kind: text('kind', { enum: ['C', 'D'] }).notNull(),
 });
 
+/** Vagues d'une compétition : règles (tranches, disciplines) et clôture de leur pesée. */
+export const waves = sqliteTable('waves', {
+  id: text('id').primaryKey(),
+  competitionId: text('competition_id')
+    .notNull()
+    .references(() => competitions.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  sortOrder: integer('sort_order').notNull(),
+  rulesJson: text('rules_json').notNull(),
+  weighInClosed: integer('weigh_in_closed', { mode: 'boolean' }).notNull().default(false),
+});
+
 /** Zones de combat d'une compétition (« Tatami 1 », « Ring »…), dans l'ordre d'affichage. */
 export const zones = sqliteTable('zones', {
   id: text('id').primaryKey(),
@@ -91,7 +103,6 @@ export const fighters = sqliteTable('fighters', {
   ageBandCode: text('age_band_code').notNull(),
   licence: text('licence'),
   grade: text('grade'),
-  presence: text('presence', { enum: ['unknown', 'present', 'absent'] }).notNull().default('unknown'),
   weighInKg: real('weigh_in_kg'),
 });
 
@@ -110,6 +121,8 @@ export const registrations = sqliteTable('registrations', {
   otherDisciplinesJson: text('other_disciplines_json').notNull().default('[]'),
   acceptsJiyuFirst: integer('accepts_jiyu_first', { mode: 'boolean' }),
   source: text('source', { enum: ['club_form', 'ffk', 'manual', 'onsite'] }).notNull(),
+  /** Présence dans la vague de sa catégorie (non pesé, présent, absent). */
+  presence: text('presence', { enum: ['unknown', 'present', 'absent'] }).notNull().default('unknown'),
   ffkConfirmed: integer('ffk_confirmed', { mode: 'boolean' }).notNull().default(false),
   categoryId: text('category_id'),
   /** Placement validé par un recasement : la synchronisation automatique ne le déplace plus. */
@@ -161,6 +174,8 @@ export const categories = sqliteTable('categories', {
   aliasKeys: text('alias_keys').notNull().default('[]'),
   stale: integer('stale', { mode: 'boolean' }).notNull().default(false),
   zoneId: text('zone_id').references(() => zones.id, { onDelete: 'set null' }),
+  /** Choix individuel de vague : id d'une vague, « none » (en attente) ou null (règles des vagues). */
+  waveOverride: text('wave_override'),
   sortOrder: integer('sort_order').notNull().default(0),
 });
 

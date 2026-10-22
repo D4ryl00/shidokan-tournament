@@ -60,7 +60,7 @@ export async function loadState(db: AppDb, competitionId: string): Promise<State
         weightClassId: r.weightClassId,
         weighInKg: f.weighInKg,
         approxWeightKg: r.approxWeightKg,
-        presence: f.presence,
+        presence: r.presence,
         otherDisciplines: JSON.parse(r.otherDisciplinesJson),
         acceptsJiyuFirst: r.acceptsJiyuFirst,
         categoryId: r.categoryId,
@@ -331,22 +331,27 @@ export async function listRecasements(db: AppDb, competitionId: string) {
 export async function setWeighIn(db: AppDb, competitionId: string, fighterId: string, data: { presence?: Presence; weighInKg?: number | null }): Promise<void> {
   const f = db.select().from(fighters).where(and(eq(fighters.id, fighterId), eq(fighters.competitionId, competitionId))).get();
   if (!f) throw new NotFoundError('Combattant introuvable');
-  const set: Partial<typeof fighters.$inferInsert> = {};
-  if (data.weighInKg !== undefined) {
-    set.weighInKg = data.weighInKg;
-    if (data.weighInKg !== null && data.presence === undefined) set.presence = 'present';
-  }
-  if (data.presence !== undefined) set.presence = data.presence;
-  db.update(fighters).set(set).where(eq(fighters.id, fighterId)).run();
+  if (data.weighInKg !== undefined) db.update(fighters).set({ weighInKg: data.weighInKg }).where(eq(fighters.id, fighterId)).run();
+  // Un poids relevé vaut présence ; la présence se note sur les inscriptions du combattant.
+  const presence = data.presence ?? (data.weighInKg !== undefined && data.weighInKg !== null ? 'present' : undefined);
+  if (presence) db.update(registrations).set({ presence }).where(eq(registrations.fighterId, fighterId)).run();
   await recomputeKeys(db, competitionId, mergedCategoryIds);
 }
 
 export async function closeWeighIn(db: AppDb, competitionId: string): Promise<{ markedAbsent: number }> {
-  const unknown = db.select().from(fighters).where(and(eq(fighters.competitionId, competitionId), eq(fighters.presence, 'unknown'))).all();
-  db.update(fighters).set({ presence: 'absent' }).where(and(eq(fighters.competitionId, competitionId), eq(fighters.presence, 'unknown'))).run();
+  const unknownRegs = and(eq(registrations.competitionId, competitionId), eq(registrations.presence, 'unknown'));
+  const unknown = new Set(db.select().from(registrations).where(unknownRegs).all().map((r) => r.fighterId));
+  db.update(registrations).set({ presence: 'absent' }).where(unknownRegs).run();
   db.update(competitions).set({ weighInClosed: true }).where(eq(competitions.id, competitionId)).run();
   await recomputeKeys(db, competitionId, mergedCategoryIds);
-  return { markedAbsent: unknown.length };
+  return { markedAbsent: unknown.size };
+}
+
+/** Présence d'un combattant d'après ses inscriptions : présent si l'une l'est, absent si toutes le sont, sinon non pesé. */
+function fighterPresence(members: Member[]): Presence {
+  if (members.some((m) => m.presence === 'present')) return 'present';
+  if (members.length > 0 && members.every((m) => m.presence === 'absent')) return 'absent';
+  return 'unknown';
 }
 
 export async function weighInList(db: AppDb, competitionId: string) {
@@ -366,7 +371,7 @@ export async function weighInList(db: AppDb, competitionId: string) {
         club: f.clubId ? (cs.get(f.clubId) ?? '') : '',
         sex: f.sex,
         ageBandCode: f.ageBandCode,
-        presence: f.presence,
+        presence: fighterPresence(state.members.filter((m) => m.fighterId === f.id)),
         weighInKg: f.weighInKg,
         registrations: state.members
           .filter((m) => m.fighterId === f.id)

@@ -140,7 +140,6 @@ function findOrCreateFighter(
     ageBandCode: input.ageBandCode,
     licence: input.licence ?? null,
     grade: input.grade ?? null,
-    presence: 'unknown' as const,
     weighInKg: null,
   };
   db.insert(fighters).values(row).run();
