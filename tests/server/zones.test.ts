@@ -127,3 +127,28 @@ test('migration d’une base antérieure : tatamis repris en zones, affectations
   expect(db.$client.prepare("SELECT count(*) AS n FROM clubs WHERE competition_id = 'c1'").get()).toEqual({ n: 1 });
   closeDb(db);
 });
+
+test('relecture : plus de 20 zones → message clair', async () => {
+  const res = await putZones(Array.from({ length: 21 }, (_, i) => ({ name: `Z${i}` })));
+  expect(res.statusCode).toBe(400);
+  expect(res.json().issues.join(' ')).toContain('Pas plus de 20 zones de combat');
+});
+
+test('relecture : liste périmée (autre onglet) → 409, rien n’est supprimé', async () => {
+  const [t1, t2] = await zones();
+  const added = (await app.inject({ method: 'PUT', url: `${base}/zones`, payload: { zones: [{ id: t1!.id, name: 'Tatami 1' }, { id: t2!.id, name: 'Tatami 2' }, { name: 'Ring' }], knownIds: [t1!.id, t2!.id] } })).json() as Zone[];
+  expect(added).toHaveLength(3);
+  // Un autre onglet n'a jamais vu « Ring »
+  const stale = await app.inject({ method: 'PUT', url: `${base}/zones`, payload: { zones: [{ id: t1!.id, name: 'Tatami 1' }], knownIds: [t1!.id, t2!.id] } });
+  expect(stale.statusCode).toBe(409);
+  expect(stale.json().error).toContain('modifiées');
+  expect(await zones()).toHaveLength(3);
+});
+
+test('relecture : zone d’une catégorie terminée non supprimable', async () => {
+  const [t1, t2] = await zones();
+  const c = await category();
+  await app.inject({ method: 'PATCH', url: `${base}/categories/${c.id}`, payload: { zoneId: t2!.id } });
+  await app.inject({ method: 'PATCH', url: `${base}/categories/${c.id}`, payload: { status: 'finished' } });
+  expect((await putZones([{ id: t1!.id, name: 'Tatami 1' }])).statusCode).toBe(409);
+});

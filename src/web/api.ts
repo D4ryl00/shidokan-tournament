@@ -351,7 +351,7 @@ export function useZones(id: string) {
 export function useSaveZones(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (zones: ZoneInput[]) => api<Zone[]>('PUT', `/api/competitions/${id}/zones`, zones),
+    mutationFn: (body: { zones: ZoneInput[]; knownIds: string[] }) => api<Zone[]>('PUT', `/api/competitions/${id}/zones`, body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['zones', id] });
       void qc.invalidateQueries({ queryKey: ['schedule', id] });

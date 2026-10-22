@@ -2,11 +2,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import type { AppDb } from '../db/client.js';
+import { closeDb, openDb, type AppDb } from '../db/client.js';
 
 export class RestoreError extends Error {
-  constructor() {
-    super("Ce fichier n'est pas une sauvegarde de l'application");
+  constructor(message = "Ce fichier n'est pas une sauvegarde de l'application") {
+    super(message);
   }
 }
 
@@ -64,8 +64,9 @@ export function freshCopy(db: AppDb): Buffer {
 }
 
 /**
- * Restaure une sauvegarde : contrôle qu'elle vient de l'application (mêmes migrations), puis remplace le contenu
- * de chaque table dans une seule transaction. En cas d'erreur, la base courante est intacte.
+ * Restaure une sauvegarde : contrôle qu'elle vient de l'application ; une sauvegarde d'une version antérieure est
+ * d'abord mise à niveau (migrations appliquées à la copie temporaire), une d'une version plus récente est refusée.
+ * Puis le contenu de chaque table est remplacé dans une seule transaction. En cas d'erreur, la base courante est intacte.
  */
 export async function restoreFrom(db: AppDb, file: Buffer, beforeCopy: () => Promise<unknown> = async () => undefined): Promise<void> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shidokan-restauration-'));
@@ -73,16 +74,30 @@ export async function restoreFrom(db: AppDb, file: Buffer, beforeCopy: () => Pro
   fs.writeFileSync(tmp, file);
   const client = db.$client;
   try {
-    let migrations: number;
-    try {
-      const src = new Database(tmp, { readonly: true, fileMustExist: true });
-      migrations = (src.prepare('select count(*) as c from __drizzle_migrations').get() as { c: number }).c;
-      src.close();
-    } catch {
-      throw new RestoreError();
-    }
+    const count = () => {
+      try {
+        const src = new Database(tmp, { readonly: true, fileMustExist: true });
+        const c = (src.prepare('select count(*) as c from __drizzle_migrations').get() as { c: number }).c;
+        src.close();
+        return c;
+      } catch {
+        throw new RestoreError();
+      }
+    };
     const current = (client.prepare('select count(*) as c from __drizzle_migrations').get() as { c: number }).c;
-    if (migrations !== current) throw new RestoreError();
+    let migrations = count();
+    if (migrations > current) {
+      throw new RestoreError("Cette sauvegarde vient d'une version plus récente de l'application : mettez l'application à jour avant de la restaurer.");
+    }
+    if (migrations < current) {
+      try {
+        closeDb(openDb(tmp)); // mise à niveau de la copie, comme au démarrage de l'app
+      } catch {
+        throw new RestoreError();
+      }
+      migrations = count();
+      if (migrations !== current) throw new RestoreError();
+    }
     await beforeCopy(); // sauvegarde de sécurité, seulement pour un fichier valide
     const tables = (client.prepare("select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name <> '__drizzle_migrations'").all() as { name: string }[]).map((t) => t.name);
     client.pragma('foreign_keys = OFF');
@@ -90,8 +105,10 @@ export async function restoreFrom(db: AppDb, file: Buffer, beforeCopy: () => Pro
     try {
       client.transaction(() => {
         for (const t of tables) {
+          // Colonnes nommées : l'ordre peut différer entre une base mise à niveau et une base créée d'un coup.
+          const cols = (client.prepare(`select name from pragma_table_info('${t}')`).all() as { name: string }[]).map((c) => `"${c.name}"`).join(', ');
           client.exec(`DELETE FROM main."${t}"`);
-          client.exec(`INSERT INTO main."${t}" SELECT * FROM src."${t}"`);
+          client.exec(`INSERT INTO main."${t}" (${cols}) SELECT ${cols} FROM src."${t}"`);
         }
       })();
     } finally {

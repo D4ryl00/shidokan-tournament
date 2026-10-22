@@ -61,10 +61,10 @@ test('réglage invalide → 400, rien n’est enregistré', async () => {
   expect(again.json().settings.weightGapMaxKg.children).toBe(5);
 });
 
-test('nombre de tatamis à 0 → 400', async () => {
-  const id = (await create()).json().id;
-  const res = await app.inject({ method: 'PATCH', url: `/api/competitions/${id}`, payload: { tatamiCount: 0 } });
+test('nombre de zones de combat à 0 → 400', async () => {
+  const res = await create({ name: 'X', date: '2026-11-22', zoneCount: 0 });
   expect(res.statusCode).toBe(400);
+  expect(res.json().issues.join(' ')).toContain('nombre de zones de combat');
 });
 
 test('PATCH valide', async () => {

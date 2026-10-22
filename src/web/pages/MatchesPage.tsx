@@ -4,7 +4,7 @@ import { useParams } from 'react-router';
 import { resolveBracket, type ResolvedMatch } from '../../domain/brackets/index.js';
 import { activeEntrantCount } from '../../domain/categories.js';
 import { validResults } from '../../domain/results.js';
-import { useCategories, useCategoryResults, useCompetition, useDeleteResult, useSchedule, useUpdateCategory, useZones } from '../api.js';
+import { useCategories, useCategoryResults, useDeleteResult, useSchedule, useUpdateCategory, useZones } from '../api.js';
 import { BracketView } from '../components/BracketView.js';
 import { KataScoring } from '../components/KataScoring.js';
 import { HelpButton, HelpText, SectionHeader } from '../components/Help.js';
@@ -14,7 +14,6 @@ import { STATUS_LABELS, useEntrantInfo } from './BracketsPage.js';
 
 export function MatchesPage() {
   const { id = '' } = useParams();
-  const { data: competition } = useCompetition(id);
   const { data: categories = [] } = useCategories(id);
   const { data: schedule } = useSchedule(id);
   const { data: zones = [] } = useZones(id);

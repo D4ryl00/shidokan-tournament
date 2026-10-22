@@ -13,14 +13,24 @@ export interface ZoneInput {
 }
 
 export const ZONE_NAME_MAX = 40;
+export const ZONE_MAX = 20;
 
 export function defaultZoneNames(count: number): string[] {
   return Array.from({ length: count }, (_, i) => `Tatami ${i + 1}`);
 }
 
+/** Nom proposé pour une zone ajoutée : le premier « Tatami N » libre. */
+export function nextZoneName(existing: string[]): string {
+  const taken = new Set(existing.map((n) => normalizeName(n)));
+  for (let n = 1; ; n++) if (!taken.has(normalizeName(`Tatami ${n}`))) return `Tatami ${n}`;
+}
+
 export function validateZones(zones: ZoneInput[]): string[] {
   if (zones.length === 0) return ['Il faut au moins une zone de combat.'];
+  if (zones.length > ZONE_MAX) return [`Pas plus de ${ZONE_MAX} zones de combat.`];
   const errors: string[] = [];
+  const ids = zones.map((z) => z.id).filter(Boolean);
+  if (new Set(ids).size !== ids.length) errors.push('La même zone apparaît deux fois dans la liste.');
   const seen = new Map<string, string>();
   for (const z of zones) {
     const name = z.name.trim();

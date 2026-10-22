@@ -122,3 +122,50 @@ test('zones de combat : nom en double, message en français', async ({ page }) =
   await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
   await expect(page.getByText('Deux zones portent le même nom : « Tatami 1 ».')).toBeVisible();
 });
+
+test('zones (relecture) : suppression confirmée, protégée si catégorie lancée, noms accessibles, nom proposé libre', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe zones relecture');
+  const reg = (lastName: string, weightClassId: string) =>
+    request.post(`/api/competitions/${id}/registrations`, {
+      data: { clubId: null, lastName, firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', weightClassId, source: 'manual' },
+    });
+  for (let i = 0; i < 2; i++) await reg(`A${i}`, 'cadet:F:-54');
+  for (let i = 0; i < 2; i++) await reg(`B${i}`, 'cadet:F:-61');
+  const zones = (await (await request.get(`/api/competitions/${id}/zones`)).json()) as { id: string }[];
+  const cats = (await (await request.get(`/api/competitions/${id}/categories`)).json()) as { id: string; label: string }[];
+  await request.patch(`/api/competitions/${id}/categories/${cats[0]!.id}`, { data: { zoneId: zones[0]!.id } });
+  await request.patch(`/api/competitions/${id}/categories/${cats[1]!.id}`, { data: { zoneId: zones[1]!.id, status: 'started' } });
+  await page.goto(`/competitions/${id}/reglages`);
+  // Noms accessibles ; zone d'une catégorie lancée non supprimable
+  await expect(page.getByRole('button', { name: 'Supprimer la zone « Tatami 2 »' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Monter la zone « Tatami 2 »' })).toBeEnabled();
+  // Suppression confirmée, avec le nombre de catégories touchées
+  await page.getByRole('button', { name: 'Supprimer la zone « Tatami 1 »' }).click();
+  await expect(page.getByTestId('zone-delete-confirm')).toContainText('1 catégorie passera « Sans zone »');
+  await page.getByTestId('zone-delete-go').click();
+  await expect(page.getByTestId('zone-name')).toHaveCount(1);
+  // Nom proposé : le premier libre
+  await page.getByTestId('zone-add').click();
+  await expect(page.getByTestId('zone-name').nth(1)).toHaveValue('Tatami 1');
+});
+
+test('zones (relecture) : nom en double → rien n’est enregistré ; liste périmée → message', async ({ page, browser }) => {
+  const id = await createCompetition(page, 'Coupe zones doublon 2');
+  await page.goto(`/competitions/${id}/reglages`);
+  await page.getByLabel('Nom', { exact: true }).fill('Nom changé');
+  await page.getByTestId('zone-name').nth(1).fill('Tatami 1');
+  await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await expect(page.getByText('Deux zones portent le même nom : « Tatami 1 ».')).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Nom', { exact: true })).toHaveValue('Coupe zones doublon 2');
+  // Un deuxième onglet ajoute une zone ; le premier, périmé, ne peut pas l'effacer
+  const other = await browser.newPage();
+  await other.goto(page.url());
+  await other.getByTestId('zone-add').click();
+  await other.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await expect(other.getByText('Réglages enregistrés')).toBeVisible();
+  await page.getByRole('button', { name: 'Supprimer la zone « Tatami 2 »' }).click(); // sans catégorie : pas de confirmation
+  await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await expect(page.getByText('Les zones ont été modifiées ailleurs')).toBeVisible();
+  await other.close();
+});

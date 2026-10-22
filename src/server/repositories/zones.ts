@@ -19,10 +19,14 @@ export async function listZones(db: AppDb, competitionId: string): Promise<Zone[
  * Remplace la liste des zones : les zones gardées conservent leur identifiant (et leurs catégories), les nouvelles sont créées,
  * celles qui disparaissent sont supprimées et leurs catégories passent sans zone — refusé si l'une d'elles est lancée ou terminée.
  */
-export async function replaceZones(db: AppDb, competitionId: string, input: ZoneInput[]): Promise<Zone[]> {
+export async function replaceZones(db: AppDb, competitionId: string, input: ZoneInput[], knownIds?: string[]): Promise<Zone[]> {
   const errors = validateZones(input);
   if (errors.length) throw new GridValidationError(errors);
   const current = await listZones(db, competitionId);
+  // Écran ouvert avant une autre modification (autre onglet) : on ne supprime pas des zones qu'il n'a jamais vues.
+  if (knownIds && (knownIds.length !== current.length || current.some((z) => !knownIds.includes(z.id)))) {
+    throw new CategoryLockedError('Les zones ont été modifiées ailleurs entre-temps : rechargez la page avant d’enregistrer.');
+  }
   const known = new Set(current.map((z) => z.id));
   const keptIds = input.map((z) => z.id).filter((id): id is string => !!id && known.has(id));
   const removed = current.filter((z) => !keptIds.includes(z.id)).map((z) => z.id);

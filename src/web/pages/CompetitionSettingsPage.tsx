@@ -1,12 +1,12 @@
 import {
-  ActionIcon, Button, Checkbox, Fieldset, Group, MultiSelect, NumberInput, Select, SimpleGrid, Stack, Switch, TextInput,
+  ActionIcon, Alert, Button, Checkbox, List, Modal, Fieldset, Group, MultiSelect, NumberInput, Select, SimpleGrid, Stack, Switch, Text, TextInput,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import type { CombatFormat, CompetitionSettings } from '../../domain/settings.js';
-import { useCompetition, useGrid, useSaveZones, useUpdateCompetition, useZones } from '../api.js';
-import type { ZoneInput } from '../../domain/zones.js';
+import { useCategories, useCompetition, useGrid, useSaveZones, useUpdateCompetition, useZones } from '../api.js';
+import { nextZoneName, validateZones, ZONE_MAX } from '../../domain/zones.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { HelpLine } from '../components/Help.js';
 import { HELP } from '../help.js';
@@ -39,10 +39,22 @@ export function CompetitionSettingsPage() {
   const [s, setS] = useState<CompetitionSettings | null>(null);
   const { data: savedZones } = useZones(id);
   const saveZones = useSaveZones(id);
-  const [zones, setZones] = useState<ZoneInput[]>([]);
+  const { data: categories = [] } = useCategories(id);
+  // `key` : identifiant d'affichage stable, y compris pour une zone pas encore enregistrée.
+  const [zones, setZones] = useState<{ key: string; id?: string; name: string }[]>([]);
+  const [zoneErrors, setZoneErrors] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState<string | null>(null);
   useEffect(() => {
-    if (savedZones) setZones(savedZones.map(({ id: zid, name }) => ({ id: zid, name })));
+    if (savedZones) setZones(savedZones.map(({ id: zid, name }) => ({ key: zid, id: zid, name })));
   }, [savedZones]);
+  const zoneCategories = (zid?: string) => (zid ? categories.filter((c) => c.zoneId === zid) : []);
+  const zoneLocked = (zid?: string) => zoneCategories(zid).some((c) => c.status === 'started' || c.status === 'finished');
+  const removeZone = (key: string) => {
+    setZones((zs) => zs.filter((z) => z.key !== key));
+    setDeleting(null);
+  };
+  const deletingZone = zones.find((z) => z.key === deleting);
+  const deletingCount = zoneCategories(deletingZone?.id).length;
   const moveZone = (i: number, d: -1 | 1) =>
     setZones((zs) => {
       const next = [...zs];
@@ -60,15 +72,20 @@ export function CompetitionSettingsPage() {
   const set = (patch: Partial<CompetitionSettings>) => setS({ ...s, ...patch });
   const bandOptions = (grid?.ageBands ?? []).map((b) => ({ value: b.code, label: b.label }));
 
-  // Les zones d'abord : une erreur (nom en double…) s'affiche sans rien enregistrer d'autre.
-  const save = () =>
-    saveZones.mutate(zones, {
+  // Zones vérifiées avant tout envoi, puis enregistrées en premier : une erreur n'enregistre rien d'autre.
+  const save = () => {
+    const input = zones.map(({ id: zid, name }) => (zid ? { id: zid, name } : { name }));
+    const errors = validateZones(input);
+    setZoneErrors(errors);
+    if (errors.length) return;
+    saveZones.mutate({ zones: input, knownIds: (savedZones ?? []).map((z) => z.id) }, {
       onSuccess: () =>
         update.mutate(
           { name: info.name, date: info.date, location: info.location || null, settings: s },
           { onSuccess: () => notifications.show({ color: 'green', message: 'Réglages enregistrés' }) },
         ),
     });
+  };
 
   return (
     <Stack data-testid="settings-form" maw={900}>
@@ -85,19 +102,36 @@ export function CompetitionSettingsPage() {
         <HelpLine topic="reglages.zones" />
         <Stack gap="xs">
           {zones.map((z, i) => (
-            <Group key={z.id ?? `new-${i}`} gap="xs" data-testid="zone-row" wrap="nowrap">
+            <Group key={z.key} gap="xs" data-testid="zone-row" wrap="nowrap">
               <TextInput data-testid="zone-name" aria-label={`Nom de la zone ${i + 1}`} w={260} maxLength={40} value={z.name}
-                onChange={(e) => { const name = e.currentTarget.value; setZones((zs) => zs.map((x, j) => (j === i ? { ...x, name } : x))); }} />
-              <ActionIcon variant="subtle" aria-label="Monter" disabled={i === 0} onClick={() => moveZone(i, -1)}>↑</ActionIcon>
-              <ActionIcon variant="subtle" aria-label="Descendre" disabled={i === zones.length - 1} onClick={() => moveZone(i, 1)}>↓</ActionIcon>
-              <ActionIcon variant="subtle" color="red" aria-label="Supprimer la zone" disabled={zones.length === 1}
-                onClick={() => setZones((zs) => zs.filter((_, j) => j !== i))}>✕</ActionIcon>
+                onChange={(e) => { const name = e.currentTarget.value; setZones((zs) => zs.map((x) => (x.key === z.key ? { ...x, name } : x))); }} />
+              <ActionIcon variant="subtle" aria-label={`Monter la zone « ${z.name} »`} disabled={i === 0} onClick={() => moveZone(i, -1)}>↑</ActionIcon>
+              <ActionIcon variant="subtle" aria-label={`Descendre la zone « ${z.name} »`} disabled={i === zones.length - 1} onClick={() => moveZone(i, 1)}>↓</ActionIcon>
+              <ActionIcon variant="subtle" color="red" aria-label={`Supprimer la zone « ${z.name} »`} disabled={zones.length === 1 || zoneLocked(z.id)}
+                title={zoneLocked(z.id) ? 'Une catégorie lancée s’y déroule' : undefined}
+                onClick={() => (zoneCategories(z.id).length ? setDeleting(z.key) : removeZone(z.key))}>✕</ActionIcon>
             </Group>
           ))}
           <Group>
-            <Button variant="light" size="xs" data-testid="zone-add" disabled={zones.length >= 20}
-              onClick={() => setZones((zs) => [...zs, { name: `Tatami ${zs.length + 1}` }])}>Ajouter une zone</Button>
+            <Button variant="light" size="xs" data-testid="zone-add" disabled={zones.length >= ZONE_MAX}
+              onClick={() => setZones((zs) => [...zs, { key: crypto.randomUUID(), name: nextZoneName(zs.map((x) => x.name)) }])}>Ajouter une zone</Button>
           </Group>
+          {zoneErrors.length > 0 && (
+            <Alert color="red" title="Zones de combat" data-testid="zone-errors">
+              <List size="sm">{zoneErrors.map((e) => <List.Item key={e}>{e}</List.Item>)}</List>
+            </Alert>
+          )}
+          <Modal opened={deleting !== null} onClose={() => setDeleting(null)} title={`Supprimer la zone « ${deletingZone?.name ?? ''} » ?`}>
+            <Stack data-testid="zone-delete-confirm">
+              <Text size="sm">
+                {deletingCount === 1 ? '1 catégorie passera « Sans zone »' : `${deletingCount} catégories passeront « Sans zone »`} à l’enregistrement des réglages.
+              </Text>
+              <Group justify="flex-end">
+                <Button variant="default" onClick={() => setDeleting(null)}>Annuler</Button>
+                <Button color="red" data-testid="zone-delete-go" onClick={() => deleting && removeZone(deleting)}>Supprimer</Button>
+              </Group>
+            </Stack>
+          </Modal>
         </Stack>
       </Fieldset>
 
