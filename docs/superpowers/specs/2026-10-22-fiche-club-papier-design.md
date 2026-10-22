@@ -62,7 +62,7 @@ Cases encadrées à remplir : **Club**, **Coach**, **Téléphone**, **E-mail**, 
 - **Même contenu** que la fiche papier : une ligne par combattant ; colonnes dans le même ordre ; listes déroulantes à la place des cases (sexe, catégorie d'âge parmi les tranches proposées, règlement, priorité shobu, pré-accord) ; disciplines : kata et/ou une discipline de combat sur la même ligne 🔧 (par exemple une colonne « Discipline de combat » en liste et une colonne « Kata » Oui/Non) ; autres disciplines numérotées 1, 2 ; grade ; poids actuel.
 - **Import** :
   - une ligne qui coche le kata et une discipline de combat donne **deux inscriptions** du même combattant ;
-  - la catégorie de poids est **déduite du poids actuel**, de l'âge et du sexe (`weightClassForWeight`) ; sans poids, l'inscription est importée sans catégorie de poids, avec une remarque dans l'aperçu ;
+  - la catégorie de poids est **déduite du poids actuel**, de l'âge et du sexe (`weightClassForWeight`, avec la tolérance de pesée des réglages) ; 💡 sans poids actuel, une inscription de combat est **en erreur** dans l'aperçu (l'app exige une catégorie de poids pour placer un combattant) — le kata n'en a pas besoin ;
   - le grade est enregistré sur le combattant ;
   - 💡 les fiches déjà renvoyées au **format actuel** restent importables (l'import reconnaît l'ancien et le nouveau format à leurs en-têtes).
 
