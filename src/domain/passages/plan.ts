@@ -110,9 +110,21 @@ function stillValid(c: PlanCategory, rows: FrozenPassage[], zoneId: string | nul
  * Numérote les catégories jouables `cats` d'une vague à partir des compteurs `next` (mis à jour) : chaque zone (kata d'abord,
  * puis les combats), puis, sur la zone des finales, les combats pour la 1re place et les finales de kata, à la fin de la vague.
  */
-function orderWave(cats: PlanCategory[], zoneOf: (id: string) => string | null, waveId: string | null, ctx: Context, next: Map<string, number>): (PlannedPassage & { zoneId: string })[] {
+function orderWave(
+  cats: PlanCategory[],
+  zoneOf: (id: string) => string | null,
+  waveId: string | null,
+  ctx: Context,
+  next: Map<string, number>,
+  opts: { keep?: Set<string>; zones?: Set<string> } = {},
+): (PlannedPassage & { zoneId: string })[] {
   const out: (PlannedPassage & { zoneId: string })[] = [];
+  // Passages gardés (joués) : ni émis ni renumérotés ; `zones` : seulement ces zones.
+  const kept = (c: PlanCategory, matchId: string | null) => opts.keep?.has(`${c.id}:${matchId ?? 'kata'}`) ?? false;
+  const kataEntry = (c: PlanCategory, block: string | null): OrderCategory[] =>
+    kept(c, block) ? [] : [{ id: c.id, rank: c.rank, kataEntrants: c.bracket!.entrants.length, kataBlock: block, nodes: [] }];
   const emit = (zoneId: string, here: OrderCategory[]) => {
+    if (opts.zones && !opts.zones.has(zoneId)) return;
     const passages = zoneOrder(here, ctx.mode, next.get(zoneId)!);
     out.push(...passages.map((p) => ({ ...p, waveId, zoneId })));
     next.set(zoneId, next.get(zoneId)! + passages.length);
@@ -121,12 +133,11 @@ function orderWave(cats: PlanCategory[], zoneOf: (id: string) => string | null, 
     const here: OrderCategory[] = [];
     for (const c of cats.filter((x) => zoneOf(x.id) === z.id)) {
       if (isKata(c)) {
-        const n = c.bracket!.entrants.length;
-        if (!kataSplit(c, ctx)) here.push({ id: c.id, rank: c.rank, kataEntrants: n, kataBlock: null, nodes: [] });
-        else if (n > 2) here.push({ id: c.id, rank: c.rank, kataEntrants: n, kataBlock: 'kata:tour1', nodes: [] });
+        if (!kataSplit(c, ctx)) here.push(...kataEntry(c, null));
+        else if (c.bracket!.entrants.length > 2) here.push(...kataEntry(c, 'kata:tour1'));
       } else {
         const finals = finalsOf(c, ctx);
-        here.push({ id: c.id, rank: c.rank, kataEntrants: null, nodes: ctx.nodes.get(c.id)!.filter((x) => !finals.includes(x.matchId)) });
+        here.push({ id: c.id, rank: c.rank, kataEntrants: null, nodes: ctx.nodes.get(c.id)!.filter((x) => !finals.includes(x.matchId) && !kept(c, x.matchId)) });
       }
     }
     emit(z.id, here);
@@ -135,10 +146,10 @@ function orderWave(cats: PlanCategory[], zoneOf: (id: string) => string | null, 
     const finals: OrderCategory[] = [];
     for (const c of cats.filter((x) => zoneOf(x.id) !== null)) {
       if (isKata(c)) {
-        if (kataSplit(c, ctx)) finals.push({ id: c.id, rank: c.rank, kataEntrants: c.bracket!.entrants.length, kataBlock: 'kata:finale', nodes: [] });
+        if (kataSplit(c, ctx)) finals.push(...kataEntry(c, 'kata:finale'));
       } else {
         const ids = finalsOf(c, ctx);
-        const nodes = ctx.nodes.get(c.id)!.filter((x) => ids.includes(x.matchId));
+        const nodes = ctx.nodes.get(c.id)!.filter((x) => ids.includes(x.matchId) && !kept(c, x.matchId));
         if (nodes.length) finals.push({ id: c.id, rank: c.rank, kataEntrants: null, nodes });
       }
     }
@@ -202,23 +213,63 @@ export function planPassages(input: PlanInput): PassagePlan {
   return plan;
 }
 
-/**
- * Numéros « à la suite » pour des catégories à numéroter d'une vague figée : sur leur zone (et la zone des finales),
- * après le dernier numéro figé de la zone parmi les vagues de la même numérotation (depuis le dernier « reprendre à 1 »).
- */
-export function appendPassages(input: PlanInput, waveId: string | null, categoryIds: string[]): FrozenPassage[] {
-  const ctx = context(input);
-  const plan = planPassages(input);
+/** Vagues de la même numérotation que `waveId` (depuis le dernier « reprendre à 1 » jusqu'au suivant), dans l'ordre. */
+function segmentOf(input: PlanInput, waveId: string | null): string[] {
   const order = input.waves.length === 0 ? [''] : [...input.waves].sort((a, b) => a.order - b.order).map((w) => w.id);
   const at = order.indexOf(waveKey(waveId));
   const restarts = order.map((k, i) => (i === 0 || input.restart?.includes(k) ? i : -1)).filter((i) => i >= 0);
   const from = Math.max(...restarts.filter((i) => i <= at));
   const to = Math.min(order.length, ...restarts.filter((i) => i > at));
-  const segment = new Set(order.slice(from, to));
+  return order.slice(from, to);
+}
+
+export interface RenumberOptions {
+  /** Passages joués (clé `${categoryId}:${matchId ?? 'kata'}`) : jamais renumérotés. */
+  played?: Set<string>;
+  /** Zone imposée à des catégories (déplacement) ; sinon leur zone du plan. */
+  zoneOf?: Record<string, string>;
+}
+
+const toFrozen = (p: PlannedPassage & { zoneId: string }): FrozenPassage => ({
+  waveKey: waveKey(p.waveId), zoneId: p.zoneId, number: p.number, categoryId: p.categoryId, matchId: p.matchId, noRest: p.noRest,
+});
+
+/**
+ * Numéros « à la suite » pour des catégories d'une vague figée (à numéroter, ou déplacées) : leurs passages non joués,
+ * sur leur zone (imposée par `zoneOf`) et la zone des finales, après le dernier numéro figé de la zone parmi les vagues
+ * de la même numérotation (depuis le dernier « reprendre à 1 »).
+ */
+export function appendPassages(input: PlanInput, waveId: string | null, categoryIds: string[], opts: RenumberOptions = {}): FrozenPassage[] {
+  const ctx = context(input);
+  const plan = planPassages(input);
+  const segment = new Set(segmentOf(input, waveId));
   const rows = (input.frozen ?? []).filter((f) => segment.has(f.waveKey));
   const next = new Map(ctx.zones.map((z) => [z.id, 1 + Math.max(0, ...rows.filter((f) => f.zoneId === z.id).map((f) => f.number))]));
   const cats = input.categories.filter((c) => c.waveId === waveId && c.playable && categoryIds.includes(c.id));
-  return orderWave(cats, (id) => plan.categories[id]?.zoneId ?? null, waveId, ctx, next).map((p) => ({
-    waveKey: waveKey(waveId), zoneId: p.zoneId, number: p.number, categoryId: p.categoryId, matchId: p.matchId, noRest: p.noRest,
-  }));
+  const zoneOf = (id: string) => opts.zoneOf?.[id] ?? plan.categories[id]?.zoneId ?? null;
+  return orderWave(cats, zoneOf, waveId, ctx, next, { keep: opts.played }).map(toFrozen);
+}
+
+/**
+ * « Mélangés » : nouveaux numéros de tous les passages non joués de la zone, dans les vagues figées de la même numérotation
+ * que `waveId` (vague par vague, ordre de passage habituel), catégories `extra` comprises (à numéroter ou déplacées), à partir
+ * du numéro qui suit le plus grand numéro joué de la zone. Les passages joués gardent leur numéro.
+ */
+export function reshuffleZone(input: PlanInput, zoneId: string, waveId: string | null, extra: string[], opts: RenumberOptions = {}): FrozenPassage[] {
+  const ctx = context(input);
+  const plan = planPassages(input);
+  const segment = segmentOf(input, waveId);
+  const keep = opts.played ?? new Set<string>();
+  const kept = (input.frozen ?? []).filter((f) => segment.includes(f.waveKey) && f.zoneId === zoneId && keep.has(`${f.categoryId}:${f.matchId ?? 'kata'}`));
+  const next = new Map(ctx.zones.map((z) => [z.id, 1]));
+  next.set(zoneId, 1 + Math.max(0, ...kept.map((f) => f.number)));
+  const pending = new Set(plan.pending.map((p) => p.categoryId).filter((id) => !extra.includes(id)));
+  const zoneOf = (id: string) => opts.zoneOf?.[id] ?? plan.categories[id]?.zoneId ?? null;
+  const out: FrozenPassage[] = [];
+  for (const key of segment.filter((k) => plan.frozenWaves.includes(k))) {
+    const wave = key === '' ? null : key;
+    const cats = input.categories.filter((c) => c.waveId === wave && c.playable && !pending.has(c.id));
+    out.push(...orderWave(cats, zoneOf, wave, ctx, next, { keep, zones: new Set([zoneId]) }).map(toFrozen));
+  }
+  return out;
 }
