@@ -66,6 +66,9 @@ npm test             # tests unitaires (domaine, serveur)
 npm run test:e2e     # tests d'interface sur Google Chrome (Playwright)
 npm run typecheck
 npm run build && npm start
+npm run seed:dev     # ajoute une compétition de test remplie de combattants fictifs
 ```
+
+`npm run seed:dev` ajoute à la base (`./data/shidokan.sqlite`, ou `DATABASE_PATH`) une compétition « Démo — Coupe Shidokan (date, heure) » : 5 clubs fictifs, environ 80 inscriptions dans toutes les disciplines, de poussins à vétérans, en jiyu et en shobu, des katakas avec grade, des combattants seuls à recaser et deux inscrits sans club. Les autres compétitions ne sont pas touchées. Rechargez la page de l'app pour la voir. `-- --seed 42` donne un autre tirage (même graine, mêmes noms).
 
 Le fichier `coupe-shidokan.xlsx` contient des données personnelles : il n'est **jamais commité**.
