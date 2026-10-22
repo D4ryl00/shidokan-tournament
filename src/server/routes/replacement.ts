@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { applyProposal, bulkPlan, casesOfWave, categoryWave, detectCases, memberWave, stateFingerprint } from '../../domain/replacement/index.js';
+import { applyAll, applyProposal, bulkPlan, casesOfWave, categoryWave, detectCases, isLocked, memberWave, stateFingerprint } from '../../domain/replacement/index.js';
 import type { AppDb } from '../db/client.js';
 import { getCompetition } from '../repositories/competitions.js';
 import {
@@ -61,8 +61,29 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
     const byFighter = new Map<string, typeof state.members>();
     for (const m of inWave) byFighter.set(m.fighterId, [...(byFighter.get(m.fighterId) ?? []), m]);
     const presence = [...byFighter.values()].map(fighterPresence);
+    // Par cas : le combattant (pour comprendre le problème d'un coup d'œil) et les catégories où le déplacer à la main,
+    // chacune avec les règles qu'enfreindrait le déplacement (aucune : déplacement cohérent avec les réglages).
+    const byRegistration = new Map(state.members.map((m) => [m.registrationId, m]));
+    const fighters = Object.fromEntries(
+      cases.map((c) => {
+        const m = byRegistration.get(c.registrationId)!;
+        const { sex, ageBandCode, discipline, ruleset, weightClassId, weighInKg, approxWeightKg, otherDisciplines, acceptsJiyuFirst, presence } = m;
+        return [c.registrationId, { sex, ageBandCode, discipline, ruleset, weightClassId, weighInKg, approxWeightKg, otherDisciplines, acceptsJiyuFirst, presence }];
+      }),
+    );
+    const moveTargets = Object.fromEntries(
+      cases.map((c) => {
+        const m = byRegistration.get(c.registrationId)!;
+        const targets = state.categories
+          .filter((t) => t.id !== m.categoryId && !isLocked(t))
+          .map((t) => ({ categoryId: t.id, warnings: manualProposal(state, m.registrationId, t.id).warnings }));
+        return [c.id, targets];
+      }),
+    );
     return {
       cases,
+      fighters,
+      moveTargets,
       proposals: Object.fromEntries(shown),
       summary: {
         present: presence.filter((p) => p === 'present').length,
@@ -90,7 +111,7 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
     }
     if ('proposalId' in body) {
       const p = findProposal(state, body.proposalId);
-      return { steps: [{ proposal: p, manual: p.manual }], categories: previewTransition(state, applyProposal(state, p)) };
+      return { steps: [{ proposal: p, manual: p.manual }], categories: previewTransition(state, applyAll(state, p)) };
     }
     const plan = bulkPlan(state, body.bulk, await bulkWave(db, req.params.id, body.waveId));
     return { steps: plan.steps, categories: previewTransition(state, plan.final), unresolved: plan.unresolved.length };

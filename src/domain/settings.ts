@@ -23,6 +23,8 @@ export const competitionSettingsSchema = z
     mixMinorsAdults: z.boolean(),
     mixSeniorsVeterans: z.boolean(),
     mixSexes: z.object({ enabled: z.boolean(), ageBandCodes: z.array(z.string()) }).strict(),
+    /** Recaser un combattant shobu en jiyu (type G) : jamais proposé si désactivé. */
+    shobuToJiyu: z.boolean(),
     multipleCombatDisciplinesPerDay: z.boolean(),
     formats: z
       .object({ two: z.enum(COMBAT_FORMATS), three: z.enum(COMBAT_FORMATS), fourPlus: z.enum(COMBAT_FORMATS) })
@@ -47,6 +49,7 @@ export function defaultSettings(): CompetitionSettings {
     mixMinorsAdults: false,
     mixSeniorsVeterans: true,
     mixSexes: { enabled: false, ageBandCodes: [] },
+    shobuToJiyu: false,
     multipleCombatDisciplinesPerDay: false,
     formats: { two: 'single_match', three: 'round_robin', fourPlus: 'single_elimination' },
     repechage: false,

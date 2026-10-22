@@ -4,8 +4,9 @@ import { seededRandom } from '../../../src/domain/brackets/seeding.js';
 import { DISCIPLINES } from '../../../src/domain/disciplines.js';
 import { weightClassesFor } from '../../../src/domain/grid.js';
 import { detectCases } from '../../../src/domain/replacement/detect.js';
-import { proposalsFor } from '../../../src/domain/replacement/propose.js';
-import { applyProposal, bulkPlan } from '../../../src/domain/replacement/apply.js';
+import { moveViolations, proposalsFor } from '../../../src/domain/replacement/propose.js';
+import { defaultSettings } from '../../../src/domain/settings.js';
+import { applyAll, applyProposal, bulkPlan } from '../../../src/domain/replacement/apply.js';
 import type { Member, Proposal, State } from '../../../src/domain/replacement/types.js';
 import { makeState, member } from './fixtures.js';
 
@@ -89,11 +90,22 @@ describe('propositions', () => {
       const jiyu = member({ ageBandCode: 'senior', sex: 'M', ruleset: 'jiyu', weightClassId: 'senior:M:-75', approxWeightKg: 74 });
       const box = member({ ageBandCode: 'senior', sex: 'M', ruleset: 'shobu', discipline: 'shido-boxing', weightClassId: 'senior:M:-75', approxWeightKg: 74 });
       const mix = member({ ageBandCode: 'senior', sex: 'M', ruleset: 'shobu', discipline: 'shido-mix', weightClassId: 'senior:M:-75', approxWeightKg: 74 });
-      const s = makeState([shobu, jiyu, box, mix]);
+      const s = makeState([shobu, jiyu, box, mix], { settings: { ...defaultSettings(), shobuToJiyu: true } });
       return props(s, shobu.registrationId).map((p) => [p.type, p.changes.discipline ?? p.changes.ruleset]);
     };
     expect(mk(true)).toEqual([['G', 'jiyu'], ['H', 'shido-mix'], ['H', 'shido-boxing']]);
     expect(mk(false)).toEqual([['H', 'shido-mix'], ['H', 'shido-boxing'], ['G', 'jiyu']]);
+  });
+  test('G seulement si le passage shobu → jiyu est autorisé dans les réglages', () => {
+    const shobu = member({ ageBandCode: 'senior', sex: 'M', ruleset: 'shobu', weightClassId: 'senior:M:-75', approxWeightKg: 74, acceptsJiyuFirst: true });
+    const jiyu = member({ ageBandCode: 'senior', sex: 'M', ruleset: 'jiyu', weightClassId: 'senior:M:-75', approxWeightKg: 74 });
+    const off = makeState([shobu, jiyu]);
+    expect(props(off, shobu.registrationId)).toEqual([]);
+    const target = off.categories.find((c) => c.id === jiyu.categoryId)!;
+    expect(moveViolations(off, shobu, target)).toContain('Passage de shobu à jiyu non autorisé (réglages).');
+    const on = { ...off, settings: { ...off.settings, shobuToJiyu: true } };
+    expect(props(on, shobu.registrationId).map((p) => p.type)).toEqual(['G']);
+    expect(moveViolations(on, shobu, target)).toEqual([]);
   });
   test('discipline hors préférences jamais proposée ; kata seul : ni G ni H', () => {
     const a = member({ otherDisciplines: [] });
@@ -236,3 +248,62 @@ test('catégorie d’une vague lancée (frozen) : ni cas ni cible', () => {
   expect(detectCases(s).some((c) => c.registrationId === b.registrationId)).toBe(false);
 });
 
+
+describe('déplacement manuel : âge', () => {
+  test('deux tranches voisines dans les deux sens sans avertissement ; propositions toujours vers le haut seulement', () => {
+    const benj = member({ ageBandCode: 'benjamin', weightClassId: 'benjamin:F:-30', approxWeightKg: 29 });
+    const p1 = member({ ageBandCode: 'pupille', weightClassId: 'pupille:F:-30', approxWeightKg: 28 });
+    const p2 = member({ ageBandCode: 'pupille', weightClassId: 'pupille:F:-30', approxWeightKg: 28 });
+    const s = makeState([benj, p1, p2]);
+    const pupilles = s.categories.find((c) => c.id === p1.categoryId)!;
+    expect(moveViolations(s, benj, pupilles)).toEqual([]);
+    expect(props(s, benj.registrationId).some((p) => 'categoryId' in p.target && p.target.categoryId === pupilles.id)).toBe(false);
+  });
+  test('messages : plus d’une tranche, mineurs / adultes', () => {
+    const mini = member({ ageBandCode: 'minime', weightClassId: 'minime:F:-35', approxWeightKg: 30 });
+    const pup = member({ ageBandCode: 'pupille', weightClassId: 'pupille:F:-30', approxWeightKg: 28 });
+    const jun = member({ ageBandCode: 'junior', weightClassId: 'junior:F:-53', approxWeightKg: 52 });
+    const sen = member({ ageBandCode: 'senior', weightClassId: 'senior:F:-55', approxWeightKg: 53 });
+    const s = makeState([mini, pup, jun, sen]);
+    const cat = (m: Member) => s.categories.find((c) => c.id === m.categoryId)!;
+    expect(moveViolations(s, mini, cat(pup))).toContain("Écart d'âge de plus d'une tranche.");
+    expect(moveViolations(s, sen, cat(jun))).toContain('Mélange mineurs / adultes non autorisé (réglages).');
+    expect(moveViolations(s, sen, cat(jun))).not.toContain("Écart d'âge de plus d'une tranche.");
+  });
+});
+
+describe('split : le combattant seul reçoit les plus lourds de la catégorie du dessous', () => {
+  const sen = (kg: number, wc = 'senior:M:-84') => member({ ageBandCode: 'senior', sex: 'M', weightClassId: wc, approxWeightKg: kg });
+  test('poule de 3 d’abord, puis un seul adversaire ; jamais en cas simple', () => {
+    const alone = sen(85, 'senior:M:+84');
+    const below = [sen(72), sen(78), sen(83), sen(84)];
+    const s = makeState([alone, ...below]);
+    const pulls = props(s, alone.registrationId).filter((p) => p.registrationId !== alone.registrationId);
+    expect(pulls.map((p) => [p.type, [p.registrationId, ...(p.alsoMoved ?? [])]])).toEqual([
+      ['A', [below[3]!.registrationId, below[2]!.registrationId]],
+      ['A', [below[3]!.registrationId]],
+    ]);
+    expect(pulls.every((p) => p.manual && p.target && 'categoryId' in p.target && p.target.categoryId === alone.categoryId)).toBe(true);
+    expect(pulls[0]!.reason).toContain('pour donner une poule');
+    // Le déplacement du combattant seul lui-même (écart 13 kg, B) passe après.
+    expect(props(s, alone.registrationId).at(-1)).toMatchObject({ type: 'B', registrationId: alone.registrationId });
+
+    const after = applyAll(s, pulls[0]!);
+    expect(after.members.filter((m) => m.categoryId === alone.categoryId)).toHaveLength(3);
+    expect(after.members.find((m) => m.registrationId === below[3]!.registrationId)!.original?.reason).toBe('pulled');
+    expect(detectCases(after).some((c) => c.kind === 'alone' || c.kind === 'return')).toBe(false);
+    expect(bulkPlan(s, 'simple').steps).toEqual([]);
+    expect(bulkPlan(s, 'all').steps.map((x) => x.proposal.registrationId)).toEqual([alone.registrationId]);
+  });
+  test('il en reste au moins deux dans la catégorie du dessous ; jamais vers le bas', () => {
+    const alone = sen(85, 'senior:M:+84');
+    const s = makeState([alone, sen(83), sen(84)]);
+    expect(props(s, alone.registrationId).some((p) => p.registrationId !== alone.registrationId)).toBe(false);
+    const light = sen(74, 'senior:M:-75');
+    const s2 = makeState([light, sen(76), sen(77), sen(80)]);
+    expect(props(s2, light.registrationId).some((p) => p.registrationId !== light.registrationId)).toBe(false);
+    const alone3 = sen(85, 'senior:M:+84');
+    const s3 = makeState([alone3, sen(83), sen(84), sen(84)]);
+    expect(props(s3, alone3.registrationId).filter((p) => p.registrationId !== alone3.registrationId).map((p) => 1 + (p.alsoMoved?.length ?? 0))).toEqual([1]);
+  });
+});

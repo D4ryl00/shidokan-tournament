@@ -9,6 +9,7 @@ test('réglages par défaut (spec §9.2, §8, §11.1, §12, §4.1)', () => {
     mixMinorsAdults: false,
     mixSeniorsVeterans: true,
     mixSexes: { enabled: false, ageBandCodes: [] },
+    shobuToJiyu: false,
     multipleCombatDisciplinesPerDay: false,
     formats: { two: 'single_match', three: 'round_robin', fourPlus: 'single_elimination' },
     repechage: false,

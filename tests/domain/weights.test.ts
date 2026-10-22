@@ -47,3 +47,15 @@ test('ancienne catégorie ouverte « +45 » après ajout de -50 → -50 avec rem
 test.each(['‑35', '﹣35', '－35'])('tirets exotiques (%s) lus comme « - »', (raw) => {
   expect(parseWeightLabel(raw)).toEqual({ label: '-35', maxKg: 35 });
 });
+
+test('pesée aux bornes (FFK : poids ≤ limite, tolérance comprise ; la catégorie ouverte prend le reste)', () => {
+  const grid = ffkDefaultGrid();
+  const at = (kg: number, sex: 'M' | 'F' = 'M', band = 'benjamin') => weightClassForWeight(grid, band, sex, kg, sex === 'M' ? 0.3 : 0.5)?.label;
+  expect(at(40)).toBe('-40');
+  expect(at(40.3)).toBe('-40');
+  expect(at(40.301)).toBe('-45');
+  expect(at(84, 'M', 'senior')).toBe('-84');
+  expect(at(84.3, 'M', 'senior')).toBe('-84');
+  expect(at(84.4, 'M', 'senior')).toBe('+84');
+  expect(at(150, 'M', 'senior')).toBe('+84');
+});

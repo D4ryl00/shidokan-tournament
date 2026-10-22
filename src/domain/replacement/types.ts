@@ -32,7 +32,7 @@ export interface Member {
     ruleset: Ruleset | null;
     weightClassId: string | null;
     /** Pourquoi il a été déplacé : seul un combattant déplacé parce qu'il était seul est candidat au retour. */
-    reason?: CaseKind | 'manual';
+    reason?: CaseKind | 'manual' | 'pulled';
   } | null;
   recasementType: ProposalType | null;
 }
@@ -90,4 +90,9 @@ export interface Proposal {
   preApproved: boolean;
   reason: string;
   rank: number;
+  /**
+   * « Split » : autres inscriptions déplacées avec `registrationId` vers la même cible (le combattant seul reçoit
+   * les plus lourds de la catégorie du dessous). Elles n'étaient pas des cas : le déplacement reste manuel.
+   */
+  alsoMoved?: string[];
 }

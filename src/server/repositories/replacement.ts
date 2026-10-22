@@ -5,6 +5,7 @@ import { DISCIPLINES } from '../../domain/disciplines.js';
 import {
   activeMembers,
   applyProposal,
+  proposalMoves,
   detectCases,
   moveViolations,
   nextBulkStep,
@@ -210,8 +211,18 @@ export async function applyProposalById(db: AppDb, competitionId: string, propos
   const state = await loadState(db, competitionId);
   if (opts.fingerprint !== undefined && stateFingerprint(state) !== opts.fingerprint) throw new StaleProposalError();
   const p = findProposal(state, proposalId);
-  persist(db, competitionId, state, applyProposal(state, p), p, { bulk: opts.bulk ?? false });
+  persistAll(db, competitionId, state, p, { bulk: opts.bulk ?? false });
   await syncCategories(db, competitionId);
+}
+
+/** Écrit chaque déplacement d'une proposition (plusieurs pour un « split »), un recasement par inscription. */
+function persistAll(db: AppDb, competitionId: string, state: State, p: Proposal, opts: { bulk: boolean }): void {
+  let current = state;
+  for (const step of proposalMoves(p)) {
+    const next = applyProposal(current, step);
+    persist(db, competitionId, current, next, step, opts);
+    current = next;
+  }
 }
 
 /** Vague demandée par l'écran (`null` : toutes) ; 404 si elle n'existe pas. */
@@ -240,8 +251,8 @@ export async function bulkApply(db: AppDb, competitionId: string, mode: BulkMode
   for (let guard = 0; guard <= state.members.length; guard++) {
     const p = nextBulkStep(state, mode, moved, wave);
     if (!p) break;
-    persist(db, competitionId, state, applyProposal(state, p), p, { bulk: true });
-    moved.add(p.registrationId);
+    persistAll(db, competitionId, state, p, { bulk: true });
+    for (const x of proposalMoves(p)) moved.add(x.registrationId);
     applied++;
     state = await loadState(db, competitionId);
   }

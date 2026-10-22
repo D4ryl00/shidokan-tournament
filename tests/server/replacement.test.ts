@@ -581,3 +581,21 @@ describe('recasement par vague', () => {
     expect((await regRow(a.id)).presence).toBe('absent');
   });
 });
+
+test('split : le seul en +84 reçoit les deux plus lourds de -84 (un recasement chacun), aperçu compris', async () => {
+  const sen = (kg: number, wc = 'senior:M:-84') => reg({ sex: 'M', ageBandCode: 'senior', weightClassId: wc, approxWeightKg: kg });
+  const alone = await sen(85, 'senior:M:+84');
+  const below = [await sen(72), await sen(78), await sen(83), await sen(84)];
+  const r = await replacement();
+  const c = r.cases.find((x) => x.registrationId === alone.id)!;
+  const pull = r.proposals[c.id]!.find((p) => p.reason.includes('pour donner une poule'))!;
+  expect(pull.manual).toBe(true);
+  const preview = (await call('POST', '/replacement/preview', { proposalId: pull.id })).json() as { categories: { label: string; after: string[][] }[] };
+  expect(preview.categories.find((x) => x.label.includes('+84'))!.after.flat()).toHaveLength(3);
+  expect((await call('POST', '/replacement/apply', { proposalId: pull.id, fingerprint: r.fingerprint })).statusCode).toBe(200);
+  const cat = (await categories()).find((x) => x.registrationIds.includes(alone.id))!;
+  expect(cat.registrationIds.sort()).toEqual([alone.id, below[2]!.id, below[3]!.id].sort());
+  const after = await replacement();
+  expect(after.recasements.map((x) => x.registrationId).sort()).toEqual([below[2]!.id, below[3]!.id].sort());
+  expect(after.cases.some((x) => x.kind === 'alone' || x.kind === 'return')).toBe(false);
+});

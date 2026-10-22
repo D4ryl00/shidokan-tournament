@@ -28,10 +28,20 @@ export function recompute(state: State, cat: CategoryState): void {
   );
 }
 
-/** Applique une proposition à une copie de l'état (l'état reçu n'est pas modifié). */
 /** Ce dont a besoin l'application d'une proposition. */
-export type Move = Pick<Proposal, 'type' | 'registrationId' | 'target' | 'changes' | 'caseId'>;
+export type Move = Pick<Proposal, 'type' | 'registrationId' | 'target' | 'changes' | 'caseId'> & Pick<Partial<Proposal>, 'alsoMoved'>;
 
+/** Les déplacements d'une proposition, un par inscription (plusieurs pour un « split »). */
+export function proposalMoves<T extends Move>(p: T): T[] {
+  return [p, ...(p.alsoMoved ?? []).map((registrationId) => ({ ...p, registrationId, alsoMoved: undefined }))];
+}
+
+/** Applique une proposition entière (tous ses déplacements) à une copie de l'état. */
+export function applyAll(state: State, p: Move): State {
+  return proposalMoves(p).reduce(applyProposal, state);
+}
+
+/** Applique le déplacement d'une inscription (`p.registrationId`, sans `alsoMoved`) à une copie de l'état (l'état reçu n'est pas modifié). */
 export function applyProposal(state: State, p: Move): State {
   const next = structuredClone(state);
   const m = next.members.find((x) => x.registrationId === p.registrationId);
@@ -57,7 +67,9 @@ export function applyProposal(state: State, p: Move): State {
     m.weightClassId = p.changes.weightClassId!;
   } else {
     if (!m.original) {
-      const kind = p.type === 'M' ? 'manual' : (p.caseId.split(':')[0] as CaseKind);
+      // Un combattant emmené par un « split » n'avait pas de cas : il ne revient pas de lui-même.
+      const [caseKind, caseRegistration] = p.caseId.split(':') as [CaseKind, string];
+      const kind = p.type === 'M' ? 'manual' : caseRegistration === p.registrationId ? caseKind : 'pulled';
       m.original = { discipline: m.discipline, ruleset: m.ruleset, weightClassId: m.weightClassId, reason: kind };
     }
     Object.assign(m, pickDefined(p.changes));

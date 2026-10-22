@@ -1,11 +1,11 @@
 import { keyString } from '../categories.js';
 import { detectCases } from './detect.js';
 import { proposalsFor } from './propose.js';
-import { applyProposal } from './move.js';
+import { applyAll, proposalMoves } from './move.js';
 import type { Case, Proposal, State } from './types.js';
 import { casesOfWave } from './waves.js';
 
-export { applyProposal, recompute } from './move.js';
+export { applyAll, applyProposal, proposalMoves, recompute } from './move.js';
 
 export type BulkMode = 'simple' | 'all';
 export interface BulkStep {
@@ -14,13 +14,14 @@ export interface BulkStep {
 }
 
 /**
- * Prochaine étape d'un recasement en masse : meilleure proposition sans changement de vague (ni du combattant, ni entraîné) du premier cas traitable
+ * Prochaine étape d'un recasement en masse : meilleure proposition sans changement de vague (ni du combattant, ni entraîné), ni « split », du premier cas traitable
  * de la vague (`null` : toutes), hors inscriptions déjà déplacées. Un changement de vague se valide un par un.
  */
 export function nextBulkStep(state: State, mode: BulkMode, moved: Set<string>, waveId: string | null = null): Proposal | null {
   for (const c of casesOfWave(state, detectCases(state), waveId)) {
     if (moved.has(c.registrationId)) continue;
-    const p = proposalsFor(state, c).find((x) => !x.waveChange && x.waveShifts.length === 0 && (mode === 'all' || x.type === 'A' || x.type === 'R'));
+    // Un « split » déplace des combattants qui n'étaient pas des cas : jamais en masse.
+    const p = proposalsFor(state, c).find((x) => !x.waveChange && x.waveShifts.length === 0 && x.registrationId === c.registrationId && (mode === 'all' || !x.manual));
     if (p) return p;
   }
   return null;
@@ -34,9 +35,9 @@ export function bulkPlan(state: State, mode: BulkMode, waveId: string | null = n
   for (let guard = 0; guard <= state.members.length; guard++) {
     const p = nextBulkStep(current, mode, moved, waveId);
     if (!p) break;
-    current = applyProposal(current, p);
+    current = applyAll(current, p);
     steps.push({ proposal: p, manual: p.manual });
-    moved.add(p.registrationId);
+    for (const x of proposalMoves(p)) moved.add(x.registrationId);
   }
   return { steps, final: current, unresolved: casesOfWave(current, detectCases(current), waveId) };
 }
