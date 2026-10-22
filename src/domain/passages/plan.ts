@@ -42,6 +42,8 @@ export interface PlanInput {
   restart?: string[];
   /** Zone des finales (combats pour la 1re place, et finales de kata si `kata`). */
   finals?: { zoneId: string | null; kata: boolean };
+  /** Passages joués (clé `${categoryId}:${matchId ?? 'kata'}`) : ils gardent numéro et zone, même après un déplacement. */
+  played?: Set<string>;
 }
 
 export type PlannedPassage = Passage & { waveId: string | null };
@@ -91,7 +93,7 @@ const sameKeys = (a: (string | null)[], b: (string | null)[]) => a.length === b.
  * Des numéros figés sont-ils encore à jour ? Mêmes combats (ou un bloc de kata, entier ou séparé : le réglage des finales
  * peut avoir changé depuis le lancement) et chacun sur la zone de la catégorie, sauf une finale (zone des finales).
  */
-function stillValid(c: PlanCategory, rows: FrozenPassage[], zoneId: string | null, ctx: Context): boolean {
+function stillValid(c: PlanCategory, rows: FrozenPassage[], zoneId: string | null, ctx: Context, played: Set<string>): boolean {
   const keys = rows.map((r) => r.matchId);
   let shape: boolean;
   let finals: (string | null)[];
@@ -103,7 +105,8 @@ function stillValid(c: PlanCategory, rows: FrozenPassage[], zoneId: string | nul
     shape = sameKeys(keys, ctx.nodes.get(c.id)!.map((n) => n.matchId));
     finals = c.bracket?.kind === 'combat' ? finalMatchIds(c.bracket) : [];
   }
-  return shape && rows.every((r) => r.zoneId === zoneId || finals.includes(r.matchId));
+  // Un passage joué reste sur sa zone (catégorie déplacée en cours de compétition).
+  return shape && rows.every((r) => r.zoneId === zoneId || finals.includes(r.matchId) || played.has(`${r.categoryId}:${r.matchId ?? 'kata'}`));
 }
 
 /**
@@ -188,7 +191,7 @@ export function planPassages(input: PlanInput): PassagePlan {
       plan.frozenWaves.push(key);
       for (const c of playable) {
         const mine = rows.filter((r) => r.categoryId === c.id);
-        if (!stillValid(c, mine, zoneOf.get(c.id) ?? null, ctx)) plan.pending.push({ waveId, categoryId: c.id });
+        if (!stillValid(c, mine, zoneOf.get(c.id) ?? null, ctx, input.played ?? new Set())) plan.pending.push({ waveId, categoryId: c.id });
         else for (const r of mine) byZone.get(r.zoneId)!.push({ number: r.number, categoryId: r.categoryId, matchId: r.matchId, noRest: r.noRest, waveId });
       }
       // Les numéros figés (trous compris) sont pris : la suite vient après (après eux seuls si la vague a repris à 1).
@@ -224,7 +227,7 @@ function segmentOf(input: PlanInput, waveId: string | null): string[] {
 }
 
 export interface RenumberOptions {
-  /** Passages joués (clé `${categoryId}:${matchId ?? 'kata'}`) : jamais renumérotés. */
+  /** Passages gardés (joués, finale restée sur la zone des finales) : jamais renumérotés ; par défaut `input.played`. */
   played?: Set<string>;
   /** Zone imposée à des catégories (déplacement) ; sinon leur zone du plan. */
   zoneOf?: Record<string, string>;
@@ -247,7 +250,7 @@ export function appendPassages(input: PlanInput, waveId: string | null, category
   const next = new Map(ctx.zones.map((z) => [z.id, 1 + Math.max(0, ...rows.filter((f) => f.zoneId === z.id).map((f) => f.number))]));
   const cats = input.categories.filter((c) => c.waveId === waveId && c.playable && categoryIds.includes(c.id));
   const zoneOf = (id: string) => opts.zoneOf?.[id] ?? plan.categories[id]?.zoneId ?? null;
-  return orderWave(cats, zoneOf, waveId, ctx, next, { keep: opts.played }).map(toFrozen);
+  return orderWave(cats, zoneOf, waveId, ctx, next, { keep: opts.played ?? input.played }).map(toFrozen);
 }
 
 /**
@@ -259,7 +262,7 @@ export function reshuffleZone(input: PlanInput, zoneId: string, waveId: string |
   const ctx = context(input);
   const plan = planPassages(input);
   const segment = segmentOf(input, waveId);
-  const keep = opts.played ?? new Set<string>();
+  const keep = opts.played ?? input.played ?? new Set<string>();
   const kept = (input.frozen ?? []).filter((f) => segment.includes(f.waveKey) && f.zoneId === zoneId && keep.has(`${f.categoryId}:${f.matchId ?? 'kata'}`));
   const next = new Map(ctx.zones.map((z) => [z.id, 1]));
   next.set(zoneId, 1 + Math.max(0, ...kept.map((f) => f.number)));

@@ -1,8 +1,8 @@
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { activeEntrantCount, type Category } from '../../domain/categories.js';
 import { planPassages, type FrozenPassage, type PassagePlan, type PlanInput } from '../../domain/passages/index.js';
 import type { AppDb } from '../db/client.js';
-import { categories as categoryTable, frozenPassages } from '../db/schema.js';
+import { categories as categoryTable, frozenPassages, kataScores, matchResults } from '../db/schema.js';
 import { listCategories } from './categories.js';
 import { getCompetition } from './competitions.js';
 import { NotFoundError } from './registrations.js';
@@ -18,6 +18,24 @@ export function loadFrozen(db: AppDb, competitionId: string): FrozenPassage[] {
     .where(eq(frozenPassages.competitionId, competitionId))
     .all()
     .map((r) => ({ waveKey: r.waveKey, zoneId: r.zoneId, number: r.number, categoryId: r.categoryId, matchId: r.matchId === 'kata' ? null : r.matchId, noRest: r.noRest }));
+}
+
+/**
+ * Passages joués (clé `${categoryId}:${matchId ?? 'kata'}`) : combat avec un résultat saisi ; kata avec au moins une note
+ * (bloc entier, et le bloc tour 1 ou finale selon la note).
+ */
+export function playedKeys(db: AppDb, competitionId: string): Set<string> {
+  const out = new Set<string>();
+  const cats = db.select({ id: categoryTable.id }).from(categoryTable).where(eq(categoryTable.competitionId, competitionId)).all().map((c) => c.id);
+  if (cats.length === 0) return out;
+  for (const r of db.select({ categoryId: matchResults.categoryId, matchId: matchResults.matchId }).from(matchResults).where(inArray(matchResults.categoryId, cats)).all()) {
+    out.add(`${r.categoryId}:${r.matchId}`);
+  }
+  for (const r of db.select({ categoryId: kataScores.categoryId, round: kataScores.round }).from(kataScores).where(inArray(kataScores.categoryId, cats)).all()) {
+    out.add(`${r.categoryId}:kata`);
+    out.add(`${r.categoryId}:kata:${r.round === 'round1' ? 'tour1' : 'finale'}`);
+  }
+  return out;
 }
 
 /**
@@ -46,6 +64,7 @@ export async function planInput(db: AppDb, competitionId: string, cats?: Categor
     // « Reprendre les numéros à 1 » choisi au lancement des vagues figées, et celui de l'aperçu.
     restart: [...restart, ...[...launchRows(db, competitionId).values()].filter((r) => r.restartNumbering).map((r) => r.waveKey)],
     finals: { zoneId: competition.settings.finalsZoneId, kata: competition.settings.kataFinalsOnFinalsZone },
+    played: playedKeys(db, competitionId),
   };
 }
 

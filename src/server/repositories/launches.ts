@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { activeEntrantCount, type Category } from '../../domain/categories.js';
 import { DISCIPLINES } from '../../domain/disciplines.js';
-import { appendPassages, planPassages, waveKey, type FrozenPassage } from '../../domain/passages/index.js';
+import { appendPassages, planPassages, reshuffleZone, waveKey, type FrozenPassage, type PlanInput } from '../../domain/passages/index.js';
 import type { AppDb } from '../db/client.js';
 import { categories, frozenPassages, waveLaunches } from '../db/schema.js';
 import { CategoryLockedError, listCategories, syncCategories } from './categories.js';
@@ -9,8 +9,11 @@ import { launchRows, launchedCategoryIds } from './launch-state.js';
 import { planInput } from './passages.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
 import { listWaves } from './waves.js';
+import { listZones } from './zones.js';
 
 export type WaveState = 'preparation' | 'launched' | 'reopened' | 'finished';
+/** « À la suite » (défaut) ou « mélangés ». */
+export type RenumberMode = 'append' | 'shuffle';
 
 const playable = (c: Category) => !!c.bracket && activeEntrantCount(c) >= 2;
 const now = () => new Date().toISOString();
@@ -105,7 +108,7 @@ export async function reopenWave(db: AppDb, competitionId: string, waveId: strin
  * « Numéroter à la suite » : les catégories à numéroter de la vague (toutes, ou `categoryIds`) reçoivent des numéros après
  * le dernier numéro figé de leur zone ; la vague (re)passe lancée. `dryRun` : aperçu, rien n'est écrit.
  */
-export async function numberPending(db: AppDb, competitionId: string, waveId: string | null, categoryIds?: string[], dryRun = false) {
+export async function numberPending(db: AppDb, competitionId: string, waveId: string | null, categoryIds?: string[], dryRun = false, mode: RenumberMode = 'append') {
   await checkWave(db, competitionId, waveId);
   const key = waveKey(waveId);
   const row = launchRows(db, competitionId).get(key);
@@ -114,9 +117,13 @@ export async function numberPending(db: AppDb, competitionId: string, waveId: st
   const input = await planInput(db, competitionId, cats);
   const plan = planPassages(input);
   const ids = plan.pending.filter((p) => p.waveId === waveId && (!categoryIds || categoryIds.includes(p.categoryId))).map((p) => p.categoryId);
-  const rows = appendPassages(input, waveId, ids);
+  const appended = appendPassages(input, waveId, ids);
+  // Mélangés : chaque zone qui reçoit une catégorie à numéroter est refaite (ses autres catégories comprises).
+  const rows =
+    mode === 'append' ? appended : [...new Set(appended.map((r) => r.zoneId))].flatMap((zoneId) => reshuffleZone(input, zoneId, waveId, ids));
+  const changed = renumbered(input, rows, ids);
   const label = new Map(cats.map((c) => [c.id, c.label]));
-  const changes = ids.map((id) => ({ categoryId: id, label: label.get(id) ?? '', numbers: rows.filter((r) => r.categoryId === id).map((r) => r.number).sort((a, b) => a - b) }));
+  const changes = changed.map((id) => ({ categoryId: id, label: label.get(id) ?? '', numbers: rows.filter((r) => r.categoryId === id).map((r) => r.number).sort((a, b) => a - b) }));
   // Comme au lancement : chaque catégorie numérotée est prête et a une zone.
   const blocking: string[] = [];
   const notReady = cats.filter((c) => ids.includes(c.id) && c.status === 'provisional');
@@ -133,11 +140,8 @@ export async function numberPending(db: AppDb, competitionId: string, waveId: st
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     if (gone.length) t.delete(frozenPassages).where(and(eq(frozenPassages.competitionId, competitionId), eq(frozenPassages.waveKey, key), inArray(frozenPassages.categoryId, gone))).run();
-    if (ids.length) {
-      t.delete(frozenPassages).where(and(eq(frozenPassages.competitionId, competitionId), eq(frozenPassages.waveKey, key), inArray(frozenPassages.categoryId, ids))).run();
-      if (rows.length) t.insert(frozenPassages).values(rows.map((r) => rowOf(competitionId, r))).run();
-      t.update(categories).set({ numbersUpdatedAt: now() }).where(inArray(categories.id, ids)).run();
-    }
+    replaceRows(t, competitionId, input, rows, ids);
+    if (changed.length) t.update(categories).set({ numbersUpdatedAt: now() }).where(inArray(categories.id, changed)).run();
     fixCategories(t, cats.filter((c) => c.waveId === waveId), waveId, (id) => plan.categories[id]?.zoneId ?? null);
     t.update(waveLaunches).set({ launched: true }).where(and(eq(waveLaunches.competitionId, competitionId), eq(waveLaunches.waveKey, key))).run();
   });
@@ -158,4 +162,88 @@ export async function regenerateCategory(db: AppDb, competitionId: string, categ
   // Tableau refait (mêmes numéros ou non) : à réimprimer.
   db.update(categories).set({ numbersUpdatedAt: now() }).where(eq(categories.id, categoryId)).run();
   return result;
+}
+
+const keyOf = (r: { waveKey: string; categoryId: string; matchId: string | null }) => `${r.waveKey}|${r.categoryId}|${r.matchId ?? 'kata'}`;
+const playedKey = (r: { categoryId: string; matchId: string | null }) => `${r.categoryId}:${r.matchId ?? 'kata'}`;
+
+/** Catégories dont un numéro change : `whole` (renumérotées entièrement) et celles dont une ligne prend un autre numéro ou une autre zone. */
+function renumbered(input: PlanInput, rows: FrozenPassage[], whole: string[]): string[] {
+  const old = new Map((input.frozen ?? []).map((f) => [keyOf(f), f]));
+  const out = new Set(whole);
+  for (const r of rows) {
+    const f = old.get(keyOf(r));
+    if (!f || f.number !== r.number || f.zoneId !== r.zoneId) out.add(r.categoryId);
+  }
+  return [...out];
+}
+
+/**
+ * Remplace des numéros figés : les lignes réécrites (`rows`) et les anciennes lignes non jouées des catégories `whole`
+ * (à numéroter, déplacée) disparaissent, puis `rows` sont enregistrées. Les passages joués ne bougent pas.
+ */
+function replaceRows(t: AppDb, competitionId: string, input: PlanInput, rows: FrozenPassage[], whole: string[]) {
+  const rewritten = new Set(rows.map(keyOf));
+  const played = input.played ?? new Set<string>();
+  for (const f of input.frozen ?? []) {
+    const gone = rewritten.has(keyOf(f)) || (whole.includes(f.categoryId) && !played.has(playedKey(f)));
+    if (!gone) continue;
+    t.delete(frozenPassages)
+      .where(and(eq(frozenPassages.competitionId, competitionId), eq(frozenPassages.waveKey, f.waveKey), eq(frozenPassages.categoryId, f.categoryId), eq(frozenPassages.matchId, f.matchId ?? 'kata')))
+      .run();
+  }
+  if (rows.length) t.insert(frozenPassages).values(rows.map((r) => rowOf(competitionId, r))).run();
+}
+
+export interface MoveResult {
+  changes: { categoryId: string; label: string; matchId: string | null; from: { zoneId: string; number: number } | null; to: { zoneId: string; number: number } }[];
+  reprint: { categoryId: string; label: string }[];
+}
+
+/**
+ * Déplace une catégorie d'une vague lancée vers une autre zone : ses passages non joués (une finale restée sur la zone
+ * des finales ne bouge pas) prennent des numéros « à la suite » sur la zone d'arrivée, ou toute la zone d'arrivée est
+ * « mélangée ». Les passages joués gardent numéro et zone. `dryRun` : aperçu.
+ */
+export async function moveCategory(db: AppDb, competitionId: string, categoryId: string, zoneId: string, mode: RenumberMode, dryRun = false): Promise<MoveResult> {
+  const cats = await listCategories(db, competitionId);
+  const cat = cats.find((c) => c.id === categoryId);
+  if (!cat) throw new NotFoundError('Catégorie introuvable');
+  const zone = (await listZones(db, competitionId)).find((z) => z.id === zoneId);
+  if (!zone) throw new NotFoundError('Zone introuvable');
+  if (!cat.launchLocked) {
+    throw new RegistrationValidationError(['La vague n’est pas lancée : choisissez simplement la zone de la catégorie (puis « Refiger » si la vague a été rouverte).']);
+  }
+  const input = await planInput(db, competitionId, cats);
+  const plan = planPassages(input);
+  const current = plan.categories[categoryId]?.zoneId ?? null;
+  if (current === zoneId) throw new RegistrationValidationError(['La catégorie est déjà sur cette zone.']);
+  if (zone.disciplines && !zone.disciplines.includes(cat.key.discipline)) {
+    throw new RegistrationValidationError([`La zone « ${zone.name} » n’accueille pas le ${DISCIPLINES[cat.key.discipline].label.toLowerCase()}.`]);
+  }
+  // Gardés : les passages joués, et ceux de la catégorie qui ne sont pas sur sa zone (finale sur la zone des finales).
+  const mine = (input.frozen ?? []).filter((f) => f.categoryId === categoryId);
+  const keep = new Set([...(input.played ?? []), ...mine.filter((f) => f.zoneId !== current).map(playedKey)]);
+  const opts = { played: keep, zoneOf: { [categoryId]: zoneId } };
+  const rows = mode === 'append' ? appendPassages(input, cat.waveId, [categoryId], opts) : reshuffleZone(input, zoneId, cat.waveId, [categoryId], opts);
+  const old = new Map((input.frozen ?? []).map((f) => [keyOf(f), f]));
+  const label = new Map(cats.map((c) => [c.id, c.label]));
+  const changes = rows
+    .map((r) => {
+      const f = old.get(keyOf(r));
+      return { categoryId: r.categoryId, label: label.get(r.categoryId) ?? '', matchId: r.matchId, from: f ? { zoneId: f.zoneId, number: f.number } : null, to: { zoneId: r.zoneId, number: r.number } };
+    })
+    .filter((c) => !c.from || c.from.number !== c.to.number || c.from.zoneId !== c.to.zoneId)
+    .sort((a, b) => a.to.number - b.to.number);
+  const changed = [...new Set([categoryId, ...changes.map((c) => c.categoryId)])];
+  const reprint = changed.map((id) => ({ categoryId: id, label: label.get(id) ?? '' }));
+  if (dryRun) return { changes, reprint };
+  db.transaction((tx) => {
+    const t = tx as unknown as AppDb;
+    // Seules les lignes non gardées de la catégorie déplacée disparaissent (pas sa finale sur la zone des finales).
+    replaceRows(t, competitionId, { ...input, played: keep }, rows, [categoryId]);
+    t.update(categories).set({ zoneId }).where(eq(categories.id, categoryId)).run();
+    t.update(categories).set({ numbersUpdatedAt: now() }).where(inArray(categories.id, changed)).run();
+  });
+  return { changes, reprint };
 }
