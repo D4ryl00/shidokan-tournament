@@ -1,13 +1,15 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { applyProposal, bulkPlan, detectCases, stateFingerprint } from '../../domain/replacement/index.js';
+import { applyProposal, bulkPlan, casesOfWave, categoryWave, detectCases, memberWave, stateFingerprint } from '../../domain/replacement/index.js';
 import type { AppDb } from '../db/client.js';
 import { getCompetition } from '../repositories/competitions.js';
+import { NotFoundError } from '../repositories/registrations.js';
 import {
   allProposals,
   displayedProposals,
   applyProposalById,
   bulkApply,
+  bulkWave,
   closeWeighIn,
   findProposal,
   listRecasements,
@@ -46,15 +48,20 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
     return closeWeighIn(db, req.params.id, waveId);
   });
 
-  app.get<P>('/api/competitions/:id/replacement', async (req) => {
+  /** Tableau de bord ; avec `?vague=` : cas, propositions et compteurs des catégories de cette vague. */
+  app.get<P & { Querystring: { vague?: string } }>('/api/competitions/:id/replacement', async (req) => {
     const state = await loadState(db, req.params.id);
-    const proposals = allProposals(state);
-    const shown = displayedProposals(state);
-    // Par combattant, d'après toutes ses inscriptions (présent s'il l'est dans une vague).
+    const waveId = req.query.vague || null;
+    if (waveId && !state.waves.some((w) => w.id === waveId)) throw new NotFoundError('Vague introuvable');
+    const cases = casesOfWave(state, detectCases(state), waveId);
+    const proposals = allProposals(state, cases);
+    const shown = displayedProposals(state, cases);
+    const inWave = waveId ? state.members.filter((m) => memberWave(state, m) === waveId) : state.members;
+    const waveCategories = waveId ? state.categories.filter((c) => categoryWave(state, c) === waveId) : state.categories;
+    // Par combattant, d'après ses inscriptions (de la vague) : présent s'il l'est dans l'une d'elles.
     const byFighter = new Map<string, typeof state.members>();
-    for (const m of state.members) byFighter.set(m.fighterId, [...(byFighter.get(m.fighterId) ?? []), m]);
+    for (const m of inWave) byFighter.set(m.fighterId, [...(byFighter.get(m.fighterId) ?? []), m]);
     const presence = [...byFighter.values()].map(fighterPresence);
-    const cases = detectCases(state);
     return {
       cases,
       proposals: Object.fromEntries(shown),
@@ -65,8 +72,8 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
         cases: cases.length,
         alone: cases.filter((c) => c.kind === 'alone').length,
         withoutProposal: cases.filter((c) => (proposals.get(c.id) ?? []).length === 0).length,
-        readyCategories: state.categories.filter((c) => c.status === 'ready').length,
-        startedCategories: state.categories.filter((c) => c.status === 'started' || c.status === 'finished').length,
+        readyCategories: waveCategories.filter((c) => c.status === 'ready').length,
+        startedCategories: waveCategories.filter((c) => c.status === 'started' || c.status === 'finished').length,
       },
       fingerprint: stateFingerprint(state),
       recasements: await listRecasements(db, req.params.id),
@@ -75,7 +82,7 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
 
   app.post<P>('/api/competitions/:id/replacement/preview', async (req) => {
     const body = z
-      .union([z.object({ proposalId: z.string() }), z.object({ bulk: mode }), z.object({ move: z.object({ registrationId: z.string(), categoryId: z.string() }) })])
+      .union([z.object({ proposalId: z.string() }), z.object({ bulk: mode, waveId: z.string().optional() }), z.object({ move: z.object({ registrationId: z.string(), categoryId: z.string() }) })])
       .parse(req.body);
     const state = await loadState(db, req.params.id);
     if ('move' in body) {
@@ -86,7 +93,7 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
       const p = findProposal(state, body.proposalId);
       return { steps: [{ proposal: p, manual: p.manual }], categories: previewTransition(state, applyProposal(state, p)) };
     }
-    const plan = bulkPlan(state, body.bulk);
+    const plan = bulkPlan(state, body.bulk, await bulkWave(db, req.params.id, body.waveId));
     return { steps: plan.steps, categories: previewTransition(state, plan.final), unresolved: plan.unresolved.length };
   });
 
@@ -97,8 +104,8 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
   });
 
   app.post<P>('/api/competitions/:id/replacement/bulk', async (req) => {
-    const body = z.object({ mode, fingerprint: z.string() }).parse(req.body);
-    return bulkApply(db, req.params.id, body.mode, body.fingerprint);
+    const body = z.object({ mode, fingerprint: z.string(), waveId: z.string().optional() }).parse(req.body);
+    return bulkApply(db, req.params.id, body.mode, body.fingerprint, body.waveId);
   });
 
   app.post<P>('/api/competitions/:id/replacement/refuse', async (req) => {

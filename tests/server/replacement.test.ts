@@ -444,3 +444,102 @@ describe('pesée par vague (relecture)', () => {
     expect((await replacement()).summary).toMatchObject({ present: 1, absent: 0, unknown: 0 });
   });
 });
+
+describe('recasement par vague', () => {
+  type P = { id: string; type: string; preApproved: boolean; waveChange: { from: string | null; to: string | null } | null };
+  /**
+   * Matin (poussins à minimes) : une minime seule dont la seule proposition est la catégorie cadette (Après-midi).
+   * Après-midi : une cadette -61 seule, recasable en +61 (cas simple).
+   */
+  async function setup() {
+    const mini = await reg({ lastName: 'MINI', ageBandCode: 'minime', weightClassId: 'minime:F:-45', approxWeightKg: 45 });
+    for (let i = 0; i < 2; i++) await reg({ lastName: `CAD${i}`, weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+    const alone = await reg({ lastName: 'SEULE', weightClassId: 'cadet:F:-61', approxWeightKg: 58 });
+    for (let i = 0; i < 2; i++) await reg({ lastName: `LOURDE${i}`, weightClassId: 'cadet:F:+61', approxWeightKg: 60 });
+    const [matin, aprem] = (await call('PUT', '/waves', [
+      { name: 'Matin', rules: { ageBandCodes: ['poussin', 'pupille', 'benjamin', 'minime'], disciplines: [] } },
+      { name: 'Après-midi', rules: { ageBandCodes: ['cadet', 'junior', 'senior'], disciplines: [] } },
+    ])).json() as { id: string }[];
+    return { mini, alone, matin: matin!.id, aprem: aprem!.id };
+  }
+  const ofWave = async (wave: string) => (await call('GET', `/replacement?vague=${wave}`)).json() as Replacement & { proposals: Record<string, P[]> };
+  const regRow = async (id: string) =>
+    ((await call('GET', '/registrations')).json() as { id: string; presence: string; categoryId: string; fighter: { weighInKg: number | null } }[]).find((r) => r.id === id)!;
+  const waveOfReg = async (id: string) => ((await call('GET', '/categories')).json() as { registrationIds: string[]; waveId: string | null }[]).find((c) => c.registrationIds.includes(id))!.waveId;
+
+  test('GET ?vague= : cas de la vague seulement ; compteurs de la vague', async () => {
+    const { mini, alone, matin, aprem } = await setup();
+    await call('PUT', `/weigh-in/${mini.fighterId}`, { presence: 'present', weighInKg: 45, waveId: matin });
+    const m = await ofWave(matin);
+    expect(m.cases.map((c) => c.registrationId)).toEqual([mini.id]);
+    expect(Object.keys(m.proposals)).toEqual([m.cases[0]!.id]);
+    expect(m.summary).toMatchObject({ present: 1, absent: 0, unknown: 0, cases: 1, alone: 1, withoutProposal: 0 });
+    const a = await ofWave(aprem);
+    expect(a.cases.map((c) => c.registrationId)).toEqual([alone.id]);
+    expect(a.summary).toMatchObject({ present: 0, unknown: 5, cases: 1 });
+    // Sans vague dans l'adresse : tous les cas.
+    expect((await replacement()).cases).toHaveLength(2);
+    expect((await call('GET', '/replacement?vague=inconnue')).statusCode).toBe(404);
+  });
+
+  test('proposition vers une autre vague : marquée, validable à la main ; l’inscription repasse « non pesé » ; le poids reste', async () => {
+    const { mini, matin, aprem } = await setup();
+    await call('PUT', `/weigh-in/${mini.fighterId}`, { presence: 'present', weighInKg: 45, waveId: matin });
+    const r = await ofWave(matin);
+    const [p] = r.proposals[r.cases[0]!.id]!;
+    expect(p).toMatchObject({ type: 'C', preApproved: false, waveChange: { from: matin, to: aprem } });
+    expect((await call('POST', '/replacement/apply', { proposalId: p!.id, fingerprint: r.fingerprint })).statusCode).toBe(200);
+    const row = await regRow(mini.id);
+    expect(row.presence).toBe('unknown');
+    expect(row.fighter.weighInKg).toBe(45);
+    expect(await waveOfReg(mini.id)).toBe(aprem);
+    const w = (await call('GET', `/weigh-in?vague=${aprem}`)).json() as { fighters: { fighterId: string; presence: string; weighInKg: number | null }[] };
+    expect(w.fighters.find((f) => f.fighterId === mini.fighterId)).toMatchObject({ presence: 'unknown', weighInKg: 45 });
+    expect((await call('GET', `/weigh-in?vague=${matin}`)).json().fighters).toEqual([]);
+  });
+
+  test('annuler : catégorie et présence d’avant rétablies', async () => {
+    const { mini, matin } = await setup();
+    await call('PUT', `/weigh-in/${mini.fighterId}`, { presence: 'present', weighInKg: 45, waveId: matin });
+    const r = await ofWave(matin);
+    await call('POST', '/replacement/apply', { proposalId: r.proposals[r.cases[0]!.id]![0]!.id });
+    expect((await regRow(mini.id)).presence).toBe('unknown');
+    const entry = (await replacement()).recasements[0]!;
+    expect((await call('POST', '/replacement/undo', { recasementId: entry.id })).statusCode).toBe(200);
+    expect((await regRow(mini.id)).presence).toBe('present');
+    // La catégorie vidée par le recasement a été supprimée : l'annulation la recrée (nouvel identifiant).
+    expect((await categories()).find((c) => c.registrationIds.includes(mini.id))!.label).toContain('Minimes');
+    expect(await waveOfReg(mini.id)).toBe(matin);
+  });
+
+  test('validation globale de la vague : changements de vague exclus ; sans vague alors qu’il y en a → 400', async () => {
+    const { mini, alone, matin, aprem } = await setup();
+    let r = await ofWave(matin);
+    const preview = (await call('POST', '/replacement/preview', { bulk: 'all', waveId: matin })).json() as { steps: unknown[]; unresolved: number };
+    expect(preview).toMatchObject({ steps: [], unresolved: 1 });
+    expect((await call('POST', '/replacement/bulk', { mode: 'all', fingerprint: r.fingerprint, waveId: matin })).json()).toEqual({ applied: 0 });
+    expect((await ofWave(matin)).cases.map((c) => c.registrationId)).toEqual([mini.id]);
+
+    expect((await call('POST', '/replacement/bulk', { mode: 'all', fingerprint: r.fingerprint })).statusCode).toBe(400);
+    expect((await call('POST', '/replacement/preview', { bulk: 'all' })).statusCode).toBe(400);
+    expect((await call('POST', '/replacement/bulk', { mode: 'all', fingerprint: r.fingerprint, waveId: 'inconnue' })).statusCode).toBe(404);
+
+    r = await ofWave(aprem);
+    expect((await call('POST', '/replacement/preview', { bulk: 'simple', waveId: aprem })).json().steps).toHaveLength(1);
+    expect((await call('POST', '/replacement/bulk', { mode: 'simple', fingerprint: r.fingerprint, waveId: aprem })).json()).toEqual({ applied: 1 });
+    expect((await ofWave(aprem)).cases).toEqual([]);
+    expect((await replacement()).recasements.map((x) => x.registrationId)).toEqual([alone.id]);
+  });
+
+  test('empreinte : vagues modifiées entre l’aperçu et la validation → 409', async () => {
+    const { aprem } = await setup();
+    const r = await ofWave(aprem);
+    const waves = (await call('GET', '/waves')).json() as { id: string; name: string; rules: { ageBandCodes: string[]; disciplines: string[] } }[];
+    await call('PUT', '/waves', waves.map((w) => ({ id: w.id, name: w.name, rules: { ...w.rules, ageBandCodes: [...w.rules.ageBandCodes, 'espoir'] } })));
+    expect((await call('POST', '/replacement/bulk', { mode: 'all', fingerprint: r.fingerprint, waveId: aprem })).statusCode).toBe(409);
+    const r2 = await ofWave(aprem);
+    const cat = ((await call('GET', '/categories')).json() as { id: string; waveId: string | null }[]).find((c) => c.waveId === aprem)!;
+    await call('PATCH', `/categories/${cat.id}`, { waveOverride: 'none' });
+    expect((await call('POST', '/replacement/bulk', { mode: 'all', fingerprint: r2.fingerprint, waveId: aprem })).statusCode).toBe(409);
+  });
+});

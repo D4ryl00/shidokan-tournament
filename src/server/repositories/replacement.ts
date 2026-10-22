@@ -18,6 +18,7 @@ import {
   type Presence,
   type Proposal,
   type State,
+  memberWave,
   waveChangeOf,
 } from '../../domain/replacement/index.js';
 import type { AppDb } from '../db/client.js';
@@ -86,16 +87,16 @@ export async function loadState(db: AppDb, competitionId: string): Promise<State
   };
 }
 
-export function allProposals(state: State): Map<string, Proposal[]> {
-  return new Map(detectCases(state).map((c) => [c.id, proposalsFor(state, c)]));
+export function allProposals(state: State, cases = detectCases(state)): Map<string, Proposal[]> {
+  return new Map(cases.map((c) => [c.id, proposalsFor(state, c)]));
 }
 
 /** Propositions à afficher : les valides, puis les refusées encore pertinentes (grisées, avec « Rétablir »). */
-export function displayedProposals(state: State): Map<string, (Proposal & { refused?: true })[]> {
+export function displayedProposals(state: State, cases = detectCases(state)): Map<string, (Proposal & { refused?: true })[]> {
   const all = { ...state, refused: [] };
   const refused = new Set(state.refused);
   return new Map(
-    detectCases(state).map((c) => [
+    cases.map((c) => [
       c.id,
       [...proposalsFor(state, c), ...proposalsFor(all, c).filter((p) => refused.has(p.id)).map((p) => ({ ...p, refused: true as const }))],
     ]),
@@ -112,7 +113,10 @@ function findProposal(state: State, proposalId: string): Proposal {
 
 type CategoryRow = typeof categories.$inferSelect;
 
-/** Écrit en base le passage de `before` à `after` pour l'inscription déplacée par `p`, et journalise. */
+/**
+ * Écrit en base le passage de `before` à `after` pour l'inscription déplacée par `p`, et journalise.
+ * Une inscription qui change de vague repasse « non pesé » : elle se pointe dans sa nouvelle vague (le poids reste).
+ */
 function persist(db: AppDb, competitionId: string, before: State, after: State, p: Proposal, opts: { bulk: boolean }): void {
   const m0 = before.members.find((m) => m.registrationId === p.registrationId)!;
   const m1 = after.members.find((m) => m.registrationId === p.registrationId)!;
@@ -146,9 +150,11 @@ function persist(db: AppDb, competitionId: string, before: State, after: State, 
         discipline: regRow.discipline,
         ruleset: regRow.ruleset,
         weightClassId: regRow.weightClassId,
+        presence: regRow.presence,
       },
       categories: snapshotCategories,
     };
+    const changesWave = memberWave(before, m0) !== memberWave(after, m1);
     t.update(registrations)
       .set({
         categoryId: idMap.get(m1.categoryId!) ?? m1.categoryId,
@@ -158,6 +164,7 @@ function persist(db: AppDb, competitionId: string, before: State, after: State, 
         discipline: m1.discipline,
         ruleset: m1.ruleset,
         weightClassId: m1.weightClassId,
+        ...(changesWave ? { presence: 'unknown' as const } : {}),
       })
       .where(eq(registrations.id, p.registrationId))
       .run();
@@ -189,13 +196,28 @@ export async function applyProposalById(db: AppDb, competitionId: string, propos
   await syncCategories(db, competitionId);
 }
 
-export async function bulkApply(db: AppDb, competitionId: string, mode: BulkMode, fingerprint: string): Promise<{ applied: number }> {
+/**
+ * Vague d'une validation en masse : avec des vagues, elle se fait toujours dans une vague (400 sinon, 404 si inconnue) ;
+ * sans vague, `null` (tous les cas).
+ */
+export async function bulkWave(db: AppDb, competitionId: string, waveId: string | undefined): Promise<string | null> {
+  const all = await listWaves(db, competitionId);
+  if (waveId) {
+    if (!all.some((w) => w.id === waveId)) throw new NotFoundError('Vague introuvable');
+    return waveId;
+  }
+  if (all.length > 0) throw new RegistrationValidationError(['Choisissez la vague du recasement (rechargez la page si les vagues viennent d’être créées).']);
+  return null;
+}
+
+export async function bulkApply(db: AppDb, competitionId: string, mode: BulkMode, fingerprint: string, waveId?: string): Promise<{ applied: number }> {
+  const wave = await bulkWave(db, competitionId, waveId);
   let state = await loadState(db, competitionId);
   if (stateFingerprint(state) !== fingerprint) throw new StaleProposalError();
   const moved = new Set<string>();
   let applied = 0;
   for (let guard = 0; guard <= state.members.length; guard++) {
-    const p = nextBulkStep(state, mode, moved);
+    const p = nextBulkStep(state, mode, moved, wave);
     if (!p) break;
     persist(db, competitionId, state, applyProposal(state, p), p, { bulk: true });
     moved.add(p.registrationId);
@@ -256,7 +278,12 @@ export async function undoRecasement(db: AppDb, competitionId: string, recasemen
   const entry = db.select().from(recasements).where(and(eq(recasements.id, recasementId), eq(recasements.competitionId, competitionId))).get();
   if (!entry || entry.status !== 'validated') throw new NotFoundError('Recasement introuvable');
   const snapshot = JSON.parse(entry.snapshotJson) as {
-    registration: { categoryId: string | null; placementLocked: boolean; originalJson: string | null; recasementType: string | null; discipline: Member['discipline']; ruleset: Member['ruleset']; weightClassId: string | null };
+    registration: {
+      categoryId: string | null; placementLocked: boolean; originalJson: string | null; recasementType: string | null;
+      discipline: Member['discipline']; ruleset: Member['ruleset']; weightClassId: string | null;
+      /** Absente des instantanés d'avant les vagues. */
+      presence?: Presence;
+    };
     categories: { id: string; keyString: string; keyJson: string; aliasKeys: string; label: string }[];
   };
   const reg = db.select().from(registrations).where(eq(registrations.id, entry.registrationId)).get();
