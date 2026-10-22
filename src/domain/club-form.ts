@@ -333,6 +333,18 @@ export function parseClubForm(cells: unknown[][], grid: CategoryGrid, tolerance:
   return { header, rows };
 }
 
+/** Fiche saisie à l'écran (fiche papier) : mêmes inscriptions et mêmes contrôles qu'un import, ligne n = n-ième ligne saisie. */
+export function parseClubFormLines(header: ClubFormHeader, lines: ClubFormLine[], grid: CategoryGrid, tolerance: WeighInTolerance): ClubFormParse {
+  const seen = new Map<string, number>();
+  const combatByFighter = new Map<string, Set<DisciplineId>>();
+  const rows = lines.flatMap((line, i) => {
+    if (!line.lastName.trim() && !line.firstName.trim() && !line.combat && !line.kata) return [];
+    const who = normalizeName(`${line.lastName} ${line.firstName}`);
+    return checkRows(lineToRows(line, i + 1, grid, tolerance), who, i + 1, seen, combatByFighter);
+  });
+  return { header, rows };
+}
+
 /** Doublons (même combattant, même discipline) et deux disciplines de combat, sur les lignes d'inscription produites. */
 function checkRows(parsedRows: ClubFormRow[], who: string, line: number, seen: Map<string, number>, combatByFighter: Map<string, Set<DisciplineId>>): ClubFormRow[] {
   const out: ClubFormRow[] = [];

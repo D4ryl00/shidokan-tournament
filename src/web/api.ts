@@ -3,7 +3,7 @@ import type { Competition, CompetitionInput } from '../domain/competition.js';
 import type { BracketFormat, KataScores, MatchMethod, Podium } from '../domain/brackets/index.js';
 import type { CategoryProgress, MedalRow, ResultRecord } from '../domain/results.js';
 import type { Category, CategoryStatus } from '../domain/categories.js';
-import type { ClubFormParse } from '../domain/club-form.js';
+import type { ClubFormHeader, ClubFormLine, ClubFormParse } from '../domain/club-form.js';
 import type { ColumnMapping, FfkChoices, FfkImportPlan } from '../domain/ffk-import.js';
 import type { Club, RegistrationInput, RegistrationRow } from '../domain/registration.js';
 import type { Case, Presence, Proposal, ProposalType } from '../domain/replacement/index.js';
@@ -138,7 +138,23 @@ async function upload<T>(url: string, file: File): Promise<T> {
 
 export function usePreviewClubForm(id: string) {
   return useMutation({
-    mutationFn: (file: File) => upload<ClubFormParse & { removals: { registrationId: string; label: string }[] }>(`/api/competitions/${id}/club-forms/preview`, file),
+    mutationFn: (file: File) => upload<ClubFormPreview>(`/api/competitions/${id}/club-forms/preview`, file),
+  });
+}
+
+export type ClubFormPreview = ClubFormParse & { removals: { registrationId: string; label: string }[] };
+export type PaperEntry = { header: ClubFormHeader; lines: ClubFormLine[] };
+
+export function usePreviewPaperEntry(id: string) {
+  return useMutation({ mutationFn: (entry: PaperEntry) => api<ClubFormPreview>('POST', `/api/competitions/${id}/club-forms/entry/preview`, entry) });
+}
+
+export function useImportPaperEntry(id: string) {
+  const invalidate = useInvalidateRegistrations(id);
+  return useMutation({
+    mutationFn: (entry: PaperEntry) =>
+      api<{ club: Club; imported: number; replaced: number; skipped: number }>('POST', `/api/competitions/${id}/club-forms/entry/import`, entry),
+    onSuccess: invalidate,
   });
 }
 

@@ -19,6 +19,7 @@ export type HelpTopicId =
   | 'grille'
   | 'fiche-club.envoyer'
   | 'fiche-club.importer'
+  | 'fiche-club.saisir'
   | 'import-ffk.clubs'
   | 'import-ffk.rapprochements'
   | 'import-ffk.mises-a-jour'
@@ -94,7 +95,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
   },
   'fiche-club': {
     title: 'Fiche club',
-    short: 'Envoyez le modèle de fiche aux clubs, puis importez chaque fiche qu’ils vous renvoient.',
+    short: 'Envoyez la fiche aux clubs (tableur ou papier), puis importez ou saisissez chaque fiche qu’ils vous renvoient.',
     details: [
       'La fiche club apporte ce que l’export FFK n’a pas : les préférences de discipline, l’accord pour le jiyu, le poids approximatif et le coach.',
       'Elle part plusieurs semaines avant la compétition ; l’export FFK n’arrive qu’à la clôture des inscriptions.',
@@ -120,6 +121,20 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Une inscription d’une catégorie qui a déjà commencé n’est jamais retirée.',
       ],
       'Si le fichier est refusé, le message dit pourquoi (fiche modifiée, nom du club manquant…).',
+    ],
+  },
+  'fiche-club.saisir': {
+    title: '3. Saisir une fiche papier',
+    short: 'Recopiez une fiche papier ligne par ligne, cliquez « Vérifier », puis « Enregistrer la fiche ».',
+    details: [
+      [
+        'Le tableau suit la fiche papier, dans le même ordre : une ligne par combattant.',
+        'Cliquez les cases cochées sur la fiche ; un second clic décoche.',
+        'Kata et combat sur une même ligne donnent deux inscriptions. La catégorie de poids est déduite du poids actuel.',
+        '« Ajouter une ligne » pour les fiches de plus de 5 combattants.',
+        'Rien n’est enregistré avant « Enregistrer la fiche » ; quitter la page abandonne la saisie.',
+      ],
+      'Comme pour un import, saisir de nouveau la fiche d’un club remplace les inscriptions de sa fiche précédente (l’aperçu les annonce).',
     ],
   },
   'import-ffk': {

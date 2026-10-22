@@ -125,3 +125,28 @@ test('grade : enregistré sur le combattant, conservé si absent', async () => {
   const cleared = await app.inject({ method: 'PUT', url: `${base}/registrations/${row.id}`, payload: { ...body, grade: null } });
   expect(cleared.json().fighter.grade).toBeNull();
 });
+
+const ENTRY_HEADER = { club: 'Tani Dojo', coachName: 'Jean', coachPhone: null, coachEmail: null, preApproval: false };
+const ENTRY_LINE = {
+  lastName: 'MARTIN', firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', weightKg: 53.5, combat: 'karate', kata: true, grade: '1er kyu',
+  ruleset: 'jiyu', prefs: { 'shido-mix': 1 }, shobuKeep: null,
+};
+
+test('saisie papier : kata + karaté sur une ligne, catégorie déduite du poids', async () => {
+  const send = () => app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: ENTRY_HEADER, lines: [ENTRY_LINE] } });
+  const res = await send();
+  expect(res.statusCode).toBe(200);
+  const rows = (await app.inject({ method: 'GET', url: `${base}/registrations` })).json() as { discipline: string; weightClassId: string | null; otherDisciplines: string[]; fighter: { grade: string | null }; club: { name: string } }[];
+  expect(rows.map((r) => r.discipline).sort()).toEqual(['karate', 'kata']);
+  expect(rows.find((r) => r.discipline === 'karate')).toMatchObject({ weightClassId: 'cadet:F:-54', otherDisciplines: ['shido-mix'] });
+  expect(rows.every((r) => r.fighter.grade === '1er kyu' && r.club.name === 'Tani Dojo')).toBe(true);
+  await send();
+  expect((await app.inject({ method: 'GET', url: `${base}/registrations` })).json()).toHaveLength(2);
+});
+
+test('saisie papier : ligne invalide → erreur dans l’aperçu, rien d’écrit', async () => {
+  const res = await app.inject({ method: 'POST', url: `${base}/club-forms/entry/preview`, payload: { header: ENTRY_HEADER, lines: [{ ...ENTRY_LINE, sex: null }] } });
+  expect(res.statusCode).toBe(200);
+  expect(res.json().rows[0].errors).toEqual(['Sexe manquant.']);
+  expect((await app.inject({ method: 'GET', url: `${base}/registrations` })).json()).toEqual([]);
+});

@@ -127,3 +127,33 @@ test('fiche papier : nom de compétition long, toujours une page', async ({ page
   await page.emulateMedia({ media: 'print' });
   expect(await pdfPages(page)).toBe(1);
 });
+
+test('saisie d’une fiche papier', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe saisie papier');
+  await page.goto(`/competitions/${id}/fiche-club`);
+  await page.getByTestId('paper-entry-club').fill('Tani Dojo');
+  const row = page.getByTestId('paper-entry-row').first();
+  await row.getByLabel('Nom', { exact: true }).fill('MARTIN');
+  await row.getByLabel('Prénom').fill('Léa');
+  await row.getByText('F', { exact: true }).click();
+  await row.getByText('C', { exact: true }).click();
+  await row.getByLabel('Poids actuel').fill('53,5');
+  await row.getByText('Karaté', { exact: true }).click();
+  await row.getByText('Kata', { exact: true }).click();
+  await row.getByLabel('Grade').fill('1er kyu');
+  await row.getByText('Jiyu', { exact: true }).click();
+  await row.getByLabel('Reclassement Mix').selectOption('1');
+  await page.getByTestId('paper-entry-check').click();
+  await expect(page.getByTestId('paper-entry-preview').getByTestId('club-form-preview-row')).toHaveCount(2);
+  await page.getByTestId('paper-entry-save').click();
+  await expect(page.getByText('Tani Dojo : 2 inscription(s)')).toBeVisible();
+  const regs = (await (await request.get(`/api/competitions/${id}/registrations`)).json()) as { discipline: string; weightClassId: string | null }[];
+  expect(regs.map((r) => r.discipline).sort()).toEqual(['karate', 'kata']);
+  expect(regs.find((r) => r.discipline === 'karate')!.weightClassId).toBe('cadet:F:-54');
+  // Une saisie commencée puis abandonnée n'écrit rien
+  await page.goto(`/competitions/${id}/fiche-club`);
+  await page.getByTestId('paper-entry-club').fill('Autre club');
+  await page.getByTestId('paper-entry-row').first().getByLabel('Nom', { exact: true }).fill('DURAND');
+  await page.goto(`/competitions/${id}/inscriptions`);
+  expect(((await (await request.get(`/api/competitions/${id}/registrations`)).json()) as unknown[]).length).toBe(2);
+});

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { NotAClubFormError, parseClubForm } from '../../domain/club-form.js';
+import { NotAClubFormError, parseClubForm, parseClubFormLines } from '../../domain/club-form.js';
 import { buildClubFormTemplate } from '../club-form-template.js';
 import type { AppDb } from '../db/client.js';
 import { getCompetition, getGrid } from '../repositories/competitions.js';
@@ -19,6 +19,33 @@ import { UnreadableFileError, readWorkbook } from '../spreadsheet/read.js';
 import { writeOds } from '../spreadsheet/ods.js';
 
 const discipline = z.enum(['karate', 'shido-boxing', 'shido-mix', 'triathlon', 'kata']);
+const pref = z.union([z.literal(1), z.literal(2)]).optional();
+/** Fiche papier saisie à l'écran : en-tête du club et lignes (un combattant par ligne). */
+const paperEntrySchema = z.object({
+  header: z.object({
+    club: z.string().trim().min(1, 'Le nom du club est obligatoire.'),
+    coachName: z.string().trim().nullable(),
+    coachPhone: z.string().trim().nullable(),
+    coachEmail: z.string().trim().nullable(),
+    preApproval: z.boolean(),
+  }),
+  lines: z.array(
+    z.object({
+      lastName: z.string(),
+      firstName: z.string(),
+      sex: z.enum(['M', 'F']).nullable(),
+      ageBandCode: z.string().nullable(),
+      weightKg: z.number().positive().nullable(),
+      combat: z.enum(['karate', 'shido-boxing', 'shido-mix', 'triathlon']).nullable(),
+      kata: z.boolean(),
+      grade: z.string().trim().max(30).nullable(),
+      ruleset: z.enum(['jiyu', 'shobu']).nullable(),
+      prefs: z.object({ karate: pref, 'shido-boxing': pref, 'shido-mix': pref }),
+      shobuKeep: z.enum(['ruleset', 'discipline']).nullable(),
+    }),
+  ).max(200),
+});
+
 export const registrationInputSchema = z
   .object({
     clubId: z.string().nullable(),
@@ -118,6 +145,22 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
       .header('Content-Type', 'application/vnd.oasis.opendocument.spreadsheet')
       .header('Content-Disposition', `attachment; filename="fiche-club-${competition.date}.ods"`)
       .send(buf);
+  });
+
+  async function parseEntry(competitionId: string, body: unknown) {
+    const { header, lines } = paperEntrySchema.parse(body);
+    const tolerance = (await getCompetition(db, competitionId))!.settings.weighInToleranceKg;
+    return parseClubFormLines(header, lines, await getGrid(db, competitionId), tolerance);
+  }
+
+  app.post<P>('/api/competitions/:id/club-forms/entry/preview', async (req) => {
+    const parse = await parseEntry(req.params.id, req.body);
+    return { ...parse, removals: await clubFormRemovals(db, req.params.id, parse) };
+  });
+
+  app.post<P>('/api/competitions/:id/club-forms/entry/import', async (req) => {
+    const parse = await parseEntry(req.params.id, req.body);
+    return { ...(await importClubForm(db, req.params.id, parse)), parse };
   });
 
   app.post<P>('/api/competitions/:id/club-forms/preview', async (req) => {
