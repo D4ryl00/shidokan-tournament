@@ -7,6 +7,7 @@ import { validResults } from '../../domain/results.js';
 import { useCategories, useCategoryResults, useCompetition, useDeleteResult, useSchedule, useUpdateCategory } from '../api.js';
 import { BracketView } from '../components/BracketView.js';
 import { KataScoring } from '../components/KataScoring.js';
+import { HelpButton, SectionHeader } from '../components/Help.js';
 import { ResultDialog } from '../components/ResultDialog.js';
 import { TieBreakDialog } from '../components/TieBreakDialog.js';
 import { STATUS_LABELS, useEntrantInfo } from './BracketsPage.js';
@@ -39,9 +40,11 @@ export function MatchesPage() {
   const tieScope = res?.progress.podium.tieScopes?.[0] ?? null;
 
   return (
+    <Stack>
+    <SectionHeader topic="combats" />
     <Grid>
       <Grid.Col span={{ base: 12, md: 4 }}>
-        <Title order={5} mb="xs">Catégories et tatamis</Title>
+        <SectionHeader topic="combats.categories" order={5} />
         <ScrollArea.Autosize mah="75vh">
           <Stack gap={4}>
             {playable.map((c) => (
@@ -69,7 +72,7 @@ export function MatchesPage() {
               const kataNext = t.categories.find((c) => c.kata && c.status !== 'finished');
               return (
                 <Card key={t.tatami} withBorder data-testid="tatami-card">
-                  <Title order={5}>Tatami {t.tatami}</Title>
+                  <Group gap={4}><Title order={5}>Tatami {t.tatami}</Title><HelpButton topic="combats.zone" /></Group>
                   {next.length === 0 && !kataNext && <Text size="sm" c="dimmed">Aucun combat en attente.</Text>}
                   {kataNext && next.length === 0 && (
                     <Button size="xs" variant="light" mt={4} onClick={() => setSelectedId(kataNext.id)}>Kata : {kataNext.label}</Button>
@@ -149,5 +152,6 @@ export function MatchesPage() {
         <TieBreakDialog competitionId={id} categoryId={selected.id} scope={tieScope} group={ties[0] ?? null} entrants={entrants} onClose={() => setTieOpen(false)} />
       )}
     </Grid>
+    </Stack>
   );
 }

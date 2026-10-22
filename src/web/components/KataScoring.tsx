@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { kataScore, resolveKata, type KataBracket, type KataScores } from '../../domain/brackets/kata.js';
 import { usePutKataNotes } from '../api.js';
 import type { EntrantInfo } from './BracketView.js';
+import { SectionHeader } from './Help.js';
 
 function NotesRow({ label, club, judges, notes, onSave, finalist }: { label: string; club: string; judges: number; notes: number[]; onSave: (n: number[]) => void; finalist?: boolean }) {
   const [values, setValues] = useState<(number | '')[]>([]);
@@ -54,6 +55,7 @@ export function KataScoring({ competitionId, categoryId, bracket, scores, tieBre
   const round1Complete = bracket.order.length <= 2 || round1Ranking.every((r) => r.score !== null);
   return (
     <Stack>
+      <SectionHeader topic="combats.kata" order={5} />
       <Group>
         <Select data-testid="kata-judges" label="Nombre d'arbitres" w={160} data={['1', '2', '3', '4', '5', '6', '7'].filter((n) => Number(n) >= used)} value={String(judges)} allowDeselect={false} onChange={(v) => v && setJudges(Number(v))} />
         <Text size="sm" c="dimmed">{judges < 5 ? 'Moins de 5 arbitres : moyenne des notes.' : 'Note la plus haute et la plus basse retirées, puis moyenne.'}</Text>

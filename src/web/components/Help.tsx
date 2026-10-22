@@ -2,9 +2,16 @@ import { ActionIcon, Group, List, Modal, Stack, Text, Title, type TitleOrder } f
 import { useState } from 'react';
 import { HELP, type HelpTopicId } from '../help.js';
 
-/** Bouton ⓘ : ouvre l'aide complète d'un sujet. */
-export function HelpButton({ topic }: { topic: HelpTopicId }) {
-  const [opened, setOpened] = useState(false);
+/**
+ * Bouton ⓘ : ouvre l'aide complète d'un sujet. Dans une autre fenêtre, `onOpenChange` permet à celle-ci de ne pas
+ * se fermer avec la même touche Échap (Mantine écoute Échap sur toute la page, pour chaque fenêtre ouverte).
+ */
+export function HelpButton({ topic, onOpenChange }: { topic: HelpTopicId; onOpenChange?: (opened: boolean) => void }) {
+  const [opened, setOpenedState] = useState(false);
+  const setOpened = (v: boolean) => {
+    setOpenedState(v);
+    onOpenChange?.(v);
+  };
   const h = HELP[topic];
   return (
     <>

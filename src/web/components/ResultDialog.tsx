@@ -5,6 +5,7 @@ import { affectedBy, type ResultRecord } from '../../domain/results.js';
 import type { Ruleset } from '../../domain/types.js';
 import { useDeleteResult, usePutResult } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
+import { HelpButton, HelpText } from './Help.js';
 import type { EntrantInfo } from './BracketView.js';
 
 const METHODS: { value: MatchMethod; label: string }[] = [
@@ -37,6 +38,7 @@ export function ResultDialog({ competitionId, categoryId, bracket, ruleset, matc
   const [method, setMethod] = useState<MatchMethod>('points');
   const [score, setScore] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   useEffect(() => {
     setWinner(match?.result?.winner ?? null);
     setMethod(match?.result?.method ?? 'points');
@@ -69,8 +71,9 @@ export function ResultDialog({ competitionId, categoryId, bracket, ruleset, matc
     winner && put.mutate({ cid: categoryId, matchId: match.id, winner, method, score: score.trim() || null }, { onSuccess: onClose });
 
   return (
-    <Modal opened onClose={onClose} title={`Combat ${number ?? ''} — résultat`} size="lg">
+    <Modal opened onClose={onClose} closeOnEscape={!helpOpen} title={`Combat ${number ?? ''} — résultat`} size="lg">
       <Stack>
+        <Group gap={4} wrap="nowrap"><HelpText topic="combats.resultat" /><HelpButton topic="combats.resultat" onOpenChange={setHelpOpen} /></Group>
         <Group grow align="stretch">{side('a')}{side('b')}</Group>
         <Group grow>
           <Select data-testid="result-method" label="Méthode" allowDeselect={false} value={method} onChange={(v) => v && setMethod(v as MatchMethod)}
