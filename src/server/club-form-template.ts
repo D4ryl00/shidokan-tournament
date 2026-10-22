@@ -1,68 +1,99 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import {
-  CLUB_FORM_LEGACY_COLUMNS,
+  CLUB_FORM_COLUMNS,
   CLUB_FORM_HEADER_FIELDS,
   CLUB_FORM_ROWS,
   CLUB_FORM_TITLE,
+  SHOBU_KEEP_LABELS,
 } from '../domain/club-form.js';
 import type { Competition } from '../domain/competition.js';
 import { DISCIPLINES, RULESETS } from '../domain/disciplines.js';
-import { weightClassesFor } from '../domain/grid.js';
 import type { CategoryGrid } from '../domain/types.js';
 import type { OdsCell, OdsSheet } from './spreadsheet/ods.js';
 
 const c = (value: string | number | null, extra: Partial<OdsCell> = {}): OdsCell => ({ value, ...extra });
 const frDate = (iso: string) => iso.split('-').reverse().join('/');
 
-/** Feuilles « Fiche club » (à remplir) et « Aide » (codes et catégories de poids). */
+/** Logo Shidokan France en PNG : dans le dépôt (développement) ou parmi les fichiers du site (image Docker). */
+function logoPng(): Buffer | null {
+  for (const p of ['assets/brand/shidokan-france-logo.png', 'dist/web/shidokan-france-logo.png']) {
+    const full = path.resolve(p);
+    if (fs.existsSync(full)) return fs.readFileSync(full);
+  }
+  return null;
+}
+
+const COMBAT = (['karate', 'shido-boxing', 'shido-mix', 'triathlon'] as const).map((d) => DISCIPLINES[d].label);
+const WIDTHS = [3.2, 2.8, 1.9, 2.8, 1.7, 2.8, 1.6, 2.0, 1.8, 1.4, 1.4, 1.4, 3.0];
+const LAST = WIDTHS.length - 1;
+
+/** Feuilles « Fiche club » (à remplir, une ligne par combattant) et « Aide ». */
 export function buildClubFormTemplate(competition: Competition, grid: CategoryGrid): OdsSheet[] {
+  const offered = grid.ageBands.filter((b) => b.onClubForm);
   const validations = {
     sexe: ['Féminin', 'Masculin'],
-    age: grid.ageBands.map((b) => b.label),
-    discipline: Object.values(DISCIPLINES).map((d) => d.label),
-    reglement: ['Jiyu', 'Shobu'],
+    age: offered.map((b) => b.label),
+    combat: COMBAT,
     ouinon: ['Oui', 'Non'],
+    reglement: ['Jiyu', 'Shobu'],
+    ordre: ['1', '2'],
+    priorite: [SHOBU_KEEP_LABELS.ruleset, SHOBU_KEEP_LABELS.discipline],
   };
   const subtitle = [competition.name, frDate(competition.date), competition.location].filter(Boolean).join(' — ');
   const rows: OdsCell[][] = [
-    [c(CLUB_FORM_TITLE, { bold: true })],
-    [c(subtitle)],
-    [c("À remplir puis renvoyer par e-mail. Une ligne par inscription (kata + combat = deux lignes). Voir l'onglet « Aide ».")],
-    ...CLUB_FORM_HEADER_FIELDS.map((label, i) => [
-      c(label, { bold: true }),
-      c(null, i === CLUB_FORM_HEADER_FIELDS.length - 1 ? { validation: 'ouinon' } : { text: true }),
-    ]),
+    [c(null, { logo: true }), c(CLUB_FORM_TITLE, { style: 'title', colSpan: LAST - 1 }), c(null, { logo: true })],
+    [c(null), c(subtitle, { style: 'subtitle', colSpan: LAST - 1 }), c(null)],
+    [c('À remplir puis renvoyer par e-mail. Une ligne par combattant : kata et combat sur la même ligne. Voir aussi l’onglet « Aide ».', { style: 'note', colSpan: WIDTHS.length })],
+    ...CLUB_FORM_HEADER_FIELDS.map((label, i) => {
+      const last = i === CLUB_FORM_HEADER_FIELDS.length - 1;
+      return [
+        c(label, { style: 'label' }),
+        c(null, { style: 'input', colSpan: 4, ...(last ? { validation: 'ouinon' } : { text: true }) }),
+        ...(last ? [c('« Oui » : le coach accepte d’avance les reclassements de ses combattants.', { style: 'note', colSpan: 8 })] : []),
+      ];
+    }),
     [],
-    [c("Catégorie de poids sous la forme -35 ou +65 (liste dans l'onglet « Aide »). Autres disciplines : codes par ordre de préférence, ex. 32.")],
-    CLUB_FORM_LEGACY_COLUMNS.map((label) => c(label, { bold: true })),
+    [c('Reclassement : numérotez 1 puis 2 les autres disciplines acceptées si le combattant se retrouve seul. Shobu : « Les règles shobu » = changer de discipline plutôt que passer en jiyu ; « La discipline » = passer en jiyu plutôt que changer de discipline.', { style: 'note', colSpan: WIDTHS.length })],
+    CLUB_FORM_COLUMNS.map((label) => c(label, { style: 'header' })),
   ];
   for (let i = 0; i < CLUB_FORM_ROWS; i++) {
+    const input = (extra: Partial<OdsCell> = {}) => c(null, { style: 'input', ...extra });
     rows.push([
-      c(null), c(null), c(null, { validation: 'sexe' }), c(null, { validation: 'age' }), c(null, { text: true }),
-      c(null, { validation: 'discipline' }), c(null, { validation: 'reglement' }), c(null, { text: true }), c(null, { validation: 'ouinon' }), c(null),
+      input(), input(), input({ validation: 'sexe' }), input({ validation: 'age' }), input({ text: true }), input({ validation: 'combat' }),
+      input({ validation: 'ouinon' }), input({ text: true }), input({ validation: 'reglement' }),
+      input({ validation: 'ordre' }), input({ validation: 'ordre' }), input({ validation: 'ordre' }), input({ validation: 'priorite' }),
     ]);
   }
 
   const help: OdsCell[][] = [
-    [c('Codes des autres disciplines (par ordre de préférence)', { bold: true })],
-    ...Object.values(DISCIPLINES)
-      .filter((d) => d.clubFormCode !== null)
-      .map((d) => [c(`${d.clubFormCode} = ${d.label}`)]),
-    [c('Exemple : 32 = d’abord shido-mix-martial, puis shido-boxing. Laisser vide si le combattant ne veut pas changer de discipline.')],
-    [c('Kata et triathlon : inscription possible, mais jamais en préférence.')],
+    [c('Comment remplir la fiche', { bold: true })],
+    [c('Une ligne par combattant. S’il fait du kata et une discipline de combat, mettez Kata « Oui » et choisissez la discipline de combat sur la même ligne.')],
+    [c('Poids actuel : le poids du combattant aujourd’hui, en kg (la catégorie de poids en est déduite).')],
+    [c('Grade : seulement pour le kata, pour information des arbitres.')],
+    [],
+    [c('Reclassement', { bold: true })],
+    [c('Si le combattant se retrouve seul dans sa catégorie, il peut être proposé dans une autre discipline : numérotez 1 puis 2 celles qu’il accepte. Laissez vide s’il ne veut pas changer de discipline.')],
+    [c(`Shobu : « ${SHOBU_KEEP_LABELS.ruleset} » = changer de discipline plutôt que passer en jiyu ; « ${SHOBU_KEEP_LABELS.discipline} » = passer en jiyu plutôt que changer de discipline.`)],
     [],
     [c('Règlements', { bold: true })],
     ...Object.values(RULESETS).map((r) => [c(`${r.label} : ${r.ko ? 'avec KO, adultes uniquement' : 'sans KO, mineurs et adultes'}`)]),
     [],
-    [c('Catégories de poids', { bold: true })],
+    [c("Catégories d'âge", { bold: true })],
+    ...offered.map((b) => [c(b.label), c(b.maxAge === null ? `${b.minAge} ans et plus` : `${b.minAge} à ${b.maxAge} ans`)]),
   ];
-  for (const band of grid.ageBands) {
-    for (const [sex, label] of [['F', 'féminines'], ['M', 'masculins']] as const) {
-      const classes = weightClassesFor(grid, band.code, sex);
-      if (classes.length) help.push([c(`${band.label} ${label}`), c(classes.map((w) => w.label).join(' '))]);
-    }
-  }
+  const logo = logoPng();
   return [
-    { name: 'Fiche club', rows, validations, columnWidthsCm: [5, 4, 2.5, 3.5, 3, 4, 2.5, 6, 4.5, 3.5] },
+    {
+      name: 'Fiche club',
+      rows,
+      validations,
+      columnWidthsCm: WIDTHS,
+      rowHeightsCm: { 0: 2.4, 1: 0.7, 2: 0.8, 3: 0.65, 4: 0.65, 5: 0.65, 6: 0.65, 7: 0.9, 9: 1.2, 10: 2.1 },
+      defaultRowHeightCm: { from: 11, heightCm: 0.75 },
+      ...(logo ? { image: { data: logo, widthCm: 2.2, heightCm: 2.2 } } : {}),
+      print: { repeatRow: 10 },
+    },
     { name: 'Aide', rows: help, columnWidthsCm: [8, 8] },
   ];
 }

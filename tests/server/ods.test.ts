@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { describe, expect, test } from 'vitest';
-import { CLUB_FORM_LEGACY_COLUMNS, CLUB_FORM_HEADER_FIELDS, CLUB_FORM_TITLE, parseClubForm } from '../../src/domain/club-form.js';
+import { CLUB_FORM_COLUMNS, CLUB_FORM_HEADER_FIELDS, CLUB_FORM_TITLE, parseClubForm } from '../../src/domain/club-form.js';
 import type { Competition } from '../../src/domain/competition.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 import { defaultSettings } from '../../src/domain/settings.js';
@@ -21,20 +21,21 @@ describe('modèle de fiche club', () => {
   test('contenu de la feuille « Fiche club »', async () => {
     const { sheets } = readWorkbook(await template());
     const fiche = sheets.find((s) => s.name === 'Fiche club')!;
-    expect(String(fiche.cells[0]![0])).toContain(CLUB_FORM_TITLE);
-    expect(String(fiche.cells[1]![0])).toContain("Coupe Shidokan – Côte d'Azur");
-    expect(String(fiche.cells[1]![0])).toContain('22/11/2026');
+    expect(String(fiche.cells[0]![1])).toContain(CLUB_FORM_TITLE);
+    expect(String(fiche.cells[1]![1])).toContain("Coupe Shidokan – Côte d'Azur");
+    expect(String(fiche.cells[1]![1])).toContain('22/11/2026');
     CLUB_FORM_HEADER_FIELDS.forEach((label, i) => expect(fiche.cells[3 + i]![0]).toBe(label));
-    expect(fiche.cells[10]!.slice(0, CLUB_FORM_LEGACY_COLUMNS.length)).toEqual([...CLUB_FORM_LEGACY_COLUMNS]);
+    expect(fiche.cells[10]!.slice(0, CLUB_FORM_COLUMNS.length)).toEqual([...CLUB_FORM_COLUMNS]);
   });
 
-  test('feuille « Aide » : codes et catégories de poids', async () => {
+  test('feuille « Aide » : remplissage, reclassement, âges', async () => {
     const { sheets } = readWorkbook(await template());
     const aide = flat(sheets.find((s) => s.name === 'Aide')!.cells);
-    expect(aide).toContain('1 = Karaté');
-    expect(aide).toContain('2 = Shido-boxing');
-    expect(aide).toContain('3 = Shido-mix-martial');
-    expect(aide).toMatch(/Cadets.*féminines.*-47 -54 -61 \+61/);
+    expect(aide).toContain('kata et une discipline de combat');
+    expect(aide).toContain('numérotez 1 puis 2');
+    expect(aide).toContain('« Les règles shobu » = changer de discipline plutôt que passer en jiyu');
+    expect(aide).toContain('Cadets 14 à 15 ans');
+    expect(aide).not.toContain('-47 -54 -61');
   });
 
   test('archive OpenDocument valide avec listes de validation', async () => {
@@ -65,6 +66,42 @@ describe('modèle de fiche club', () => {
   });
 });
 
+describe('modèle de fiche club : présentation et nouveau contenu', () => {
+  test('tranches d’âge proposées seulement', async () => {
+    const g = { ...grid, ageBands: grid.ageBands.map((b) => ({ ...b, onClubForm: b.code !== 'mini-poussin' && b.code !== 'espoir' })) };
+    const zip = await JSZip.loadAsync(await writeOds(buildClubFormTemplate(competition, g)));
+    const content = await zip.file('content.xml')!.async('string');
+    const ages = /of:cell-content-is-in-list\(([^)]*Cadets[^)]*)\)/.exec(content.replace(/&quot;/g, '"'))![1]!;
+    expect(ages).toContain('Poussins');
+    expect(ages).not.toContain('Mini-poussins');
+    expect(ages).not.toContain('Espoirs');
+  });
+
+  test('logo, styles et mise en page A4 paysage', async () => {
+    const zip = await JSZip.loadAsync(await template());
+    expect(zip.file('Pictures/logo.png')).not.toBeNull();
+    expect(await zip.file('META-INF/manifest.xml')!.async('string')).toContain('Pictures/logo.png');
+    const content = await zip.file('content.xml')!.async('string');
+    expect((content.match(/xlink:href="Pictures\/logo.png"/g) ?? []).length).toBe(2);
+    expect(content).toContain('table:number-columns-spanned=');
+    expect(content).toContain('fo:border');
+    expect(content).toContain('<table:table-header-rows>');
+    const styles = await zip.file('styles.xml')!.async('string');
+    expect(styles).toContain('style:print-orientation="landscape"');
+    expect(styles).toContain('fo:page-width="29.7cm"');
+    expect(styles).toContain('style:scale-to-X="1"');
+  });
+
+  test('modèle rempli au nouveau format puis relu : kata et karaté sur une ligne', async () => {
+    const filled = fillClubForm(await template(), ['Tani Dojo', 'Jean', null, null, 'Non'], [
+      ['MARTIN', 'Léa', 'Féminin', 'Cadets', '53,5', 'Karaté', 'Oui', '1er kyu', 'Jiyu', null, '2', '1', null],
+    ], 'new');
+    const parse = parseClubForm(readWorkbook(filled).sheets[0]!.cells, grid);
+    expect(parse.rows.map((r) => r.errors)).toEqual([[], []]);
+    expect(parse.rows.map((r) => r.input!.discipline)).toEqual(['karate', 'kata']);
+  });
+});
+
 describe('readWorkbook', () => {
   test('CSV en ; et UTF-8', () => {
     const csv = Buffer.from('Nom;Prenom\nDUPONT;Héloïse\n', 'utf8');
@@ -83,13 +120,13 @@ describe('readWorkbook', () => {
   });
 });
 
-test('poids, préférences et téléphone en format texte dans le modèle', async () => {
+test('poids, grade et téléphone en format texte dans le modèle', async () => {
   const zip = await JSZip.loadAsync(await template());
   const content = await zip.file('content.xml')!.async('string');
   expect(content).toContain('<number:text-style');
   // ligne 6 (téléphone), colonne B : cellule au format texte
-  const rows = content.split('<table:table-row>');
-  expect(rows[6]).toMatch(/table:style-name="txt"/);
-  // 1re ligne de combattant (ligne 12) : colonnes E et H au format texte
-  expect((rows[12]!.match(/table:style-name="txt"/g) ?? []).length).toBe(2);
+  const rows = content.split(/<table:table-row[ >]/);
+  expect(rows[6]).toMatch(/table:style-name="ce_input_txt"/);
+  // 1re ligne de combattant (ligne 12) : poids actuel (E) et grade (H) au format texte
+  expect((rows[12]!.match(/table:style-name="ce_input_txt"/g) ?? []).length).toBe(2);
 });

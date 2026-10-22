@@ -209,7 +209,8 @@ export function ageBandFromLabel(v: unknown, grid: CategoryGrid): string | null 
 /** Repère la fiche dans le tableur : titre, champs d'en-tête et ligne des colonnes, même si des lignes ont été ajoutées. */
 function locate(cells: unknown[][]): { headerRows: Map<string, number>; columnsRow: number } {
   const title = normalizeName(CLUB_FORM_TITLE);
-  const titleRow = cells.slice(0, 10).findIndex((r) => normalizeName(text(r?.[0])) === title);
+  // Titre en colonne A (ancien modèle) ou B (à côté du logo).
+  const titleRow = cells.slice(0, 10).findIndex((r) => [0, 1, 2].some((i) => normalizeName(text(r?.[i])) === title));
   if (titleRow < 0) throw new NotAClubFormError("Ce fichier n'est pas une fiche club.");
   let columnsRow = -1;
   for (let r = titleRow + 1; r < Math.min(cells.length, titleRow + 40); r++) {
