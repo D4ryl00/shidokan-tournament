@@ -116,7 +116,7 @@ describe('plan de passage', () => {
 });
 
 describe('plan de passage (relecture)', () => {
-  test('premier résultat d’une vague : la répartition de toute la vague est fixée, rien ne bouge', async () => {
+  test('premier résultat d’une session : la répartition de toute la session est fixée, rien ne bouge', async () => {
     await many(4); // -54 : 3 combats
     await many(4, { weightClassId: 'cadet:F:-61' }); // 3 combats
     await many(2, { weightClassId: 'cadet:F:+61' }); // 1 combat
@@ -131,7 +131,7 @@ describe('plan de passage (relecture)', () => {
 });
 
 describe('file par zone', () => {
-  test('?vague= : passages de la vague ; combats joués retirés ; noRest renvoyé', async () => {
+  test('?vague= : passages de la session ; combats joués retirés ; noRest renvoyé', async () => {
     await many(4, { ageBandCode: 'minime', weightClassId: 'minime:F:-45' });
     await many(4);
     const t1 = await oneZone();

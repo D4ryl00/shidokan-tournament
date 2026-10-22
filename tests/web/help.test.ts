@@ -17,7 +17,7 @@ test('aides courtes : une phrase de 160 caractères au plus, terminée par un po
 test('pas de jargon ni de codes internes', () => {
   for (const [id, h] of Object.entries(HELP)) {
     const text = [h.title, h.short, ...h.details.flat()].join(' ');
-    expect(text, id).not.toMatch(/(?<!\p{L})[A-H] :/u); // codes de recasement (« C : », « D : »)
+    expect(text, id).not.toMatch(/(?<!\p{L})[A-H] :/u); // codes de réaffectation (« C : », « D : »)
     expect(text, id).not.toMatch(/\b(registration|bracket|seed|null|undefined|API|weight_out)\b/i);
   }
 });
@@ -51,7 +51,7 @@ test('relecture : kata — enregistrer avec ✓ ou Entrée ; notes retirées à 
 test('relecture : écart de poids — au-delà du seuil, validation manuelle (⚖ Poids +)', () => {
   expect(all('reglages.recasement')).toContain('⚖ Poids +');
   expect(all('reglages.recasement')).not.toContain('jamais proposés ensemble');
-  expect(all('recasement')).toContain('⚖ Poids +');
+  expect(all('reaffectation')).toContain('⚖ Poids +');
 });
 test('relecture : passages d’âge — tranche voisine, mineurs / adultes, pas d’ajout de tranche', () => {
   expect(all('grille.passages')).toContain('tranche voisine');
@@ -78,4 +78,11 @@ test('relecture : aide de la fiche club à jour', () => {
   expect(all('fiche-club')).not.toContain('poids approximatif');
   expect(all('fiche-club.importer')).toContain('ancien format');
   expect(all('fiche-club.saisir')).toContain('s’ajoute');
+});
+
+test('vocabulaire : « session » et « réaffectation », plus « vague » ni « recasement »', () => {
+  for (const [id, h] of Object.entries(HELP)) {
+    const text = [h.title, h.short, ...h.details.flat()].join(' ');
+    expect(text, id).not.toMatch(/\bvagues?\b|\brecas/i);
+  }
 });

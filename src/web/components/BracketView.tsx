@@ -84,7 +84,7 @@ export function BracketView(props: Props) {
     const only = props.entrants.get(category.registrationIds[0]!);
     return (
       <Text data-testid="bracket-view" c="dimmed">
-        {only?.name} ({only?.club}) est seul(e) dans cette catégorie : pas de combat. À recaser.
+        {only?.name} ({only?.club}) est seul(e) dans cette catégorie : pas de combat. À réaffecter.
       </Text>
     );
   }

@@ -91,7 +91,7 @@ export function MatchesPage() {
           <HelpText topic="combats.zone" />
           {waves.length > 0 && (
             <Group gap="xs">
-              <Text size="sm" fw={600}>Vague :</Text>
+              <Text size="sm" fw={600}>Session :</Text>
               <SegmentedControl data-testid="matches-wave" value={waveId ?? ''} onChange={select} data={waves.map((w) => ({ value: w.id, label: w.name }))} />
             </Group>
           )}
@@ -124,7 +124,7 @@ export function MatchesPage() {
             {(schedule?.unassigned.length ?? 0) > 0 && (
               <Card withBorder>
                 <Title order={6}>Sans zone</Title>
-                <Text size="sm" c="dimmed">{schedule!.unassigned.length} catégorie(s) sans zone possible ou sans vague.</Text>
+                <Text size="sm" c="dimmed">{schedule!.unassigned.length} catégorie(s) sans zone possible ou sans session.</Text>
               </Card>
             )}
           </SimpleGrid>

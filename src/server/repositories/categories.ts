@@ -280,7 +280,7 @@ export async function updateCategory(
   const row = getRow(db, competitionId, categoryId);
   if (launchedCategoryIds(db, competitionId).has(categoryId)) {
     const blocked = patch.zoneId !== undefined || patch.waveOverride !== undefined || patch.format !== undefined || patch.repechage !== undefined || patch.thirdPlace !== undefined;
-    if (blocked) throw new CategoryLockedError('La vague est lancée : rouvrez-la pour changer la zone, la vague ou le tableau de cette catégorie.');
+    if (blocked) throw new CategoryLockedError('La session est lancée : rouvrez-la pour changer la zone, la session ou le tableau de cette catégorie.');
   }
   const locked = LOCKED.includes(row.status);
   const unlocking = locked && patch.status !== undefined && !LOCKED.includes(patch.status);
@@ -308,7 +308,7 @@ export async function updateCategory(
   }
   if (patch.waveOverride !== undefined) {
     if (patch.waveOverride !== null && patch.waveOverride !== WAVE_NONE && !(await listWaves(db, competitionId)).some((w) => w.id === patch.waveOverride)) {
-      throw new RegistrationValidationError(['Vague inconnue pour cette compétition.']);
+      throw new RegistrationValidationError(['Session inconnue pour cette compétition.']);
     }
     set.waveOverride = patch.waveOverride;
   }

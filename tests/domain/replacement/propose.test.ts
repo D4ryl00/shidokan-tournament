@@ -238,7 +238,7 @@ describe('corrections de la relecture (étape 5)', () => {
   });
 });
 
-test('catégorie d’une vague lancée (frozen) : ni cas ni cible', () => {
+test('catégorie d’une session lancée (frozen) : ni cas ni cible', () => {
   const a = member({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
   const b = member({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
   const s = makeState([a, b]);
@@ -320,7 +320,7 @@ describe('poids hors catégorie : catégorie du poids réel vide', () => {
     expect(ps.map((p) => p.type)).toEqual(['C', 'A']);
     expect(ps[0]).toMatchObject({ target: { categoryId: rousseau.categoryId }, changes: { weightClassId: 'benjamin:M:-45' }, manual: true });
     expect(ps[0]!.reason).toBe(`${garnier.label} : Karaté · Jiyu · Benjamins M · -40 kg → Karaté · Jiyu · Benjamins / Minimes M · -45 / -50 kg (1 adversaire) — lui en -45 kg, la catégorie de son poids réel`);
-    expect(ps[1]!.reason).toBe(`${garnier.label} : Karaté · Jiyu · Benjamins M · -40 kg → Karaté · Jiyu · Benjamins M · -45 kg — il y sera seul (sans adversaire), à recaser ensuite`);
+    expect(ps[1]!.reason).toBe(`${garnier.label} : Karaté · Jiyu · Benjamins M · -40 kg → Karaté · Jiyu · Benjamins M · -45 kg — il y sera seul (sans adversaire), à réaffecter ensuite`);
     // Validée, la proposition C le met avec ROUSSEAU, en -45 ; il ne « revient » pas en -40.
     const after = applyProposal(s, ps[0]!);
     const g = after.members.find((m) => m.registrationId === garnier.registrationId)!;

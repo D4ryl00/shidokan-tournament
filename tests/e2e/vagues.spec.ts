@@ -21,15 +21,15 @@ async function addWave(page: Page, name: string, bands: string[]) {
   for (const b of bands) await c.getByText(b, { exact: true }).click();
 }
 
-test('vagues : règles, retrait, ajout à la main, conflit, suppression', async ({ page, request }) => {
-  const id = await createCompetition(page, 'Coupe vagues');
+test('sessions : règles, retrait, ajout à la main, conflit, suppression', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe sessions');
   await seed(request, id);
-  await page.goto(`/competitions/${id}/vagues`);
+  await page.goto(`/competitions/${id}/sessions`);
   await expect(page.getByTestId('waves-none')).toBeVisible();
   await addWave(page, 'Matin', ['Poussins', 'Pupilles', 'Benjamins', 'Minimes']);
   await addWave(page, 'Après-midi', ['Cadets', 'Juniors', 'Seniors']);
   await page.getByTestId('wave-save').click();
-  await expect(page.getByText('Vagues enregistrées')).toBeVisible();
+  await expect(page.getByText('Sessions enregistrées')).toBeVisible();
   await expect(card(page, 'Matin').getByTestId('wave-category')).toHaveText([/Minimes F/]);
   await expect(card(page, 'Après-midi').getByTestId('wave-category')).toHaveCount(2);
 
@@ -47,17 +47,17 @@ test('vagues : règles, retrait, ajout à la main, conflit, suppression', async 
   await card(page, 'Matin').getByText('Cadets', { exact: true }).click();
 
   // Supprimer « Après-midi » : confirmation ; ses catégories retombent sur les règles
-  await card(page, 'Après-midi').getByRole('button', { name: 'Supprimer la vague « Après-midi »' }).click();
+  await card(page, 'Après-midi').getByRole('button', { name: 'Supprimer la session « Après-midi »' }).click();
   await expect(page.getByTestId('wave-delete-confirm')).toContainText('3 catégories');
   await page.getByTestId('wave-delete-go').click();
   await page.getByTestId('wave-save').click();
-  await expect(page.getByText('Vagues enregistrées').last()).toBeVisible(); // la notification du 1er enregistrement peut être encore là
+  await expect(page.getByText('Sessions enregistrées').last()).toBeVisible(); // la notification du 1er enregistrement peut être encore là
   await expect(card(page, 'Matin').getByTestId('wave-category')).toHaveText([/Minimes F/]);
   await expect(waiting.getByTestId('waiting-category')).toHaveCount(2);
 });
 
-test('pesée par vague : présence indépendante, clôture limitée à la vague, feuilles de la vague', async ({ page, request, context }) => {
-  const id = await createCompetition(page, 'Coupe pesée vagues');
+test('pesée par session : présence indépendante, clôture limitée à la session, feuilles de la session', async ({ page, request, context }) => {
+  const id = await createCompetition(page, 'Coupe pesée sessions');
   const reg = (lastName: string, discipline: string) =>
     request.post(`/api/competitions/${id}/registrations`, {
       data: { clubId: null, lastName, firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline, ruleset: discipline === 'kata' ? null : 'jiyu', weightClassId: discipline === 'kata' ? null : 'cadet:F:-54', source: 'manual' },
@@ -72,11 +72,11 @@ test('pesée par vague : présence indépendante, clôture limitée à la vague,
   ] });
   await page.goto(`/competitions/${id}/pesee`);
   const row = (name: string) => page.getByTestId('weighin-row').filter({ hasText: name });
-  await page.getByTestId('weighin-wave').getByText('Kata', { exact: true }).click(); // vague par défaut : la première
+  await page.getByTestId('weighin-wave').getByText('Kata', { exact: true }).click(); // session par défaut : la première
   await expect(page.getByTestId('weighin-row')).toHaveCount(2);
   await row('DEUX').getByTestId('weighin-presence').getByText('Présent').click();
   await page.getByTestId('weighin-wave').getByText('Combats', { exact: true }).click();
-  await expect(page).toHaveURL(/vague=/);
+  await expect(page).toHaveURL(/session=/);
   await expect(page.getByTestId('weighin-row')).toHaveCount(2);
   await row('DEUX').getByTestId('weighin-presence').getByText('Absent').click();
   await expect(row('DEUX').getByTestId('weighin-presence').locator('input[value="absent"]')).toBeChecked();
@@ -96,8 +96,8 @@ test('pesée par vague : présence indépendante, clôture limitée à la vague,
   await expect(sheet.getByTestId('weighin-sheet').filter({ hasText: 'KATA ' })).toHaveCount(0);
 });
 
-test('vagues (mineurs) : vague par défaut non clôturée, feuilles sans vague ou périmée, écran Vagues non enregistré', async ({ page, request }) => {
-  const id = await createCompetition(page, 'Coupe vagues mineurs');
+test('sessions (mineurs) : session par défaut non clôturée, feuilles sans session ou périmée, écran Sessions non enregistré', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe sessions mineurs');
   const reg = (lastName: string, discipline: string) =>
     request.post(`/api/competitions/${id}/registrations`, {
       data: { clubId: null, lastName, firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline, ruleset: discipline === 'kata' ? null : 'jiyu', weightClassId: discipline === 'kata' ? null : 'cadet:F:-54', source: 'manual' },
@@ -111,16 +111,16 @@ test('vagues (mineurs) : vague par défaut non clôturée, feuilles sans vague o
   await request.post(`/api/competitions/${id}/weigh-in/close`, { data: { waveId: kata!.id } });
   // Pesée : vague proposée = la première non clôturée, écrite dans l'adresse
   await page.goto(`/competitions/${id}/pesee`);
-  await expect(page).toHaveURL(new RegExp(`vague=${combat!.id}`));
+  await expect(page).toHaveURL(new RegExp(`session=${combat!.id}`));
   await expect(page.getByTestId('weighin-wave').locator(`input[value="${combat!.id}"]`)).toBeChecked();
   // Feuilles : sans vague ou vague périmée → même repli
-  for (const q of ['', '?vague=perimee']) {
+  for (const q of ['', '?session=perimee', '?vague=perimee']) {
     await page.goto(`/competitions/${id}/impression/pesee${q}`);
     await expect(page.getByTestId('weighin-sheet').first()).toContainText('COMBAT');
     await expect(page.getByText('KATAONLY')).toHaveCount(0);
   }
   // Écran Vagues : modifications non enregistrées signalées et protégées
-  await page.goto(`/competitions/${id}/vagues`);
+  await page.goto(`/competitions/${id}/sessions`);
   await expect(page.getByTestId('waves-unsaved')).toHaveCount(0);
   await page.getByTestId('wave-name').first().fill('Kata du matin');
   await expect(page.getByTestId('waves-unsaved')).toBeVisible();
@@ -131,8 +131,8 @@ test('vagues (mineurs) : vague par défaut non clôturée, feuilles sans vague o
   await expect(page.getByTestId('waves-unsaved')).toHaveCount(0);
 });
 
-test('recasement par vague : cas de la vague, changement de vague signalé et validé un par un', async ({ page, request }) => {
-  const id = await createCompetition(page, 'Coupe recasement vagues');
+test('réaffectation par session : cas de la session, changement de session signalé et validé un par un', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe réaffectation sessions');
   const reg = async (lastName: string, ageBandCode: string, weightClassId: string, approxWeightKg: number) =>
     (await (await request.post(`/api/competitions/${id}/registrations`, {
       data: { clubId: null, lastName, firstName: 'Léa', sex: 'F', ageBandCode, discipline: 'karate', ruleset: 'jiyu', weightClassId, approxWeightKg, source: 'manual' },
@@ -149,23 +149,23 @@ test('recasement par vague : cas de la vague, changement de vague signalé et va
   ] })).json()) as { id: string }[];
   await request.put(`/api/competitions/${id}/weigh-in/${mini.fighterId}`, { data: { weighInKg: 45, waveId: matin!.id } });
 
-  await page.goto(`/competitions/${id}/recasement`);
+  await page.goto(`/competitions/${id}/reaffectation`);
   const cases = page.getByTestId('replacement-case');
   await page.getByTestId('replacement-wave').getByText('Après-midi', { exact: true }).click();
-  await expect(page).toHaveURL(/vague=/);
+  await expect(page).toHaveURL(/session=/);
   await expect(cases).toHaveCount(1);
   await expect(cases).toContainText('SEULE');
   await page.getByTestId('bulk-simple').click();
   await page.getByTestId('bulk-confirm').click();
-  await expect(page.getByText('1 recasement(s) appliqué(s).')).toBeVisible();
+  await expect(page.getByText('1 réaffectation(s) appliquée(s).')).toBeVisible();
   await expect(page.getByText('Aucun cas à traiter')).toBeVisible();
 
   await page.getByTestId('replacement-wave').getByText('Matin', { exact: true }).click();
   await expect(cases).toHaveCount(1);
   await expect(cases).toContainText('MINI');
   const proposal = cases.getByTestId('replacement-proposal');
-  await expect(proposal.getByTestId('wave-change')).toHaveText('↪ change de vague : Matin → Après-midi');
-  await expect(page.getByText('Les changements de vague se valident un par un.')).toBeVisible();
+  await expect(proposal.getByTestId('wave-change')).toHaveText('↪ change de session : Matin → Après-midi');
+  await expect(page.getByText('Les changements de session se valident un par un.')).toBeVisible();
   // « Tout classer automatiquement » ne la prend pas.
   await page.getByTestId('bulk-all').click();
   await expect(page.getByTestId('bulk-confirm')).toHaveText('Confirmer (0)');
@@ -174,7 +174,7 @@ test('recasement par vague : cas de la vague, changement de vague signalé et va
   // Validée à la main : la minime passe dans l'Après-midi, à pointer, son poids gardé.
   await proposal.getByTestId('proposal-apply').click();
   await page.getByTestId('proposal-confirm').click();
-  await expect(page.getByText('Recasement validé.')).toBeVisible();
+  await expect(page.getByText('Réaffectation validée.')).toBeVisible();
   await expect(cases).toHaveCount(0);
 
   await page.getByRole('tab', { name: 'Pesée' }).click();
@@ -184,8 +184,8 @@ test('recasement par vague : cas de la vague, changement de vague signalé et va
   await expect(row.getByTestId('weighin-weight')).toHaveValue('45 kg');
 });
 
-test('recasement par vague (relecture) : vague gardée d’un onglet à l’autre, avertissements du déplacement manuel', async ({ page, request }) => {
-  const id = await createCompetition(page, 'Coupe recasement vagues relecture');
+test('réaffectation par session (relecture) : session gardée d’un onglet à l’autre, avertissements du déplacement manuel', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe réaffectation sessions relecture');
   const reg = (lastName: string, ageBandCode: string, weightClassId: string) =>
     request.post(`/api/competitions/${id}/registrations`, {
       data: { clubId: null, lastName, firstName: 'Léa', sex: 'F', ageBandCode, discipline: 'karate', ruleset: 'jiyu', weightClassId, approxWeightKg: 46, source: 'manual' },
@@ -202,16 +202,16 @@ test('recasement par vague (relecture) : vague gardée d’un onglet à l’autr
   await request.post(`/api/competitions/${id}/weigh-in/close`, { data: { waveId: matin!.id } });
   await page.goto(`/competitions/${id}/pesee`);
   await page.getByTestId('weighin-wave').getByText('Matin', { exact: true }).click();
-  await page.getByRole('tab', { name: 'Recasement' }).click();
+  await page.getByRole('tab', { name: 'Réaffectation' }).click();
   await expect(page.getByTestId('replacement-wave').locator(`input[value="${matin!.id}"]`)).toBeChecked();
   const cases = page.getByTestId('replacement-case');
   await expect(cases).toContainText('MINI');
   // Déplacement manuel vers une catégorie d'une autre vague, puis vers une catégorie en attente.
   const select = cases.getByTestId('manual-move-select');
   await select.click();
-  await page.getByRole('option', { name: /Cadets F.*vague Après-midi/ }).click();
+  await page.getByRole('option', { name: /Cadets F.*session Après-midi/ }).click();
   await cases.getByTestId('manual-move').click();
-  await expect(page.getByTestId('wave-change-warning')).toContainText('passera dans la vague « Après-midi »');
+  await expect(page.getByTestId('wave-change-warning')).toContainText('passera dans la session « Après-midi »');
   await page.keyboard.press('Escape');
   // Juniors F : deux tranches d'écart, absente de la liste tant qu'on ne demande pas toutes les catégories.
   await select.click();
@@ -219,14 +219,14 @@ test('recasement par vague (relecture) : vague gardée d’un onglet à l’autr
   await page.keyboard.press('Escape');
   await cases.getByTestId('manual-move-all').click();
   await select.click();
-  await page.getByRole('option', { name: /Juniors F.*vague en attente.*règle\(s\) enfreinte\(s\)/ }).click();
+  await page.getByRole('option', { name: /Juniors F.*session en attente.*règle\(s\) enfreinte\(s\)/ }).click();
   await cases.getByTestId('manual-move').click();
-  await expect(page.getByTestId('wave-change-warning')).toContainText('dans aucune vague');
+  await expect(page.getByTestId('wave-change-warning')).toContainText('dans aucune session');
 });
 
-test('vagues : tout cocher les tranches d’âge et les disciplines', async ({ page }) => {
-  const id = await createCompetition(page, 'Coupe vagues tout cocher');
-  await page.goto(`/competitions/${id}/vagues`);
+test('sessions : tout cocher les tranches d’âge et les disciplines', async ({ page }) => {
+  const id = await createCompetition(page, 'Coupe sessions tout cocher');
+  await page.goto(`/competitions/${id}/sessions`);
   await page.getByTestId('wave-add').click();
   const card = page.getByTestId('wave-card');
   await card.getByTestId('wave-all-ages').click();
@@ -240,8 +240,8 @@ test('vagues : tout cocher les tranches d’âge et les disciplines', async ({ p
   await expect(card.getByTestId('wave-all-ages')).toHaveText('Tout cocher');
 });
 
-test('tableaux par vague : la vague choisie, celles en attente, toutes', async ({ page, request }) => {
-  const id = await createCompetition(page, 'Coupe tableaux par vague');
+test('tableaux par session : la session choisie, celles en attente, toutes', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe tableaux par session');
   const reg = (lastName: string, ageBandCode: string, weightClassId: string) =>
     request.post(`/api/competitions/${id}/registrations`, {
       data: { clubId: null, lastName, firstName: 'Léa', sex: 'F', ageBandCode, discipline: 'karate', ruleset: 'jiyu', weightClassId, source: 'manual' },
@@ -253,10 +253,20 @@ test('tableaux par vague : la vague choisie, celles en attente, toutes', async (
   const rows = page.getByTestId('category-row');
   await expect(rows).toHaveCount(1);
   await expect(rows).toContainText('Minimes');
-  await expect(page.getByTestId('print-all')).toHaveText('Imprimer la vague');
+  await expect(page.getByTestId('print-all')).toHaveText('Imprimer la session');
   await page.getByTestId('brackets-wave').getByText('En attente (1)').click();
   await expect(rows).toHaveCount(1);
   await expect(rows).toContainText('Cadets');
   await page.getByTestId('brackets-wave').getByText('Toutes').click();
   await expect(rows).toHaveCount(2);
+});
+
+test('anciennes adresses : /vagues et /recasement redirigées, ?vague= toujours lu', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe anciennes adresses');
+  const [w] = (await (await request.put(`/api/competitions/${id}/waves`, { data: [{ name: 'Matin', rules: { ageBandCodes: ['minime'], disciplines: [] } }, { name: 'Soir', rules: { ageBandCodes: ['cadet'], disciplines: [] } }] })).json()) as { id: string }[];
+  await page.goto(`/competitions/${id}/vagues`);
+  await expect(page).toHaveURL(new RegExp(`/competitions/${id}/sessions$`));
+  await page.goto(`/competitions/${id}/recasement?vague=${w!.id}`);
+  await expect(page).toHaveURL(new RegExp(`/competitions/${id}/reaffectation\\?session=${w!.id}$`));
+  await expect(page.getByRole('tab', { name: 'Réaffectation' })).toHaveAttribute('aria-selected', 'true');
 });

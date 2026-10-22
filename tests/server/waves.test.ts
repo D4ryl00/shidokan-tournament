@@ -26,7 +26,7 @@ const reg = (ageBandCode: string, weightClassId: string, lastName: string, sourc
     clubId: null, lastName, firstName: 'x', sex: 'F', ageBandCode, discipline: 'karate', ruleset: 'jiyu', weightClassId, source,
   } });
 
-test('créer, renommer, réordonner, supprimer des vagues (identifiants stables)', async () => {
+test('créer, renommer, réordonner, supprimer des sessions (identifiants stables)', async () => {
   expect(await waves()).toEqual([]);
   const created = (await putWaves([MATIN, APREM])).json() as Wave[];
   expect(created.map((w) => [w.name, w.order, w.weighInClosed])).toEqual([['Matin', 0, false], ['Après-midi', 1, false]]);
@@ -45,7 +45,7 @@ test('noms en double → 400 ; liste périmée → 409', async () => {
   expect(stale.statusCode).toBe(409);
 });
 
-test('vague d’une catégorie calculée ; choix individuel ; catégorie créée après coup', async () => {
+test('session d’une catégorie calculée ; choix individuel ; catégorie créée après coup', async () => {
   for (let i = 0; i < 2; i++) await reg('minime', 'minime:F:-45', `MIN${i}`);
   for (let i = 0; i < 2; i++) await reg('cadet', 'cadet:F:-54', `CAD${i}`);
   const [m, a] = (await putWaves([MATIN, APREM])).json() as Wave[];
@@ -66,7 +66,7 @@ test('vague d’une catégorie calculée ; choix individuel ; catégorie créée
   expect((await byLabel('Benjamins')).waveId).toBe(m!.id);
 });
 
-test('supprimer une vague efface les choix individuels qui la visaient', async () => {
+test('supprimer une session efface les choix individuels qui la visaient', async () => {
   for (let i = 0; i < 2; i++) await reg('minime', 'minime:F:-45', `MIN${i}`);
   const [m, a] = (await putWaves([MATIN, APREM])).json() as Wave[];
   const c = (await cats())[0]!;
@@ -75,7 +75,7 @@ test('supprimer une vague efface les choix individuels qui la visaient', async (
   expect((await cats())[0]).toMatchObject({ waveOverride: null, waveId: m!.id });
 });
 
-test('sans vague : vague nulle partout', async () => {
+test('sans session : session nulle partout', async () => {
   for (let i = 0; i < 2; i++) await reg('minime', 'minime:F:-45', `MIN${i}`);
   expect((await cats()).every((c) => c.waveId === null)).toBe(true);
 });
@@ -99,7 +99,7 @@ test('migration : présence des combattants recopiée sur leurs inscriptions, pe
 test('relecture (mineurs) : tranche inconnue de la grille dans une règle → 400', async () => {
   const res = await putWaves([{ name: 'Matin', rules: { ageBandCodes: ['poussin', 'inconnue'], disciplines: [] } }]);
   expect(res.statusCode).toBe(400);
-  expect(res.json().issues.join(' ')).toContain('Tranche d’âge inconnue dans la vague « Matin » : inconnue.');
+  expect(res.json().issues.join(' ')).toContain('Tranche d’âge inconnue dans la session « Matin » : inconnue.');
 });
 
 test('relecture (mineurs) : migration — inscription orpheline sans combattant : présence « non pesé »', () => {
@@ -114,7 +114,7 @@ test('relecture (mineurs) : migration — inscription orpheline sans combattant 
   closeDb(db);
 });
 
-test('relecture (mineurs) : tranche retirée de la grille → retirée des règles des vagues', async () => {
+test('relecture (mineurs) : tranche retirée de la grille → retirée des règles des sessions', async () => {
   await putWaves([{ name: 'Vétérans', rules: { ageBandCodes: ['v4', 'v5'], disciplines: [] } }]);
   const g = (await app.inject({ method: 'GET', url: `${base}/grid` })).json() as { ageBands: { code: string }[]; weightClasses: { ageBandCode: string }[]; ageLinks: { from: string; to: string }[] };
   const grid = { ...g, ageBands: g.ageBands.filter((b) => b.code !== 'v5'), weightClasses: g.weightClasses.filter((w) => w.ageBandCode !== 'v5'), ageLinks: g.ageLinks.filter((l) => l.from !== 'v5' && l.to !== 'v5') };

@@ -5,6 +5,7 @@ import { useCompetition } from '../api.js';
 import { HELP, type HelpTopicId } from '../help.js';
 import { COMPETITION_TABS } from '../tabs.js';
 import { useHasUnsaved } from '../unsaved.js';
+import { sessionParam } from '../useSelectedWave.js';
 import { HelpButton, HelpText } from './Help.js';
 
 
@@ -15,9 +16,9 @@ export function CompetitionLayout() {
   const current = useLocation().pathname.split('/')[3] ?? 'reglages';
   const unsaved = useHasUnsaved();
   const [pending, setPending] = useState<string | null>(null);
-  // La vague choisie (`?vague=`) suit d'un onglet à l'autre : de la pesée d'une vague à son recasement.
-  const vague = useSearchParams()[0].get('vague');
-  const path = (tab: string) => `/competitions/${id}/${tab}${vague ? `?vague=${encodeURIComponent(vague)}` : ''}`;
+  // La vague choisie (`?session=`) suit d'un onglet à l'autre : de la pesée d'une vague à son recasement.
+  const session = sessionParam(useSearchParams()[0]);
+  const path = (tab: string) => `/competitions/${id}/${tab}${session ? `?session=${encodeURIComponent(session)}` : ''}`;
   const go = (tab: string) => (unsaved ? setPending(tab) : navigate(path(tab)));
   if (isLoading) return <Loader />;
   if (!data) return <Text>Compétition introuvable.</Text>;

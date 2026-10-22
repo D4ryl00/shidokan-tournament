@@ -49,7 +49,7 @@ describe('plan de passage', () => {
     id, waveId: null, discipline: b.kind === 'kata' ? 'kata' : 'karate', pinnedZoneId: null, rank: 0, bracket: b, playable: b.entrants.length >= 2, ...over,
   });
 
-  test('numéros continus d’une vague à l’autre, kata en tête de chaque vague ; sans vague (alors qu’il y en a) : ni zone ni numéro', () => {
+  test('numéros continus d’une session à l’autre, kata en tête de chaque session ; sans session (alors qu’il y en a) : ni zone ni numéro', () => {
     const plan = planPassages({
       categories: [pc('A', combat(4), { waveId: 'w1' }), pc('K', kata(3), { waveId: 'w2' }), pc('B', combat(4), { waveId: 'w2', rank: 1 }), pc('N', combat(4))],
       zones,
@@ -61,7 +61,7 @@ describe('plan de passage', () => {
     expect(plan.categories.N).toEqual({ zoneId: null, auto: false });
   });
 
-  test('sans vague : une seule vague implicite', () => {
+  test('sans session : une seule session implicite', () => {
     const plan = planPassages({ categories: [pc('A', combat(2, 'single_match')), pc('B', combat(2, 'single_match'), { rank: 1 })], zones, waves: [], mode: 'rounds' });
     expect(plan.zones[0]!.passages.map((p) => [p.number, p.categoryId, p.waveId])).toEqual([[1, 'A', null], [2, 'B', null]]);
   });

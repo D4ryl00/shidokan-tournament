@@ -66,8 +66,8 @@ test('ordre de passage : zones par discipline, kata d’abord, numéros imprimé
   await expect(page.getByTestId('zone-card').filter({ hasText: 'Ring' }).getByTestId('next-match').first()).toContainText('combat 1');
 });
 
-test('ordre de passage (relecture) : vague par défaut = la première qui a encore des combats, catégories de la vague seulement', async ({ page, request }) => {
-  const id = await createCompetition(page, 'Coupe ordre vagues');
+test('ordre de passage (relecture) : session par défaut = la première qui a encore des combats, catégories de la session seulement', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe ordre sessions');
   let i = 0;
   const reg = async (ageBandCode: string, weightClassId: string) =>
     (await (await request.post(`/api/competitions/${id}/registrations`, {

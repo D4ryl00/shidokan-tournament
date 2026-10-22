@@ -22,15 +22,15 @@ function minimeAlone(over: Partial<State> = {}) {
   return { mini, cadet: c1, s: makeState([mini, c1, c2], { waves, ...over }) };
 }
 
-describe('recasement par vague', () => {
-  test('sans vague : waveChange toujours null', () => {
+describe('réaffectation par session', () => {
+  test('sans session : waveChange toujours null', () => {
     const { s } = minimeAlone({ waves: [] });
     const all = detectCases(s).flatMap((c) => proposalsFor(s, c));
     expect(all.length).toBeGreaterThan(0);
     expect(all.every((p) => p.waveChange === null)).toBe(true);
   });
 
-  test('proposition vers une catégorie d’une autre vague : waveChange { from: matin, to: aprem }, preApproved faux', () => {
+  test('proposition vers une catégorie d’une autre session : waveChange { from: matin, to: aprem }, preApproved faux', () => {
     const { s, mini, cadet } = minimeAlone();
     const [p] = props(s, mini.registrationId);
     expect(p).toMatchObject({ type: 'C', target: { categoryId: cadet.categoryId }, waveChange: { from: 'matin', to: 'aprem' }, preApproved: false });
@@ -39,7 +39,7 @@ describe('recasement par vague', () => {
     expect(q).toMatchObject({ type: 'C', preApproved: true, waveChange: null });
   });
 
-  test('même vague : waveChange null', () => {
+  test('même session : waveChange null', () => {
     const a = member({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
     const b = member({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
     const s = makeState([a, b], { waves });
@@ -51,7 +51,7 @@ describe('recasement par vague', () => {
     expect(props(s, mini.registrationId)[0]!.waveChange).toEqual({ from: 'matin', to: null });
   });
 
-  test('catégorie d’arrivée fusionnée : garde sa vague', () => {
+  test('catégorie d’arrivée fusionnée : garde sa session', () => {
     const { s, mini, cadet } = minimeAlone();
     const after = applyProposal(s, props(s, mini.registrationId)[0]!);
     const merged = after.categories.find((c) => c.id === cadet.categoryId)!;
@@ -60,7 +60,7 @@ describe('recasement par vague', () => {
     expect(memberWave(after, after.members.find((m) => m.registrationId === mini.registrationId)!)).toBe('aprem');
   });
 
-  test('validation globale « tout » : pas de changement de vague', () => {
+  test('validation globale « tout » : pas de changement de session', () => {
     const { s, mini } = minimeAlone();
     const plan = bulkPlan(s, 'all');
     expect(plan.steps).toEqual([]);
@@ -78,7 +78,7 @@ describe('recasement par vague', () => {
     expect(plan2.steps.map((x) => [x.proposal.registrationId, (x.proposal.target as { categoryId: string }).categoryId])).toEqual([[mini.registrationId, farCat.id]]);
   });
 
-  test('validation globale limitée à la vague', () => {
+  test('validation globale limitée à la session', () => {
     const p1 = member({ ageBandCode: 'minime', weightClassId: 'minime:F:-40', approxWeightKg: 40 });
     const p2 = member({ ageBandCode: 'minime', weightClassId: 'minime:F:-45', approxWeightKg: 43 });
     const p3 = member({ ageBandCode: 'minime', weightClassId: 'minime:F:-45', approxWeightKg: 43 });
@@ -95,7 +95,7 @@ describe('recasement par vague', () => {
     expect(bulkPlan(s, 'all').steps.map((x) => x.proposal.registrationId).sort()).toEqual([c1.registrationId, p1.registrationId].sort());
   });
 
-  test('empreinte : change si une règle de vague ou un choix individuel change', () => {
+  test('empreinte : change si une règle de session ou un choix individuel change', () => {
     const { s, cadet } = minimeAlone();
     const base = stateFingerprint(s);
     expect(stateFingerprint({ ...s, waves: [matin, { ...aprem, rules: { ...aprem.rules, ageBandCodes: ['cadet'] } }] })).not.toBe(base);
@@ -104,7 +104,7 @@ describe('recasement par vague', () => {
     expect(stateFingerprint(s2)).not.toBe(base);
   });
 
-  test('changement de vague entraîné : la catégorie qui perd ses derniers combattants d’origine change de vague avec ses recasés', () => {
+  test('changement de session entraîné : la catégorie qui perd ses derniers combattants d’origine change de session avec ses réaffectés', () => {
     const { s, mini, cadet } = minimeAlone();
     const s1 = applyProposal(s, props(s, mini.registrationId)[0]!);
     // Les deux cadettes d'origine pèsent 52 kg : hors catégorie, vers les -54.

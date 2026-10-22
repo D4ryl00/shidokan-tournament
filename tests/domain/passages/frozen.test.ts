@@ -18,14 +18,14 @@ const freeze = (input: PlanInput, wave: string | null = null): FrozenPassage[] =
   planPassages(input).zones.flatMap((z) => z.passages.filter((p) => p.waveId === wave).map((p) => ({ waveKey: wave ?? '', zoneId: z.zoneId, number: p.number, categoryId: p.categoryId, matchId: p.matchId, noRest: p.noRest })));
 
 describe('numéros figés', () => {
-  test('vague figée : numéros repris tels quels, trous compris', () => {
+  test('session figée : numéros repris tels quels, trous compris', () => {
     const input: PlanInput = { categories: [pc('A', br(4))], zones: [t1], waves: [], mode: 'rounds' };
     const frozen = freeze(input).map((f) => ({ ...f, number: f.number * 10 }));
     expect(seqOf({ ...input, frozen })).toEqual(['10:A:w1-0', '20:A:w1-1', '30:A:w2-0']);
     expect(planPassages({ ...input, frozen }).frozenWaves).toEqual(['']);
   });
 
-  test('vague suivante : après le plus grand numéro figé de chaque zone ; restart → 1', () => {
+  test('session suivante : après le plus grand numéro figé de chaque zone ; restart → 1', () => {
     const waves = [{ id: 'w1', order: 0 }, { id: 'w2', order: 1 }];
     const input: PlanInput = { categories: [pc('A', br(4), { waveId: 'w1' }), pc('B', br(2, 'single_match'), { waveId: 'w2' })], zones: [t1], waves, mode: 'rounds' };
     const frozen = freeze(input, 'w1').map((f) => (f.matchId === 'w2-0' ? { ...f, number: 7 } : f));
@@ -43,7 +43,7 @@ describe('numéros figés', () => {
     expect(plan.zones[0]!.passages.map((p) => p.number)).toEqual(frozen.filter((f) => f.categoryId === 'A').map((f) => f.number));
   });
 
-  test('appendPassages : après le dernier numéro figé de la zone, toutes vagues', () => {
+  test('appendPassages : après le dernier numéro figé de la zone, toutes sessions', () => {
     const base: PlanInput = { categories: [pc('A', br(4)), pc('B', br(4), { rank: 1 })], zones: [t1], waves: [], mode: 'rounds' };
     const frozen = freeze(base);
     const input: PlanInput = { ...base, frozen, categories: [pc('A', br(4)), pc('B', br(5), { rank: 1 })] };
@@ -63,7 +63,7 @@ describe('finales sur une zone', () => {
     expect(finalMatchIds(br(4, 'round_robin') as CombatBracket)).toEqual([]);
   });
 
-  test('finales sur le Ring, à la fin de la vague, dans l’ordre des rangs', () => {
+  test('finales sur le Ring, à la fin de la session, dans l’ordre des rangs', () => {
     const input: PlanInput = {
       categories: [pc('A', br(8)), pc('B', br(4), { rank: 1 }), pc('R', br(4), { pinnedZoneId: 'ring', rank: 2 })],
       zones: [t1, ring], waves: [], mode: 'rounds', finals: { zoneId: 'ring', kata: false },
@@ -93,7 +93,7 @@ test('réglages : pas de zone des finales par défaut', () => {
 });
 
 describe('numéros figés (relecture)', () => {
-  test('reprendre à 1 : la vague suivante continue la nouvelle numérotation, pas celle de la veille', () => {
+  test('reprendre à 1 : la session suivante continue la nouvelle numérotation, pas celle de la veille', () => {
     const waves = [{ id: 'w1', order: 0 }, { id: 'w2', order: 1 }, { id: 'w3', order: 2 }];
     const cats = [pc('A', br(16), { waveId: 'w1' }), pc('B', br(4), { waveId: 'w2' }), pc('C', br(2, 'single_match'), { waveId: 'w3' })];
     const input: PlanInput = { categories: cats, zones: [t1], waves, mode: 'rounds' };

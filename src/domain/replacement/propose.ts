@@ -160,7 +160,7 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
     if (merged.length === 1) {
       // Catégorie du poids réel vide : il y serait seul. Proposée en dernier, après les catégories où il aurait un adversaire.
       const alone = out.at(-1)!;
-      alone.reason += ' — il y sera seul (sans adversaire), à recaser ensuite';
+      alone.reason += ' — il y sera seul (sans adversaire), à réaffecter ensuite';
       alone.sortKey[0] = Number.MAX_SAFE_INTEGER;
       const corrected = { ...m, weightClassId: wic.id };
       const hypothetical = { ...state, members: state.members.map((x) => (x.registrationId === m.registrationId ? corrected : x)) };

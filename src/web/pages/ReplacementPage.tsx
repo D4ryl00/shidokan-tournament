@@ -43,13 +43,13 @@ const kg = (x: number) => Number(x.toFixed(1)).toString().replace('.', ',');
 function WaveChangeWarning({ proposal, waves, name }: { proposal: Proposal | undefined; waves: Wave[]; name: (registrationId: string) => string }) {
   if (!proposal || (!proposal.waveChange && proposal.waveShifts.length === 0)) return null;
   const waveName = (w: string | null) => waves.find((x) => x.id === w)?.name ?? 'en attente';
-  const where = (to: string | null) => (to === null ? 'dans une catégorie en attente (dans aucune vague)' : `dans la vague « ${waveName(to)} »`);
+  const where = (to: string | null) => (to === null ? 'dans une catégorie en attente (dans aucune session)' : `dans la session « ${waveName(to)} »`);
   const then = (to: string | null) =>
     to === null
-      ? 'il n’apparaîtra dans aucune pesée tant qu’elle n’est pas placée dans une vague (écran Vagues).'
+      ? 'il n’apparaîtra dans aucune pesée tant qu’elle n’est pas placée dans une session (écran Sessions).'
       : waves.find((w) => w.id === to)?.weighInClosed
-        ? 'la pesée de cette vague est déjà clôturée : pointez-le à la main dans l’écran Pesée.'
-        : 'à pointer (et à peser si besoin) dans cette vague.';
+        ? 'la pesée de cette session est déjà clôturée : pointez-le à la main dans l’écran Pesée.'
+        : 'à pointer (et à peser si besoin) dans cette session.';
   return (
     <Alert color="grape" data-testid="wave-change-warning">
       <Stack gap={4}>
@@ -60,7 +60,7 @@ function WaveChangeWarning({ proposal, waves, name }: { proposal: Proposal | und
         )}
         {proposal.waveShifts.map((x) => (
           <Text size="sm" key={x.registrationId}>
-            {x.label}, dont la catégorie change de vague, passera {where(x.to)} : {then(x.to)}
+            {x.label}, dont la catégorie change de session, passera {where(x.to)} : {then(x.to)}
           </Text>
         ))}
       </Stack>
@@ -135,7 +135,7 @@ export function ReplacementPage() {
 
   const waveSelector = waves.length > 0 && (
     <Group gap="xs">
-      <Text size="sm" fw={600}>Vague :</Text>
+      <Text size="sm" fw={600}>Session :</Text>
       <SegmentedControl data-testid="replacement-wave" value={waveId ?? ''} onChange={select} data={waves.map((w) => ({ value: w.id, label: w.name }))} />
     </Group>
   );
@@ -151,7 +151,7 @@ export function ReplacementPage() {
       const otherBand = band !== undefined && !x.key.ageBandCodes.includes(band);
       return {
         value: x.id,
-        label: `${x.label} (${x.registrationIds.length - x.absentIds.length})${otherBand ? ' · autre tranche d’âge' : ''}${waveId && x.waveId !== waveId ? ` · vague ${waveName(x.waveId)}` : ''}${t.warnings.length ? ` ⚠ ${t.warnings.length} règle(s) enfreinte(s)` : ''}`,
+        label: `${x.label} (${x.registrationIds.length - x.absentIds.length})${otherBand ? ' · autre tranche d’âge' : ''}${waveId && x.waveId !== waveId ? ` · session ${waveName(x.waveId)}` : ''}${t.warnings.length ? ` ⚠ ${t.warnings.length} règle(s) enfreinte(s)` : ''}`,
       };
     };
     const targets = data.moveTargets[caseId] ?? [];
@@ -175,7 +175,7 @@ export function ReplacementPage() {
       <Group>
         <Button data-testid="bulk-simple" onClick={() => openBulk('simple')} disabled={s.cases === 0}>Classer automatiquement tous les cas simples</Button>
         <Button data-testid="bulk-all" color="orange" variant="light" onClick={() => openBulk('all')} disabled={s.cases === 0}>Tout classer automatiquement</Button>
-        {waves.length > 0 && <Text size="sm" c="dimmed">Les changements de vague se valident un par un.</Text>}
+        {waves.length > 0 && <Text size="sm" c="dimmed">Les changements de session se valident un par un.</Text>}
       </Group>
       <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error ?? bulk.error ?? undo.error ?? move.error} />
 
@@ -242,12 +242,12 @@ export function ReplacementPage() {
                       {p.preApproved && <Badge color="green" variant="light" size="sm">pré-accord coach</Badge>}
                       {p.waveChange && (
                         <Badge color="grape" variant="light" size="sm" tt="none" data-testid="wave-change">
-                          ↪ change de vague : {waveName(p.waveChange.from)} → {waveName(p.waveChange.to)}
+                          ↪ change de session : {waveName(p.waveChange.from)} → {waveName(p.waveChange.to)}
                         </Badge>
                       )}
                       {p.waveShifts.length > 0 && (
                         <Badge color="grape" variant="light" size="sm" tt="none" data-testid="wave-shift">
-                          ↪ emmène {p.waveShifts.length} autre(s) combattant(s) dans une autre vague
+                          ↪ emmène {p.waveShifts.length} autre(s) combattant(s) dans une autre session
                         </Badge>
                       )}
                     </Group>
@@ -293,7 +293,7 @@ export function ReplacementPage() {
         {data.recasements.length > 0 && (
           <Group gap="xs" data-testid="recasement-filters">
             <SegmentedControl size="xs" value={logState} onChange={(v) => setLogState(v as typeof logState)}
-              data={[{ value: 'all', label: 'Tous' }, { value: 'validated', label: 'Validés' }, { value: 'undone', label: 'Annulés' }]} />
+              data={[{ value: 'all', label: 'Toutes' }, { value: 'validated', label: 'Validées' }, { value: 'undone', label: 'Annulées' }]} />
             <Select size="xs" w={200} placeholder="Tous les types" clearable value={logType} onChange={setLogType}
               data={[...new Set(data.recasements.map((r) => r.type))].map((t) => ({ value: t, label: `${PROPOSAL_TYPES[t as ProposalType].label} — ${PROPOSAL_TYPES[t as ProposalType].title}` }))} />
           </Group>
@@ -306,11 +306,11 @@ export function ReplacementPage() {
           <Table.Tbody>
             {data.recasements.filter((r) => (logState === 'all' || r.status === logState) && (!logType || r.type === logType)).map((r) => (
               <Table.Tr key={r.id} data-testid="recasement-row">
-                <Table.Td><ReplacementBadge type={r.type} state={r.status === 'undone' ? 'refused' : 'validated'} detail={r} /></Table.Td>
+                <Table.Td style={{ whiteSpace: 'nowrap' }}><ReplacementBadge type={r.type} state={r.status === 'undone' ? 'refused' : 'validated'} detail={r} /></Table.Td>
                 <Table.Td>{name(r.registrationId)}</Table.Td>
                 <Table.Td>{r.fromLabel} → {r.toLabel}{r.reason && <Text size="xs" c="dimmed">{r.reason}</Text>}</Table.Td>
                 <Table.Td>
-                  {r.bulk ? 'en masse' : 'unitaire'}{r.preApproved ? ' · pré-accord coach' : ''}{r.status === 'undone' ? ' · annulé' : ''}
+                  {r.bulk ? 'en masse' : 'unitaire'}{r.preApproved ? ' · pré-accord coach' : ''}{r.status === 'undone' ? ' · annulée' : ''}
                   <Text size="xs" c="dimmed">{new Date(r.createdAt).toLocaleTimeString('fr-FR')}</Text>
                 </Table.Td>
                 <Table.Td>
@@ -327,7 +327,7 @@ export function ReplacementPage() {
       )}
 
       <Modal opened={dialog?.kind === 'proposal' || dialog?.kind === 'bulk' || dialog?.kind === 'move'} onClose={() => setDialog(null)} size="xl"
-        title={dialog?.kind === 'bulk' ? (dialog.mode === 'simple' ? 'Classer automatiquement tous les cas simples' : 'Tout classer automatiquement') : dialog?.kind === 'move' ? 'Déplacement manuel' : 'Aperçu du recasement'}>
+        title={dialog?.kind === 'bulk' ? (dialog.mode === 'simple' ? 'Classer automatiquement tous les cas simples' : 'Tout classer automatiquement') : dialog?.kind === 'move' ? 'Déplacement manuel' : 'Aperçu de la réaffectation'}>
         <Stack>
           {preview.isPending && <Text size="sm">Calcul de l'aperçu…</Text>}
           <ApiErrorAlert error={preview.error} />
@@ -355,12 +355,12 @@ export function ReplacementPage() {
               <Button variant="default" onClick={() => setDialog(null)}>Annuler</Button>
               {dialog.kind === 'proposal' ? (
                 <Button data-testid="proposal-confirm" loading={apply.isPending}
-                  onClick={() => apply.mutate({ proposalId: dialog.proposal.id, fingerprint: data.fingerprint }, { onSuccess: () => done('Recasement validé.') })}>
+                  onClick={() => apply.mutate({ proposalId: dialog.proposal.id, fingerprint: data.fingerprint }, { onSuccess: () => done('Réaffectation validée.') })}>
                   {PROPOSAL_TYPES[dialog.proposal.type].simple ? 'Êtes-vous sûr ? Valider' : 'Confirmer la validation'}
                 </Button>
               ) : (
                 <Button data-testid="bulk-confirm" loading={bulk.isPending} disabled={!preview.data || preview.data.steps.length === 0}
-                  onClick={() => bulk.mutate({ mode: dialog.mode, fingerprint: data.fingerprint, ...inWave }, { onSuccess: (r) => done(`${r.applied ?? 0} recasement(s) appliqué(s).`) })}>
+                  onClick={() => bulk.mutate({ mode: dialog.mode, fingerprint: data.fingerprint, ...inWave }, { onSuccess: (r) => done(`${r.applied ?? 0} réaffectation(s) appliquée(s).`) })}>
                   Confirmer ({preview.data?.steps.length ?? 0})
                 </Button>
               )}
@@ -368,14 +368,14 @@ export function ReplacementPage() {
           )}
         </Stack>
       </Modal>
-      <Modal opened={dialog?.kind === 'undo'} onClose={() => setDialog(null)} title="Annuler ce recasement ?">
+      <Modal opened={dialog?.kind === 'undo'} onClose={() => setDialog(null)} title="Annuler cette réaffectation ?">
         <Stack>
           <Text>{dialog?.kind === 'undo' && dialog.label} retrouvera sa place d'avant.</Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setDialog(null)}>Non</Button>
             <Button color="red" data-testid="recasement-undo-confirm"
-              onClick={() => dialog?.kind === 'undo' && undo.mutate({ recasementId: dialog.recasementId }, { onSuccess: () => done('Recasement annulé.') })}>
-              Annuler le recasement
+              onClick={() => dialog?.kind === 'undo' && undo.mutate({ recasementId: dialog.recasementId }, { onSuccess: () => done('Réaffectation annulée.') })}>
+              Annuler la réaffectation
             </Button>
           </Group>
         </Stack>

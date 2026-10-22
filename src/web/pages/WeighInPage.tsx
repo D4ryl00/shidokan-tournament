@@ -45,7 +45,7 @@ export function WeighInPage() {
   const { id = '' } = useParams();
   const { waves, waveId, select, ready } = useSelectedWave(id);
   const { data } = useWeighIn(id, waveId);
-  const sheetQuery = waveId ? `vague=${encodeURIComponent(waveId)}` : '';
+  const sheetQuery = waveId ? `session=${encodeURIComponent(waveId)}` : '';
   const { data: grid } = useGrid(id);
   const set = useSetWeighIn(id);
   const close = useCloseWeighIn(id);
@@ -61,7 +61,7 @@ export function WeighInPage() {
     <Stack>
       {waves.length > 0 && (
         <Group gap="xs">
-          <Text size="sm" fw={600}>Vague :</Text>
+          <Text size="sm" fw={600}>Session :</Text>
           <SegmentedControl data-testid="weighin-wave" value={waveId ?? ''} onChange={select}
             data={waves.map((w) => ({ value: w.id, label: w.name }))} />
         </Group>
@@ -103,7 +103,7 @@ export function WeighInPage() {
                   {f.registrations.map((r) => (
                     <Text key={r.id} size="xs">
                       {disciplineLabel(r.discipline)}{r.weightClassLabel ? ` ${r.weightClassLabel}` : ''}
-                      {r.recased && <Badge ml={4} size="xs" variant="light" color="gray" data-testid="weighin-recased" title={r.categoryLabel ?? undefined}>recasé</Badge>}
+                      {r.recased && <Badge ml={4} size="xs" variant="light" color="gray" data-testid="weighin-recased" title={r.categoryLabel ?? undefined}>réaffecté</Badge>}
                     </Text>
                   ))}
                 </Table.Td>

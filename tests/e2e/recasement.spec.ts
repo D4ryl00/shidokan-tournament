@@ -17,8 +17,8 @@ async function seed(request: APIRequestContext, id: string) {
 /** La carte d'un combattant (son nom en titre, pas cité comme adversaire dans une autre carte). */
 const caseOf = (page: Page, name: string) => page.getByTestId('replacement-case').filter({ has: page.getByTestId('case-name').filter({ hasText: name }) });
 
-test('pesée puis recasement : aperçu, validation, refus, masse, retour, annulation', async ({ page, request }) => {
-  const id = await createCompetition(page, 'Coupe recasement');
+test('pesée puis réaffectation : aperçu, validation, refus, masse, retour, annulation', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe réaffectation');
   await seed(request, id);
 
   // 1. Pesée
@@ -54,7 +54,7 @@ test('pesée puis recasement : aperçu, validation, refus, masse, retour, annula
   await page.keyboard.press('Escape');
 
   // 2. Recasement : aperçu et validation d'un cas simple
-  await page.goto(`/competitions/${id}/recasement`);
+  await page.goto(`/competitions/${id}/reaffectation`);
   const martin = caseOf(page, 'MARTIN Léa');
   await expect(martin).toBeVisible();
   const simple = martin.getByTestId('replacement-proposal').filter({ hasText: '-54' }).first();
@@ -63,7 +63,7 @@ test('pesée puis recasement : aperçu, validation, refus, masse, retour, annula
   await simple.getByTestId('proposal-apply').click();
   await expect(page.getByTestId('preview-content')).toContainText('MARTIN Léa contre BERNARD Léa');
   await page.getByTestId('proposal-confirm').click();
-  await expect(page.getByText('Recasement validé.')).toBeVisible();
+  await expect(page.getByText('Réaffectation validée.')).toBeVisible();
   await expect(page.getByTestId('recasement-row')).toHaveCount(1);
 
   await page.goto(`/competitions/${id}/inscriptions`);
@@ -76,7 +76,7 @@ test('pesée puis recasement : aperçu, validation, refus, masse, retour, annula
   await expect(page.getByTestId('weighin-row').filter({ hasText: 'MARTIN' }).getByTestId('weighin-recased')).toBeVisible();
 
   // 3. Refus
-  await page.goto(`/competitions/${id}/recasement`);
+  await page.goto(`/competitions/${id}/reaffectation`);
   const dubois = caseOf(page, 'DUBOIS');
   const before = await dubois.getByTestId('replacement-proposal').count();
   if (before > 0) {
@@ -94,7 +94,7 @@ test('pesée puis recasement : aperçu, validation, refus, masse, retour, annula
     await page.getByTestId('bulk-all').click();
     await expect(page.getByTestId('preview-content')).toBeVisible();
     await page.getByTestId('bulk-confirm').click();
-    await expect(page.getByText(/recasement\(s\) appliqué\(s\)/)).toBeVisible();
+    await expect(page.getByText(/réaffectation\(s\) appliquée\(s\)/)).toBeVisible();
   }
   await expect(page.getByTestId('replacement-proposal')).toHaveCount(0);
 
@@ -107,14 +107,14 @@ test('pesée puis recasement : aperçu, validation, refus, masse, retour, annula
   await expect(ret.getByTestId('replacement-badge')).toHaveText('↩ Retour');
   await ret.getByTestId('proposal-apply').click();
   await page.getByTestId('proposal-confirm').click();
-  await expect(page.getByText('Recasement validé.')).toBeVisible();
+  await expect(page.getByText('Réaffectation validée.')).toBeVisible();
 
   // 6. Annulation depuis l'historique
   const rows = page.getByTestId('recasement-row');
   const count = await rows.count();
   await rows.first().getByTestId('recasement-undo').click();
   await page.getByTestId('recasement-undo-confirm').click();
-  await expect(page.getByText('Recasement annulé.')).toBeVisible();
+  await expect(page.getByText('Réaffectation annulée.')).toBeVisible();
   await expect(rows).toHaveCount(count);
   await expect(rows.first()).toContainText('annulé');
 

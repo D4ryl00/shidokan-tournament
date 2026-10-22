@@ -151,7 +151,7 @@ test('déplacement manuel hors règles : effectué avec avertissement', async ()
   expect((await categories())[0]!.registrationIds).toHaveLength(2);
 });
 
-test('catégorie lancée : jamais cible ni modifiée par le recasement en masse', async () => {
+test('catégorie lancée : jamais cible ni modifiée par la réaffectation en masse', async () => {
   await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
   const b = await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
   await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
@@ -163,7 +163,7 @@ test('catégorie lancée : jamais cible ni modifiée par le recasement en masse'
   expect((await categories()).find((c) => c.id === cat54.id)!.registrationIds).toHaveLength(2);
 });
 
-test('annulation : clé de catégorie recalculée ; seulement le recasement le plus récent d’une inscription', async () => {
+test('annulation : clé de catégorie recalculée ; seulement la réaffectation la plus récente d’une inscription', async () => {
   const a = await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 50 });
   const b = await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 52 });
   const c = await reg({ weightClassId: 'cadet:F:-61', approxWeightKg: 54 });
@@ -183,7 +183,7 @@ test('annulation : clé de catégorie recalculée ; seulement le recasement le p
   if (host.registrationIds.includes(c.id)) expect(host.label).toContain('-61');
 });
 
-test('annulation d’un ancien recasement refusée si un plus récent existe pour la même inscription', async () => {
+test('annulation d’un ancien réaffectation refusée si un plus récent existe pour la même inscription', async () => {
   const a = await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
   await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
   let r = await replacement();
@@ -250,7 +250,7 @@ test('proposition refusée : listée comme refusée, puis rétablie', async () =
   expect(r.proposals[caseId]!.find((p) => p.id === pid)!.refused).toBeFalsy();
 });
 
-test('pesée : un recasé n’est pas « hors catégorie », il est signalé « recasé »', async () => {
+test('pesée : un réaffecté n’est pas « hors catégorie », il est signalé « réaffecté »', async () => {
   const a = await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 }) as unknown as { id: string; fighterId: string };
   await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
   const r = await replacement();
@@ -282,7 +282,7 @@ test('absence d’un membre d’une catégorie fusionnée : clé recalculée sur
   expect(host.registrationIds).toContain(b.id);
 });
 
-test('journal : motif du recasement ; pesée : catégorie de chaque inscription', async () => {
+test('journal : motif de la réaffectation ; pesée : catégorie de chaque inscription', async () => {
   const a = await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
   await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
   const r = await replacement();
@@ -293,7 +293,7 @@ test('journal : motif du recasement ; pesée : catégorie de chaque inscription'
   expect(w.fighters.find((f) => f.fighterId === a.fighterId)!.registrations[0]!.categoryLabel).toBe('Karaté · Jiyu · Cadets F · -47 / -54 kg');
 });
 
-test('annulation : ordre fiable même si deux recasements ont la même heure (à la milliseconde)', async () => {
+test('annulation : ordre fiable même si deux réaffectations ont la même heure (à la milliseconde)', async () => {
   const a = await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
   await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
   const r = await replacement();
@@ -350,7 +350,7 @@ test('catégorie mixte (F/M) : le libellé suit les présents, et revient à F/M
   expect(await labels()).toEqual(['Karaté · Jiyu · Cadets F/M · -52 / -54 kg [3]']);
 });
 
-describe('pesée par vague', () => {
+describe('pesée par session', () => {
   type W = { fighters: { fighterId: string; presence: string; registrations: { discipline: string }[] }[]; closed: boolean };
   async function twoWaves() {
     const both = await reg({ lastName: 'DEUX' });
@@ -368,13 +368,13 @@ describe('pesée par vague', () => {
     ((await call('GET', '/registrations')).json() as { discipline: string; presence: string; fighter: { lastName: string } }[])
       .map((r) => `${r.fighter.lastName}:${r.discipline}:${r.presence}`).sort();
 
-  test('liste limitée aux combattants de la vague', async () => {
+  test('liste limitée aux combattants de la session', async () => {
     const { kata, combat } = await twoWaves();
     expect((await list(kata)).fighters.map((f) => f.registrations.map((r) => r.discipline))).toEqual([['kata']]);
     expect((await list(combat)).fighters).toHaveLength(2);
   });
 
-  test('combattant dans deux vagues : présence indépendante', async () => {
+  test('combattant dans deux sessions : présence indépendante', async () => {
     const { both, kata, combat } = await twoWaves();
     await call('PUT', `/weigh-in/${both.fighterId}`, { presence: 'absent', waveId: combat });
     expect(await presences()).toEqual(['COMBAT:karate:unknown', 'DEUX:karate:absent', 'DEUX:kata:unknown']);
@@ -384,7 +384,7 @@ describe('pesée par vague', () => {
     expect((await list(combat)).fighters.find((f) => f.fighterId === both.fighterId)!.presence).toBe('absent');
   });
 
-  test('clôture de la vague du matin : les autres vagues ne bougent pas', async () => {
+  test('clôture de la session du matin : les autres sessions ne bougent pas', async () => {
     const { kata, combat } = await twoWaves();
     const closed = (await call('POST', '/weigh-in/close', { waveId: kata })).json() as { markedAbsent: number };
     expect(closed.markedAbsent).toBe(1);
@@ -396,9 +396,9 @@ describe('pesée par vague', () => {
   });
 });
 
-describe('pesée par vague (relecture)', () => {
+describe('pesée par session (relecture)', () => {
   const bands = ['poussin', 'pupille', 'benjamin', 'minime', 'cadet', 'junior', 'senior'];
-  test('catégorie d’arrivée d’un recasement : garde sa vague', async () => {
+  test('catégorie d’arrivée d’une réaffectation : garde sa session', async () => {
     const minime = await reg({ lastName: 'MINI', ageBandCode: 'minime', weightClassId: 'minime:F:-50' });
     for (let i = 0; i < 3; i++) await reg({ lastName: `CAD${i}`, weightClassId: 'cadet:F:-54' });
     const [matin, aprem] = (await call('PUT', '/waves', [
@@ -412,7 +412,7 @@ describe('pesée par vague (relecture)', () => {
     void matin;
   });
 
-  test('sans vague : clôturer ne marque pas absent un combattant déjà présent (inscrit ensuite sur place en kata)', async () => {
+  test('sans session : clôturer ne marque pas absent un combattant déjà présent (inscrit ensuite sur place en kata)', async () => {
     const a = await reg({ lastName: 'PESEE' });
     await call('PUT', `/weigh-in/${a.fighterId}`, { weighInKg: 53 });
     await call('POST', '/registrations', { clubId: null, lastName: 'PESEE', firstName: 'x', sex: 'F', ageBandCode: 'cadet', discipline: 'kata', ruleset: null, weightClassId: null, source: 'onsite' });
@@ -422,7 +422,7 @@ describe('pesée par vague (relecture)', () => {
     expect(regs.map((r) => r.presence)).toEqual(['present', 'present']);
   });
 
-  test('avec des vagues : pointage et clôture sans vague refusés (400), poids non enregistré', async () => {
+  test('avec des sessions : pointage et clôture sans session refusés (400), poids non enregistré', async () => {
     const a = await reg({ lastName: 'X' });
     await call('PUT', '/waves', [{ name: 'Tous', rules: { ageBandCodes: bands, disciplines: [] } }]);
     expect((await call('POST', '/weigh-in/close')).statusCode).toBe(400);
@@ -432,7 +432,7 @@ describe('pesée par vague (relecture)', () => {
     expect(w[0]!.fighter.weighInKg).toBeNull();
   });
 
-  test('compteurs du recasement : un combattant présent dans une vague compte comme présent', async () => {
+  test('compteurs de la réaffectation : un combattant présent dans une session compte comme présent', async () => {
     const a = await reg({ lastName: 'DEUX' });
     await call('POST', '/registrations', { clubId: null, lastName: 'DEUX', firstName: 'x', sex: 'F', ageBandCode: 'cadet', discipline: 'kata', ruleset: null, weightClassId: null, source: 'manual' });
     const [kata, combat] = (await call('PUT', '/waves', [
@@ -445,7 +445,7 @@ describe('pesée par vague (relecture)', () => {
   });
 });
 
-describe('recasement par vague', () => {
+describe('réaffectation par session', () => {
   type P = {
     id: string; type: string; preApproved: boolean; waveChange: { from: string | null; to: string | null } | null;
     waveShifts: { registrationId: string; from: string | null; to: string | null }[];
@@ -470,7 +470,7 @@ describe('recasement par vague', () => {
     ((await call('GET', '/registrations')).json() as { id: string; presence: string; categoryId: string; fighter: { weighInKg: number | null } }[]).find((r) => r.id === id)!;
   const waveOfReg = async (id: string) => ((await call('GET', '/categories')).json() as { registrationIds: string[]; waveId: string | null }[]).find((c) => c.registrationIds.includes(id))!.waveId;
 
-  test('GET ?vague= : cas de la vague seulement ; compteurs de la vague', async () => {
+  test('GET ?vague= : cas de la session seulement ; compteurs de la session', async () => {
     const { mini, alone, matin, aprem } = await setup();
     await call('PUT', `/weigh-in/${mini.fighterId}`, { presence: 'present', weighInKg: 45, waveId: matin });
     const m = await ofWave(matin);
@@ -485,7 +485,7 @@ describe('recasement par vague', () => {
     expect((await call('GET', '/replacement?vague=inconnue')).statusCode).toBe(404);
   });
 
-  test('proposition vers une autre vague : marquée, validable à la main ; l’inscription repasse « non pesé » ; le poids reste', async () => {
+  test('proposition vers une autre session : marquée, validable à la main ; l’inscription repasse « non pesé » ; le poids reste', async () => {
     const { mini, matin, aprem } = await setup();
     await call('PUT', `/weigh-in/${mini.fighterId}`, { presence: 'present', weighInKg: 45, waveId: matin });
     const r = await ofWave(matin);
@@ -515,7 +515,7 @@ describe('recasement par vague', () => {
     expect(await waveOfReg(mini.id)).toBe(matin);
   });
 
-  test('validation globale de la vague : changements de vague exclus ; sans vague alors qu’il y en a → 400', async () => {
+  test('validation globale de la session : changements de session exclus ; sans session alors qu’il y en a → 400', async () => {
     const { mini, alone, matin, aprem } = await setup();
     let r = await ofWave(matin);
     const preview = (await call('POST', '/replacement/preview', { bulk: 'all', waveId: matin })).json() as { steps: unknown[]; unresolved: number };
@@ -534,7 +534,7 @@ describe('recasement par vague', () => {
     expect((await replacement()).recasements.map((x) => x.registrationId)).toEqual([alone.id]);
   });
 
-  test('empreinte : vagues modifiées entre l’aperçu et la validation → 409', async () => {
+  test('empreinte : sessions modifiées entre l’aperçu et la validation → 409', async () => {
     const { aprem } = await setup();
     const r = await ofWave(aprem);
     const waves = (await call('GET', '/waves')).json() as { id: string; name: string; rules: { ageBandCodes: string[]; disciplines: string[] } }[];
@@ -546,7 +546,7 @@ describe('recasement par vague', () => {
     expect((await call('POST', '/replacement/bulk', { mode: 'all', fingerprint: r2.fingerprint, waveId: aprem })).statusCode).toBe(409);
   });
 
-  test('changement de vague entraîné : les recasés qui changent de vague avec leur catégorie repassent « non pesé » ; annuler rétablit', async () => {
+  test('changement de session entraîné : les réaffectés qui changent de session avec leur catégorie repassent « non pesé » ; annuler rétablit', async () => {
     const { mini, matin, aprem } = await setup();
     let r = await ofWave(matin);
     await call('POST', '/replacement/apply', { proposalId: r.proposals[r.cases[0]!.id]![0]!.id });
@@ -570,7 +570,7 @@ describe('recasement par vague', () => {
     expect((await regRow(mini.id)).presence).toBe('present');
   });
 
-  test('sans vague : annuler ne touche pas à la présence (pointée absente après le recasement)', async () => {
+  test('sans session : annuler ne touche pas à la présence (pointée absente après la réaffectation)', async () => {
     const a = await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
     await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
     await call('PUT', `/weigh-in/${a.fighterId}`, { presence: 'present' });
@@ -582,7 +582,7 @@ describe('recasement par vague', () => {
   });
 });
 
-test('split : le seul en +84 reçoit les deux plus lourds de -84 (un recasement chacun), aperçu compris', async () => {
+test('split : le seul en +84 reçoit les deux plus lourds de -84 (une réaffectation chacun), aperçu compris', async () => {
   const sen = (kg: number, wc = 'senior:M:-84') => reg({ sex: 'M', ageBandCode: 'senior', weightClassId: wc, approxWeightKg: kg });
   const alone = await sen(85, 'senior:M:+84');
   const below = [await sen(72), await sen(78), await sen(83), await sen(84)];

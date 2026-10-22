@@ -10,10 +10,10 @@ export type HelpTopicId =
   | 'clubs'
   | 'fiche-club'
   | 'import-ffk'
-  | 'vagues'
+  | 'sessions'
   | 'vagues.en-attente'
   | 'pesee'
-  | 'recasement'
+  | 'reaffectation'
   | 'tableaux'
   | 'combats'
   | 'podiums'
@@ -61,7 +61,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         '« Nouvelle compétition » : nom, date, lieu, nombre de zones de combat (renommables ensuite). Une grille enregistrée comme modèle peut servir de point de départ.',
         'Cliquez le nom d’une compétition pour l’ouvrir.',
       ],
-      'Ordre habituel : réglages et grille, fiche club envoyée aux clubs, inscriptions, import FFK, pesée, recasement, tableaux, combats, podiums.',
+      'Ordre habituel : réglages et grille, fiche club envoyée aux clubs, inscriptions, import FFK, pesée, réaffectation, tableaux, combats, podiums.',
     ],
   },
   impression: {
@@ -88,12 +88,12 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
   },
   clubs: {
     title: 'Clubs',
-    short: 'Les clubs, leur coach et leur pré-accord pour les recasements.',
+    short: 'Les clubs, leur coach et leur pré-accord pour les réaffectations.',
     details: [
       'Les clubs sont créés par l’import des fiches club, par l’import FFK ou par la saisie des inscriptions.',
       [
         'Coach : nom, téléphone et e-mail, pour le joindre le jour J.',
-        'Pré-accord : le coach accepte d’avance qu’on recase ses combattants. Les propositions qui demanderaient son accord sont alors marquées « pré-accord coach ».',
+        'Pré-accord : le coach accepte d’avance qu’on réaffecte ses combattants. Les propositions qui demanderaient son accord sont alors marquées « pré-accord coach ».',
       ],
     ],
   },
@@ -180,25 +180,25 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Les inscriptions de l’export FFK qui n’existent pas encore et seront créées.',
     details: ['Ces combattants n’ont pas envoyé de fiche club : ils n’auront pas de préférences, sauf si vous les ajoutez à la main.'],
   },
-  vagues: {
-    title: 'Vagues',
+  sessions: {
+    title: 'Sessions',
     short: 'Regroupez les catégories qui se pèsent et se lancent ensemble (« Samedi matin », « Dimanche »…) : cochez leurs tranches d’âge ou disciplines.',
     details: [
-      'Une vague a sa propre pesée et son propre recasement ; pendant qu’une vague combat, la suivante peut déjà se peser.',
+      'Une session a sa propre pesée et sa propre réaffectation ; pendant qu’une session combat, la suivante peut déjà se peser.',
       [
-        '« Ajouter une vague », nommez-la, puis cochez les tranches d’âge (et, si besoin, les disciplines) qu’elle prend. « Tout cocher » prend d’un coup toutes les tranches (ou toutes les disciplines).',
-        'Une catégorie suit la plus jeune tranche d’âge de ses combattants ; un combattant recasé depuis une autre tranche ne la fait pas changer de vague. Une catégorie créée plus tard (inscription sur place) rejoint d’office la vague qui lui correspond.',
-        'Si une catégorie correspond à deux vagues, elle va dans la première (dans l’ordre des cartes) et une alerte l’indique.',
-        '« Retirer » met une catégorie en attente ; « Ajouter à… » la place à la main dans une vague (marquée « ajoutée à la main ») ; « Revenir aux règles » annule ce choix.',
-        '« Enregistrer les vagues » enregistre les noms, l’ordre et les règles ; les retraits et ajouts à la main s’appliquent tout de suite.',
+        '« Ajouter une session », nommez-la, puis cochez les tranches d’âge (et, si besoin, les disciplines) qu’elle prend. « Tout cocher » prend d’un coup toutes les tranches (ou toutes les disciplines).',
+        'Une catégorie suit la plus jeune tranche d’âge de ses combattants ; un combattant réaffecté depuis une autre tranche ne la fait pas changer de session. Une catégorie créée plus tard (inscription sur place) rejoint d’office la session qui lui correspond.',
+        'Si une catégorie correspond à deux sessions, elle va dans la première (dans l’ordre des cartes) et une alerte l’indique.',
+        '« Retirer » met une catégorie en attente ; « Ajouter à… » la place à la main dans une session (marquée « ajoutée à la main ») ; « Revenir aux règles » annule ce choix.',
+        '« Enregistrer les sessions » enregistre les noms, l’ordre et les règles ; les retraits et ajouts à la main s’appliquent tout de suite.',
       ],
-      'Sans vague, toutes les catégories forment une seule vague.',
+      'Sans session, toutes les catégories forment une seule session.',
     ],
   },
   'vagues.en-attente': {
     title: 'En attente',
-    short: 'Les catégories qui ne sont dans aucune vague : pas de pesée ni de lancement tant qu’elles n’en rejoignent pas une.',
-    details: ['Cochez leur tranche d’âge dans une vague, ou choisissez « Ajouter à… » pour les placer à la main.'],
+    short: 'Les catégories qui ne sont dans aucune session : pas de pesée ni de lancement tant qu’elles n’en rejoignent pas une.',
+    details: ['Cochez leur tranche d’âge dans une session, ou choisissez « Ajouter à… » pour les placer à la main.'],
   },
   pesee: {
     title: 'Pesée',
@@ -210,15 +210,15 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Un combattant qui ne vient pas : cliquez « Absent ».',
         'Le kata n’a pas de pesée : pointez seulement la présence.',
       ],
-      'Le badge « ⚖ hors catégorie → … » signale un combattant trop lourd pour sa catégorie (au-delà de la tolérance) et indique celle de son poids ; le recasement s’en occupera. La limite fait partie de la catégorie : 40,0 kg reste en -40 kg.',
-      'La mention « recasé » indique un combattant déjà déplacé dans une autre catégorie.',
+      'Le badge « ⚖ hors catégorie → … » signale un combattant trop lourd pour sa catégorie (au-delà de la tolérance) et indique celle de son poids ; la réaffectation s’en occupera. La limite fait partie de la catégorie : 40,0 kg reste en -40 kg.',
+      'La mention « réaffecté » indique un combattant déjà déplacé dans une autre catégorie.',
       '« Clôturer la pesée » marque absents tous les combattants non pesés. À faire une fois la pesée terminée.',
-      'Avec des vagues : choisissez la vague en haut de l’écran. La liste, les compteurs, les feuilles de pesée et « Clôturer la pesée » ne portent que sur cette vague ; un combattant inscrit dans deux vagues est pointé dans chacune.',
+      'Avec des sessions : choisissez la session en haut de l’écran. La liste, les compteurs, les feuilles de pesée et « Clôturer la pesée » ne portent que sur cette session ; un combattant inscrit dans deux sessions est pointé dans chacune.',
       'Les feuilles de pesée (par club ou par catégorie) s’impriment pour peser sur papier.',
     ],
   },
-  recasement: {
-    title: 'Recasement',
+  reaffectation: {
+    title: 'Réaffectation',
     short: 'Trouvez une place à chaque combattant seul ou hors de sa catégorie : choisissez une proposition, regardez l’aperçu, validez.',
     details: [
       'Chaque cas (combattant sans adversaire, poids hors catégorie…) reçoit des propositions, de la meilleure à la moins bonne.',
@@ -233,13 +233,13 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Un combattant seul dans sa catégorie peut aussi recevoir le ou les deux plus lourds de la catégorie de poids juste en dessous, s’il y en reste au moins deux (« pour donner une poule à… »). Ces combattants n’avaient pas de problème : la proposition se valide à la main, jamais automatiquement.',
       'Badges : ⚖ Poids (catégorie de poids voisine), ⚖ Poids + (écart au-delà du seuil), ↑ Âge (tranche au-dessus), ⇄ Sen./Vét., ↑ Min./Adultes, ⚥ Mixte, Shobu → Jiyu, ⇄ Discipline, ↩ Retour, ✋ Manuel. Cliquez un badge validé pour son détail.',
       'Certains déplacements demandent normalement l’accord des coachs ; en les validant vous en prenez la responsabilité.',
-      'Avec des vagues : choisissez la vague en haut de l’écran (la même que pour la pesée). Les cas, les compteurs et les validations automatiques ne portent que sur ses catégories.',
-      'Le badge « ↪ change de vague : Matin → Dimanche » signale une proposition qui ferait passer le combattant dans une catégorie d’une autre vague. Elle n’est jamais validée automatiquement : validez-la une par une. Le combattant repasse alors « non pesé » dans sa nouvelle vague, à pointer à sa pesée ; son poids déjà relevé est gardé.',
-      'Le badge « ↪ emmène N autre(s) combattant(s) dans une autre vague » signale un déplacement qui fait changer de vague une catégorie entière (ses derniers combattants d’origine la quittent, par exemple) : mêmes règles, validation une par une, les combattants emmenés repassent « non pesés ».',
+      'Avec des sessions : choisissez la session en haut de l’écran (la même que pour la pesée). Les cas, les compteurs et les validations automatiques ne portent que sur ses catégories.',
+      'Le badge « ↪ change de session : Matin → Dimanche » signale une proposition qui ferait passer le combattant dans une catégorie d’une autre session. Elle n’est jamais validée automatiquement : validez-la une par une. Le combattant repasse alors « non pesé » dans sa nouvelle session, à pointer à sa pesée ; son poids déjà relevé est gardé.',
+      'Le badge « ↪ emmène N autre(s) combattant(s) dans une autre session » signale un déplacement qui fait changer de session une catégorie entière (ses derniers combattants d’origine la quittent, par exemple) : mêmes règles, validation une par une, les combattants emmenés repassent « non pesés ».',
     ],
   },
   'recasement.valides': {
-    title: 'Recasements validés',
+    title: 'Réaffectations validées',
     short: 'L’historique des déplacements ; vous pouvez annuler le plus récent d’un combattant.',
     details: ['Annuler remet le combattant dans sa catégorie d’avant. Impossible si sa catégorie a déjà commencé.'],
   },
@@ -249,13 +249,13 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     details: [
       'Les tableaux se font tout seuls à partir des inscriptions, en séparant les combattants d’un même club au premier tour.',
       [
-        'Provisoire (gris) : avant la pesée et le recasement. Prête (bleu) : vérifiée, on peut l’imprimer. Lancée (orange) : un résultat est saisi, le tableau est figé. Terminée (vert) : podium connu.',
+        'Provisoire (gris) : avant la pesée et la réaffectation. Prête (bleu) : vérifiée, on peut l’imprimer. Lancée (orange) : un résultat est saisi, le tableau est figé. Terminée (vert) : podium connu.',
         'Format, repêchage et combat pour la 3e place se changent tant que la catégorie n’est pas lancée.',
         'Cliquez deux combattants pour les échanger.',
         '« Déverrouiller » rouvre une catégorie lancée (le tableau peut être refait si ses inscrits ont changé).',
-        'Vague figée : ses tableaux ne changent plus d’eux-mêmes. Si un combattant devient absent, « Régénérer (renuméroté à la suite) » refait le tableau et lui donne de nouveaux numéros, après le dernier numéro de sa zone : réimprimez-le (il porte « mis à jour à … »).',
+        'Session figée : ses tableaux ne changent plus d’eux-mêmes. Si un combattant devient absent, « Régénérer (renuméroté à la suite) » refait le tableau et lui donne de nouveaux numéros, après le dernier numéro de sa zone : réimprimez-le (il porte « mis à jour à … »).',
       ],
-      'Avec des vagues : la liste montre les catégories de la vague choisie en haut (la même que dans les autres onglets) ; « En attente » montre celles qui ne sont dans aucune vague, « Toutes » toute la compétition. Le bouton d’impression suit ce choix.',
+      'Avec des sessions : la liste montre les catégories de la session choisie en haut (la même que dans les autres onglets) ; « En attente » montre celles qui ne sont dans aucune session, « Toutes » toute la compétition. Le bouton d’impression suit ce choix.',
       'Une catégorie de kata affiche son numéro de passage sur sa zone (« passage n° 1 ») : sur chaque zone, le kata passe avant les combats, le premier combat peut donc porter le n° 2.',
       'Les catégories « Sans adversaire » ou « Tous absents » ne sont pas imprimées.',
     ],
@@ -265,10 +265,10 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Cliquez une catégorie, puis un combat, pour saisir son résultat : le vainqueur avance tout seul.',
     details: [
       [
-        'À gauche : les catégories et leur zone de combat. À droite : par zone, les prochains combats dans l’ordre des numéros de passage (avec des vagues, ceux de la vague choisie en haut).',
-        '« Figer et imprimer la vague » : quand toutes ses catégories sont prêtes et ont une zone, les numéros de passage sont enregistrés et ne changent plus ; imprimez alors les tableaux de la vague. « Reprendre les numéros à 1 » repart de 1 sur chaque zone (nouveau jour). Les vagues se figent dans l’ordre.',
-        'Vague figée : fermée au recasement, ses tableaux ne bougent plus sans confirmation. Une catégorie nouvelle ou régénérée est « à numéroter » : « Numéroter à la suite » lui donne des numéros après le dernier de sa zone.',
-        '« Rouvrir la vague » rend modifiables les catégories sans résultat ; « Refiger la vague » ne renumérote que celles qui ont changé, à la suite (ou « mélangés » : leurs zones d’arrivée sont entièrement renumérotées).',
+        'À gauche : les catégories et leur zone de combat. À droite : par zone, les prochains combats dans l’ordre des numéros de passage (avec des sessions, ceux de la session choisie en haut).',
+        '« Figer et imprimer la session » : quand toutes ses catégories sont prêtes et ont une zone, les numéros de passage sont enregistrés et ne changent plus ; imprimez alors les tableaux de la session. « Reprendre les numéros à 1 » repart de 1 sur chaque zone (nouveau jour). Les sessions se figent dans l’ordre.',
+        'Session figée : fermée à la réaffectation, ses tableaux ne bougent plus sans confirmation. Une catégorie nouvelle ou régénérée est « à numéroter » : « Numéroter à la suite » lui donne des numéros après le dernier de sa zone.',
+        '« Rouvrir la session » rend modifiables les catégories sans résultat ; « Refiger la session » ne renumérote que celles qui ont changé, à la suite (ou « mélangés » : leurs zones d’arrivée sont entièrement renumérotées).',
         'Une zone prend du retard : dans la liste de gauche, choisissez une autre zone pour une catégorie (« Déplacer vers… »).',
         'Cliquez un combat du tableau pour saisir le vainqueur et la méthode.',
         'Une égalité de poule ou de kata s’affiche avec « Départager » : classez les ex-æquo.',
@@ -281,8 +281,8 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Chaque catégorie a une zone, répartie automatiquement ou épinglée à la main ; cliquez une catégorie pour l’ouvrir.',
     details: [
       '« Automatique (Tatami 2) » : l’app a placé la catégorie sur cette zone en équilibrant les combats. Choisir une zone l’y épingle ; « Automatique » la rend à la répartition.',
-      'Dès qu’une catégorie d’une vague est lancée, la répartition de la vague est fixée : chaque catégorie garde sa zone (elle apparaît alors épinglée). « Automatique » la rend à la répartition, sauf dans une vague figée (rouvrez-la d’abord).',
-      'Vague figée : choisir une autre zone ouvre « Déplacer vers… ». « À la suite » (conseillé) : les combats restants de la catégorie prennent les numéros après le dernier de la zone d’arrivée, seuls ses tableaux sont à réimprimer. « Mélangés » : tous les combats non joués de la zone d’arrivée sont renumérotés (mieux répartis, mais réimprimez tous ses tableaux). Les combats déjà joués gardent leur numéro ; l’aperçu montre ancien → nouveau numéro. Un combat en cours sur le tapis n’a pas de résultat : il serait renuméroté en « Mélangés ».',
+      'Dès qu’une catégorie d’une session est lancée, la répartition de la session est fixée : chaque catégorie garde sa zone (elle apparaît alors épinglée). « Automatique » la rend à la répartition, sauf dans une session figée (rouvrez-la d’abord).',
+      'Session figée : choisir une autre zone ouvre « Déplacer vers… ». « À la suite » (conseillé) : les combats restants de la catégorie prennent les numéros après le dernier de la zone d’arrivée, seuls ses tableaux sont à réimprimer. « Mélangés » : tous les combats non joués de la zone d’arrivée sont renumérotés (mieux répartis, mais réimprimez tous ses tableaux). Les combats déjà joués gardent leur numéro ; l’aperçu montre ancien → nouveau numéro. Un combat en cours sur le tapis n’a pas de résultat : il serait renuméroté en « Mélangés ».',
       'L’ordre fixe le rang de la catégorie : catégories alternées en « tour par tour », enchaînées en « catégorie par catégorie » (Réglages › Ordre de passage). Les zones et leurs disciplines se règlent dans les Réglages.',
     ],
   },
@@ -351,7 +351,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
   },
   reglages: {
     title: 'Réglages',
-    short: 'Les informations de la compétition et ses règles : recasement, pesée, formats de tableaux, kata.',
+    short: 'Les informations de la compétition et ses règles : réaffectation, pesée, formats de tableaux, kata.',
     details: [
       'Ces réglages valent pour toute la compétition. Cliquez « Enregistrer » en bas de page après vos changements.',
       'Changer un format ou une option refait les tableaux qui ne sont pas encore lancés.',
@@ -373,7 +373,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Deux zones ne peuvent pas porter le même nom.',
         'Disciplines accueillies : par exemple, le shido-boxing cochée seulement sur le Ring. Une zone accueille au moins une discipline.',
       ],
-      'L’app répartit les catégories de chaque vague sur les zones qui accueillent leur discipline, en équilibrant le nombre de combats. Dans l’onglet Combats, vous pouvez épingler une catégorie sur une zone : ce choix l’emporte. Le nom de la zone est imprimé sur les tableaux.',
+      'L’app répartit les catégories de chaque session sur les zones qui accueillent leur discipline, en équilibrant le nombre de combats. Dans l’onglet Combats, vous pouvez épingler une catégorie sur une zone : ce choix l’emporte. Le nom de la zone est imprimé sur les tableaux.',
     ],
   },
   'reglages.ordre': {
@@ -381,20 +381,20 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Chaque zone numérote ses combats : kata d’abord, puis les combats tour par tour (par défaut) ou catégorie par catégorie.',
     details: [
       [
-        'Tour par tour : les tours sont alignés à partir de la fin (toutes les finales ensemble, toutes les demies ensemble…) ; on passe un tour de toutes les catégories de la zone avant le suivant, et les finales à la fin de la vague. Les combattants ont ainsi le plus de repos possible.',
+        'Tour par tour : les tours sont alignés à partir de la fin (toutes les finales ensemble, toutes les demies ensemble…) ; on passe un tour de toutes les catégories de la zone avant le suivant, et les finales à la fin de la session. Les combattants ont ainsi le plus de repos possible.',
         'Catégorie par catégorie : une catégorie va jusqu’à sa finale, puis la suivante (dans l’ordre saisi dans l’onglet Combats, sinon celui de la grille).',
-        'Chaque catégorie de kata forme un seul numéro, avant les combats de sa vague.',
-        'Les numéros se suivent d’une vague à l’autre sur une même zone. Une exemption n’a pas de numéro.',
+        'Chaque catégorie de kata forme un seul numéro, avant les combats de sa session.',
+        'Les numéros se suivent d’une session à l’autre sur une même zone. Une exemption n’a pas de numéro.',
         'Quand un combattant enchaîne deux combats sans repos, le combat porte « pas de repos : prévoir une pause ».',
-        '« Finales sur la zone » : le combat pour la 1re place de chaque catégorie passe sur cette zone, à la fin de la vague, l’un après l’autre (le tableau imprimé l’indique). Les combats pour la 3e place et les repêchages restent sur leur zone. Option : les finales de kata aussi (le tour 1 reste sur sa zone).',
-        'Une catégorie sans numéro de passage (sans zone possible ou sans vague) numérote ses combats « c1 », « c2 »… pour ne pas les confondre avec ceux d’une zone.',
+        '« Finales sur la zone » : le combat pour la 1re place de chaque catégorie passe sur cette zone, à la fin de la session, l’un après l’autre (le tableau imprimé l’indique). Les combats pour la 3e place et les repêchages restent sur leur zone. Option : les finales de kata aussi (le tour 1 reste sur sa zone).',
+        'Une catégorie sans numéro de passage (sans zone possible ou sans session) numérote ses combats « c1 », « c2 »… pour ne pas les confondre avec ceux d’une zone.',
       ],
       'Si aucune zone n’accueille une discipline, ses catégories restent sans zone ni numéro et un message le signale.',
     ],
   },
   'reglages.recasement': {
-    title: 'Recasement',
-    short: 'Jusqu’où le recasement peut aller : écart de poids et mélanges autorisés.',
+    title: 'Réaffectation',
+    short: 'Jusqu’où la réaffectation peut aller : écart de poids et mélanges autorisés.',
     details: [
       [
         'Écart de poids max (enfants et adultes séparément) : jusqu’à cet écart, un déplacement vers un poids voisin est sans risque ; au-delà, il reste proposé mais se valide à la main (badge « ⚖ Poids + »).',
@@ -457,12 +457,12 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
   },
   'grille.passages': {
     title: 'Passages d’âge autorisés',
-    short: 'Vers quelle tranche d’âge un combattant peut être recasé quand il est seul dans la sienne.',
+    short: 'Vers quelle tranche d’âge un combattant peut être réaffecté quand il est seul dans la sienne.',
     details: [
-      'Le recasement ne propose de changer de tranche d’âge que par un passage de cette liste (par exemple Minimes → Cadets).',
+      'La réaffectation ne propose de changer de tranche d’âge que par un passage de cette liste (par exemple Minimes → Cadets).',
       [
         '« Toujours permis » : le passage est proposé dès qu’il est utile (tranche voisine).',
-        '« Seulement si le mélange seniors / vétérans est activé » : le passage dépend de ce réglage (onglet Réglages, section Recasement).',
+        '« Seulement si le mélange seniors / vétérans est activé » : le passage dépend de ce réglage (onglet Réglages, section Réaffectation).',
         'Un passage de mineurs vers adultes (par exemple Juniors → Seniors) dépend en plus du réglage « mélange mineurs / adultes ».',
       ],
       'La grille FFK est déjà réglée : en général, il n’y a rien à changer ici.',

@@ -3,6 +3,8 @@
 > **Statut : conception validée le 2026-10-21, construite** (étapes 1 à 14, voir `docs/superpowers/plans/2026-10-21-00-feuille-de-route.md`). Complétée par `docs/superpowers/specs/2026-10-22-ordre-de-passage-et-aides-design.md` (vagues, zones de combat, ordre de passage, aides) : en cas de différence, ce second document fait foi.
 > Dernière mise à jour : 2026-10-23. Mainteneur : Remi.
 >
+> **Vocabulaire (2026-10-23)** : dans l'app, « vague » se dit désormais **« session »** et « recasement » **« réaffectation »** (verbe « réaffecter », badge « réaffecté »). Ce document garde les anciens termes, qui restent aussi dans le code (`wave`, `replacement`), la base et l'API. Onglets : `/sessions` et `/reaffectation` (les anciennes adresses `/vagues`, `/recasement` et `?vague=` sont redirigées).
+>
 > Légende : ✅ décidé par l'équipe · 🟡 présumé, en attente de confirmation de la personne qui fait les tableaux · 💡 choix de Claude, à valider ou à corriger
 >
 > Ce document sert aussi au **suivi du projet** : questions ouvertes, décisions et prochaines étapes sont en fin de document (§18 à §20).

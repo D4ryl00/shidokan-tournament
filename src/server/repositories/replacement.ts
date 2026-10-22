@@ -227,7 +227,7 @@ function persistAll(db: AppDb, competitionId: string, state: State, p: Proposal,
 
 /** Vague demandée par l'écran (`null` : toutes) ; 404 si elle n'existe pas. */
 export function knownWave(waves: Pick<Wave, 'id'>[], waveId: string | undefined): string | null {
-  if (waveId && !waves.some((w) => w.id === waveId)) throw new NotFoundError('Vague introuvable');
+  if (waveId && !waves.some((w) => w.id === waveId)) throw new NotFoundError('Session introuvable');
   return waveId ?? null;
 }
 
@@ -238,7 +238,7 @@ export function knownWave(waves: Pick<Wave, 'id'>[], waveId: string | undefined)
 export async function bulkWave(db: AppDb, competitionId: string, waveId: string | undefined): Promise<string | null> {
   const all = await listWaves(db, competitionId);
   if (waveId) return knownWave(all, waveId);
-  if (all.length > 0) throw new RegistrationValidationError(['Choisissez la vague du recasement (rechargez la page si les vagues viennent d’être créées).']);
+  if (all.length > 0) throw new RegistrationValidationError(['Choisissez la session de la réaffectation (rechargez la page si les sessions viennent d’être créées).']);
   return null;
 }
 
@@ -275,7 +275,7 @@ export function manualProposal(state: State, registrationId: string, categoryId:
   const source = state.categories.find((c) => c.id === m.categoryId);
   // Catégorie lancée, ou d'une vague lancée (fermée au recasement).
   const locked = (c: { status: string; frozen?: boolean } | undefined) => c?.status === 'started' || c?.status === 'finished' || c?.frozen === true;
-  if (locked(t) || locked(source)) throw new CategoryLockedError(t?.frozen || source?.frozen ? 'La vague est lancée : rouvrez-la pour y déplacer quelqu’un.' : undefined);
+  if (locked(t) || locked(source)) throw new CategoryLockedError(t?.frozen || source?.frozen ? 'La session est lancée : rouvrez-la pour y déplacer quelqu’un.' : undefined);
   const warnings = moveViolations(state, m, t);
   const toKata = !DISCIPLINES[t.key.discipline].hasWeight && DISCIPLINES[m.discipline].hasWeight;
   if (toKata) warnings.push(`Passage en ${DISCIPLINES[t.key.discipline].label.toLowerCase()} : règlement et catégorie de poids retirés.`);
@@ -309,7 +309,7 @@ export async function manualMove(db: AppDb, competitionId: string, registrationI
 
 export async function undoRecasement(db: AppDb, competitionId: string, recasementId: string): Promise<void> {
   const entry = db.select().from(recasements).where(and(eq(recasements.id, recasementId), eq(recasements.competitionId, competitionId))).get();
-  if (!entry || entry.status !== 'validated') throw new NotFoundError('Recasement introuvable');
+  if (!entry || entry.status !== 'validated') throw new NotFoundError('Réaffectation introuvable');
   const snapshot = JSON.parse(entry.snapshotJson) as {
     registration: {
       categoryId: string | null; placementLocked: boolean; originalJson: string | null; recasementType: string | null;
@@ -328,7 +328,7 @@ export async function undoRecasement(db: AppDb, competitionId: string, recasemen
   if (locked(reg.categoryId) || locked(snapshot.registration.categoryId)) throw new CategoryLockedError();
   const frozen = new Set((await loadState(db, competitionId)).categories.filter((c) => c.frozen).map((c) => c.id));
   if ((reg.categoryId && frozen.has(reg.categoryId)) || (snapshot.registration.categoryId && frozen.has(snapshot.registration.categoryId))) {
-    throw new CategoryLockedError('La vague est lancée : rouvrez-la pour annuler ce recasement.');
+    throw new CategoryLockedError('La session est lancée : rouvrez-la pour annuler cette réaffectation.');
   }
   // Ordre d'insertion (rowid) : fiable même pour deux recasements de la même milliseconde.
   const mine = db.select({ n: sql<number>`rowid` }).from(recasements).where(eq(recasements.id, entry.id)).get()!.n;
@@ -338,7 +338,7 @@ export async function undoRecasement(db: AppDb, competitionId: string, recasemen
     .where(and(eq(recasements.registrationId, entry.registrationId), eq(recasements.status, 'validated')))
     .all()
     .some((r) => r.id !== entry.id && r.n > mine);
-  if (newer) throw new StaleProposalError("Annulez d'abord le recasement plus récent de ce combattant.");
+  if (newer) throw new StaleProposalError("Annulez d'abord la réaffectation plus récente de ce combattant.");
   const touched = new Set([reg.categoryId, snapshot.registration.categoryId, ...snapshot.categories.map((c) => c.id)].filter((x): x is string => !!x));
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
@@ -398,7 +398,7 @@ export async function listRecasements(db: AppDb, competitionId: string) {
 
 /** Inscriptions des catégories d'une vague (vague inconnue : erreur 404). */
 async function registrationsOfWave(db: AppDb, competitionId: string, waveId: string): Promise<Set<string>> {
-  if (!(await listWaves(db, competitionId)).some((w) => w.id === waveId)) throw new NotFoundError('Vague introuvable');
+  if (!(await listWaves(db, competitionId)).some((w) => w.id === waveId)) throw new NotFoundError('Session introuvable');
   // Même calcul que l'écran (vague des catégories d'après leurs combattants d'origine).
   return new Set((await listCategories(db, competitionId)).filter((c) => c.waveId === waveId).flatMap((c) => c.registrationIds));
 }
@@ -406,7 +406,7 @@ async function registrationsOfWave(db: AppDb, competitionId: string, waveId: str
 /** Avec des vagues, la pesée se fait toujours dans une vague : refus d'un pointage ou d'une clôture « toutes vagues ». */
 async function requireWave(db: AppDb, competitionId: string, waveId: string | undefined): Promise<void> {
   if (!waveId && (await listWaves(db, competitionId)).length > 0) {
-    throw new RegistrationValidationError(['Choisissez la vague de la pesée (rechargez la page si les vagues viennent d’être créées).']);
+    throw new RegistrationValidationError(['Choisissez la session de la pesée (rechargez la page si les sessions viennent d’être créées).']);
   }
 }
 

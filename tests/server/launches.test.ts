@@ -42,8 +42,8 @@ const twoWaves = async () =>
     { name: 'Après-midi', rules: { ageBandCodes: ['cadet'], disciplines: [] } },
   ])).json() as { id: string }[];
 
-describe('lancer une vague', () => {
-  test('lancer : numéros enregistrés, vague et zones fixées ; une nouvelle catégorie ne change aucun numéro', async () => {
+describe('lancer une session', () => {
+  test('lancer : numéros enregistrés, session et zones fixées ; une nouvelle catégorie ne change aucun numéro', async () => {
     await many(4);
     await many(4, { weightClassId: 'cadet:F:-61' });
     await readyAll();
@@ -60,13 +60,13 @@ describe('lancer une vague', () => {
     expect(after.zones.map((z) => z.passages.filter((p) => p.categoryId !== fresh.id))).toEqual(before.zones.map((z) => z.passages));
   });
 
-  test('blocages : vague précédente, catégorie non prête, discipline acceptée nulle part, déjà lancée', async () => {
+  test('blocages : session précédente, catégorie non prête, discipline acceptée nulle part, déjà lancée', async () => {
     await many(2, { ageBandCode: 'minime', weightClassId: 'minime:F:-45' });
     await many(2);
     const [matin, aprem] = await twoWaves();
     let res = await launch(aprem!.id);
     expect(res.statusCode).toBe(400);
-    expect(res.json().issues).toContain('Lancez d’abord la vague « Matin ».');
+    expect(res.json().issues).toContain('Lancez d’abord la session « Matin ».');
     expect(res.json().issues.join(' ')).toContain('n’est pas prête');
     await readyAll();
     const zones = (await call('GET', '/zones')).json() as { id: string; name: string }[];
@@ -77,10 +77,10 @@ describe('lancer une vague', () => {
     expect((await launch(matin!.id)).statusCode).toBe(204);
     res = await launch(matin!.id);
     expect(res.statusCode).toBe(400);
-    expect(res.json().issues).toEqual(['La vague a déjà été lancée.']);
+    expect(res.json().issues).toEqual(['La session a déjà été lancée.']);
   });
 
-  test('reprendre à 1 : la vague suivante repart de 1, sinon elle suit', async () => {
+  test('reprendre à 1 : la session suivante repart de 1, sinon elle suit', async () => {
     await many(4, { ageBandCode: 'minime', weightClassId: 'minime:F:-45' });
     await many(4);
     const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
@@ -94,7 +94,7 @@ describe('lancer une vague', () => {
     expect((await plan()).zones[0]!.passages.filter((p) => p.waveId === aprem!.id).map((p) => p.number)).toEqual([1, 2, 3]);
   });
 
-  test('rouvrir puis numéroter sans rien changer : aucun numéro ne change, vague de nouveau lancée', async () => {
+  test('rouvrir puis numéroter sans rien changer : aucun numéro ne change, session de nouveau lancée', async () => {
     await many(4);
     await readyAll();
     await launch(null);
@@ -106,7 +106,7 @@ describe('lancer une vague', () => {
     expect((await plan()).zones).toEqual(before.zones);
   });
 
-  test('nouvelle catégorie dans une vague lancée : à numéroter, à la suite ; l’aperçu n’écrit rien', async () => {
+  test('nouvelle catégorie dans une session lancée : à numéroter, à la suite ; l’aperçu n’écrit rien', async () => {
     const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
     await call('PUT', '/zones', [{ id: t1!.id, name: 'Tatami 1' }]);
     await many(4);
@@ -128,7 +128,7 @@ describe('lancer une vague', () => {
   });
 });
 
-describe('vague lancée : verrous', () => {
+describe('session lancée : verrous', () => {
   test('absent tardif : tableau gardé sans confirmation ; « Régénérer » → numéros à la suite pour elle seule', async () => {
     const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
     await call('PUT', '/zones', [{ id: t1!.id, name: 'Tatami 1' }]);
@@ -152,7 +152,7 @@ describe('vague lancée : verrous', () => {
     expect((await catOf('-54')).stale).toBe(false);
   });
 
-  test('recasement fermé pendant la vague lancée, rouvert ensuite', async () => {
+  test('réaffectation fermée pendant la session lancée, rouverte ensuite', async () => {
     await many(4);
     await many(1, { weightClassId: 'cadet:F:-47', approxWeightKg: 47 });
     await readyAll();
@@ -163,7 +163,7 @@ describe('vague lancée : verrous', () => {
     expect(((await call('GET', '/replacement')).json() as { cases: unknown[] }).cases).toHaveLength(1);
   });
 
-  test('zone, vague, format d’une catégorie de la vague lancée : 409 ; rouverte : permis', async () => {
+  test('zone, session, format d’une catégorie de la session lancée : 409 ; rouverte : permis', async () => {
     await many(4);
     await readyAll();
     const [matin] = (await call('PUT', '/waves', [{ name: 'Tous', rules: { ageBandCodes: ['cadet'], disciplines: [] } }])).json() as { id: string }[];
@@ -177,23 +177,23 @@ describe('vague lancée : verrous', () => {
     expect((await call('PATCH', `/categories/${c.id}`, { zoneId: t2!.id })).statusCode).toBe(200);
   });
 
-  test('vague lancée une fois : suppression refusée ; compétition lancée sans vague : pas de vagues ; zone portant des numéros figés : non supprimable', async () => {
+  test('session lancée une fois : suppression refusée ; compétition lancée sans session : pas de sessions ; zone portant des numéros figés : non supprimable', async () => {
     await many(4);
     await readyAll();
     const [matin, aprem] = await twoWaves();
     await launch(aprem!.id).then(() => launch(matin!.id));
     const kept = await call('PUT', '/waves', [{ id: aprem!.id, name: 'Après-midi', rules: { ageBandCodes: ['cadet'], disciplines: [] } }]);
     expect(kept.statusCode).toBe(409);
-    expect(kept.json().error).toBe('La vague « Matin » a été lancée : elle ne peut plus être supprimée.');
+    expect(kept.json().error).toBe('La session « Matin » a été lancée : elle ne peut plus être supprimée.');
   });
 
-  test('sans vague, lancée : création de vagues refusée ; zone portant des numéros figés non supprimable', async () => {
+  test('sans session, lancée : création de sessions refusée ; zone portant des numéros figés non supprimable', async () => {
     await many(4);
     await readyAll();
     await launch(null);
     const res = await call('PUT', '/waves', [{ name: 'Matin', rules: { ageBandCodes: ['cadet'], disciplines: [] } }]);
     expect(res.statusCode).toBe(409);
-    expect(res.json().error).toBe('La compétition a été lancée sans vague : impossible de créer des vagues maintenant.');
+    expect(res.json().error).toBe('La compétition a été lancée sans session : impossible de créer des sessions maintenant.');
     const zones = (await call('GET', '/zones')).json() as { id: string; name: string }[];
     const used = (await plan()).zones.find((z) => z.passages.length)!.zoneId;
     const res2 = await call('PUT', '/zones', zones.filter((z) => z.id !== used).map((z) => ({ id: z.id, name: z.name })));
@@ -202,7 +202,7 @@ describe('vague lancée : verrous', () => {
   });
 });
 
-describe('vague lancée (relecture)', () => {
+describe('session lancée (relecture)', () => {
   const oneZone = async () => {
     const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
     await call('PUT', '/zones', [{ id: t1!.id, name: 'Tatami 1' }]);
@@ -214,7 +214,7 @@ describe('vague lancée (relecture)', () => {
       { name: 'J2 soir', rules: { ageBandCodes: ['senior'], disciplines: [] } },
     ])).json() as { id: string }[];
 
-  test('reprendre à 1 enregistré : la vague suivante continue après la vague qui a repris', async () => {
+  test('reprendre à 1 enregistré : la session suivante continue après la session qui a repris', async () => {
     await oneZone();
     await many(8, { ageBandCode: 'minime', weightClassId: 'minime:F:-45' });
     await many(4);
@@ -226,7 +226,7 @@ describe('vague lancée (relecture)', () => {
     expect((await status(j3!.id)).zones[0]).toMatchObject({ first: 4, last: 4 });
   });
 
-  test('une vague pas encore lancée ne peut pas passer avant une vague lancée', async () => {
+  test('une session pas encore lancée ne peut pas passer avant une session lancée', async () => {
     await many(2, { ageBandCode: 'minime', weightClassId: 'minime:F:-45' });
     await readyAll();
     const [matin, aprem] = await twoWaves();
@@ -245,7 +245,7 @@ describe('vague lancée (relecture)', () => {
     expect(added.statusCode).toBe(409);
   });
 
-  test('déplacement manuel et annulation refusés vers ou depuis une catégorie de la vague lancée', async () => {
+  test('déplacement manuel et annulation refusés vers ou depuis une catégorie de la session lancée', async () => {
     await many(4);
     const lone = (await many(1, { weightClassId: 'cadet:F:-47', approxWeightKg: 47 }))[0]!;
     await readyAll();
@@ -290,7 +290,7 @@ describe('vague lancée (relecture)', () => {
     expect((await catOf('-54')).numbersUpdatedAt).not.toBeNull();
   });
 
-  test('catégorie passée dans une autre vague pendant la réouverture : plus verrouillée par l’ancienne', async () => {
+  test('catégorie passée dans une autre session pendant la réouverture : plus verrouillée par l’ancienne', async () => {
     await many(2, { ageBandCode: 'minime', weightClassId: 'minime:F:-45' });
     await readyAll();
     const [matin, aprem] = await twoWaves();

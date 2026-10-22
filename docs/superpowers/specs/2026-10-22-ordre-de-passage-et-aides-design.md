@@ -3,6 +3,8 @@
 **Date :** 2026-10-22 · **Complète :** `docs/superpowers/specs/2026-10-21-tableaux-shidokan-design.md` (remplace le premier point du §12 sur l'affectation des tatamis ; modifie la pesée §8 et le recasement §9 pour les rattacher aux vagues).
 **Échéance :** compétition du 22 novembre 2026, avec une répétition générale avant.
 
+> **Vocabulaire (2026-10-23)** : dans l'app, « vague » se dit désormais **« session »** et « recasement » **« réaffectation »** (verbe « réaffecter », badge « réaffecté »). Ce document garde les anciens termes, qui restent aussi dans le code (`wave`, `replacement`), la base et l'API. Onglets : `/sessions` et `/reaffectation` (les anciennes adresses `/vagues`, `/recasement` et `?vague=` sont redirigées).
+
 Deux parties indépendantes :
 - **Partie 1 — Vagues et ordre de passage par zone** (demandes 1 et 2 de l'organisateur, et la compétition sur plusieurs jours) : la plus grosse.
 - **Partie 2 — Aides à l'écran** (demande 3) : plus petite. **À faire en premier**, parce qu'elle sert dès la répétition générale.

@@ -124,7 +124,7 @@ test('impression : aucune aide sur la feuille', async ({ page, request }) => {
 test('réglages : le nom lu d’un groupe est son titre seul', async ({ page }) => {
   const id = await createCompetition(page, 'Coupe aides groupes');
   await page.goto(`/competitions/${id}/reglages`);
-  await expect(page.getByRole('group', { name: 'Recasement', exact: true })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Réaffectation', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: `Aide : ${HELP['reglages.recasement'].title}` })).toBeVisible();
 });
 

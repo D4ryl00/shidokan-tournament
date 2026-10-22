@@ -27,22 +27,22 @@ export async function replaceWaves(db: AppDb, competitionId: string, input: Wave
   const bands = new Set((await getGrid(db, competitionId)).ageBands.map((b) => b.code));
   for (const w of input) {
     const unknown = w.rules.ageBandCodes.filter((c) => !bands.has(c));
-    if (unknown.length) errors.push(`Tranche d’âge inconnue dans la vague « ${w.name.trim()} » : ${unknown.join(', ')}.`);
+    if (unknown.length) errors.push(`Tranche d’âge inconnue dans la session « ${w.name.trim()} » : ${unknown.join(', ')}.`);
   }
   if (errors.length) throw new GridValidationError(errors);
   const current = await listWaves(db, competitionId);
   if (knownIds && (knownIds.length !== current.length || current.some((w) => !knownIds.includes(w.id)))) {
-    throw new CategoryLockedError('Les vagues ont été modifiées ailleurs entre-temps : rechargez la page avant d’enregistrer.');
+    throw new CategoryLockedError('Les sessions ont été modifiées ailleurs entre-temps : rechargez la page avant d’enregistrer.');
   }
   const known = new Set(current.map((w) => w.id));
   const keptIds = input.map((w) => w.id).filter((id): id is string => !!id && known.has(id));
   const removed = current.filter((w) => !keptIds.includes(w.id)).map((w) => w.id);
   const launched = launchRows(db, competitionId);
   if (current.length === 0 && input.length > 0 && launched.has('')) {
-    throw new CategoryLockedError('La compétition a été lancée sans vague : impossible de créer des vagues maintenant.');
+    throw new CategoryLockedError('La compétition a été lancée sans session : impossible de créer des sessions maintenant.');
   }
   const lost = current.find((w) => removed.includes(w.id) && launched.has(w.id));
-  if (lost) throw new CategoryLockedError(`La vague « ${lost.name} » a été lancée : elle ne peut plus être supprimée.`);
+  if (lost) throw new CategoryLockedError(`La session « ${lost.name} » a été lancée : elle ne peut plus être supprimée.`);
   // Les vagues se lancent dans l'ordre : une vague pas encore lancée ne passe pas avant une vague lancée.
   const lastLaunched = input.map((w) => !!w.id && launched.has(w.id)).lastIndexOf(true);
   const early = lastLaunched < 0 ? undefined : input.slice(0, lastLaunched).find((w) => !w.id || !launched.has(w.id));

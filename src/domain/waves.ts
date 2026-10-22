@@ -76,20 +76,20 @@ export function waveConflicts(
 }
 
 export function validateWaves(input: WaveInput[]): string[] {
-  if (input.length > WAVE_MAX) return [`Pas plus de ${WAVE_MAX} vagues.`];
+  if (input.length > WAVE_MAX) return [`Pas plus de ${WAVE_MAX} sessions.`];
   const errors: string[] = [];
   const ids = input.map((w) => w.id).filter(Boolean);
-  if (new Set(ids).size !== ids.length) errors.push('La même vague apparaît deux fois dans la liste.');
+  if (new Set(ids).size !== ids.length) errors.push('La même session apparaît deux fois dans la liste.');
   const seen = new Map<string, string>();
   for (const w of input) {
     const name = w.name.trim();
     if (!name) {
-      errors.push('Une vague n’a pas de nom.');
+      errors.push('Une session n’a pas de nom.');
       continue;
     }
-    if (name.length > WAVE_NAME_MAX) errors.push(`Nom de vague trop long (${WAVE_NAME_MAX} caractères au plus) : « ${name} ».`);
+    if (name.length > WAVE_NAME_MAX) errors.push(`Nom de session trop long (${WAVE_NAME_MAX} caractères au plus) : « ${name} ».`);
     const key = normalizeName(name);
-    if (seen.has(key)) errors.push(`Deux vagues portent le même nom : « ${seen.get(key)} ».`);
+    if (seen.has(key)) errors.push(`Deux sessions portent le même nom : « ${seen.get(key)} ».`);
     else seen.set(key, name);
   }
   return errors;

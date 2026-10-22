@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { createCompetition } from './helpers.js';
 
-test('figer et imprimer la vague, finales sur le Ring, régénérer à la suite, rouvrir et refiger', async ({ page, request, context }) => {
+test('figer et imprimer la session, finales sur le Ring, régénérer à la suite, rouvrir et refiger', async ({ page, request, context }) => {
   const id = await createCompetition(page, 'Coupe figeage');
   let i = 0;
   const reg = async (weightClassId: string) =>

@@ -79,7 +79,7 @@ export function WavesPage() {
     const errs = validateWaves(input);
     setErrors(errs);
     if (errs.length) return;
-    save.mutate({ waves: input, knownIds: savedWaves.map((w) => w.id) }, { onSuccess: () => notifications.show({ color: 'green', message: 'Vagues enregistrées' }) });
+    save.mutate({ waves: input, knownIds: savedWaves.map((w) => w.id) }, { onSuccess: () => notifications.show({ color: 'green', message: 'Sessions enregistrées' }) });
   };
 
   const categoryRow = (c: Category, actions: React.ReactNode, testid: string) => (
@@ -96,11 +96,11 @@ export function WavesPage() {
     <Stack>
       {drafts.length === 0 && (
         <Alert color="blue" data-testid="waves-none">
-          Aucune vague : toutes les catégories forment une seule vague (une seule pesée, un seul recasement). Créez des vagues pour peser et lancer les catégories par groupes.
+          Aucune session : toutes les catégories forment une seule session (une seule pesée, une seule réaffectation). Créez des sessions pour peser et lancer les catégories par groupes.
         </Alert>
       )}
       {conflicts.length > 0 && (
-        <Alert color="orange" title="Catégories prises par plusieurs vagues" data-testid="waves-conflicts">
+        <Alert color="orange" title="Catégories prises par plusieurs sessions" data-testid="waves-conflicts">
           <List size="sm">
             {conflicts.map((x) => {
               const c = listed.find((k) => k.id === x.categoryId)!;
@@ -117,11 +117,11 @@ export function WavesPage() {
             <Card key={d.key} withBorder data-testid="wave-card">
               <Stack gap="xs">
                 <Group gap="xs" wrap="nowrap">
-                  <TextInput data-testid="wave-name" aria-label={`Nom de la vague ${i + 1}`} value={d.name} maxLength={40} style={{ flex: 1 }}
+                  <TextInput data-testid="wave-name" aria-label={`Nom de la session ${i + 1}`} value={d.name} maxLength={40} style={{ flex: 1 }}
                     onChange={(e) => setDraft(d.key, { name: e.currentTarget.value })} />
-                  <ActionIcon variant="subtle" aria-label={`Monter la vague « ${d.name} »`} disabled={i === 0} onClick={() => move(i, -1)}>↑</ActionIcon>
-                  <ActionIcon variant="subtle" aria-label={`Descendre la vague « ${d.name} »`} disabled={i === drafts.length - 1} onClick={() => move(i, 1)}>↓</ActionIcon>
-                  <ActionIcon variant="subtle" color="red" aria-label={`Supprimer la vague « ${d.name} »`}
+                  <ActionIcon variant="subtle" aria-label={`Monter la session « ${d.name} »`} disabled={i === 0} onClick={() => move(i, -1)}>↑</ActionIcon>
+                  <ActionIcon variant="subtle" aria-label={`Descendre la session « ${d.name} »`} disabled={i === drafts.length - 1} onClick={() => move(i, 1)}>↓</ActionIcon>
+                  <ActionIcon variant="subtle" color="red" aria-label={`Supprimer la session « ${d.name} »`}
                     onClick={() => (cats.length ? setDeleting(d.key) : remove(d.key))}>✕</ActionIcon>
                 </Group>
                 <Group gap="xs">
@@ -167,14 +167,14 @@ export function WavesPage() {
       </SimpleGrid>
       <Group>
         <Button variant="light" data-testid="wave-add" disabled={drafts.length >= WAVE_MAX}
-          onClick={() => setDrafts((ds) => [...ds, { key: crypto.randomUUID(), name: `Vague ${ds.length + 1}`, rules: { ageBandCodes: [], disciplines: [] } }])}>
-          Ajouter une vague
+          onClick={() => setDrafts((ds) => [...ds, { key: crypto.randomUUID(), name: `Session ${ds.length + 1}`, rules: { ageBandCodes: [], disciplines: [] } }])}>
+          Ajouter une session
         </Button>
-        <Button data-testid="wave-save" onClick={doSave} loading={save.isPending}>Enregistrer les vagues</Button>
+        <Button data-testid="wave-save" onClick={doSave} loading={save.isPending}>Enregistrer les sessions</Button>
         {dirty && <Badge color="orange" variant="light" data-testid="waves-unsaved">Modifications non enregistrées</Badge>}
       </Group>
       {errors.length > 0 && (
-        <Alert color="red" title="Vagues" data-testid="wave-errors">
+        <Alert color="red" title="Sessions" data-testid="wave-errors">
           <List size="sm">{errors.map((e) => <List.Item key={e}>{e}</List.Item>)}</List>
         </Alert>
       )}
@@ -191,7 +191,7 @@ export function WavesPage() {
                 {c.waveOverride === WAVE_NONE && (
                   <Button size="compact-xs" variant="subtle" onClick={() => override(c, null)}>Revenir aux règles</Button>
                 )}
-                <NativeSelect size="xs" aria-label={`Ajouter ${c.label} à une vague`} value=""
+                <NativeSelect size="xs" aria-label={`Ajouter ${c.label} à une session`} value=""
                   data={[{ value: '', label: 'Ajouter à…' }, ...savedWaves.map((w) => ({ value: w.id, label: w.name }))]}
                   onChange={(e) => e.currentTarget.value && override(c, e.currentTarget.value)} />
               </>,
@@ -201,10 +201,10 @@ export function WavesPage() {
         </Stack>
       </Card>
 
-      <Modal opened={deleting !== null} onClose={() => setDeleting(null)} title={`Supprimer la vague « ${deletingDraft?.name ?? ''} » ?`}>
+      <Modal opened={deleting !== null} onClose={() => setDeleting(null)} title={`Supprimer la session « ${deletingDraft?.name ?? ''} » ?`}>
         <Stack data-testid="wave-delete-confirm">
           <Text size="sm">
-            {deletingCount === 1 ? '1 catégorie' : `${deletingCount} catégories`} quitteront cette vague à l’enregistrement : elles suivront les règles des autres vagues, ou passeront en attente.
+            {deletingCount === 1 ? '1 catégorie' : `${deletingCount} catégories`} quitteront cette session à l’enregistrement : elles suivront les règles des autres sessions, ou passeront en attente.
           </Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setDeleting(null)}>Annuler</Button>

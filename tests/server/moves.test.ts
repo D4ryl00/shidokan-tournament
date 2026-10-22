@@ -43,7 +43,7 @@ async function setup(finals?: 0 | 1) {
 const result = (cid: string, matchId: string) => call('PUT', `/categories/${cid}/results/${matchId}`, { winner: 'a', method: 'points' });
 const move = (cid: string, zoneId: string, mode: 'append' | 'shuffle', preview = false) => call('POST', `/categories/${cid}/move${preview ? '/preview' : ''}`, { zoneId, mode });
 
-describe('déplacer une catégorie d’une vague lancée', () => {
+describe('déplacer une catégorie d’une session lancée', () => {
   test('à la suite : combats restants sur la zone d’arrivée, le combat joué garde numéro et zone', async () => {
     const { t1, t2, a, b, d } = await setup();
     const before = await plan();
@@ -87,7 +87,7 @@ describe('déplacer une catégorie d’une vague lancée', () => {
     expect((await catOf('-54')).zoneId).not.toBe(t2);
   });
 
-  test('refus : même zone, discipline non accueillie, vague non lancée', async () => {
+  test('refus : même zone, discipline non accueillie, session non lancée', async () => {
     const { t1, t2, a } = await setup();
     expect((await move(a.id, t1, 'append')).statusCode).toBe(400);
     const zones = (await call('GET', '/zones')).json() as { id: string; name: string }[];

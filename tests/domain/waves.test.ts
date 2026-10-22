@@ -37,27 +37,27 @@ test('choix individuel prioritaire', () => {
   expect(waveOfCategory({ key: key(['minime']), waveOverride: 'disparue' }, [MATIN, APREM], grid)).toBe('matin');
 });
 
-test('ordre des vagues : la première qui correspond', () => {
+test('ordre des sessions : la première qui correspond', () => {
   const both = wave('tout', 2, ['cadet']);
   expect(waveOfCategory({ key: key(['cadet']), waveOverride: null }, [both, APREM, MATIN], grid)).toBe('aprem');
 });
 
-test('conflits : catégorie couverte par deux vagues', () => {
+test('conflits : catégorie couverte par deux sessions', () => {
   const large = wave('large', 2, ['cadet']);
   const cats = [{ id: 'c1', key: key(['cadet']), waveOverride: null }, { id: 'c2', key: key(['minime']), waveOverride: null }, { id: 'c3', key: key(['cadet']), waveOverride: 'large' }];
   expect(waveConflicts(cats, [MATIN, APREM, large], grid)).toEqual([{ categoryId: 'c1', waveIds: ['aprem', 'large'] }]);
 });
 
-test('validation des vagues', () => {
+test('validation des sessions', () => {
   const r = { ageBandCodes: [], disciplines: [] };
   expect(validateWaves([])).toEqual([]);
-  expect(validateWaves([{ name: ' ', rules: r }])).toEqual(['Une vague n’a pas de nom.']);
-  expect(validateWaves([{ name: 'Matin', rules: r }, { name: ' matin ', rules: r }])).toEqual(['Deux vagues portent le même nom : « Matin ».']);
-  expect(validateWaves(Array.from({ length: 21 }, (_, i) => ({ name: `V${i}`, rules: r })))).toEqual(['Pas plus de 20 vagues.']);
-  expect(validateWaves([{ id: 'w', name: 'A', rules: r }, { id: 'w', name: 'B', rules: r }])).toEqual(['La même vague apparaît deux fois dans la liste.']);
+  expect(validateWaves([{ name: ' ', rules: r }])).toEqual(['Une session n’a pas de nom.']);
+  expect(validateWaves([{ name: 'Matin', rules: r }, { name: ' matin ', rules: r }])).toEqual(['Deux sessions portent le même nom : « Matin ».']);
+  expect(validateWaves(Array.from({ length: 21 }, (_, i) => ({ name: `V${i}`, rules: r })))).toEqual(['Pas plus de 20 sessions.']);
+  expect(validateWaves([{ id: 'w', name: 'A', rules: r }, { id: 'w', name: 'B', rules: r }])).toEqual(['La même session apparaît deux fois dans la liste.']);
 });
 
-test('relecture : catégorie d’arrivée d’un recasement — sa vague suit ses propres combattants', () => {
+test('relecture : catégorie d’arrivée d’une réaffectation — sa session suit ses propres combattants', () => {
   // Cadets ayant reçu un minime recasé : clé « minime + cadet », mais tranches des combattants d'origine = cadet
   expect(waveOfCategory({ key: key(['cadet', 'minime']), waveOverride: null, waveBands: ['cadet'] }, [MATIN, APREM], grid)).toBe('aprem');
   // Sans combattant d'origine (catégorie créée par le recasement) : clé de la catégorie

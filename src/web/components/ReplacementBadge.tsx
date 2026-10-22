@@ -59,7 +59,7 @@ export function ReplacementBadge({ type, state = 'validated', size = 'sm', gapKg
   return (
     <Popover withArrow shadow="md" width={320} position="bottom-start">
       <Popover.Target>
-        <UnstyledButton component="span" onClick={(e) => e.stopPropagation()} aria-label={`Détail du recasement : ${t.title}`}>{badge}</UnstyledButton>
+        <UnstyledButton component="span" onClick={(e) => e.stopPropagation()} aria-label={`Détail de la réaffectation : ${t.title}`}>{badge}</UnstyledButton>
       </Popover.Target>
       <Popover.Dropdown data-testid="recasement-detail">
         <Stack gap={4}>

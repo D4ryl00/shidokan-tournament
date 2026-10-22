@@ -26,7 +26,7 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
   const reopen = useReopen(competitionId);
   const number = useNumberPending(competitionId);
   const numberPreview = useNumberPreview(competitionId);
-  const printUrl = `/competitions/${competitionId}/impression?vague=${encodeURIComponent(waveId ?? '')}`;
+  const printUrl = `/competitions/${competitionId}/impression?session=${encodeURIComponent(waveId ?? '')}`;
   if (!status) return null;
   const zoneName = (zid: string) => zones.find((z) => z.id === zid)?.name ?? '?';
   const previewNumbers = (m: RenumberMode) => {
@@ -49,14 +49,14 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
     <Stack gap="xs" data-testid="wave-launch">
       <Group gap="xs">
         <Badge color={STATES[status.state].color} data-testid="wave-state">{STATES[status.state].label}</Badge>
-        {status.state === 'preparation' && <Button size="xs" data-testid="launch-open" onClick={() => { setRestart(false); setDialog('launch'); }}>Figer et imprimer la vague…</Button>}
+        {status.state === 'preparation' && <Button size="xs" data-testid="launch-open" onClick={() => { setRestart(false); setDialog('launch'); }}>Figer et imprimer la session…</Button>}
         {(status.state === 'launched' || status.state === 'finished') && (
           <>
-            <Button size="xs" variant="light" component={Link} to={printUrl} target="_blank" data-testid="wave-print">Imprimer la vague</Button>
-            <Button size="xs" variant="subtle" color="orange" data-testid="reopen-open" onClick={() => setDialog('reopen')}>Rouvrir la vague</Button>
+            <Button size="xs" variant="light" component={Link} to={printUrl} target="_blank" data-testid="wave-print">Imprimer la session</Button>
+            <Button size="xs" variant="subtle" color="orange" data-testid="reopen-open" onClick={() => setDialog('reopen')}>Rouvrir la session</Button>
           </>
         )}
-        {status.state === 'reopened' && <Button size="xs" data-testid="refreeze-open" onClick={openNumber}>Refiger la vague…</Button>}
+        {status.state === 'reopened' && <Button size="xs" data-testid="refreeze-open" onClick={openNumber}>Refiger la session…</Button>}
       </Group>
       {status.pending.length > 0 && status.state !== 'reopened' && (
         <Alert color="orange" data-testid="pending-alert" title={`${status.pending.length} catégorie(s) à numéroter`}>
@@ -65,16 +65,16 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
         </Alert>
       )}
 
-      <Modal opened={dialog === 'launch'} onClose={close} title="Figer et imprimer la vague" size="lg">
+      <Modal opened={dialog === 'launch'} onClose={close} title="Figer et imprimer la session" size="lg">
         <Stack>
           {launch.isSuccess ? (
             <>
-              <Alert color="green">Vague figée : ses numéros de passage ne changeront plus.</Alert>
-              <Button component={Link} to={printUrl} target="_blank" data-testid="launch-print">Imprimer la vague</Button>
+              <Alert color="green">Session figée : ses numéros de passage ne changeront plus.</Alert>
+              <Button component={Link} to={printUrl} target="_blank" data-testid="launch-print">Imprimer la session</Button>
             </>
           ) : (
             <>
-              <Text size="sm">Les zones et les numéros de passage de la vague sont enregistrés : ils ne changent plus (sauf réouverture). Imprimez ensuite les tableaux.</Text>
+              <Text size="sm">Les zones et les numéros de passage de la session sont enregistrés : ils ne changent plus (sauf réouverture). Imprimez ensuite les tableaux.</Text>
               {preview && preview.blocking.length > 0 && (
                 <Alert color="red" title="Impossible de figer" data-testid="launch-blocking">
                   <List size="sm">{preview.blocking.map((b) => <List.Item key={b}>{b}</List.Item>)}</List>
@@ -101,18 +101,18 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
         </Stack>
       </Modal>
 
-      <Modal opened={dialog === 'reopen'} onClose={close} title="Rouvrir la vague ?">
+      <Modal opened={dialog === 'reopen'} onClose={close} title="Rouvrir la session ?">
         <Stack>
           <Text size="sm">Les catégories sans résultat redeviennent modifiables : des tableaux déjà affichés pourront changer. Les catégories commencées restent verrouillées.</Text>
           <ApiErrorAlert error={reopen.error} />
           <Group justify="flex-end">
             <Button variant="default" onClick={close}>Annuler</Button>
-            <Button color="orange" data-testid="reopen-confirm" loading={reopen.isPending} onClick={() => reopen.mutate({ waveId }, { onSuccess: close })}>Rouvrir la vague</Button>
+            <Button color="orange" data-testid="reopen-confirm" loading={reopen.isPending} onClick={() => reopen.mutate({ waveId }, { onSuccess: close })}>Rouvrir la session</Button>
           </Group>
         </Stack>
       </Modal>
 
-      <Modal opened={dialog === 'number'} onClose={close} title={status.state === 'reopened' ? 'Refiger la vague' : 'Numéroter les catégories modifiées'} size="lg">
+      <Modal opened={dialog === 'number'} onClose={close} title={status.state === 'reopened' ? 'Refiger la session' : 'Numéroter les catégories modifiées'} size="lg">
         <Stack>
           <SegmentedControl data-testid="number-mode" value={mode} onChange={(v) => previewNumbers(v as RenumberMode)}
             data={[{ value: 'append', label: 'À la suite' }, { value: 'shuffle', label: 'Mélangés' }]} />
@@ -135,7 +135,7 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
             <Button variant="default" onClick={close}>Annuler</Button>
             <Button data-testid="number-confirm" loading={number.isPending} disabled={!shown || shown.blocking.length > 0}
               onClick={() => shown && number.mutate({ waveId, mode, categoryIds: shown.changes.map((c) => c.categoryId) }, { onSuccess: close })}>
-              {status.state === 'reopened' ? 'Refiger la vague' : mode === 'append' ? 'Numéroter à la suite' : 'Numéroter (mélangés)'}
+              {status.state === 'reopened' ? 'Refiger la session' : mode === 'append' ? 'Numéroter à la suite' : 'Numéroter (mélangés)'}
             </Button>
           </Group>
         </Stack>

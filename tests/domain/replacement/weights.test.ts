@@ -36,7 +36,7 @@ test('membres actifs : absents exclus', () => {
   expect(activeMembers(s, a.categoryId!).map((m) => m.registrationId)).toEqual([a.registrationId]);
 });
 
-test('recasé : trop lourd seulement au-delà de la catégorie la plus lourde de sa catégorie', () => {
+test('réaffecté : trop lourd seulement au-delà de la catégorie la plus lourde de sa catégorie', () => {
   const m = member({ weightClassId: 'cadet:F:-47', placementLocked: true, presence: 'present', weighInKg: 52 });
   const s = makeState([m]);
   s.categories[0]!.key = { ...s.categories[0]!.key, weightClassIds: ['cadet:F:-47', 'cadet:F:-54'] };

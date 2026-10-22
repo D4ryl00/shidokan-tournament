@@ -219,7 +219,7 @@ export interface QueueItem {
  * passages de la vague (toutes sans `waveId`) dans l'ordre des numéros — combats jouables sans résultat, blocs de kata non terminés.
  */
 export async function schedule(db: AppDb, competitionId: string, waveId?: string) {
-  if (waveId && !(await listWaves(db, competitionId)).some((w) => w.id === waveId)) throw new NotFoundError('Vague introuvable');
+  if (waveId && !(await listWaves(db, competitionId)).some((w) => w.id === waveId)) throw new NotFoundError('Session introuvable');
   const all = await listCategories(db, competitionId);
   const plan = await passagePlan(db, competitionId, all);
   const numbers = passageNumbers(plan);

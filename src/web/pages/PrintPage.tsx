@@ -9,6 +9,7 @@ import { categoryPassages, kataPassageText, movedMatchZones } from '../passages.
 import { BracketView, type EntrantInfo } from '../components/BracketView.js';
 import { HelpText } from '../components/Help.js';
 import { useEntrantInfo } from './BracketsPage.js';
+import { sessionParam } from '../useSelectedWave.js';
 
 /** Zone utile d'une page A4 paysage (marges 10 mm) moins l'en-tête, en pixels CSS. */
 const PAGE_WIDTH = 1040;
@@ -71,7 +72,7 @@ export function PrintSection({ category, entrants, competitionLine, withResults 
   );
 }
 
-/** /competitions/:id/impression[?categories=id1,id2 | ?vague=id] — hors de l'AppShell, toujours en noir sur blanc. */
+/** /competitions/:id/impression[?categories=id1,id2 | ?session=id (ou ?vague=id)] — hors de l'AppShell, toujours en noir sur blanc. */
 export function PrintPage() {
   const { id = '' } = useParams();
   const [params] = useSearchParams();
@@ -79,8 +80,8 @@ export function PrintPage() {
   const { data: categories = [] } = useCategories(id);
   const entrants = useEntrantInfo(id);
   const wanted = params.get('categories')?.split(',').filter(Boolean);
-  // `?vague=` : les catégories de la vague (vide : vague implicite d'une compétition sans vague).
-  const wave = params.has('vague') ? params.get('vague') || null : undefined;
+  // `?session=` : les catégories de la vague (vide : vague implicite d'une compétition sans vague).
+  const wave = params.has('session') || params.has('vague') ? sessionParam(params) || null : undefined;
   const withResults = params.get('resultats') === '1';
   // Sans sélection : seulement les catégories à disputer (une catégorie dont tous les membres sont absents n'est pas imprimée).
   const list = wanted

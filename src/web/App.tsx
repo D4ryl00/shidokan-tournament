@@ -1,5 +1,5 @@
 import { AppShell } from '@mantine/core';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router';
 import { AppHeader } from './components/AppHeader.js';
 import { CompetitionLayout } from './components/CompetitionLayout.js';
 import { BracketsRoute } from './pages/BracketsRoute.js';
@@ -30,6 +30,12 @@ export function App() {
   );
 }
 
+/** Anciens onglets « vagues » et « recasement » (renommés le 2026-10-23) : redirigés, avec le reste de l'adresse. */
+function RenamedTab({ to }: { to: string }) {
+  const { search } = useLocation();
+  return <Navigate to={`../${to}${search}`} relative="path" replace />;
+}
+
 function MainShell() {
   return (
       <AppShell header={{ height: 64 }} padding="md">
@@ -45,9 +51,11 @@ function MainShell() {
               <Route path="clubs" element={<ClubsPage />} />
               <Route path="fiche-club" element={<ClubFormPage />} />
               <Route path="import-ffk" element={<FfkImportPage />} />
-              <Route path="vagues" element={<WavesPage />} />
+              <Route path="sessions" element={<WavesPage />} />
+              <Route path="vagues" element={<RenamedTab to="sessions" />} />
               <Route path="pesee" element={<WeighInPage />} />
-              <Route path="recasement" element={<ReplacementPage />} />
+              <Route path="reaffectation" element={<ReplacementPage />} />
+              <Route path="recasement" element={<RenamedTab to="reaffectation" />} />
               <Route path="tableaux" element={<BracketsRoute />} />
               <Route path="combats" element={<MatchesPage />} />
               <Route path="podiums" element={<PodiumsPage />} />

@@ -21,8 +21,8 @@ const now = () => new Date().toISOString();
 /** Vague demandée : une vague connue, ou la vague implicite (null) d'une compétition sans vague. */
 async function checkWave(db: AppDb, competitionId: string, waveId: string | null) {
   const waves = await listWaves(db, competitionId);
-  if (waveId === null && waves.length > 0) throw new RegistrationValidationError(['Choisissez la vague.']);
-  if (waveId !== null && !waves.some((w) => w.id === waveId)) throw new NotFoundError('Vague introuvable');
+  if (waveId === null && waves.length > 0) throw new RegistrationValidationError(['Choisissez la session.']);
+  if (waveId !== null && !waves.some((w) => w.id === waveId)) throw new NotFoundError('Session introuvable');
   return waves;
 }
 
@@ -42,9 +42,9 @@ export async function launchStatus(db: AppDb, competitionId: string, waveId: str
   const state: WaveState = row?.launched ? (finished ? 'finished' : 'launched') : row ? 'reopened' : 'preparation';
 
   const blocking: string[] = [];
-  if (row) blocking.push(row.launched ? 'La vague a déjà été lancée.' : 'La vague a déjà été lancée : « Numéroter à la suite » la refige.');
+  if (row) blocking.push(row.launched ? 'La session a déjà été lancée.' : 'La session a déjà été lancée : « Numéroter à la suite » la refige.');
   const order = waves.find((w) => w.id === waveId)?.order ?? 0;
-  for (const w of [...waves].sort((a, b) => a.order - b.order)) if (w.order < order && !launched.has(w.id)) blocking.push(`Lancez d’abord la vague « ${w.name} ».`);
+  for (const w of [...waves].sort((a, b) => a.order - b.order)) if (w.order < order && !launched.has(w.id)) blocking.push(`Lancez d’abord la session « ${w.name} ».`);
   const impossible = plan.impossible.filter((x) => mine.some((c) => c.id === x.categoryId));
   if (impossible.length) {
     const counts = new Map<string, number>();
@@ -100,7 +100,7 @@ export async function launchWave(db: AppDb, competitionId: string, waveId: strin
 export async function reopenWave(db: AppDb, competitionId: string, waveId: string | null): Promise<void> {
   await checkWave(db, competitionId, waveId);
   const row = launchRows(db, competitionId).get(waveKey(waveId));
-  if (!row?.launched) throw new RegistrationValidationError(['La vague n’est pas lancée.']);
+  if (!row?.launched) throw new RegistrationValidationError(['La session n’est pas lancée.']);
   db.update(waveLaunches).set({ launched: false }).where(and(eq(waveLaunches.competitionId, competitionId), eq(waveLaunches.waveKey, row.waveKey))).run();
 }
 
@@ -112,7 +112,7 @@ export async function numberPending(db: AppDb, competitionId: string, waveId: st
   await checkWave(db, competitionId, waveId);
   const key = waveKey(waveId);
   const row = launchRows(db, competitionId).get(key);
-  if (!row) throw new RegistrationValidationError(['La vague n’a pas encore été lancée.']);
+  if (!row) throw new RegistrationValidationError(['La session n’a pas encore été lancée.']);
   const cats = await listCategories(db, competitionId);
   const input = await planInput(db, competitionId, cats);
   const plan = planPassages(input);
@@ -156,7 +156,7 @@ export async function regenerateCategory(db: AppDb, competitionId: string, categ
   const cat = (await listCategories(db, competitionId)).find((c) => c.id === categoryId);
   if (!cat) throw new NotFoundError('Catégorie introuvable');
   if (cat.status === 'started' || cat.status === 'finished') throw new CategoryLockedError();
-  if (!launchedCategoryIds(db, competitionId).has(categoryId)) throw new RegistrationValidationError(['La vague de cette catégorie n’est pas lancée : son tableau se met à jour tout seul.']);
+  if (!launchedCategoryIds(db, competitionId).has(categoryId)) throw new RegistrationValidationError(['La session de cette catégorie n’est pas lancée : son tableau se met à jour tout seul.']);
   await syncCategories(db, competitionId, { regenerate: categoryId });
   const result = await numberPending(db, competitionId, cat.waveId, [categoryId]);
   // Tableau refait (mêmes numéros ou non) : à réimprimer.
@@ -223,7 +223,7 @@ export async function moveCategory(db: AppDb, competitionId: string, categoryId:
   const zone = (await listZones(db, competitionId)).find((z) => z.id === zoneId);
   if (!zone) throw new NotFoundError('Zone introuvable');
   if (!cat.launchLocked) {
-    throw new RegistrationValidationError(['La vague n’est pas lancée : choisissez simplement la zone de la catégorie (puis « Refiger » si la vague a été rouverte).']);
+    throw new RegistrationValidationError(['La session n’est pas lancée : choisissez simplement la zone de la catégorie (puis « Refiger » si la session a été rouverte).']);
   }
   const input = await planInput(db, competitionId, cats);
   const plan = planPassages(input);

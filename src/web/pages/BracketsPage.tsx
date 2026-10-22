@@ -77,7 +77,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
       ? `/competitions/${id}/impression`
       : scope === 'waiting'
         ? `/competitions/${id}/impression?categories=${shown.map((c) => c.id).join(',')}`
-        : `/competitions/${id}/impression?vague=${encodeURIComponent(waveId ?? '')}`;
+        : `/competitions/${id}/impression?session=${encodeURIComponent(waveId ?? '')}`;
   const selected: Category | undefined = categories.find((c) => c.id === selectedId) ?? filtered[0];
   const locked = selected?.status === 'started' || selected?.status === 'finished';
   const passages = useMemo(() => (selected ? categoryPassages(plan, selected.id) : null), [plan, selected]);
@@ -112,7 +112,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
               {shown.length} catégorie(s) · {alone} sans adversaire{absentOnly ? ` · ${absentOnly} sans présent (non imprimée${absentOnly > 1 ? 's' : ''})` : ''}
             </Text>
             <Button size="xs" variant="light" component={Link} to={printUrl} target="_blank" data-testid="print-all">
-              {waves.length === 0 || scope === 'all' ? 'Imprimer tout' : scope === 'waiting' ? 'Imprimer celles en attente' : 'Imprimer la vague'}
+              {waves.length === 0 || scope === 'all' ? 'Imprimer tout' : scope === 'waiting' ? 'Imprimer celles en attente' : 'Imprimer la session'}
             </Button>
           </Group>
           <TextInput size="xs" placeholder="Filtrer (ex. cadets, -54, kata)" value={search} onChange={(e) => setSearch(e.currentTarget.value)} />
@@ -129,7 +129,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
                       {activeCount(c) === 1 && <Badge size="xs" color="red" data-testid="category-alone">Sans adversaire</Badge>}
                       {allAbsent(c) && <Badge size="xs" color="gray" variant="light" data-testid="category-all-absent" title="Non imprimée">Tous absents</Badge>}
                       {casesByCategory.get(c.id) && (
-                        <Badge size="xs" color="orange" variant="outline" data-testid="category-cases" component={Link} to={`/competitions/${id}/recasement`}
+                        <Badge size="xs" color="orange" variant="outline" data-testid="category-cases" component={Link} to={`/competitions/${id}/reaffectation`}
                           onClick={(e: React.MouseEvent) => e.stopPropagation()} style={{ cursor: 'pointer' }}>
                           {casesByCategory.get(c.id)} cas à traiter
                         </Badge>
@@ -210,7 +210,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
         )}
         <Modal opened={confirmRegenerate} onClose={() => setConfirmRegenerate(false)} title="Régénérer le tableau ?">
           <Stack>
-            <Text>La vague est lancée. Le tableau sera refait avec les inscrits actuels et ses combats recevront de nouveaux numéros, à la suite du dernier numéro de sa zone : réimprimez-le. Les autres catégories ne changent pas.</Text>
+            <Text>La session est lancée. Le tableau sera refait avec les inscrits actuels et ses combats recevront de nouveaux numéros, à la suite du dernier numéro de sa zone : réimprimez-le. Les autres catégories ne changent pas.</Text>
             <Group justify="flex-end">
               <Button variant="default" onClick={() => setConfirmRegenerate(false)}>Annuler</Button>
               <Button color="orange" data-testid="regenerate-confirm" loading={regenerate.isPending}

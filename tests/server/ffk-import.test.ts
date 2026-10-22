@@ -164,7 +164,7 @@ test('aperçu périmé : la validation est refusée (409)', async () => {
   expect(ok.statusCode).toBe(200);
 });
 
-test('réimport FFK après un recasement H : pas de doublon, la discipline d’origine est reconnue', async () => {
+test('réimport FFK après une réaffectation H : pas de doublon, la discipline d’origine est reconnue', async () => {
   const up = await uploadAll(buildFfkWorkbook({
     Karate: [['SEUL KARATE', null, 'K1', TANI, 'Masculin', 'Karate', 'Senior', -75, 'Shobu']],
     Boxe: [['AUTRE BOXE', null, 'B1', TANI, 'Masculin', 'Boxe', 'Senior', -75, 'Shobu']],
@@ -236,7 +236,7 @@ test('purge des fichiers envoyés : un aperçu ouvert survit à d’autres envoi
   check.close();
 });
 
-test('réimport de fiche club après un recasement H : discipline d’origine reconnue, placement gardé, rien à retirer', async () => {
+test('réimport de fiche club après une réaffectation H : discipline d’origine reconnue, placement gardé, rien à retirer', async () => {
   const tpl = (await app.inject({ method: 'GET', url: `${base}/club-form.ods` })).rawPayload;
   const fiche = (poids: string) => fillClubForm(tpl, ['Tani Dojo', 'Coach', null, null, 'Non'], [
     ['SEUL', 'Karate', 'Masculin', 'Seniors', poids, 'Karaté', 'Shobu', '2', null, null],
