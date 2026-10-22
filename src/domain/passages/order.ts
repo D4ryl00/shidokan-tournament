@@ -7,9 +7,11 @@ export interface OrderCategory {
   id: string;
   rank: number;
   kataEntrants: number | null;
+  /** Bloc de kata émis (`matchId` du passage) : null = catégorie entière, sinon 'kata:tour1' ou 'kata:finale'. */
+  kataBlock?: string | null;
   nodes: MatchNode[];
 }
-/** Numéro de passage : un combat, ou un bloc de kata entier (`matchId` null). */
+/** Numéro de passage : un combat, ou un bloc de kata (`matchId` null : entier ; 'kata:tour1' / 'kata:finale'). */
 export interface Passage {
   number: number;
   categoryId: string;
@@ -36,7 +38,7 @@ export function zoneOrder(cats: OrderCategory[], mode: PassageOrderMode, first: 
   const sorted = [...cats].sort((a, b) => a.rank - b.rank);
   const out: Passage[] = [];
   let number = first;
-  for (const c of sorted) if (c.kataEntrants !== null) out.push({ number: number++, categoryId: c.id, matchId: null, noRest: false });
+  for (const c of sorted) if (c.kataEntrants !== null) out.push({ number: number++, categoryId: c.id, matchId: c.kataBlock ?? null, noRest: false });
 
   const placed: Item[] = [];
   const place = (group: Item[]) => {

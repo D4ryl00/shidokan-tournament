@@ -32,6 +32,9 @@ export const competitionSettingsSchema = z
     kataBronzeCount: z.union([z.literal(1), z.literal(2)]),
     triathlonRounds: z.union([z.literal(3), z.literal(6)]),
     passageOrder: z.enum(PASSAGE_ORDER_MODES),
+    /** Zone où passent les combats pour la 1re place (null : aucune). */
+    finalsZoneId: z.string().nullable(),
+    kataFinalsOnFinalsZone: z.boolean(),
   })
   .strict();
 
@@ -51,6 +54,8 @@ export function defaultSettings(): CompetitionSettings {
     kataBronzeCount: 2,
     triathlonRounds: 3,
     passageOrder: 'rounds',
+    finalsZoneId: null,
+    kataFinalsOnFinalsZone: false,
   };
 }
 

@@ -16,6 +16,8 @@ test('réglages par défaut (spec §9.2, §8, §11.1, §12, §4.1)', () => {
     kataBronzeCount: 2,
     triathlonRounds: 3,
     passageOrder: 'rounds',
+    finalsZoneId: null,
+    kataFinalsOnFinalsZone: false,
   });
 });
 
