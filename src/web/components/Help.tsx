@@ -15,7 +15,7 @@ export function HelpButton({ topic, onOpenChange }: { topic: HelpTopicId; onOpen
   const h = HELP[topic];
   return (
     <>
-      <ActionIcon variant="subtle" radius="xl" size="sm" className="no-print" aria-label={`Aide : ${h.title}`}
+      <ActionIcon variant="subtle" radius="xl" size="lg" className="no-print" aria-label={`Aide : ${h.title}`}
         data-testid="help-button" data-topic={topic} onClick={() => setOpened(true)}>
         ⓘ
       </ActionIcon>
@@ -58,11 +58,14 @@ export function SectionHeader({ topic, order = 4, suffix }: { topic: HelpTopicId
   );
 }
 
-/** Légende de `Fieldset` avec son ⓘ (la phrase d'aide se place en tête du contenu). */
-export function HelpLegend({ topic }: { topic: HelpTopicId }) {
+/**
+ * Phrase d'aide suivie de son ⓘ, en tête d'un `Fieldset` dont la légende reste le titre seul
+ * (le nom du groupe lu par un lecteur d'écran n'inclut pas « Aide : … »).
+ */
+export function HelpLine({ topic }: { topic: HelpTopicId }) {
   return (
-    <Group gap={4} wrap="nowrap" component="span">
-      {HELP[topic].title}
+    <Group gap={4} wrap="nowrap" align="flex-start">
+      <HelpText topic={topic} />
       <HelpButton topic={topic} />
     </Group>
   );

@@ -22,7 +22,7 @@ function stamp(d = new Date()): string {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}-${p(d.getMilliseconds(), 3)}`;
 }
 
-/** Copie cohérente de la base (VACUUM INTO), puis rotation (30 fichiers). */
+/** Copie cohérente de la base (VACUUM INTO), puis rotation (KEEP fichiers). */
 export async function backupNow(db: AppDb, dbPath: string): Promise<string> {
   const dir = backupDir(dbPath);
   fs.mkdirSync(dir, { recursive: true });

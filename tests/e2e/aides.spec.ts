@@ -35,6 +35,10 @@ test('aides des bénévoles : pesée et combats', async ({ page, request }) => {
   await page.goto(`/competitions/${id}/combats`);
   await expect(short(page, 'combats')).toBeVisible();
   await expect(short(page, 'combats.categories')).toBeVisible();
+  await expect(short(page, 'combats.zone')).toBeVisible();
+  // Bouton ⓘ assez grand pour un doigt sur tablette
+  const box = await page.getByRole('button', { name: `Aide : ${HELP.combats.title}` }).boundingBox();
+  expect(box!.width).toBeGreaterThanOrEqual(28);
   await openAndClose(page, 'combats');
 });
 
@@ -107,7 +111,7 @@ test('grille : passages d’âge en clair', async ({ page, request }) => {
 test('impression : aucune aide sur la feuille', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe aides impression');
   await seed(request, id);
-  for (const url of [`/competitions/${id}/impression`, `/competitions/${id}/impression/pesee`]) {
+  for (const url of [`/competitions/${id}/impression`, `/competitions/${id}/impression/pesee`, `/competitions/${id}/impression/podiums`]) {
     await page.emulateMedia({ media: 'screen' });
     await page.goto(url);
     await expect(short(page, 'impression'), url).toBeVisible();
@@ -115,4 +119,26 @@ test('impression : aucune aide sur la feuille', async ({ page, request }) => {
     await expect(page.getByTestId('help-short')).toBeHidden();
     await expect(page.getByTestId('help-button')).toHaveCount(0);
   }
+});
+
+test('réglages : le nom lu d’un groupe est son titre seul', async ({ page }) => {
+  const id = await createCompetition(page, 'Coupe aides groupes');
+  await page.goto(`/competitions/${id}/reglages`);
+  await expect(page.getByRole('group', { name: 'Recasement', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: `Aide : ${HELP['reglages.recasement'].title}` })).toBeVisible();
+});
+
+test('grille : les passages d’âge restent lisibles sur un écran étroit', async ({ page }) => {
+  const id = await createCompetition(page, 'Coupe aides étroit');
+  await page.setViewportSize({ width: 600, height: 1000 });
+  await page.goto(`/competitions/${id}/grille`);
+  const group = page.getByRole('group', { name: HELP['grille.passages'].title, exact: true });
+  await expect(group).toBeVisible();
+  // Ni débordement ni texte coupé : les listes gardent leur largeur et passent à la ligne.
+  const fs = (await group.boundingBox())!;
+  const kind = (await page.getByLabel('Type de passage').first().boundingBox())!;
+  const from = (await group.getByLabel('De', { exact: true }).first().boundingBox())!;
+  expect(kind.width).toBeGreaterThanOrEqual(420);
+  expect(from.width).toBeGreaterThanOrEqual(150);
+  expect(kind.x + kind.width).toBeLessThanOrEqual(fs.x + fs.width);
 });

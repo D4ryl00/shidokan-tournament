@@ -1,4 +1,4 @@
-import { Alert, Anchor, Badge, Button, Card, Group, Modal, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
+import { Alert, Anchor, Badge, Button, Card, Group, Modal, SimpleGrid, Stack, Table, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';

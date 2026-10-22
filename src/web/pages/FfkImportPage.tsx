@@ -1,5 +1,5 @@
 import {
-  Alert, Badge, Button, Card, Checkbox, Group, List, Modal, Radio, Select, SimpleGrid, Stack, Table, Text, Title,
+  Alert, Badge, Button, Card, Checkbox, Group, List, Modal, Radio, Select, SimpleGrid, Stack, Table, Text,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';

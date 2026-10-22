@@ -1,4 +1,4 @@
-import { Alert, Anchor, Badge, Button, Group, List, Stack, Table, Text, Title } from '@mantine/core';
+import { Alert, Anchor, Badge, Button, Group, List, Stack, Table, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { useParams } from 'react-router';

@@ -7,7 +7,8 @@ import { useParams } from 'react-router';
 import type { CombatFormat, CompetitionSettings } from '../../domain/settings.js';
 import { useCompetition, useGrid, useUpdateCompetition } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
-import { HelpLegend, HelpText } from '../components/Help.js';
+import { HelpLine } from '../components/Help.js';
+import { HELP } from '../help.js';
 
 export const FORMAT_LABELS: Record<CombatFormat, string> = {
   single_match: 'Un seul combat',
@@ -54,8 +55,8 @@ export function CompetitionSettingsPage() {
 
   return (
     <Stack data-testid="settings-form" maw={900}>
-      <Fieldset legend={<HelpLegend topic="reglages.competition" />}>
-        <HelpText topic="reglages.competition" />
+      <Fieldset legend={HELP['reglages.competition'].title}>
+        <HelpLine topic="reglages.competition" />
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
           <TextInput label="Nom" value={info.name} onChange={(e) => setInfo({ ...info, name: e.currentTarget.value })} />
           <TextInput label="Date" type="date" value={info.date} onChange={(e) => setInfo({ ...info, date: e.currentTarget.value })} />
@@ -65,8 +66,8 @@ export function CompetitionSettingsPage() {
         </SimpleGrid>
       </Fieldset>
 
-      <Fieldset legend={<HelpLegend topic="reglages.recasement" />}>
-        <HelpText topic="reglages.recasement" />
+      <Fieldset legend={HELP['reglages.recasement'].title}>
+        <HelpLine topic="reglages.recasement" />
         <Stack>
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <Kg testId="gap-children" label="Écart de poids max entre deux combattants — enfants" value={s.weightGapMaxKg.children}
@@ -89,8 +90,8 @@ export function CompetitionSettingsPage() {
         </Stack>
       </Fieldset>
 
-      <Fieldset legend={<HelpLegend topic="reglages.pesee" />}>
-        <HelpText topic="reglages.pesee" />
+      <Fieldset legend={HELP['reglages.pesee'].title}>
+        <HelpLine topic="reglages.pesee" />
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
           <Kg label="Tolérance — hommes" value={s.weighInToleranceKg.M}
             onChange={(M) => set({ weighInToleranceKg: { ...s.weighInToleranceKg, M } })} />
@@ -99,8 +100,8 @@ export function CompetitionSettingsPage() {
         </SimpleGrid>
       </Fieldset>
 
-      <Fieldset legend={<HelpLegend topic="reglages.tableaux" />}>
-        <HelpText topic="reglages.tableaux" />
+      <Fieldset legend={HELP['reglages.tableaux'].title}>
+        <HelpLine topic="reglages.tableaux" />
         <Stack>
           <SimpleGrid cols={{ base: 1, sm: 3 }}>
             <Select label="Format pour 2 combattants" data={FORMAT_OPTIONS} value={s.formats.two} allowDeselect={false}
@@ -116,8 +117,8 @@ export function CompetitionSettingsPage() {
         </Stack>
       </Fieldset>
 
-      <Fieldset legend={<HelpLegend topic="reglages.kata" />}>
-        <HelpText topic="reglages.kata" />
+      <Fieldset legend={HELP['reglages.kata'].title}>
+        <HelpLine topic="reglages.kata" />
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
           <Select label="Médailles de bronze en kata" data={[{ value: '1', label: '1' }, { value: '2', label: '2' }]}
             value={String(s.kataBronzeCount)} allowDeselect={false}

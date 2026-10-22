@@ -7,7 +7,7 @@ import { validResults } from '../../domain/results.js';
 import { useCategories, useCategoryResults, useCompetition, useDeleteResult, useSchedule, useUpdateCategory } from '../api.js';
 import { BracketView } from '../components/BracketView.js';
 import { KataScoring } from '../components/KataScoring.js';
-import { HelpButton, SectionHeader } from '../components/Help.js';
+import { HelpButton, HelpText, SectionHeader } from '../components/Help.js';
 import { ResultDialog } from '../components/ResultDialog.js';
 import { TieBreakDialog } from '../components/TieBreakDialog.js';
 import { STATUS_LABELS, useEntrantInfo } from './BracketsPage.js';
@@ -64,6 +64,7 @@ export function MatchesPage() {
       </Grid.Col>
       <Grid.Col span={{ base: 12, md: 8 }}>
         <Stack>
+          <HelpText topic="combats.zone" />
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
             {(schedule?.tatamis ?? []).map((t) => {
               const next = t.categories.flatMap((c) => c.nextMatches.map((m) => ({ ...m, category: c }))).slice(0, 4);

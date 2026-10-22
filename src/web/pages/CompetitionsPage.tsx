@@ -1,4 +1,4 @@
-import { Anchor, Button, Group, Modal, NumberInput, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import { Anchor, Button, Group, Modal, NumberInput, Select, Stack, Table, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useCompetitions, useCreateCompetition, useGridTemplates } from '../api.js';

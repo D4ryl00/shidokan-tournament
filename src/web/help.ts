@@ -200,7 +200,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     details: [
       'Les tableaux se font tout seuls à partir des inscriptions, en séparant les combattants d’un même club au premier tour.',
       [
-        'Provisoire : avant la pesée et le recasement. Prête : vérifiée, on peut l’imprimer. Lancée : un résultat est saisi, le tableau est figé. Terminée : podium connu.',
+        'Provisoire (gris) : avant la pesée et le recasement. Prête (bleu) : vérifiée, on peut l’imprimer. Lancée (orange) : un résultat est saisi, le tableau est figé. Terminée (vert) : podium connu.',
         'Format, repêchage et combat pour la 3e place se changent tant que la catégorie n’est pas lancée.',
         'Cliquez deux combattants pour les échanger.',
         '« Déverrouiller » rouvre une catégorie lancée (le tableau peut être refait si ses inscrits ont changé).',

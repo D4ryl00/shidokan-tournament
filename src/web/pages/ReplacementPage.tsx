@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Card, Chip, Group, Modal, SegmentedControl, Select, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
+import { Alert, Badge, Button, Card, Chip, Group, Modal, SegmentedControl, Select, SimpleGrid, Stack, Table, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router';

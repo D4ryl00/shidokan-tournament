@@ -67,3 +67,8 @@ test('relecture : autres faits', () => {
   expect(all('reglages.tableaux')).toContain('ignoré quand le repêchage est activé');
   expect(all('impression')).toContain('« Enregistrer au format PDF »');
 });
+
+test('tableaux : sens des couleurs des statuts', () => {
+  const text = all('tableaux');
+  for (const c of ['gris', 'bleu', 'orange', 'vert']) expect(text).toContain(c);
+});
