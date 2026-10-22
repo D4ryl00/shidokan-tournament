@@ -179,7 +179,41 @@ export const categories = sqliteTable('categories', {
   /** Choix individuel de vague : id d'une vague, « none » (en attente) ou null (règles des vagues). */
   waveOverride: text('wave_override'),
   sortOrder: integer('sort_order').notNull().default(0),
+  /** Heure de la dernière renumérotation après le lancement de sa vague (imprimée « mis à jour à HH:MM »). */
+  numbersUpdatedAt: text('numbers_updated_at'),
 });
+
+/** Lancement d'une vague (`wave_key` '' : vague implicite d'une compétition sans vague) ; `launched` faux : rouverte. */
+export const waveLaunches = sqliteTable(
+  'wave_launches',
+  {
+    competitionId: text('competition_id')
+      .notNull()
+      .references(() => competitions.id, { onDelete: 'cascade' }),
+    waveKey: text('wave_key').notNull(),
+    launched: integer('launched', { mode: 'boolean' }).notNull(),
+    restartNumbering: integer('restart_numbering', { mode: 'boolean' }).notNull().default(false),
+    launchedAt: text('launched_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.competitionId, t.waveKey] })],
+);
+
+/** Numéros de passage figés au lancement d'une vague (`match_id` 'kata' : bloc de kata entier). */
+export const frozenPassages = sqliteTable(
+  'frozen_passages',
+  {
+    competitionId: text('competition_id')
+      .notNull()
+      .references(() => competitions.id, { onDelete: 'cascade' }),
+    waveKey: text('wave_key').notNull(),
+    zoneId: text('zone_id').notNull(),
+    number: integer('number').notNull(),
+    categoryId: text('category_id').notNull(),
+    matchId: text('match_id').notNull(),
+    noRest: integer('no_rest', { mode: 'boolean' }).notNull().default(false),
+  },
+  (t) => [primaryKey({ columns: [t.competitionId, t.waveKey, t.categoryId, t.matchId] })],
+);
 
 /** Journal des recasements validés (avec de quoi les annuler). */
 export const recasements = sqliteTable('recasements', {

@@ -160,6 +160,7 @@ export async function syncCategories(db: AppDb, competitionId: string): Promise<
           zoneId: null,
           waveOverride: null,
           sortOrder: 0,
+          numbersUpdatedAt: null,
         };
         t.insert(categories).values(row).run();
         cat = row;
@@ -232,6 +233,7 @@ function toCategory(row: Row, ctx: Context): Category {
     aliasKeys: JSON.parse(row.aliasKeys) as string[],
     effectiveFormat: row.bracketJson ? ((JSON.parse(row.bracketJson) as Bracket).kind === 'kata' ? 'kata_two_rounds' : (JSON.parse(row.bracketJson) as { format: BracketFormat }).format) : effectiveFormat(row, key, (ctx.active.get(row.id) ?? []).length, ctx),
     stale: row.stale,
+    numbersUpdatedAt: row.numbersUpdatedAt,
   };
 }
 

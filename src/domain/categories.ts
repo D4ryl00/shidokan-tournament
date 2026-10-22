@@ -100,6 +100,8 @@ export interface Category {
   effectiveFormat: BracketFormat | null;
   /** Catégorie lancée dont les inscrits ont changé depuis (tableau non régénéré). */
   stale: boolean;
+  /** Heure de la dernière renumérotation après le lancement de sa vague (« mis à jour à HH:MM »). */
+  numbersUpdatedAt: string | null;
 }
 
 /** Combattants à disputer : présents avant le lancement, inscrits du tableau ensuite (un absent tardif ne compte pas). */
