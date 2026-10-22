@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from 'react-router';
 import { activeEntrantCount, type Category } from '../../domain/categories.js';
 import { validResults } from '../../domain/results.js';
 import { useCategories, useCategoryResults, useCompetition, usePassages, usePodiums, useZones } from '../api.js';
-import { categoryPassages, movedMatchZones } from '../passages.js';
+import { categoryPassages, kataPassageText, movedMatchZones } from '../passages.js';
 import { BracketView, type EntrantInfo } from '../components/BracketView.js';
 import { HelpText } from '../components/Help.js';
 import { useEntrantInfo } from './BracketsPage.js';
@@ -46,11 +46,9 @@ export function PrintSection({ category, entrants, competitionLine, withResults 
   const { data: plan } = usePassages(id);
   const passages = categoryPassages(plan, category.id);
   const zone = zones.find((z) => z.id === passages.zoneId);
-  const zoneName = (zid: string) => zones.find((z) => z.id === zid)?.name ?? '?';
   // Kata : bloc entier, ou tour 1 sur sa zone et finale sur la zone des finales.
-  const kataLine = passages.kata
-    .map((k) => (k.part === 'all' ? ` · passage n° ${k.number}` : k.part === 'tour1' ? ` · tour 1 : n° ${k.number}` : ` · finale : n° ${k.number} (${zoneName(k.zoneId)})`))
-    .join('');
+  const kataText = kataPassageText(passages, zones);
+  const kataLine = kataText ? ` · ${kataText}` : '';
   // Combats déplacés sur la zone des finales : leur zone est indiquée sur le combat.
   const movedZones = movedMatchZones(passages, zones, category.bracket);
   const results = res && category.bracket?.kind === 'combat' ? validResults(category.bracket, res.records, res.tieBreaks.pools).results : undefined;

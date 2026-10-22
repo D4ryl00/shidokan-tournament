@@ -40,3 +40,9 @@ export function movedMatchZones(p: ReturnType<typeof categoryPassages> | null, z
       .map(([mid, zid]) => [mid, finals.includes(mid) ? `Zone des finales : ${name(zid)}` : `Joué sur : ${name(zid)}`]),
   );
 }
+
+/** Numéros d'un kata : « passage n° 14 », ou « tour 1 : n° 14 · finale : n° 31 (Ring) » (finale sur la zone des finales). */
+export function kataPassageText(p: ReturnType<typeof categoryPassages>, zones: { id: string; name: string }[]): string {
+  const name = (zid: string) => zones.find((z) => z.id === zid)?.name ?? '?';
+  return p.kata.map((k) => (k.part === 'all' ? `passage n° ${k.number}` : k.part === 'tour1' ? `tour 1 : n° ${k.number}` : `finale : n° ${k.number} (${name(k.zoneId)})`)).join(' · ');
+}

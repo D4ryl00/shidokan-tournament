@@ -319,7 +319,7 @@ describe('poids hors catégorie : catégorie du poids réel vide', () => {
     const ps = props(s, garnier.registrationId);
     expect(ps.map((p) => p.type)).toEqual(['C', 'A']);
     expect(ps[0]).toMatchObject({ target: { categoryId: rousseau.categoryId }, changes: { weightClassId: 'benjamin:M:-45' }, manual: true });
-    expect(ps[0]!.reason).toBe(`${garnier.label} : Karaté · Jiyu · Benjamins M · -40 kg → Karaté · Jiyu · Benjamins / Minimes M · -45 / -50 kg (avec ${rousseau.label}) — lui en -45 kg, la catégorie de son poids réel`);
+    expect(ps[0]!.reason).toBe(`${garnier.label} : Karaté · Jiyu · Benjamins M · -40 kg → Karaté · Jiyu · Benjamins / Minimes M · -45 / -50 kg (1 adversaire) — lui en -45 kg, la catégorie de son poids réel`);
     expect(ps[1]!.reason).toBe(`${garnier.label} : Karaté · Jiyu · Benjamins M · -40 kg → Karaté · Jiyu · Benjamins M · -45 kg — il y sera seul (sans adversaire), à recaser ensuite`);
     // Validée, la proposition C le met avec ROUSSEAU, en -45 ; il ne « revient » pas en -40.
     const after = applyProposal(s, ps[0]!);

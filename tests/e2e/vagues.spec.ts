@@ -239,3 +239,24 @@ test('vagues : tout cocher les tranches d’âge et les disciplines', async ({ p
   await card.getByTestId('wave-all-ages').click();
   await expect(card.getByTestId('wave-all-ages')).toHaveText('Tout cocher');
 });
+
+test('tableaux par vague : la vague choisie, celles en attente, toutes', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe tableaux par vague');
+  const reg = (lastName: string, ageBandCode: string, weightClassId: string) =>
+    request.post(`/api/competitions/${id}/registrations`, {
+      data: { clubId: null, lastName, firstName: 'Léa', sex: 'F', ageBandCode, discipline: 'karate', ruleset: 'jiyu', weightClassId, source: 'manual' },
+    });
+  for (const n of ['MINA', 'MINB']) await reg(n, 'minime', 'minime:F:-45');
+  for (const n of ['CADA', 'CADB']) await reg(n, 'cadet', 'cadet:F:-47');
+  await request.put(`/api/competitions/${id}/waves`, { data: [{ name: 'Matin', rules: { ageBandCodes: ['minime'], disciplines: [] } }] });
+  await page.goto(`/competitions/${id}/tableaux`);
+  const rows = page.getByTestId('category-row');
+  await expect(rows).toHaveCount(1);
+  await expect(rows).toContainText('Minimes');
+  await expect(page.getByTestId('print-all')).toHaveText('Imprimer la vague');
+  await page.getByTestId('brackets-wave').getByText('En attente (1)').click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows).toContainText('Cadets');
+  await page.getByTestId('brackets-wave').getByText('Toutes').click();
+  await expect(rows).toHaveCount(2);
+});

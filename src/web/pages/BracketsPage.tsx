@@ -1,5 +1,5 @@
 import {
-  Badge, Button, Card, Checkbox, Grid, Group, Modal, ScrollArea, Select, Stack, Text, TextInput, Title, UnstyledButton,
+  Badge, Button, Card, Checkbox, Grid, Group, Modal, ScrollArea, SegmentedControl, Select, Stack, Text, TextInput, Title, UnstyledButton,
 } from '@mantine/core';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
@@ -7,7 +7,8 @@ import { compatibleFormats, type BracketFormat } from '../../domain/brackets/ind
 import { activeEntrantCount, type Category, type CategoryStatus } from '../../domain/categories.js';
 import { normalizeName } from '../../domain/names.js';
 import { useCategories, usePassages, useRedraw, useRegenerate, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
-import { categoryPassages, movedMatchZones } from '../passages.js';
+import { categoryPassages, kataPassageText, movedMatchZones } from '../passages.js';
+import { useSelectedWave } from '../useSelectedWave.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { BracketView, type EntrantInfo } from '../components/BracketView.js';
 import { useRecasementDetails } from '../components/ReplacementBadge.js';
@@ -50,6 +51,9 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   const [onlyAlone, setOnlyAlone] = useState(false);
   const [swapFrom, setSwapFrom] = useState<string | null>(null);
   const [confirmUnlock, setConfirmUnlock] = useState(false);
+  // Avec des vagues : les catégories de la vague choisie (la même que dans les autres onglets), celles en attente, ou toutes.
+  const { waves, waveId, select } = useSelectedWave(id);
+  const [scope, setScope] = useState<'wave' | 'waiting' | 'all'>('wave');
 
   const { data: registrations = [] } = useRegistrations(id);
   const badges = useMemo(() => new Map(registrations.filter((r) => r.recasementType).map((r) => [r.id, r.recasementType!])), [registrations]);
@@ -62,14 +66,23 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   }, [replacement]);
   const activeCount = (c: Category) => activeEntrantCount(c);
   const allAbsent = (c: Category) => c.registrationIds.length > 0 && activeCount(c) === 0;
-  const filtered = categories.filter(
+  const inScope = (c: Category) => waves.length === 0 || scope === 'all' || (scope === 'waiting' ? c.waveId === null : c.waveId === waveId);
+  const shown = categories.filter(inScope);
+  const filtered = shown.filter(
     (c) => (!search || normalizeName(c.label).includes(normalizeName(search))) && (!onlyAlone || activeCount(c) === 1),
   );
+  const waiting = categories.filter((c) => c.waveId === null).length;
+  const printUrl =
+    waves.length === 0 || scope === 'all'
+      ? `/competitions/${id}/impression`
+      : scope === 'waiting'
+        ? `/competitions/${id}/impression?categories=${shown.map((c) => c.id).join(',')}`
+        : `/competitions/${id}/impression?vague=${encodeURIComponent(waveId ?? '')}`;
   const selected: Category | undefined = categories.find((c) => c.id === selectedId) ?? filtered[0];
   const locked = selected?.status === 'started' || selected?.status === 'finished';
   const passages = useMemo(() => (selected ? categoryPassages(plan, selected.id) : null), [plan, selected]);
-  const alone = categories.filter((c) => activeCount(c) === 1).length;
-  const absentOnly = categories.filter(allAbsent).length;
+  const alone = shown.filter((c) => activeCount(c) === 1).length;
+  const absentOnly = shown.filter(allAbsent).length;
 
   const onSelectEntrant = (rid: string) => {
     if (!selected || locked) return;
@@ -85,12 +98,21 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
     <Grid>
       <Grid.Col span={{ base: 12, md: 4 }}>
         <Stack gap="xs">
+          {waves.length > 0 && (
+            <SegmentedControl size="xs" data-testid="brackets-wave" value={scope === 'wave' ? (waveId ?? '') : scope}
+              onChange={(v) => {
+                if (v === 'waiting' || v === 'all') setScope(v);
+                else { setScope('wave'); select(v); }
+                setSelectedId(null);
+              }}
+              data={[...waves.map((w) => ({ value: w.id, label: w.name })), ...(waiting ? [{ value: 'waiting', label: `En attente (${waiting})` }] : []), { value: 'all', label: 'Toutes' }]} />
+          )}
           <Group justify="space-between">
             <Text size="sm" c="dimmed">
-              {categories.length} catégorie(s) · {alone} sans adversaire{absentOnly ? ` · ${absentOnly} sans présent (non imprimée${absentOnly > 1 ? 's' : ''})` : ''}
+              {shown.length} catégorie(s) · {alone} sans adversaire{absentOnly ? ` · ${absentOnly} sans présent (non imprimée${absentOnly > 1 ? 's' : ''})` : ''}
             </Text>
-            <Button size="xs" variant="light" component={Link} to={`/competitions/${id}/impression`} target="_blank" data-testid="print-all">
-              Imprimer tout
+            <Button size="xs" variant="light" component={Link} to={printUrl} target="_blank" data-testid="print-all">
+              {waves.length === 0 || scope === 'all' ? 'Imprimer tout' : scope === 'waiting' ? 'Imprimer celles en attente' : 'Imprimer la vague'}
             </Button>
           </Group>
           <TextInput size="xs" placeholder="Filtrer (ex. cadets, -54, kata)" value={search} onChange={(e) => setSearch(e.currentTarget.value)} />
@@ -131,6 +153,9 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
                   <Badge color={STATUS_COLORS[selected.status]}>{STATUS_LABELS[selected.status]}</Badge>
                   {zones.find((z) => z.id === passages?.zoneId) && (
                     <Badge variant="outline" data-testid="category-zone">{zones.find((z) => z.id === passages?.zoneId)!.name}{passages?.auto ? ' (auto)' : ''}</Badge>
+                  )}
+                  {passages && kataPassageText(passages, zones) && (
+                    <Badge variant="outline" tt="none" data-testid="category-kata-passage">{kataPassageText(passages, zones)}</Badge>
                   )}
                   {selected.stale && <Badge color="orange">Les inscrits ont changé depuis le lancement</Badge>}
                   {selected.stale && selected.launchLocked && !locked && (

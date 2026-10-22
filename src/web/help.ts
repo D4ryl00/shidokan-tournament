@@ -255,6 +255,8 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         '« Déverrouiller » rouvre une catégorie lancée (le tableau peut être refait si ses inscrits ont changé).',
         'Vague figée : ses tableaux ne changent plus d’eux-mêmes. Si un combattant devient absent, « Régénérer (renuméroté à la suite) » refait le tableau et lui donne de nouveaux numéros, après le dernier numéro de sa zone : réimprimez-le (il porte « mis à jour à … »).',
       ],
+      'Avec des vagues : la liste montre les catégories de la vague choisie en haut (la même que dans les autres onglets) ; « En attente » montre celles qui ne sont dans aucune vague, « Toutes » toute la compétition. Le bouton d’impression suit ce choix.',
+      'Une catégorie de kata affiche son numéro de passage sur sa zone (« passage n° 1 ») : sur chaque zone, le kata passe avant les combats, le premier combat peut donc porter le n° 2.',
       'Les catégories « Sans adversaire » ou « Tous absents » ne sont pas imprimées.',
     ],
   },

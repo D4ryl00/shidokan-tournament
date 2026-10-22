@@ -142,7 +142,7 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
       manual: type !== 'A' && type !== 'R',
       ...waves,
       preApproved: !waves.waveChange && waves.waveShifts.length === 0 && m.clubPreApproval && ['B', 'C', 'D', 'E'].includes(type),
-      // La catégorie telle qu'elle sera après le déplacement (« Benjamins / Minimes M · -45 / -50 kg »), et qui il y rencontrera.
+      // La catégorie telle qu'elle sera après le déplacement (« Benjamins / Minimes M · -45 / -50 kg »), et combien d'adversaires il y aura.
       reason: `${m.label} : ${from} → ${labelOf(arrivalKey(state, m, toKey, ev.changes))}${withWhom(opponents)}`,
       sortKey: [order(m).indexOf(type), ...extra, members === 1 ? 0 : 1, ev.checks.weightGapKg, labelOf(toKey)],
     });
@@ -247,12 +247,9 @@ function arrivalKey(state: State, m: Member, toKey: CategoryKey, changes: Propos
   };
 }
 
-/** « (avec DUPONT Léa et MARTIN Jade) », trois noms au plus. */
+/** « (1 adversaire) », « (4 adversaires) » : qui il rencontre se voit dans l'aperçu. */
 function withWhom(opponents: Member[]): string {
-  if (opponents.length === 0) return '';
-  const names = opponents.slice(0, 3).map((x) => x.label);
-  const more = opponents.length - names.length;
-  return ` (avec ${more > 0 ? `${names.join(', ')} et ${more} autre${more > 1 ? 's' : ''}` : names.length > 1 ? `${names.slice(0, -1).join(', ')} et ${names.at(-1)}` : names[0]})`;
+  return opponents.length === 0 ? '' : ` (${opponents.length} adversaire${opponents.length > 1 ? 's' : ''})`;
 }
 
 /** La catégorie `t` accepte le poids pesé de `m` (tolérance comprise) : sa catégorie de poids la plus lourde n'est pas en dessous. */
