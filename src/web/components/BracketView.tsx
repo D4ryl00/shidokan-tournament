@@ -161,11 +161,11 @@ function CombatView(props: Props & { bracket: CombatBracket }) {
       </Box>
     );
     return (
-      <Paper withBorder className="bracket-card" data-testid="bracket-match" data-match={m.id} data-bye={m.bye ? 'true' : undefined}
+      <Paper key={m.id} withBorder className="bracket-card" data-testid="bracket-match" data-match={m.id} data-bye={m.bye ? 'true' : undefined}
         style={{ breakInside: 'avoid', overflow: 'visible', cursor: clickable ? 'pointer' : undefined, opacity: m.bye ? 0.6 : undefined, borderColor: stale ? 'var(--mantine-color-orange-6)' : undefined }}
         onClick={() => clickable && props.onMatchClick!(m)}>
         <div className="bracket-card-head">
-          <Text size="xs" fw={700}>{m.bye ? 'Exempt' : `Combat ${numbers.get(m.id)}`}</Text>
+          <Text size="xs" fw={700}>{m.bye ? 'Exempt' : `Combat ${numbers.get(m.id)}${m.optional ? ' (si 1-1)' : ''}`}</Text>
           <Text size="xs" c="dimmed" ta="right">
             {resultText(m)}
             {stale ? ' · à revoir' : ''}
@@ -182,40 +182,8 @@ function CombatView(props: Props & { bracket: CombatBracket }) {
       </Paper>
     );
   };
-  const card = (m: ResolvedMatch) => {
-    if (m.bye) {
-      // À l'impression, l'exempté apparaît directement au tour suivant : la case est inutile.
-      if (props.printable) return null;
-      const who = m.entrantA ?? m.entrantB;
-      return (
-        <Paper key={m.id} withBorder p={6} data-testid="bracket-match" data-bye="true" style={{ opacity: 0.6 }}>
-          <Text size="xs" c="dimmed">Exempt</Text>
-          {who && <EntrantLine id={who} fallback="" info={entrants.get(who)} props={props} />}
-        </Paper>
-      );
-    }
-    const winA = m.result?.winner === 'a';
-    const winB = m.result?.winner === 'b';
-    const clickable = !props.printable && props.onMatchClick && m.playable;
-    const stale = props.stale?.has(m.id);
-    return (
-      <Paper key={m.id} withBorder p={props.printable ? 4 : 6} data-testid="bracket-match" data-match={m.id}
-        style={{ breakInside: 'avoid', cursor: clickable ? 'pointer' : undefined, borderColor: stale ? 'var(--mantine-color-orange-6)' : undefined }}
-        onClick={() => clickable && props.onMatchClick!(m)}>
-        <Text size="xs" c="dimmed">
-          Combat {numbers.get(m.id)}{m.optional ? ' (si 1-1)' : ''}
-          {m.result && !props.printable ? ` · ${METHOD_SHORT[m.result.method]}${m.result.score ? ` ${m.result.score}` : ''}` : ''}
-          {m.result && props.printable && (m.result.method !== 'points' || m.result.score) ? ` · ${METHOD_SHORT[m.result.method]}${m.result.score ? ` ${m.result.score}` : ''}` : ''}
-          {stale ? ' · à revoir' : ''}
-          {!props.printable && props.noRest?.has(m.id) ? ' · pas de repos : prévoir une pause' : ''}
-        </Text>
-        {props.matchZones?.get(m.id) && <Text size="xs" fw={700} data-testid="match-zone">{props.matchZones.get(m.id)}</Text>}
-        <EntrantLine id={m.entrantA} fallback={describe(m.a)} info={m.entrantA ? entrants.get(m.entrantA) : undefined} props={props} winner={winA} />
-        {!props.printable && <Text size="xs" c="dimmed" ta="center">contre</Text>}
-        <EntrantLine id={m.entrantB} fallback={describe(m.b)} info={m.entrantB ? entrants.get(m.entrantB) : undefined} props={props} winner={winB} />
-      </Paper>
-    );
-  };
+  /** Même carte pour tous les combats (arbre, poule, manches, repêchage) ; à l'impression, une exemption n'a pas de case. */
+  const card = (m: ResolvedMatch) => (m.bye && props.printable ? null : treeCard(m));
 
   const sections: { title: string; matches: ResolvedMatch[]; columns: boolean }[] = [];
   if (bracket.pools) {
@@ -304,7 +272,7 @@ function CombatView(props: Props & { bracket: CombatBracket }) {
 export function treeRounds(matches: ResolvedMatch[]): ResolvedMatch[][] | null {
   const rounds = [...new Set(matches.map((m) => m.round))].sort((a, b) => a - b);
   const byRound = rounds.map((r) => matches.filter((m) => m.round === r).sort((a, b) => a.order - b.order));
-  if (byRound.length < 2 || byRound.at(-1)!.length !== 1) return null;
+  if (byRound.length === 0 || byRound.at(-1)!.length !== 1) return null;
   for (let r = 1; r < byRound.length; r++) {
     if (byRound[r]!.length * 2 !== byRound[r - 1]!.length) return null;
     const ok = byRound[r]!.every((m, k) =>
