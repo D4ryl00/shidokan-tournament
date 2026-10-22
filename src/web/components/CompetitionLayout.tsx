@@ -1,21 +1,8 @@
 import { Loader, Stack, Tabs, Text, Title } from '@mantine/core';
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { useCompetition } from '../api.js';
+import { COMPETITION_TABS } from '../tabs.js';
 
-/** Onglets d'une compétition ; chaque étape du projet ajoute les siens. */
-export const COMPETITION_TABS = [
-  { path: 'inscriptions', label: 'Inscriptions' },
-  { path: 'clubs', label: 'Clubs' },
-  { path: 'fiche-club', label: 'Fiche club' },
-  { path: 'import-ffk', label: 'Import FFK' },
-  { path: 'pesee', label: 'Pesée' },
-  { path: 'recasement', label: 'Recasement' },
-  { path: 'tableaux', label: 'Tableaux' },
-  { path: 'combats', label: 'Combats' },
-  { path: 'podiums', label: 'Podiums' },
-  { path: 'reglages', label: 'Réglages' },
-  { path: 'grille', label: 'Grille âge / poids' },
-];
 
 export function CompetitionLayout() {
   const { id = '' } = useParams();
