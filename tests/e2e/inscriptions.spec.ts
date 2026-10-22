@@ -95,3 +95,35 @@ test('saisie rapide au clavier, sur place, avertissement, kata', async ({ page }
   await page.goto(`/competitions/${id}/clubs`);
   await expect(page.getByTestId('club-row')).toHaveCount(1);
 });
+
+async function pdfPages(page: Page): Promise<number> {
+  const pdf = await page.pdf({ format: 'A4', landscape: true, printBackground: true, preferCSSPageSize: true });
+  return (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []).length;
+}
+
+test('fiche papier : une page A4 paysage, 10 lignes, tranches proposées', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe fiche papier');
+  const grid = (await (await request.get(`/api/competitions/${id}/grid`)).json()) as { ageBands: { code: string; onClubForm: boolean }[] };
+  grid.ageBands = grid.ageBands.map((b) => ({ ...b, onClubForm: b.code !== 'mini-poussin' && b.code !== 'espoir' }));
+  expect((await request.put(`/api/competitions/${id}/grid`, { data: grid })).status()).toBe(204);
+  await page.goto(`/competitions/${id}/fiche-club`);
+  const [popup] = await Promise.all([page.waitForEvent('popup'), page.getByTestId('paper-form-open').click()]);
+  await expect(popup).toHaveURL(new RegExp(`/competitions/${id}/impression/fiche-club$`));
+  const form = popup.getByTestId('paper-form');
+  await expect(form).toContainText('FICHE DE PRÉ-INSCRIPTION');
+  await expect(popup.getByTestId('paper-form-row')).toHaveCount(10);
+  const ages = popup.getByTestId('paper-form-row').first().getByTestId('paper-age');
+  await expect(ages).toHaveText(['P', 'Pu', 'B', 'Mi', 'C', 'J', 'S', 'V1', 'V2', 'V3', 'V4', 'V5']);
+  await expect(form.locator('img')).toHaveCount(2);
+  await popup.emulateMedia({ media: 'print' });
+  expect(await pdfPages(popup)).toBe(1);
+});
+
+test('fiche papier : nom de compétition long, toujours une page', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe fiche longue');
+  await request.patch(`/api/competitions/${id}`, { data: { name: 'Coupe Shidokan de la Côte d’Azur et des Alpes-Maritimes — édition spéciale 2026', location: 'Gymnase municipal' } });
+  await page.goto(`/competitions/${id}/impression/fiche-club`);
+  await expect(page.getByTestId('paper-form-row')).toHaveCount(10);
+  await page.emulateMedia({ media: 'print' });
+  expect(await pdfPages(page)).toBe(1);
+});

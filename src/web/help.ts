@@ -102,10 +102,12 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
   },
   'fiche-club.envoyer': {
     title: '1. Envoyer le modèle aux clubs',
-    short: 'Téléchargez le modèle (.ods) et envoyez-le aux clubs par e-mail.',
+    short: 'Envoyez aux clubs le modèle à remplir sur ordinateur (.ods) ou la fiche papier à cocher (PDF).',
     details: [
-      'Le modèle contient des listes déroulantes (sexe, tranche d’âge, discipline, règlement, oui / non) ; le poids s’écrit à la main (-35, +65…). Il s’ouvre avec LibreOffice ou Excel.',
-      'Les clubs le remplissent, une ligne par combattant et par discipline, puis vous le renvoient.',
+      'Le modèle .ods s’ouvre avec LibreOffice ou Excel ; il contient des listes déroulantes (sexe, catégorie d’âge, discipline de combat, kata, règlement, reclassement, priorité shobu).',
+      '« Fiche papier (PDF) » ouvre une fiche A4 paysage à cocher, 10 combattants par feuille : cliquez « Imprimer » puis « Enregistrer au format PDF » pour l’envoyer, ou imprimez-la directement.',
+      'Une ligne par combattant : kata et combat sur la même ligne. Le coach donne le poids actuel ; la catégorie de poids en est déduite.',
+      'Seules les tranches d’âge cochées « Fiche club » dans la grille sont proposées.',
     ],
   },
   'fiche-club.importer': {
