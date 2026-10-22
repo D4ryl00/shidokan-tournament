@@ -74,6 +74,8 @@ export const zones = sqliteTable('zones', {
     .references(() => competitions.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   sortOrder: integer('sort_order').notNull(),
+  /** Disciplines accueillies (JSON) ; null = toutes. */
+  disciplinesJson: text('disciplines_json'),
 });
 
 export const clubs = sqliteTable('clubs', {

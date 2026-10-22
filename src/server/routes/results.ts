@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
 import { getCompetition } from '../repositories/competitions.js';
+import { passagePlan } from '../repositories/passages.js';
 import { deleteResult, exportPodiums, exportResults, getResults, podiums, putKataNotes, putResult, putTieBreak, schedule } from '../repositories/results.js';
 
 type P = { Params: { id: string; cid: string } };
@@ -35,7 +36,8 @@ export async function resultRoutes(app: FastifyInstance, { db }: { db: AppDb }) 
     await putTieBreak(db, req.params.id, req.params.cid, scope, order);
     return reply.status(204).send();
   });
-  app.get<{ Params: { id: string } }>('/api/competitions/:id/schedule', async (req) => schedule(db, req.params.id));
+  app.get<{ Params: { id: string }; Querystring: { vague?: string } }>('/api/competitions/:id/schedule', async (req) => schedule(db, req.params.id, req.query.vague || undefined));
+  app.get<{ Params: { id: string } }>('/api/competitions/:id/passages', async (req) => passagePlan(db, req.params.id));
   app.get<{ Params: { id: string } }>('/api/competitions/:id/podiums', async (req) => {
     const { categories, medals } = await podiums(db, req.params.id);
     return { categories, medals };

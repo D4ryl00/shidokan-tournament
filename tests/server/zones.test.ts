@@ -152,3 +152,40 @@ test('relecture : zone d’une catégorie terminée non supprimable', async () =
   await app.inject({ method: 'PATCH', url: `${base}/categories/${c.id}`, payload: { status: 'finished' } });
   expect((await putZones([{ id: t1!.id, name: 'Tatami 1' }])).statusCode).toBe(409);
 });
+
+test('disciplines par zone : enregistrées et relues ; liste vide refusée ; omises : inchangées', async () => {
+  const [t1, t2] = await zones();
+  expect(t1!).toMatchObject({ disciplines: null });
+  expect((await putZones([{ id: t1!.id, name: 'Tatami 1', disciplines: ['karate', 'kata'] }, { id: t2!.id, name: 'Ring', disciplines: null }])).statusCode).toBe(200);
+  expect((await zones()).map((z) => (z as Zone & { disciplines: string[] | null }).disciplines)).toEqual([['karate', 'kata'], null]);
+  await putZones([{ id: t1!.id, name: 'Tatami 1' }, { id: t2!.id, name: 'Ring' }]);
+  expect((await zones()).map((z) => (z as Zone & { disciplines: string[] | null }).disciplines)).toEqual([['karate', 'kata'], null]);
+  const empty = await putZones([{ id: t1!.id, name: 'Tatami 1', disciplines: [] }]);
+  expect(empty.statusCode).toBe(400);
+  expect(empty.json().issues.join(' ')).toContain('La zone « Tatami 1 » n’accueille aucune discipline : cochez-en au moins une.');
+});
+
+test('migration : une zone d’une base antérieure accueille toutes les disciplines', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'migr-'));
+  const src = path.resolve('drizzle');
+  fs.mkdirSync(path.join(dir, 'meta'));
+  const journal = JSON.parse(fs.readFileSync(path.join(src, 'meta/_journal.json'), 'utf8')) as { entries: { idx: number; tag: string }[] };
+  const before = journal.entries.filter((e) => e.idx <= 11);
+  for (const e of before) fs.copyFileSync(path.join(src, `${e.tag}.sql`), path.join(dir, `${e.tag}.sql`));
+  fs.writeFileSync(path.join(dir, 'meta/_journal.json'), JSON.stringify({ ...journal, entries: before }));
+  const file = path.join(dir, 'old.sqlite');
+  process.env.MIGRATIONS_DIR = dir;
+  try {
+    closeDb(openDb(file));
+  } finally {
+    delete process.env.MIGRATIONS_DIR;
+  }
+  const raw = new Database(file);
+  raw.prepare("INSERT INTO competitions (id, name, date, settings_json) VALUES ('c1', 'Ancienne', '2026-11-22', '{}')").run();
+  raw.prepare("INSERT INTO zones (id, competition_id, name, sort_order) VALUES ('z1', 'c1', 'Tatami 1', 0)").run();
+  raw.close();
+  const db = openDb(file);
+  expect(db.$client.prepare("SELECT disciplines_json AS d FROM zones WHERE id = 'z1'").get()).toEqual({ d: null });
+  closeDb(db);
+});
+

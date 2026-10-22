@@ -7,6 +7,8 @@ import type { AppDb } from '../db/client.js';
 import { categories, clubs, fighters, kataScores, matchResults, registrations, tieBreaks } from '../db/schema.js';
 import { listCategories } from './categories.js';
 import { listZones } from './zones.js';
+import { listWaves } from './waves.js';
+import { passageNumbers, passagePlan } from './passages.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
 import { activeEntrantCount } from '../../domain/categories.js';
 
@@ -82,10 +84,12 @@ export async function getResults(db: AppDb, competitionId: string, categoryId: s
 /** Statut automatique après une saisie : lancée, terminée, ou sans aucun résultat de nouveau prête (une provisoire le reste). */
 async function refreshStatus(db: AppDb, competitionId: string, categoryId: string): Promise<void> {
   const { progress, records } = await getResults(db, competitionId, categoryId);
-  const current = categoryRow(db, competitionId, categoryId).status;
+  const row = categoryRow(db, competitionId, categoryId);
   const status =
-    progress.status === 'finished' ? 'finished' : progress.status === 'started' || records.length > 0 ? 'started' : current === 'provisional' ? 'provisional' : 'ready';
-  db.update(categories).set({ status }).where(eq(categories.id, categoryId)).run();
+    progress.status === 'finished' ? 'finished' : progress.status === 'started' || records.length > 0 ? 'started' : row.status === 'provisional' ? 'provisional' : 'ready';
+  // Une catégorie lancée garde sa zone : sa zone automatique devient un épinglage.
+  const zoneId = (status === 'started' || status === 'finished') && !row.zoneId ? ((await passagePlan(db, competitionId)).categories[categoryId]?.zoneId ?? null) : row.zoneId;
+  db.update(categories).set({ status, zoneId }).where(eq(categories.id, categoryId)).run();
 }
 
 /** Efface des départages devenus caducs (une poule ou un tour de kata dont un résultat a changé). */
@@ -195,37 +199,77 @@ function labels(db: AppDb, competitionId: string) {
   return map;
 }
 
-export async function schedule(db: AppDb, competitionId: string) {
+/** Passage de la file d'une zone : un combat à appeler, ou un bloc de kata (`matchId` null). */
+export interface QueueItem {
+  number: number;
+  categoryId: string;
+  categoryLabel: string;
+  matchId: string | null;
+  a: string | null;
+  b: string | null;
+  katakas: number | null;
+  noRest: boolean;
+}
+
+/**
+ * Jour J, par zone (épinglée ou automatique) : ses catégories (dans l'ordre saisi) et sa file, c'est-à-dire les prochains
+ * passages de la vague (toutes sans `waveId`) dans l'ordre des numéros — combats jouables sans résultat, blocs de kata non terminés.
+ */
+export async function schedule(db: AppDb, competitionId: string, waveId?: string) {
+  if (waveId && !(await listWaves(db, competitionId)).some((w) => w.id === waveId)) throw new NotFoundError('Vague introuvable');
+  const plan = await passagePlan(db, competitionId);
+  const numbers = passageNumbers(plan);
   const cats = (await listCategories(db, competitionId)).filter(playableCategory);
   const rows = new Map(db.select().from(categories).where(eq(categories.competitionId, competitionId)).all().map((r) => [r.id, r]));
   const who = labels(db, competitionId);
+  const name = (rid: string | null) => (rid ? (who.get(rid)?.name ?? '?') : null);
+  const state = new Map<string, { matches: ReturnType<typeof resolveBracket>['matches']; finished: boolean }>();
   const describe = async (c: (typeof cats)[number]) => {
     const { progress } = await getResults(db, competitionId, c.id);
-    let nextMatches: { matchId: string; number: number; a: string; b: string }[] = [];
+    let matches: ReturnType<typeof resolveBracket>['matches'] = [];
     if (c.bracket?.kind === 'combat') {
       const { results } = validResults(c.bracket, loadRecords(db, c.id), loadTieBreaks(db, c.id).pools);
-      const { matches } = resolveBracket(c.bracket, results, loadTieBreaks(db, c.id).pools);
-      const numbered = [...matches].filter((m) => !m.bye).sort((x, y) => x.order - y.order);
-      nextMatches = numbered
-        .map((m, i) => ({ m, number: i + 1 }))
-        .filter(({ m }) => m.playable && !m.result)
-        .map(({ m, number }) => ({ matchId: m.id, number, a: who.get(m.entrantA!)?.name ?? '?', b: who.get(m.entrantB!)?.name ?? '?' }));
+      matches = resolveBracket(c.bracket, results, loadTieBreaks(db, c.id).pools).matches;
     }
+    state.set(c.id, { matches, finished: progress.status === 'finished' });
+    // Numéro de passage ; sans zone, numérotation propre à la catégorie.
+    const local = new Map([...matches].filter((m) => !m.bye).sort((x, y) => x.order - y.order).map((m, i) => [m.id, i + 1]));
+    const nextMatches = matches
+      .filter((m) => !m.bye && m.playable && !m.result)
+      .map((m) => ({ matchId: m.id, number: numbers.get(`${c.id}:${m.id}`) ?? local.get(m.id)!, a: name(m.entrantA)!, b: name(m.entrantB)! }));
     return { id: c.id, label: c.label, status: c.status, order: rows.get(c.id)?.sortOrder ?? 0, kata: c.bracket?.kind === 'kata', progress: { played: progress.played, total: progress.total }, nextMatches };
   };
   const byZone = new Map<string, Awaited<ReturnType<typeof describe>>[]>();
   const unassigned: Awaited<ReturnType<typeof describe>>[] = [];
   for (const c of cats) {
     const d = await describe(c);
-    if (c.zoneId) byZone.set(c.zoneId, [...(byZone.get(c.zoneId) ?? []), d]);
+    const zoneId = plan.categories[c.id]?.zoneId ?? null;
+    if (zoneId) byZone.set(zoneId, [...(byZone.get(zoneId) ?? []), d]);
     else unassigned.push(d);
   }
+  const labelOf = new Map(cats.map((c) => [c.id, c.label]));
+  const queue = (zoneId: string) =>
+    (plan.zones.find((z) => z.zoneId === zoneId)?.passages ?? [])
+      .filter((p) => !waveId || p.waveId === waveId)
+      .flatMap((p): QueueItem[] => {
+        const st = state.get(p.categoryId);
+        if (!st) return [];
+        const base = { number: p.number, categoryId: p.categoryId, categoryLabel: labelOf.get(p.categoryId) ?? '', noRest: p.noRest };
+        if (p.matchId === null) {
+          const c = cats.find((x) => x.id === p.categoryId)!;
+          return st.finished ? [] : [{ ...base, matchId: null, a: null, b: null, katakas: c.bracket?.entrants.length ?? 0 }];
+        }
+        const m = st.matches.find((x) => x.id === p.matchId);
+        return m && m.playable && !m.result ? [{ ...base, matchId: m.id, a: name(m.entrantA), b: name(m.entrantB), katakas: null }] : [];
+      })
+      .slice(0, 6);
   // Dans l'ordre des zones de la compétition ; une zone sans catégorie n'apparaît pas.
   return {
     zones: (await listZones(db, competitionId))
       .filter((z) => byZone.has(z.id))
-      .map((zone) => ({ zone, categories: byZone.get(zone.id)!.sort((a, b) => a.order - b.order) })),
+      .map((zone) => ({ zone, categories: byZone.get(zone.id)!.sort((a, b) => a.order - b.order), queue: queue(zone.id) })),
     unassigned,
+    impossible: plan.impossible,
   };
 }
 
@@ -253,6 +297,7 @@ function book(sheets: { name: string; rows: (string | number)[][] }[], type: 'xl
 
 export async function exportResults(db: AppDb, competitionId: string, type: 'xlsx' | 'ods'): Promise<Buffer> {
   const cats = await listCategories(db, competitionId);
+  const numbers = passageNumbers(await passagePlan(db, competitionId));
   const who = labels(db, competitionId);
   const rows: (string | number)[][] = [['Catégorie', 'Combat', 'Combattant A', 'Club A', 'Combattant B', 'Club B', 'Vainqueur', 'Méthode', 'Score']];
   for (const c of cats) {
@@ -266,7 +311,7 @@ export async function exportResults(db: AppDb, competitionId: string, type: 'xls
       const a = who.get(m.entrantA) ?? unknown;
       const b = who.get(m.entrantB) ?? unknown;
       const winner = m.result ? (m.result.winner === 'a' ? a.name : b.name) : '';
-      rows.push([c.label, i + 1, a.name, a.club, b.name, b.club, winner, m.result ? METHOD_LABELS[m.result.method] : '', m.result?.score ?? '']);
+      rows.push([c.label, numbers.get(`${c.id}:${m.id}`) ?? i + 1, a.name, a.club, b.name, b.club, winner, m.result ? METHOD_LABELS[m.result.method] : '', m.result?.score ?? '']);
     });
   }
   const kataRows: (string | number)[][] = [['Catégorie', 'Tour', 'Rang', 'Kataka', 'Club', 'Notes', 'Note retenue']];

@@ -1,4 +1,5 @@
 import { and, asc, eq, inArray, notInArray } from 'drizzle-orm';
+import type { DisciplineId } from '../../domain/types.js';
 import { validateZones, type Zone, type ZoneInput } from '../../domain/zones.js';
 import type { AppDb } from '../db/client.js';
 import { categories, zones } from '../db/schema.js';
@@ -12,7 +13,7 @@ export async function listZones(db: AppDb, competitionId: string): Promise<Zone[
     .where(eq(zones.competitionId, competitionId))
     .orderBy(asc(zones.sortOrder))
     .all()
-    .map((z) => ({ id: z.id, name: z.name, order: z.sortOrder }));
+    .map((z) => ({ id: z.id, name: z.name, order: z.sortOrder, disciplines: z.disciplinesJson ? (JSON.parse(z.disciplinesJson) as DisciplineId[]) : null }));
 }
 
 /**
@@ -48,8 +49,10 @@ export async function replaceZones(db: AppDb, competitionId: string, input: Zone
     }
     input.forEach((z, order) => {
       const name = z.name.trim();
-      if (z.id && known.has(z.id)) t.update(zones).set({ name, sortOrder: order }).where(eq(zones.id, z.id)).run();
-      else t.insert(zones).values({ id: crypto.randomUUID(), competitionId, name, sortOrder: order }).run();
+      // Disciplines omises : inchangées (toutes pour une nouvelle zone).
+      const disciplines = z.disciplines === undefined ? {} : { disciplinesJson: z.disciplines ? JSON.stringify(z.disciplines) : null };
+      if (z.id && known.has(z.id)) t.update(zones).set({ name, sortOrder: order, ...disciplines }).where(eq(zones.id, z.id)).run();
+      else t.insert(zones).values({ id: crypto.randomUUID(), competitionId, name, sortOrder: order, ...disciplines }).run();
     });
   });
   return listZones(db, competitionId);
