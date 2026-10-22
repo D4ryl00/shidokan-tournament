@@ -10,6 +10,9 @@ export const COMBAT_FORMATS = [
   'pools_then_bracket',
 ] as const;
 export type CombatFormat = (typeof COMBAT_FORMATS)[number];
+/** Ordre de passage des combats d'une zone : tour par tour (défaut) ou catégorie par catégorie. */
+export const PASSAGE_ORDER_MODES = ['rounds', 'categories'] as const;
+export type PassageOrderMode = (typeof PASSAGE_ORDER_MODES)[number];
 
 const kg = (max: number) => z.number().min(0).max(max);
 
@@ -28,6 +31,7 @@ export const competitionSettingsSchema = z
     thirdPlaceMatch: z.boolean(),
     kataBronzeCount: z.union([z.literal(1), z.literal(2)]),
     triathlonRounds: z.union([z.literal(3), z.literal(6)]),
+    passageOrder: z.enum(PASSAGE_ORDER_MODES),
   })
   .strict();
 
@@ -46,6 +50,7 @@ export function defaultSettings(): CompetitionSettings {
     thirdPlaceMatch: false,
     kataBronzeCount: 2,
     triathlonRounds: 3,
+    passageOrder: 'rounds',
   };
 }
 
