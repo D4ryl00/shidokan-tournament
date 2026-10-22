@@ -115,6 +115,21 @@ describe('plan de passage', () => {
   });
 });
 
+describe('plan de passage (relecture)', () => {
+  test('premier résultat d’une vague : la répartition de toute la vague est fixée, rien ne bouge', async () => {
+    await many(4); // -54 : 3 combats
+    await many(4, { weightClassId: 'cadet:F:-61' }); // 3 combats
+    await many(2, { weightClassId: 'cadet:F:+61' }); // 1 combat
+    const [a, b, c] = [await catOf('-54'), await catOf('-61'), await catOf('+61')];
+    const before = await plan();
+    expect([a, b, c].map((x) => before.categories[x.id]!.zoneId)).toEqual([before.zones[0]!.zoneId, before.zones[1]!.zoneId, before.zones[0]!.zoneId]);
+    await call('PUT', `/categories/${c.id}/results/w1-0`, { winner: 'a', method: 'points' });
+    const after = await plan();
+    for (const x of [a, b, c]) expect(after.categories[x.id]).toEqual({ zoneId: before.categories[x.id]!.zoneId, auto: false });
+    expect(after.zones).toEqual(before.zones);
+  });
+});
+
 describe('file par zone', () => {
   test('?vague= : passages de la vague ; combats joués retirés ; noRest renvoyé', async () => {
     await many(4, { ageBandCode: 'minime', weightClassId: 'minime:F:-45' });

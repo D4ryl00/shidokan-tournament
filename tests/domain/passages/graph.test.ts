@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { generateBracket, type BracketFormat, type CombatBracket } from '../../../src/domain/brackets/index.js';
-import { matchNodes } from '../../../src/domain/passages/index.js';
+import { compatibleFormats, generateBracket, resolveBracket, type BracketFormat, type CombatBracket, type MatchResult } from '../../../src/domain/brackets/index.js';
+import { matchNodes, zoneOrder } from '../../../src/domain/passages/index.js';
 
 const entrants = (n: number) => Array.from({ length: n }, (_, i) => ({ registrationId: `e${i + 1}`, clubId: null, label: `E${i + 1}` }));
 const bracket = (format: BracketFormat, n: number, opts: { repechage?: boolean; thirdPlace?: boolean } = {}) =>
@@ -29,11 +29,11 @@ describe('graphe des combats', () => {
     expect(distances(bracket('single_elimination', 4, { thirdPlace: true }))).toMatchObject({ 'w1-0': 1, 'w1-1': 1, 'w2-0': 0 });
   });
 
-  test('repêchage à 16 : rep<h>-1 → 1, rep<h>-2 → 0 ; rep0-1 fourni par les tours 1 et 2 de la moitié haute seulement', () => {
+  test('repêchage à 16 : rep<h>-1 → 1, rep<h>-2 → 0 ; rep0-1 fourni par les tours 1 et 2 et la demie de la moitié haute seulement', () => {
     const b = bracket('single_elimination', 16, { repechage: true });
     expect(distances(b)).toMatchObject({ 'rep0-1': 1, 'rep1-1': 1, 'rep0-2': 0, 'rep1-2': 0, 'w4-0': 0 });
     const rep = matchNodes(b).find((n) => n.matchId === 'rep0-1')!;
-    expect(rep.feeds.sort()).toEqual(['w1-0', 'w1-1', 'w1-2', 'w1-3', 'w2-0', 'w2-1']);
+    expect(rep.feeds.sort()).toEqual(['w1-0', 'w1-1', 'w1-2', 'w1-3', 'w2-0', 'w2-1', 'w3-0']);
   });
 
   test('double élimination à 4 : gf → 0, w1-0 a la plus grande distance', () => {
@@ -69,5 +69,48 @@ describe('graphe des combats', () => {
 
   test('moins de 2 inscrits : aucun combat', () => {
     expect(matchNodes(bracket('single_elimination', 1))).toEqual([]);
+  });
+});
+
+describe('ordre de passage jouable (relecture)', () => {
+  /** Joue une catégorie seule sur sa zone, dans l'ordre des numéros : chaque combat appelé a ses deux combattants connus. */
+  const playInOrder = (b: CombatBracket, mode: 'rounds' | 'categories') => {
+    const results: Record<string, MatchResult> = {};
+    const problems: string[] = [];
+    for (const p of zoneOrder([{ id: 'c', rank: 0, kataEntrants: null, nodes: matchNodes(b) }], mode, 1)) {
+      const m = resolveBracket(b, results).matches.find((x) => x.id === p.matchId)!;
+      if (m.bye || (m.optional && !m.playable)) continue;
+      if (!m.playable) {
+        problems.push(`${b.format}/${b.entrants.length}: ${p.matchId} appelé avant d'être jouable`);
+        continue;
+      }
+      // Le plus petit identifiant gagne : classement de poule sans égalité.
+      results[m.id] = { winner: m.entrantA! < m.entrantB! ? 'a' : 'b', method: 'points' };
+    }
+    return problems;
+  };
+
+  test('tous les formats, de 2 à 20 inscrits, options et modes : chaque combat est jouable quand on l’appelle', () => {
+    const problems: string[] = [];
+    for (let n = 2; n <= 20; n++) {
+      for (const format of compatibleFormats('karate', n)) {
+        for (const opts of [{}, { repechage: true }, { thirdPlace: true }]) {
+          for (const mode of ['rounds', 'categories'] as const) problems.push(...playInOrder(bracket(format as BracketFormat, n, opts), mode));
+        }
+      }
+    }
+    expect([...new Set(problems)]).toEqual([]);
+  });
+
+  test('repêchage : fourni aussi par la demi-finale de sa moitié', () => {
+    const rep = matchNodes(bracket('single_elimination', 16, { repechage: true })).find((n) => n.matchId === 'rep0-1')!;
+    expect(rep.feeds).toContain('w3-0');
+  });
+
+  test('poules puis tableau à 17 : une exemption ne coupe pas la dépendance (poules avant le tableau)', () => {
+    const b = bracket('pools_then_bracket', 17);
+    const d = distances(b);
+    const bracketMax = Math.max(...matchNodes(b).filter((x) => x.phase === 'main').map((x) => x.distance));
+    for (const n of matchNodes(b).filter((x) => x.phase === 'pool')) expect(d[n.matchId]).toBeGreaterThan(bracketMax - 1);
   });
 });

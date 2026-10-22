@@ -16,5 +16,6 @@ export function categoryPassages(plan: PassagePlan | undefined, categoryId: stri
     }
   }
   const zone = plan?.categories[categoryId] ?? { zoneId: null, auto: false };
-  return { zoneId: zone.zoneId, auto: zone.auto, numbers, noRest, kataNumber };
+  // Plan pas encore chargé : `numbers` absent (numérotation propre à la catégorie, sans marque).
+  return { zoneId: zone.zoneId, auto: zone.auto, numbers: plan ? numbers : undefined, noRest, kataNumber };
 }

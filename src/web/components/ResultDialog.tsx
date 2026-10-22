@@ -23,7 +23,7 @@ interface Props {
   bracket: CombatBracket;
   ruleset: Ruleset | null;
   match: ResolvedMatch | null;
-  number?: number;
+  number?: number | string;
   records: ResultRecord[];
   tieBreaks: Record<number, string[]>;
   entrants: Map<string, EntrantInfo>;

@@ -52,7 +52,7 @@ function roundTitle(phase: MatchPhase, round: number, rounds: number): string {
 interface Props {
   category: Category;
   entrants: Map<string, EntrantInfo>;
-  /** Numéros de passage (zone) ; sans eux, les combats sont numérotés dans la catégorie. */
+  /** Numéros de passage (zone) ; vide : catégorie sans numéro de passage (« c1 », « c2 »… propres à la catégorie). */
   numbers?: Map<string, number>;
   /** Combats sans repos (« pas de repos : prévoir une pause »). */
   noRest?: Set<string>;
@@ -114,12 +114,18 @@ function EntrantLine({ id, fallback, info, props, winner }: { id: string | null;
   );
 }
 
+/** Numéro affiché d'un combat : de passage, sinon « c3 » (propre à la catégorie) quand elle n'en a pas, sinon local. */
+export function combatLabel(matchId: string, numbers: Map<string, number> | undefined, local: Map<string, number>): string {
+  if (!numbers) return String(local.get(matchId) ?? '?');
+  return numbers.size > 0 ? String(numbers.get(matchId) ?? '?') : `c${local.get(matchId) ?? '?'}`;
+}
+
 function CombatView(props: Props & { bracket: CombatBracket }) {
   const { bracket, entrants, results = {} } = props;
   const { matches, podium } = resolveBracket(bracket, results, props.tieBreaks ?? {});
   const local = new Map<string, number>();
   [...matches].filter((m) => !m.bye).sort((a, b) => a.order - b.order).forEach((m, i) => local.set(m.id, i + 1));
-  const numbers = props.numbers && props.numbers.size > 0 ? props.numbers : local;
+  const numbers = new Map([...local.keys()].map((id) => [id, combatLabel(id, props.numbers, local)]));
   const describe = (src: SlotSource): string => {
     switch (src.kind) {
       case 'winner':
@@ -223,7 +229,7 @@ function CombatView(props: Props & { bracket: CombatBracket }) {
 }
 
 /** Poule imprimée en grille croisée : V = victoire de la ligne, D = défaite, n° du combat sinon. */
-function PoolGrid({ title, pool, matches, entrants, numbers }: { title: string; pool: string[]; matches: ResolvedMatch[]; entrants: Map<string, EntrantInfo>; numbers: Map<string, number> }) {
+function PoolGrid({ title, pool, matches, entrants, numbers }: { title: string; pool: string[]; matches: ResolvedMatch[]; entrants: Map<string, EntrantInfo>; numbers: Map<string, string> }) {
   const cell = { border: '1px solid #000', padding: 6, textAlign: 'center' as const, minWidth: 48 };
   const between = (x: string, y: string) => matches.find((m) => (m.entrantA === x && m.entrantB === y) || (m.entrantA === y && m.entrantB === x));
   const wins = (x: string) => matches.filter((m) => m.result && (m.result.winner === 'a' ? m.entrantA : m.entrantB) === x).length;

@@ -50,7 +50,11 @@ test('ordre de passage : zones par discipline, kata d’abord, numéros imprimé
   await page.getByTestId('settings-save').click();
   await expect(page.getByText('Réglages enregistrés')).toBeVisible();
   await expect(page.getByTestId('zones-impossible')).toContainText('Aucune zone n’accepte : Shido-boxing (1 catégorie)');
-  await page.getByRole('tab', { name: 'Combats' }).click();
+  // Sans zone possible : pas de numéro de passage, numérotation propre à la catégorie (« c1 »).
+  const box = cats.find((c) => c.label.includes('Shido-boxing'))!;
+  await page.goto(`/competitions/${id}/impression?categories=${box.id}`);
+  await expect(page.getByTestId('print-section')).toContainText('Combat c1');
+  await page.goto(`/competitions/${id}/combats`);
   await expect(page.getByTestId('zones-impossible')).toBeVisible();
   await expect(tatami.getByTestId('next-match').first()).toContainText('combat 2');
 
@@ -60,4 +64,32 @@ test('ordre de passage : zones par discipline, kata d’abord, numéros imprimé
   await page.getByRole('option', { name: 'Ring', exact: true }).click();
   await expect(card.getByTestId('schedule-zone')).toHaveValue('Ring');
   await expect(page.getByTestId('zone-card').filter({ hasText: 'Ring' }).getByTestId('next-match').first()).toContainText('combat 1');
+});
+
+test('ordre de passage (relecture) : vague par défaut = la première qui a encore des combats, catégories de la vague seulement', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe ordre vagues');
+  let i = 0;
+  const reg = async (ageBandCode: string, weightClassId: string) =>
+    (await (await request.post(`/api/competitions/${id}/registrations`, {
+      data: { clubId: null, lastName: `NOM${++i}`, firstName: 'Léa', sex: 'F', ageBandCode, discipline: 'karate', ruleset: 'jiyu', weightClassId, source: 'manual' },
+    })).json()).row as { fighterId: string };
+  for (let k = 0; k < 2; k++) await reg('minime', 'minime:F:-45');
+  const cadets = [await reg('cadet', 'cadet:F:-54'), await reg('cadet', 'cadet:F:-54')];
+  const [matin, aprem] = (await (await request.put(`/api/competitions/${id}/waves`, { data: [
+    { name: 'Matin', rules: { ageBandCodes: ['minime'], disciplines: [] } },
+    { name: 'Après-midi', rules: { ageBandCodes: ['cadet'], disciplines: [] } },
+  ] })).json()) as { id: string }[];
+  // La pesée de l'après-midi est close alors que le matin combat encore.
+  for (const c of cadets) await request.put(`/api/competitions/${id}/weigh-in/${c.fighterId}`, { data: { presence: 'present', waveId: aprem!.id } });
+  await request.post(`/api/competitions/${id}/weigh-in/close`, { data: { waveId: aprem!.id } });
+  await page.goto(`/competitions/${id}/combats`);
+  await expect(page.getByTestId('matches-wave').locator(`input[value="${matin!.id}"]`)).toBeChecked();
+  await expect(page.getByTestId('schedule-category')).toHaveText([/Minimes/]);
+  // Le matin terminé : l'après-midi devient la vague par défaut.
+  const cats = (await (await request.get(`/api/competitions/${id}/categories`)).json()) as { id: string; label: string }[];
+  const minimes = cats.find((c) => c.label.includes('Minimes'))!;
+  await request.put(`/api/competitions/${id}/categories/${minimes.id}/results/w1-0`, { data: { winner: 'a', method: 'points' } });
+  await page.goto(`/competitions/${id}/combats`);
+  await expect(page.getByTestId('matches-wave').locator(`input[value="${aprem!.id}"]`)).toBeChecked();
+  await expect(page.getByTestId('schedule-category')).toHaveText([/Cadets/]);
 });

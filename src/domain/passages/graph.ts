@@ -22,19 +22,26 @@ export function matchNodes(bracket: CombatBracket): MatchNode[] {
   const numbered = bracket.matches.filter((m) => !byes.has(m.id));
   const ids = new Set(numbered.map((m) => m.id));
   const main = bracket.matches.filter((m) => m.phase === 'main');
+  const mainRounds = Math.max(0, ...main.map((m) => m.round));
+  const byId = new Map(bracket.matches.map((m) => [m.id, m]));
 
   const fromSource = (src: SlotSource): string[] => {
     switch (src.kind) {
       case 'winner':
-      case 'loser':
-        return [src.matchId];
+      case 'loser': {
+        // Une exemption est transparente : son combattant vient de ses propres sources.
+        const m = byId.get(src.matchId)!;
+        return byes.has(m.id) ? [...fromSource(m.a), ...fromSource(m.b)] : [m.id];
+      }
       case 'poolRank':
         return bracket.matches.filter((m) => m.phase === 'pool' && m.pool === src.pool).map((m) => m.id);
       case 'beatenBy': {
-        // Battu par le finaliste de la moitié `half` : un des combats de ce tour dans cette moitié.
+        // Battu par le finaliste de la moitié `half` : un des combats de ce tour dans cette moitié ; on ne le connaît
+        // qu'une fois ce finaliste désigné (demi-finale de la moitié).
         const round = main.filter((m) => m.round === src.round);
         const half = round.length / 2;
-        return round.filter((m) => Math.floor(Number(m.id.split('-')[1]) / half) === src.half).map((m) => m.id);
+        const beaten = round.filter((m) => Math.floor(Number(m.id.split('-')[1]) / half) === src.half).map((m) => m.id);
+        return [...beaten, ...fromSource({ kind: 'winner', matchId: `w${mainRounds - 1}-${src.half}` })];
       }
       default:
         return [];

@@ -57,7 +57,8 @@ export function CompetitionSettingsPage() {
   useEffect(() => {
     if (savedZones) setZones(savedZones.map(({ id: zid, name, disciplines }) => ({ key: zid, id: zid, name, disciplines })));
   }, [savedZones]);
-  const zoneCategories = (zid?: string) => (zid ? categories.filter((c) => c.zoneId === zid) : []);
+  // Catégories de la zone, épinglées ou réparties automatiquement.
+  const zoneCategories = (zid?: string) => (zid ? categories.filter((c) => (passages?.categories[c.id]?.zoneId ?? c.zoneId) === zid) : []);
   const zoneLocked = (zid?: string) => zoneCategories(zid).some((c) => c.status === 'started' || c.status === 'finished');
   const removeZone = (key: string) => {
     setZones((zs) => zs.filter((z) => z.key !== key));
@@ -152,7 +153,7 @@ export function CompetitionSettingsPage() {
           <Modal opened={deleting !== null} onClose={() => setDeleting(null)} title={`Supprimer la zone « ${deletingZone?.name ?? ''} » ?`}>
             <Stack data-testid="zone-delete-confirm">
               <Text size="sm">
-                {deletingCount === 1 ? '1 catégorie passera « Sans zone »' : `${deletingCount} catégories passeront « Sans zone »`} à l’enregistrement des réglages.
+                {deletingCount === 1 ? '1 catégorie de cette zone sera répartie' : `${deletingCount} catégories de cette zone seront réparties`} automatiquement sur les autres zones à l’enregistrement des réglages.
               </Text>
               <Group justify="flex-end">
                 <Button variant="default" onClick={() => setDeleting(null)}>Annuler</Button>

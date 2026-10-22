@@ -271,7 +271,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Chaque catégorie a une zone, répartie automatiquement ou épinglée à la main ; cliquez une catégorie pour l’ouvrir.',
     details: [
       '« Automatique (Tatami 2) » : l’app a placé la catégorie sur cette zone en équilibrant les combats. Choisir une zone l’y épingle ; « Automatique » la rend à la répartition.',
-      'Une catégorie lancée garde sa zone.',
+      'Dès qu’une catégorie d’une vague est lancée, la répartition de la vague est fixée : chaque catégorie garde sa zone (elle apparaît alors épinglée ; choisissez « Automatique » pour la rendre à la répartition).',
       'L’ordre fixe le rang de la catégorie : catégories alternées en « tour par tour », enchaînées en « catégorie par catégorie » (Réglages › Ordre de passage). Les zones et leurs disciplines se règlent dans les Réglages.',
     ],
   },
@@ -370,11 +370,12 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Chaque zone numérote ses combats : kata d’abord, puis les combats tour par tour (par défaut) ou catégorie par catégorie.',
     details: [
       [
-        'Tour par tour : tous les premiers tours de la zone, puis tous les tours suivants… Les finales passent à la fin de la vague. Les combattants ont ainsi le plus de repos possible.',
+        'Tour par tour : les tours sont alignés à partir de la fin (toutes les finales ensemble, toutes les demies ensemble…) ; on passe un tour de toutes les catégories de la zone avant le suivant, et les finales à la fin de la vague. Les combattants ont ainsi le plus de repos possible.',
         'Catégorie par catégorie : une catégorie va jusqu’à sa finale, puis la suivante (dans l’ordre saisi dans l’onglet Combats, sinon celui de la grille).',
         'Chaque catégorie de kata forme un seul numéro, avant les combats de sa vague.',
         'Les numéros se suivent d’une vague à l’autre sur une même zone. Une exemption n’a pas de numéro.',
         'Quand un combattant enchaîne deux combats sans repos, le combat porte « pas de repos : prévoir une pause ».',
+        'Une catégorie sans numéro de passage (sans zone possible ou sans vague) numérote ses combats « c1 », « c2 »… pour ne pas les confondre avec ceux d’une zone.',
       ],
       'Si aucune zone n’accueille une discipline, ses catégories restent sans zone ni numéro et un message le signale.',
     ],

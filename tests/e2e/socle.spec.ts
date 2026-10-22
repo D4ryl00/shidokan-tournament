@@ -141,7 +141,7 @@ test('zones (relecture) : suppression confirmée, protégée si catégorie lanc�
   await expect(page.getByRole('button', { name: 'Monter la zone « Tatami 2 »' })).toBeEnabled();
   // Suppression confirmée, avec le nombre de catégories touchées
   await page.getByRole('button', { name: 'Supprimer la zone « Tatami 1 »' }).click();
-  await expect(page.getByTestId('zone-delete-confirm')).toContainText('1 catégorie passera « Sans zone »');
+  await expect(page.getByTestId('zone-delete-confirm')).toContainText('1 catégorie de cette zone sera répartie automatiquement sur les autres zones');
   await page.getByTestId('zone-delete-go').click();
   await expect(page.getByTestId('zone-name')).toHaveCount(1);
   // Nom proposé : le premier libre

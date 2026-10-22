@@ -8,7 +8,7 @@ import { useCategories, useCategoryResults, useDeleteResult, usePassages, useSch
 import { ZonesImpossibleAlert } from '../components/ZonesImpossibleAlert.js';
 import { categoryPassages } from '../passages.js';
 import { useSelectedWave } from '../useSelectedWave.js';
-import { BracketView } from '../components/BracketView.js';
+import { BracketView, combatLabel } from '../components/BracketView.js';
 import { KataScoring } from '../components/KataScoring.js';
 import { HelpButton, HelpText, SectionHeader } from '../components/Help.js';
 import { ResultDialog } from '../components/ResultDialog.js';
@@ -17,11 +17,16 @@ import { STATUS_LABELS, useEntrantInfo } from './BracketsPage.js';
 
 export function MatchesPage() {
   const { id = '' } = useParams();
-  const { data: categories = [] } = useCategories(id);
-  // Avec des vagues : la file de la vague en cours (par défaut, la dernière dont la pesée est clôturée).
-  const { waves, waveId, select, ready } = useSelectedWave(id, 'running');
-  const { data: schedule } = useSchedule(id, waveId, ready);
+  const { data: categories = [], isSuccess: categoriesLoaded } = useCategories(id);
   const { data: plan } = usePassages(id);
+  // Avec des vagues : par défaut, la première qui a encore des combats (inconnue tant que les catégories ne sont pas chargées).
+  const { waves, waveId, select, ready } = useSelectedWave(id, (ws) => {
+    if (!categoriesLoaded) return undefined;
+    const ordered = [...ws].sort((a, b) => a.order - b.order);
+    const busy = ordered.find((w) => categories.some((c) => c.waveId === w.id && c.bracket && activeEntrantCount(c) >= 2 && c.status !== 'finished'));
+    return busy?.id ?? null;
+  });
+  const { data: schedule } = useSchedule(id, waveId, ready);
   const { data: zones = [] } = useZones(id);
   const zoneName = (zid: string | null) => zones.find((z) => z.id === zid)?.name ?? null;
   const update = useUpdateCategory(id);
@@ -30,7 +35,8 @@ export function MatchesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialogMatchId, setDialogMatchId] = useState<string | null>(null);
   const [tieOpen, setTieOpen] = useState(false);
-  const playable = categories.filter((c) => c.bracket && activeEntrantCount(c) >= 2);
+  // Avec une vague : ses catégories seulement.
+  const playable = categories.filter((c) => c.bracket && activeEntrantCount(c) >= 2 && (!waveId || c.waveId === waveId));
   const selected = playable.find((c) => c.id === selectedId) ?? null;
   const { data: res } = useCategoryResults(id, selected?.id ?? null);
   // Zone : automatique (répartie par l'app) ou épinglée à la main.
@@ -44,9 +50,9 @@ export function MatchesPage() {
     if (!selected?.bracket || selected.bracket.kind !== 'combat' || !res) return null;
     const { results, ignored } = validResults(selected.bracket, res.records, res.tieBreaks.pools);
     const { matches } = resolveBracket(selected.bracket, results, res.tieBreaks.pools);
-    // Numéros de passage ; sans zone, numérotation propre à la catégorie.
+    // Numéros de passage ; sans zone, numérotation propre à la catégorie (« c1 »).
     const local = new Map([...matches].filter((m) => !m.bye).sort((a, b) => a.order - b.order).map((m, i) => [m.id, i + 1]));
-    const numbers = passages && passages.numbers.size > 0 ? passages.numbers : local;
+    const numbers = new Map([...local.keys()].map((mid) => [mid, combatLabel(mid, passages?.numbers, local)]));
     return { results, stale: new Set(ignored.map((r) => r.matchId)), matches, numbers };
   }, [selected, res, passages]);
   const dialogMatch: ResolvedMatch | null = (dialogMatchId && view?.matches.find((m) => m.id === dialogMatchId)) || null;

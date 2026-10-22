@@ -8,7 +8,7 @@ import { categories, clubs, fighters, kataScores, matchResults, registrations, t
 import { listCategories } from './categories.js';
 import { listZones } from './zones.js';
 import { listWaves } from './waves.js';
-import { passageNumbers, passagePlan } from './passages.js';
+import { fixWaveZones, passageNumbers, passagePlan } from './passages.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
 import { activeEntrantCount } from '../../domain/categories.js';
 
@@ -87,9 +87,10 @@ async function refreshStatus(db: AppDb, competitionId: string, categoryId: strin
   const row = categoryRow(db, competitionId, categoryId);
   const status =
     progress.status === 'finished' ? 'finished' : progress.status === 'started' || records.length > 0 ? 'started' : row.status === 'provisional' ? 'provisional' : 'ready';
-  // Une catégorie lancée garde sa zone : sa zone automatique devient un épinglage.
-  const zoneId = (status === 'started' || status === 'finished') && !row.zoneId ? ((await passagePlan(db, competitionId)).categories[categoryId]?.zoneId ?? null) : row.zoneId;
-  db.update(categories).set({ status, zoneId }).where(eq(categories.id, categoryId)).run();
+  // Statut d'abord : la catégorie est verrouillée avant toute synchronisation (son tableau ne bouge plus).
+  db.update(categories).set({ status }).where(eq(categories.id, categoryId)).run();
+  // Une catégorie de la vague est lancée : chaque catégorie de la vague garde sa zone.
+  if ((status === 'started' || status === 'finished') && !row.zoneId) await fixWaveZones(db, competitionId, categoryId);
 }
 
 /** Efface des départages devenus caducs (une poule ou un tour de kata dont un résultat a changé). */
@@ -217,9 +218,11 @@ export interface QueueItem {
  */
 export async function schedule(db: AppDb, competitionId: string, waveId?: string) {
   if (waveId && !(await listWaves(db, competitionId)).some((w) => w.id === waveId)) throw new NotFoundError('Vague introuvable');
-  const plan = await passagePlan(db, competitionId);
+  const all = await listCategories(db, competitionId);
+  const plan = await passagePlan(db, competitionId, all);
   const numbers = passageNumbers(plan);
-  const cats = (await listCategories(db, competitionId)).filter(playableCategory);
+  // Avec une vague : ses catégories seulement.
+  const cats = all.filter(playableCategory).filter((c) => !waveId || c.waveId === waveId);
   const rows = new Map(db.select().from(categories).where(eq(categories.competitionId, competitionId)).all().map((r) => [r.id, r]));
   const who = labels(db, competitionId);
   const name = (rid: string | null) => (rid ? (who.get(rid)?.name ?? '?') : null);
@@ -297,7 +300,7 @@ function book(sheets: { name: string; rows: (string | number)[][] }[], type: 'xl
 
 export async function exportResults(db: AppDb, competitionId: string, type: 'xlsx' | 'ods'): Promise<Buffer> {
   const cats = await listCategories(db, competitionId);
-  const numbers = passageNumbers(await passagePlan(db, competitionId));
+  const numbers = passageNumbers(await passagePlan(db, competitionId, cats));
   const who = labels(db, competitionId);
   const rows: (string | number)[][] = [['Catégorie', 'Combat', 'Combattant A', 'Club A', 'Combattant B', 'Club B', 'Vainqueur', 'Méthode', 'Score']];
   for (const c of cats) {
@@ -311,7 +314,7 @@ export async function exportResults(db: AppDb, competitionId: string, type: 'xls
       const a = who.get(m.entrantA) ?? unknown;
       const b = who.get(m.entrantB) ?? unknown;
       const winner = m.result ? (m.result.winner === 'a' ? a.name : b.name) : '';
-      rows.push([c.label, numbers.get(`${c.id}:${m.id}`) ?? i + 1, a.name, a.club, b.name, b.club, winner, m.result ? METHOD_LABELS[m.result.method] : '', m.result?.score ?? '']);
+      rows.push([c.label, numbers.get(`${c.id}:${m.id}`) ?? `c${i + 1}`, a.name, a.club, b.name, b.club, winner, m.result ? METHOD_LABELS[m.result.method] : '', m.result?.score ?? '']);
     });
   }
   const kataRows: (string | number)[][] = [['Catégorie', 'Tour', 'Rang', 'Kataka', 'Club', 'Notes', 'Note retenue']];
