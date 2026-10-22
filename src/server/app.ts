@@ -24,6 +24,7 @@ import { StaleProposalError } from './repositories/replacement.js';
 import { categoryRoutes } from './routes/categories.js';
 import { replacementRoutes } from './routes/replacement.js';
 import { resultRoutes } from './routes/results.js';
+import { zoneRoutes } from './routes/zones.js';
 import { backupRoutes } from './routes/backups.js';
 import { RestoreError, startAutoBackup } from './repositories/backups.js';
 import { ffkImportRoutes } from './routes/ffk-import.js';
@@ -114,6 +115,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(categoryRoutes, { db });
   await app.register(replacementRoutes, { db });
   await app.register(resultRoutes, { db });
+  await app.register(zoneRoutes, { db });
   await app.register(backupRoutes, { db, dbPath: opts.dbPath });
 
   // Après toute écriture réussie qui touche aux inscriptions ou aux réglages : catégories et tableaux à jour.

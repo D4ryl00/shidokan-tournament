@@ -89,7 +89,7 @@ export async function seedDev(app: FastifyInstance, opts: { seed?: number } = {}
   const pick = <T>(list: T[]): T => list[Math.floor(random() * list.length)]!;
   const stamp = new Date().toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
   const name = `Démo — Coupe Shidokan (${stamp})`;
-  const { id } = await call<{ id: string }>(app, 'POST', '/api/competitions', { name, date: '2026-11-22', location: 'Gymnase (démo)', tatamiCount: 3 });
+  const { id } = await call<{ id: string }>(app, 'POST', '/api/competitions', { name, date: '2026-11-22', location: 'Gymnase (démo)', zoneCount: 3 });
   const base = `/api/competitions/${id}`;
 
   // Comme pour la Coupe 2026 : mini-poussins et espoirs non proposés sur la fiche club

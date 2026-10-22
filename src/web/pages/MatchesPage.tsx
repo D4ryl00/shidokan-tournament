@@ -4,7 +4,7 @@ import { useParams } from 'react-router';
 import { resolveBracket, type ResolvedMatch } from '../../domain/brackets/index.js';
 import { activeEntrantCount } from '../../domain/categories.js';
 import { validResults } from '../../domain/results.js';
-import { useCategories, useCategoryResults, useCompetition, useDeleteResult, useSchedule, useUpdateCategory } from '../api.js';
+import { useCategories, useCategoryResults, useCompetition, useDeleteResult, useSchedule, useUpdateCategory, useZones } from '../api.js';
 import { BracketView } from '../components/BracketView.js';
 import { KataScoring } from '../components/KataScoring.js';
 import { HelpButton, HelpText, SectionHeader } from '../components/Help.js';
@@ -17,6 +17,7 @@ export function MatchesPage() {
   const { data: competition } = useCompetition(id);
   const { data: categories = [] } = useCategories(id);
   const { data: schedule } = useSchedule(id);
+  const { data: zones = [] } = useZones(id);
   const update = useUpdateCategory(id);
   const clearIgnored = useDeleteResult(id);
   const entrants = useEntrantInfo(id);
@@ -26,7 +27,7 @@ export function MatchesPage() {
   const playable = categories.filter((c) => c.bracket && activeEntrantCount(c) >= 2);
   const selected = playable.find((c) => c.id === selectedId) ?? null;
   const { data: res } = useCategoryResults(id, selected?.id ?? null);
-  const tatamiOptions = [{ value: '', label: '—' }, ...Array.from({ length: competition?.tatamiCount ?? 2 }, (_, i) => ({ value: String(i + 1), label: `Tatami ${i + 1}` }))];
+  const zoneOptions = [{ value: '', label: '—' }, ...zones.map((z) => ({ value: z.id, label: z.name }))];
 
   const view = useMemo(() => {
     if (!selected?.bracket || selected.bracket.kind !== 'combat' || !res) return null;
@@ -52,8 +53,8 @@ export function MatchesPage() {
                 </UnstyledButton>
                 <Group gap={4} mt={4}>
                   <Badge size="xs" variant="light">{STATUS_LABELS[c.status]}</Badge>
-                  <Select size="xs" w={110} data={tatamiOptions} value={c.tatami ? String(c.tatami) : ''} allowDeselect={false} data-testid="schedule-tatami"
-                    onChange={(v) => update.mutate({ cid: c.id, tatami: v ? Number(v) : null })} />
+                  <Select size="xs" w={130} data={zoneOptions} value={c.zoneId ?? ''} allowDeselect={false} data-testid="schedule-zone" aria-label="Zone de combat"
+                    onChange={(v) => update.mutate({ cid: c.id, zoneId: v || null })} />
                   <NumberInput size="xs" w={70} min={0} max={99} value={c.order} aria-label="Ordre" data-testid="schedule-order"
                     onChange={(v) => typeof v === 'number' && update.mutate({ cid: c.id, order: v })} />
                 </Group>
@@ -66,12 +67,12 @@ export function MatchesPage() {
         <Stack>
           <HelpText topic="combats.zone" />
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
-            {(schedule?.tatamis ?? []).map((t) => {
+            {(schedule?.zones ?? []).map((t) => {
               const next = t.categories.flatMap((c) => c.nextMatches.map((m) => ({ ...m, category: c }))).slice(0, 4);
               const kataNext = t.categories.find((c) => c.kata && c.status !== 'finished');
               return (
-                <Card key={t.tatami} withBorder data-testid="tatami-card">
-                  <Group gap={4}><Title order={5}>Tatami {t.tatami}</Title><HelpButton topic="combats.zone" /></Group>
+                <Card key={t.zone.id} withBorder data-testid="zone-card">
+                  <Group gap={4}><Title order={5}>{t.zone.name}</Title><HelpButton topic="combats.zone" /></Group>
                   {next.length === 0 && !kataNext && <Text size="sm" c="dimmed">Aucun combat en attente.</Text>}
                   {kataNext && next.length === 0 && (
                     <Button size="xs" variant="light" mt={4} onClick={() => setSelectedId(kataNext.id)}>Kata : {kataNext.label}</Button>
@@ -90,7 +91,7 @@ export function MatchesPage() {
             })}
             {(schedule?.unassigned.length ?? 0) > 0 && (
               <Card withBorder>
-                <Title order={6}>Sans tatami</Title>
+                <Title order={6}>Sans zone</Title>
                 <Text size="sm" c="dimmed">{schedule!.unassigned.length} catégorie(s) à affecter.</Text>
               </Card>
             )}

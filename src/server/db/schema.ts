@@ -6,7 +6,6 @@ export const competitions = sqliteTable('competitions', {
   name: text('name').notNull(),
   date: text('date').notNull(),
   location: text('location'),
-  tatamiCount: integer('tatami_count').notNull().default(2),
   settingsJson: text('settings_json').notNull(),
   weighInClosed: integer('weigh_in_closed', { mode: 'boolean' }).notNull().default(false),
   createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
@@ -53,6 +52,16 @@ export const ageLinks = sqliteTable('age_links', {
   fromCode: text('from_code').notNull(),
   toCode: text('to_code').notNull(),
   kind: text('kind', { enum: ['C', 'D'] }).notNull(),
+});
+
+/** Zones de combat d'une compétition (« Tatami 1 », « Ring »…), dans l'ordre d'affichage. */
+export const zones = sqliteTable('zones', {
+  id: text('id').primaryKey(),
+  competitionId: text('competition_id')
+    .notNull()
+    .references(() => competitions.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  sortOrder: integer('sort_order').notNull(),
 });
 
 export const clubs = sqliteTable('clubs', {
@@ -151,7 +160,7 @@ export const categories = sqliteTable('categories', {
   /** Clés naturelles absorbées par une fusion (leurs inscriptions continuent d'arriver ici). */
   aliasKeys: text('alias_keys').notNull().default('[]'),
   stale: integer('stale', { mode: 'boolean' }).notNull().default(false),
-  tatami: integer('tatami'),
+  zoneId: text('zone_id').references(() => zones.id, { onDelete: 'set null' }),
   sortOrder: integer('sort_order').notNull().default(0),
 });
 

@@ -125,14 +125,15 @@ test('kata à 3 : notes, égalité, départage', async () => {
   expect((await note(k[0]!.id, 'round1', [11])).statusCode).toBe(400);
 });
 
-test('programme des tatamis', async () => {
+test('programme des zones', async () => {
   await fourInElimination();
   for (let i = 0; i < 2; i++) await reg({ weightClassId: 'cadet:F:-61' });
   const [a, b] = await cats();
-  await call('PATCH', `/categories/${a!.id}`, { tatami: 1, order: 2 });
-  await call('PATCH', `/categories/${b!.id}`, { tatami: 1, order: 1 });
-  const s = (await call('GET', '/schedule')).json() as { tatamis: { tatami: number; categories: { id: string; nextMatches: unknown[] }[] }[] };
-  const t1 = s.tatamis.find((t) => t.tatami === 1)!;
+  const zone = ((await call('GET', '/zones')).json() as { id: string }[])[0]!;
+  await call('PATCH', `/categories/${a!.id}`, { zoneId: zone.id, order: 2 });
+  await call('PATCH', `/categories/${b!.id}`, { zoneId: zone.id, order: 1 });
+  const s = (await call('GET', '/schedule')).json() as { zones: { zone: { id: string }; categories: { id: string; nextMatches: unknown[] }[] }[] };
+  const t1 = s.zones.find((t) => t.zone.id === zone.id)!;
   expect(t1.categories.map((c) => c.id)).toEqual([b!.id, a!.id]);
   expect(t1.categories[1]!.nextMatches).toHaveLength(2);
 });

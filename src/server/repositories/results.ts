@@ -6,6 +6,7 @@ import { affectedBy, categoryProgress, checkResult, medalTable, validResults, ty
 import type { AppDb } from '../db/client.js';
 import { categories, clubs, fighters, kataScores, matchResults, registrations, tieBreaks } from '../db/schema.js';
 import { listCategories } from './categories.js';
+import { listZones } from './zones.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
 import { activeEntrantCount } from '../../domain/categories.js';
 
@@ -212,15 +213,18 @@ export async function schedule(db: AppDb, competitionId: string) {
     }
     return { id: c.id, label: c.label, status: c.status, order: rows.get(c.id)?.sortOrder ?? 0, kata: c.bracket?.kind === 'kata', progress: { played: progress.played, total: progress.total }, nextMatches };
   };
-  const tatamis = new Map<number, Awaited<ReturnType<typeof describe>>[]>();
+  const byZone = new Map<string, Awaited<ReturnType<typeof describe>>[]>();
   const unassigned: Awaited<ReturnType<typeof describe>>[] = [];
   for (const c of cats) {
     const d = await describe(c);
-    if (c.tatami) tatamis.set(c.tatami, [...(tatamis.get(c.tatami) ?? []), d]);
+    if (c.zoneId) byZone.set(c.zoneId, [...(byZone.get(c.zoneId) ?? []), d]);
     else unassigned.push(d);
   }
+  // Dans l'ordre des zones de la compétition ; une zone sans catégorie n'apparaît pas.
   return {
-    tatamis: [...tatamis].sort((a, b) => a[0] - b[0]).map(([tatami, list]) => ({ tatami, categories: list.sort((a, b) => a.order - b.order) })),
+    zones: (await listZones(db, competitionId))
+      .filter((z) => byZone.has(z.id))
+      .map((zone) => ({ zone, categories: byZone.get(zone.id)!.sort((a, b) => a.order - b.order) })),
     unassigned,
   };
 }

@@ -9,13 +9,13 @@ export function CompetitionsPage() {
   const { data = [] } = useCompetitions();
   const create = useCreateCompetition();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', date: '2026-11-22', location: '', tatamiCount: 2 });
+  const [form, setForm] = useState({ name: '', date: '2026-11-22', location: '', zoneCount: 2 });
   const { data: templates = [] } = useGridTemplates();
   const [templateId, setTemplateId] = useState<string | null>(null);
 
   const submit = () =>
     create.mutate(
-      { name: form.name, date: form.date, location: form.location || null, tatamiCount: form.tatamiCount, ...(templateId ? { templateId } : {}) },
+      { name: form.name, date: form.date, location: form.location || null, zoneCount: form.zoneCount, ...(templateId ? { templateId } : {}) },
       { onSuccess: () => { setOpen(false); setForm({ ...form, name: '', location: '' }); } },
     );
 
@@ -66,8 +66,8 @@ export function CompetitionsPage() {
             onChange={(e) => setForm({ ...form, date: e.currentTarget.value })} />
           <TextInput label="Lieu" value={form.location}
             onChange={(e) => setForm({ ...form, location: e.currentTarget.value })} />
-          <NumberInput label="Nombre de tatamis" min={1} max={20} value={form.tatamiCount}
-            onChange={(v) => setForm({ ...form, tatamiCount: Number(v) || 1 })} />
+          <NumberInput label="Nombre de zones de combat" description="Créées sous les noms « Tatami 1 », « Tatami 2 »… ; renommables dans les Réglages." min={1} max={20} value={form.zoneCount}
+            onChange={(v) => setForm({ ...form, zoneCount: Number(v) || 1 })} />
           {templates.length > 0 && (
             <Select label="Grille âge / poids" placeholder="Grille FFK par défaut" clearable data={templates.map((t) => ({ value: t.id, label: t.name }))}
               value={templateId} onChange={setTemplateId} />

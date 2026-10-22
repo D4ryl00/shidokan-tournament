@@ -83,8 +83,9 @@ export interface Category {
   thirdPlace: boolean | null;
   seed: number;
   bracket: Bracket | null;
-  tatami: number | null;
-  /** Rang de passage sur le tatami. */
+  /** Zone de combat (null : pas encore affectée). */
+  zoneId: string | null;
+  /** Rang de passage sur la zone. */
   order: number;
   registrationIds: string[];
   /** Inscrits absents (exclus du tableau). */

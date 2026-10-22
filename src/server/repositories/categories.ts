@@ -18,13 +18,13 @@ import {
 } from '../../domain/categories.js';
 import type { CompetitionSettings } from '../../domain/settings.js';
 import type { AppDb } from '../db/client.js';
-import { categories, fighters, registrations, tieBreaks } from '../db/schema.js';
+import { categories, fighters, registrations, tieBreaks, zones } from '../db/schema.js';
 import { getCompetition, getGrid } from './competitions.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
 
 export class CategoryLockedError extends Error {
-  constructor() {
-    super("Catégorie lancée : déverrouillez-la d'abord");
+  constructor(message = "Catégorie lancée : déverrouillez-la d'abord") {
+    super(message);
   }
 }
 
@@ -145,7 +145,7 @@ export async function syncCategories(db: AppDb, competitionId: string): Promise<
           bracketJson: null,
           aliasKeys: '[]',
           stale: false,
-          tatami: null,
+          zoneId: null,
           sortOrder: 0,
         };
         t.insert(categories).values(row).run();
@@ -209,7 +209,7 @@ function toCategory(row: Row, ctx: Context): Category {
     thirdPlace: row.thirdPlace,
     seed: row.seed,
     bracket: withCurrentLabels(row.bracketJson ? (JSON.parse(row.bracketJson) as Bracket) : null, ctx),
-    tatami: row.tatami,
+    zoneId: row.zoneId,
     order: row.sortOrder,
     registrationIds: [...ids].sort(),
     absentIds: ids.filter((id) => !(ctx.active.get(row.id) ?? []).includes(id)).sort(),
@@ -248,7 +248,7 @@ export async function updateCategory(
   db: AppDb,
   competitionId: string,
   categoryId: string,
-  patch: { format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null; status?: CategoryStatus; tatami?: number | null; order?: number; unlock?: boolean },
+  patch: { format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null; status?: CategoryStatus; zoneId?: string | null; order?: number; unlock?: boolean },
 ): Promise<Category> {
   const row = getRow(db, competitionId, categoryId);
   const locked = LOCKED.includes(row.status);
@@ -269,7 +269,12 @@ export async function updateCategory(
   if (patch.repechage !== undefined) set.repechage = patch.repechage;
   if (patch.thirdPlace !== undefined) set.thirdPlace = patch.thirdPlace;
   if (patch.status !== undefined) set.status = patch.status;
-  if (patch.tatami !== undefined) set.tatami = patch.tatami;
+  if (patch.zoneId !== undefined) {
+    if (patch.zoneId !== null && !db.select().from(zones).where(and(eq(zones.id, patch.zoneId), eq(zones.competitionId, competitionId))).get()) {
+      throw new RegistrationValidationError(['Zone de combat inconnue pour cette compétition.']);
+    }
+    set.zoneId = patch.zoneId;
+  }
   if (patch.order !== undefined) set.sortOrder = patch.order;
   if (Object.keys(set).length) db.update(categories).set(set).where(eq(categories.id, categoryId)).run();
   return categoryById(db, competitionId, categoryId);

@@ -2,11 +2,12 @@ import { and, asc, desc, eq, notInArray } from 'drizzle-orm';
 import { ZodError } from 'zod';
 import type { Competition, CompetitionInput } from '../../domain/competition.js';
 import { ffkDefaultGrid } from '../../domain/grid-ffk.js';
+import { defaultZoneNames } from '../../domain/zones.js';
 import { validateGrid } from '../../domain/grid.js';
 import { defaultSettings, mergeSettings, readStoredSettings } from '../../domain/settings.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
-import { ageBands, ageLinks, competitions, registrations, weightClasses } from '../db/schema.js';
+import { ageBands, ageLinks, competitions, registrations, weightClasses, zones } from '../db/schema.js';
 
 export type { Competition, CompetitionInput };
 
@@ -33,7 +34,6 @@ function toCompetition(row: Row): Competition {
     name: row.name,
     date: row.date,
     location: row.location,
-    tatamiCount: row.tatamiCount,
     settings: readStoredSettings(stored),
     createdAt: row.createdAt,
   };
@@ -53,11 +53,13 @@ export async function createCompetition(db: AppDb, input: CompetitionInput): Pro
         name: input.name,
         date: input.date,
         location: input.location ?? null,
-        tatamiCount: input.tatamiCount ?? 2,
         settingsJson: JSON.stringify(defaultSettings()),
       })
       .run();
     writeGrid(tx as unknown as AppDb, id, ffkDefaultGrid());
+    defaultZoneNames(input.zoneCount ?? 2).forEach((name, order) =>
+      tx.insert(zones).values({ id: crypto.randomUUID(), competitionId: id, name, sortOrder: order }).run(),
+    );
   });
   return getCompetitionSync(db, id)!;
 }
@@ -102,7 +104,6 @@ export async function updateCompetition(
       name: patch.name ?? current.name,
       date: patch.date ?? current.date,
       location: patch.location === undefined ? current.location : patch.location,
-      tatamiCount: patch.tatamiCount ?? current.tatamiCount,
       settingsJson: JSON.stringify(settings),
     })
     .where(eq(competitions.id, id))

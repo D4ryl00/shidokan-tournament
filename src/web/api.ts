@@ -8,6 +8,7 @@ import type { ColumnMapping, FfkChoices, FfkImportPlan } from '../domain/ffk-imp
 import type { Club, RegistrationInput, RegistrationRow } from '../domain/registration.js';
 import type { Case, Presence, Proposal, ProposalType } from '../domain/replacement/index.js';
 import type { CategoryGrid, DisciplineId } from '../domain/types.js';
+import type { Zone, ZoneInput } from '../domain/zones.js';
 
 export class ApiError extends Error {
   constructor(
@@ -227,7 +228,7 @@ function useCategoryMutation<T>(id: string, fn: (arg: T) => Promise<Category>) {
 }
 
 export const useUpdateCategory = (id: string) =>
-  useCategoryMutation(id, ({ cid, ...patch }: { cid: string; format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null; status?: CategoryStatus; unlock?: boolean; tatami?: number | null; order?: number }) =>
+  useCategoryMutation(id, ({ cid, ...patch }: { cid: string; format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null; status?: CategoryStatus; unlock?: boolean; zoneId?: string | null; order?: number }) =>
     api<Category>('PATCH', `/api/competitions/${id}/categories/${cid}`, patch),
   );
 export const useRedraw = (id: string) => useCategoryMutation(id, (cid: string) => api<Category>('POST', `/api/competitions/${id}/categories/${cid}/redraw`));
@@ -340,7 +341,23 @@ export interface CategoryResultsData {
 }
 
 export function useSchedule(id: string) {
-  return useQuery({ queryKey: ['schedule', id], queryFn: () => api<{ tatamis: { tatami: number; categories: ScheduleCategory[] }[]; unassigned: ScheduleCategory[] }>('GET', `/api/competitions/${id}/schedule`) });
+  return useQuery({ queryKey: ['schedule', id], queryFn: () => api<{ zones: { zone: Zone; categories: ScheduleCategory[] }[]; unassigned: ScheduleCategory[] }>('GET', `/api/competitions/${id}/schedule`) });
+}
+
+export function useZones(id: string) {
+  return useQuery({ queryKey: ['zones', id], queryFn: () => api<Zone[]>('GET', `/api/competitions/${id}/zones`) });
+}
+
+export function useSaveZones(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (zones: ZoneInput[]) => api<Zone[]>('PUT', `/api/competitions/${id}/zones`, zones),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['zones', id] });
+      void qc.invalidateQueries({ queryKey: ['schedule', id] });
+      void qc.invalidateQueries({ queryKey: ['categories', id] });
+    },
+  });
 }
 export function useCategoryResults(id: string, cid: string | null) {
   return useQuery({

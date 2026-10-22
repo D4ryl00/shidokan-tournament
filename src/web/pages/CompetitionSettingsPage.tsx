@@ -34,12 +34,12 @@ export function CompetitionSettingsPage() {
   const { data: competition } = useCompetition(id);
   const { data: grid } = useGrid(id);
   const update = useUpdateCompetition(id);
-  const [info, setInfo] = useState({ name: '', date: '', location: '', tatamiCount: 2 });
+  const [info, setInfo] = useState({ name: '', date: '', location: '' });
   const [s, setS] = useState<CompetitionSettings | null>(null);
 
   useEffect(() => {
     if (!competition) return;
-    setInfo({ name: competition.name, date: competition.date, location: competition.location ?? '', tatamiCount: competition.tatamiCount });
+    setInfo({ name: competition.name, date: competition.date, location: competition.location ?? '' });
     setS(competition.settings);
   }, [competition]);
 
@@ -49,7 +49,7 @@ export function CompetitionSettingsPage() {
 
   const save = () =>
     update.mutate(
-      { name: info.name, date: info.date, location: info.location || null, tatamiCount: info.tatamiCount, settings: s },
+      { name: info.name, date: info.date, location: info.location || null, settings: s },
       { onSuccess: () => notifications.show({ color: 'green', message: 'Réglages enregistrés' }) },
     );
 
@@ -61,8 +61,6 @@ export function CompetitionSettingsPage() {
           <TextInput label="Nom" value={info.name} onChange={(e) => setInfo({ ...info, name: e.currentTarget.value })} />
           <TextInput label="Date" type="date" value={info.date} onChange={(e) => setInfo({ ...info, date: e.currentTarget.value })} />
           <TextInput label="Lieu" value={info.location} onChange={(e) => setInfo({ ...info, location: e.currentTarget.value })} />
-          <NumberInput label="Nombre de tatamis" clampBehavior="none" value={info.tatamiCount}
-            onChange={(v) => setInfo({ ...info, tatamiCount: Number(v) })} />
         </SimpleGrid>
       </Fieldset>
 

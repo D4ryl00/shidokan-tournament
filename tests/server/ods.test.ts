@@ -10,7 +10,7 @@ import { writeOds } from '../../src/server/spreadsheet/ods.js';
 import { fillClubForm } from '../helpers/club-form-fill.js';
 
 const competition: Competition = {
-  id: 'c1', name: "Coupe Shidokan – Côte d'Azur", date: '2026-11-22', location: 'Nice', tatamiCount: 2,
+  id: 'c1', name: "Coupe Shidokan – Côte d'Azur", date: '2026-11-22', location: 'Nice',
   settings: defaultSettings(), createdAt: '2026-10-21T00:00:00Z',
 };
 const grid = ffkDefaultGrid();

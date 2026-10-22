@@ -17,7 +17,6 @@ const NAME = "Coupe Shidokan – Côte d'Azur";
 test('une compétition est créée avec la grille FFK et relue à l’identique', async () => {
   const db = openDb(tmpDbPath());
   const c = await createCompetition(db, { name: NAME, date: '2026-11-22' });
-  expect(c.tatamiCount).toBe(2);
   expect((await getCompetition(db, c.id))?.name).toBe(NAME);
   expect(await getGrid(db, c.id)).toEqual(ffkDefaultGrid());
   expect((await listCompetitions(db)).map((x) => x.id)).toEqual([c.id]);
@@ -63,7 +62,7 @@ test('les réglages partiels gardent les autres valeurs', async () => {
 test('les données survivent à la fermeture et réouverture de la base', async () => {
   const file = tmpDbPath();
   const db = openDb(file);
-  const c = await createCompetition(db, { name: NAME, date: '2026-11-22', location: 'Nice', tatamiCount: 3 });
+  const c = await createCompetition(db, { name: NAME, date: '2026-11-22', location: 'Nice', zoneCount: 3 });
   closeDb(db);
   const reopened = openDb(file);
   expect(await getCompetition(reopened, c.id)).toEqual(c);

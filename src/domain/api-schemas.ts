@@ -12,11 +12,11 @@ export const competitionCreateSchema = z
         return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === day;
       }, 'La date n’existe pas'),
     location: z.string().trim().max(120).nullable().optional(),
-    tatamiCount: z.number().int().min(1).max(20).optional(),
+    zoneCount: z.number().int().min(1).max(20).optional(),
   })
   .strict();
 
-export const competitionPatchSchema = competitionCreateSchema.partial().extend({ settings: z.unknown().optional() }).strict();
+export const competitionPatchSchema = competitionCreateSchema.omit({ zoneCount: true }).partial().extend({ settings: z.unknown().optional() }).strict();
 
 const sex = z.enum(['M', 'F']);
 export const categoryGridSchema = z
@@ -50,7 +50,7 @@ const FIELD_LABELS: Record<string, string> = {
   name: 'nom',
   date: 'date',
   location: 'lieu',
-  tatamiCount: 'nombre de tatamis',
+  zoneCount: 'nombre de zones de combat',
   children: 'enfants',
   adults: 'adultes',
   weightGapMaxKg: 'écart de poids max',

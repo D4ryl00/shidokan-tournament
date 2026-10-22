@@ -5,7 +5,6 @@ export interface Competition {
   name: string;
   date: string;
   location: string | null;
-  tatamiCount: number;
   settings: CompetitionSettings;
   createdAt: string;
 }
@@ -14,5 +13,6 @@ export interface CompetitionInput {
   name: string;
   date: string;
   location?: string | null;
-  tatamiCount?: number;
+  /** Nombre de zones de combat créées (« Tatami 1 » … « Tatami N ») ; 2 par défaut. */
+  zoneCount?: number;
 }
