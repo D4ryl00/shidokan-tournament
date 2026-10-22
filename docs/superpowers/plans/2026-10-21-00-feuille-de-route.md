@@ -3,7 +3,7 @@
 **Spec :** `docs/superpowers/specs/2026-10-21-tableaux-shidokan-design.md`
 **Échéance :** compétition du **22 novembre 2026**.
 
-Le projet est découpé en **6 étapes**. Chacune produit une app qui fonctionne et se teste seule, et chacune a son propre plan détaillé dans `docs/superpowers/plans/`. Le plan d'une étape est détaillé **au moment de la commencer**, à partir du code réellement écrit aux étapes précédentes : les interfaces réelles remplacent les suppositions.
+Le projet est découpé en étapes (1 à 7 : première version ; 8 à 14 : conception `docs/superpowers/specs/2026-10-22-ordre-de-passage-et-aides-design.md`). Chacune produit une app qui fonctionne et se teste seule, et chacune a son propre plan détaillé dans `docs/superpowers/plans/`. Le plan d'une étape est détaillé **au moment de la commencer**, à partir du code réellement écrit aux étapes précédentes : les interfaces réelles remplacent les suppositions.
 
 | # | Étape | Livrable testable | Dépend de | Cible |
 |---|---|---|---|---|
@@ -14,6 +14,13 @@ Le projet est découpé en **6 étapes**. Chacune produit une app qui fonctionne
 | 5 ✅ | **Pesée et recasement** | Écran de pesée, moteur de propositions (A à H, R), tableau de bord avec badges, aperçu, validation unitaire et globale, recasement anticipé, régénération | 3, 4 | 14 nov. |
 | 6 ✅ | **Jour J** | Tatamis, saisie des résultats, avancement automatique, classements de poule, notation kata, feuilles de résultats, podiums et classement des clubs, exports, sauvegarde automatique et restauration | 4, 5 | 19 nov. |
 | 7 ✅ | **Points reportés** | Points mineurs des relectures des étapes 1 à 6 (plan `2026-10-22-07-points-reportes.md`, bilan mis à jour) | 1 à 6 | 22 oct. |
+| 8 | **Aides à l'écran** | Phrase d'aide et bouton ⓘ sur chaque section ; passages d'âge en clair dans la grille (plan `2026-10-22-08-aides.md`) | 1 à 7 | 25 oct. |
+| 9 | **Zones nommées** | Liste de zones (« Tatami 1 », « Ring »…) remplaçant le nombre de tatamis ; nom imprimé sur les tableaux | 8 | 28 oct. |
+| 10 | **Vagues** | Vagues (règles par tranche / discipline, ajouts et retraits), pesée et présence par vague | 9 | 2 nov. |
+| 11 | **Recasement par vague** | Tableau de bord filtré par vague ; « change de vague » validé un par un | 10 | 5 nov. |
+| 12 | **Ordre de passage** | Répartition sur les zones avec contraintes, kata d'abord, tour par tour / catégorie par catégorie, repos signalé, numéros imprimés, file par zone | 10 | 10 nov. |
+| 13 | **Figeage et finales** | Figer et imprimer une vague, rouvrir, finales (et finales de kata) sur une zone | 12 | 13 nov. |
+| 14 | **Déplacements en cours** | Déplacer une catégorie vers une autre zone, « à la suite » / « mélangés », aperçu, « mis à jour à HH:MM » | 13 | 16 nov. |
 | — | **Répétition générale** | Compétition fictive complète sur le PC de la table centrale, avec Docker et sans internet | 6 | 20-21 nov. |
 
 ## État au 2026-10-21
