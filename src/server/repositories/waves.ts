@@ -43,6 +43,12 @@ export async function replaceWaves(db: AppDb, competitionId: string, input: Wave
   }
   const lost = current.find((w) => removed.includes(w.id) && launched.has(w.id));
   if (lost) throw new CategoryLockedError(`La vague « ${lost.name} » a été lancée : elle ne peut plus être supprimée.`);
+  // Les vagues se lancent dans l'ordre : une vague pas encore lancée ne passe pas avant une vague lancée.
+  const lastLaunched = input.map((w) => !!w.id && launched.has(w.id)).lastIndexOf(true);
+  const early = lastLaunched < 0 ? undefined : input.slice(0, lastLaunched).find((w) => !w.id || !launched.has(w.id));
+  if (early) {
+    throw new CategoryLockedError(`« ${early.name.trim()} » n’est pas encore lancée : elle ne peut pas passer avant « ${input[lastLaunched]!.name.trim()} », déjà lancée.`);
+  }
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     if (removed.length) {

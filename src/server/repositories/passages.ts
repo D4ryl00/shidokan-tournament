@@ -8,6 +8,7 @@ import { getCompetition } from './competitions.js';
 import { NotFoundError } from './registrations.js';
 import { listWaves } from './waves.js';
 import { listZones } from './zones.js';
+import { launchRows } from './launch-state.js';
 
 /** Numéros figés des vagues lancées au moins une fois (`match_id` 'kata' : bloc de kata entier). */
 export function loadFrozen(db: AppDb, competitionId: string): FrozenPassage[] {
@@ -42,7 +43,8 @@ export async function planInput(db: AppDb, competitionId: string, cats?: Categor
     waves: await listWaves(db, competitionId),
     mode: competition.settings.passageOrder,
     frozen: loadFrozen(db, competitionId),
-    restart,
+    // « Reprendre les numéros à 1 » choisi au lancement des vagues figées, et celui de l'aperçu.
+    restart: [...restart, ...[...launchRows(db, competitionId).values()].filter((r) => r.restartNumbering).map((r) => r.waveKey)],
     finals: { zoneId: competition.settings.finalsZoneId, kata: competition.settings.kataFinalsOnFinalsZone },
   };
 }

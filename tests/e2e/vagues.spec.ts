@@ -51,7 +51,7 @@ test('vagues : règles, retrait, ajout à la main, conflit, suppression', async 
   await expect(page.getByTestId('wave-delete-confirm')).toContainText('3 catégories');
   await page.getByTestId('wave-delete-go').click();
   await page.getByTestId('wave-save').click();
-  await expect(page.getByText('Vagues enregistrées')).toBeVisible();
+  await expect(page.getByText('Vagues enregistrées').last()).toBeVisible(); // la notification du 1er enregistrement peut être encore là
   await expect(card(page, 'Matin').getByTestId('wave-category')).toHaveText([/Minimes F/]);
   await expect(waiting.getByTestId('waiting-category')).toHaveCount(2);
 });

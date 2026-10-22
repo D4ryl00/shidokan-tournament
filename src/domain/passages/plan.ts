@@ -38,7 +38,7 @@ export interface PlanInput {
   mode: PassageOrderMode;
   /** Numéros des vagues lancées au moins une fois. */
   frozen?: FrozenPassage[];
-  /** Vagues (non figées) numérotées à partir de 1 (« reprendre les numéros à 1 »). */
+  /** Vagues numérotées à partir de 1 (« reprendre les numéros à 1 ») : les vagues suivantes continuent après elles. */
   restart?: string[];
   /** Zone des finales (combats pour la 1re place, et finales de kata si `kata`). */
   finals?: { zoneId: string | null; kata: boolean };
@@ -64,23 +64,46 @@ interface Context {
   finalsZone: string | null;
   kataFinals: boolean;
   nodes: Map<string, MatchNode[]>;
+  /** La zone accueille la discipline. */
+  accepts: (zoneId: string, discipline: DisciplineId) => boolean;
 }
 
 function context(input: PlanInput): Context {
   const zones = [...input.zones].sort((a, b) => a.order - b.order);
   const finalsZone = input.finals?.zoneId && zones.some((z) => z.id === input.finals!.zoneId) ? input.finals.zoneId : null;
   const nodes = new Map<string, MatchNode[]>(input.categories.map((c) => [c.id, c.playable && c.bracket?.kind === 'combat' ? matchNodes(c.bracket) : []]));
-  return { zones, mode: input.mode, finalsZone, kataFinals: !!input.finals?.kata && finalsZone !== null, nodes };
+  const accepts = (zoneId: string, discipline: DisciplineId) => {
+    const z = zones.find((x) => x.id === zoneId);
+    return !!z && (z.disciplines === null || z.disciplines.includes(discipline));
+  };
+  return { zones, mode: input.mode, finalsZone, kataFinals: !!input.finals?.kata && finalsZone !== null, nodes, accepts };
 }
 
 const isKata = (c: PlanCategory) => c.bracket?.kind === 'kata';
-const finalsOf = (c: PlanCategory, ctx: Context) => (ctx.finalsZone && c.bracket?.kind === 'combat' ? finalMatchIds(c.bracket) : []);
+/** Finales qui passent sur la zone des finales : seulement si elle accueille la discipline de la catégorie. */
+const finalsOf = (c: PlanCategory, ctx: Context) =>
+  ctx.finalsZone && c.bracket?.kind === 'combat' && ctx.accepts(ctx.finalsZone, c.discipline) ? finalMatchIds(c.bracket) : [];
+const kataSplit = (c: PlanCategory, ctx: Context) => ctx.kataFinals && ctx.accepts(ctx.finalsZone!, c.discipline);
 
-/** Identifiants des passages attendus d'une catégorie jouable (pour reconnaître des numéros figés encore à jour). */
-function expectedKeys(c: PlanCategory, ctx: Context): (string | null)[] {
-  if (!isKata(c)) return ctx.nodes.get(c.id)!.map((n) => n.matchId);
-  if (!ctx.kataFinals) return [null];
-  return c.bracket!.entrants.length > 2 ? ['kata:tour1', 'kata:finale'] : ['kata:finale'];
+const sameKeys = (a: (string | null)[], b: (string | null)[]) => a.length === b.length && a.every((k) => b.includes(k));
+
+/**
+ * Des numéros figés sont-ils encore à jour ? Mêmes combats (ou un bloc de kata, entier ou séparé : le réglage des finales
+ * peut avoir changé depuis le lancement) et chacun sur la zone de la catégorie, sauf une finale (zone des finales).
+ */
+function stillValid(c: PlanCategory, rows: FrozenPassage[], zoneId: string | null, ctx: Context): boolean {
+  const keys = rows.map((r) => r.matchId);
+  let shape: boolean;
+  let finals: (string | null)[];
+  if (isKata(c)) {
+    const split: (string | null)[] = c.bracket!.entrants.length > 2 ? ['kata:tour1', 'kata:finale'] : ['kata:finale'];
+    shape = sameKeys(keys, [null]) || sameKeys(keys, split);
+    finals = ['kata:finale'];
+  } else {
+    shape = sameKeys(keys, ctx.nodes.get(c.id)!.map((n) => n.matchId));
+    finals = c.bracket?.kind === 'combat' ? finalMatchIds(c.bracket) : [];
+  }
+  return shape && rows.every((r) => r.zoneId === zoneId || finals.includes(r.matchId));
 }
 
 /**
@@ -99,7 +122,7 @@ function orderWave(cats: PlanCategory[], zoneOf: (id: string) => string | null, 
     for (const c of cats.filter((x) => zoneOf(x.id) === z.id)) {
       if (isKata(c)) {
         const n = c.bracket!.entrants.length;
-        if (!ctx.kataFinals) here.push({ id: c.id, rank: c.rank, kataEntrants: n, kataBlock: null, nodes: [] });
+        if (!kataSplit(c, ctx)) here.push({ id: c.id, rank: c.rank, kataEntrants: n, kataBlock: null, nodes: [] });
         else if (n > 2) here.push({ id: c.id, rank: c.rank, kataEntrants: n, kataBlock: 'kata:tour1', nodes: [] });
       } else {
         const finals = finalsOf(c, ctx);
@@ -112,7 +135,7 @@ function orderWave(cats: PlanCategory[], zoneOf: (id: string) => string | null, 
     const finals: OrderCategory[] = [];
     for (const c of cats.filter((x) => zoneOf(x.id) !== null)) {
       if (isKata(c)) {
-        if (ctx.kataFinals) finals.push({ id: c.id, rank: c.rank, kataEntrants: c.bracket!.entrants.length, kataBlock: 'kata:finale', nodes: [] });
+        if (kataSplit(c, ctx)) finals.push({ id: c.id, rank: c.rank, kataEntrants: c.bracket!.entrants.length, kataBlock: 'kata:finale', nodes: [] });
       } else {
         const ids = finalsOf(c, ctx);
         const nodes = ctx.nodes.get(c.id)!.filter((x) => ids.includes(x.matchId));
@@ -154,13 +177,15 @@ export function planPassages(input: PlanInput): PassagePlan {
       plan.frozenWaves.push(key);
       for (const c of playable) {
         const mine = rows.filter((r) => r.categoryId === c.id);
-        const expected = expectedKeys(c, ctx);
-        const same = mine.length === expected.length && expected.every((k) => mine.some((r) => r.matchId === k));
-        if (!same) plan.pending.push({ waveId, categoryId: c.id });
+        if (!stillValid(c, mine, zoneOf.get(c.id) ?? null, ctx)) plan.pending.push({ waveId, categoryId: c.id });
         else for (const r of mine) byZone.get(r.zoneId)!.push({ number: r.number, categoryId: r.categoryId, matchId: r.matchId, noRest: r.noRest, waveId });
       }
-      // Les numéros figés (trous compris) sont pris : la suite vient après.
-      for (const r of rows) next.set(r.zoneId, Math.max(next.get(r.zoneId)!, r.number + 1));
+      // Les numéros figés (trous compris) sont pris : la suite vient après (après eux seuls si la vague a repris à 1).
+      const restarted = input.restart?.includes(key) ?? false;
+      for (const z of ctx.zones) {
+        const top = Math.max(0, ...rows.filter((r) => r.zoneId === z.id).map((r) => r.number));
+        next.set(z.id, restarted ? top + 1 : Math.max(next.get(z.id)!, top + 1));
+      }
     } else {
       if (input.restart?.includes(key)) for (const z of ctx.zones) next.set(z.id, 1);
       for (const p of orderWave(playable, (id) => zoneOf.get(id) ?? null, waveId, ctx, next)) {
@@ -179,12 +204,19 @@ export function planPassages(input: PlanInput): PassagePlan {
 
 /**
  * Numéros « à la suite » pour des catégories à numéroter d'une vague figée : sur leur zone (et la zone des finales),
- * après le dernier numéro figé de la zone, toutes vagues confondues.
+ * après le dernier numéro figé de la zone parmi les vagues de la même numérotation (depuis le dernier « reprendre à 1 »).
  */
 export function appendPassages(input: PlanInput, waveId: string | null, categoryIds: string[]): FrozenPassage[] {
   const ctx = context(input);
   const plan = planPassages(input);
-  const next = new Map(ctx.zones.map((z) => [z.id, 1 + Math.max(0, ...(input.frozen ?? []).filter((f) => f.zoneId === z.id).map((f) => f.number))]));
+  const order = input.waves.length === 0 ? [''] : [...input.waves].sort((a, b) => a.order - b.order).map((w) => w.id);
+  const at = order.indexOf(waveKey(waveId));
+  const restarts = order.map((k, i) => (i === 0 || input.restart?.includes(k) ? i : -1)).filter((i) => i >= 0);
+  const from = Math.max(...restarts.filter((i) => i <= at));
+  const to = Math.min(order.length, ...restarts.filter((i) => i > at));
+  const segment = new Set(order.slice(from, to));
+  const rows = (input.frozen ?? []).filter((f) => segment.has(f.waveKey));
+  const next = new Map(ctx.zones.map((z) => [z.id, 1 + Math.max(0, ...rows.filter((f) => f.zoneId === z.id).map((f) => f.number))]));
   const cats = input.categories.filter((c) => c.waveId === waveId && c.playable && categoryIds.includes(c.id));
   return orderWave(cats, (id) => plan.categories[id]?.zoneId ?? null, waveId, ctx, next).map((p) => ({
     waveKey: waveKey(waveId), zoneId: p.zoneId, number: p.number, categoryId: p.categoryId, matchId: p.matchId, noRest: p.noRest,

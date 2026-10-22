@@ -25,7 +25,7 @@ const many = async (count: number, over: object = {}) => {
   for (let i = 0; i < count; i++) out.push(await reg(over));
   return out;
 };
-type Cat = { id: string; label: string; zoneId: string | null; waveId: string | null; waveOverride: string | null; status: string; numbersUpdatedAt: string | null; stale: boolean };
+type Cat = { id: string; label: string; zoneId: string | null; waveId: string | null; waveOverride: string | null; status: string; numbersUpdatedAt: string | null; stale: boolean; launchLocked: boolean };
 type Plan = { zones: { zoneId: string; passages: { number: number; categoryId: string; matchId: string | null; waveId: string | null }[] }[]; pending: { categoryId: string }[] };
 type Status = { state: string; blocking: string[]; pending: { categoryId: string; label: string }[]; zones: { zoneId: string; first: number | null; last: number | null }[] };
 const cats = async () => (await call('GET', '/categories')).json() as Cat[];
@@ -101,7 +101,7 @@ describe('lancer une vague', () => {
     const before = await plan();
     expect((await call('POST', '/launch/reopen', { waveId: null })).statusCode).toBe(204);
     expect((await status(null)).state).toBe('reopened');
-    expect((await call('POST', '/launch/number', { waveId: null })).json()).toEqual({ changes: [] });
+    expect((await call('POST', '/launch/number', { waveId: null })).json()).toEqual({ changes: [], blocking: [] });
     expect((await status(null)).state).toBe('launched');
     expect((await plan()).zones).toEqual(before.zones);
   });
@@ -114,9 +114,10 @@ describe('lancer une vague', () => {
     await launch(null);
     await many(2, { weightClassId: 'cadet:F:-47' });
     const fresh = await catOf('-47');
+    await call('PATCH', `/categories/${fresh.id}`, { status: 'ready' });
     expect((await status(null)).pending).toEqual([{ categoryId: fresh.id, label: fresh.label }]);
     const preview = (await call('POST', '/launch/number/preview', { waveId: null })).json();
-    expect(preview).toEqual({ changes: [{ categoryId: fresh.id, label: fresh.label, numbers: [4] }] });
+    expect(preview).toEqual({ changes: [{ categoryId: fresh.id, label: fresh.label, numbers: [4] }], blocking: [] });
     expect((await plan()).pending).toHaveLength(1);
     await call('POST', '/launch/number', { waveId: null });
     const p = await plan();
@@ -198,5 +199,106 @@ describe('vague lancée : verrous', () => {
     const res2 = await call('PUT', '/zones', zones.filter((z) => z.id !== used).map((z) => ({ id: z.id, name: z.name })));
     expect(res2.statusCode).toBe(409);
     expect(res2.json().error).toContain('des combats figés y sont numérotés');
+  });
+});
+
+describe('vague lancée (relecture)', () => {
+  const oneZone = async () => {
+    const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
+    await call('PUT', '/zones', [{ id: t1!.id, name: 'Tatami 1' }]);
+  };
+  const threeWaves = async () =>
+    (await call('PUT', '/waves', [
+      { name: 'J1', rules: { ageBandCodes: ['minime'], disciplines: [] } },
+      { name: 'J2', rules: { ageBandCodes: ['cadet'], disciplines: [] } },
+      { name: 'J2 soir', rules: { ageBandCodes: ['senior'], disciplines: [] } },
+    ])).json() as { id: string }[];
+
+  test('reprendre à 1 enregistré : la vague suivante continue après la vague qui a repris', async () => {
+    await oneZone();
+    await many(8, { ageBandCode: 'minime', weightClassId: 'minime:F:-45' });
+    await many(4);
+    await many(2, { ageBandCode: 'senior', weightClassId: 'senior:F:-55' });
+    const [j1, j2, j3] = await threeWaves();
+    await readyAll();
+    await launch(j1!.id);
+    await launch(j2!.id, true);
+    expect((await status(j3!.id)).zones[0]).toMatchObject({ first: 4, last: 4 });
+  });
+
+  test('une vague pas encore lancée ne peut pas passer avant une vague lancée', async () => {
+    await many(2, { ageBandCode: 'minime', weightClassId: 'minime:F:-45' });
+    await readyAll();
+    const [matin, aprem] = await twoWaves();
+    await launch(matin!.id);
+    const res = await call('PUT', '/waves', [
+      { id: aprem!.id, name: 'Après-midi', rules: { ageBandCodes: ['cadet'], disciplines: [] } },
+      { id: matin!.id, name: 'Matin', rules: { ageBandCodes: ['minime'], disciplines: [] } },
+    ]);
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toBe('« Après-midi » n’est pas encore lancée : elle ne peut pas passer avant « Matin », déjà lancée.');
+    const added = await call('PUT', '/waves', [
+      { name: 'Nouvelle', rules: { ageBandCodes: [], disciplines: ['kata'] } },
+      { id: matin!.id, name: 'Matin', rules: { ageBandCodes: ['minime'], disciplines: [] } },
+      { id: aprem!.id, name: 'Après-midi', rules: { ageBandCodes: ['cadet'], disciplines: [] } },
+    ]);
+    expect(added.statusCode).toBe(409);
+  });
+
+  test('déplacement manuel et annulation refusés vers ou depuis une catégorie de la vague lancée', async () => {
+    await many(4);
+    const lone = (await many(1, { weightClassId: 'cadet:F:-47', approxWeightKg: 47 }))[0]!;
+    await readyAll();
+    const big = await catOf('-54');
+    // Recasement validé avant le lancement, puis lancement.
+    const r = (await call('GET', '/replacement')).json() as { cases: { id: string }[]; proposals: Record<string, { id: string }[]> };
+    await call('POST', '/replacement/apply', { proposalId: r.proposals[r.cases[0]!.id]![0]!.id });
+    await launch(null);
+    const entry = ((await call('GET', '/replacement')).json() as { recasements: { id: string }[] }).recasements[0]!;
+    const undo = await call('POST', '/replacement/undo', { recasementId: entry.id });
+    expect(undo.statusCode).toBe(409);
+    const more = (await many(1, { weightClassId: 'cadet:F:-61' }))[0]!;
+    const move = await call('POST', '/replacement/move', { registrationId: more.id, categoryId: big.id });
+    expect(move.statusCode).toBe(409);
+    void lone;
+  });
+
+  test('numéroter : catégorie à numéroter non prête → refusé, rien n’est écrit', async () => {
+    await oneZone();
+    await many(4);
+    await readyAll();
+    await launch(null);
+    await many(2, { weightClassId: 'cadet:F:-47' });
+    const fresh = await catOf('-47');
+    const preview = (await call('POST', '/launch/number/preview', { waveId: null })).json() as { blocking: string[] };
+    expect(preview.blocking).toEqual([`1 catégorie n’est pas prête : ${fresh.label}.`]);
+    expect((await call('POST', '/launch/number', { waveId: null })).statusCode).toBe(400);
+    await call('PATCH', `/categories/${fresh.id}`, { status: 'ready' });
+    expect((await call('POST', '/launch/number', { waveId: null })).statusCode).toBe(200);
+  });
+
+  test('régénérer sans changement de numéros : « mis à jour » quand même', async () => {
+    await oneZone();
+    const a = await many(4);
+    await readyAll();
+    await launch(null);
+    await call('PUT', `/weigh-in/${a[0]!.fighterId}`, { presence: 'absent' });
+    await many(1);
+    const c = await catOf('-54');
+    expect(c.stale).toBe(true);
+    await call('POST', `/categories/${c.id}/regenerate`);
+    expect((await catOf('-54')).numbersUpdatedAt).not.toBeNull();
+  });
+
+  test('catégorie passée dans une autre vague pendant la réouverture : plus verrouillée par l’ancienne', async () => {
+    await many(2, { ageBandCode: 'minime', weightClassId: 'minime:F:-45' });
+    await readyAll();
+    const [matin, aprem] = await twoWaves();
+    await launch(matin!.id);
+    const c = await catOf('Minimes');
+    await call('POST', '/launch/reopen', { waveId: matin!.id });
+    await call('PATCH', `/categories/${c.id}`, { waveOverride: aprem!.id });
+    await call('POST', '/launch/number', { waveId: matin!.id });
+    expect((await catOf('Minimes')).launchLocked).toBe(false);
   });
 });

@@ -29,13 +29,16 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
   if (!status) return null;
   const zoneName = (zid: string) => zones.find((z) => z.id === zid)?.name ?? '?';
   const openNumber = () => {
+    numberPreview.reset();
     numberPreview.mutate({ waveId });
     setDialog('number');
   };
   const close = () => {
     setDialog(null);
-    launch.reset();
+    for (const m of [launch, reopen, number, numberPreview]) m.reset();
   };
+  // Numéroter exactement ce que l'aperçu a montré.
+  const shown = numberPreview.data && !numberPreview.isPending ? numberPreview.data : null;
 
   return (
     <Stack gap="xs" data-testid="wave-launch">
@@ -108,13 +111,19 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
         <Stack>
           <Text size="sm">Seules les catégories modifiées reçoivent de nouveaux numéros, à la suite du dernier numéro de leur zone ; leurs tableaux sont à réimprimer (« mis à jour à … »).</Text>
           <div data-testid="number-preview">
-            {numberPreview.data && numberPreview.data.changes.length === 0 && <Text size="sm">Aucun numéro ne change.</Text>}
-            {numberPreview.data?.changes.map((c) => <Text size="sm" key={c.categoryId}>{c.label} : n° {c.numbers.join(', ')}</Text>)}
+            {shown && shown.changes.length === 0 && <Text size="sm">Aucun numéro ne change.</Text>}
+            {shown?.changes.map((c) => <Text size="sm" key={c.categoryId}>{c.label} : n° {c.numbers.join(', ')}</Text>)}
           </div>
+          {shown && shown.blocking.length > 0 && (
+            <Alert color="red" title="Impossible de numéroter" data-testid="number-blocking">
+              <List size="sm">{shown.blocking.map((b) => <List.Item key={b}>{b}</List.Item>)}</List>
+            </Alert>
+          )}
           <ApiErrorAlert error={numberPreview.error ?? number.error} />
           <Group justify="flex-end">
             <Button variant="default" onClick={close}>Annuler</Button>
-            <Button data-testid="number-confirm" loading={number.isPending} disabled={!numberPreview.data} onClick={() => number.mutate({ waveId }, { onSuccess: close })}>
+            <Button data-testid="number-confirm" loading={number.isPending} disabled={!shown || shown.blocking.length > 0}
+              onClick={() => shown && number.mutate({ waveId, categoryIds: shown.changes.map((c) => c.categoryId) }, { onSuccess: close })}>
               {status.state === 'reopened' ? 'Refiger la vague' : 'Numéroter à la suite'}
             </Button>
           </Group>

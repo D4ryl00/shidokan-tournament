@@ -25,3 +25,8 @@ export function categoryPassages(plan: PassagePlan | undefined, categoryId: stri
   // Plan pas encore chargé : `numbers` absent (numérotation propre à la catégorie, sans marque).
   return { zoneId: zone.zoneId, auto: zone.auto, numbers: plan ? numbers : undefined, noRest, matchZones, kata: kata.sort((a, b) => a.number - b.number) };
 }
+
+/** Combats joués sur une autre zone que leur catégorie (zone des finales) : nom de cette zone. */
+export function movedMatchZones(p: ReturnType<typeof categoryPassages> | null, zones: { id: string; name: string }[]): Map<string, string> {
+  return new Map([...(p?.matchZones ?? [])].filter(([, zid]) => zid !== p?.zoneId).map(([mid, zid]) => [mid, zones.find((z) => z.id === zid)?.name ?? '?']));
+}

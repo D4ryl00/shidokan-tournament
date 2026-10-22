@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from 'react-router';
 import { activeEntrantCount, type Category } from '../../domain/categories.js';
 import { validResults } from '../../domain/results.js';
 import { useCategories, useCategoryResults, useCompetition, usePassages, usePodiums, useZones } from '../api.js';
-import { categoryPassages } from '../passages.js';
+import { categoryPassages, movedMatchZones } from '../passages.js';
 import { BracketView, type EntrantInfo } from '../components/BracketView.js';
 import { HelpText } from '../components/Help.js';
 import { useEntrantInfo } from './BracketsPage.js';
@@ -52,7 +52,7 @@ export function PrintSection({ category, entrants, competitionLine, withResults 
     .map((k) => (k.part === 'all' ? ` · passage n° ${k.number}` : k.part === 'tour1' ? ` · tour 1 : n° ${k.number}` : ` · finale : n° ${k.number} (${zoneName(k.zoneId)})`))
     .join('');
   // Combats déplacés sur la zone des finales : leur zone est indiquée sur le combat.
-  const movedZones = new Map([...passages.matchZones].filter(([, zid]) => zid !== passages.zoneId).map(([mid, zid]) => [mid, zoneName(zid)]));
+  const movedZones = movedMatchZones(passages, zones);
   const results = res && category.bracket?.kind === 'combat' ? validResults(category.bracket, res.records, res.tieBreaks.pools).results : undefined;
   return (
     <section className="print-section" data-testid="print-section">

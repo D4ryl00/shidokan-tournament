@@ -393,6 +393,8 @@ export interface LaunchStatus {
 }
 export interface NumberChanges {
   changes: { categoryId: string; label: string; numbers: number[] }[];
+  /** Ce qui empêche de numéroter (catégorie pas prête, sans zone possible). */
+  blocking: string[];
 }
 
 /** État de lancement d'une vague (null : vague implicite) ; sous « categories » : rechargé avec elles. */
@@ -410,7 +412,7 @@ function useLaunchAction<T, R = void>(id: string, method: 'POST', path: (arg: T)
 }
 export const useLaunch = (id: string) => useLaunchAction<{ waveId: string | null; restart: boolean }>(id, 'POST', () => '/launch', (a) => a);
 export const useReopen = (id: string) => useLaunchAction<{ waveId: string | null }>(id, 'POST', () => '/launch/reopen', (a) => a);
-export const useNumberPending = (id: string) => useLaunchAction<{ waveId: string | null }, NumberChanges>(id, 'POST', () => '/launch/number', (a) => a);
+export const useNumberPending = (id: string) => useLaunchAction<{ waveId: string | null; categoryIds?: string[] }, NumberChanges>(id, 'POST', () => '/launch/number', (a) => a);
 export const useRegenerate = (id: string) => useLaunchAction<string, NumberChanges>(id, 'POST', (cid) => `/categories/${cid}/regenerate`, () => undefined);
 export function useNumberPreview(id: string) {
   return useMutation({ mutationFn: (body: { waveId: string | null }) => api<NumberChanges>('POST', `/api/competitions/${id}/launch/number/preview`, body) });

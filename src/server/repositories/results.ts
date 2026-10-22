@@ -230,13 +230,16 @@ export async function schedule(db: AppDb, competitionId: string, waveId?: string
   const name = (rid: string | null) => (rid ? (who.get(rid)?.name ?? '?') : null);
   const state = new Map<string, { matches: ReturnType<typeof resolveBracket>['matches']; finished: boolean; round1Done: boolean }>();
   const describe = async (c: (typeof cats)[number]) => {
-    const { progress } = await getResults(db, competitionId, c.id);
+    const { progress, kataScores: scores } = await getResults(db, competitionId, c.id);
     let matches: ReturnType<typeof resolveBracket>['matches'] = [];
     if (c.bracket?.kind === 'combat') {
       const { results } = validResults(c.bracket, loadRecords(db, c.id), loadTieBreaks(db, c.id).pools);
       matches = resolveBracket(c.bracket, results, loadTieBreaks(db, c.id).pools).matches;
     }
-    state.set(c.id, { matches, finished: progress.status === 'finished', round1Done: progress.played >= (c.bracket?.entrants.length ?? 0) });
+    // Tour 1 du kata terminé : chaque kataka présent a ses notes (un absent tardif d'une vague figée n'en aura pas).
+    const present = (c.bracket?.entrants ?? []).filter((e) => !c.absentIds.includes(e.registrationId));
+    const round1Done = c.bracket?.kind === 'kata' && present.every((e) => (scores.round1[e.registrationId] ?? []).length > 0);
+    state.set(c.id, { matches, finished: progress.status === 'finished', round1Done });
     // Numéro de passage ; sans zone, numérotation propre à la catégorie.
     const local = new Map([...matches].filter((m) => !m.bye).sort((x, y) => x.order - y.order).map((m, i) => [m.id, i + 1]));
     const nextMatches = matches

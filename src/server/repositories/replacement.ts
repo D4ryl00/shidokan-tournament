@@ -262,8 +262,9 @@ export function manualProposal(state: State, registrationId: string, categoryId:
   const t = state.categories.find((c) => c.id === categoryId);
   if (!m || !t) throw new NotFoundError('Inscription ou catégorie introuvable');
   const source = state.categories.find((c) => c.id === m.categoryId);
-  const locked = (c: { status: string } | undefined) => c?.status === 'started' || c?.status === 'finished';
-  if (locked(t) || locked(source)) throw new CategoryLockedError();
+  // Catégorie lancée, ou d'une vague lancée (fermée au recasement).
+  const locked = (c: { status: string; frozen?: boolean } | undefined) => c?.status === 'started' || c?.status === 'finished' || c?.frozen === true;
+  if (locked(t) || locked(source)) throw new CategoryLockedError(t?.frozen || source?.frozen ? 'La vague est lancée : rouvrez-la pour y déplacer quelqu’un.' : undefined);
   const warnings = moveViolations(state, m, t);
   const toKata = !DISCIPLINES[t.key.discipline].hasWeight && DISCIPLINES[m.discipline].hasWeight;
   if (toKata) warnings.push(`Passage en ${DISCIPLINES[t.key.discipline].label.toLowerCase()} : règlement et catégorie de poids retirés.`);
@@ -314,6 +315,10 @@ export async function undoRecasement(db: AppDb, competitionId: string, recasemen
     return c !== undefined && (c.status === 'started' || c.status === 'finished');
   };
   if (locked(reg.categoryId) || locked(snapshot.registration.categoryId)) throw new CategoryLockedError();
+  const frozen = new Set((await loadState(db, competitionId)).categories.filter((c) => c.frozen).map((c) => c.id));
+  if ((reg.categoryId && frozen.has(reg.categoryId)) || (snapshot.registration.categoryId && frozen.has(snapshot.registration.categoryId))) {
+    throw new CategoryLockedError('La vague est lancée : rouvrez-la pour annuler ce recasement.');
+  }
   // Ordre d'insertion (rowid) : fiable même pour deux recasements de la même milliseconde.
   const mine = db.select({ n: sql<number>`rowid` }).from(recasements).where(eq(recasements.id, entry.id)).get()!.n;
   const newer = db

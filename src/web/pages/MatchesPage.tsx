@@ -7,7 +7,7 @@ import { validResults } from '../../domain/results.js';
 import { useCategories, useCategoryResults, useDeleteResult, usePassages, useSchedule, useUpdateCategory, useZones } from '../api.js';
 import { ZonesImpossibleAlert } from '../components/ZonesImpossibleAlert.js';
 import { WaveLaunchPanel } from '../components/WaveLaunchPanel.js';
-import { categoryPassages } from '../passages.js';
+import { categoryPassages, movedMatchZones } from '../passages.js';
 import { useSelectedWave } from '../useSelectedWave.js';
 import { BracketView, combatLabel } from '../components/BracketView.js';
 import { KataScoring } from '../components/KataScoring.js';
@@ -163,7 +163,7 @@ export function MatchesPage() {
               ) : (
                 view && (
                   <BracketView category={selected} entrants={entrants} results={view.results} stale={view.stale} tieBreaks={res.tieBreaks.pools}
-                    numbers={passages?.numbers} noRest={passages?.noRest}
+                    numbers={passages?.numbers} noRest={passages?.noRest} matchZones={movedMatchZones(passages, zones)}
                     onMatchClick={(m) => setDialogMatchId(m.id)} />
                 )
               )}

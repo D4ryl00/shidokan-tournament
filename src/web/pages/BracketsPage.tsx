@@ -7,7 +7,7 @@ import { compatibleFormats, type BracketFormat } from '../../domain/brackets/ind
 import { activeEntrantCount, type Category, type CategoryStatus } from '../../domain/categories.js';
 import { normalizeName } from '../../domain/names.js';
 import { useCategories, usePassages, useRedraw, useRegenerate, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
-import { categoryPassages } from '../passages.js';
+import { categoryPassages, movedMatchZones } from '../passages.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { BracketView, type EntrantInfo } from '../components/BracketView.js';
 import { useRecasementDetails } from '../components/ReplacementBadge.js';
@@ -180,7 +180,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
               )}
             </Group>
             <ApiErrorAlert error={update.error ?? redraw.error ?? swap.error ?? regenerate.error} />
-            <BracketView category={selected} entrants={entrants} numbers={passages?.numbers} noRest={passages?.noRest} selected={swapFrom} onSelect={locked ? undefined : onSelectEntrant} badges={badges} badgeDetails={badgeDetails} />
+            <BracketView category={selected} entrants={entrants} numbers={passages?.numbers} noRest={passages?.noRest} matchZones={movedMatchZones(passages, zones)} selected={swapFrom} onSelect={locked ? undefined : onSelectEntrant} badges={badges} badgeDetails={badgeDetails} />
           </Stack>
         )}
         <Modal opened={confirmRegenerate} onClose={() => setConfirmRegenerate(false)} title="Régénérer le tableau ?">

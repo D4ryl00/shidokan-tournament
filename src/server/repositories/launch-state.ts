@@ -1,6 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import type { AppDb } from '../db/client.js';
-import { frozenPassages, waveLaunches } from '../db/schema.js';
+import { categories, frozenPassages, waveLaunches } from '../db/schema.js';
 
 /** Lancements des vagues d'une compétition, par clé de vague ('' : vague implicite). Sans synchronisation des catégories. */
 export function launchRows(db: AppDb, competitionId: string) {
@@ -24,7 +24,13 @@ export function launchedCategoryIds(db: AppDb, competitionId: string): Set<strin
   );
 }
 
-/** Zones portant des numéros figés. */
+/** Zones portant des numéros figés (de catégories qui existent encore). */
 export function frozenZoneIds(db: AppDb, competitionId: string): Set<string> {
-  return new Set(db.select({ id: frozenPassages.zoneId }).from(frozenPassages).where(eq(frozenPassages.competitionId, competitionId)).all().map((r) => r.id));
+  return new Set(
+    db.select({ id: frozenPassages.zoneId }).from(frozenPassages)
+      .innerJoin(categories, eq(categories.id, frozenPassages.categoryId))
+      .where(eq(frozenPassages.competitionId, competitionId))
+      .all()
+      .map((r) => r.id),
+  );
 }

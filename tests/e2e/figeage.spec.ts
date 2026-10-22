@@ -48,6 +48,8 @@ test('figer et imprimer la vague, finales sur le Ring, régénérer à la suite,
   await page.getByRole('tab', { name: 'Tableaux' }).click();
   await page.getByText(big.label).first().click();
   await expect(page.getByText('Les inscrits ont changé')).toBeVisible();
+  // À l'écran aussi, la finale déplacée indique sa zone.
+  await expect(page.getByTestId('match-zone').first()).toHaveText('Zone des finales : Ring');
   await page.getByTestId('category-regenerate').click();
   await page.getByTestId('regenerate-confirm').click();
   await expect(page.getByText('Les inscrits ont changé')).toHaveCount(0);
