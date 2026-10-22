@@ -153,14 +153,15 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
     return parseClubFormLines(header, lines, await getGrid(db, competitionId), tolerance);
   }
 
+  // Une fiche papier se saisit page par page : chaque saisie s'ajoute (une ligne déjà saisie est mise à jour), rien n'est retiré.
   app.post<P>('/api/competitions/:id/club-forms/entry/preview', async (req) => {
     const parse = await parseEntry(req.params.id, req.body);
-    return { ...parse, removals: await clubFormRemovals(db, req.params.id, parse) };
+    return { ...parse, removals: [] };
   });
 
   app.post<P>('/api/competitions/:id/club-forms/entry/import', async (req) => {
     const parse = await parseEntry(req.params.id, req.body);
-    return { ...(await importClubForm(db, req.params.id, parse)), parse };
+    return { ...(await importClubForm(db, req.params.id, parse, { replace: false })), parse };
   });
 
   app.post<P>('/api/competitions/:id/club-forms/preview', async (req) => {

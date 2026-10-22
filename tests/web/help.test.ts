@@ -72,3 +72,10 @@ test('tableaux : sens des couleurs des statuts', () => {
   const text = all('tableaux');
   for (const c of ['gris', 'bleu', 'orange', 'vert']) expect(text).toContain(c);
 });
+
+test('relecture : aide de la fiche club à jour', () => {
+  expect(all('fiche-club')).toContain('poids actuel');
+  expect(all('fiche-club')).not.toContain('poids approximatif');
+  expect(all('fiche-club.importer')).toContain('ancien format');
+  expect(all('fiche-club.saisir')).toContain('s’ajoute');
+});

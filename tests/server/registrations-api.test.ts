@@ -150,3 +150,25 @@ test('saisie papier : ligne invalide → erreur dans l’aperçu, rien d’écri
   expect(res.json().rows[0].errors).toEqual(['Sexe manquant.']);
   expect((await app.inject({ method: 'GET', url: `${base}/registrations` })).json()).toEqual([]);
 });
+
+test('relecture : grade gardé quand kata et combat sont sur deux lignes', async () => {
+  const kataLine = { ...ENTRY_LINE, weightKg: null, combat: null, ruleset: null, prefs: {} };
+  const combatLine = { ...ENTRY_LINE, kata: false, grade: null };
+  for (const lines of [[kataLine, combatLine], [combatLine, kataLine]]) {
+    await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: ENTRY_HEADER, lines } });
+    const rows = (await app.inject({ method: 'GET', url: `${base}/registrations` })).json() as { fighter: { grade: string | null } }[];
+    expect(rows.map((r) => r.fighter.grade)).toEqual(['1er kyu', '1er kyu']);
+  }
+});
+
+test('relecture : une fiche papier saisie page par page s’ajoute (rien n’est retiré)', async () => {
+  const page2 = { ...ENTRY_LINE, lastName: 'DURAND', kata: false };
+  await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: ENTRY_HEADER, lines: [ENTRY_LINE] } });
+  const preview = await app.inject({ method: 'POST', url: `${base}/club-forms/entry/preview`, payload: { header: ENTRY_HEADER, lines: [page2] } });
+  expect(preview.json().removals).toEqual([]);
+  await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: ENTRY_HEADER, lines: [page2] } });
+  expect((await app.inject({ method: 'GET', url: `${base}/registrations` })).json()).toHaveLength(3);
+  // Ressaisir la page 1 met à jour sans doublon
+  await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: ENTRY_HEADER, lines: [ENTRY_LINE] } });
+  expect((await app.inject({ method: 'GET', url: `${base}/registrations` })).json()).toHaveLength(3);
+});

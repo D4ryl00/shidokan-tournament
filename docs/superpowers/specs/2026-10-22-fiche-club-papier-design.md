@@ -70,7 +70,7 @@ Cases encadrées à remplir : **Club**, **Coach**, **Téléphone**, **E-mail**, 
 - Nouvel écran dans l'onglet **Fiche club** 💡 (« 3. Saisir une fiche papier ») qui suit la fiche ligne par ligne : en-tête du club (club, coach, téléphone, e-mail, pré-accord), puis un tableau dans le même ordre que la fiche, avec des cases à cocher et des champs courts ; une ligne = un combattant.
 - Le club est saisi une fois pour toute la fiche ; on ajoute des lignes au fil de la saisie.
 - À l'enregistrement, même traitement qu'un import de fiche club : aperçu (erreurs, remarques), puis enregistrement ; kata et combat sur une ligne → deux inscriptions ; catégorie de poids déduite du poids.
-- 💡 Une fiche saisie ainsi est traitée comme la fiche de ce club (comme un import .ods) : la saisir de nouveau remplace la précédente, avec l'aperçu des retraits.
+- Une fiche papier de plusieurs pages se saisit **page par page** : chaque saisie **s'ajoute** aux inscriptions déjà enregistrées pour ce club, une ligne déjà saisie (même combattant, même discipline) est mise à jour ; rien n'est retiré (un retrait se fait dans l'onglet Inscriptions). *(Corrigé après relecture : « remplacer la fiche précédente » effaçait la page 1 en saisissant la page 2.)*
 
 ## 5. Hors périmètre
 - Lecture automatique des fiches scannées (reconnaissance d'écriture).

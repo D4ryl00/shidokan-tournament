@@ -258,6 +258,8 @@ export async function importClubForm(
   db: AppDb,
   competitionId: string,
   parse: ClubFormParse,
+  /** false : les inscriptions absentes de cette fiche sont gardées (fiche papier saisie page par page). */
+  opts: { replace: boolean } = { replace: true },
 ): Promise<{ club: Club; imported: number; replaced: number; skipped: number }> {
   return db.transaction((tx) => {
     const t = tx as unknown as AppDb;
@@ -307,7 +309,7 @@ export async function importClubForm(
       imported++;
     }
     // Une inscription d'une catégorie lancée n'est jamais retirée par un réimport.
-    const removed = previous.filter((r) => !kept.has(r.id) && !inLockedCategory(t, r.categoryId));
+    const removed = opts.replace ? previous.filter((r) => !kept.has(r.id) && !inLockedCategory(t, r.categoryId)) : [];
     if (removed.length) {
       t.delete(registrations).where(inArray(registrations.id, removed.map((r) => r.id))).run();
       deleteOrphanFighters(t, removed.map((r) => r.fighterId));

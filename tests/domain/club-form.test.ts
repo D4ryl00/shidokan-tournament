@@ -213,7 +213,7 @@ describe('nouveau format (une ligne par combattant)', () => {
     expect(r.rows.map((x) => x.errors)).toEqual([[], []]);
     expect(r.rows.map((x) => x.line)).toEqual([12, 12]);
     const [combat, kata] = r.rows.map((x) => x.input!);
-    expect(combat).toMatchObject({ discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54', approxWeightKg: 53.5, otherDisciplines: ['shido-mix', 'shido-boxing'], acceptsJiyuFirst: null, grade: '1er kyu' });
+    expect(combat).toMatchObject({ discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54', approxWeightKg: 53.5, otherDisciplines: ['shido-mix', 'shido-boxing'], acceptsJiyuFirst: null });
     expect(kata).toMatchObject({ discipline: 'kata', ruleset: null, weightClassId: null, otherDisciplines: [], grade: '1er kyu' });
   });
 
@@ -241,6 +241,23 @@ describe('nouveau format (une ligne par combattant)', () => {
     const jiyu = parseClubForm(sheetNew([line({ 6: 'Non', 12: 'La discipline' })]), grid, tol).rows[0]!;
     expect(jiyu.input!.acceptsJiyuFirst).toBeNull();
     expect(jiyu.warnings.join(' ')).toMatch(/shobu/i);
+  });
+
+  test('relecture : case Kata — « Kata » accepté, valeur illisible signalée', () => {
+    const kataWord = parseClubForm(sheetNew([line({ 6: 'Kata' })]), grid, tol).rows;
+    expect(kataWord.map((r) => r.input?.discipline)).toEqual(['karate', 'kata']);
+    const unreadable = parseClubForm(sheetNew([line({ 6: 'peut-être' })]), grid, tol).rows;
+    expect(unreadable.map((r) => r.input?.discipline)).toEqual(['karate']);
+    expect(unreadable[0]!.warnings.join(' ')).toContain('Kata');
+    // « Kata » écrit dans la colonne de combat : c'est du kata
+    const inCombat = parseClubForm(sheetNew([line({ 4: '', 5: 'Kata', 6: '', 8: '', 10: '', 11: '' })]), grid, tol).rows;
+    expect(inCombat.map((r) => [r.input?.discipline, r.errors])).toEqual([['kata', []]]);
+  });
+
+  test('relecture : le grade ne va qu’à l’inscription kata', () => {
+    const inputs = parseClubForm(sheetNew([line()]), grid, tol).rows.map((r) => r.input!);
+    expect(inputs[0]!.grade).toBeUndefined();
+    expect(inputs[1]!.grade).toBe('1er kyu');
   });
 
   test('préférence vers sa propre discipline ignorée avec remarque', () => {

@@ -139,7 +139,7 @@ export function PaperEntryTable({ competitionId, grid }: { competitionId: string
             <Button data-testid="paper-entry-save" onClick={doSave} loading={save.isPending} disabled={!preview.data.rows.some((r) => r.input)}>
               Enregistrer la fiche ({preview.data.rows.filter((r) => r.input).length} inscription(s) valide(s))
             </Button>
-            <Text size="sm" c="dimmed">Saisir de nouveau la fiche d’un club remplace les inscriptions de sa fiche précédente.</Text>
+            <Text size="sm" c="dimmed">Chaque page saisie s’ajoute aux inscriptions déjà enregistrées pour ce club ; une ligne déjà saisie est mise à jour.</Text>
           </Group>
         </Stack>
       )}

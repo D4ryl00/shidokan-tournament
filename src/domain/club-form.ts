@@ -112,7 +112,7 @@ export function lineToRows(line: ClubFormLine, lineNumber: number, grid: Categor
   if (common.length || !line.sex || !line.ageBandCode) return [{ line: lineNumber, label, input: null, errors: common, warnings: [] }];
   const base = {
     clubId: null, lastName: line.lastName.trim(), firstName: line.firstName.trim(), sex: line.sex, ageBandCode: line.ageBandCode,
-    grade: line.grade?.trim() || null, source: 'club_form' as const,
+    source: 'club_form' as const,
   };
   const rows: ClubFormRow[] = [];
   if (line.combat) {
@@ -146,7 +146,8 @@ export function lineToRows(line: ClubFormLine, lineNumber: number, grid: Categor
     }
   }
   if (line.kata) {
-    const input: RegistrationInput = { ...base, discipline: 'kata', ruleset: null, weightClassId: null, approxWeightKg: line.weightKg, otherDisciplines: [], acceptsJiyuFirst: null };
+    // Le grade ne vient que du kata : une ligne de combat seule ne l'efface pas (grade absent = conservé).
+    const input: RegistrationInput = { ...base, grade: line.grade?.trim() || null, discipline: 'kata', ruleset: null, weightClassId: null, approxWeightKg: line.weightKg, otherDisciplines: [], acceptsJiyuFirst: null };
     const invalid = validateRegistration(input, grid);
     rows.push(invalid.length ? { line: lineNumber, label, input: null, errors: invalid, warnings: [] } : { line: lineNumber, label, input, errors: [], warnings: [] });
   }
@@ -159,7 +160,12 @@ function cellsToLine(row: unknown[], grid: CategoryGrid): { line: ClubFormLine; 
   const warnings: string[] = [];
   const combatRaw = disciplineFromLabel(combatCell);
   const combat = combatRaw && COMBAT_LABELS.has(combatRaw) ? (combatRaw as CombatDiscipline) : null;
-  if (text(combatCell) && !combat) warnings.push(`Discipline de combat incompréhensible : « ${text(combatCell)} » (ignorée).`);
+  // « Kata » écrit dans la colonne de combat : c'est une inscription en kata.
+  const kataInCombat = combatRaw === 'kata';
+  if (text(combatCell) && !combat && !kataInCombat) warnings.push(`Discipline de combat incompréhensible : « ${text(combatCell)} » (ignorée).`);
+  const kataText = normalizeName(text(kataCell));
+  const kataYes = kataText === 'KATA' || kataText === 'K' || kataText === '✓' ? true : parseYesNo(kataCell);
+  if (kataText && kataYes === null) warnings.push(`Case Kata incomprise : « ${text(kataCell)} » (Oui ou Non) — pas d'inscription en kata.`);
   const weightText = text(weightCell).replace(',', '.');
   const weightKg = weightText && Number(weightText) > 0 ? Number(weightText) : null;
   if (weightText && weightKg === null) warnings.push(`Poids actuel incompréhensible : « ${text(weightCell)} ».`);
@@ -175,7 +181,7 @@ function cellsToLine(row: unknown[], grid: CategoryGrid): { line: ClubFormLine; 
   return {
     line: {
       lastName: text(lastName), firstName: text(firstName), sex: parseSex(sexCell), ageBandCode: ageBandFromLabel(ageCell, grid),
-      weightKg, combat, kata: parseYesNo(kataCell) === true, grade: textOrNull(gradeCell), ruleset: rulesetFromLabel(rulesetCell), prefs, shobuKeep,
+      weightKg, combat, kata: kataYes === true || kataInCombat, grade: textOrNull(gradeCell), ruleset: rulesetFromLabel(rulesetCell), prefs, shobuKeep,
     },
     warnings,
   };

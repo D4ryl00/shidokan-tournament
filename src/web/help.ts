@@ -97,7 +97,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     title: 'Fiche club',
     short: 'Envoyez la fiche aux clubs (tableur ou papier), puis importez ou saisissez chaque fiche qu’ils vous renvoient.',
     details: [
-      'La fiche club apporte ce que l’export FFK n’a pas : les préférences de discipline, l’accord pour le jiyu, le poids approximatif et le coach.',
+      'La fiche club apporte ce que l’export FFK n’a pas : le poids actuel, les disciplines acceptées en cas de reclassement, la priorité en shobu, le grade pour le kata et le coach.',
       'Elle part plusieurs semaines avant la compétition ; l’export FFK n’arrive qu’à la clôture des inscriptions.',
     ],
   },
@@ -121,11 +121,12 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Une inscription d’une catégorie qui a déjà commencé n’est jamais retirée.',
       ],
       'Si le fichier est refusé, le message dit pourquoi (fiche modifiée, nom du club manquant…).',
+      'Les fiches remplies avec l’ancien format (une ligne par inscription, catégorie de poids) sont toujours acceptées.',
     ],
   },
   'fiche-club.saisir': {
     title: '3. Saisir une fiche papier',
-    short: 'Recopiez une fiche papier ligne par ligne, cliquez « Vérifier », puis « Enregistrer la fiche ».',
+    short: 'Recopiez une fiche papier ligne par ligne (page par page), cliquez « Vérifier », puis « Enregistrer la fiche ».',
     details: [
       [
         'Le tableau suit la fiche papier, dans le même ordre : une ligne par combattant.',
@@ -134,7 +135,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         '« Ajouter une ligne » pour les fiches de plus de 5 combattants.',
         'Rien n’est enregistré avant « Enregistrer la fiche » ; quitter la page abandonne la saisie.',
       ],
-      'Comme pour un import, saisir de nouveau la fiche d’un club remplace les inscriptions de sa fiche précédente (l’aperçu les annonce).',
+      'Une fiche de plusieurs pages se saisit page par page : chaque page s’ajoute aux inscriptions déjà enregistrées pour ce club, et une ligne déjà saisie est mise à jour (pas de doublon). Rien n’est retiré : pour retirer un combattant, supprimez-le dans l’onglet Inscriptions.',
     ],
   },
   'import-ffk': {
