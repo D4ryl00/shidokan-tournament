@@ -1,7 +1,7 @@
-import { Alert, Badge, Button, Checkbox, Group, List, Modal, Stack, Table, Text } from '@mantine/core';
+import { Alert, Badge, Button, Checkbox, Group, List, Modal, SegmentedControl, Stack, Table, Text } from '@mantine/core';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { useLaunch, useLaunchStatus, useNumberPending, useNumberPreview, useReopen, useZones, type WaveState } from '../api.js';
+import { useLaunch, useLaunchStatus, useNumberPending, useNumberPreview, useReopen, useZones, type RenumberMode, type WaveState } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 
 const STATES: Record<WaveState, { label: string; color: string }> = {
@@ -18,6 +18,7 @@ const STATES: Record<WaveState, { label: string; color: string }> = {
 export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: string; waveId: string | null }) {
   const [dialog, setDialog] = useState<'launch' | 'reopen' | 'number' | null>(null);
   const [restart, setRestart] = useState(false);
+  const [mode, setMode] = useState<RenumberMode>('append');
   const { data: status } = useLaunchStatus(competitionId, waveId);
   const { data: preview } = useLaunchStatus(competitionId, waveId, restart, dialog === 'launch');
   const { data: zones = [] } = useZones(competitionId);
@@ -28,9 +29,13 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
   const printUrl = `/competitions/${competitionId}/impression?vague=${encodeURIComponent(waveId ?? '')}`;
   if (!status) return null;
   const zoneName = (zid: string) => zones.find((z) => z.id === zid)?.name ?? '?';
-  const openNumber = () => {
+  const previewNumbers = (m: RenumberMode) => {
+    setMode(m);
     numberPreview.reset();
-    numberPreview.mutate({ waveId });
+    numberPreview.mutate({ waveId, mode: m });
+  };
+  const openNumber = () => {
+    previewNumbers('append');
     setDialog('number');
   };
   const close = () => {
@@ -109,7 +114,13 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
 
       <Modal opened={dialog === 'number'} onClose={close} title={status.state === 'reopened' ? 'Refiger la vague' : 'Numéroter à la suite'} size="lg">
         <Stack>
-          <Text size="sm">Seules les catégories modifiées reçoivent de nouveaux numéros, à la suite du dernier numéro de leur zone ; leurs tableaux sont à réimprimer (« mis à jour à … »).</Text>
+          <SegmentedControl data-testid="number-mode" value={mode} onChange={(v) => previewNumbers(v as RenumberMode)}
+            data={[{ value: 'append', label: 'À la suite' }, { value: 'shuffle', label: 'Mélangés' }]} />
+          <Text size="sm">
+            {mode === 'append'
+              ? 'À la suite : seules les catégories modifiées reçoivent de nouveaux numéros, après le dernier numéro de leur zone ; leurs tableaux sont à réimprimer (« mis à jour à … »).'
+              : 'Mélangés : les zones qui reçoivent une catégorie modifiée sont entièrement renumérotées (combats non joués), avec la règle de repos ; réimprimez tous leurs tableaux.'}
+          </Text>
           <div data-testid="number-preview">
             {shown && shown.changes.length === 0 && <Text size="sm">Aucun numéro ne change.</Text>}
             {shown?.changes.map((c) => <Text size="sm" key={c.categoryId}>{c.label} : n° {c.numbers.join(', ')}</Text>)}
@@ -123,7 +134,7 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
           <Group justify="flex-end">
             <Button variant="default" onClick={close}>Annuler</Button>
             <Button data-testid="number-confirm" loading={number.isPending} disabled={!shown || shown.blocking.length > 0}
-              onClick={() => shown && number.mutate({ waveId, categoryIds: shown.changes.map((c) => c.categoryId) }, { onSuccess: close })}>
+              onClick={() => shown && number.mutate({ waveId, mode, categoryIds: shown.changes.map((c) => c.categoryId) }, { onSuccess: close })}>
               {status.state === 'reopened' ? 'Refiger la vague' : 'Numéroter à la suite'}
             </Button>
           </Group>

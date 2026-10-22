@@ -412,10 +412,24 @@ function useLaunchAction<T, R = void>(id: string, method: 'POST', path: (arg: T)
 }
 export const useLaunch = (id: string) => useLaunchAction<{ waveId: string | null; restart: boolean }>(id, 'POST', () => '/launch', (a) => a);
 export const useReopen = (id: string) => useLaunchAction<{ waveId: string | null }>(id, 'POST', () => '/launch/reopen', (a) => a);
-export const useNumberPending = (id: string) => useLaunchAction<{ waveId: string | null; categoryIds?: string[] }, NumberChanges>(id, 'POST', () => '/launch/number', (a) => a);
+export type RenumberMode = 'append' | 'shuffle';
+export interface MoveResult {
+  changes: { categoryId: string; label: string; matchId: string | null; from: { zoneId: string; number: number } | null; to: { zoneId: string; number: number } }[];
+  reprint: { categoryId: string; label: string }[];
+}
+export const useMoveCategory = (id: string) =>
+  useLaunchAction<{ cid: string; zoneId: string; mode: RenumberMode }, MoveResult>(id, 'POST', (a) => `/categories/${a.cid}/move`, ({ zoneId, mode }) => ({ zoneId, mode }));
+export function useMovePreview(id: string, cid: string, zoneId: string, mode: RenumberMode) {
+  return useQuery({
+    queryKey: ['categories', id, 'move', cid, zoneId, mode],
+    queryFn: () => api<MoveResult>('POST', `/api/competitions/${id}/categories/${cid}/move/preview`, { zoneId, mode }),
+    gcTime: 0,
+  });
+}
+export const useNumberPending = (id: string) => useLaunchAction<{ waveId: string | null; categoryIds?: string[]; mode?: RenumberMode }, NumberChanges>(id, 'POST', () => '/launch/number', (a) => a);
 export const useRegenerate = (id: string) => useLaunchAction<string, NumberChanges>(id, 'POST', (cid) => `/categories/${cid}/regenerate`, () => undefined);
 export function useNumberPreview(id: string) {
-  return useMutation({ mutationFn: (body: { waveId: string | null }) => api<NumberChanges>('POST', `/api/competitions/${id}/launch/number/preview`, body) });
+  return useMutation({ mutationFn: (body: { waveId: string | null; mode?: RenumberMode }) => api<NumberChanges>('POST', `/api/competitions/${id}/launch/number/preview`, body) });
 }
 
 /** Zones et numéros de passage (clé sous « categories » : rechargés avec les catégories). */

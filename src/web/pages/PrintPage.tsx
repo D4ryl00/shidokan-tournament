@@ -52,7 +52,7 @@ export function PrintSection({ category, entrants, competitionLine, withResults 
     .map((k) => (k.part === 'all' ? ` · passage n° ${k.number}` : k.part === 'tour1' ? ` · tour 1 : n° ${k.number}` : ` · finale : n° ${k.number} (${zoneName(k.zoneId)})`))
     .join('');
   // Combats déplacés sur la zone des finales : leur zone est indiquée sur le combat.
-  const movedZones = movedMatchZones(passages, zones);
+  const movedZones = movedMatchZones(passages, zones, category.bracket);
   const results = res && category.bracket?.kind === 'combat' ? validResults(category.bracket, res.records, res.tieBreaks.pools).results : undefined;
   return (
     <section className="print-section" data-testid="print-section">

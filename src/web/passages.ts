@@ -1,4 +1,5 @@
-import type { PassagePlan } from '../domain/passages/index.js';
+import type { Bracket } from '../domain/brackets/index.js';
+import { finalMatchIds, type PassagePlan } from '../domain/passages/index.js';
 
 /**
  * Ce que le plan de passage dit d'une catégorie : zone (épinglée ou automatique), numéros de ses combats et leur zone
@@ -26,7 +27,16 @@ export function categoryPassages(plan: PassagePlan | undefined, categoryId: stri
   return { zoneId: zone.zoneId, auto: zone.auto, numbers: plan ? numbers : undefined, noRest, matchZones, kata: kata.sort((a, b) => a.number - b.number) };
 }
 
-/** Combats joués sur une autre zone que leur catégorie (zone des finales) : nom de cette zone. */
-export function movedMatchZones(p: ReturnType<typeof categoryPassages> | null, zones: { id: string; name: string }[]): Map<string, string> {
-  return new Map([...(p?.matchZones ?? [])].filter(([, zid]) => zid !== p?.zoneId).map(([mid, zid]) => [mid, zones.find((z) => z.id === zid)?.name ?? '?']));
+/**
+ * Combats sur une autre zone que leur catégorie : « Zone des finales : Ring » pour une finale déplacée, « Joué sur : Tatami 1 »
+ * pour un combat joué avant un déplacement de la catégorie.
+ */
+export function movedMatchZones(p: ReturnType<typeof categoryPassages> | null, zones: { id: string; name: string }[], bracket?: Bracket | null): Map<string, string> {
+  const finals = bracket?.kind === 'combat' ? finalMatchIds(bracket) : [];
+  const name = (zid: string) => zones.find((z) => z.id === zid)?.name ?? '?';
+  return new Map(
+    [...(p?.matchZones ?? [])]
+      .filter(([, zid]) => zid !== p?.zoneId)
+      .map(([mid, zid]) => [mid, finals.includes(mid) ? `Zone des finales : ${name(zid)}` : `Joué sur : ${name(zid)}`]),
+  );
 }

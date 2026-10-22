@@ -21,7 +21,7 @@ Le projet est découpé en étapes (1 à 7 : première version ; 8 à 14 : conce
 | 11 ✅ | **Recasement par vague** | Tableau de bord filtré par vague ; « change de vague » validé un par un (plan `2026-10-22-11-recasement-vagues.md`) | 10 | 5 nov. |
 | 12 ✅ | **Ordre de passage** | Répartition sur les zones avec contraintes, kata d'abord, tour par tour / catégorie par catégorie, repos signalé, numéros imprimés, file par zone (plan `2026-10-22-12-ordre-de-passage.md`) | 10 | 10 nov. |
 | 13 ✅ | **Figeage et finales** | Figer et imprimer une vague, rouvrir, finales (et finales de kata) sur une zone (plan `2026-10-22-13-figeage-finales.md`) | 12 | 13 nov. |
-| 14 | **Déplacements en cours** | Déplacer une catégorie vers une autre zone, « à la suite » / « mélangés », aperçu, « mis à jour à HH:MM » | 13 | 16 nov. |
+| 14 ✅ | **Déplacements en cours** | Déplacer une catégorie vers une autre zone, « à la suite » / « mélangés », aperçu, « mis à jour à HH:MM » (plan `2026-10-22-14-deplacements.md`) | 13 | 16 nov. |
 | — | **Répétition générale** | Compétition fictive complète sur le PC de la table centrale, avec Docker et sans internet | 6 | 20-21 nov. |
 
 ## État au 2026-10-21

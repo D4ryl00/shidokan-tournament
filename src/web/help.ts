@@ -263,7 +263,8 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'À gauche : les catégories et leur zone de combat. À droite : par zone, les prochains combats dans l’ordre des numéros de passage (avec des vagues, ceux de la vague choisie en haut).',
         '« Figer et imprimer la vague » : quand toutes ses catégories sont prêtes et ont une zone, les numéros de passage sont enregistrés et ne changent plus ; imprimez alors les tableaux de la vague. « Reprendre les numéros à 1 » repart de 1 sur chaque zone (nouveau jour). Les vagues se figent dans l’ordre.',
         'Vague figée : fermée au recasement, ses tableaux ne bougent plus sans confirmation. Une catégorie nouvelle ou régénérée est « à numéroter » : « Numéroter à la suite » lui donne des numéros après le dernier de sa zone.',
-        '« Rouvrir la vague » rend modifiables les catégories sans résultat ; « Refiger la vague » ne renumérote que celles qui ont changé, à la suite.',
+        '« Rouvrir la vague » rend modifiables les catégories sans résultat ; « Refiger la vague » ne renumérote que celles qui ont changé, à la suite (ou « mélangés » : leurs zones d’arrivée sont entièrement renumérotées).',
+        'Une zone prend du retard : dans la liste de gauche, choisissez une autre zone pour une catégorie (« Déplacer vers… »).',
         'Cliquez un combat du tableau pour saisir le vainqueur et la méthode.',
         'Une égalité de poule ou de kata s’affiche avec « Départager » : classez les ex-æquo.',
         'Un résultat corrigé rend « à revoir » les combats suivants déjà joués : ils sont encadrés en orange.',
@@ -276,6 +277,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     details: [
       '« Automatique (Tatami 2) » : l’app a placé la catégorie sur cette zone en équilibrant les combats. Choisir une zone l’y épingle ; « Automatique » la rend à la répartition.',
       'Dès qu’une catégorie d’une vague est lancée, la répartition de la vague est fixée : chaque catégorie garde sa zone (elle apparaît alors épinglée ; choisissez « Automatique » pour la rendre à la répartition).',
+      'Vague figée : choisir une autre zone ouvre « Déplacer vers… ». « À la suite » (conseillé) : les combats restants de la catégorie prennent les numéros après le dernier de la zone d’arrivée, seuls ses tableaux sont à réimprimer. « Mélangés » : tous les combats non joués de la zone d’arrivée sont renumérotés (mieux répartis, mais réimprimez tous ses tableaux). Les combats déjà joués gardent leur numéro ; l’aperçu montre ancien → nouveau numéro. Un combat en cours sur le tapis n’a pas de résultat : il serait renuméroté en « Mélangés ».',
       'L’ordre fixe le rang de la catégorie : catégories alternées en « tour par tour », enchaînées en « catégorie par catégorie » (Réglages › Ordre de passage). Les zones et leurs disciplines se règlent dans les Réglages.',
     ],
   },

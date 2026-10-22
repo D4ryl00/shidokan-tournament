@@ -7,6 +7,7 @@ import { validResults } from '../../domain/results.js';
 import { useCategories, useCategoryResults, useDeleteResult, usePassages, useSchedule, useUpdateCategory, useZones } from '../api.js';
 import { ZonesImpossibleAlert } from '../components/ZonesImpossibleAlert.js';
 import { WaveLaunchPanel } from '../components/WaveLaunchPanel.js';
+import { MoveDialog } from '../components/MoveDialog.js';
 import { categoryPassages, movedMatchZones } from '../passages.js';
 import { useSelectedWave } from '../useSelectedWave.js';
 import { BracketView, combatLabel } from '../components/BracketView.js';
@@ -36,14 +37,16 @@ export function MatchesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialogMatchId, setDialogMatchId] = useState<string | null>(null);
   const [tieOpen, setTieOpen] = useState(false);
+  // Vague lancée : changer la zone d'une catégorie numérotée = « Déplacer vers… » (aperçu, renumérotation).
+  const [moving, setMoving] = useState<{ category: { id: string; label: string }; zoneId: string } | null>(null);
   // Avec une vague : ses catégories seulement.
   const playable = categories.filter((c) => c.bracket && activeEntrantCount(c) >= 2 && (!waveId || c.waveId === waveId));
   const selected = playable.find((c) => c.id === selectedId) ?? null;
   const { data: res } = useCategoryResults(id, selected?.id ?? null);
   // Zone : automatique (répartie par l'app) ou épinglée à la main.
-  const zoneOptions = (cid: string) => {
+  const zoneOptions = (cid: string, launched: boolean) => {
     const auto = plan?.categories[cid]?.auto !== false ? zoneName(plan?.categories[cid]?.zoneId ?? null) : null;
-    return [{ value: '', label: auto ? `Automatique (${auto})` : 'Automatique' }, ...zones.map((z) => ({ value: z.id, label: z.name }))];
+    return [{ value: '', label: auto ? `Automatique (${auto})` : 'Automatique', disabled: launched }, ...zones.map((z) => ({ value: z.id, label: z.name }))];
   };
   const passages = useMemo(() => (selected ? categoryPassages(plan, selected.id) : null), [plan, selected]);
 
@@ -73,8 +76,8 @@ export function MatchesPage() {
                 </UnstyledButton>
                 <Group gap={4} mt={4}>
                   <Badge size="xs" variant="light">{STATUS_LABELS[c.status]}</Badge>
-                  <Select size="xs" w={190} data={zoneOptions(c.id)} value={c.zoneId ?? ''} allowDeselect={false} data-testid="schedule-zone" aria-label="Zone de combat"
-                    onChange={(v) => update.mutate({ cid: c.id, zoneId: v || null })} />
+                  <Select size="xs" w={190} data={zoneOptions(c.id, c.launchLocked)} value={c.zoneId ?? ''} allowDeselect={false} data-testid="schedule-zone" aria-label="Zone de combat"
+                    onChange={(v) => (c.launchLocked ? v && v !== c.zoneId && setMoving({ category: c, zoneId: v }) : update.mutate({ cid: c.id, zoneId: v || null }))} />
                   <NumberInput size="xs" w={70} min={0} max={99} value={c.order} aria-label="Ordre" data-testid="schedule-order"
                     onChange={(v) => typeof v === 'number' && update.mutate({ cid: c.id, order: v })} />
                 </Group>
@@ -163,7 +166,7 @@ export function MatchesPage() {
               ) : (
                 view && (
                   <BracketView category={selected} entrants={entrants} results={view.results} stale={view.stale} tieBreaks={res.tieBreaks.pools}
-                    numbers={passages?.numbers} noRest={passages?.noRest} matchZones={movedMatchZones(passages, zones)}
+                    numbers={passages?.numbers} noRest={passages?.noRest} matchZones={movedMatchZones(passages, zones, selected.bracket)}
                     onMatchClick={(m) => setDialogMatchId(m.id)} />
                 )
               )}
@@ -178,6 +181,7 @@ export function MatchesPage() {
         <ResultDialog competitionId={id} categoryId={selected.id} bracket={selected.bracket} ruleset={selected.key.ruleset} match={dialogMatch}
           number={view?.numbers.get(dialogMatch.id)} records={res.records} tieBreaks={res.tieBreaks.pools} entrants={entrants} onClose={() => setDialogMatchId(null)} />
       )}
+      {moving && <MoveDialog competitionId={id} category={moving.category} zoneId={moving.zoneId} zones={zones} onClose={() => setMoving(null)} />}
       {tieOpen && selected && tieScope && (
         <TieBreakDialog competitionId={id} categoryId={selected.id} scope={tieScope} group={ties[0] ?? null} entrants={entrants} onClose={() => setTieOpen(false)} />
       )}
