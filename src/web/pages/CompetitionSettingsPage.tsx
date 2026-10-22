@@ -1,11 +1,12 @@
 import {
-  Button, Checkbox, Fieldset, Group, MultiSelect, NumberInput, Select, SimpleGrid, Stack, Switch, TextInput,
+  ActionIcon, Button, Checkbox, Fieldset, Group, MultiSelect, NumberInput, Select, SimpleGrid, Stack, Switch, TextInput,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import type { CombatFormat, CompetitionSettings } from '../../domain/settings.js';
-import { useCompetition, useGrid, useUpdateCompetition } from '../api.js';
+import { useCompetition, useGrid, useSaveZones, useUpdateCompetition, useZones } from '../api.js';
+import type { ZoneInput } from '../../domain/zones.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { HelpLine } from '../components/Help.js';
 import { HELP } from '../help.js';
@@ -36,6 +37,18 @@ export function CompetitionSettingsPage() {
   const update = useUpdateCompetition(id);
   const [info, setInfo] = useState({ name: '', date: '', location: '' });
   const [s, setS] = useState<CompetitionSettings | null>(null);
+  const { data: savedZones } = useZones(id);
+  const saveZones = useSaveZones(id);
+  const [zones, setZones] = useState<ZoneInput[]>([]);
+  useEffect(() => {
+    if (savedZones) setZones(savedZones.map(({ id: zid, name }) => ({ id: zid, name })));
+  }, [savedZones]);
+  const moveZone = (i: number, d: -1 | 1) =>
+    setZones((zs) => {
+      const next = [...zs];
+      [next[i], next[i + d]] = [next[i + d]!, next[i]!];
+      return next;
+    });
 
   useEffect(() => {
     if (!competition) return;
@@ -47,11 +60,15 @@ export function CompetitionSettingsPage() {
   const set = (patch: Partial<CompetitionSettings>) => setS({ ...s, ...patch });
   const bandOptions = (grid?.ageBands ?? []).map((b) => ({ value: b.code, label: b.label }));
 
+  // Les zones d'abord : une erreur (nom en double…) s'affiche sans rien enregistrer d'autre.
   const save = () =>
-    update.mutate(
-      { name: info.name, date: info.date, location: info.location || null, settings: s },
-      { onSuccess: () => notifications.show({ color: 'green', message: 'Réglages enregistrés' }) },
-    );
+    saveZones.mutate(zones, {
+      onSuccess: () =>
+        update.mutate(
+          { name: info.name, date: info.date, location: info.location || null, settings: s },
+          { onSuccess: () => notifications.show({ color: 'green', message: 'Réglages enregistrés' }) },
+        ),
+    });
 
   return (
     <Stack data-testid="settings-form" maw={900}>
@@ -62,6 +79,26 @@ export function CompetitionSettingsPage() {
           <TextInput label="Date" type="date" value={info.date} onChange={(e) => setInfo({ ...info, date: e.currentTarget.value })} />
           <TextInput label="Lieu" value={info.location} onChange={(e) => setInfo({ ...info, location: e.currentTarget.value })} />
         </SimpleGrid>
+      </Fieldset>
+
+      <Fieldset legend={HELP['reglages.zones'].title}>
+        <HelpLine topic="reglages.zones" />
+        <Stack gap="xs">
+          {zones.map((z, i) => (
+            <Group key={z.id ?? `new-${i}`} gap="xs" data-testid="zone-row" wrap="nowrap">
+              <TextInput data-testid="zone-name" aria-label={`Nom de la zone ${i + 1}`} w={260} maxLength={40} value={z.name}
+                onChange={(e) => { const name = e.currentTarget.value; setZones((zs) => zs.map((x, j) => (j === i ? { ...x, name } : x))); }} />
+              <ActionIcon variant="subtle" aria-label="Monter" disabled={i === 0} onClick={() => moveZone(i, -1)}>↑</ActionIcon>
+              <ActionIcon variant="subtle" aria-label="Descendre" disabled={i === zones.length - 1} onClick={() => moveZone(i, 1)}>↓</ActionIcon>
+              <ActionIcon variant="subtle" color="red" aria-label="Supprimer la zone" disabled={zones.length === 1}
+                onClick={() => setZones((zs) => zs.filter((_, j) => j !== i))}>✕</ActionIcon>
+            </Group>
+          ))}
+          <Group>
+            <Button variant="light" size="xs" data-testid="zone-add" disabled={zones.length >= 20}
+              onClick={() => setZones((zs) => [...zs, { name: `Tatami ${zs.length + 1}` }])}>Ajouter une zone</Button>
+          </Group>
+        </Stack>
       </Fieldset>
 
       <Fieldset legend={HELP['reglages.recasement'].title}>
@@ -127,9 +164,9 @@ export function CompetitionSettingsPage() {
         </SimpleGrid>
       </Fieldset>
 
-      <ApiErrorAlert error={update.error} />
+      <ApiErrorAlert error={saveZones.error ?? update.error} />
       <Group>
-        <Button data-testid="settings-save" onClick={save} loading={update.isPending}>
+        <Button data-testid="settings-save" onClick={save} loading={saveZones.isPending || update.isPending}>
           Enregistrer
         </Button>
       </Group>

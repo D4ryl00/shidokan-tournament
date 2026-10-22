@@ -32,6 +32,7 @@ export type HelpTopicId =
   | 'podiums.clubs'
   | 'podiums.sauvegardes'
   | 'reglages.competition'
+  | 'reglages.zones'
   | 'reglages.recasement'
   | 'reglages.pesee'
   | 'reglages.tableaux'
@@ -54,7 +55,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     details: [
       'Chaque compétition a ses inscriptions, sa grille de catégories et ses réglages.',
       [
-        '« Nouvelle compétition » : nom, date, lieu, nombre de tatamis. Une grille enregistrée comme modèle peut servir de point de départ.',
+        '« Nouvelle compétition » : nom, date, lieu, nombre de zones de combat (renommables ensuite). Une grille enregistrée comme modèle peut servir de point de départ.',
         'Cliquez le nom d’une compétition pour l’ouvrir.',
       ],
       'Ordre habituel : réglages et grille, fiche club envoyée aux clubs, inscriptions, import FFK, pesée, recasement, tableaux, combats, podiums.',
@@ -231,7 +232,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Cliquez une catégorie, puis un combat, pour saisir son résultat : le vainqueur avance tout seul.',
     details: [
       [
-        'À gauche : les catégories et leur tatami. À droite : par tatami, les prochains combats.',
+        'À gauche : les catégories et leur zone de combat. À droite : par zone, les prochains combats.',
         'Cliquez un combat du tableau pour saisir le vainqueur et la méthode.',
         'Une égalité de poule ou de kata s’affiche avec « Départager » : classez les ex-æquo.',
         'Un résultat corrigé rend « à revoir » les combats suivants déjà joués : ils sont encadrés en orange.',
@@ -239,13 +240,13 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     ],
   },
   'combats.categories': {
-    title: 'Catégories et tatamis',
-    short: 'Choisissez le tatami et l’ordre de passage de chaque catégorie ; cliquez une catégorie pour l’ouvrir.',
-    details: ['L’ordre fixe la place de la catégorie dans la file de son tatami. Une catégorie sans tatami n’apparaît pas dans les files.'],
+    title: 'Catégories et zones de combat',
+    short: 'Choisissez la zone de combat et l’ordre de passage de chaque catégorie ; cliquez une catégorie pour l’ouvrir.',
+    details: ['L’ordre fixe la place de la catégorie dans la file de sa zone. Une catégorie sans zone n’apparaît pas dans les files. Les zones se renomment dans les Réglages.'],
   },
   'combats.zone': {
-    title: 'Prochains combats du tatami',
-    short: 'Les combats à appeler sur ce tatami, dans l’ordre.',
+    title: 'Prochains combats de la zone',
+    short: 'Les combats à appeler sur cette zone, dans l’ordre.',
     details: ['Cliquez « Saisir » pour entrer le résultat d’un combat. La liste avance au fur et à mesure.'],
   },
   'combats.resultat': {
@@ -313,8 +314,21 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
   },
   'reglages.competition': {
     title: 'Compétition',
-    short: 'Nom, date, lieu et nombre de tatamis.',
-    details: ['Le nombre de tatamis fixe les choix proposés dans l’onglet Combats.'],
+    short: 'Nom, date et lieu de la compétition.',
+    details: ['Ces informations figurent sur les fiches club et les feuilles imprimées.'],
+  },
+  'reglages.zones': {
+    title: 'Zones de combat',
+    short: 'Les zones où se déroulent les combats (« Tatami 1 », « Ring »…) : nommez-les et rangez-les dans l’ordre voulu.',
+    details: [
+      [
+        'Renommez une zone en tapant son nom ; ↑ et ↓ changent l’ordre d’affichage.',
+        '« Ajouter une zone » en crée une nouvelle ; ✕ la supprime (ses catégories passent « Sans zone »).',
+        'Une zone où se déroule une catégorie déjà lancée ne peut pas être supprimée.',
+        'Deux zones ne peuvent pas porter le même nom.',
+      ],
+      'Les catégories sont affectées aux zones dans l’onglet Combats ; le nom de la zone est imprimé sur les tableaux.',
+    ],
   },
   'reglages.recasement': {
     title: 'Recasement',

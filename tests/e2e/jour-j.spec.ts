@@ -34,15 +34,17 @@ test('journée complète : tatamis, résultats, correction, poule, kata, podiums
   const pool = cats.find((c) => c.label.includes('Seniors'))!;
   const kata = cats.find((c) => c.label.startsWith('Kata'))!;
 
-  // Tatamis
+  // Zones de combat
   await page.goto(`/competitions/${id}/combats`);
   const elimCard = page.getByTestId('schedule-category').filter({ hasText: elim.label });
-  await elimCard.getByTestId('schedule-tatami').click();
+  await elimCard.getByTestId('schedule-zone').click();
   await page.getByRole('option', { name: 'Tatami 1', exact: true }).click();
-  await request.patch(`/api/competitions/${id}/categories/${pool.id}`, { data: { tatami: 2 } });
+  const zones = (await (await request.get(`/api/competitions/${id}/zones`)).json()) as { id: string; name: string }[];
+  await request.patch(`/api/competitions/${id}/categories/${pool.id}`, { data: { zoneId: zones[1]!.id } });
   await page.reload();
-  await expect(page.getByTestId('tatami-card')).toHaveCount(2);
-  await expect(page.getByTestId('tatami-card').first().getByTestId('next-match')).toHaveCount(2);
+  await expect(page.getByTestId('zone-card')).toHaveCount(2);
+  await expect(page.getByTestId('zone-card').first()).toContainText('Tatami 1');
+  await expect(page.getByTestId('zone-card').first().getByTestId('next-match')).toHaveCount(2);
 
   // Élimination directe : demies puis finale
   await page.getByTestId('schedule-category').filter({ hasText: elim.label }).getByRole('button').first().click();

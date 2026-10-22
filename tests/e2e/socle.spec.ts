@@ -97,3 +97,28 @@ test('grille : décocher « Fiche club » pour une tranche', async ({ page }) =>
   await expect(page.getByLabel('Proposée sur la fiche club').first()).not.toBeChecked();
   await expect(page.getByLabel('Proposée sur la fiche club').nth(1)).toBeChecked();
 });
+
+test('zones de combat : renommer, ajouter, réordonner', async ({ page }) => {
+  const id = await createCompetition(page, 'Coupe zones');
+  await page.goto(`/competitions/${id}/reglages`);
+  const names = page.getByTestId('zone-name');
+  await expect(names).toHaveCount(2);
+  await names.nth(1).fill('Ring');
+  await page.getByTestId('zone-add').click();
+  await names.nth(2).fill('Tatami 3');
+  await page.getByTestId('zone-row').nth(2).getByRole('button', { name: 'Monter' }).click();
+  await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await expect(page.getByText('Réglages enregistrés')).toBeVisible();
+  await page.reload();
+  const reloaded = page.getByTestId('zone-name');
+  await expect(reloaded).toHaveCount(3);
+  for (const [i, v] of ['Tatami 1', 'Tatami 3', 'Ring'].entries()) await expect(reloaded.nth(i)).toHaveValue(v);
+});
+
+test('zones de combat : nom en double, message en français', async ({ page }) => {
+  const id = await createCompetition(page, 'Coupe zones doublon');
+  await page.goto(`/competitions/${id}/reglages`);
+  await page.getByTestId('zone-name').nth(1).fill('tatami 1');
+  await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await expect(page.getByText('Deux zones portent le même nom : « Tatami 1 ».')).toBeVisible();
+});
