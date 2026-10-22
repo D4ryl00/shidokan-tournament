@@ -1,7 +1,7 @@
 # App de tableaux pour compétitions Shidokan : document de conception
 
-> **Statut : conception validée le 2026-10-21**, rien n'est encore construit. Prochaine étape : plan de développement.
-> Dernière mise à jour : 2026-10-21. Mainteneur : Remi.
+> **Statut : conception validée le 2026-10-21, construite** (étapes 1 à 14, voir `docs/superpowers/plans/2026-10-21-00-feuille-de-route.md`). Complétée par `docs/superpowers/specs/2026-10-22-ordre-de-passage-et-aides-design.md` (vagues, zones de combat, ordre de passage, aides) : en cas de différence, ce second document fait foi.
+> Dernière mise à jour : 2026-10-22. Mainteneur : Remi.
 >
 > Légende : ✅ décidé par l'équipe · 🟡 présumé, en attente de confirmation de la personne qui fait les tableaux · 💡 choix de Claude, à valider ou à corriger
 >
@@ -201,16 +201,19 @@ Kata et triathlon : inscription possible sur la fiche ✅, mais **jamais dans le
 
 ## 8. Pesée 💡
 
+- ✅ (2026-10-22) La pesée se fait **par vague** (« Samedi matin », « Dimanche »…) quand la compétition en a : liste, compteurs, feuilles de pesée et clôture ne portent que sur les catégories de la vague choisie. La **présence est tenue par inscription** : un combattant inscrit en kata le matin et en combat l'après-midi est pointé dans chaque vague ; son poids relevé reste le même. Détails : second document, §1.3 et §1.4.
 - Écran de pesée rapide : recherche par nom ou club, saisie du poids, case « présent ».
 - **Tolérance** réglable, par défaut 300 g pour les hommes et 500 g pour les femmes (FFK).
 - Un poids hors de la catégorie (tolérance comprise) crée **une proposition de recasement** vers la catégorie qui correspond au poids réel. Rien n'est appliqué sans validation (§2).
-- À la clôture de la pesée, l'organisateur confirme que les non-pesés sont **absents**.
+- À la clôture de la pesée (de la vague), l'organisateur confirme que les non-pesés sont **absents** ; un combattant déjà présent (inscrit ensuite sur place) le reste.
 - Feuilles de pesée imprimables, par club ou par catégorie.
 - Kata : pas de pesée, seulement la présence.
 
 ## 9. Recasement
 
 ### 9.1 Quand et quoi
+✅ (2026-10-22) Avec des vagues, le tableau de bord traite **la vague choisie**. Une proposition qui ferait changer un combattant de vague (ou qui emmène d'autres combattants dans une autre vague) est marquée « change de vague », jamais pré-approuvée ni validée en masse ; validée une par une, l'inscription repasse « non pesé » dans sa nouvelle vague. Une vague **lancée** est fermée au recasement tant qu'on ne la rouvre pas. Détails : second document, §1.5.
+
 Le recasement est possible **dès que les inscriptions sont connues, avant le jour J** ✅, puis à nouveau après la pesée, et jusqu'au lancement des catégories. L'app repère :
 - les **combattants seuls** dans leur catégorie (à cause d'un absent, d'un changement de poids, ou dès l'inscription) ;
 - les **poids hors catégorie** (§8) ;
@@ -316,10 +319,11 @@ Tous réglables **pour chaque compétition**.
 `provisoire` (avant la pesée) → `prête` (après le recasement) → `lancée` (premier résultat saisi) → `terminée`.
 - Un recasement ou une inscription **régénère** automatiquement les tableaux non lancés concernés.
 - Une catégorie **lancée** est **verrouillée** : on ne peut plus y recaser personne. Un déverrouillage reste possible, avec avertissement.
+- ✅ (2026-10-22) Une catégorie d'une **vague figée** (« Figer et imprimer la vague ») est verrouillée de la même façon : son tableau ne se régénère plus sans confirmation (« Régénérer (renuméroté à la suite) »).
 
 ## 12. Déroulé de la compétition et résultats ✅
 
-- 💡 Les catégories sont **affectées aux tatamis** à la main (glisser-déposer), avec un ordre de passage. L'app affiche, par tatami, la **liste des prochains combats**.
+- ✅ (2026-10-22, remplace l'affectation à la main des tatamis) Les **zones de combat** sont nommées (« Tatami 1 », « Ring »), avec les disciplines qu'elles accueillent. Les catégories de chaque vague sont **réparties automatiquement** sur les zones en équilibrant les combats (ou épinglées à la main). Chaque zone a sa **file numérotée** : kata d'abord, puis les combats « tour par tour » (finales en fin de vague) ou « catégorie par catégorie », avec le signal « pas de repos : prévoir une pause ». Option : finales sur une zone choisie. « Figer et imprimer la vague » fige les numéros ; « Rouvrir » et « Refiger » ; en cas de retard, une catégorie se **déplace** vers une autre zone « à la suite » ou « mélangés », avec aperçu. L'onglet Combats affiche, par zone, la file des prochains combats de la vague dans l'ordre des numéros. Détails : second document, §1.2 et §1.6 à §1.10.
 - **Saisie des résultats** au PC central ✅. Pour chaque combat 💡 :
   - **vainqueur** ;
   - **méthode** : points / décision, KO (shobu uniquement), abandon, disqualification, forfait ;
@@ -337,7 +341,7 @@ Tous réglables **pour chaque compétition**.
 
 ## 13. Impressions et exports ✅
 
-- **Tableaux et poules pour le gymnase** : simples, lisibles de loin. Noms, clubs, rencontres, résultats. **Sans** badges ni motifs de recasement.
+- **Tableaux et poules pour le gymnase** : simples, lisibles de loin. Noms, clubs, rencontres, résultats. **Sans** badges ni motifs de recasement. ✅ (2026-10-22) Chaque tableau porte **le nom de sa zone** et, sur chaque combat, son **numéro de passage** (« Combat 31 ») ; une finale déplacée porte « Zone des finales : Ring » ; un tableau renuméroté après le figeage porte « mis à jour à HH:MM ». Impression vague par vague.
 - **Podiums** ✅ : par catégorie, 1er, 2e, 3e (deux 3es s'il n'y a pas de combat pour la 3e place), avec le club.
   - Formats 💡 : **PDF** pour l'annonce et la remise des médailles, **.ods / .xlsx** pour l'archivage et la fédération.
   - 💡 **Classement des clubs** par médailles (or, argent, bronze) dans le même export.
@@ -356,7 +360,8 @@ Tous réglables **pour chaque compétition**.
 - **Navigateur de référence : Google Chrome**. Les tests d'interface automatisés tournent sur Chrome, dans les deux thèmes.
 
 ## 14. Paramètres d'une compétition (récapitulatif) 💡
-- Nom, date, lieu, nombre de tatamis.
+- Nom, date, lieu.
+- ✅ (2026-10-22) Zones de combat (noms, ordre, disciplines accueillies) ; vagues (nom, ordre, règles par tranche d'âge et par discipline, catégories ajoutées ou retirées) ; ordre de passage des combats (tour par tour / catégorie par catégorie) ; finales sur une zone (et finales de kata). Récapitulatif : second document, §1.11.
 - Grille de catégories (âges, poids, liste des mineurs et adultes), modifiable et enregistrable comme modèle.
 - Disciplines proposées ; triathlon (3 ou 6 rounds).
 - Seuils et options de recasement (§9.2).
@@ -456,4 +461,5 @@ Hypothèses à faire confirmer (🟡) :
 ## 20. Prochaines étapes
 1. ~~Valider ce document~~ ✅ validé le 2026-10-21.
 2. Récupérer les réponses WhatsApp et mettre à jour les 🟡.
-3. Plan de développement (skill superpowers:writing-plans).
+3. ~~Plan de développement~~ ✅ étapes 1 à 14 réalisées (feuille de route et bilan dans `docs/superpowers/plans/`).
+4. Répétition générale sur le PC de la table centrale (Docker, sans internet), puis compétition le 22 novembre 2026.

@@ -176,4 +176,4 @@ Le ⓘ explique à quoi servent les passages (le recasement ne propose de change
    6. déplacements en cours de compétition (« à la suite » / « mélangés »).
 
    Chaque étape reçoit ses aides au fil de l'eau.
-3. Mise à jour de la spec principale (§8, §9, §12, §14) et du bilan.
+3. ~~Mise à jour de la spec principale (§8, §9, §12, §14) et du bilan.~~ ✅ 2026-10-22.

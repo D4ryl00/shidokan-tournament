@@ -24,9 +24,9 @@ Le projet est découpé en étapes (1 à 7 : première version ; 8 à 14 : conce
 | 14 ✅ | **Déplacements en cours** | Déplacer une catégorie vers une autre zone, « à la suite » / « mélangés », aperçu, « mis à jour à HH:MM » (plan `2026-10-22-14-deplacements.md`) | 13 | 16 nov. |
 | — | **Répétition générale** | Compétition fictive complète sur le PC de la table centrale, avec Docker et sans internet | 6 | 20-21 nov. |
 
-## État au 2026-10-21
+## État au 2026-10-22
 
-Les 6 étapes sont réalisées sur la branche `feat/app` (419 tests unitaires, 13 parcours d'interface sur Chrome, image Docker vérifiée). Décisions prises et points reportés : `docs/superpowers/plans/2026-10-21-99-bilan.md`. Reste : la **répétition générale** sur le PC de la table centrale.
+Les étapes 1 à 14 sont réalisées, relues et fusionnées dans `main` (659 tests unitaires, 43 parcours d'interface sur Chrome, image Docker construite et démarrée, migrations 0012 et 0013 comprises). Décisions prises, corrections après relecture et points mineurs : `docs/superpowers/plans/2026-10-21-99-bilan.md`. La conception principale renvoie au second document pour les vagues, les zones et l'ordre de passage. Reste : la **répétition générale** sur le PC de la table centrale.
 
 ## Pourquoi cet ordre
 - **La fiche club part en premier** (étape 2) : les clubs doivent la recevoir plusieurs semaines avant la compétition, alors que l'export FFK n'arrive qu'à la clôture. Solution de secours si l'étape 2 prend du retard : le modèle .ods peut être produit et envoyé seul ; son import suivra.
