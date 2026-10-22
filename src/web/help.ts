@@ -63,7 +63,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     title: 'Impression',
     short: 'Cliquez « Imprimer » : seules les feuilles sortent, sans les boutons ni les aides.',
     details: [
-      'Ces pages sont faites pour l’impression (A4). Dans la fenêtre d’impression du navigateur, choisissez l’imprimante ou « Enregistrer en PDF ».',
+      'Ces pages sont faites pour l’impression (A4). Dans la fenêtre d’impression du navigateur, choisissez l’imprimante ou « Enregistrer au format PDF ».',
       'Les feuilles sortent toujours en noir sur blanc, même si l’app est en thème sombre.',
     ],
   },
@@ -74,7 +74,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Une ligne = un combattant dans une discipline. Un même combattant peut avoir plusieurs lignes (kata et combat, par exemple).',
       [
         'Recherche : tapez une partie du nom ou du club.',
-        '« Sans inscription FFK » : combattants venus d’une fiche club mais absents de l’export FFK.',
+        '« Sans inscription FFK » : inscriptions pas encore confirmées par l’export FFK (fiche club, saisie, inscription sur place).',
         'Le crayon modifie une inscription, la croix la supprime (impossible si sa catégorie a déjà commencé).',
         'Une inscription sur place le jour J se saisit ici, avec la case « Inscription sur place ».',
       ],
@@ -85,7 +85,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     title: 'Clubs',
     short: 'Les clubs, leur coach et leur pré-accord pour les recasements.',
     details: [
-      'Les clubs sont créés par l’import des fiches club ou par la saisie des inscriptions.',
+      'Les clubs sont créés par l’import des fiches club, par l’import FFK ou par la saisie des inscriptions.',
       [
         'Coach : nom, téléphone et e-mail, pour le joindre le jour J.',
         'Pré-accord : le coach accepte d’avance qu’on recase ses combattants. Les propositions qui demanderaient son accord sont alors marquées « pré-accord coach ».',
@@ -104,7 +104,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     title: '1. Envoyer le modèle aux clubs',
     short: 'Téléchargez le modèle (.ods) et envoyez-le aux clubs par e-mail.',
     details: [
-      'Le modèle contient des listes déroulantes (sexe, tranche d’âge, poids, discipline). Il s’ouvre avec LibreOffice ou Excel.',
+      'Le modèle contient des listes déroulantes (sexe, tranche d’âge, discipline, règlement, oui / non) ; le poids s’écrit à la main (-35, +65…). Il s’ouvre avec LibreOffice ou Excel.',
       'Les clubs le remplissent, une ligne par combattant et par discipline, puis vous le renvoient.',
     ],
   },
@@ -137,7 +137,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     title: 'Clubs',
     short: 'Vérifiez à quel club de l’app correspond chaque club de l’export FFK.',
     details: [
-      'Un lien « à vérifier » est une ressemblance de nom : confirmez-le ou choisissez un autre club. Un lien confirmé est retenu pour les compétitions suivantes.',
+      'Un lien « à vérifier » est une ressemblance de nom : vérifiez-le, et changez-le si ce n’est pas le bon club. Laissé tel quel, il est utilisé pour cet import.',
     ],
   },
   'import-ffk.rapprochements': {
@@ -182,10 +182,10 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       [
         '« Aperçu » montre qui rencontrera qui avant de valider.',
         '« Refuser » écarte une proposition (elle reste en grisé, « Rétablir » la reprend).',
-        '« Classer automatiquement tous les cas simples » valide d’un coup les propositions sans risque (poids voisin, retour dans la catégorie d’origine).',
+        '« Classer automatiquement tous les cas simples » valide d’un coup les propositions sans risque (poids voisin, retour dans la catégorie d’origine) ; « Tout classer automatiquement » valide aussi les autres, sous votre responsabilité.',
         '« Déplacer manuellement vers… » place un combattant où vous voulez, avec les règles enfreintes affichées.',
       ],
-      'Badges : ⚖ Poids (catégorie de poids voisine), ↑ Âge (tranche au-dessus), ⇄ Sen./Vét., ↑ Min./Adultes, ⚥ Mixte, Shobu → Jiyu, ⇄ Discipline, ↩ Retour, ✋ Manuel. Cliquez un badge validé pour son détail.',
+      'Badges : ⚖ Poids (catégorie de poids voisine), ⚖ Poids + (écart au-delà du seuil), ↑ Âge (tranche au-dessus), ⇄ Sen./Vét., ↑ Min./Adultes, ⚥ Mixte, Shobu → Jiyu, ⇄ Discipline, ↩ Retour, ✋ Manuel. Cliquez un badge validé pour son détail.',
       'Certains déplacements demandent normalement l’accord des coachs ; en les validant vous en prenez la responsabilité.',
     ],
   },
@@ -244,13 +244,13 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
   },
   'combats.kata': {
     title: 'Notation du kata',
-    short: 'Tapez la note de chaque arbitre pour chaque kataka, puis « Enregistrer » sur sa ligne.',
+    short: 'Tapez la note de chaque arbitre pour chaque kataka, puis ✓ au bout de sa ligne (ou Entrée).',
     details: [
       [
         'Choisissez d’abord le nombre d’arbitres.',
         'Moins de 5 arbitres : la note retenue est la moyenne. À partir de 5 : on retire la plus haute et la plus basse, puis on fait la moyenne.',
         'La finale apparaît quand toutes les notes du tour 1 sont saisies.',
-        'En cas d’égalité, la note basse retirée puis la note haute retirée départagent ; sinon « Départager » vous laisse classer.',
+        'En cas d’égalité avec au moins 5 arbitres, la note basse retirée puis la note haute retirée départagent ; sinon « Départager » vous laisse classer.',
       ],
     ],
   },
@@ -273,12 +273,13 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
   },
   'podiums.sauvegardes': {
     title: 'Sauvegardes',
-    short: 'Une copie de la base est faite toute seule ; en cas de problème, restaurez la plus récente.',
+    short: 'Une copie de la base est faite toute seule ; en cas de problème, on peut revenir à une sauvegarde.',
     details: [
-      'Une sauvegarde est faite automatiquement toutes les 5 minutes quand quelque chose a changé ; les 200 dernières sont gardées (plus d’une journée).',
+      'Une sauvegarde est faite automatiquement toutes les 5 minutes quand quelque chose a changé ; les 200 dernières sont gardées (toute une journée de compétition). La liste montre les 10 plus récentes, la plus récente en haut.',
       [
         '« Sauvegarder maintenant » en fait une tout de suite.',
-        '« Restaurer » remet la base dans l’état de cette sauvegarde (une copie de l’état actuel est faite avant).',
+        'Pour revenir en arrière : cliquez « Télécharger » sur la sauvegarde voulue, puis « Restaurer une sauvegarde… » et choisissez ce fichier.',
+        'La restauration remplace toutes les données (toutes les compétitions) par celles du fichier ; une copie de l’état actuel est faite juste avant.',
         '« Télécharger la base complète » : à garder sur une clé USB en fin de journée.',
       ],
     ],
@@ -301,7 +302,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Jusqu’où le recasement peut aller : écart de poids et mélanges autorisés.',
     details: [
       [
-        'Écart de poids max : au-delà, deux combattants ne sont jamais proposés ensemble (enfants et adultes séparément).',
+        'Écart de poids max (enfants et adultes séparément) : jusqu’à cet écart, un déplacement vers un poids voisin est sans risque ; au-delà, il reste proposé mais se valide à la main (badge « ⚖ Poids + »).',
         'Mélange mineurs / adultes, seniors / vétérans, filles / garçons : chaque mélange coché peut être proposé, mais se valide à la main.',
         'Filles / garçons : seulement dans les tranches d’âge cochées.',
         'Plusieurs disciplines de combat le même jour : permet à un combattant d’être inscrit en karaté et en shido-boxing, par exemple.',
@@ -322,7 +323,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         '3 combattants : poule (chacun rencontre les autres) ou autre format.',
         '4 et plus : élimination directe par défaut.',
         'Repêchage : ceux qui ont perdu contre un finaliste se disputent le bronze.',
-        'Combat pour la 3e place : un seul bronze au lieu de deux.',
+        'Combat pour la 3e place : un seul bronze au lieu de deux (ignoré quand le repêchage est activé).',
       ],
       'Chaque catégorie peut changer de format dans l’onglet Tableaux.',
     ],
@@ -358,10 +359,11 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     details: [
       'Le recasement ne propose de changer de tranche d’âge que par un passage de cette liste (par exemple Minimes → Cadets).',
       [
-        '« Toujours permis » : le passage est proposé dès qu’il est utile (tranche au-dessus).',
+        '« Toujours permis » : le passage est proposé dès qu’il est utile (tranche voisine).',
         '« Seulement si le mélange seniors / vétérans est activé » : le passage dépend de ce réglage (onglet Réglages, section Recasement).',
+        'Un passage de mineurs vers adultes (par exemple Juniors → Seniors) dépend en plus du réglage « mélange mineurs / adultes ».',
       ],
-      'La grille FFK est déjà réglée : n’y touchez que si vous ajoutez une tranche d’âge.',
+      'La grille FFK est déjà réglée : en général, il n’y a rien à changer ici.',
     ],
   },
   'grille.modeles': {

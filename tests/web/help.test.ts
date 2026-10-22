@@ -35,3 +35,35 @@ test('passages d’âge : libellés en clair', () => {
 test('sauvegardes : le nombre gardé est celui du serveur', () => {
   expect(HELP['podiums.sauvegardes'].details.flat().join(' ')).toContain('200');
 });
+
+const all = (id: keyof typeof HELP) => [HELP[id].short, ...HELP[id].details.flat()].join(' ');
+
+test('relecture : sauvegardes — la restauration décrite est celle de l’écran', () => {
+  expect(all('podiums.sauvegardes')).toContain('« Restaurer une sauvegarde… »');
+  expect(all('podiums.sauvegardes')).toContain('« Télécharger »');
+  expect(all('podiums.sauvegardes')).not.toMatch(/restaurez la plus récente|plus d’une journée/);
+});
+test('relecture : kata — enregistrer avec ✓ ou Entrée ; notes retirées à partir de 5 arbitres', () => {
+  expect(HELP['combats.kata'].short).toContain('✓');
+  expect(HELP['combats.kata'].short).not.toContain('« Enregistrer »');
+  expect(all('combats.kata')).toMatch(/au moins 5 arbitres, la note basse retirée/);
+});
+test('relecture : écart de poids — au-delà du seuil, validation manuelle (⚖ Poids +)', () => {
+  expect(all('reglages.recasement')).toContain('⚖ Poids +');
+  expect(all('reglages.recasement')).not.toContain('jamais proposés ensemble');
+  expect(all('recasement')).toContain('⚖ Poids +');
+});
+test('relecture : passages d’âge — tranche voisine, mineurs / adultes, pas d’ajout de tranche', () => {
+  expect(all('grille.passages')).toContain('tranche voisine');
+  expect(all('grille.passages')).toContain('mélange mineurs / adultes');
+  expect(all('grille.passages')).not.toContain('ajoutez une tranche');
+});
+test('relecture : autres faits', () => {
+  expect(all('fiche-club.envoyer')).toContain('règlement');
+  expect(all('fiche-club.envoyer')).not.toMatch(/listes déroulantes \([^)]*poids/);
+  expect(all('inscriptions')).toContain('pas encore confirmées par l’export FFK');
+  expect(all('clubs')).toContain('import FFK');
+  expect(all('import-ffk.clubs')).not.toContain('confirmez');
+  expect(all('reglages.tableaux')).toContain('ignoré quand le repêchage est activé');
+  expect(all('impression')).toContain('« Enregistrer au format PDF »');
+});
