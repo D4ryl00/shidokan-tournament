@@ -2,6 +2,7 @@ import { keyString, naturalKey, type CategoryKey } from '../categories.js';
 import { detectCases } from './detect.js';
 import { proposalsFor } from './propose.js';
 import type { Case, CaseKind, CategoryState, Member, Proposal, State } from './types.js';
+import { casesOfWave } from './waves.js';
 
 const uniqSorted = (xs: string[]) => [...new Set(xs)].sort();
 
@@ -42,7 +43,7 @@ export function applyProposal(state: State, p: Proposal): State {
     target = next.categories.find((c) => c.id === (p.target as { categoryId: string }).categoryId)!;
   } else {
     const ks = keyString(p.target.newKey);
-    target = next.categories.find((c) => keyString(c.key) === ks) ?? { id: `new:${ks}`, key: p.target.newKey, status: 'provisional', aliasKeys: [] };
+    target = next.categories.find((c) => keyString(c.key) === ks) ?? { id: `new:${ks}`, key: p.target.newKey, status: 'provisional', aliasKeys: [], waveOverride: null };
     if (!next.categories.includes(target)) next.categories.push(target);
   }
 
@@ -85,29 +86,32 @@ export interface BulkStep {
   manual: boolean;
 }
 
-/** Prochaine étape d'un recasement en masse : meilleure proposition du premier cas traitable (hors inscriptions déjà déplacées). */
-export function nextBulkStep(state: State, mode: BulkMode, moved: Set<string>): Proposal | null {
-  for (const c of detectCases(state)) {
+/**
+ * Prochaine étape d'un recasement en masse : meilleure proposition sans changement de vague du premier cas traitable
+ * de la vague (`null` : toutes), hors inscriptions déjà déplacées. Un changement de vague se valide un par un.
+ */
+export function nextBulkStep(state: State, mode: BulkMode, moved: Set<string>, waveId: string | null = null): Proposal | null {
+  for (const c of casesOfWave(state, detectCases(state), waveId)) {
     if (moved.has(c.registrationId)) continue;
-    const p = proposalsFor(state, c).find((x) => mode === 'all' || x.type === 'A' || x.type === 'R');
+    const p = proposalsFor(state, c).find((x) => !x.waveChange && (mode === 'all' || x.type === 'A' || x.type === 'R'));
     if (p) return p;
   }
   return null;
 }
 
 /** Applique la meilleure proposition du premier cas traitable, recalcule, recommence ; une étape par inscription au plus. */
-export function bulkPlan(state: State, mode: BulkMode): { steps: BulkStep[]; final: State; unresolved: Case[] } {
+export function bulkPlan(state: State, mode: BulkMode, waveId: string | null = null): { steps: BulkStep[]; final: State; unresolved: Case[] } {
   let current = state;
   const steps: BulkStep[] = [];
   const moved = new Set<string>();
   for (let guard = 0; guard <= state.members.length; guard++) {
-    const p = nextBulkStep(current, mode, moved);
+    const p = nextBulkStep(current, mode, moved, waveId);
     if (!p) break;
     current = applyProposal(current, p);
     steps.push({ proposal: p, manual: p.manual });
     moved.add(p.registrationId);
   }
-  return { steps, final: current, unresolved: detectCases(current) };
+  return { steps, final: current, unresolved: casesOfWave(current, detectCases(current), waveId) };
 }
 
 export function stateFingerprint(state: State): string {
@@ -118,7 +122,8 @@ export function stateFingerprint(state: State): string {
         m.registrationId, m.categoryId, m.presence, m.weighInKg, m.approxWeightKg, m.weightClassId, m.discipline, m.ruleset, m.ageBandCode, m.sex,
         m.placementLocked, m.clubId, m.clubPreApproval, m.otherDisciplines, m.acceptsJiyuFirst, m.original, m.recasementType,
       ]),
-    c: [...state.categories].sort((a, b) => a.id.localeCompare(b.id)).map((c) => [c.id, keyString(c.key), c.status, c.aliasKeys]),
+    c: [...state.categories].sort((a, b) => a.id.localeCompare(b.id)).map((c) => [c.id, keyString(c.key), c.status, c.aliasKeys, c.waveOverride]),
+    w: [...state.waves].sort((a, b) => a.id.localeCompare(b.id)).map((w) => [w.id, w.order, w.rules]),
     r: [...state.refused].sort(),
     s: state.settings,
     g: state.grid,

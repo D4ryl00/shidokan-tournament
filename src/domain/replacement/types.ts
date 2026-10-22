@@ -1,6 +1,7 @@
 import type { CategoryKey, CategoryStatus } from '../categories.js';
 import type { CompetitionSettings } from '../settings.js';
 import type { CategoryGrid, DisciplineId, Ruleset, Sex } from '../types.js';
+import type { Wave } from '../waves.js';
 
 export type Presence = 'unknown' | 'present' | 'absent';
 /** M = déplacement manuel décidé par l'organisateur (jamais proposé). */
@@ -42,6 +43,8 @@ export interface CategoryState {
   status: CategoryStatus;
   /** Clés naturelles absorbées par une fusion : leurs inscriptions continuent d'arriver ici. */
   aliasKeys: string[];
+  /** Choix individuel de vague (`WAVE_NONE` = en attente), sinon les règles des vagues décident. */
+  waveOverride: string | null;
 }
 
 export interface State {
@@ -49,6 +52,8 @@ export interface State {
   settings: CompetitionSettings;
   categories: CategoryState[];
   members: Member[];
+  /** Vagues de la compétition (vide : une seule vague implicite, comme avant). */
+  waves: Wave[];
   /** Identifiants de propositions refusées. */
   refused: string[];
 }
@@ -76,6 +81,8 @@ export interface Proposal {
   changes: { discipline?: DisciplineId; ruleset?: Ruleset | null; weightClassId?: string | null };
   checks: { weightGapKg: number; threshold: number; ageMove: 'same' | 'C' | 'D'; crossesMinorAdult: boolean; mixedSex: boolean };
   manual: boolean;
+  /** Vague de départ et d'arrivée quand elles diffèrent (`null` = en attente) : jamais pré-approuvée ni validée en masse. */
+  waveChange: { from: string | null; to: string | null } | null;
   preApproved: boolean;
   reason: string;
   rank: number;

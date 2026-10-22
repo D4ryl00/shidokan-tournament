@@ -4,8 +4,8 @@ import { DISCIPLINES } from '../disciplines.js';
 import { neighborWeightClasses } from '../weights.js';
 import { categoryForKey, isLocked, originalCategory } from './detect.js';
 import type { Case, CategoryState, Member, Proposal, ProposalType, State } from './types.js';
+import { waveChangeOf } from './waves.js';
 import { activeMembers, categoryWeightGap, gapThreshold, weighInClass } from './weights.js';
-
 
 /**
  * Compatibilité d'âge entre `band` et toutes les tranches d'une catégorie : chaque paire doit être la même tranche
@@ -107,6 +107,7 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
   const make = (type: ProposalType, target: Proposal['target'], toKey: CategoryKey, ev: Omit<Evaluation, 'type'>, members: number, extra: (number | string)[] = []) => {
     const targetId = 'categoryId' in target ? target.categoryId : keyString(target.newKey);
     const weightText = DISCIPLINES[toKey.discipline].hasWeight ? ` (écart ${ev.checks.weightGapKg.toFixed(1).replace('.', ',')} kg)` : '';
+    const waveChange = waveChangeOf(state, { type, registrationId: m.registrationId, target, changes: ev.changes });
     out.push({
       id: `${type}:${m.registrationId}>${targetId}`,
       caseId: c.id,
@@ -116,7 +117,8 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
       changes: ev.changes,
       checks: ev.checks,
       manual: type !== 'A' && type !== 'R',
-      preApproved: m.clubPreApproval && ['B', 'C', 'D', 'E'].includes(type),
+      waveChange,
+      preApproved: !waveChange && m.clubPreApproval && ['B', 'C', 'D', 'E'].includes(type),
       reason: `${m.label} : ${from} → ${labelOf(toKey)}${weightText}`,
       sortKey: [order(m).indexOf(type), ...extra, members === 1 ? 0 : 1, ev.checks.weightGapKg, labelOf(toKey)],
     });

@@ -23,10 +23,10 @@ export function makeState(members: Member[], over: Partial<State> = {}): State {
     const ks = keyString(key);
     let cat = categories.find((c) => keyString(c.key) === ks || c.aliasKeys.includes(ks));
     if (!cat) {
-      cat = { id: `cat:${ks}`, key, status: 'provisional', aliasKeys: [] };
+      cat = { id: `cat:${ks}`, key, status: 'provisional', aliasKeys: [], waveOverride: null };
       categories.push(cat);
     }
     m.categoryId = cat.id;
   }
-  return { grid: ffkDefaultGrid(), settings: defaultSettings(), refused: [], ...over, categories, members };
+  return { grid: ffkDefaultGrid(), settings: defaultSettings(), refused: [], waves: [], ...over, categories, members };
 }

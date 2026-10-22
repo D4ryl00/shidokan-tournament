@@ -18,6 +18,7 @@ import {
   type Presence,
   type Proposal,
   type State,
+  waveChangeOf,
 } from '../../domain/replacement/index.js';
 import type { AppDb } from '../db/client.js';
 import { categories, clubs, competitions, fighters, recasements, refusals, registrations, waves } from '../db/schema.js';
@@ -78,8 +79,9 @@ export async function loadState(db: AppDb, competitionId: string): Promise<State
       .from(categories)
       .where(eq(categories.competitionId, competitionId))
       .all()
-      .map((c) => ({ id: c.id, key: JSON.parse(c.keyJson), status: c.status, aliasKeys: JSON.parse(c.aliasKeys) })),
+      .map((c) => ({ id: c.id, key: JSON.parse(c.keyJson), status: c.status, aliasKeys: JSON.parse(c.aliasKeys), waveOverride: c.waveOverride })),
     members,
+    waves: await listWaves(db, competitionId),
     refused: db.select().from(refusals).where(eq(refusals.competitionId, competitionId)).all().map((r) => r.proposalId),
   };
 }
@@ -222,7 +224,7 @@ export function manualProposal(state: State, registrationId: string, categoryId:
   const warnings = moveViolations(state, m, t);
   const toKata = !DISCIPLINES[t.key.discipline].hasWeight && DISCIPLINES[m.discipline].hasWeight;
   if (toKata) warnings.push(`Passage en ${DISCIPLINES[t.key.discipline].label.toLowerCase()} : règlement et catégorie de poids retirés.`);
-  const p: Proposal = {
+  const p: Omit<Proposal, 'waveChange'> = {
     id: `M:${registrationId}>${categoryId}`,
     caseId: 'manual',
     type: 'M',
@@ -239,7 +241,7 @@ export function manualProposal(state: State, registrationId: string, categoryId:
     reason: 'Déplacement manuel',
     rank: 0,
   };
-  return { p, warnings };
+  return { p: { ...p, waveChange: waveChangeOf(state, p) }, warnings };
 }
 
 export async function manualMove(db: AppDb, competitionId: string, registrationId: string, categoryId: string): Promise<{ warnings: string[] }> {
