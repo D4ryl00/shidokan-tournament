@@ -102,6 +102,21 @@ export function ageBandAbbreviation(code: string, label: string): string {
   return ABBREVIATIONS[code] ?? label.slice(0, 2);
 }
 
+/** Abréviations d'une grille, sans doublon : à défaut, trois lettres, puis un numéro. */
+export function ageBandAbbreviations(bands: { code: string; label: string }[]): Map<string, string> {
+  const out = new Map<string, string>();
+  const used = new Set<string>();
+  for (const b of bands) {
+    const base = ageBandAbbreviation(b.code, b.label);
+    let abbr = base;
+    if (used.has(abbr)) abbr = b.label.replace(/\s+/g, '').slice(0, 3);
+    for (let n = 2; used.has(abbr); n++) abbr = `${base}${n}`;
+    used.add(abbr);
+    out.set(b.code, abbr);
+  }
+  return out;
+}
+
 /** Une ligne → une ou deux lignes d'inscription (combat puis kata), avec le même numéro de ligne. */
 export function lineToRows(line: ClubFormLine, lineNumber: number, grid: CategoryGrid, tolerance: WeighInTolerance): ClubFormRow[] {
   const label = `${line.lastName.trim()} ${line.firstName.trim()}`.trim();
@@ -155,9 +170,14 @@ export function lineToRows(line: ClubFormLine, lineNumber: number, grid: Categor
 }
 
 const COMBAT_LABELS = new Set<DisciplineId>(['karate', 'shido-boxing', 'shido-mix', 'triathlon']);
-function cellsToLine(row: unknown[], grid: CategoryGrid): { line: ClubFormLine; warnings: string[] } {
+function cellsToLine(row: unknown[], grid: CategoryGrid): { line: ClubFormLine; warnings: string[]; errors: string[] } {
   const [lastName, firstName, sexCell, ageCell, weightCell, combatCell, kataCell, gradeCell, rulesetCell, prefK, prefB, prefM, keepCell] = row;
   const warnings: string[] = [];
+  const errors: string[] = [];
+  const sex = parseSex(sexCell);
+  if (text(sexCell) && !sex) errors.push(`Sexe incompréhensible : « ${text(sexCell)} ».`);
+  const ageBandCode = ageBandFromLabel(ageCell, grid);
+  if (text(ageCell) && !ageBandCode) errors.push(`Catégorie d'âge incompréhensible : « ${text(ageCell)} ».`);
   const combatRaw = disciplineFromLabel(combatCell);
   const combat = combatRaw && COMBAT_LABELS.has(combatRaw) ? (combatRaw as CombatDiscipline) : null;
   // « Kata » écrit dans la colonne de combat : c'est une inscription en kata.
@@ -166,9 +186,9 @@ function cellsToLine(row: unknown[], grid: CategoryGrid): { line: ClubFormLine; 
   const kataText = normalizeName(text(kataCell));
   const kataYes = kataText === 'KATA' || kataText === 'K' || kataText === '✓' ? true : parseYesNo(kataCell);
   if (kataText && kataYes === null) warnings.push(`Case Kata incomprise : « ${text(kataCell)} » (Oui ou Non) — pas d'inscription en kata.`);
-  const weightText = text(weightCell).replace(',', '.');
+  const weightText = text(weightCell).replace(',', '.').replace(/\s*kg$/i, '');
   const weightKg = weightText && Number(weightText) > 0 ? Number(weightText) : null;
-  if (weightText && weightKg === null) warnings.push(`Poids actuel incompréhensible : « ${text(weightCell)} ».`);
+  if (weightText && weightKg === null) errors.push(`Poids actuel incompréhensible : « ${text(weightCell)} ».`);
   const prefs: ClubFormLine['prefs'] = {};
   for (const [d, cell] of [['karate', prefK], ['shido-boxing', prefB], ['shido-mix', prefM]] as const) {
     const n = text(cell);
@@ -180,10 +200,11 @@ function cellsToLine(row: unknown[], grid: CategoryGrid): { line: ClubFormLine; 
   if (keep && !shobuKeep) warnings.push(`Priorité shobu incompréhensible : « ${text(keepCell)} ».`);
   return {
     line: {
-      lastName: text(lastName), firstName: text(firstName), sex: parseSex(sexCell), ageBandCode: ageBandFromLabel(ageCell, grid),
+      lastName: text(lastName), firstName: text(firstName), sex, ageBandCode,
       weightKg, combat, kata: kataYes === true || kataInCombat, grade: textOrNull(gradeCell), ruleset: rulesetFromLabel(rulesetCell), prefs, shobuKeep,
     },
     warnings,
+    errors,
   };
 }
 
@@ -326,7 +347,9 @@ export function parseClubForm(cells: unknown[][], grid: CategoryGrid, tolerance:
     if (row.slice(0, width).every((c) => text(c) === '')) continue;
     const parsedRows = isNew
       ? (() => {
-          const { line, warnings } = cellsToLine(row, grid);
+          const { line, warnings, errors } = cellsToLine(row, grid);
+          // Une valeur illisible prime sur « manquant » (même ligne, un seul message par case).
+          if (errors.length) return [{ line: r + 1, label: `${line.lastName} ${line.firstName}`.trim(), input: null, errors, warnings }];
           const out = lineToRows(line, r + 1, grid, tolerance);
           out[0]!.warnings.unshift(...warnings);
           return out;

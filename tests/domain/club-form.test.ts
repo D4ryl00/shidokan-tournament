@@ -3,6 +3,7 @@ import {
   CLUB_FORM_COLUMNS,
   CLUB_FORM_LEGACY_COLUMNS,
   ageBandAbbreviation,
+  ageBandAbbreviations,
   CLUB_FORM_FIRST_ROW,
   CLUB_FORM_HEADER_FIELDS,
   CLUB_FORM_TITLE,
@@ -277,4 +278,29 @@ test('abréviations des tranches d’âge', () => {
   expect(ageBandAbbreviation('pupille', 'Pupilles')).toBe('Pu');
   expect(ageBandAbbreviation('v3', 'Vétérans 3')).toBe('V3');
   expect(ageBandAbbreviation('ado', 'Adolescents')).toBe('Ad');
+});
+
+describe('relecture (mineurs) : messages du nouveau format', () => {
+  const base: Line = ['MARTIN', 'Léa', 'Féminin', 'Cadets', '53,5', 'Karaté', 'Non', null, 'Jiyu', null, null, null, null];
+  const with_ = (i: number, v: string) => base.map((x, j) => (j === i ? v : x));
+  test('sexe ou âge illisibles : « incompréhensible », pas « manquant »', () => {
+    expect(parseClubForm(sheetNew([with_(2, 'Inconnu')]), grid).rows[0]!.errors).toEqual(['Sexe incompréhensible : « Inconnu ».']);
+    expect(parseClubForm(sheetNew([with_(3, 'Sénior 2')]), grid).rows[0]!.errors).toEqual(["Catégorie d'âge incompréhensible : « Sénior 2 »."]);
+  });
+  test('« 70 kg » : lu comme 70, sans remarque', () => {
+    const r = parseClubForm(sheetNew([with_(4, '53,5 kg')]), grid, { M: 0, F: 0.5 }).rows[0]!;
+    expect(r.errors).toEqual([]);
+    expect(r.warnings).toEqual([]);
+    expect(r.input!.approxWeightKg).toBe(53.5);
+  });
+  test('poids illisible : un seul message', () => {
+    expect(parseClubForm(sheetNew([with_(4, 'lourd')]), grid).rows[0]!.errors).toEqual(['Poids actuel incompréhensible : « lourd ».']);
+  });
+});
+
+test('relecture (mineurs) : abréviations sans doublon dans une grille', () => {
+  const m = ageBandAbbreviations([{ code: 'minime', label: 'Minimes' }, { code: 'mini2', label: 'Minimes 2' }, { code: 'cadet', label: 'Cadets' }]);
+  expect(m.get('minime')).toBe('Mi');
+  expect(m.get('cadet')).toBe('C');
+  expect(new Set(m.values()).size).toBe(3);
 });
