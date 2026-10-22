@@ -172,3 +172,16 @@ test('relecture : une fiche papier saisie page par page s’ajoute (rien n’est
   await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: ENTRY_HEADER, lines: [ENTRY_LINE] } });
   expect((await app.inject({ method: 'GET', url: `${base}/registrations` })).json()).toHaveLength(3);
 });
+
+test('relecture (mineurs) : import HTTP d’une fiche .ods au nouveau format', async () => {
+  const filled = fillClubForm(await template(), ['Tani Dojo', 'Jean', null, null, 'Non'], [
+    ['MARTIN', 'Léa', 'Féminin', 'Cadets', '54,4', 'Karaté', 'Oui', '1er kyu', 'Jiyu', null, '2', '1', null],
+  ], 'new');
+  const res = await upload(`${base}/club-forms/import`, filled);
+  expect(res.statusCode).toBe(200);
+  const rows = (await app.inject({ method: 'GET', url: `${base}/registrations` })).json() as { discipline: string; weightClassId: string | null; fighter: { grade: string | null } }[];
+  expect(rows.map((r) => r.discipline).sort()).toEqual(['karate', 'kata']);
+  // Tolérance de pesée des réglages (femmes 0,5 kg) : 54,4 kg reste en -54
+  expect(rows.find((r) => r.discipline === 'karate')!.weightClassId).toBe('cadet:F:-54');
+  expect(rows.every((r) => r.fighter.grade === '1er kyu')).toBe(true);
+});

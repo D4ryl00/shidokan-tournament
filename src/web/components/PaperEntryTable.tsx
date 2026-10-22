@@ -1,9 +1,10 @@
 import { Button, Checkbox, Chip, Group, NativeSelect, ScrollArea, SimpleGrid, Stack, Table, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
-import { ageBandAbbreviation, type ClubFormHeader, type ClubFormLine, type CombatDiscipline, type PrefDiscipline } from '../../domain/club-form.js';
+import { ageBandAbbreviations, type ClubFormHeader, type ClubFormLine, type CombatDiscipline, type PrefDiscipline } from '../../domain/club-form.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import { useImportPaperEntry, usePreviewPaperEntry } from '../api.js';
+import { useUnsaved } from '../unsaved.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { ClubFormPreviewTable } from './ClubFormPreviewTable.js';
 
@@ -12,7 +13,7 @@ const emptyLine = (): ClubFormLine => ({
 });
 const EMPTY_HEADER: ClubFormHeader = { club: '', coachName: null, coachPhone: null, coachEmail: null, preApproval: false };
 const COMBATS: [CombatDiscipline, string][] = [['karate', 'Karaté'], ['shido-boxing', 'Boxing'], ['shido-mix', 'Mix'], ['triathlon', 'Triathlon']];
-const PREFS: [PrefDiscipline, string, string][] = [['karate', 'Karaté', 'Ka'], ['shido-boxing', 'Boxing', 'Bo'], ['shido-mix', 'Mix', 'Mi']];
+const PREFS: [PrefDiscipline, string, string][] = [['karate', 'Karaté', 'Ka'], ['shido-boxing', 'Boxing', 'Bx'], ['shido-mix', 'Mix', 'Mx']];
 
 /** Cases à choix unique, comme sur la fiche : un second clic décoche. */
 function OneOf<T extends string>({ value, options, onChange }: { value: T | null; options: [T, string][]; onChange: (v: T | null) => void }) {
@@ -32,7 +33,11 @@ export function PaperEntryTable({ competitionId, grid }: { competitionId: string
   const [weights, setWeights] = useState<string[]>(() => Array(5).fill(''));
   const preview = usePreviewPaperEntry(competitionId);
   const save = useImportPaperEntry(competitionId);
-  const bands = grid.ageBands.filter((b) => b.onClubForm).map((b) => [b.code, ageBandAbbreviation(b.code, b.label)] as [string, string]);
+  const offered = grid.ageBands.filter((b) => b.onClubForm);
+  const abbr = ageBandAbbreviations(offered);
+  const bands = offered.map((b) => [b.code, abbr.get(b.code)!] as [string, string]);
+  const isEmpty = (l: ClubFormLine) => !l.lastName && !l.firstName && !l.sex && !l.ageBandCode && l.weightKg === null && !l.combat && !l.kata && !l.grade && !l.ruleset && !Object.keys(l.prefs).length && !l.shobuKeep;
+  useUnsaved('paper-entry', !!header.club.trim() || lines.some((l) => !isEmpty(l)));
 
   const changed = () => {
     preview.reset();
@@ -84,8 +89,8 @@ export function PaperEntryTable({ competitionId, grid }: { competitionId: string
               <Table.Tr key={i} data-testid="paper-entry-row">
                 <Table.Td w={150}><TextInput size="xs" aria-label="Nom" value={l.lastName} onChange={(e) => setLine(i, { lastName: e.currentTarget.value })} /></Table.Td>
                 <Table.Td w={130}><TextInput size="xs" aria-label="Prénom" value={l.firstName} onChange={(e) => setLine(i, { firstName: e.currentTarget.value })} /></Table.Td>
-                <Table.Td><OneOf value={l.sex} options={[['F', 'F'], ['M', 'M']]} onChange={(sex) => setLine(i, { sex })} /></Table.Td>
-                <Table.Td w={280}><OneOf value={l.ageBandCode} options={bands} onChange={(ageBandCode) => setLine(i, { ageBandCode })} /></Table.Td>
+                <Table.Td role="group" aria-label={`Ligne ${i + 1} — Sexe`}><OneOf value={l.sex} options={[['F', 'F'], ['M', 'M']]} onChange={(sex) => setLine(i, { sex })} /></Table.Td>
+                <Table.Td role="group" aria-label={`Ligne ${i + 1} — Catégorie d’âge`} w={280}><OneOf value={l.ageBandCode} options={bands} onChange={(ageBandCode) => setLine(i, { ageBandCode })} /></Table.Td>
                 <Table.Td w={90}>
                   <TextInput size="xs" aria-label="Poids actuel" rightSection={<Text size="xs">kg</Text>} value={weights[i]}
                     onChange={(e) => {
@@ -95,15 +100,15 @@ export function PaperEntryTable({ competitionId, grid }: { competitionId: string
                       setLine(i, { weightKg: raw.trim() && kg > 0 ? kg : null });
                     }} />
                 </Table.Td>
-                <Table.Td w={230}>
+                <Table.Td role="group" aria-label={`Ligne ${i + 1} — Disciplines`} w={230}>
                   <Group gap={4}>
                     <OneOf value={l.combat} options={COMBATS} onChange={(combat) => setLine(i, { combat })} />
                     <Chip size="xs" checked={l.kata} onChange={(kata) => setLine(i, { kata })}>Kata</Chip>
                   </Group>
                 </Table.Td>
                 <Table.Td w={100}><TextInput size="xs" aria-label="Grade" value={l.grade ?? ''} onChange={(e) => setLine(i, { grade: e.currentTarget.value || null })} /></Table.Td>
-                <Table.Td><OneOf value={l.ruleset} options={[['jiyu', 'Jiyu'], ['shobu', 'Shobu']]} onChange={(ruleset) => setLine(i, { ruleset })} /></Table.Td>
-                <Table.Td>
+                <Table.Td role="group" aria-label={`Ligne ${i + 1} — Règlement`}><OneOf value={l.ruleset} options={[['jiyu', 'Jiyu'], ['shobu', 'Shobu']]} onChange={(ruleset) => setLine(i, { ruleset })} /></Table.Td>
+                <Table.Td role="group" aria-label={`Ligne ${i + 1} — Si reclassement`}>
                   <Group gap={4} wrap="nowrap">
                     {PREFS.map(([d, label, short]) => (
                       <NativeSelect key={d} size="xs" w={78} aria-label={`Reclassement ${label}`} data={['', '1', '2']}
@@ -119,7 +124,7 @@ export function PaperEntryTable({ competitionId, grid }: { competitionId: string
                     ))}
                   </Group>
                 </Table.Td>
-                <Table.Td><OneOf value={l.shobuKeep} options={[['ruleset', 'Règles shobu'], ['discipline', 'Discipline']]} onChange={(shobuKeep) => setLine(i, { shobuKeep })} /></Table.Td>
+                <Table.Td role="group" aria-label={`Ligne ${i + 1} — Shobu : garder en priorité`}><OneOf value={l.shobuKeep} options={[['ruleset', 'Règles shobu'], ['discipline', 'Discipline']]} onChange={(shobuKeep) => setLine(i, { shobuKeep })} /></Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>

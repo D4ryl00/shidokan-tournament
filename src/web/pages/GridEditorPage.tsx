@@ -161,7 +161,7 @@ export function GridEditorPage() {
                     onChange={(v) => updateBand(b.code, { maxAge: v === '' ? null : Number(v) })} />
                 </Table.Td>
                 <Table.Td><Checkbox aria-label="Mineurs" checked={b.isMinor} onChange={(e) => updateBand(b.code, { isMinor: e.currentTarget.checked })} /></Table.Td>
-                <Table.Td><Checkbox aria-label="Proposée sur la fiche club" checked={b.onClubForm} onChange={(e) => updateBand(b.code, { onClubForm: e.currentTarget.checked })} /></Table.Td>
+                <Table.Td><Checkbox aria-label={`Proposée sur la fiche club — ${b.label}`} checked={b.onClubForm} onChange={(e) => updateBand(b.code, { onClubForm: e.currentTarget.checked })} /></Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>

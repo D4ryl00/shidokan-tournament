@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   CLUB_FORM_COLUMNS,
   CLUB_FORM_HEADER_FIELDS,
@@ -15,13 +16,19 @@ import type { OdsCell, OdsSheet } from './spreadsheet/ods.js';
 const c = (value: string | number | null, extra: Partial<OdsCell> = {}): OdsCell => ({ value, ...extra });
 const frDate = (iso: string) => iso.split('-').reverse().join('/');
 
-/** Logo Shidokan France en PNG : dans le dépôt (développement) ou parmi les fichiers du site (image Docker). */
+const here = path.dirname(fileURLToPath(import.meta.url));
+/**
+ * Logo Shidokan France en PNG, cherché à partir de ce fichier (indépendant du dossier courant) :
+ * dans le dépôt (src/server → assets/brand) ou parmi les fichiers du site compilé (dist/server → dist/web).
+ */
 function logoPng(): Buffer | null {
-  for (const p of ['assets/brand/shidokan-france-logo.png', 'dist/web/shidokan-france-logo.png']) {
-    const full = path.resolve(p);
-    if (fs.existsSync(full)) return fs.readFileSync(full);
-  }
-  return null;
+  const candidates = [
+    ...(process.env.WEB_DIST_DIR ? [path.resolve(process.env.WEB_DIST_DIR, 'shidokan-france-logo.png')] : []),
+    path.resolve(here, '../../assets/brand/shidokan-france-logo.png'),
+    path.resolve(here, '../web/shidokan-france-logo.png'),
+  ];
+  const found = candidates.find((p) => fs.existsSync(p));
+  return found ? fs.readFileSync(found) : null;
 }
 
 const COMBAT = (['karate', 'shido-boxing', 'shido-mix', 'triathlon'] as const).map((d) => DISCIPLINES[d].label);

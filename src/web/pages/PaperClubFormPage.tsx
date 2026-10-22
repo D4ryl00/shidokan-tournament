@@ -1,7 +1,7 @@
 import '../print.css';
 import { Button, Group } from '@mantine/core';
 import { useParams } from 'react-router';
-import { ageBandAbbreviation, CLUB_FORM_TITLE } from '../../domain/club-form.js';
+import { ageBandAbbreviations, CLUB_FORM_TITLE } from '../../domain/club-form.js';
 import { useCompetition, useGrid } from '../api.js';
 import { HelpText } from '../components/Help.js';
 
@@ -12,11 +12,11 @@ const frDate = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('
 const CSS = `
 .pf { width: 277mm; height: 190mm; margin: 0 auto; box-sizing: border-box; display: flex; flex-direction: column; color: #000; background: #fff;
   font-family: Calibri, 'Segoe UI', Arial, sans-serif; font-size: 9.5pt; overflow: hidden; }
-.pf-head { display: flex; align-items: center; gap: 4mm; height: 20mm; flex: none; }
+.pf-head { display: flex; align-items: center; gap: 4mm; min-height: 20mm; flex: none; }
 .pf-head img { width: 18mm; height: 18mm; }
-.pf-title { flex: 1; border: 0.8mm solid #000; text-align: center; padding: 1mm 3mm; height: 18mm; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; }
-.pf-title b { font-size: 17pt; letter-spacing: 0.2mm; }
-.pf-title span { font-size: 9.5pt; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.pf-title { flex: 1; border: 0.8mm solid #000; text-align: center; padding: 1mm 3mm; min-height: 18mm; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; }
+.pf-title b { font-size: 15pt; letter-spacing: 0.2mm; line-height: 1.15; }
+.pf-title span { font-size: 9pt; line-height: 1.25; }
 .pf-fields { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 1.5mm 3mm; margin-top: 3mm; flex: none; }
 .pf-box { border: 0.25mm solid #666; height: 7mm; padding: 0 2mm; display: flex; align-items: center; box-sizing: border-box; font-weight: 700; white-space: nowrap; }
 .pf table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 3mm; }
@@ -26,8 +26,9 @@ const CSS = `
 .pf .opts { white-space: nowrap; line-height: 1.55; }
 .pf .ck { display: inline-block; width: 2.8mm; height: 2.8mm; border: 0.3mm solid #222; vertical-align: -0.5mm; margin: 0 0.6mm 0 1.2mm; box-sizing: border-box; }
 .pf .num { display: inline-block; width: 3.6mm; height: 3.6mm; border: 0.3mm solid #222; vertical-align: -1mm; margin: 0 0.6mm 0 1mm; box-sizing: border-box; }
-.pf .ages { display: grid; gap: 0; font-size: 8pt; line-height: 1.6; }
-.pf .ages span { white-space: nowrap; }
+.pf .ages { display: grid; column-gap: 0.8mm; font-size: 8pt; line-height: 1.6; }
+.pf .ages.dense { font-size: 7pt; line-height: 1.3; }
+.pf .ages > span { white-space: nowrap; }
 .pf .ages .ck { margin-left: 0; }
 .pf-foot { margin-top: auto; padding-top: 1.5mm; font-size: 8pt; line-height: 1.35; flex: none; display: flex; gap: 4mm; align-items: flex-end; }
 .pf-foot .page { flex: none; font-weight: 700; white-space: nowrap; }
@@ -55,15 +56,18 @@ export function PaperClubFormPage() {
   if (!competition || !grid) return null;
   const bands = grid.ageBands.filter((b) => b.onClubForm);
   const subtitle = [competition.name, frDate(competition.date), competition.location].filter(Boolean).join(' — ');
+  const abbreviations = ageBandAbbreviations(bands);
   const legend = bands
     .map((b) => {
-      const abbr = ageBandAbbreviation(b.code, b.label);
+      const abbr = abbreviations.get(b.code)!;
       const ages = b.maxAge === null ? `${b.minAge}+` : `${b.minAge}-${b.maxAge}`;
       // « V1 (35-45) » : le libellé n'apporte rien quand l'abréviation le contient déjà.
       return /^V\d$/.test(abbr) ? `${abbr} (${ages})` : `${abbr} ${b.label.toLowerCase()} (${ages})`;
     })
     .join(' · ');
-  const ageColumns = Math.ceil(bands.length / 2);
+  // Au-delà de 12 tranches, trois rangées plus serrées pour garder chaque case lisible.
+  const ageRows = bands.length > 12 ? 3 : 2;
+  const ageColumns = Math.ceil(bands.length / ageRows);
   return (
     <div className="print-root">
       <style>{CSS}</style>
@@ -74,7 +78,7 @@ export function PaperClubFormPage() {
       <div className="pf" data-testid="paper-form">
         <div className="pf-head">
           <img src="/shidokan-france-logo.webp" alt="" />
-          <div className="pf-title"><b>{CLUB_FORM_TITLE.replace(/ CLUB$/, '')}</b><span>{subtitle}</span></div>
+          <div className="pf-title"><b>{CLUB_FORM_TITLE.replace(/ CLUB$/, '')}</b><span data-testid="paper-subtitle">{subtitle}</span></div>
           <img src="/shidokan-france-logo.webp" alt="" />
         </div>
         <div className="pf-fields">
@@ -105,9 +109,9 @@ export function PaperClubFormPage() {
                 <td /><td />
                 <td className="opts"><Ck label="F" /><br /><Ck label="M" /></td>
                 <td>
-                  <div className="ages" style={{ gridTemplateColumns: `repeat(${ageColumns}, 1fr)` }}>
+                  <div className={ageRows > 2 ? 'ages dense' : 'ages'} style={{ gridTemplateColumns: `repeat(${ageColumns}, max-content)` }}>
                     {bands.map((b) => (
-                      <span key={b.code}><span className="ck" /><span data-testid="paper-age">{ageBandAbbreviation(b.code, b.label)}</span></span>
+                      <span key={b.code} data-testid="paper-age-item"><span className="ck" /><span data-testid="paper-age">{abbreviations.get(b.code)}</span></span>
                     ))}
                   </div>
                 </td>

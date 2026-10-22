@@ -1,8 +1,10 @@
-import { Group, Loader, Stack, Tabs, Text, Title } from '@mantine/core';
+import { Button, Group, Loader, Modal, Stack, Tabs, Text, Title } from '@mantine/core';
+import { useState } from 'react';
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { useCompetition } from '../api.js';
 import { HELP, type HelpTopicId } from '../help.js';
 import { COMPETITION_TABS } from '../tabs.js';
+import { useHasUnsaved } from '../unsaved.js';
 import { HelpButton, HelpText } from './Help.js';
 
 
@@ -11,6 +13,9 @@ export function CompetitionLayout() {
   const { data, isLoading } = useCompetition(id);
   const navigate = useNavigate();
   const current = useLocation().pathname.split('/')[3] ?? 'reglages';
+  const unsaved = useHasUnsaved();
+  const [pending, setPending] = useState<string | null>(null);
+  const go = (tab: string) => (unsaved ? setPending(tab) : navigate(`/competitions/${id}/${tab}`));
   if (isLoading) return <Loader />;
   if (!data) return <Text>Compétition introuvable.</Text>;
   return (
@@ -22,7 +27,7 @@ export function CompetitionLayout() {
           {data.location ? ` — ${data.location}` : ''}
         </Text>
       </div>
-      <Tabs value={current} onChange={(v) => v && navigate(`/competitions/${id}/${v}`)}>
+      <Tabs value={current} onChange={(v) => v && v !== current && go(v)}>
         <Tabs.List>
           {COMPETITION_TABS.map((t) => (
             <Tabs.Tab key={t.path} value={t.path}>
@@ -37,6 +42,17 @@ export function CompetitionLayout() {
           <HelpButton topic={current as HelpTopicId} />
         </Group>
       )}
+      <Modal opened={pending !== null} onClose={() => setPending(null)} title="Quitter sans enregistrer ?">
+        <Stack data-testid="leave-confirm">
+          <Text size="sm">La saisie en cours n’est pas enregistrée : elle sera perdue si vous quittez cet onglet.</Text>
+          <Group justify="flex-end">
+            <Button variant="default" data-testid="leave-stay" onClick={() => setPending(null)}>Rester</Button>
+            <Button color="red" data-testid="leave-go" onClick={() => { const tab = pending; setPending(null); if (tab) navigate(`/competitions/${id}/${tab}`); }}>
+              Quitter sans enregistrer
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
       <Outlet />
     </Stack>
   );

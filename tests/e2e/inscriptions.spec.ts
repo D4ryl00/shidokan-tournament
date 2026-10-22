@@ -157,3 +157,39 @@ test('saisie d’une fiche papier', async ({ page, request }) => {
   await page.goto(`/competitions/${id}/inscriptions`);
   expect(((await (await request.get(`/api/competitions/${id}/registrations`)).json()) as unknown[]).length).toBe(2);
 });
+
+test('relecture (mineurs) : fiche papier — abréviations uniques, lieu visible, cases d’âge espacées', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe fiche mineurs');
+  await request.patch(`/api/competitions/${id}`, { data: { name: 'Coupe Shidokan de la Côte d’Azur et des Alpes-Maritimes — édition spéciale 2026', location: 'Gymnase municipal Jean Médecin, Nice' } });
+  const grid = (await (await request.get(`/api/competitions/${id}/grid`)).json()) as { ageBands: { code: string; label: string; sortOrder: number; minAge: number; maxAge: number | null; isMinor: boolean; onClubForm: boolean }[]; weightClasses: unknown[]; ageLinks: unknown[] };
+  grid.ageBands.push({ code: 'mini2', label: 'Minimes 2', minAge: 12, maxAge: 13, isMinor: true, sortOrder: 99, onClubForm: true });
+  expect((await request.put(`/api/competitions/${id}/grid`, { data: grid })).status()).toBe(204);
+  await page.goto(`/competitions/${id}/impression/fiche-club`);
+  const ages = await page.getByTestId('paper-form-row').first().getByTestId('paper-age').allTextContents();
+  expect(new Set(ages).size).toBe(ages.length);
+  // Le lieu n'est pas coupé dans le cadre du titre
+  const clipped = await page.getByTestId('paper-subtitle').evaluate((el) => el.scrollHeight > el.clientHeight + 1);
+  expect(clipped).toBe(false);
+  // Cases d'âge : aucune case collée au libellé précédent (15 tranches)
+  const boxes = await page.getByTestId('paper-form-row').first().getByTestId('paper-age-item').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON() as DOMRect));
+  for (let i = 1; i < boxes.length; i++) {
+    if (Math.abs(boxes[i]!.top - boxes[i - 1]!.top) < 2) expect(boxes[i]!.left).toBeGreaterThanOrEqual(boxes[i - 1]!.right + 1);
+  }
+  await page.emulateMedia({ media: 'print' });
+  expect(await pdfPages(page)).toBe(1);
+});
+
+test('relecture (mineurs) : saisie papier — confirmation avant de quitter, noms accessibles', async ({ page }) => {
+  const id = await createCompetition(page, 'Coupe saisie confirmation');
+  await page.goto(`/competitions/${id}/fiche-club`);
+  await expect(page.getByRole('group', { name: 'Ligne 1 — Sexe' })).toBeVisible();
+  await page.getByTestId('paper-entry-row').first().getByLabel('Nom', { exact: true }).fill('MARTIN');
+  await page.getByRole('tab', { name: 'Inscriptions' }).click();
+  await expect(page.getByTestId('leave-confirm')).toBeVisible();
+  await page.getByTestId('leave-stay').click();
+  await expect(page).toHaveURL(/\/fiche-club$/);
+  await expect(page.getByTestId('paper-entry-row').first().getByLabel('Nom', { exact: true })).toHaveValue('MARTIN');
+  await page.getByRole('tab', { name: 'Inscriptions' }).click();
+  await page.getByTestId('leave-go').click();
+  await expect(page).toHaveURL(/\/inscriptions$/);
+});

@@ -130,3 +130,13 @@ test('poids, grade et téléphone en format texte dans le modèle', async () => 
   // 1re ligne de combattant (ligne 12) : poids actuel (E) et grade (H) au format texte
   expect((rows[12]!.match(/table:style-name="ce_input_txt"/g) ?? []).length).toBe(2);
 });
+
+test('relecture (mineurs) : logo trouvé quel que soit le dossier courant', () => {
+  const cwd = process.cwd();
+  try {
+    process.chdir('/');
+    expect(buildClubFormTemplate(competition, grid)[0]!.image).toBeDefined();
+  } finally {
+    process.chdir(cwd);
+  }
+});
