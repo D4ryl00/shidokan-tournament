@@ -10,6 +10,7 @@ import type { Case, Presence, Proposal, ProposalType } from '../domain/replaceme
 import type { CategoryGrid, DisciplineId } from '../domain/types.js';
 import type { Wave, WaveInput } from '../domain/waves.js';
 import type { Zone, ZoneInput } from '../domain/zones.js';
+import type { PassagePlan } from '../domain/passages/index.js';
 
 export class ApiError extends Error {
   constructor(
@@ -55,7 +56,8 @@ export function useUpdateCompetition(id: string) {
       api<Competition>('PATCH', `/api/competitions/${id}`, patch),
     onSuccess: (c) => {
       qc.setQueryData(['competitions', id], c);
-      return qc.invalidateQueries({ queryKey: ['competitions'] });
+      // Les réglages changent les tableaux et l'ordre de passage.
+      return Promise.all(['competitions', ['categories', id], ['schedule', id]].map((k) => qc.invalidateQueries({ queryKey: Array.isArray(k) ? k : [k] })));
     },
   });
 }
@@ -353,8 +355,35 @@ export interface CategoryResultsData {
   tieBreaks: { pools: Record<number, string[]>; kata: string[]; kataFinal: string[] };
 }
 
-export function useSchedule(id: string) {
-  return useQuery({ queryKey: ['schedule', id], queryFn: () => api<{ zones: { zone: Zone; categories: ScheduleCategory[] }[]; unassigned: ScheduleCategory[] }>('GET', `/api/competitions/${id}/schedule`) });
+/** Passage de la file d'une zone : un combat, ou un bloc de kata (`matchId` null). */
+export interface QueueItem {
+  number: number;
+  categoryId: string;
+  categoryLabel: string;
+  matchId: string | null;
+  a: string | null;
+  b: string | null;
+  katakas: number | null;
+  noRest: boolean;
+}
+export interface ScheduleData {
+  zones: { zone: Zone; categories: ScheduleCategory[]; queue: QueueItem[] }[];
+  unassigned: ScheduleCategory[];
+  impossible: PassagePlan['impossible'];
+}
+
+/** Jour J par zone ; avec une vague, la file de cette vague. */
+export function useSchedule(id: string, waveId?: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ['schedule', id, waveId ?? null],
+    queryFn: () => api<ScheduleData>('GET', `/api/competitions/${id}/schedule${waveId ? `?vague=${encodeURIComponent(waveId)}` : ''}`),
+    enabled,
+  });
+}
+
+/** Zones et numéros de passage (clé sous « categories » : rechargés avec les catégories). */
+export function usePassages(id: string) {
+  return useQuery({ queryKey: ['categories', id, 'passages'], queryFn: () => api<PassagePlan>('GET', `/api/competitions/${id}/passages`) });
 }
 
 export function useWaves(id: string) {

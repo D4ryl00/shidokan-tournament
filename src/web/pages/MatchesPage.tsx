@@ -1,10 +1,13 @@
-import { Alert, Badge, Button, Card, Grid, Group, NumberInput, Progress, ScrollArea, Select, SimpleGrid, Stack, Text, Title, UnstyledButton } from '@mantine/core';
+import { Alert, Badge, Button, Card, Grid, Group, NumberInput, Progress, ScrollArea, SegmentedControl, Select, SimpleGrid, Stack, Text, Title, UnstyledButton } from '@mantine/core';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { resolveBracket, type ResolvedMatch } from '../../domain/brackets/index.js';
 import { activeEntrantCount } from '../../domain/categories.js';
 import { validResults } from '../../domain/results.js';
-import { useCategories, useCategoryResults, useDeleteResult, useSchedule, useUpdateCategory, useZones } from '../api.js';
+import { useCategories, useCategoryResults, useDeleteResult, usePassages, useSchedule, useUpdateCategory, useZones } from '../api.js';
+import { ZonesImpossibleAlert } from '../components/ZonesImpossibleAlert.js';
+import { categoryPassages } from '../passages.js';
+import { useSelectedWave } from '../useSelectedWave.js';
 import { BracketView } from '../components/BracketView.js';
 import { KataScoring } from '../components/KataScoring.js';
 import { HelpButton, HelpText, SectionHeader } from '../components/Help.js';
@@ -15,8 +18,12 @@ import { STATUS_LABELS, useEntrantInfo } from './BracketsPage.js';
 export function MatchesPage() {
   const { id = '' } = useParams();
   const { data: categories = [] } = useCategories(id);
-  const { data: schedule } = useSchedule(id);
+  // Avec des vagues : la file de la vague en cours (par défaut, la dernière dont la pesée est clôturée).
+  const { waves, waveId, select, ready } = useSelectedWave(id, 'running');
+  const { data: schedule } = useSchedule(id, waveId, ready);
+  const { data: plan } = usePassages(id);
   const { data: zones = [] } = useZones(id);
+  const zoneName = (zid: string | null) => zones.find((z) => z.id === zid)?.name ?? null;
   const update = useUpdateCategory(id);
   const clearIgnored = useDeleteResult(id);
   const entrants = useEntrantInfo(id);
@@ -26,15 +33,22 @@ export function MatchesPage() {
   const playable = categories.filter((c) => c.bracket && activeEntrantCount(c) >= 2);
   const selected = playable.find((c) => c.id === selectedId) ?? null;
   const { data: res } = useCategoryResults(id, selected?.id ?? null);
-  const zoneOptions = [{ value: '', label: '—' }, ...zones.map((z) => ({ value: z.id, label: z.name }))];
+  // Zone : automatique (répartie par l'app) ou épinglée à la main.
+  const zoneOptions = (cid: string) => {
+    const auto = plan?.categories[cid]?.auto !== false ? zoneName(plan?.categories[cid]?.zoneId ?? null) : null;
+    return [{ value: '', label: auto ? `Automatique (${auto})` : 'Automatique' }, ...zones.map((z) => ({ value: z.id, label: z.name }))];
+  };
+  const passages = useMemo(() => (selected ? categoryPassages(plan, selected.id) : null), [plan, selected]);
 
   const view = useMemo(() => {
     if (!selected?.bracket || selected.bracket.kind !== 'combat' || !res) return null;
     const { results, ignored } = validResults(selected.bracket, res.records, res.tieBreaks.pools);
     const { matches } = resolveBracket(selected.bracket, results, res.tieBreaks.pools);
-    const numbers = new Map([...matches].filter((m) => !m.bye).sort((a, b) => a.order - b.order).map((m, i) => [m.id, i + 1]));
+    // Numéros de passage ; sans zone, numérotation propre à la catégorie.
+    const local = new Map([...matches].filter((m) => !m.bye).sort((a, b) => a.order - b.order).map((m, i) => [m.id, i + 1]));
+    const numbers = passages && passages.numbers.size > 0 ? passages.numbers : local;
     return { results, stale: new Set(ignored.map((r) => r.matchId)), matches, numbers };
-  }, [selected, res]);
+  }, [selected, res, passages]);
   const dialogMatch: ResolvedMatch | null = (dialogMatchId && view?.matches.find((m) => m.id === dialogMatchId)) || null;
   const ties = res?.progress.podium.ties ?? [];
   const tieScope = res?.progress.podium.tieScopes?.[0] ?? null;
@@ -52,7 +66,7 @@ export function MatchesPage() {
                 </UnstyledButton>
                 <Group gap={4} mt={4}>
                   <Badge size="xs" variant="light">{STATUS_LABELS[c.status]}</Badge>
-                  <Select size="xs" w={130} data={zoneOptions} value={c.zoneId ?? ''} allowDeselect={false} data-testid="schedule-zone" aria-label="Zone de combat"
+                  <Select size="xs" w={190} data={zoneOptions(c.id)} value={c.zoneId ?? ''} allowDeselect={false} data-testid="schedule-zone" aria-label="Zone de combat"
                     onChange={(v) => update.mutate({ cid: c.id, zoneId: v || null })} />
                   <NumberInput size="xs" w={70} min={0} max={99} value={c.order} aria-label="Ordre" data-testid="schedule-order"
                     onChange={(v) => typeof v === 'number' && update.mutate({ cid: c.id, order: v })} />
@@ -65,33 +79,41 @@ export function MatchesPage() {
       <Grid.Col span={{ base: 12, md: 8 }}>
         <Stack>
           <HelpText topic="combats.zone" />
+          {waves.length > 0 && (
+            <Group gap="xs">
+              <Text size="sm" fw={600}>Vague :</Text>
+              <SegmentedControl data-testid="matches-wave" value={waveId ?? ''} onChange={select} data={waves.map((w) => ({ value: w.id, label: w.name }))} />
+            </Group>
+          )}
+          <ZonesImpossibleAlert impossible={schedule?.impossible} />
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
-            {(schedule?.zones ?? []).map((t) => {
-              const next = t.categories.flatMap((c) => c.nextMatches.map((m) => ({ ...m, category: c }))).slice(0, 4);
-              const kataNext = t.categories.find((c) => c.kata && c.status !== 'finished');
-              return (
-                <Card key={t.zone.id} withBorder data-testid="zone-card">
-                  <Group gap={4}><Title order={5}>{t.zone.name}</Title><HelpButton topic="combats.zone" /></Group>
-                  {next.length === 0 && !kataNext && <Text size="sm" c="dimmed">Aucun combat en attente.</Text>}
-                  {kataNext && next.length === 0 && (
-                    <Button size="xs" variant="light" mt={4} onClick={() => setSelectedId(kataNext.id)}>Kata : {kataNext.label}</Button>
-                  )}
-                  {next.map((m) => (
-                    <Group key={`${m.category.id}-${m.matchId}`} justify="space-between" wrap="nowrap" mt={6} data-testid="next-match">
-                      <div>
-                        <Text size="xs" c="dimmed">{m.category.label} · combat {m.number}</Text>
-                        <Text size="sm">{m.a} <Text span c="dimmed">contre</Text> {m.b}</Text>
-                      </div>
-                      <Button size="xs" style={{ flexShrink: 0 }} onClick={() => { setSelectedId(m.category.id); setDialogMatchId(m.matchId); }}>Saisir</Button>
+            {(schedule?.zones ?? []).map((t) => (
+              <Card key={t.zone.id} withBorder data-testid="zone-card">
+                <Group gap={4}><Title order={5}>{t.zone.name}</Title><HelpButton topic="combats.zone" /></Group>
+                {t.queue.length === 0 && <Text size="sm" c="dimmed">Aucun combat en attente.</Text>}
+                {t.queue.map((q) =>
+                  q.matchId === null ? (
+                    <Group key={`${q.categoryId}-kata`} justify="space-between" wrap="nowrap" mt={6} data-testid="next-kata">
+                      <Text size="sm">n° {q.number} — {q.categoryLabel}, {q.katakas} katakas</Text>
+                      <Button size="xs" variant="light" style={{ flexShrink: 0 }} onClick={() => setSelectedId(q.categoryId)}>Noter</Button>
                     </Group>
-                  ))}
-                </Card>
-              );
-            })}
+                  ) : (
+                    <Group key={`${q.categoryId}-${q.matchId}`} justify="space-between" wrap="nowrap" mt={6} data-testid="next-match">
+                      <div>
+                        <Text size="xs" c="dimmed">combat {q.number} · {q.categoryLabel}</Text>
+                        <Text size="sm">{q.a} <Text span c="dimmed">contre</Text> {q.b}</Text>
+                        {q.noRest && <Badge size="xs" color="orange" variant="light" data-testid="no-rest">pas de repos : prévoir une pause</Badge>}
+                      </div>
+                      <Button size="xs" style={{ flexShrink: 0 }} onClick={() => { setSelectedId(q.categoryId); setDialogMatchId(q.matchId); }}>Saisir</Button>
+                    </Group>
+                  ),
+                )}
+              </Card>
+            ))}
             {(schedule?.unassigned.length ?? 0) > 0 && (
               <Card withBorder>
                 <Title order={6}>Sans zone</Title>
-                <Text size="sm" c="dimmed">{schedule!.unassigned.length} catégorie(s) à affecter.</Text>
+                <Text size="sm" c="dimmed">{schedule!.unassigned.length} catégorie(s) sans zone possible ou sans vague.</Text>
               </Card>
             )}
           </SimpleGrid>
@@ -133,6 +155,7 @@ export function MatchesPage() {
               ) : (
                 view && (
                   <BracketView category={selected} entrants={entrants} results={view.results} stale={view.stale} tieBreaks={res.tieBreaks.pools}
+                    numbers={passages?.numbers} noRest={passages?.noRest}
                     onMatchClick={(m) => setDialogMatchId(m.id)} />
                 )
               )}

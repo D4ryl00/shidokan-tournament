@@ -6,7 +6,8 @@ import { Link, useParams } from 'react-router';
 import { compatibleFormats, type BracketFormat } from '../../domain/brackets/index.js';
 import { activeEntrantCount, type Category, type CategoryStatus } from '../../domain/categories.js';
 import { normalizeName } from '../../domain/names.js';
-import { useCategories, useRedraw, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
+import { useCategories, usePassages, useRedraw, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
+import { categoryPassages } from '../passages.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { BracketView, type EntrantInfo } from '../components/BracketView.js';
 import { useRecasementDetails } from '../components/ReplacementBadge.js';
@@ -37,6 +38,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   const { id = '' } = useParams();
   const { data: categories = [] } = useCategories(id);
   const { data: zones = [] } = useZones(id);
+  const { data: plan } = usePassages(id);
   const entrants = useEntrantInfo(id);
   const update = useUpdateCategory(id);
   const redraw = useRedraw(id);
@@ -63,6 +65,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   );
   const selected: Category | undefined = categories.find((c) => c.id === selectedId) ?? filtered[0];
   const locked = selected?.status === 'started' || selected?.status === 'finished';
+  const passages = useMemo(() => (selected ? categoryPassages(plan, selected.id) : null), [plan, selected]);
   const alone = categories.filter((c) => activeCount(c) === 1).length;
   const absentOnly = categories.filter(allAbsent).length;
 
@@ -124,7 +127,9 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
                 <Title order={4}>{selected.label}</Title>
                 <Group gap={4}>
                   <Badge color={STATUS_COLORS[selected.status]}>{STATUS_LABELS[selected.status]}</Badge>
-                  {zones.find((z) => z.id === selected.zoneId) && <Badge variant="outline" data-testid="category-zone">{zones.find((z) => z.id === selected.zoneId)!.name}</Badge>}
+                  {zones.find((z) => z.id === passages?.zoneId) && (
+                    <Badge variant="outline" data-testid="category-zone">{zones.find((z) => z.id === passages?.zoneId)!.name}{passages?.auto ? ' (auto)' : ''}</Badge>
+                  )}
                   {selected.stale && <Badge color="orange">Les inscrits ont changé depuis le lancement</Badge>}
                 </Group>
               </div>
@@ -170,7 +175,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
               )}
             </Group>
             <ApiErrorAlert error={update.error ?? redraw.error ?? swap.error} />
-            <BracketView category={selected} entrants={entrants} selected={swapFrom} onSelect={locked ? undefined : onSelectEntrant} badges={badges} badgeDetails={badgeDetails} />
+            <BracketView category={selected} entrants={entrants} numbers={passages?.numbers} noRest={passages?.noRest} selected={swapFrom} onSelect={locked ? undefined : onSelectEntrant} badges={badges} badgeDetails={badgeDetails} />
           </Stack>
         )}
         <Modal opened={confirmUnlock} onClose={() => setConfirmUnlock(false)} title="Déverrouiller la catégorie ?">

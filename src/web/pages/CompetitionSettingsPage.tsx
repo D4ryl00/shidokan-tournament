@@ -4,8 +4,11 @@ import {
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
-import type { CombatFormat, CompetitionSettings } from '../../domain/settings.js';
-import { useCategories, useCompetition, useGrid, useSaveZones, useUpdateCompetition, useZones } from '../api.js';
+import type { CombatFormat, CompetitionSettings, PassageOrderMode } from '../../domain/settings.js';
+import { DISCIPLINES } from '../../domain/disciplines.js';
+import type { DisciplineId } from '../../domain/types.js';
+import { useCategories, useCompetition, useGrid, usePassages, useSaveZones, useUpdateCompetition, useZones } from '../api.js';
+import { ZonesImpossibleAlert } from '../components/ZonesImpossibleAlert.js';
 import { nextZoneName, validateZones, ZONE_MAX } from '../../domain/zones.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { HelpLine } from '../components/Help.js';
@@ -21,6 +24,11 @@ export const FORMAT_LABELS: Record<CombatFormat, string> = {
   pools_then_bracket: 'Poules puis tableau final',
 };
 const FORMAT_OPTIONS = Object.entries(FORMAT_LABELS).map(([value, label]) => ({ value, label }));
+const ALL_DISCIPLINES = Object.keys(DISCIPLINES) as DisciplineId[];
+const PASSAGE_ORDER_OPTIONS: { value: PassageOrderMode; label: string }[] = [
+  { value: 'rounds', label: 'Tour par tour' },
+  { value: 'categories', label: 'Catégorie par catégorie' },
+];
 
 /** NumberInput sans bornage côté client : le serveur valide et explique. */
 function Kg(props: { label: string; value: number; onChange: (v: number) => void; testId?: string }) {
@@ -41,11 +49,13 @@ export function CompetitionSettingsPage() {
   const saveZones = useSaveZones(id);
   const { data: categories = [] } = useCategories(id);
   // `key` : identifiant d'affichage stable, y compris pour une zone pas encore enregistrée.
-  const [zones, setZones] = useState<{ key: string; id?: string; name: string }[]>([]);
+  // Disciplines accueillies : null = toutes.
+  const [zones, setZones] = useState<{ key: string; id?: string; name: string; disciplines: DisciplineId[] | null }[]>([]);
+  const { data: passages } = usePassages(id);
   const [zoneErrors, setZoneErrors] = useState<string[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
   useEffect(() => {
-    if (savedZones) setZones(savedZones.map(({ id: zid, name }) => ({ key: zid, id: zid, name })));
+    if (savedZones) setZones(savedZones.map(({ id: zid, name, disciplines }) => ({ key: zid, id: zid, name, disciplines })));
   }, [savedZones]);
   const zoneCategories = (zid?: string) => (zid ? categories.filter((c) => c.zoneId === zid) : []);
   const zoneLocked = (zid?: string) => zoneCategories(zid).some((c) => c.status === 'started' || c.status === 'finished');
@@ -55,6 +65,15 @@ export function CompetitionSettingsPage() {
   };
   const deletingZone = zones.find((z) => z.key === deleting);
   const deletingCount = zoneCategories(deletingZone?.id).length;
+  const toggleDiscipline = (key: string, d: DisciplineId) =>
+    setZones((zs) =>
+      zs.map((z) => {
+        if (z.key !== key) return z;
+        const current = z.disciplines ?? ALL_DISCIPLINES;
+        const next = current.includes(d) ? current.filter((x) => x !== d) : ALL_DISCIPLINES.filter((x) => x === d || current.includes(x));
+        return { ...z, disciplines: next.length === ALL_DISCIPLINES.length ? null : next };
+      }),
+    );
   const moveZone = (i: number, d: -1 | 1) =>
     setZones((zs) => {
       const next = [...zs];
@@ -74,7 +93,7 @@ export function CompetitionSettingsPage() {
 
   // Zones vérifiées avant tout envoi, puis enregistrées en premier : une erreur n'enregistre rien d'autre.
   const save = () => {
-    const input = zones.map(({ id: zid, name }) => (zid ? { id: zid, name } : { name }));
+    const input = zones.map(({ id: zid, name, disciplines }) => (zid ? { id: zid, name, disciplines } : { name, disciplines }));
     const errors = validateZones(input);
     setZoneErrors(errors);
     if (errors.length) return;
@@ -102,7 +121,8 @@ export function CompetitionSettingsPage() {
         <HelpLine topic="reglages.zones" />
         <Stack gap="xs">
           {zones.map((z, i) => (
-            <Group key={z.key} gap="xs" data-testid="zone-row" wrap="nowrap">
+            <Stack key={z.key} gap={4} data-testid="zone-row">
+            <Group gap="xs" wrap="nowrap">
               <TextInput data-testid="zone-name" aria-label={`Nom de la zone ${i + 1}`} w={260} maxLength={40} value={z.name}
                 onChange={(e) => { const name = e.currentTarget.value; setZones((zs) => zs.map((x) => (x.key === z.key ? { ...x, name } : x))); }} />
               <ActionIcon variant="subtle" aria-label={`Monter la zone « ${z.name} »`} disabled={i === 0} onClick={() => moveZone(i, -1)}>↑</ActionIcon>
@@ -111,10 +131,18 @@ export function CompetitionSettingsPage() {
                 title={zoneLocked(z.id) ? 'Une catégorie lancée s’y déroule' : undefined}
                 onClick={() => (zoneCategories(z.id).length ? setDeleting(z.key) : removeZone(z.key))}>✕</ActionIcon>
             </Group>
+            <Group gap="sm" data-testid="zone-disciplines">
+              <Text size="xs" c="dimmed">Disciplines accueillies :</Text>
+              {ALL_DISCIPLINES.map((d) => (
+                <Checkbox key={d} size="xs" label={DISCIPLINES[d].label} checked={z.disciplines === null || z.disciplines.includes(d)}
+                  onChange={() => toggleDiscipline(z.key, d)} />
+              ))}
+            </Group>
+            </Stack>
           ))}
           <Group>
             <Button variant="light" size="xs" data-testid="zone-add" disabled={zones.length >= ZONE_MAX}
-              onClick={() => setZones((zs) => [...zs, { key: crypto.randomUUID(), name: nextZoneName(zs.map((x) => x.name)) }])}>Ajouter une zone</Button>
+              onClick={() => setZones((zs) => [...zs, { key: crypto.randomUUID(), name: nextZoneName(zs.map((x) => x.name)), disciplines: null }])}>Ajouter une zone</Button>
           </Group>
           {zoneErrors.length > 0 && (
             <Alert color="red" title="Zones de combat" data-testid="zone-errors">
@@ -132,6 +160,15 @@ export function CompetitionSettingsPage() {
               </Group>
             </Stack>
           </Modal>
+        </Stack>
+      </Fieldset>
+
+      <Fieldset legend={HELP['reglages.ordre'].title}>
+        <HelpLine topic="reglages.ordre" />
+        <Stack>
+          <Select data-testid="passage-order" w={320} label="Ordre de passage des combats" data={PASSAGE_ORDER_OPTIONS} value={s.passageOrder} allowDeselect={false}
+            onChange={(v) => v && set({ passageOrder: v as PassageOrderMode })} />
+          <ZonesImpossibleAlert impossible={passages?.impossible} />
         </Stack>
       </Fieldset>
 

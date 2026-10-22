@@ -19,7 +19,7 @@ Le projet est découpé en étapes (1 à 7 : première version ; 8 à 14 : conce
 | 9 ✅ | **Zones nommées** | Liste de zones (« Tatami 1 », « Ring »…) remplaçant le nombre de tatamis ; nom imprimé sur les tableaux (plan `2026-10-22-09-zones.md`) | 8 | 28 oct. |
 | 10 ✅ | **Vagues** | Vagues (règles par tranche / discipline, ajouts et retraits), pesée et présence par vague (plan `2026-10-22-10-vagues.md`) | 9 | 2 nov. |
 | 11 ✅ | **Recasement par vague** | Tableau de bord filtré par vague ; « change de vague » validé un par un (plan `2026-10-22-11-recasement-vagues.md`) | 10 | 5 nov. |
-| 12 | **Ordre de passage** | Répartition sur les zones avec contraintes, kata d'abord, tour par tour / catégorie par catégorie, repos signalé, numéros imprimés, file par zone | 10 | 10 nov. |
+| 12 ✅ | **Ordre de passage** | Répartition sur les zones avec contraintes, kata d'abord, tour par tour / catégorie par catégorie, repos signalé, numéros imprimés, file par zone (plan `2026-10-22-12-ordre-de-passage.md`) | 10 | 10 nov. |
 | 13 | **Figeage et finales** | Figer et imprimer une vague, rouvrir, finales (et finales de kata) sur une zone | 12 | 13 nov. |
 | 14 | **Déplacements en cours** | Déplacer une catégorie vers une autre zone, « à la suite » / « mélangés », aperçu, « mis à jour à HH:MM » | 13 | 16 nov. |
 | — | **Répétition générale** | Compétition fictive complète sur le PC de la table centrale, avec Docker et sans internet | 6 | 20-21 nov. |

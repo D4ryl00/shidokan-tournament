@@ -35,6 +35,7 @@ export type HelpTopicId =
   | 'podiums.sauvegardes'
   | 'reglages.competition'
   | 'reglages.zones'
+  | 'reglages.ordre'
   | 'reglages.recasement'
   | 'reglages.pesee'
   | 'reglages.tableaux'
@@ -258,7 +259,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Cliquez une catégorie, puis un combat, pour saisir son résultat : le vainqueur avance tout seul.',
     details: [
       [
-        'À gauche : les catégories et leur zone de combat. À droite : par zone, les prochains combats.',
+        'À gauche : les catégories et leur zone de combat. À droite : par zone, les prochains combats dans l’ordre des numéros de passage (avec des vagues, ceux de la vague choisie en haut).',
         'Cliquez un combat du tableau pour saisir le vainqueur et la méthode.',
         'Une égalité de poule ou de kata s’affiche avec « Départager » : classez les ex-æquo.',
         'Un résultat corrigé rend « à revoir » les combats suivants déjà joués : ils sont encadrés en orange.',
@@ -267,13 +268,20 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
   },
   'combats.categories': {
     title: 'Catégories et zones de combat',
-    short: 'Choisissez la zone de combat et l’ordre de passage de chaque catégorie ; cliquez une catégorie pour l’ouvrir.',
-    details: ['L’ordre fixe la place de la catégorie dans la file de sa zone. Une catégorie sans zone n’apparaît pas dans les files. Les zones se renomment dans les Réglages.'],
+    short: 'Chaque catégorie a une zone, répartie automatiquement ou épinglée à la main ; cliquez une catégorie pour l’ouvrir.',
+    details: [
+      '« Automatique (Tatami 2) » : l’app a placé la catégorie sur cette zone en équilibrant les combats. Choisir une zone l’y épingle ; « Automatique » la rend à la répartition.',
+      'Une catégorie lancée garde sa zone.',
+      'L’ordre fixe le rang de la catégorie : catégories alternées en « tour par tour », enchaînées en « catégorie par catégorie » (Réglages › Ordre de passage). Les zones et leurs disciplines se règlent dans les Réglages.',
+    ],
   },
   'combats.zone': {
     title: 'Prochains combats de la zone',
-    short: 'Les combats à appeler sur cette zone, dans l’ordre.',
-    details: ['Cliquez « Saisir » pour entrer le résultat d’un combat. La liste avance au fur et à mesure.'],
+    short: 'Les combats à appeler sur cette zone, dans l’ordre des numéros imprimés sur les tableaux.',
+    details: [
+      'Cliquez « Saisir » pour entrer le résultat d’un combat, « Noter » pour un kata (« n° 14 — Kata… » : toute la catégorie de kata sous un seul numéro). La liste avance au fur et à mesure.',
+      '« pas de repos : prévoir une pause » : un combattant de ce combat sort juste du précédent ; laissez-lui le temps de souffler.',
+    ],
   },
   'combats.resultat': {
     title: 'Saisir un résultat',
@@ -345,15 +353,30 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
   },
   'reglages.zones': {
     title: 'Zones de combat',
-    short: 'Les zones où se déroulent les combats (« Tatami 1 », « Ring »…) : nommez-les et rangez-les dans l’ordre voulu.',
+    short: 'Les zones où se déroulent les combats (« Tatami 1 », « Ring »…) : nommez-les, rangez-les et cochez les disciplines que chacune accueille.',
     details: [
       [
         'Renommez une zone en tapant son nom ; ↑ et ↓ changent l’ordre d’affichage.',
-        '« Ajouter une zone » en crée une nouvelle ; ✕ la supprime (ses catégories passent « Sans zone »).',
+        '« Ajouter une zone » en crée une nouvelle (elle accueille toutes les disciplines) ; ✕ la supprime (ses catégories sont réparties sur les autres zones).',
         'Une zone où se déroule une catégorie déjà lancée ne peut pas être supprimée.',
         'Deux zones ne peuvent pas porter le même nom.',
+        'Disciplines accueillies : par exemple, le shido-boxing cochée seulement sur le Ring. Une zone accueille au moins une discipline.',
       ],
-      'Les catégories sont affectées aux zones dans l’onglet Combats ; le nom de la zone est imprimé sur les tableaux.',
+      'L’app répartit les catégories de chaque vague sur les zones qui accueillent leur discipline, en équilibrant le nombre de combats. Dans l’onglet Combats, vous pouvez épingler une catégorie sur une zone : ce choix l’emporte. Le nom de la zone est imprimé sur les tableaux.',
+    ],
+  },
+  'reglages.ordre': {
+    title: 'Ordre de passage',
+    short: 'Chaque zone numérote ses combats : kata d’abord, puis les combats tour par tour (par défaut) ou catégorie par catégorie.',
+    details: [
+      [
+        'Tour par tour : tous les premiers tours de la zone, puis tous les tours suivants… Les finales passent à la fin de la vague. Les combattants ont ainsi le plus de repos possible.',
+        'Catégorie par catégorie : une catégorie va jusqu’à sa finale, puis la suivante (dans l’ordre saisi dans l’onglet Combats, sinon celui de la grille).',
+        'Chaque catégorie de kata forme un seul numéro, avant les combats de sa vague.',
+        'Les numéros se suivent d’une vague à l’autre sur une même zone. Une exemption n’a pas de numéro.',
+        'Quand un combattant enchaîne deux combats sans repos, le combat porte « pas de repos : prévoir une pause ».',
+      ],
+      'Si aucune zone n’accueille une discipline, ses catégories restent sans zone ni numéro et un message le signale.',
     ],
   },
   'reglages.recasement': {

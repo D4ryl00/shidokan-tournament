@@ -52,6 +52,10 @@ function roundTitle(phase: MatchPhase, round: number, rounds: number): string {
 interface Props {
   category: Category;
   entrants: Map<string, EntrantInfo>;
+  /** Numéros de passage (zone) ; sans eux, les combats sont numérotés dans la catégorie. */
+  numbers?: Map<string, number>;
+  /** Combats sans repos (« pas de repos : prévoir une pause »). */
+  noRest?: Set<string>;
   results?: Record<string, MatchResult>;
   kataScores?: KataScores;
   printable?: boolean;
@@ -113,8 +117,9 @@ function EntrantLine({ id, fallback, info, props, winner }: { id: string | null;
 function CombatView(props: Props & { bracket: CombatBracket }) {
   const { bracket, entrants, results = {} } = props;
   const { matches, podium } = resolveBracket(bracket, results, props.tieBreaks ?? {});
-  const numbers = new Map<string, number>();
-  [...matches].filter((m) => !m.bye).sort((a, b) => a.order - b.order).forEach((m, i) => numbers.set(m.id, i + 1));
+  const local = new Map<string, number>();
+  [...matches].filter((m) => !m.bye).sort((a, b) => a.order - b.order).forEach((m, i) => local.set(m.id, i + 1));
+  const numbers = props.numbers && props.numbers.size > 0 ? props.numbers : local;
   const describe = (src: SlotSource): string => {
     switch (src.kind) {
       case 'winner':
@@ -156,6 +161,7 @@ function CombatView(props: Props & { bracket: CombatBracket }) {
           {m.result && !props.printable ? ` · ${METHOD_SHORT[m.result.method]}${m.result.score ? ` ${m.result.score}` : ''}` : ''}
           {m.result && props.printable && (m.result.method !== 'points' || m.result.score) ? ` · ${METHOD_SHORT[m.result.method]}${m.result.score ? ` ${m.result.score}` : ''}` : ''}
           {stale ? ' · à revoir' : ''}
+          {!props.printable && props.noRest?.has(m.id) ? ' · pas de repos : prévoir une pause' : ''}
         </Text>
         <EntrantLine id={m.entrantA} fallback={describe(m.a)} info={m.entrantA ? entrants.get(m.entrantA) : undefined} props={props} winner={winA} />
         {!props.printable && <Text size="xs" c="dimmed" ta="center">contre</Text>}

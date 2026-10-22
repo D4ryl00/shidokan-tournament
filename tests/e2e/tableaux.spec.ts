@@ -109,5 +109,6 @@ test('impression : nom de la zone sur le tableau', async ({ page, request }) => 
   await request.patch(`/api/competitions/${id}/categories/${withZone.id}`, { data: { zoneId: zones[0]!.id } });
   await page.goto(`/competitions/${id}/impression`);
   await expect(page.getByTestId('print-section').filter({ hasText: withZone.label })).toContainText('Zone : Ring');
-  await expect(page.getByTestId('print-section').filter({ hasText: without.label })).not.toContainText('Zone :');
+  // Non épinglée : la zone de la répartition automatique (l'autre zone, moins chargée).
+  await expect(page.getByTestId('print-section').filter({ hasText: without.label })).toContainText('Zone : Tatami 2');
 });
