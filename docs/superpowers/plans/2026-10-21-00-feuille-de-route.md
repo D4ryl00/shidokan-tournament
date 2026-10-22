@@ -17,7 +17,7 @@ Le projet est découpé en étapes (1 à 7 : première version ; 8 à 14 : conce
 | 8 ✅ | **Aides à l'écran** | Phrase d'aide et bouton ⓘ sur chaque section ; passages d'âge en clair dans la grille (plan `2026-10-22-08-aides.md`) | 1 à 7 | 25 oct. |
 | 8 bis ✅ | **Fiche club papier** | Fiche papier à cocher (A4 paysage, logo), fiche .ods au même contenu et aux couleurs Shidokan, saisie des fiches papier, grade, tranches proposées (plan `2026-10-22-08b-fiche-club-papier.md`) | 8 | 28 oct. (**envoi aux clubs**) |
 | 9 ✅ | **Zones nommées** | Liste de zones (« Tatami 1 », « Ring »…) remplaçant le nombre de tatamis ; nom imprimé sur les tableaux (plan `2026-10-22-09-zones.md`) | 8 | 28 oct. |
-| 10 | **Vagues** | Vagues (règles par tranche / discipline, ajouts et retraits), pesée et présence par vague | 9 | 2 nov. |
+| 10 | **Vagues** | Vagues (règles par tranche / discipline, ajouts et retraits), pesée et présence par vague (plan `2026-10-22-10-vagues.md`) | 9 | 2 nov. |
 | 11 | **Recasement par vague** | Tableau de bord filtré par vague ; « change de vague » validé un par un | 10 | 5 nov. |
 | 12 | **Ordre de passage** | Répartition sur les zones avec contraintes, kata d'abord, tour par tour / catégorie par catégorie, repos signalé, numéros imprimés, file par zone | 10 | 10 nov. |
 | 13 | **Figeage et finales** | Figer et imprimer une vague, rouvrir, finales (et finales de kata) sur une zone | 12 | 13 nov. |
