@@ -8,6 +8,7 @@ import type { ColumnMapping, FfkChoices, FfkImportPlan } from '../domain/ffk-imp
 import type { Club, RegistrationInput, RegistrationRow } from '../domain/registration.js';
 import type { Case, Presence, Proposal, ProposalType } from '../domain/replacement/index.js';
 import type { CategoryGrid, DisciplineId } from '../domain/types.js';
+import type { Wave, WaveInput } from '../domain/waves.js';
 import type { Zone, ZoneInput } from '../domain/zones.js';
 
 export class ApiError extends Error {
@@ -228,7 +229,7 @@ function useCategoryMutation<T>(id: string, fn: (arg: T) => Promise<Category>) {
 }
 
 export const useUpdateCategory = (id: string) =>
-  useCategoryMutation(id, ({ cid, ...patch }: { cid: string; format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null; status?: CategoryStatus; unlock?: boolean; zoneId?: string | null; order?: number }) =>
+  useCategoryMutation(id, ({ cid, ...patch }: { cid: string; format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null; status?: CategoryStatus; unlock?: boolean; zoneId?: string | null; waveOverride?: string | null; order?: number }) =>
     api<Category>('PATCH', `/api/competitions/${id}/categories/${cid}`, patch),
   );
 export const useRedraw = (id: string) => useCategoryMutation(id, (cid: string) => api<Category>('POST', `/api/competitions/${id}/categories/${cid}/redraw`));
@@ -342,6 +343,22 @@ export interface CategoryResultsData {
 
 export function useSchedule(id: string) {
   return useQuery({ queryKey: ['schedule', id], queryFn: () => api<{ zones: { zone: Zone; categories: ScheduleCategory[] }[]; unassigned: ScheduleCategory[] }>('GET', `/api/competitions/${id}/schedule`) });
+}
+
+export function useWaves(id: string) {
+  return useQuery({ queryKey: ['waves', id], queryFn: () => api<Wave[]>('GET', `/api/competitions/${id}/waves`) });
+}
+
+export function useSaveWaves(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { waves: WaveInput[]; knownIds: string[] }) => api<Wave[]>('PUT', `/api/competitions/${id}/waves`, body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['waves', id] });
+      void qc.invalidateQueries({ queryKey: ['categories', id] });
+      void qc.invalidateQueries({ queryKey: ['weigh-in', id] });
+    },
+  });
 }
 
 export function useZones(id: string) {

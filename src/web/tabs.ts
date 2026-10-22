@@ -4,6 +4,7 @@ export const COMPETITION_TABS = [
   { path: 'clubs', label: 'Clubs' },
   { path: 'fiche-club', label: 'Fiche club' },
   { path: 'import-ffk', label: 'Import FFK' },
+  { path: 'vagues', label: 'Vagues' },
   { path: 'pesee', label: 'Pesée' },
   { path: 'recasement', label: 'Recasement' },
   { path: 'tableaux', label: 'Tableaux' },

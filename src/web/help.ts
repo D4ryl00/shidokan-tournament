@@ -10,6 +10,8 @@ export type HelpTopicId =
   | 'clubs'
   | 'fiche-club'
   | 'import-ffk'
+  | 'vagues'
+  | 'vagues.en-attente'
   | 'pesee'
   | 'recasement'
   | 'tableaux'
@@ -176,6 +178,26 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     title: 'Créations',
     short: 'Les inscriptions de l’export FFK qui n’existent pas encore et seront créées.',
     details: ['Ces combattants n’ont pas envoyé de fiche club : ils n’auront pas de préférences, sauf si vous les ajoutez à la main.'],
+  },
+  vagues: {
+    title: 'Vagues',
+    short: 'Regroupez les catégories qui se pèsent et se lancent ensemble (« Samedi matin », « Dimanche »…) : cochez leurs tranches d’âge ou disciplines.',
+    details: [
+      'Une vague a sa propre pesée et son propre recasement ; pendant qu’une vague combat, la suivante peut déjà se peser.',
+      [
+        '« Ajouter une vague », nommez-la, puis cochez les tranches d’âge (et, si besoin, les disciplines) qu’elle prend.',
+        'Une catégorie suit sa plus jeune tranche d’âge ; une catégorie créée plus tard (inscription sur place) rejoint d’office la vague qui lui correspond.',
+        'Si une catégorie correspond à deux vagues, elle va dans la première (dans l’ordre des cartes) et une alerte l’indique.',
+        '« Retirer » met une catégorie en attente ; « Ajouter à… » la place à la main dans une vague (marquée « ajoutée à la main ») ; « Revenir aux règles » annule ce choix.',
+        '« Enregistrer les vagues » enregistre les noms, l’ordre et les règles ; les retraits et ajouts à la main s’appliquent tout de suite.',
+      ],
+      'Sans vague, toutes les catégories forment une seule vague.',
+    ],
+  },
+  'vagues.en-attente': {
+    title: 'En attente',
+    short: 'Les catégories qui ne sont dans aucune vague : pas de pesée ni de lancement tant qu’elles n’en rejoignent pas une.',
+    details: ['Cochez leur tranche d’âge dans une vague, ou choisissez « Ajouter à… » pour les placer à la main.'],
   },
   pesee: {
     title: 'Pesée',

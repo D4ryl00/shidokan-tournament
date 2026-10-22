@@ -14,6 +14,7 @@ import { PodiumsPage } from './pages/PodiumsPage.js';
 import { PodiumsPrintPage, PrintPage } from './pages/PrintPage.js';
 import { RegistrationsPage } from './pages/RegistrationsPage.js';
 import { ReplacementPage } from './pages/ReplacementPage.js';
+import { WavesPage } from './pages/WavesPage.js';
 import { WeighInPage, WeighInSheets } from './pages/WeighInPage.js';
 
 export function App() {
@@ -44,6 +45,7 @@ function MainShell() {
               <Route path="clubs" element={<ClubsPage />} />
               <Route path="fiche-club" element={<ClubFormPage />} />
               <Route path="import-ffk" element={<FfkImportPage />} />
+              <Route path="vagues" element={<WavesPage />} />
               <Route path="pesee" element={<WeighInPage />} />
               <Route path="recasement" element={<ReplacementPage />} />
               <Route path="tableaux" element={<BracketsRoute />} />
