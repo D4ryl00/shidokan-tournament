@@ -92,3 +92,22 @@ test('impression : poule en grille croisée, kata sans badge', async ({ page, re
   await expect(page.getByTestId('pool-grid')).toHaveCount(1);
   await expect(page.getByTestId('print-section').filter({ hasText: 'Kata' }).locator('.mantine-Badge-root')).toHaveCount(0);
 });
+
+test('impression : nom de la zone sur le tableau', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe zones impression');
+  const reg = (lastName: string, weightClassId: string) =>
+    request.post(`/api/competitions/${id}/registrations`, {
+      data: { clubId: null, lastName, firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', weightClassId, source: 'manual' },
+    });
+  for (let i = 0; i < 4; i++) await reg(`ZONE${i}`, 'cadet:F:-54');
+  for (let i = 0; i < 2; i++) await reg(`SANS${i}`, 'cadet:F:-61');
+  const zones = (await (await request.get(`/api/competitions/${id}/zones`)).json()) as { id: string; name: string }[];
+  await request.put(`/api/competitions/${id}/zones`, { data: [{ id: zones[0]!.id, name: 'Ring' }, { id: zones[1]!.id, name: zones[1]!.name }] });
+  const cats = (await (await request.get(`/api/competitions/${id}/categories`)).json()) as { id: string; label: string }[];
+  const withZone = cats.find((c) => c.label.includes('-54'))!;
+  const without = cats.find((c) => c.label.includes('-61'))!;
+  await request.patch(`/api/competitions/${id}/categories/${withZone.id}`, { data: { zoneId: zones[0]!.id } });
+  await page.goto(`/competitions/${id}/impression`);
+  await expect(page.getByTestId('print-section').filter({ hasText: withZone.label })).toContainText('Zone : Ring');
+  await expect(page.getByTestId('print-section').filter({ hasText: without.label })).not.toContainText('Zone :');
+});

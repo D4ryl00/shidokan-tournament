@@ -4,7 +4,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { activeEntrantCount, type Category } from '../../domain/categories.js';
 import { validResults } from '../../domain/results.js';
-import { useCategories, useCategoryResults, useCompetition, usePodiums } from '../api.js';
+import { useCategories, useCategoryResults, useCompetition, usePodiums, useZones } from '../api.js';
 import { BracketView, type EntrantInfo } from '../components/BracketView.js';
 import { HelpText } from '../components/Help.js';
 import { useEntrantInfo } from './BracketsPage.js';
@@ -41,6 +41,8 @@ function FitToPage({ children }: { children: React.ReactNode }) {
 export function PrintSection({ category, entrants, competitionLine, withResults = false }: { category: Category; entrants: Map<string, EntrantInfo>; competitionLine: string; withResults?: boolean }) {
   const { id = '' } = useParams();
   const { data: res } = useCategoryResults(id, withResults ? category.id : null);
+  const { data: zones = [] } = useZones(id);
+  const zone = zones.find((z) => z.id === category.zoneId);
   const results = res && category.bracket?.kind === 'combat' ? validResults(category.bracket, res.records, res.tieBreaks.pools).results : undefined;
   return (
     <section className="print-section" data-testid="print-section">
@@ -49,6 +51,7 @@ export function PrintSection({ category, entrants, competitionLine, withResults 
         <div>
           <h1>{category.label}</h1>
           <Text size="sm">{competitionLine}</Text>
+          {zone && <Text size="md" fw={700}>Zone : {zone.name}</Text>}
         </div>
       </div>
       <FitToPage>
