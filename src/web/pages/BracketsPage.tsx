@@ -19,7 +19,7 @@ const STATUS_COLORS: Record<CategoryStatus, string> = { provisional: 'gray', rea
 export function useEntrantInfo(competitionId: string): Map<string, EntrantInfo> {
   const { data: rows = [] } = useRegistrations(competitionId);
   return useMemo(
-    () => new Map(rows.map((r) => [r.id, { name: `${r.fighter.lastName} ${r.fighter.firstName}`.trim(), club: r.club?.name ?? 'Sans club' }])),
+    () => new Map(rows.map((r) => [r.id, { name: `${r.fighter.lastName} ${r.fighter.firstName}`.trim(), club: r.club?.name ?? 'Sans club', grade: r.fighter.grade }])),
     [rows],
   );
 }

@@ -19,6 +19,8 @@ import { ReplacementBadge } from './ReplacementBadge.js';
 export interface EntrantInfo {
   name: string;
   club: string;
+  /** Grade (kata), pour informer les arbitres. */
+  grade?: string | null;
 }
 
 export const METHOD_SHORT: Record<MatchResult['method'], string> = {
@@ -274,7 +276,10 @@ function KataView(props: Props & { bracket: KataBracket }) {
           {bracket.order.map((id, i) => (
             <Table.Tr key={id} data-testid="bracket-match">
               <Table.Td w={40}>{i + 1}</Table.Td>
-              <Table.Td><EntrantLine id={id} fallback="" info={entrants.get(id)} props={props} /></Table.Td>
+              <Table.Td>
+                <EntrantLine id={id} fallback="" info={entrants.get(id)} props={props} />
+                {entrants.get(id)?.grade && <Text size="xs" px={4} data-testid="kata-grade">Grade : {entrants.get(id)!.grade}</Text>}
+              </Table.Td>
               {resolved && <Table.Td>{resolved.round1Ranking.find((r) => r.registrationId === id)?.score ?? ''}</Table.Td>}
             </Table.Tr>
           ))}

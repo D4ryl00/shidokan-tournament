@@ -16,7 +16,7 @@ async function seed(request: APIRequestContext, id: string) {
     });
   for (let k = 0; k < 4; k++) await reg({});
   for (let k = 0; k < 3; k++) await reg({ ageBandCode: 'senior', weightClassId: 'senior:F:-55' });
-  for (let k = 0; k < 3; k++) await reg({ discipline: 'kata', ruleset: null, weightClassId: null });
+  for (let k = 0; k < 3; k++) await reg({ discipline: 'kata', ruleset: null, weightClassId: null, ...(k === 0 ? { grade: '1er dan' } : {}) });
   return (await (await request.get(`/api/competitions/${id}/categories`)).json()) as Cat[];
 }
 
@@ -90,6 +90,8 @@ test('journée complète : tatamis, résultats, correction, poule, kata, podiums
 
   // Kata : 3 arbitres, tour 1 puis finale
   await page.getByTestId('schedule-category').filter({ hasText: kata.label }).getByRole('button').first().click();
+  // Le grade du kataka est affiché aux arbitres
+  await expect(page.getByTestId('kata-row').filter({ hasText: 'Grade : 1er dan' })).toHaveCount(1);
   await page.getByTestId('kata-judges').click();
   await page.getByRole('option', { name: '3', exact: true }).click();
   const rows = page.getByTestId('kata-row');
@@ -138,4 +140,7 @@ test('journée complète : tatamis, résultats, correction, poule, kata, podiums
   await page.getByTestId('backup-now').click();
   await expect(page.getByText('Sauvegarde effectuée.')).toBeVisible();
   expect(await page.getByTestId('backup-row').count()).toBeGreaterThan(0);
+  // … et sur le tableau de kata imprimé
+  await page.goto(`/competitions/${id}/impression`);
+  await expect(page.getByTestId('kata-grade').filter({ hasText: '1er dan' })).toHaveCount(1);
 });

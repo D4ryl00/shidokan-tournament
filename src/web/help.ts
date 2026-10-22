@@ -265,6 +265,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     details: [
       [
         'Choisissez d’abord le nombre d’arbitres.',
+        'Le grade du kataka (s’il a été donné à l’inscription) est affiché sous son nom, pour information.',
         'Moins de 5 arbitres : la note retenue est la moyenne. À partir de 5 : on retire la plus haute et la plus basse, puis on fait la moyenne.',
         'La finale apparaît quand toutes les notes du tour 1 sont saisies.',
         'En cas d’égalité avec au moins 5 arbitres, la note basse retirée puis la note haute retirée départagent ; sinon « Départager » vous laisse classer.',
