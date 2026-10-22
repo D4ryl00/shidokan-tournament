@@ -419,11 +419,13 @@ export interface MoveResult {
 }
 export const useMoveCategory = (id: string) =>
   useLaunchAction<{ cid: string; zoneId: string; mode: RenumberMode }, MoveResult>(id, 'POST', (a) => `/categories/${a.cid}/move`, ({ zoneId, mode }) => ({ zoneId, mode }));
-export function useMovePreview(id: string, cid: string, zoneId: string, mode: RenumberMode) {
+/** Aperçu d'un déplacement ; `enabled` faux une fois le déplacement lancé (sinon l'aperçu rechargé dirait « déjà sur cette zone »). */
+export function useMovePreview(id: string, cid: string, zoneId: string, mode: RenumberMode, enabled = true) {
   return useQuery({
     queryKey: ['categories', id, 'move', cid, zoneId, mode],
     queryFn: () => api<MoveResult>('POST', `/api/competitions/${id}/categories/${cid}/move/preview`, { zoneId, mode }),
     gcTime: 0,
+    enabled,
   });
 }
 export const useNumberPending = (id: string) => useLaunchAction<{ waveId: string | null; categoryIds?: string[]; mode?: RenumberMode }, NumberChanges>(id, 'POST', () => '/launch/number', (a) => a);

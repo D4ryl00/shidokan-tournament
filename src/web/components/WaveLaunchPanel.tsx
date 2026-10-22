@@ -112,7 +112,7 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
         </Stack>
       </Modal>
 
-      <Modal opened={dialog === 'number'} onClose={close} title={status.state === 'reopened' ? 'Refiger la vague' : 'Numéroter à la suite'} size="lg">
+      <Modal opened={dialog === 'number'} onClose={close} title={status.state === 'reopened' ? 'Refiger la vague' : 'Numéroter les catégories modifiées'} size="lg">
         <Stack>
           <SegmentedControl data-testid="number-mode" value={mode} onChange={(v) => previewNumbers(v as RenumberMode)}
             data={[{ value: 'append', label: 'À la suite' }, { value: 'shuffle', label: 'Mélangés' }]} />
@@ -135,7 +135,7 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
             <Button variant="default" onClick={close}>Annuler</Button>
             <Button data-testid="number-confirm" loading={number.isPending} disabled={!shown || shown.blocking.length > 0}
               onClick={() => shown && number.mutate({ waveId, mode, categoryIds: shown.changes.map((c) => c.categoryId) }, { onSuccess: close })}>
-              {status.state === 'reopened' ? 'Refiger la vague' : 'Numéroter à la suite'}
+              {status.state === 'reopened' ? 'Refiger la vague' : mode === 'append' ? 'Numéroter à la suite' : 'Numéroter (mélangés)'}
             </Button>
           </Group>
         </Stack>

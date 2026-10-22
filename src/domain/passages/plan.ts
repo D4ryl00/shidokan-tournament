@@ -217,7 +217,7 @@ export function planPassages(input: PlanInput): PassagePlan {
 }
 
 /** Vagues de la même numérotation que `waveId` (depuis le dernier « reprendre à 1 » jusqu'au suivant), dans l'ordre. */
-function segmentOf(input: PlanInput, waveId: string | null): string[] {
+export function segmentOf(input: PlanInput, waveId: string | null): string[] {
   const order = input.waves.length === 0 ? [''] : [...input.waves].sort((a, b) => a.order - b.order).map((w) => w.id);
   const at = order.indexOf(waveKey(waveId));
   const restarts = order.map((k, i) => (i === 0 || input.restart?.includes(k) ? i : -1)).filter((i) => i >= 0);
@@ -227,8 +227,10 @@ function segmentOf(input: PlanInput, waveId: string | null): string[] {
 }
 
 export interface RenumberOptions {
-  /** Passages gardés (joués, finale restée sur la zone des finales) : jamais renumérotés ; par défaut `input.played`. */
+  /** Passages joués : jamais renumérotés ; le plus grand numéro joué fixe le départ de « mélangés ». Par défaut `input.played`. */
   played?: Set<string>;
+  /** Passages gardés tels quels sans être joués (finale restée sur la zone des finales). */
+  pinned?: Set<string>;
   /** Zone imposée à des catégories (déplacement) ; sinon leur zone du plan. */
   zoneOf?: Record<string, string>;
 }
@@ -250,7 +252,8 @@ export function appendPassages(input: PlanInput, waveId: string | null, category
   const next = new Map(ctx.zones.map((z) => [z.id, 1 + Math.max(0, ...rows.filter((f) => f.zoneId === z.id).map((f) => f.number))]));
   const cats = input.categories.filter((c) => c.waveId === waveId && c.playable && categoryIds.includes(c.id));
   const zoneOf = (id: string) => opts.zoneOf?.[id] ?? plan.categories[id]?.zoneId ?? null;
-  return orderWave(cats, zoneOf, waveId, ctx, next, { keep: opts.played ?? input.played }).map(toFrozen);
+  const keep = new Set([...(opts.played ?? input.played ?? []), ...(opts.pinned ?? [])]);
+  return orderWave(cats, zoneOf, waveId, ctx, next, { keep }).map(toFrozen);
 }
 
 /**
@@ -262,8 +265,10 @@ export function reshuffleZone(input: PlanInput, zoneId: string, waveId: string |
   const ctx = context(input);
   const plan = planPassages(input);
   const segment = segmentOf(input, waveId);
-  const keep = opts.played ?? input.played ?? new Set<string>();
-  const kept = (input.frozen ?? []).filter((f) => segment.includes(f.waveKey) && f.zoneId === zoneId && keep.has(`${f.categoryId}:${f.matchId ?? 'kata'}`));
+  const played = opts.played ?? input.played ?? new Set<string>();
+  const keep = new Set([...played, ...(opts.pinned ?? [])]);
+  // Départ : après le plus grand numéro réellement joué de la zone.
+  const kept = (input.frozen ?? []).filter((f) => segment.includes(f.waveKey) && f.zoneId === zoneId && played.has(`${f.categoryId}:${f.matchId ?? 'kata'}`));
   const next = new Map(ctx.zones.map((z) => [z.id, 1]));
   next.set(zoneId, 1 + Math.max(0, ...kept.map((f) => f.number)));
   const pending = new Set(plan.pending.map((p) => p.categoryId).filter((id) => !extra.includes(id)));

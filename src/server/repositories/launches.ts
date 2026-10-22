@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { activeEntrantCount, type Category } from '../../domain/categories.js';
 import { DISCIPLINES } from '../../domain/disciplines.js';
-import { appendPassages, planPassages, reshuffleZone, waveKey, type FrozenPassage, type PlanInput } from '../../domain/passages/index.js';
+import { appendPassages, finalMatchIds, planPassages, reshuffleZone, segmentOf, waveKey, type FrozenPassage, type PlanInput } from '../../domain/passages/index.js';
 import type { AppDb } from '../db/client.js';
 import { categories, frozenPassages, waveLaunches } from '../db/schema.js';
 import { CategoryLockedError, listCategories, syncCategories } from './categories.js';
@@ -119,8 +119,8 @@ export async function numberPending(db: AppDb, competitionId: string, waveId: st
   const ids = plan.pending.filter((p) => p.waveId === waveId && (!categoryIds || categoryIds.includes(p.categoryId))).map((p) => p.categoryId);
   const appended = appendPassages(input, waveId, ids);
   // Mélangés : chaque zone qui reçoit une catégorie à numéroter est refaite (ses autres catégories comprises).
-  const rows =
-    mode === 'append' ? appended : [...new Set(appended.map((r) => r.zoneId))].flatMap((zoneId) => reshuffleZone(input, zoneId, waveId, ids));
+  const zonesRedone = mode === 'append' ? [] : [...new Set(appended.map((r) => r.zoneId))];
+  const rows = mode === 'append' ? appended : zonesRedone.flatMap((zoneId) => reshuffleZone(input, zoneId, waveId, ids));
   const changed = renumbered(input, rows, ids);
   const label = new Map(cats.map((c) => [c.id, c.label]));
   const changes = changed.map((id) => ({ categoryId: id, label: label.get(id) ?? '', numbers: rows.filter((r) => r.categoryId === id).map((r) => r.number).sort((a, b) => a - b) }));
@@ -140,7 +140,7 @@ export async function numberPending(db: AppDb, competitionId: string, waveId: st
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     if (gone.length) t.delete(frozenPassages).where(and(eq(frozenPassages.competitionId, competitionId), eq(frozenPassages.waveKey, key), inArray(frozenPassages.categoryId, gone))).run();
-    replaceRows(t, competitionId, input, rows, ids);
+    replaceRows(t, competitionId, input, rows, ids, undefined, zonesRedone.map((zoneId) => ({ zoneId, waves: segmentOf(input, waveId) })));
     if (changed.length) t.update(categories).set({ numbersUpdatedAt: now() }).where(inArray(categories.id, changed)).run();
     fixCategories(t, cats.filter((c) => c.waveId === waveId), waveId, (id) => plan.categories[id]?.zoneId ?? null);
     t.update(waveLaunches).set({ launched: true }).where(and(eq(waveLaunches.competitionId, competitionId), eq(waveLaunches.waveKey, key))).run();
@@ -179,14 +179,25 @@ function renumbered(input: PlanInput, rows: FrozenPassage[], whole: string[]): s
 }
 
 /**
- * Remplace des numéros figés : les lignes réécrites (`rows`) et les anciennes lignes non jouées des catégories `whole`
- * (à numéroter, déplacée) disparaissent, puis `rows` sont enregistrées. Les passages joués ne bougent pas.
+ * Remplace des numéros figés : les lignes réécrites (`rows`) et les anciennes lignes non gardées des catégories `whole`
+ * (à numéroter, déplacée) disparaissent, puis `rows` sont enregistrées. Les passages gardés (`keep` : joués, finale restée
+ * sur la zone des finales) ne bougent pas. `shuffled` : zones refaites en « mélangés » — toute autre ligne non gardée de ces
+ * zones (catégorie devenue non jouable ou à numéroter) disparaît aussi, pour qu'aucun ancien numéro n'en double un nouveau.
  */
-function replaceRows(t: AppDb, competitionId: string, input: PlanInput, rows: FrozenPassage[], whole: string[]) {
+function replaceRows(
+  t: AppDb,
+  competitionId: string,
+  input: PlanInput,
+  rows: FrozenPassage[],
+  whole: string[],
+  keep: Set<string> = input.played ?? new Set(),
+  shuffled: { zoneId: string; waves: string[] }[] = [],
+) {
   const rewritten = new Set(rows.map(keyOf));
-  const played = input.played ?? new Set<string>();
   for (const f of input.frozen ?? []) {
-    const gone = rewritten.has(keyOf(f)) || (whole.includes(f.categoryId) && !played.has(playedKey(f)));
+    const kept = keep.has(playedKey(f));
+    const stale = !kept && shuffled.some((z) => z.zoneId === f.zoneId && z.waves.includes(f.waveKey));
+    const gone = rewritten.has(keyOf(f)) || (whole.includes(f.categoryId) && !kept) || stale;
     if (!gone) continue;
     t.delete(frozenPassages)
       .where(and(eq(frozenPassages.competitionId, competitionId), eq(frozenPassages.waveKey, f.waveKey), eq(frozenPassages.categoryId, f.categoryId), eq(frozenPassages.matchId, f.matchId ?? 'kata')))
@@ -221,11 +232,18 @@ export async function moveCategory(db: AppDb, competitionId: string, categoryId:
   if (zone.disciplines && !zone.disciplines.includes(cat.key.discipline)) {
     throw new RegistrationValidationError([`La zone « ${zone.name} » n’accueille pas le ${DISCIPLINES[cat.key.discipline].label.toLowerCase()}.`]);
   }
-  // Gardés : les passages joués, et ceux de la catégorie qui ne sont pas sur sa zone (finale sur la zone des finales).
-  const mine = (input.frozen ?? []).filter((f) => f.categoryId === categoryId);
-  const keep = new Set([...(input.played ?? []), ...mine.filter((f) => f.zoneId !== current).map(playedKey)]);
-  const opts = { played: keep, zoneOf: { [categoryId]: zoneId } };
+  // La finale restée sur la zone des finales y reste (sauf si la catégorie y arrive : elle y est renumérotée après ses demies).
+  const finalsZone = input.finals?.zoneId ?? null;
+  const finals = cat.bracket?.kind === 'combat' ? finalMatchIds(cat.bracket) : [];
+  const pinned = new Set(
+    (input.frozen ?? [])
+      .filter((f) => f.categoryId === categoryId && f.zoneId === finalsZone && zoneId !== finalsZone && (f.matchId === 'kata:finale' || finals.includes(f.matchId ?? '')))
+      .map(playedKey),
+  );
+  const opts = { pinned, zoneOf: { [categoryId]: zoneId } };
   const rows = mode === 'append' ? appendPassages(input, cat.waveId, [categoryId], opts) : reshuffleZone(input, zoneId, cat.waveId, [categoryId], opts);
+  if (!rows.some((r) => r.categoryId === categoryId)) throw new RegistrationValidationError(['Tous ses combats sont joués : rien à déplacer.']);
+  const keep = new Set([...(input.played ?? []), ...pinned]);
   const old = new Map((input.frozen ?? []).map((f) => [keyOf(f), f]));
   const label = new Map(cats.map((c) => [c.id, c.label]));
   const changes = rows
@@ -241,7 +259,7 @@ export async function moveCategory(db: AppDb, competitionId: string, categoryId:
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     // Seules les lignes non gardées de la catégorie déplacée disparaissent (pas sa finale sur la zone des finales).
-    replaceRows(t, competitionId, { ...input, played: keep }, rows, [categoryId]);
+    replaceRows(t, competitionId, input, rows, [categoryId], keep, mode === 'shuffle' ? [{ zoneId, waves: segmentOf(input, cat.waveId) }] : []);
     t.update(categories).set({ zoneId }).where(eq(categories.id, categoryId)).run();
     t.update(categories).set({ numbersUpdatedAt: now() }).where(inArray(categories.id, changed)).run();
   });

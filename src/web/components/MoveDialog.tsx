@@ -10,8 +10,8 @@ import { ApiErrorAlert } from './ApiErrorAlert.js';
  */
 export function MoveDialog({ competitionId, category, zoneId, zones, onClose }: { competitionId: string; category: { id: string; label: string }; zoneId: string; zones: Zone[]; onClose: () => void }) {
   const [mode, setMode] = useState<RenumberMode>('append');
-  const preview = useMovePreview(competitionId, category.id, zoneId, mode);
   const move = useMoveCategory(competitionId);
+  const preview = useMovePreview(competitionId, category.id, zoneId, mode, move.isIdle);
   const zoneName = (zid: string) => zones.find((z) => z.id === zid)?.name ?? '?';
   const target = zoneName(zoneId);
   return (
@@ -27,7 +27,7 @@ export function MoveDialog({ competitionId, category, zoneId, zones, onClose }: 
         {mode === 'shuffle' && (
           <Alert color="orange">Un combat en cours sur le tapis n’a pas encore de résultat : il serait renuméroté — préférez « À la suite ».</Alert>
         )}
-        <ApiErrorAlert error={preview.error ?? move.error} />
+        <ApiErrorAlert error={move.isIdle ? preview.error : move.error} />
         {preview.data && (
           <>
             <Table>

@@ -28,12 +28,13 @@ const catOf = async (label: string) => (await cats()).find((c) => c.label.includ
 const plan = async () => (await call('GET', '/passages')).json() as Plan;
 const on = (p: Plan, zoneId: string, categoryId: string) => p.zones.find((z) => z.zoneId === zoneId)!.passages.filter((x) => x.categoryId === categoryId).map((x) => `${x.number}:${x.matchId}`);
 
-/** Sans vague, lancée : -54 (A) et -47 (D) sur Tatami 1, -61 (B) sur Tatami 2. */
-async function setup() {
+/** Sans vague, lancée : -54 (A) et -47 (D) sur Tatami 1, -61 (B) sur Tatami 2 ; `finals` : zone des finales (index). */
+async function setup(finals?: 0 | 1) {
   await many(4, 'cadet:F:-54');
   await many(4, 'cadet:F:-61');
   await many(4, 'cadet:F:-47');
   const [t1, t2] = (await call('GET', '/zones')).json() as { id: string }[];
+  if (finals !== undefined) await call('PATCH', '', { settings: { finalsZoneId: [t1, t2][finals]!.id } });
   for (const c of await cats()) await call('PATCH', `/categories/${c.id}`, { status: 'ready', zoneId: c.label.includes('-61') ? t2!.id : t1!.id });
   expect((await call('POST', '/launch', { waveId: null })).statusCode).toBe(204);
   const [a, b, d] = [await catOf('-54'), await catOf('-61'), await catOf('-47')];
@@ -113,3 +114,62 @@ describe('déplacer une catégorie d’une vague lancée', () => {
     void b;
   });
 });
+
+describe('déplacements (relecture)', () => {
+  const numberOf = (p: Plan, cid: string, matchId: string) => p.zones.flatMap((z) => z.passages.map((x) => ({ ...x, zoneId: z.zoneId }))).find((x) => x.categoryId === cid && x.matchId === matchId)!;
+
+  test('vers la zone des finales, à la suite : la finale passe après les demies', async () => {
+    const { t2, a } = await setup(1);
+    await move(a.id, t2, 'append');
+    const p = await plan();
+    expect(p.pending).toEqual([]);
+    const semis = ['w1-0', 'w1-1'].map((m) => numberOf(p, a.id, m).number);
+    expect(numberOf(p, a.id, 'w2-0').number).toBeGreaterThan(Math.max(...semis));
+  });
+
+  test('depuis la zone des finales, mélangés : la finale reste où elle est, rien n’est perdu', async () => {
+    const { t1, t2, a } = await setup(0);
+    await result(a.id, 'w1-0');
+    const before = await plan();
+    await move(a.id, t2, 'shuffle');
+    const p = await plan();
+    expect(p.pending).toEqual([]);
+    expect(numberOf(p, a.id, 'w2-0')).toEqual(numberOf(before, a.id, 'w2-0'));
+    expect(numberOf(p, a.id, 'w1-0')).toEqual(numberOf(before, a.id, 'w1-0'));
+    expect(numberOf(p, a.id, 'w1-1').zoneId).toBe(t2);
+    void t1;
+  });
+
+  test('valider après un changement depuis l’aperçu : tout est recalculé', async () => {
+    const { t2, a } = await setup();
+    const preview = (await move(a.id, t2, 'append', true)).json() as Move;
+    expect(preview.changes).toHaveLength(3);
+    await result(a.id, 'w1-0');
+    const done = (await move(a.id, t2, 'append')).json() as Move;
+    expect(done.changes.map((c) => c.matchId)).toEqual(['w1-1', 'w2-0']);
+  });
+
+  test('tous les combats joués : rien à déplacer', async () => {
+    const { t1, b } = await setup();
+    for (const m of ['w1-0', 'w1-1', 'w2-0']) await result(b.id, m);
+    const res = await move(b.id, t1, 'append');
+    expect(res.statusCode).toBe(400);
+    expect(res.json().issues).toEqual(['Tous ses combats sont joués : rien à déplacer.']);
+  });
+
+  test('kata : déplacé en bloc ; une note saisie = joué', async () => {
+    for (let i = 0; i < 3; i++) {
+      await call('POST', '/registrations', { clubId: null, lastName: `K${i}`, firstName: 'x', sex: 'F', ageBandCode: 'cadet', discipline: 'kata', ruleset: null, weightClassId: null, source: 'manual' });
+    }
+    const [t1, t2] = (await call('GET', '/zones')).json() as { id: string }[];
+    const k = await catOf('Kata');
+    await call('PATCH', `/categories/${k.id}`, { status: 'ready', zoneId: t1!.id });
+    await call('POST', '/launch', { waveId: null });
+    const res = (await move(k.id, t2!.id, 'append')).json() as Move;
+    expect(res.changes.map((c) => [c.matchId, c.to.zoneId])).toEqual([[null, t2!.id]]);
+    const rid = ((await call('GET', '/registrations')).json() as { id: string; categoryId: string }[]).find((r) => r.categoryId === k.id)!.id;
+    await call('PUT', `/categories/${k.id}/kata/${rid}/round1`, { notes: [7] });
+    expect((await move(k.id, t1!.id, 'append')).statusCode).toBe(400);
+  });
+});
+

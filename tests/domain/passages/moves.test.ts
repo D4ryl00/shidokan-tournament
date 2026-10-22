@@ -69,3 +69,48 @@ describe('déplacements', () => {
     expect(appendPassages(input, null, ['K'], { zoneOf: { K: 'ring' }, played: new Set(['K:kata']) })).toEqual([]);
   });
 });
+
+describe('déplacements et zone des finales (relecture)', () => {
+  const finalsOn = (zoneId: string, kata = false): PlanInput => ({
+    categories: [pc('C', br(4)), pc('X', br(4), { pinnedZoneId: 'ring', rank: 1 })],
+    zones, waves: [], mode: 'rounds', finals: { zoneId, kata },
+  });
+  const after = (rows: FrozenPassage[], cat: string, match: string) => rows.find((r) => r.categoryId === cat && r.matchId === match)!.number;
+
+  test('vers la zone des finales, à la suite : la finale est renumérotée après les demies', () => {
+    const input = finalsOn('ring');
+    input.frozen = freeze(input);
+    const rows = appendPassages(input, null, ['C'], { zoneOf: { C: 'ring' } });
+    expect(rows.every((r) => r.zoneId === 'ring')).toBe(true);
+    expect(after(rows, 'C', 'w2-0')).toBeGreaterThan(Math.max(after(rows, 'C', 'w1-0'), after(rows, 'C', 'w1-1')));
+  });
+
+  test('vers la zone des finales, mélangés : renumérotation dès 1 (rien de joué), finales à la fin', () => {
+    const input = finalsOn('ring');
+    input.frozen = freeze(input);
+    const rows = reshuffleZone(input, 'ring', null, ['C'], { zoneOf: { C: 'ring' } });
+    expect(rows.map((r) => r.number).sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(Math.min(after(rows, 'C', 'w2-0'), after(rows, 'X', 'w2-0'))).toBeGreaterThan(4);
+  });
+
+  test('depuis la zone des finales : la finale gardée (pinned) ne bouge pas et ne compte pas comme jouée', () => {
+    const input = finalsOn('t1');
+    input.frozen = freeze(input);
+    const final = input.frozen.find((f) => f.categoryId === 'C' && f.matchId === 'w2-0')!;
+    expect(final.zoneId).toBe('t1');
+    const pinned = new Set(['C:w2-0']);
+    const appended = appendPassages(input, null, ['C'], { zoneOf: { C: 'ring' }, pinned });
+    expect(appended.map((r) => `${r.zoneId}:${r.matchId}`)).toEqual(['ring:w1-0', 'ring:w1-1']);
+    const shuffled = reshuffleZone(input, 'ring', null, ['C'], { zoneOf: { C: 'ring' }, pinned });
+    expect(Math.min(...shuffled.map((r) => r.number))).toBe(1);
+    expect(shuffled.some((r) => r.matchId === 'w2-0' && r.categoryId === 'C')).toBe(false);
+  });
+
+  test('kata séparé, déplacé vers la zone des finales : la finale après le tour 1', () => {
+    const input: PlanInput = { categories: [pc('K', br(5, 'kata_two_rounds'))], zones, waves: [], mode: 'rounds', finals: { zoneId: 'ring', kata: true } };
+    input.frozen = freeze(input);
+    const rows = appendPassages(input, null, ['K'], { zoneOf: { K: 'ring' } });
+    expect(rows.map((r) => `${r.zoneId}:${r.matchId}`)).toEqual(['ring:kata:tour1', 'ring:kata:finale']);
+    expect(after(rows, 'K', 'kata:finale')).toBeGreaterThan(after(rows, 'K', 'kata:tour1'));
+  });
+});
