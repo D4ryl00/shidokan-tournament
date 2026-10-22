@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    image: shidokan-tournaments:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/data
+    environment:
+      - BACKUP_INTERVAL_MIN=${BACKUP_INTERVAL_MIN:-5}
+    restart: unless-stopped

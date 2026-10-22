@@ -1,0 +1,125 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import Database from 'better-sqlite3';
+import type { AppDb } from '../db/client.js';
+
+export class RestoreError extends Error {
+  constructor() {
+    super("Ce fichier n'est pas une sauvegarde de l'application");
+  }
+}
+
+/** 200 fichiers : plus d'une journée entière toutes les 5 minutes (les sauvegardes sont petites). */
+const KEEP = 200;
+const NAME = /^shidokan-\d{8}-\d{6}-\d{3}\.sqlite$/;
+const quote = (p: string) => `'${p.replace(/'/g, "''")}'`;
+
+export const backupDir = (dbPath: string) => path.join(path.dirname(path.resolve(dbPath)), 'sauvegardes');
+
+function stamp(d = new Date()): string {
+  const p = (n: number, w = 2) => String(n).padStart(w, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}-${p(d.getMilliseconds(), 3)}`;
+}
+
+/** Copie cohérente de la base (VACUUM INTO), puis rotation (30 fichiers). */
+export async function backupNow(db: AppDb, dbPath: string): Promise<string> {
+  const dir = backupDir(dbPath);
+  fs.mkdirSync(dir, { recursive: true });
+  let file = path.join(dir, `shidokan-${stamp()}.sqlite`);
+  for (let i = 1; fs.existsSync(file); i++) file = path.join(dir, `shidokan-${stamp(new Date(Date.now() + i))}.sqlite`);
+  db.$client.exec(`VACUUM INTO ${quote(file)}`);
+  const all = (await listBackups(dbPath)).map((b) => b.name).sort();
+  for (const old of all.slice(0, Math.max(0, all.length - KEEP))) fs.rmSync(path.join(dir, old), { force: true });
+  return file;
+}
+
+export async function listBackups(dbPath: string): Promise<{ name: string; size: number; createdAt: string }[]> {
+  const dir = backupDir(dbPath);
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((n) => NAME.test(n))
+    .map((name) => {
+      const st = fs.statSync(path.join(dir, name));
+      return { name, size: st.size, createdAt: st.mtime.toISOString() };
+    })
+    .sort((a, b) => b.name.localeCompare(a.name));
+}
+
+/** Chemin d'une sauvegarde existante, ou null (nom invalide ou absent). */
+export function backupFile(dbPath: string, name: string): string | null {
+  if (!NAME.test(name)) return null;
+  const file = path.join(backupDir(dbPath), name);
+  return fs.existsSync(file) ? file : null;
+}
+
+/** Copie fraîche de la base courante (fichier temporaire). */
+export function freshCopy(db: AppDb): Buffer {
+  const tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'shidokan-copie-')), 'copie.sqlite');
+  db.$client.exec(`VACUUM INTO ${quote(tmp)}`);
+  const buf = fs.readFileSync(tmp);
+  fs.rmSync(path.dirname(tmp), { recursive: true, force: true });
+  return buf;
+}
+
+/**
+ * Restaure une sauvegarde : contrôle qu'elle vient de l'application (mêmes migrations), puis remplace le contenu
+ * de chaque table dans une seule transaction. En cas d'erreur, la base courante est intacte.
+ */
+export async function restoreFrom(db: AppDb, file: Buffer, beforeCopy: () => Promise<unknown> = async () => undefined): Promise<void> {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shidokan-restauration-'));
+  const tmp = path.join(dir, 'restauration.sqlite');
+  fs.writeFileSync(tmp, file);
+  const client = db.$client;
+  try {
+    let migrations: number;
+    try {
+      const src = new Database(tmp, { readonly: true, fileMustExist: true });
+      migrations = (src.prepare('select count(*) as c from __drizzle_migrations').get() as { c: number }).c;
+      src.close();
+    } catch {
+      throw new RestoreError();
+    }
+    const current = (client.prepare('select count(*) as c from __drizzle_migrations').get() as { c: number }).c;
+    if (migrations !== current) throw new RestoreError();
+    await beforeCopy(); // sauvegarde de sécurité, seulement pour un fichier valide
+    const tables = (client.prepare("select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name <> '__drizzle_migrations'").all() as { name: string }[]).map((t) => t.name);
+    client.pragma('foreign_keys = OFF');
+    client.exec(`ATTACH DATABASE ${quote(tmp)} AS src`);
+    try {
+      client.transaction(() => {
+        for (const t of tables) {
+          client.exec(`DELETE FROM main."${t}"`);
+          client.exec(`INSERT INTO main."${t}" SELECT * FROM src."${t}"`);
+        }
+      })();
+    } finally {
+      client.exec('DETACH DATABASE src');
+      client.pragma('foreign_keys = ON');
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+const lastChanges = new WeakMap<AppDb, number>();
+
+/** Sauvegarde seulement si la base a changé depuis la précédente (évite de pousser dehors les bonnes sauvegardes). */
+export async function backupIfChanged(db: AppDb, dbPath: string): Promise<string | null> {
+  const changes = (db.$client.prepare('select total_changes() as c').get() as { c: number }).c;
+  if (lastChanges.get(db) === changes) return null;
+  const file = await backupNow(db, dbPath);
+  lastChanges.set(db, changes);
+  return file;
+}
+
+/** Sauvegarde périodique ; renvoie la fonction d'arrêt. 0 minute = désactivée. */
+export function startAutoBackup(db: AppDb, dbPath: string, intervalMin: number, onError: (e: unknown) => void): () => void {
+  if (!(intervalMin > 0)) return () => undefined;
+  const timer = setInterval(() => {
+    backupIfChanged(db, dbPath).catch(onError);
+  }, intervalMin * 60_000);
+  timer.unref();
+  return () => clearInterval(timer);
+}

@@ -1,0 +1,1 @@
+ALTER TABLE `recasements` ADD `reason` text DEFAULT '' NOT NULL;

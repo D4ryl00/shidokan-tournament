@@ -1,0 +1,189 @@
+import { ageMove } from '../ages.js';
+import { categoryLabel, keyString, naturalKey, type CategoryKey } from '../categories.js';
+import { DISCIPLINES } from '../disciplines.js';
+import { neighborWeightClasses } from '../weights.js';
+import { categoryForKey, isLocked, originalCategory } from './detect.js';
+import type { Case, CategoryState, Member, Proposal, ProposalType, State } from './types.js';
+import { activeMembers, categoryWeightGap, gapThreshold, weighInClass } from './weights.js';
+
+
+/**
+ * Compatibilité d'âge entre `band` et toutes les tranches d'une catégorie : chaque paire doit être la même tranche
+ * ou deux tranches reliées (C ou D, dans un sens ou l'autre), selon les réglages. Jamais deux tranches d'écart.
+ */
+export function ageCompatibility(state: State, band: string, targetBands: string[]): { ok: boolean; kind: 'same' | 'C' | 'D'; crossesMinorAdult: boolean } {
+  const { grid, settings } = state;
+  const allowed = (x: ReturnType<typeof ageMove>) =>
+    (x.kind === 'C' || x.kind === 'D') && (x.kind !== 'D' || settings.mixSeniorsVeterans) && (!x.crossesMinorAdult || settings.mixMinorsAdults);
+  let kind: 'same' | 'C' | 'D' = 'same';
+  let crossesMinorAdult = false;
+  for (const b of targetBands) {
+    if (b === band) continue;
+    const up = ageMove(grid, band, b);
+    const down = ageMove(grid, b, band);
+    // On monte d'une tranche ; une tranche plus jeune n'est admise que si la sienne est déjà dans la catégorie.
+    const link = allowed(up) ? up : targetBands.includes(band) && allowed(down) ? down : null;
+    if (!link || (link.kind !== 'C' && link.kind !== 'D')) return { ok: false, kind, crossesMinorAdult };
+    if (link.crossesMinorAdult) crossesMinorAdult = true;
+    if (!targetBands.includes(band)) kind = kind === 'D' ? 'D' : link.kind;
+  }
+  return { ok: true, kind, crossesMinorAdult };
+}
+
+const isMinor = (state: State, code: string) => state.grid.ageBands.find((b) => b.code === code)?.isMinor ?? false;
+
+interface Evaluation {
+  type: ProposalType;
+  changes: Proposal['changes'];
+  checks: Proposal['checks'];
+}
+
+/** Compatibilité d'un déplacement de `m` vers la catégorie `t` (null = interdit). */
+function evaluate(state: State, m: Member, t: CategoryState): Evaluation | null {
+  const { settings, grid } = state;
+  const tk = t.key;
+  const changes: Proposal['changes'] = {};
+  let H = false;
+  let G = false;
+  let F = false;
+  let age: 'same' | 'C' | 'D' = 'same';
+  let crossesMinorAdult = false;
+
+  if (tk.discipline !== m.discipline) {
+    if (!DISCIPLINES[m.discipline].inPreferences || !DISCIPLINES[tk.discipline].inPreferences || !m.otherDisciplines.includes(tk.discipline)) return null;
+    H = true;
+    changes.discipline = tk.discipline;
+  }
+  if (tk.ruleset !== m.ruleset) {
+    if (m.ruleset === 'shobu' && tk.ruleset === 'jiyu') {
+      G = true;
+      changes.ruleset = 'jiyu';
+    } else return null;
+  }
+  if (tk.ruleset === 'shobu' && isMinor(state, m.ageBandCode)) return null;
+
+  const sameSex = tk.sex === m.sex;
+  if (!sameSex) {
+    if (!settings.mixSexes.enabled || !settings.mixSexes.ageBandCodes.includes(m.ageBandCode)) return null;
+    F = true;
+  }
+  const ages = ageCompatibility(state, m.ageBandCode, tk.ageBandCodes);
+  if (!ages.ok) return null;
+  age = ages.kind;
+  crossesMinorAdult = ages.crossesMinorAdult;
+
+  const merged = [...activeMembers(state, t.id).filter((x) => x.registrationId !== m.registrationId), m];
+  const hasWeight = DISCIPLINES[tk.discipline].hasWeight;
+  const gap = hasWeight ? categoryWeightGap(merged, grid) : 0;
+  const threshold = gapThreshold(merged, state);
+  let B = false;
+  if (hasWeight && m.weightClassId) {
+    const sameBandSex = sameSex && tk.ageBandCodes.includes(m.ageBandCode);
+    if (sameBandSex) {
+      const wc = grid.weightClasses.find((w) => w.id === m.weightClassId);
+      const { lighter, heavier } = wc ? neighborWeightClasses(grid, wc) : { lighter: null, heavier: null };
+      const near = [m.weightClassId, lighter?.id, heavier?.id];
+      if (!tk.weightClassIds.some((id) => near.includes(id))) return null;
+      B = gap > threshold + 1e-9;
+    } else if (gap > threshold + 1e-9) return null;
+  }
+
+  const type: ProposalType = F ? 'F' : crossesMinorAdult ? 'E' : H ? 'H' : G ? 'G' : age !== 'same' ? age : B ? 'B' : 'A';
+  return { type, changes, checks: { weightGapKg: Math.round(gap * 100) / 100, threshold, ageMove: age, crossesMinorAdult, mixedSex: F } };
+}
+
+function order(m: Member): ProposalType[] {
+  const gh: ProposalType[] = m.acceptsJiyuFirst ? ['G', 'H'] : ['H', 'G'];
+  return ['R', 'A', 'B', 'C', 'D', ...gh, 'E', 'F'];
+}
+
+export function proposalsFor(state: State, c: Case): Proposal[] {
+  const m = state.members.find((x) => x.registrationId === c.registrationId);
+  if (!m) return [];
+  const current = state.categories.find((x) => x.id === m.categoryId);
+  const labelOf = (key: CategoryKey) => categoryLabel(key, state.grid);
+  const from = current ? labelOf(current.key) : '—';
+  const out: (Omit<Proposal, 'rank'> & { sortKey: (number | string)[] })[] = [];
+  const make = (type: ProposalType, target: Proposal['target'], toKey: CategoryKey, ev: Omit<Evaluation, 'type'>, members: number, extra: (number | string)[] = []) => {
+    const targetId = 'categoryId' in target ? target.categoryId : keyString(target.newKey);
+    const weightText = DISCIPLINES[toKey.discipline].hasWeight ? ` (écart ${ev.checks.weightGapKg.toFixed(1).replace('.', ',')} kg)` : '';
+    out.push({
+      id: `${type}:${m.registrationId}>${targetId}`,
+      caseId: c.id,
+      type,
+      registrationId: m.registrationId,
+      target,
+      changes: ev.changes,
+      checks: ev.checks,
+      manual: type !== 'A' && type !== 'R',
+      preApproved: m.clubPreApproval && ['B', 'C', 'D', 'E'].includes(type),
+      reason: `${m.label} : ${from} → ${labelOf(toKey)}${weightText}`,
+      sortKey: [order(m).indexOf(type), ...extra, members === 1 ? 0 : 1, ev.checks.weightGapKg, labelOf(toKey)],
+    });
+  };
+
+  if (c.kind === 'weight_out') {
+    const wic = weighInClass(m, state);
+    if (!wic) return [];
+    const key = naturalKey({ ...m, weightClassId: wic.id }, m);
+    const existing = categoryForKey(state, keyString(key));
+    if (isLocked(existing)) return [];
+    const merged = [...(existing ? activeMembers(state, existing.id) : []), m];
+    const checks = { weightGapKg: Math.round(categoryWeightGap(merged, state.grid) * 100) / 100, threshold: gapThreshold(merged, state), ageMove: 'same' as const, crossesMinorAdult: false, mixedSex: false };
+    make('A', existing ? { categoryId: existing.id } : { newKey: key }, existing?.key ?? key, { changes: { weightClassId: wic.id }, checks }, merged.length - 1);
+  } else if (c.kind === 'return') {
+    const home = originalCategory(state, m);
+    if (!home || !m.original) return [];
+    const merged = [...activeMembers(state, home.id), m];
+    const checks = { weightGapKg: Math.round(categoryWeightGap(merged, state.grid) * 100) / 100, threshold: gapThreshold(merged, state), ageMove: 'same' as const, crossesMinorAdult: false, mixedSex: false };
+    const changes: Proposal['changes'] = { discipline: m.original.discipline, ...(m.original.ruleset ? { ruleset: m.original.ruleset } : {}), ...(m.original.weightClassId ? { weightClassId: m.original.weightClassId } : {}) };
+    make('R', { categoryId: home.id }, home.key, { changes, checks }, merged.length - 1);
+  } else {
+    for (const t of state.categories) {
+      if (t.id === m.categoryId || isLocked(t)) continue;
+      const others = activeMembers(state, t.id).filter((x) => x.registrationId !== m.registrationId);
+      if (others.length === 0) continue;
+      const ev = evaluate(state, m, t);
+      if (!ev) continue;
+      const prefIndex = ev.changes.discipline ? m.otherDisciplines.indexOf(ev.changes.discipline) : 0;
+      make(ev.type, { categoryId: t.id }, t.key, ev, others.length, [prefIndex]);
+    }
+  }
+
+  const cmp = (a: (number | string)[], b: (number | string)[]) => {
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      const x = a[i] ?? 0;
+      const y = b[i] ?? 0;
+      if (x === y) continue;
+      return typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y));
+    }
+    return 0;
+  };
+  // Les tris G/H n'ont pas d'indice de préférence : on aligne les clés sur la même longueur.
+  for (const p of out) if (p.sortKey.length === 4) p.sortKey.splice(1, 0, 0);
+  return out
+    .filter((p) => !state.refused.includes(p.id))
+    .sort((a, b) => cmp(a.sortKey, b.sortKey))
+    .map(({ sortKey: _s, ...p }, rank) => ({ ...p, rank }));
+}
+
+/** Règles qu'enfreindrait un déplacement libre de `m` vers `t` (avertissements, en français). */
+export function moveViolations(state: State, m: Member, t: CategoryState): string[] {
+  const v: string[] = [];
+  const { settings, grid } = state;
+  if (isLocked(t)) v.push('La catégorie est lancée.');
+  if (t.key.discipline !== m.discipline && !m.otherDisciplines.includes(t.key.discipline)) v.push('Discipline hors des préférences du combattant.');
+  if (m.ruleset === 'jiyu' && t.key.ruleset === 'shobu') v.push('Passage de jiyu à shobu.');
+  if (t.key.ruleset === 'shobu' && isMinor(state, m.ageBandCode)) v.push('Le shobu est réservé aux adultes.');
+  if (t.key.sex !== m.sex && (!settings.mixSexes.enabled || !settings.mixSexes.ageBandCodes.includes(m.ageBandCode))) {
+    v.push('Mélange filles / garçons non autorisé (mixité désactivée).');
+  }
+  if (!ageCompatibility(state, m.ageBandCode, t.key.ageBandCodes).ok) v.push("Écart d'âge non autorisé (plus d'une tranche).");
+  if (DISCIPLINES[t.key.discipline].hasWeight) {
+    const merged = [...activeMembers(state, t.id).filter((x) => x.registrationId !== m.registrationId), m];
+    const gap = categoryWeightGap(merged, grid);
+    const threshold = gapThreshold(merged, state);
+    if (gap > threshold + 1e-9) v.push(`Écart de poids de ${gap.toFixed(1).replace('.', ',')} kg (maximum ${threshold} kg).`);
+  }
+  return v;
+}

@@ -1,0 +1,49 @@
+/* Impression des tableaux pour le gymnase : noir sur blanc, une catégorie par page. */
+.print-root {
+  --mantine-color-body: #ffffff;
+  --mantine-color-text: #000000;
+  --mantine-color-dimmed: #333333;
+  --mantine-color-default-border: #888888;
+  background: #ffffff;
+  color: #000000;
+  color-scheme: light;
+  min-height: 100vh;
+  padding: 16px;
+}
+.print-section {
+  break-after: page;
+  page-break-after: always;
+  margin-bottom: 32px;
+}
+.print-section:last-child {
+  break-after: auto;
+  page-break-after: auto;
+}
+.print-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 2px solid #000;
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+}
+.print-header h1 {
+  font-size: 26px;
+  margin: 0;
+}
+@page {
+  size: A4 landscape;
+  margin: 10mm;
+}
+@media print {
+  html,
+  body {
+    background: #ffffff !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-root {
+    padding: 0;
+  }
+}
