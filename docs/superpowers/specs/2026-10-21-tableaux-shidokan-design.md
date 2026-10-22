@@ -270,6 +270,7 @@ Tous réglables **pour chaque compétition**.
 - Si le club a donné son **pré-accord**, les propositions C et B portent la mention « pré-accord coach ».
 - **Écart d'âge** : quand un combattant affronte un plus jeune, une alerte s'affiche sur la fiche du combat. Le coach du plus âgé lui demande en général d'y aller plus doucement.
 - Si aucune solution n'existe : le combattant est signalé « **sans adversaire** ». L'organisateur peut le déplacer à la main n'importe où (avec avertissement si une règle est enfreinte), ou le retirer.
+- ✅ (2026-10-23) **Poids hors catégorie, catégorie du poids réel vide** : la proposition « vers la catégorie du poids réel » indique qu'il y sera seul et passe en dernier ; avant elle, les catégories existantes où il aurait un adversaire (sa catégorie de poids est corrigée dans tous les cas), jamais une catégorie trop légère pour son poids pesé.
 - ✅ (2026-10-23) **Déplacement manuel** : la liste ne propose d'abord que les catégories **cohérentes avec les réglages** ; « Toutes les catégories » ajoute les autres, marquées « règle(s) enfreinte(s) », avec le détail avant confirmation. En déplacement manuel, deux tranches d'âge **voisines** se mélangent **dans les deux sens** sans avertissement (une benjamine avec des pupilles) ; les propositions automatiques, elles, ne font toujours que monter d'une tranche.
 - ✅ (2026-10-23) Chaque cas affiche le combattant en une ligne : tranche d'âge et sexe, discipline et règlement, catégorie de poids, poids (pesé ou approximatif), disciplines acceptées.
 
