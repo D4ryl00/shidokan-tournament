@@ -229,6 +229,8 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       ],
       'Badges : ⚖ Poids (catégorie de poids voisine), ⚖ Poids + (écart au-delà du seuil), ↑ Âge (tranche au-dessus), ⇄ Sen./Vét., ↑ Min./Adultes, ⚥ Mixte, Shobu → Jiyu, ⇄ Discipline, ↩ Retour, ✋ Manuel. Cliquez un badge validé pour son détail.',
       'Certains déplacements demandent normalement l’accord des coachs ; en les validant vous en prenez la responsabilité.',
+      'Avec des vagues : choisissez la vague en haut de l’écran (la même que pour la pesée). Les cas, les compteurs et les validations automatiques ne portent que sur ses catégories.',
+      'Le badge « ↪ change de vague : Matin → Dimanche » signale une proposition qui ferait passer le combattant dans une catégorie d’une autre vague. Elle n’est jamais validée automatiquement : validez-la une par une. Le combattant repasse alors « non pesé » dans sa nouvelle vague, à pointer à sa pesée ; son poids déjà relevé est gardé.',
     ],
   },
   'recasement.valides': {

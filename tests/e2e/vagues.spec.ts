@@ -130,3 +130,56 @@ test('vagues (mineurs) : vague par défaut non clôturée, feuilles sans vague o
   await page.getByTestId('wave-save').click();
   await expect(page.getByTestId('waves-unsaved')).toHaveCount(0);
 });
+
+test('recasement par vague : cas de la vague, changement de vague signalé et validé un par un', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe recasement vagues');
+  const reg = async (lastName: string, ageBandCode: string, weightClassId: string, approxWeightKg: number) =>
+    (await (await request.post(`/api/competitions/${id}/registrations`, {
+      data: { clubId: null, lastName, firstName: 'Léa', sex: 'F', ageBandCode, discipline: 'karate', ruleset: 'jiyu', weightClassId, approxWeightKg, source: 'manual' },
+    })).json()).row as { fighterId: string };
+  // Matin : une minime seule, dont la seule proposition est la catégorie cadette (Après-midi).
+  const mini = await reg('MINI', 'minime', 'minime:F:-45', 45);
+  for (const n of ['CADA', 'CADB']) await reg(n, 'cadet', 'cadet:F:-47', 46);
+  // Après-midi : une cadette -61 seule, recasable en +61 (cas simple).
+  await reg('SEULE', 'cadet', 'cadet:F:-61', 58);
+  for (const n of ['LOURDEA', 'LOURDEB']) await reg(n, 'cadet', 'cadet:F:+61', 60);
+  const [matin] = (await (await request.put(`/api/competitions/${id}/waves`, { data: [
+    { name: 'Matin', rules: { ageBandCodes: ['poussin', 'pupille', 'benjamin', 'minime'], disciplines: [] } },
+    { name: 'Après-midi', rules: { ageBandCodes: ['cadet', 'junior', 'senior'], disciplines: [] } },
+  ] })).json()) as { id: string }[];
+  await request.put(`/api/competitions/${id}/weigh-in/${mini.fighterId}`, { data: { weighInKg: 45, waveId: matin!.id } });
+
+  await page.goto(`/competitions/${id}/recasement`);
+  const cases = page.getByTestId('replacement-case');
+  await page.getByTestId('replacement-wave').getByText('Après-midi', { exact: true }).click();
+  await expect(page).toHaveURL(/vague=/);
+  await expect(cases).toHaveCount(1);
+  await expect(cases).toContainText('SEULE');
+  await page.getByTestId('bulk-simple').click();
+  await page.getByTestId('bulk-confirm').click();
+  await expect(page.getByText('1 recasement(s) appliqué(s).')).toBeVisible();
+  await expect(page.getByText('Aucun cas à traiter')).toBeVisible();
+
+  await page.getByTestId('replacement-wave').getByText('Matin', { exact: true }).click();
+  await expect(cases).toHaveCount(1);
+  await expect(cases).toContainText('MINI');
+  const proposal = cases.getByTestId('replacement-proposal');
+  await expect(proposal.getByTestId('wave-change')).toHaveText('↪ change de vague : Matin → Après-midi');
+  await expect(page.getByText('Les changements de vague se valident un par un.')).toBeVisible();
+  // « Tout classer automatiquement » ne la prend pas.
+  await page.getByTestId('bulk-all').click();
+  await expect(page.getByTestId('bulk-confirm')).toHaveText('Confirmer (0)');
+  await expect(page.getByTestId('bulk-confirm')).toBeDisabled();
+  await page.keyboard.press('Escape');
+  // Validée à la main : la minime passe dans l'Après-midi, à pointer, son poids gardé.
+  await proposal.getByTestId('proposal-apply').click();
+  await page.getByTestId('proposal-confirm').click();
+  await expect(page.getByText('Recasement validé.')).toBeVisible();
+  await expect(cases).toHaveCount(0);
+
+  await page.getByRole('tab', { name: 'Pesée' }).click();
+  await page.getByTestId('weighin-wave').getByText('Après-midi', { exact: true }).click();
+  const row = page.getByTestId('weighin-row').filter({ hasText: 'MINI' });
+  await expect(row.getByTestId('weighin-presence').locator('input[value="unknown"]')).toBeChecked();
+  await expect(row.getByTestId('weighin-weight')).toHaveValue('45 kg');
+});

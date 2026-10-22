@@ -308,12 +308,17 @@ export interface PreviewData {
   warnings?: string[];
 }
 
-export function useReplacement(id: string) {
-  return useQuery({ queryKey: ['replacement', id], queryFn: () => api<ReplacementData>('GET', `/api/competitions/${id}/replacement`) });
+/** Tableau de bord du recasement ; avec une vague, ses cas et ses compteurs seulement. */
+export function useReplacement(id: string, waveId?: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ['replacement', id, waveId ?? null],
+    queryFn: () => api<ReplacementData>('GET', `/api/competitions/${id}/replacement${waveId ? `?vague=${encodeURIComponent(waveId)}` : ''}`),
+    enabled,
+  });
 }
 export function usePreviewReplacement(id: string) {
   return useMutation({
-    mutationFn: (body: { proposalId: string } | { bulk: 'simple' | 'all' } | { move: { registrationId: string; categoryId: string } }) =>
+    mutationFn: (body: { proposalId: string } | { bulk: 'simple' | 'all'; waveId?: string } | { move: { registrationId: string; categoryId: string } }) =>
       api<PreviewData>('POST', `/api/competitions/${id}/replacement/preview`, body),
   });
 }
@@ -325,7 +330,7 @@ function useReplacementAction<T>(id: string, path: string) {
 export const useApplyProposal = (id: string) => useReplacementAction<{ proposalId: string; fingerprint: string }>(id, 'apply');
 export const useRefuseProposal = (id: string) => useReplacementAction<{ proposalId: string }>(id, 'refuse');
 export const useUnrefuseProposal = (id: string) => useReplacementAction<{ proposalId: string }>(id, 'unrefuse');
-export const useBulkReplacement = (id: string) => useReplacementAction<{ mode: 'simple' | 'all'; fingerprint: string }>(id, 'bulk');
+export const useBulkReplacement = (id: string) => useReplacementAction<{ mode: 'simple' | 'all'; fingerprint: string; waveId?: string }>(id, 'bulk');
 export const useUndoRecasement = (id: string) => useReplacementAction<{ recasementId: string }>(id, 'undo');
 export const useManualMove = (id: string) => useReplacementAction<{ registrationId: string; categoryId: string }>(id, 'move');
 

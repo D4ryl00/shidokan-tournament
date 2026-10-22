@@ -1,14 +1,15 @@
 import '../print.css';
 import { Badge, Button, Group, Loader, Modal, NumberInput, SegmentedControl, Stack, Table, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { normalizeName } from '../../domain/names.js';
 import type { Presence } from '../../domain/replacement/index.js';
-import { useCloseWeighIn, useGrid, useSetWeighIn, useWaves, useWeighIn, type WeighInFighter } from '../api.js';
+import { useCloseWeighIn, useGrid, useSetWeighIn, useWeighIn, type WeighInFighter } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { HelpText } from '../components/Help.js';
 import { ageBandLabel, disciplineLabel } from '../labels.js';
+import { useSelectedWave } from '../useSelectedWave.js';
 
 function WeightCell({ fighter, index, onSave }: { fighter: WeighInFighter; index: number; onSave: (kg: number | null) => void }) {
   const [value, setValue] = useState<number | ''>(fighter.weighInKg ?? '');
@@ -38,23 +39,6 @@ function WeightCell({ fighter, index, onSave }: { fighter: WeighInFighter; index
       }}
     />
   );
-}
-
-/**
- * Vague choisie (adresse `?vague=`) ; à défaut ou si elle n'existe plus, la première dont la pesée n'est pas clôturée
- * (sinon la première), écrite dans l'adresse. null sans vague.
- */
-function useSelectedWave(id: string) {
-  const { data: waves = [], isSuccess } = useWaves(id);
-  const [params, setParams] = useSearchParams();
-  const asked = params.get('vague');
-  const waveId = waves.find((w) => w.id === asked)?.id ?? (waves.find((w) => !w.weighInClosed) ?? waves[0])?.id ?? null;
-  const select = (v: string) => setParams((p) => { p.set('vague', v); return p; }, { replace: true });
-  useEffect(() => {
-    if (waveId && asked !== waveId) select(waveId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [waveId, asked]);
-  return { waves, waveId, select, ready: isSuccess };
 }
 
 export function WeighInPage() {

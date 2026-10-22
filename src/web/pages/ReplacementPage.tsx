@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Card, Chip, Group, Modal, SegmentedControl, Select, SimpleGrid, Stack, Table, Text } from '@mantine/core';
+import { Alert, Badge, Button, Card, Chip, Group, Loader, Modal, SegmentedControl, Select, SimpleGrid, Stack, Table, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router';
@@ -19,6 +19,7 @@ import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { SectionHeader } from '../components/Help.js';
 import { ProposalPreview } from '../components/ProposalPreview.js';
 import { PROPOSAL_TYPES, ReplacementBadge } from '../components/ReplacementBadge.js';
+import { useSelectedWave } from '../useSelectedWave.js';
 
 type Dialog =
   | { kind: 'proposal'; proposal: Proposal; confirm: boolean }
@@ -41,7 +42,11 @@ function Stat({ label, value, color }: { label: string; value: number; color?: s
 
 export function ReplacementPage() {
   const { id = '' } = useParams();
-  const { data } = useReplacement(id);
+  // Avec des vagues : le tableau de bord de la vague choisie (même choix que la Pesée).
+  const { waves, waveId, select, ready } = useSelectedWave(id);
+  const { data } = useReplacement(id, waveId, ready);
+  const inWave = waveId ? { waveId } : {};
+  const waveName = (w: string | null) => (w === null ? 'en attente' : (waves.find((x) => x.id === w)?.name ?? '?'));
   const { data: rows = [] } = useRegistrations(id);
   const { data: categories = [] } = useCategories(id);
   const preview = usePreviewReplacement(id);
@@ -68,17 +73,25 @@ export function ReplacementPage() {
   };
   const openBulk = (mode: 'simple' | 'all') => {
     setDialog({ kind: 'bulk', mode });
-    preview.mutate({ bulk: mode });
+    preview.mutate({ bulk: mode, ...inWave });
   };
   const done = (message: string) => {
     setDialog(null);
     notifications.show({ color: 'green', message });
   };
 
-  if (!data) return null;
+  const waveSelector = waves.length > 0 && (
+    <Group gap="xs">
+      <Text size="sm" fw={600}>Vague :</Text>
+      <SegmentedControl data-testid="replacement-wave" value={waveId ?? ''} onChange={select} data={waves.map((w) => ({ value: w.id, label: w.name }))} />
+    </Group>
+  );
+  // Tant que les vagues ne sont pas chargées, on ne sait pas quels cas afficher.
+  if (!ready || !data) return <Stack>{waveSelector}<Loader /></Stack>;
   const s = data.summary;
   return (
     <Stack>
+      {waveSelector}
       <SimpleGrid cols={{ base: 2, sm: 4, md: 7 }} data-testid="replacement-summary">
         <Stat label="Présents" value={s.present} />
         <Stat label="Absents" value={s.absent} />
@@ -91,6 +104,7 @@ export function ReplacementPage() {
       <Group>
         <Button data-testid="bulk-simple" onClick={() => openBulk('simple')} disabled={s.cases === 0}>Classer automatiquement tous les cas simples</Button>
         <Button data-testid="bulk-all" color="orange" variant="light" onClick={() => openBulk('all')} disabled={s.cases === 0}>Tout classer automatiquement</Button>
+        {waves.length > 0 && <Text size="sm" c="dimmed">Les changements de vague se valident un par un.</Text>}
       </Group>
       <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error ?? bulk.error ?? undo.error ?? move.error} />
 
@@ -150,6 +164,11 @@ export function ReplacementPage() {
                         </Text>
                       </div>
                       {p.preApproved && <Badge color="green" variant="light" size="sm">pré-accord coach</Badge>}
+                      {p.waveChange && (
+                        <Badge color="grape" variant="light" size="sm" tt="none" data-testid="wave-change">
+                          ↪ change de vague : {waveName(p.waveChange.from)} → {waveName(p.waveChange.to)}
+                        </Badge>
+                      )}
                     </Group>
                     <Group gap={4} wrap="nowrap">
                       <Button size="xs" variant="default" data-testid="proposal-preview" onClick={() => openProposal(p, false)}>Aperçu</Button>
@@ -161,7 +180,10 @@ export function ReplacementPage() {
               })}
               <Group gap="xs">
                 <Select size="xs" w={360} placeholder="Déplacer manuellement vers…" searchable clearable data-testid="manual-move-select"
-                  data={categories.filter((x) => !x.registrationIds.includes(c.registrationId) && x.status !== 'started' && x.status !== 'finished').map((x) => ({ value: x.id, label: `${x.label} (${x.registrationIds.length - x.absentIds.length})` }))}
+                  data={categories.filter((x) => !x.registrationIds.includes(c.registrationId) && x.status !== 'started' && x.status !== 'finished').map((x) => ({
+                    value: x.id,
+                    label: `${x.label} (${x.registrationIds.length - x.absentIds.length})${waveId && x.waveId !== waveId ? ` · vague ${waveName(x.waveId)}` : ''}`,
+                  }))}
                   value={moveTarget[c.id] ?? null} onChange={(v) => setMoveTarget({ ...moveTarget, [c.id]: v })} />
                 <Button size="xs" variant="default" disabled={!moveTarget[c.id]} data-testid="manual-move"
                   onClick={() => {
@@ -222,6 +244,11 @@ export function ReplacementPage() {
           {preview.data?.warnings && preview.data.warnings.length > 0 && (
             <Alert color="orange" title="Règles enfreintes" data-testid="move-warnings">{preview.data.warnings.join(' ')}</Alert>
           )}
+          {dialog?.kind === 'proposal' && dialog.proposal.waveChange && (
+            <Alert color="grape" data-testid="wave-change-warning">
+              {name(dialog.proposal.registrationId)} passera dans la vague « {waveName(dialog.proposal.waveChange.to)} » : à pointer (et à peser si besoin) dans cette vague. Son poids déjà relevé est gardé.
+            </Alert>
+          )}
           {preview.data && <ProposalPreview data={preview.data} />}
           {dialog?.kind === 'bulk' && dialog.mode === 'all' && (preview.data?.steps.some((x) => x.manual) ?? false) && (
             <Alert color="orange">Certains déplacements demandent normalement une validation manuelle (accord des coachs) : en confirmant, vous en prenez la responsabilité.</Alert>
@@ -245,7 +272,7 @@ export function ReplacementPage() {
                 </Button>
               ) : (
                 <Button data-testid="bulk-confirm" loading={bulk.isPending} disabled={!preview.data || preview.data.steps.length === 0}
-                  onClick={() => bulk.mutate({ mode: dialog.mode, fingerprint: data.fingerprint }, { onSuccess: (r) => done(`${r.applied ?? 0} recasement(s) appliqué(s).`) })}>
+                  onClick={() => bulk.mutate({ mode: dialog.mode, fingerprint: data.fingerprint, ...inWave }, { onSuccess: (r) => done(`${r.applied ?? 0} recasement(s) appliqué(s).`) })}>
                   Confirmer ({preview.data?.steps.length ?? 0})
                 </Button>
               )}
