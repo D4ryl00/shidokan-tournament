@@ -197,7 +197,7 @@ export function ReplacementPage() {
           <Card key={c.id} withBorder data-testid="replacement-case">
             <Group justify="space-between" mb="xs">
               <div>
-                <Text fw={600}>{name(c.registrationId)}</Text>
+                <Text fw={600} data-testid="case-name">{name(c.registrationId)}</Text>
                 <FighterDetail f={data.fighters[c.registrationId]} grid={grid} />
                 <Text size="sm" c="dimmed">
                   {c.detail}

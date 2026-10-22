@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { createCompetition } from './helpers.js';
 
 async function seed(request: APIRequestContext, id: string) {
@@ -13,6 +13,9 @@ async function seed(request: APIRequestContext, id: string) {
   await reg({ lastName: 'PETIT', ageBandCode: 'minime', weightClassId: 'minime:F:-45', approxWeightKg: 44 });
   await reg({ lastName: 'ROBERT', firstName: 'Paul', sex: 'M', ageBandCode: 'senior', ruleset: 'shobu', weightClassId: 'senior:M:-75' });
 }
+
+/** La carte d'un combattant (son nom en titre, pas cité comme adversaire dans une autre carte). */
+const caseOf = (page: Page, name: string) => page.getByTestId('replacement-case').filter({ has: page.getByTestId('case-name').filter({ hasText: name }) });
 
 test('pesée puis recasement : aperçu, validation, refus, masse, retour, annulation', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe recasement');
@@ -52,11 +55,11 @@ test('pesée puis recasement : aperçu, validation, refus, masse, retour, annula
 
   // 2. Recasement : aperçu et validation d'un cas simple
   await page.goto(`/competitions/${id}/recasement`);
-  const martin = page.getByTestId('replacement-case').filter({ hasText: 'MARTIN Léa' });
+  const martin = caseOf(page, 'MARTIN Léa');
   await expect(martin).toBeVisible();
   const simple = martin.getByTestId('replacement-proposal').filter({ hasText: '-54' }).first();
   await expect(simple.getByTestId('replacement-badge')).toHaveText('⚖ Poids 4,5 kg');
-  await expect(simple).toContainText('écart 4,5 kg');
+  await expect(simple).toContainText('écart de poids 4,5 kg');
   await simple.getByTestId('proposal-apply').click();
   await expect(page.getByTestId('preview-content')).toContainText('MARTIN Léa contre BERNARD Léa');
   await page.getByTestId('proposal-confirm').click();
@@ -74,7 +77,7 @@ test('pesée puis recasement : aperçu, validation, refus, masse, retour, annula
 
   // 3. Refus
   await page.goto(`/competitions/${id}/recasement`);
-  const dubois = page.getByTestId('replacement-case').filter({ hasText: 'DUBOIS' });
+  const dubois = caseOf(page, 'DUBOIS');
   const before = await dubois.getByTestId('replacement-proposal').count();
   if (before > 0) {
     await dubois.getByTestId('proposal-refuse').first().click();
@@ -100,7 +103,7 @@ test('pesée puis recasement : aperçu, validation, refus, masse, retour, annula
     data: { clubId: null, lastName: 'NOUVELLE', firstName: 'Zoé', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-47', source: 'onsite' },
   });
   await page.reload();
-  const ret = page.getByTestId('replacement-case').filter({ hasText: 'MARTIN Léa' });
+  const ret = caseOf(page, 'MARTIN Léa');
   await expect(ret.getByTestId('replacement-badge')).toHaveText('↩ Retour');
   await ret.getByTestId('proposal-apply').click();
   await page.getByTestId('proposal-confirm').click();
