@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { normalizeName } from '../../domain/names.js';
 import type { Presence } from '../../domain/replacement/index.js';
-import { useCloseWeighIn, useGrid, useSetWeighIn, useWeighIn, type WeighInFighter } from '../api.js';
+import { useCloseWeighIn, useGrid, useSetWeighIn, useWaves, useWeighIn, type WeighInFighter } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { HelpText } from '../components/Help.js';
 import { ageBandLabel, disciplineLabel } from '../labels.js';
@@ -40,9 +40,21 @@ function WeightCell({ fighter, index, onSave }: { fighter: WeighInFighter; index
   );
 }
 
+/** Vague choisie (adresse `?vague=`), par défaut la première ; null sans vague. */
+function useSelectedWave(id: string) {
+  const { data: waves = [] } = useWaves(id);
+  const [params, setParams] = useSearchParams();
+  const asked = params.get('vague');
+  const waveId = waves.find((w) => w.id === asked)?.id ?? waves[0]?.id ?? null;
+  const select = (v: string) => setParams((p) => { p.set('vague', v); return p; }, { replace: true });
+  return { waves, waveId, select };
+}
+
 export function WeighInPage() {
   const { id = '' } = useParams();
-  const { data } = useWeighIn(id);
+  const { waves, waveId, select } = useSelectedWave(id);
+  const { data } = useWeighIn(id, waveId);
+  const sheetQuery = waveId ? `vague=${encodeURIComponent(waveId)}` : '';
   const { data: grid } = useGrid(id);
   const set = useSetWeighIn(id);
   const close = useCloseWeighIn(id);
@@ -54,6 +66,13 @@ export function WeighInPage() {
 
   return (
     <Stack>
+      {waves.length > 0 && (
+        <Group gap="xs">
+          <Text size="sm" fw={600}>Vague :</Text>
+          <SegmentedControl data-testid="weighin-wave" value={waveId ?? ''} onChange={select}
+            data={waves.map((w) => ({ value: w.id, label: w.name }))} />
+        </Group>
+      )}
       <Group justify="space-between">
         <Group>
           <TextInput placeholder="Rechercher (nom, club)" value={search} onChange={(e) => setSearch(e.currentTarget.value)} />
@@ -63,8 +82,8 @@ export function WeighInPage() {
           {data?.closed && <Badge color="gray">Pesée clôturée</Badge>}
         </Group>
         <Group>
-          <Button variant="light" component={Link} to={`/competitions/${id}/impression/pesee`} target="_blank">Feuilles de pesée par club</Button>
-          <Button variant="light" component={Link} to={`/competitions/${id}/impression/pesee?par=categorie`} target="_blank" data-testid="weighin-sheets-category">
+          <Button variant="light" component={Link} to={`/competitions/${id}/impression/pesee${sheetQuery ? `?${sheetQuery}` : ''}`} target="_blank" data-testid="weighin-sheets-club">Feuilles de pesée par club</Button>
+          <Button variant="light" component={Link} to={`/competitions/${id}/impression/pesee?par=categorie${sheetQuery ? `&${sheetQuery}` : ''}`} target="_blank" data-testid="weighin-sheets-category">
             … par catégorie
           </Button>
           <Button color="orange" data-testid="weighin-close" onClick={() => setConfirm(true)} disabled={count('unknown') === 0}>Clôturer la pesée</Button>
@@ -97,12 +116,12 @@ export function WeighInPage() {
                 </Table.Td>
                 <Table.Td>
                   <SegmentedControl data-testid="weighin-presence" size="xs" value={f.presence}
-                    onChange={(v) => set.mutate({ fighterId: f.fighterId, presence: v as Presence })}
+                    onChange={(v) => set.mutate({ fighterId: f.fighterId, presence: v as Presence, ...(waveId ? { waveId } : {}) })}
                     data={[{ value: 'unknown', label: '?' }, { value: 'present', label: 'Présent' }, { value: 'absent', label: 'Absent' }]} />
                 </Table.Td>
                 <Table.Td>
                   {combat.length > 0 ? (
-                    <WeightCell key={`${f.fighterId}-${f.weighInKg ?? ''}`} fighter={f} index={i} onSave={(kg) => set.mutate({ fighterId: f.fighterId, weighInKg: kg })} />
+                    <WeightCell key={`${f.fighterId}-${f.weighInKg ?? ''}`} fighter={f} index={i} onSave={(kg) => set.mutate({ fighterId: f.fighterId, weighInKg: kg, ...(waveId ? { waveId } : {}) })} />
                   ) : (
                     <Text size="xs" c="dimmed">kata : pas de pesée</Text>
                   )}
@@ -125,7 +144,7 @@ export function WeighInPage() {
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setConfirm(false)}>Annuler</Button>
             <Button color="orange" data-testid="weighin-close-confirm"
-              onClick={() => close.mutate(undefined, { onSuccess: (r) => { setConfirm(false); notifications.show({ message: `${r.markedAbsent} combattant(s) marqué(s) absent(s).` }); } })}>
+              onClick={() => close.mutate(waveId ?? undefined, { onSuccess: (r) => { setConfirm(false); notifications.show({ message: `${r.markedAbsent} combattant(s) marqué(s) absent(s).` }); } })}>
               Clôturer
             </Button>
           </Group>
@@ -139,7 +158,8 @@ export function WeighInPage() {
 export function WeighInSheets() {
   const { id = '' } = useParams();
   const [params] = useSearchParams();
-  const { data } = useWeighIn(id);
+  // Avec des vagues : les feuilles de la vague choisie dans l'écran de pesée.
+  const { data } = useWeighIn(id, params.get('vague'));
   const { data: grid } = useGrid(id);
   const byCategory = params.get('par') === 'categorie';
   const groups = new Map<string, WeighInFighter[]>();

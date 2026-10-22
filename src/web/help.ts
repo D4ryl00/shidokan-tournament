@@ -212,6 +212,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Le badge « ⚖ hors catégorie → … » signale un combattant trop lourd pour sa catégorie (au-delà de la tolérance) et indique celle de son poids ; le recasement s’en occupera.',
       'La mention « recasé » indique un combattant déjà déplacé dans une autre catégorie.',
       '« Clôturer la pesée » marque absents tous les combattants non pesés. À faire une fois la pesée terminée.',
+      'Avec des vagues : choisissez la vague en haut de l’écran. La liste, les compteurs, les feuilles de pesée et « Clôturer la pesée » ne portent que sur cette vague ; un combattant inscrit dans deux vagues est pointé dans chacune.',
       'Les feuilles de pesée (par club ou par catégorie) s’impriment pour peser sur papier.',
     ],
   },

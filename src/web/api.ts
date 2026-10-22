@@ -249,8 +249,12 @@ export interface WeighInFighter {
   registrations: { id: string; discipline: DisciplineId; hasWeight: boolean; weightClassLabel: string | null; weighInClassLabel: string | null; outOfClass: boolean; recased: boolean; categoryLabel: string | null; categoryOrder: number | null }[];
 }
 
-export function useWeighIn(id: string) {
-  return useQuery({ queryKey: ['weigh-in', id], queryFn: () => api<{ closed: boolean; fighters: WeighInFighter[] }>('GET', `/api/competitions/${id}/weigh-in`) });
+/** Liste de pesée ; `waveId` : celle d'une vague (sans vague : toute la compétition). */
+export function useWeighIn(id: string, waveId?: string | null) {
+  return useQuery({
+    queryKey: ['weigh-in', id, waveId ?? null],
+    queryFn: () => api<{ closed: boolean; fighters: WeighInFighter[] }>('GET', `/api/competitions/${id}/weigh-in${waveId ? `?vague=${encodeURIComponent(waveId)}` : ''}`),
+  });
 }
 
 function useInvalidateDay(id: string) {
@@ -261,7 +265,7 @@ function useInvalidateDay(id: string) {
 export function useSetWeighIn(id: string) {
   const invalidate = useInvalidateDay(id);
   return useMutation({
-    mutationFn: ({ fighterId, ...data }: { fighterId: string; presence?: Presence; weighInKg?: number | null }) =>
+    mutationFn: ({ fighterId, ...data }: { fighterId: string; presence?: Presence; weighInKg?: number | null; waveId?: string }) =>
       api<void>('PUT', `/api/competitions/${id}/weigh-in/${fighterId}`, data),
     onSuccess: invalidate,
   });
@@ -269,7 +273,10 @@ export function useSetWeighIn(id: string) {
 
 export function useCloseWeighIn(id: string) {
   const invalidate = useInvalidateDay(id);
-  return useMutation({ mutationFn: () => api<{ markedAbsent: number }>('POST', `/api/competitions/${id}/weigh-in/close`), onSuccess: invalidate });
+  return useMutation({
+    mutationFn: (waveId?: string) => api<{ markedAbsent: number }>('POST', `/api/competitions/${id}/weigh-in/close`, waveId ? { waveId } : undefined),
+    onSuccess: invalidate,
+  });
 }
 
 export interface RecasementEntry {

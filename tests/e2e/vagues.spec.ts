@@ -55,3 +55,43 @@ test('vagues : règles, retrait, ajout à la main, conflit, suppression', async 
   await expect(card(page, 'Matin').getByTestId('wave-category')).toHaveText([/Minimes F/]);
   await expect(waiting.getByTestId('waiting-category')).toHaveCount(2);
 });
+
+test('pesée par vague : présence indépendante, clôture limitée à la vague, feuilles de la vague', async ({ page, request, context }) => {
+  const id = await createCompetition(page, 'Coupe pesée vagues');
+  const reg = (lastName: string, discipline: string) =>
+    request.post(`/api/competitions/${id}/registrations`, {
+      data: { clubId: null, lastName, firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline, ruleset: discipline === 'kata' ? null : 'jiyu', weightClassId: discipline === 'kata' ? null : 'cadet:F:-54', source: 'manual' },
+    });
+  await reg('DEUX', 'karate');
+  await reg('DEUX', 'kata');
+  await reg('KATA', 'kata');
+  await reg('COMBAT', 'karate');
+  await request.put(`/api/competitions/${id}/waves`, { data: [
+    { name: 'Kata', rules: { ageBandCodes: [], disciplines: ['kata'] } },
+    { name: 'Combats', rules: { ageBandCodes: ['cadet'], disciplines: [] } },
+  ] });
+  await page.goto(`/competitions/${id}/pesee`);
+  const row = (name: string) => page.getByTestId('weighin-row').filter({ hasText: name });
+  await page.getByTestId('weighin-wave').getByText('Kata', { exact: true }).click(); // vague par défaut : la première
+  await expect(page.getByTestId('weighin-row')).toHaveCount(2);
+  await row('DEUX').getByTestId('weighin-presence').getByText('Présent').click();
+  await page.getByTestId('weighin-wave').getByText('Combats', { exact: true }).click();
+  await expect(page).toHaveURL(/vague=/);
+  await expect(page.getByTestId('weighin-row')).toHaveCount(2);
+  await row('DEUX').getByTestId('weighin-presence').getByText('Absent').click();
+  await expect(row('DEUX').getByTestId('weighin-presence').locator('input[value="absent"]')).toBeChecked();
+  await page.getByTestId('weighin-wave').getByText('Kata', { exact: true }).click();
+  await expect(row('DEUX').getByTestId('weighin-presence').locator('input[value="present"]')).toBeChecked();
+  // Clôture de la vague Kata : seul KATA (non pesé) devient absent
+  await page.getByTestId('weighin-close').click();
+  await page.getByTestId('weighin-close-confirm').click();
+  await expect(page.getByText('1 combattant(s) marqué(s) absent(s).')).toBeVisible();
+  await expect(page.getByText('Pesée clôturée')).toBeVisible();
+  await page.getByTestId('weighin-wave').getByText('Combats', { exact: true }).click();
+  await expect(page.getByText('Pesée clôturée')).toHaveCount(0);
+  await expect(row('COMBAT').getByTestId('weighin-presence').locator('input[value="unknown"]')).toBeChecked();
+  // Feuilles de pesée de la vague Combats : ses combattants seulement
+  const [sheet] = await Promise.all([context.waitForEvent('page'), page.getByTestId('weighin-sheets-club').click()]);
+  await expect(sheet.getByTestId('weighin-sheet')).toContainText('COMBAT');
+  await expect(sheet.getByTestId('weighin-sheet').filter({ hasText: 'KATA ' })).toHaveCount(0);
+});
