@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { useCompetitions, useCreateCompetition, useGridTemplates } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { SectionHeader } from '../components/Help.js';
 
 export function CompetitionsPage() {
   const { data = [] } = useCompetitions();
@@ -21,7 +22,7 @@ export function CompetitionsPage() {
   return (
     <Stack>
       <Group justify="space-between">
-        <Title order={2}>Compétitions</Title>
+        <SectionHeader topic="competitions" order={2} />
         <Button data-testid="new-competition" onClick={() => setOpen(true)}>
           Nouvelle compétition
         </Button>

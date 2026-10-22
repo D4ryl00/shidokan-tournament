@@ -14,7 +14,7 @@ Le projet est découpé en étapes (1 à 7 : première version ; 8 à 14 : conce
 | 5 ✅ | **Pesée et recasement** | Écran de pesée, moteur de propositions (A à H, R), tableau de bord avec badges, aperçu, validation unitaire et globale, recasement anticipé, régénération | 3, 4 | 14 nov. |
 | 6 ✅ | **Jour J** | Tatamis, saisie des résultats, avancement automatique, classements de poule, notation kata, feuilles de résultats, podiums et classement des clubs, exports, sauvegarde automatique et restauration | 4, 5 | 19 nov. |
 | 7 ✅ | **Points reportés** | Points mineurs des relectures des étapes 1 à 6 (plan `2026-10-22-07-points-reportes.md`, bilan mis à jour) | 1 à 6 | 22 oct. |
-| 8 | **Aides à l'écran** | Phrase d'aide et bouton ⓘ sur chaque section ; passages d'âge en clair dans la grille (plan `2026-10-22-08-aides.md`) | 1 à 7 | 25 oct. |
+| 8 ✅ | **Aides à l'écran** | Phrase d'aide et bouton ⓘ sur chaque section ; passages d'âge en clair dans la grille (plan `2026-10-22-08-aides.md`) | 1 à 7 | 25 oct. |
 | 9 | **Zones nommées** | Liste de zones (« Tatami 1 », « Ring »…) remplaçant le nombre de tatamis ; nom imprimé sur les tableaux | 8 | 28 oct. |
 | 10 | **Vagues** | Vagues (règles par tranche / discipline, ajouts et retraits), pesée et présence par vague | 9 | 2 nov. |
 | 11 | **Recasement par vague** | Tableau de bord filtré par vague ; « change de vague » validé un par un | 10 | 5 nov. |

@@ -16,6 +16,7 @@ import {
   useUndoRecasement,
 } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { SectionHeader } from '../components/Help.js';
 import { ProposalPreview } from '../components/ProposalPreview.js';
 import { PROPOSAL_TYPES, ReplacementBadge } from '../components/ReplacementBadge.js';
 
@@ -176,7 +177,7 @@ export function ReplacementPage() {
       })}
 
       <Group justify="space-between" mt="md">
-        <Title order={4}>Recasements validés</Title>
+        <SectionHeader topic="recasement.valides" />
         {data.recasements.length > 0 && (
           <Group gap="xs" data-testid="recasement-filters">
             <SegmentedControl size="xs" value={logState} onChange={(v) => setLogState(v as typeof logState)}

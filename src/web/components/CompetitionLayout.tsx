@@ -1,7 +1,9 @@
-import { Loader, Stack, Tabs, Text, Title } from '@mantine/core';
+import { Group, Loader, Stack, Tabs, Text, Title } from '@mantine/core';
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { useCompetition } from '../api.js';
+import { HELP, type HelpTopicId } from '../help.js';
 import { COMPETITION_TABS } from '../tabs.js';
+import { HelpButton, HelpText } from './Help.js';
 
 
 export function CompetitionLayout() {
@@ -29,6 +31,12 @@ export function CompetitionLayout() {
           ))}
         </Tabs.List>
       </Tabs>
+      {current in HELP && (
+        <Group gap={4} wrap="nowrap">
+          <HelpText topic={current as HelpTopicId} />
+          <HelpButton topic={current as HelpTopicId} />
+        </Group>
+      )}
       <Outlet />
     </Stack>
   );

@@ -7,7 +7,7 @@ import { normalizeName } from '../../domain/names.js';
 import type { Presence } from '../../domain/replacement/index.js';
 import { useCloseWeighIn, useGrid, useSetWeighIn, useWeighIn, type WeighInFighter } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
-import { SectionHeader } from '../components/Help.js';
+import { HelpText } from '../components/Help.js';
 import { ageBandLabel, disciplineLabel } from '../labels.js';
 
 function WeightCell({ fighter, index, onSave }: { fighter: WeighInFighter; index: number; onSave: (kg: number | null) => void }) {
@@ -54,7 +54,6 @@ export function WeighInPage() {
 
   return (
     <Stack>
-      <SectionHeader topic="pesee" />
       <Group justify="space-between">
         <Group>
           <TextInput placeholder="Rechercher (nom, club)" value={search} onChange={(e) => setSearch(e.currentTarget.value)} />
@@ -160,7 +159,7 @@ export function WeighInSheets() {
   const sorted = byCategory ? [...groups].sort(([a], [b]) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0) || a.localeCompare(b)) : [...groups];
   return (
     <div className="print-root">
-      <Group className="no-print" mb="md"><Button onClick={() => window.print()}>Imprimer</Button></Group>
+      <Group className="no-print" mb="md"><Button onClick={() => window.print()}>Imprimer</Button><HelpText topic="impression" /></Group>
       {sorted.map(([title, list]) => (
         <section key={title} className="print-section" data-testid="weighin-sheet">
           <div className="print-header">

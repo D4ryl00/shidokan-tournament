@@ -8,6 +8,12 @@ import type { AgeLinkKind, CategoryGrid, Sex, WeightClass } from '../../domain/t
 import { parseWeightLabel } from '../../domain/weights.js';
 import { ApiError, useGrid, useGridTemplates, useLoadTemplate, useReplaceGrid, useSaveTemplate } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { HelpLegend, HelpText } from '../components/Help.js';
+
+const AGE_LINK_KINDS = [
+  { value: 'C', label: 'Toujours permis' },
+  { value: 'D', label: 'Seulement si le mélange seniors / vétérans est activé' },
+];
 
 const byWeight = (a: number | null, b: number | null) => (a ?? Infinity) - (b ?? Infinity);
 
@@ -91,7 +97,8 @@ export function GridEditorPage() {
 
   return (
     <Stack maw={900}>
-      <Fieldset legend="Catégories de poids">
+      <Fieldset legend={<HelpLegend topic="grille.poids" />}>
+        <HelpText topic="grille.poids" />
         <Stack>
           <Group>
             <Select data-testid="grid-age-select" label="Tranche d'âge" data={bandOptions} value={band} allowDeselect={false} onChange={setBand} />
@@ -131,7 +138,8 @@ export function GridEditorPage() {
         </Stack>
       </Fieldset>
 
-      <Fieldset legend="Tranches d'âge">
+      <Fieldset legend={<HelpLegend topic="grille.tranches" />}>
+        <HelpText topic="grille.tranches" />
         <Table>
           <Table.Thead>
             <Table.Tr>
@@ -157,17 +165,18 @@ export function GridEditorPage() {
         </Table>
       </Fieldset>
 
-      <Fieldset legend="Passages d'âge autorisés (C : tranche au-dessus, D : seniors / vétérans)">
+      <Fieldset legend={<HelpLegend topic="grille.passages" />}>
+        <HelpText topic="grille.passages" />
         <Stack>
           {grid.ageLinks.map((l, i) => (
-            <Group key={i}>
-              <Select aria-label="De" data={bandOptions} value={l.from} allowDeselect={false}
+            <Group key={i} wrap="nowrap">
+              <Select aria-label="De" w={160} data={bandOptions} value={l.from} allowDeselect={false}
                 onChange={(v) => v && setGrid({ ...grid, ageLinks: grid.ageLinks.map((x, j) => (j === i ? { ...x, from: v } : x)) })} />
               <Text>→</Text>
-              <Select aria-label="Vers" data={bandOptions} value={l.to} allowDeselect={false}
+              <Select aria-label="Vers" w={160} data={bandOptions} value={l.to} allowDeselect={false}
                 onChange={(v) => v && setGrid({ ...grid, ageLinks: grid.ageLinks.map((x, j) => (j === i ? { ...x, to: v } : x)) })} />
-              <SegmentedControl value={l.kind} data={['C', 'D']}
-                onChange={(v) => setGrid({ ...grid, ageLinks: grid.ageLinks.map((x, j) => (j === i ? { ...x, kind: v as AgeLinkKind } : x)) })} />
+              <Select aria-label="Type de passage" w={380} data={AGE_LINK_KINDS} value={l.kind} allowDeselect={false}
+                onChange={(v) => v && setGrid({ ...grid, ageLinks: grid.ageLinks.map((x, j) => (j === i ? { ...x, kind: v as AgeLinkKind } : x)) })} />
               <ActionIcon variant="subtle" color="red" aria-label="Supprimer"
                 onClick={() => setGrid({ ...grid, ageLinks: grid.ageLinks.filter((_, j) => j !== i) })}>✕</ActionIcon>
             </Group>
@@ -185,7 +194,8 @@ export function GridEditorPage() {
       <Group>
         <Button data-testid="grid-save" onClick={save} loading={replace.isPending}>Enregistrer la grille</Button>
       </Group>
-      <Fieldset legend="Modèles de grille (réutilisables d'une compétition à l'autre)">
+      <Fieldset legend={<HelpLegend topic="grille.modeles" />}>
+        <HelpText topic="grille.modeles" />
         <Group align="flex-end">
           <TextInput label="Nom du modèle" placeholder="ex. Grille shidokan 2026" value={templateName} onChange={(e) => setTemplateName(e.currentTarget.value)} />
           <Button variant="light" data-testid="template-save" disabled={!templateName.trim()}

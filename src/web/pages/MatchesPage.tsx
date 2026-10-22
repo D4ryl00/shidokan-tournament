@@ -40,8 +40,6 @@ export function MatchesPage() {
   const tieScope = res?.progress.podium.tieScopes?.[0] ?? null;
 
   return (
-    <Stack>
-    <SectionHeader topic="combats" />
     <Grid>
       <Grid.Col span={{ base: 12, md: 4 }}>
         <SectionHeader topic="combats.categories" order={5} />
@@ -152,6 +150,5 @@ export function MatchesPage() {
         <TieBreakDialog competitionId={id} categoryId={selected.id} scope={tieScope} group={ties[0] ?? null} entrants={entrants} onClose={() => setTieOpen(false)} />
       )}
     </Grid>
-    </Stack>
   );
 }

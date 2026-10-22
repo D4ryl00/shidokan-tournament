@@ -39,18 +39,18 @@ export function HelpButton({ topic, onOpenChange }: { topic: HelpTopicId; onOpen
 /** Phrase d'aide visible sous un titre (jamais imprimée). */
 export function HelpText({ topic }: { topic: HelpTopicId }) {
   return (
-    <Text size="sm" c="dimmed" className="no-print" data-testid="help-short" data-topic={topic}>
+    <Text size="sm" c="dimmed" mb={4} className="no-print" data-testid="help-short" data-topic={topic}>
       {HELP[topic].short}
     </Text>
   );
 }
 
-/** Titre de section avec son ⓘ, puis sa phrase d'aide. */
-export function SectionHeader({ topic, order = 4 }: { topic: HelpTopicId; order?: TitleOrder }) {
+/** Titre de section avec son ⓘ, puis sa phrase d'aide. `suffix` complète le titre (un compteur, par exemple). */
+export function SectionHeader({ topic, order = 4, suffix }: { topic: HelpTopicId; order?: TitleOrder; suffix?: string }) {
   return (
     <Stack gap={2}>
       <Group gap={4} wrap="nowrap">
-        <Title order={order}>{HELP[topic].title}</Title>
+        <Title order={order}>{HELP[topic].title}{suffix ? ` ${suffix}` : ''}</Title>
         <HelpButton topic={topic} />
       </Group>
       <HelpText topic={topic} />

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useParams } from 'react-router';
 import { useGrid, useImportClubForm, usePreviewClubForm } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { SectionHeader } from '../components/Help.js';
 import { ageBandLabel, disciplineLabel, prefsLabel, rulesetShort, weightLabel } from '../labels.js';
 
 export function ClubFormPage() {
@@ -35,15 +36,14 @@ export function ClubFormPage() {
 
   return (
     <Stack maw={1200}>
-      <Title order={4}>1. Envoyer le modèle aux clubs</Title>
+      <SectionHeader topic="fiche-club.envoyer" />
       <Group>
         <Anchor href={`/api/competitions/${id}/club-form.ods`} download data-testid="club-form-download">
           <Button component="span" variant="light">Télécharger le modèle de fiche (.ods)</Button>
         </Anchor>
-        <Text size="sm" c="dimmed">À ouvrir avec LibreOffice ou Excel. Les clubs le renvoient rempli par e-mail.</Text>
       </Group>
 
-      <Title order={4}>2. Importer une fiche renvoyée</Title>
+      <SectionHeader topic="fiche-club.importer" />
       <input data-testid="club-form-file" type="file" accept=".ods,.xlsx,.xls,.csv"
         onChange={(e) => onFile(e.currentTarget.files?.[0] ?? null)} key={file ? 'f' : 'empty'} />
       <ApiErrorAlert error={preview.error ?? importForm.error} />

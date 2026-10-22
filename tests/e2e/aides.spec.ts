@@ -1,5 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { HELP } from '../../src/web/help.js';
+import { COMPETITION_TABS } from '../../src/web/tabs.js';
 import { createCompetition } from './helpers.js';
 
 type Cat = { id: string; label: string };
@@ -61,4 +62,57 @@ test('aide de la notation kata', async ({ page, request }) => {
   await page.getByTestId('schedule-category').filter({ hasText: kata.label }).getByRole('button').first().click();
   await expect(short(page, 'combats.kata')).toBeVisible();
   await openAndClose(page, 'combats.kata');
+});
+
+test('chaque onglet affiche son aide et son ⓘ', async ({ page }) => {
+  const id = await createCompetition(page, 'Coupe aides onglets');
+  for (const t of COMPETITION_TABS) {
+    await page.goto(`/competitions/${id}/${t.path}`);
+    await expect(short(page, t.path), t.path).toBeVisible();
+    await openAndClose(page, t.path);
+  }
+});
+
+test('page d’accueil : aide des compétitions', async ({ page }) => {
+  await page.goto('/');
+  await expect(short(page, 'competitions')).toBeVisible();
+});
+
+test('réglages : ouvrir une aide n’enregistre rien', async ({ page }) => {
+  const id = await createCompetition(page, 'Coupe aides réglages');
+  await page.goto(`/competitions/${id}/reglages`);
+  const writes: string[] = [];
+  page.on('request', (r) => { if (r.method() !== 'GET') writes.push(`${r.method()} ${r.url()}`); });
+  await expect(short(page, 'reglages.recasement')).toBeVisible();
+  await openAndClose(page, 'reglages.recasement');
+  await page.waitForTimeout(300);
+  expect(writes).toEqual([]);
+});
+
+test('grille : passages d’âge en clair', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe aides grille');
+  await page.goto(`/competitions/${id}/grille`);
+  await expect(page.getByText('C : tranche au-dessus')).toHaveCount(0);
+  await expect(short(page, 'grille.passages')).toBeVisible();
+  const kinds = page.getByLabel('Type de passage');
+  await expect(kinds.first()).toHaveValue('Toujours permis');
+  await kinds.first().click();
+  await page.getByRole('option', { name: 'Seulement si le mélange seniors / vétérans est activé' }).click();
+  await page.getByRole('button', { name: 'Enregistrer la grille' }).click();
+  await expect(page.getByText('Grille enregistrée')).toBeVisible();
+  const grid = (await (await request.get(`/api/competitions/${id}/grid`)).json()) as { ageLinks: { kind: string }[] };
+  expect(grid.ageLinks[0]!.kind).toBe('D');
+});
+
+test('impression : aucune aide sur la feuille', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe aides impression');
+  await seed(request, id);
+  for (const url of [`/competitions/${id}/impression`, `/competitions/${id}/impression/pesee`]) {
+    await page.emulateMedia({ media: 'screen' });
+    await page.goto(url);
+    await expect(short(page, 'impression'), url).toBeVisible();
+    await page.emulateMedia({ media: 'print' });
+    await expect(page.getByTestId('help-short')).toBeHidden();
+    await expect(page.getByTestId('help-button')).toHaveCount(0);
+  }
 });

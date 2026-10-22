@@ -6,6 +6,7 @@ import { activeEntrantCount, type Category } from '../../domain/categories.js';
 import { validResults } from '../../domain/results.js';
 import { useCategories, useCategoryResults, useCompetition, usePodiums } from '../api.js';
 import { BracketView, type EntrantInfo } from '../components/BracketView.js';
+import { HelpText } from '../components/Help.js';
 import { useEntrantInfo } from './BracketsPage.js';
 
 /** Zone utile d'une page A4 paysage (marges 10 mm) moins l'en-tête, en pixels CSS. */
@@ -79,6 +80,7 @@ export function PrintPage() {
         <Text size="sm">
           {withResults ? 'Feuilles de résultats' : 'Tableaux'} : {list.length} catégorie(s) — une par page, format A4 paysage. Pour un PDF, choisir « Enregistrer au format PDF ».
         </Text>
+        <HelpText topic="impression" />
       </Group>
       {list.map((c) => (
         <PrintSection key={c.id} category={c} entrants={entrants} competitionLine={line} withResults={withResults} />
@@ -97,7 +99,7 @@ export function PodiumsPrintPage() {
   const done = (data?.categories ?? []).filter((c) => c.complete);
   return (
     <div className="print-root">
-      <Group className="no-print" mb="md"><Button onClick={() => window.print()}>Imprimer</Button></Group>
+      <Group className="no-print" mb="md"><Button onClick={() => window.print()}>Imprimer</Button><HelpText topic="impression" /></Group>
       <section className="print-section" data-testid="podium-print">
         <div className="print-header">
           <img src="/shidokan-france-logo.webp" alt="" width={44} height={44} />

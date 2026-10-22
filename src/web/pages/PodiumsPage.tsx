@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useBackupNow, useBackups, usePodiums, useRestore } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { SectionHeader } from '../components/Help.js';
 import { useEntrantInfo } from './BracketsPage.js';
 
 export function PodiumsPage() {
@@ -48,7 +49,7 @@ export function PodiumsPage() {
         ))}
       </SimpleGrid>
 
-      <Title order={4}>Classement des clubs</Title>
+      <SectionHeader topic="podiums.clubs" />
       <Table striped>
         <Table.Thead><Table.Tr><Table.Th>Club</Table.Th><Table.Th>🥇 Or</Table.Th><Table.Th>🥈 Argent</Table.Th><Table.Th>🥉 Bronze</Table.Th><Table.Th>Total</Table.Th></Table.Tr></Table.Thead>
         <Table.Tbody>
@@ -60,8 +61,7 @@ export function PodiumsPage() {
         </Table.Tbody>
       </Table>
 
-      <Title order={4} mt="lg">Sauvegardes</Title>
-      <Text size="sm" c="dimmed">Une copie de la base est faite automatiquement toutes les quelques minutes (30 dernières conservées).</Text>
+      <SectionHeader topic="podiums.sauvegardes" />
       <Group>
         <Button variant="light" data-testid="backup-now" loading={backupNow.isPending}
           onClick={() => backupNow.mutate(undefined, { onSuccess: () => notifications.show({ color: 'green', message: 'Sauvegarde effectuée.' }) })}>

@@ -7,6 +7,7 @@ import { useParams } from 'react-router';
 import { FFK_FIELDS, FFK_FIELD_LABELS, type FfkChoices, type FfkRow, type PlanItem } from '../../domain/ffk-import.js';
 import { type FfkSheetSetup, useClubs, useCommitFfk, useGrid, usePreviewFfk, useUploadFfk } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { SectionHeader } from '../components/Help.js';
 import { ageBandLabel, disciplineLabel } from '../labels.js';
 
 const rowLabel = (r: FfkRow) => `${r.lastName} ${r.firstName}`;
@@ -127,7 +128,7 @@ export function FfkImportPage() {
 
           {plan.clubs.length > 0 && (
             <>
-              <Title order={5}>Clubs</Title>
+              <SectionHeader topic="import-ffk.clubs" order={5} />
               <Table>
                 <Table.Tbody>
                   {plan.clubs.map((c) => (
@@ -154,7 +155,7 @@ export function FfkImportPage() {
 
           {doubtful.length > 0 && (
             <>
-              <Title order={5}>Rapprochements à trancher ({pending} sur {doubtful.length})</Title>
+              <SectionHeader topic="import-ffk.rapprochements" order={5} suffix={`(${pending} sur ${doubtful.length})`} />
               {doubtful.map((d) =>
                 d.kind === 'doubtful' ? (
                   <Card key={d.row.key} withBorder data-testid="ffk-doubtful">
@@ -177,7 +178,7 @@ export function FfkImportPage() {
 
           {updates.length > 0 && (
             <>
-              <Title order={5}>Mises à jour ({updates.length})</Title>
+              <SectionHeader topic="import-ffk.mises-a-jour" order={5} suffix={`(${updates.length})`} />
               <List size="sm">
                 {updates.map((u) =>
                   u.kind === 'update' ? (
@@ -193,7 +194,7 @@ export function FfkImportPage() {
 
           {creates.length > 0 && (
             <>
-              <Title order={5}>Créations ({creates.length})</Title>
+              <SectionHeader topic="import-ffk.creations" order={5} suffix={`(${creates.length})`} />
               <Text size="sm">
                 {creates.map((c) => `${rowLabel(c.row)} (${c.row.ageBandCode ? ageBandLabel(grid, c.row.ageBandCode) : '?'}, ${c.row.discipline ? disciplineLabel(c.row.discipline) : '?'})`).join(' · ')}
               </Text>
