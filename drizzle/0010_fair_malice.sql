@@ -11,4 +11,4 @@ CREATE TABLE `waves` (
 ALTER TABLE `categories` ADD `wave_override` text;--> statement-breakpoint
 ALTER TABLE `registrations` ADD `presence` text DEFAULT 'unknown' NOT NULL;--> statement-breakpoint
 -- Reprise des données : la présence du combattant devient celle de chacune de ses inscriptions.
-UPDATE `registrations` SET `presence` = (SELECT f.`presence` FROM `fighters` f WHERE f.`id` = `registrations`.`fighter_id`);
+UPDATE `registrations` SET `presence` = coalesce((SELECT f.`presence` FROM `fighters` f WHERE f.`id` = `registrations`.`fighter_id`), 'unknown');

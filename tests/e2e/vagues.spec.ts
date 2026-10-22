@@ -95,3 +95,38 @@ test('pesée par vague : présence indépendante, clôture limitée à la vague,
   await expect(sheet.getByTestId('weighin-sheet')).toContainText('COMBAT');
   await expect(sheet.getByTestId('weighin-sheet').filter({ hasText: 'KATA ' })).toHaveCount(0);
 });
+
+test('vagues (mineurs) : vague par défaut non clôturée, feuilles sans vague ou périmée, écran Vagues non enregistré', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe vagues mineurs');
+  const reg = (lastName: string, discipline: string) =>
+    request.post(`/api/competitions/${id}/registrations`, {
+      data: { clubId: null, lastName, firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline, ruleset: discipline === 'kata' ? null : 'jiyu', weightClassId: discipline === 'kata' ? null : 'cadet:F:-54', source: 'manual' },
+    });
+  await reg('KATAONLY', 'kata');
+  await reg('COMBAT', 'karate');
+  const [kata, combat] = (await (await request.put(`/api/competitions/${id}/waves`, { data: [
+    { name: 'Kata', rules: { ageBandCodes: [], disciplines: ['kata'] } },
+    { name: 'Combats', rules: { ageBandCodes: ['cadet'], disciplines: [] } },
+  ] })).json()) as { id: string }[];
+  await request.post(`/api/competitions/${id}/weigh-in/close`, { data: { waveId: kata!.id } });
+  // Pesée : vague proposée = la première non clôturée, écrite dans l'adresse
+  await page.goto(`/competitions/${id}/pesee`);
+  await expect(page).toHaveURL(new RegExp(`vague=${combat!.id}`));
+  await expect(page.getByTestId('weighin-wave').locator(`input[value="${combat!.id}"]`)).toBeChecked();
+  // Feuilles : sans vague ou vague périmée → même repli
+  for (const q of ['', '?vague=perimee']) {
+    await page.goto(`/competitions/${id}/impression/pesee${q}`);
+    await expect(page.getByTestId('weighin-sheet').first()).toContainText('COMBAT');
+    await expect(page.getByText('KATAONLY')).toHaveCount(0);
+  }
+  // Écran Vagues : modifications non enregistrées signalées et protégées
+  await page.goto(`/competitions/${id}/vagues`);
+  await expect(page.getByTestId('waves-unsaved')).toHaveCount(0);
+  await page.getByTestId('wave-name').first().fill('Kata du matin');
+  await expect(page.getByTestId('waves-unsaved')).toBeVisible();
+  await page.getByRole('tab', { name: 'Pesée' }).click();
+  await expect(page.getByTestId('leave-confirm')).toBeVisible();
+  await page.getByTestId('leave-stay').click();
+  await page.getByTestId('wave-save').click();
+  await expect(page.getByTestId('waves-unsaved')).toHaveCount(0);
+});

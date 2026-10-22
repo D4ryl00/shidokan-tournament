@@ -7,7 +7,7 @@ import { validateGrid } from '../../domain/grid.js';
 import { defaultSettings, mergeSettings, readStoredSettings } from '../../domain/settings.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
-import { ageBands, ageLinks, competitions, registrations, weightClasses, zones } from '../db/schema.js';
+import { ageBands, ageLinks, competitions, registrations, waves, weightClasses, zones } from '../db/schema.js';
 
 export type { Competition, CompetitionInput };
 
@@ -163,6 +163,13 @@ export async function replaceGrid(db: AppDb, competitionId: string, grid: Catego
         .set({ settingsJson: JSON.stringify({ ...current.settings, mixSexes }) })
         .where(eq(competitions.id, competitionId))
         .run();
+    }
+    // … et des règles des vagues.
+    for (const w of t.select().from(waves).where(eq(waves.competitionId, competitionId)).all()) {
+      const rules = JSON.parse(w.rulesJson) as { ageBandCodes: string[]; disciplines: string[] };
+      if (rules.ageBandCodes.some((c) => !codes.has(c))) {
+        t.update(waves).set({ rulesJson: JSON.stringify({ ...rules, ageBandCodes: rules.ageBandCodes.filter((c) => codes.has(c)) }) }).where(eq(waves.id, w.id)).run();
+      }
     }
   });
 }

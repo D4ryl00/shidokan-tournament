@@ -3,7 +3,7 @@ import { validateWaves, type Wave, type WaveInput, type WaveRules } from '../../
 import type { AppDb } from '../db/client.js';
 import { categories, waves } from '../db/schema.js';
 import { CategoryLockedError } from './categories.js';
-import { GridValidationError } from './competitions.js';
+import { GridValidationError, getGrid } from './competitions.js';
 
 export async function listWaves(db: AppDb, competitionId: string): Promise<Wave[]> {
   return db
@@ -22,6 +22,12 @@ export async function listWaves(db: AppDb, competitionId: string): Promise<Wave[
  */
 export async function replaceWaves(db: AppDb, competitionId: string, input: WaveInput[], knownIds?: string[]): Promise<Wave[]> {
   const errors = validateWaves(input);
+  // Tranches cochées : celles de la grille de la compétition.
+  const bands = new Set((await getGrid(db, competitionId)).ageBands.map((b) => b.code));
+  for (const w of input) {
+    const unknown = w.rules.ageBandCodes.filter((c) => !bands.has(c));
+    if (unknown.length) errors.push(`Tranche d’âge inconnue dans la vague « ${w.name.trim()} » : ${unknown.join(', ')}.`);
+  }
   if (errors.length) throw new GridValidationError(errors);
   const current = await listWaves(db, competitionId);
   if (knownIds && (knownIds.length !== current.length || current.some((w) => !knownIds.includes(w.id)))) {

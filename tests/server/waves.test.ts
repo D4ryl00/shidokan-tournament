@@ -95,3 +95,29 @@ test('migration : présence des combattants recopiée sur leurs inscriptions, pe
   expect(db.$client.prepare('SELECT count(*) AS n FROM fighters').get()).toEqual({ n: 2 });
   closeDb(db);
 });
+
+test('relecture (mineurs) : tranche inconnue de la grille dans une règle → 400', async () => {
+  const res = await putWaves([{ name: 'Matin', rules: { ageBandCodes: ['poussin', 'inconnue'], disciplines: [] } }]);
+  expect(res.statusCode).toBe(400);
+  expect(res.json().issues.join(' ')).toContain('Tranche d’âge inconnue dans la vague « Matin » : inconnue.');
+});
+
+test('relecture (mineurs) : migration — inscription orpheline sans combattant : présence « non pesé »', () => {
+  const file = olderDb(9);
+  const raw = new Database(file);
+  raw.pragma('foreign_keys = OFF');
+  raw.prepare("INSERT INTO competitions (id, name, date, settings_json) VALUES ('c1', 'Ancienne', '2026-11-22', '{}')").run();
+  raw.prepare("INSERT INTO registrations (id, competition_id, fighter_id, discipline, source) VALUES ('r1', 'c1', 'fantome', 'kata', 'manual')").run();
+  raw.close();
+  const db = openDb(file);
+  expect(db.$client.prepare("SELECT presence FROM registrations WHERE id = 'r1'").get()).toEqual({ presence: 'unknown' });
+  closeDb(db);
+});
+
+test('relecture (mineurs) : tranche retirée de la grille → retirée des règles des vagues', async () => {
+  await putWaves([{ name: 'Vétérans', rules: { ageBandCodes: ['v4', 'v5'], disciplines: [] } }]);
+  const g = (await app.inject({ method: 'GET', url: `${base}/grid` })).json() as { ageBands: { code: string }[]; weightClasses: { ageBandCode: string }[]; ageLinks: { from: string; to: string }[] };
+  const grid = { ...g, ageBands: g.ageBands.filter((b) => b.code !== 'v5'), weightClasses: g.weightClasses.filter((w) => w.ageBandCode !== 'v5'), ageLinks: g.ageLinks.filter((l) => l.from !== 'v5' && l.to !== 'v5') };
+  expect((await app.inject({ method: 'PUT', url: `${base}/grid`, payload: grid })).statusCode).toBe(204);
+  expect((await waves())[0]!.rules.ageBandCodes).toEqual(['v4']);
+});

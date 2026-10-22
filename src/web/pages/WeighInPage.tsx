@@ -1,7 +1,7 @@
 import '../print.css';
 import { Badge, Button, Group, Loader, Modal, NumberInput, SegmentedControl, Stack, Table, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { normalizeName } from '../../domain/names.js';
 import type { Presence } from '../../domain/replacement/index.js';
@@ -40,13 +40,20 @@ function WeightCell({ fighter, index, onSave }: { fighter: WeighInFighter; index
   );
 }
 
-/** Vague choisie (adresse `?vague=`), par défaut la première ; null sans vague. */
+/**
+ * Vague choisie (adresse `?vague=`) ; à défaut ou si elle n'existe plus, la première dont la pesée n'est pas clôturée
+ * (sinon la première), écrite dans l'adresse. null sans vague.
+ */
 function useSelectedWave(id: string) {
   const { data: waves = [], isSuccess } = useWaves(id);
   const [params, setParams] = useSearchParams();
   const asked = params.get('vague');
-  const waveId = waves.find((w) => w.id === asked)?.id ?? waves[0]?.id ?? null;
+  const waveId = waves.find((w) => w.id === asked)?.id ?? (waves.find((w) => !w.weighInClosed) ?? waves[0])?.id ?? null;
   const select = (v: string) => setParams((p) => { p.set('vague', v); return p; }, { replace: true });
+  useEffect(() => {
+    if (waveId && asked !== waveId) select(waveId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waveId, asked]);
   return { waves, waveId, select, ready: isSuccess };
 }
 
@@ -160,8 +167,9 @@ export function WeighInPage() {
 export function WeighInSheets() {
   const { id = '' } = useParams();
   const [params] = useSearchParams();
-  // Avec des vagues : les feuilles de la vague choisie dans l'écran de pesée.
-  const { data } = useWeighIn(id, params.get('vague'));
+  // Avec des vagues : les feuilles de la vague choisie dans l'écran de pesée (même repli que l'écran).
+  const { waveId, ready } = useSelectedWave(id);
+  const { data } = useWeighIn(id, waveId);
   const { data: grid } = useGrid(id);
   const byCategory = params.get('par') === 'categorie';
   const groups = new Map<string, WeighInFighter[]>();
@@ -179,6 +187,7 @@ export function WeighInSheets() {
   }
   // Par catégorie : dans l'ordre de la grille (tranches d'âge, puis poids), comme l'onglet Tableaux.
   const sorted = byCategory ? [...groups].sort(([a], [b]) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0) || a.localeCompare(b)) : [...groups];
+  if (!ready) return null;
   return (
     <div className="print-root">
       <Group className="no-print" mb="md"><Button onClick={() => window.print()}>Imprimer</Button><HelpText topic="impression" /></Group>

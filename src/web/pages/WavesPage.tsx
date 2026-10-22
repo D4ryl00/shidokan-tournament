@@ -9,6 +9,7 @@ import { validateWaves, WAVE_MAX, WAVE_NONE, waveConflicts, waveOfCategory, type
 import { useCategories, useGrid, useSaveWaves, useUpdateCategory, useWaves } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { HelpButton, HelpText } from '../components/Help.js';
+import { useUnsaved } from '../unsaved.js';
 
 /** Vague en cours d'édition ; `key` identifie aussi une vague pas encore enregistrée. */
 interface Draft { key: string; id?: string; name: string; rules: WaveRules }
@@ -29,6 +30,11 @@ export function WavesPage() {
   useEffect(() => {
     if (saved) setDrafts(saved.map((w) => ({ key: w.id, id: w.id, name: w.name, rules: w.rules })));
   }, [saved]);
+
+  // Modifications non enregistrées (noms, ordre, règles) : signalées, et confirmation avant de quitter l'onglet.
+  const comparable = (ws: { id?: string; name: string; rules: WaveRules }[]) => JSON.stringify(ws.map(({ id: wid, name, rules }) => [wid ?? null, name, rules]));
+  const dirty = !!saved && comparable(drafts) !== comparable(saved);
+  useUnsaved('waves', dirty);
 
   // Aperçu immédiat : la vague de chaque catégorie est recalculée avec les vagues en cours d'édition.
   const editing: Wave[] = drafts.map((d, order) => ({ id: d.id ?? d.key, name: d.name, order, rules: d.rules, weighInClosed: false }));
@@ -148,6 +154,7 @@ export function WavesPage() {
           Ajouter une vague
         </Button>
         <Button data-testid="wave-save" onClick={doSave} loading={save.isPending}>Enregistrer les vagues</Button>
+        {dirty && <Badge color="orange" variant="light" data-testid="waves-unsaved">Modifications non enregistrées</Badge>}
       </Group>
       {errors.length > 0 && (
         <Alert color="red" title="Vagues" data-testid="wave-errors">
