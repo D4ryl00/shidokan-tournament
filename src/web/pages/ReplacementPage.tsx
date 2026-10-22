@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Card, Chip, Group, Loader, Modal, SegmentedControl, Select, SimpleGrid, Stack, Switch, Table, Text } from '@mantine/core';
+import { Alert, Badge, Box, Button, Card, Chip, Group, Loader, Modal, SegmentedControl, Select, SimpleGrid, Stack, Switch, Table, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router';
@@ -144,12 +144,14 @@ export function ReplacementPage() {
   const s = data.summary;
   /** Catégories proposées au déplacement manuel : les cohérentes avec les réglages, et les autres si on les demande. */
   const moveOptions = (caseId: string) => {
+    const band = data.fighters[data.cases.find((x) => x.id === caseId)?.registrationId ?? '']?.ageBandCode;
     const option = (t: { categoryId: string; warnings: string[] }) => {
       const x = categories.find((k) => k.id === t.categoryId);
       if (!x) return null;
+      const otherBand = band !== undefined && !x.key.ageBandCodes.includes(band);
       return {
         value: x.id,
-        label: `${x.label} (${x.registrationIds.length - x.absentIds.length})${waveId && x.waveId !== waveId ? ` · vague ${waveName(x.waveId)}` : ''}${t.warnings.length ? ` ⚠ ${t.warnings.length} règle(s) enfreinte(s)` : ''}`,
+        label: `${x.label} (${x.registrationIds.length - x.absentIds.length})${otherBand ? ' · autre tranche d’âge' : ''}${waveId && x.waveId !== waveId ? ` · vague ${waveName(x.waveId)}` : ''}${t.warnings.length ? ` ⚠ ${t.warnings.length} règle(s) enfreinte(s)` : ''}`,
       };
     };
     const targets = data.moveTargets[caseId] ?? [];
@@ -199,7 +201,7 @@ export function ReplacementPage() {
                 <FighterDetail f={data.fighters[c.registrationId]} grid={grid} />
                 <Text size="sm" c="dimmed">
                   {c.detail}
-                  {c.categoryId && categories.find((x) => x.id === c.categoryId) ? ` — ${categories.find((x) => x.id === c.categoryId)!.label}` : ''}
+                  {c.categoryId && categories.find((x) => x.id === c.categoryId) ? ` · catégorie actuelle : ${categories.find((x) => x.id === c.categoryId)!.label}` : ''}
                 </Text>
               </div>
               <Badge variant="light" color={c.kind === 'return' ? 'gray' : 'orange'}>
@@ -225,12 +227,12 @@ export function ReplacementPage() {
                 return (
                   <Group key={p.id} justify="space-between" wrap="nowrap" data-testid="replacement-proposal">
                     <Group gap="xs" wrap="nowrap">
-                      <ReplacementBadge type={p.type} state="proposed" gapKg={p.checks.weightGapKg} />
+                      <Box style={{ flexShrink: 0 }}><ReplacementBadge type={p.type} state="proposed" gapKg={'newKey' in p.target ? undefined : p.checks.weightGapKg} /></Box>
                       <div>
                         <Text size="sm">{p.reason}</Text>
                         <Text size="xs" c="dimmed">
-                          {PROPOSAL_TYPES[p.type].title}
-                          {p.type === 'A' || p.type === 'B' ? ` · écart ${kg(p.checks.weightGapKg)} kg (max ${kg(p.checks.threshold)} kg)` : ''}
+                          {'newKey' in p.target ? 'Catégorie de son poids réel (encore vide)' : PROPOSAL_TYPES[p.type].title}
+                          {(p.type === 'A' || p.type === 'B') && !('newKey' in p.target) ? ` · écart ${kg(p.checks.weightGapKg)} kg (max ${kg(p.checks.threshold)} kg)` : ''}
                           {p.checks.ageMove !== 'same' ? ' · âge : une tranche au-dessus' : ''}
                           {p.checks.mixedSex ? ' · mixte' : ''}
                           {p.manual ? ' · validation manuelle' : ' · cas simple'}
@@ -275,6 +277,11 @@ export function ReplacementPage() {
                   Déplacer…
                 </Button>
               </Group>
+              {open.some((p) => 'newKey' in p.target) && (
+                <Text size="xs" c="dimmed" data-testid="manual-move-new-hint">
+                  Le déplacement manuel ne liste que les catégories qui existent déjà : pour l’envoyer dans une catégorie encore vide, utilisez la proposition ci-dessus.
+                </Text>
+              )}
             </Stack>
           </Card>
         );

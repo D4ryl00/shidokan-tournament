@@ -28,7 +28,10 @@ export function detectCases(state: State): Case[] {
     const wic = isOverweight(m, state);
     if (wic && !isLocked(byId.get(m.categoryId ?? ''))) {
       withWeightOut.add(m.registrationId);
-      cases.push({ id: `weight_out:${m.registrationId}`, kind: 'weight_out', registrationId: m.registrationId, categoryId: m.categoryId, detail: `Pesé(e) ${m.weighInKg} kg : catégorie ${wic.label}` });
+      const current = state.grid.weightClasses.find((w) => w.id === m.weightClassId);
+      const kg = (x: number) => String(x).replace('.', ',');
+      const detail = `Pesé(e) ${kg(m.weighInKg!)} kg : trop lourd pour ${current?.label ?? '?'} kg (tolérance ${kg(state.settings.weighInToleranceKg[m.sex])} kg) — sa catégorie de poids est ${wic.label} kg`;
+      cases.push({ id: `weight_out:${m.registrationId}`, kind: 'weight_out', registrationId: m.registrationId, categoryId: m.categoryId, detail });
     }
   }
 

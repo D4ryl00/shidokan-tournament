@@ -156,6 +156,24 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
     const merged = [...(existing ? activeMembers(state, existing.id) : []), m];
     const checks = { weightGapKg: Math.round(categoryWeightGap(merged, state.grid) * 100) / 100, threshold: gapThreshold(merged, state), ageMove: 'same' as const, crossesMinorAdult: false, mixedSex: false };
     make('A', existing ? { categoryId: existing.id } : { newKey: key }, existing?.key ?? key, { changes: { weightClassId: wic.id }, checks }, merged.length - 1);
+    if (merged.length === 1) {
+      // Catégorie du poids réel vide : il y serait seul. Proposée en dernier, après les catégories où il aurait un adversaire.
+      const alone = out.at(-1)!;
+      alone.reason = `${alone.reason.replace(/ \(écart [^)]*\)$/, '')} — il y sera seul (sans adversaire), à recaser ensuite`;
+      alone.sortKey[0] = Number.MAX_SAFE_INTEGER;
+      const corrected = { ...m, weightClassId: wic.id };
+      const hypothetical = { ...state, members: state.members.map((x) => (x.registrationId === m.registrationId ? corrected : x)) };
+      for (const t of state.categories) {
+        if (t.id === m.categoryId || isLocked(t) || !acceptsWeight(state, m, t)) continue;
+        const others = activeMembers(state, t.id).filter((x) => x.registrationId !== m.registrationId);
+        if (others.length === 0) continue;
+        const ev = evaluate(hypothetical, corrected, t);
+        if (!ev) continue;
+        const prefIndex = ev.changes.discipline ? m.otherDisciplines.indexOf(ev.changes.discipline) : 0;
+        make(ev.type, { categoryId: t.id }, t.key, { changes: { ...ev.changes, weightClassId: wic.id }, checks: ev.checks }, others.length, [prefIndex]);
+        out.at(-1)!.reason += ` — sa catégorie de poids devient ${wic.label} kg`;
+      }
+    }
   } else if (c.kind === 'return') {
     const home = originalCategory(state, m);
     if (!home || !m.original) return [];
@@ -214,6 +232,15 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
     .filter((p) => !state.refused.includes(p.id))
     .sort((a, b) => cmp(a.sortKey, b.sortKey))
     .map(({ sortKey: _s, ...p }, rank) => ({ ...p, rank }));
+}
+
+/** La catégorie `t` accepte le poids pesé de `m` (tolérance comprise) : sa catégorie de poids la plus lourde n'est pas en dessous. */
+function acceptsWeight(state: State, m: Member, t: CategoryState): boolean {
+  if (m.weighInKg === null || !DISCIPLINES[t.key.discipline].hasWeight) return true;
+  const limits = t.key.weightClassIds.map((id) => state.grid.weightClasses.find((w) => w.id === id)?.maxKg);
+  if (limits.length === 0 || limits.some((kg) => kg === null || kg === undefined)) return true;
+  const grams = (kg: number) => Math.round(kg * 1000);
+  return grams(m.weighInKg) <= grams(Math.max(...(limits as number[]))) + grams(state.settings.weighInToleranceKg[m.sex]);
 }
 
 /**

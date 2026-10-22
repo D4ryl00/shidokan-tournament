@@ -228,6 +228,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         '« Classer automatiquement tous les cas simples » valide d’un coup les propositions sans risque (poids voisin, retour dans la catégorie d’origine) ; « Tout classer automatiquement » valide aussi les autres, sous votre responsabilité.',
         '« Déplacer manuellement vers… » ne liste que les catégories cohérentes avec les réglages (âge, poids, règlement, mixité). « Toutes les catégories » ajoute les autres, marquées « ⚠ règle(s) enfreinte(s) » : le détail s’affiche avant de confirmer.',
       ],
+      'Poids hors catégorie : la proposition « ⚖ Poids » l’envoie dans la catégorie de son poids réel. Si elle est vide, il y serait seul : elle passe alors en dernier, après les catégories où il aurait un adversaire (sa catégorie de poids est corrigée dans tous les cas).',
       'Sous le nom du combattant : sa tranche d’âge, sa discipline et son règlement, sa catégorie de poids, son poids (pesé ou approximatif) et les disciplines qu’il accepte.',
       'Un combattant seul dans sa catégorie peut aussi recevoir le ou les deux plus lourds de la catégorie de poids juste en dessous, s’il y en reste au moins deux (« pour donner une poule à… »). Ces combattants n’avaient pas de problème : la proposition se valide à la main, jamais automatiquement.',
       'Badges : ⚖ Poids (catégorie de poids voisine), ⚖ Poids + (écart au-delà du seuil), ↑ Âge (tranche au-dessus), ⇄ Sen./Vét., ↑ Min./Adultes, ⚥ Mixte, Shobu → Jiyu, ⇄ Discipline, ↩ Retour, ✋ Manuel. Cliquez un badge validé pour son détail.',

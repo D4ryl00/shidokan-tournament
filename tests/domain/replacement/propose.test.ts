@@ -307,3 +307,29 @@ describe('split : le combattant seul reçoit les plus lourds de la catégorie du
     expect(props(s3, alone3.registrationId).filter((p) => p.registrationId !== alone3.registrationId).map((p) => 1 + (p.alsoMoved?.length ?? 0))).toEqual([1]);
   });
 });
+
+describe('poids hors catégorie : catégorie du poids réel vide', () => {
+  test('aussi les catégories existantes où il aurait un adversaire (en premier) ; « il y sera seul » en dernier', () => {
+    const boy = (over: Partial<Member>) => member({ sex: 'M', ageBandCode: 'benjamin', weightClassId: 'benjamin:M:-40', approxWeightKg: 38, ...over });
+    const garnier = boy({ weighInKg: 41, presence: 'present' });
+    const others = [boy({}), boy({}), boy({})];
+    const rousseau = member({ sex: 'M', ageBandCode: 'minime', weightClassId: 'minime:M:-50', weighInKg: 45, presence: 'present' });
+    const s = makeState([garnier, ...others, rousseau]);
+    expect(caseOf(s, garnier.registrationId).detail).toBe('Pesé(e) 41 kg : trop lourd pour -40 kg (tolérance 0,3 kg) — sa catégorie de poids est -45 kg');
+    const ps = props(s, garnier.registrationId);
+    expect(ps.map((p) => p.type)).toEqual(['C', 'A']);
+    expect(ps[0]).toMatchObject({ target: { categoryId: rousseau.categoryId }, changes: { weightClassId: 'benjamin:M:-45' }, manual: true });
+    expect(ps[1]!.reason).toContain('il y sera seul');
+    // Validée, la proposition C le met avec ROUSSEAU, en -45 ; il ne « revient » pas en -40.
+    const after = applyProposal(s, ps[0]!);
+    const g = after.members.find((m) => m.registrationId === garnier.registrationId)!;
+    expect(g).toMatchObject({ categoryId: rousseau.categoryId, weightClassId: 'benjamin:M:-45' });
+    expect(detectCases(after).filter((c) => c.registrationId === garnier.registrationId)).toEqual([]);
+  });
+  test('jamais une catégorie trop légère pour son poids réel', () => {
+    const garnier = member({ sex: 'M', ageBandCode: 'benjamin', weightClassId: 'benjamin:M:-40', weighInKg: 41, presence: 'present' });
+    const light = member({ sex: 'M', ageBandCode: 'minime', weightClassId: 'minime:M:-40', weighInKg: 39, presence: 'present' });
+    const ps = props(makeState([garnier, light]), garnier.registrationId);
+    expect(ps.some((p) => 'categoryId' in p.target && p.target.categoryId === light.categoryId)).toBe(false);
+  });
+});
