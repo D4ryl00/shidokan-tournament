@@ -211,7 +211,6 @@ export function ReplacementPage() {
             <Stack gap="xs">
               {open.length === 0 && <Text size="sm" c="red">Aucune solution automatique : déplacer manuellement ou laisser sans adversaire.</Text>}
               {proposals.map((p) => {
-                const simple = PROPOSAL_TYPES[p.type].simple;
                 if (p.refused) {
                   return (
                     <Group key={p.id} justify="space-between" wrap="nowrap" data-testid="replacement-proposal-refused" style={{ opacity: 0.55 }}>
@@ -232,7 +231,9 @@ export function ReplacementPage() {
                         <Text size="sm">{p.reason}</Text>
                         <Text size="xs" c="dimmed">
                           {'newKey' in p.target ? 'Catégorie de son poids réel (encore vide)' : PROPOSAL_TYPES[p.type].title}
-                          {(p.type === 'A' || p.type === 'B') && !('newKey' in p.target) ? ` · écart ${kg(p.checks.weightGapKg)} kg (max ${kg(p.checks.threshold)} kg)` : ''}
+                          {!('newKey' in p.target) && (p.type === 'A' || p.type === 'B' || p.checks.weightGapKg > 0)
+                            ? ` · écart de poids ${kg(p.checks.weightGapKg)} kg entre le plus léger et le plus lourd (max ${kg(p.checks.threshold)} kg)`
+                            : ''}
                           {p.checks.ageMove !== 'same' ? ' · âge : une tranche au-dessus' : ''}
                           {p.checks.mixedSex ? ' · mixte' : ''}
                           {p.manual ? ' · validation manuelle' : ' · cas simple'}
@@ -252,7 +253,7 @@ export function ReplacementPage() {
                     </Group>
                     <Group gap={4} wrap="nowrap">
                       <Button size="xs" variant="default" data-testid="proposal-preview" onClick={() => openProposal(p, false)}>Aperçu</Button>
-                      <Button size="xs" data-testid="proposal-apply" onClick={() => openProposal(p, true)}>{simple ? 'Classer automatiquement' : 'Valider'}</Button>
+                      <Button size="xs" data-testid="proposal-apply" onClick={() => openProposal(p, true)}>Valider</Button>
                       <Button size="xs" variant="subtle" color="red" data-testid="proposal-refuse" onClick={() => refuse.mutate({ proposalId: p.id })}>Refuser</Button>
                     </Group>
                   </Group>
@@ -355,7 +356,7 @@ export function ReplacementPage() {
               {dialog.kind === 'proposal' ? (
                 <Button data-testid="proposal-confirm" loading={apply.isPending}
                   onClick={() => apply.mutate({ proposalId: dialog.proposal.id, fingerprint: data.fingerprint }, { onSuccess: () => done('Recasement validé.') })}>
-                  {PROPOSAL_TYPES[dialog.proposal.type].simple ? 'Êtes-vous sûr ? Classer' : 'Confirmer la validation'}
+                  {PROPOSAL_TYPES[dialog.proposal.type].simple ? 'Êtes-vous sûr ? Valider' : 'Confirmer la validation'}
                 </Button>
               ) : (
                 <Button data-testid="bulk-confirm" loading={bulk.isPending} disabled={!preview.data || preview.data.steps.length === 0}

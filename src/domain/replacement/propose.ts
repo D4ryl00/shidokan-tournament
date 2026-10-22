@@ -128,8 +128,8 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
   const out: (Omit<Proposal, 'rank'> & { sortKey: (number | string)[] })[] = [];
   const make = (type: ProposalType, target: Proposal['target'], toKey: CategoryKey, ev: Omit<Evaluation, 'type'>, members: number, extra: (number | string)[] = []) => {
     const targetId = 'categoryId' in target ? target.categoryId : keyString(target.newKey);
-    const weightText = DISCIPLINES[toKey.discipline].hasWeight ? ` (écart ${ev.checks.weightGapKg.toFixed(1).replace('.', ',')} kg)` : '';
     const id = `${type}:${m.registrationId}>${targetId}`;
+    const opponents = 'categoryId' in target ? activeMembers(state, target.categoryId).filter((x) => x.registrationId !== m.registrationId) : [];
     const waves = waveEffects(state, { caseId: c.id, type, registrationId: m.registrationId, target, changes: ev.changes });
     out.push({
       id,
@@ -142,7 +142,8 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
       manual: type !== 'A' && type !== 'R',
       ...waves,
       preApproved: !waves.waveChange && waves.waveShifts.length === 0 && m.clubPreApproval && ['B', 'C', 'D', 'E'].includes(type),
-      reason: `${m.label} : ${from} → ${labelOf(toKey)}${weightText}`,
+      // La catégorie telle qu'elle sera après le déplacement (« Benjamins / Minimes M · -45 / -50 kg »), et qui il y rencontrera.
+      reason: `${m.label} : ${from} → ${labelOf(arrivalKey(state, m, toKey, ev.changes))}${withWhom(opponents)}`,
       sortKey: [order(m).indexOf(type), ...extra, members === 1 ? 0 : 1, ev.checks.weightGapKg, labelOf(toKey)],
     });
   };
@@ -159,7 +160,7 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
     if (merged.length === 1) {
       // Catégorie du poids réel vide : il y serait seul. Proposée en dernier, après les catégories où il aurait un adversaire.
       const alone = out.at(-1)!;
-      alone.reason = `${alone.reason.replace(/ \(écart [^)]*\)$/, '')} — il y sera seul (sans adversaire), à recaser ensuite`;
+      alone.reason += ' — il y sera seul (sans adversaire), à recaser ensuite';
       alone.sortKey[0] = Number.MAX_SAFE_INTEGER;
       const corrected = { ...m, weightClassId: wic.id };
       const hypothetical = { ...state, members: state.members.map((x) => (x.registrationId === m.registrationId ? corrected : x)) };
@@ -171,7 +172,7 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
         if (!ev) continue;
         const prefIndex = ev.changes.discipline ? m.otherDisciplines.indexOf(ev.changes.discipline) : 0;
         make(ev.type, { categoryId: t.id }, t.key, { changes: { ...ev.changes, weightClassId: wic.id }, checks: ev.checks }, others.length, [prefIndex]);
-        out.at(-1)!.reason += ` — sa catégorie de poids devient ${wic.label} kg`;
+        out.at(-1)!.reason += ` — lui en ${wic.label} kg, la catégorie de son poids réel`;
       }
     }
   } else if (c.kind === 'return') {
@@ -210,7 +211,7 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
         manual: true,
         ...waves,
         preApproved: false,
-        reason: `${names} : ${labelOf(pull.from)} → ${labelOf(pull.to)} (écart ${pull.checks.weightGapKg.toFixed(1).replace('.', ',')} kg), pour donner ${k > 1 ? 'une poule' : 'un adversaire'} à ${m.label}`,
+        reason: `${names} : ${labelOf(pull.from)} → ${labelOf(pull.to)}, pour donner ${k > 1 ? 'une poule' : 'un adversaire'} à ${m.label}`,
         // Après les déplacements du combattant lui-même (de même type) : la poule de 3 d'abord.
         sortKey: [order(m).indexOf(pull.type), 0, k > 1 ? 2 : 3, pull.checks.weightGapKg, labelOf(pull.to)],
       });
@@ -232,6 +233,26 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
     .filter((p) => !state.refused.includes(p.id))
     .sort((a, b) => cmp(a.sortKey, b.sortKey))
     .map(({ sortKey: _s, ...p }, rank) => ({ ...p, rank }));
+}
+
+/** Clé de la catégorie d'arrivée une fois `m` arrivé (avec ses changements) : tranches, poids et sexe réunis. */
+function arrivalKey(state: State, m: Member, toKey: CategoryKey, changes: Proposal['changes']): CategoryKey {
+  const uniq = (xs: string[]) => [...new Set(xs)].sort();
+  const wc = changes.weightClassId !== undefined ? changes.weightClassId : m.weightClassId;
+  return {
+    ...toKey,
+    sex: toKey.sex === m.sex ? toKey.sex : 'X',
+    ageBandCodes: uniq([...toKey.ageBandCodes, m.ageBandCode]),
+    weightClassIds: wc && DISCIPLINES[toKey.discipline].hasWeight ? uniq([...toKey.weightClassIds, wc]) : toKey.weightClassIds,
+  };
+}
+
+/** « (avec DUPONT Léa et MARTIN Jade) », trois noms au plus. */
+function withWhom(opponents: Member[]): string {
+  if (opponents.length === 0) return '';
+  const names = opponents.slice(0, 3).map((x) => x.label);
+  const more = opponents.length - names.length;
+  return ` (avec ${more > 0 ? `${names.join(', ')} et ${more} autre${more > 1 ? 's' : ''}` : names.length > 1 ? `${names.slice(0, -1).join(', ')} et ${names.at(-1)}` : names[0]})`;
 }
 
 /** La catégorie `t` accepte le poids pesé de `m` (tolérance comprise) : sa catégorie de poids la plus lourde n'est pas en dessous. */

@@ -241,7 +241,7 @@ Tous réglables **pour chaque compétition**.
 ### 9.3 Types de recasement et validation
 | # | Type | Validation |
 |---|---|---|
-| A | Catégorie de poids voisine, même âge, écart ≤ seuil (y compris la correction d'un poids hors catégorie) | **cas simple** : bouton « Classer automatiquement » ✅ |
+| A | Catégorie de poids voisine, même âge, écart ≤ seuil (y compris la correction d'un poids hors catégorie) | **cas simple** : bouton « Valider » (2026-10-23, auparavant « Classer automatiquement ») ✅ |
 | B | Catégorie de poids voisine, écart > seuil | manuelle ✅ |
 | C | Tranche d'âge au-dessus (une seule) | manuelle, avec l'accord des deux coachs ✅ |
 | D | Mélange seniors / vétérans | manuelle, si l'option est activée 🟡 |
@@ -282,7 +282,7 @@ Tous réglables **pour chaque compétition**.
 ## 10. Tableau de bord du jour J ✅
 
 - **Liste des cas à traiter**, combattant par combattant, avec les propositions classées et un **aperçu avant validation** : qui bouge, quels tableaux changent, qui rencontre qui.
-- **Cas simples (A)** : bouton « Classer automatiquement » → aperçu → « Êtes-vous sûr ? » → application.
+- **Cas simples (A)** : bouton « Valider » → aperçu → « Êtes-vous sûr ? » → application. ✅ (2026-10-23) Chaque proposition nomme la catégorie **telle qu'elle sera après le déplacement** (« Benjamins / Minimes M · -45 / -50 kg ») et les adversaires qu'il y rencontrera ; l'écart de poids affiché est celui entre le plus léger et le plus lourd de cette catégorie.
 - **Bouton global « Tout classer automatiquement »** → aperçu global → confirmation. Il applique la meilleure proposition à **tous** les cas, **y compris ceux qui demandent normalement une validation manuelle**. L'organisateur en prend la responsabilité.
   - 💡 L'aperçu global sépare les cas simples des cas qui auraient dû être validés un par un.
 - **Repérage visuel des combattants reclassés et du motif**, partout où ils apparaissent :
