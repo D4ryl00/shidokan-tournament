@@ -46,6 +46,13 @@ export function PrintSection({ category, entrants, competitionLine, withResults 
   const { data: plan } = usePassages(id);
   const passages = categoryPassages(plan, category.id);
   const zone = zones.find((z) => z.id === passages.zoneId);
+  const zoneName = (zid: string) => zones.find((z) => z.id === zid)?.name ?? '?';
+  // Kata : bloc entier, ou tour 1 sur sa zone et finale sur la zone des finales.
+  const kataLine = passages.kata
+    .map((k) => (k.part === 'all' ? ` · passage n° ${k.number}` : k.part === 'tour1' ? ` · tour 1 : n° ${k.number}` : ` · finale : n° ${k.number} (${zoneName(k.zoneId)})`))
+    .join('');
+  // Combats déplacés sur la zone des finales : leur zone est indiquée sur le combat.
+  const movedZones = new Map([...passages.matchZones].filter(([, zid]) => zid !== passages.zoneId).map(([mid, zid]) => [mid, zoneName(zid)]));
   const results = res && category.bracket?.kind === 'combat' ? validResults(category.bracket, res.records, res.tieBreaks.pools).results : undefined;
   return (
     <section className="print-section" data-testid="print-section">
@@ -54,18 +61,19 @@ export function PrintSection({ category, entrants, competitionLine, withResults 
         <div>
           <h1>{category.label}</h1>
           <Text size="sm">{competitionLine}</Text>
-          {zone && <Text size="md" fw={700}>Zone : {zone.name}{passages.kataNumber !== null ? ` · passage n° ${passages.kataNumber}` : ''}</Text>}
+          {zone && <Text size="md" fw={700}>Zone : {zone.name}{kataLine}</Text>}
+          {category.numbersUpdatedAt && <Text size="sm" data-testid="numbers-updated">mis à jour à {new Date(category.numbersUpdatedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</Text>}
         </div>
       </div>
       <FitToPage>
-        <BracketView category={category} entrants={entrants} printable results={results} kataScores={res?.kataScores} numbers={passages.numbers}
+        <BracketView category={category} entrants={entrants} printable results={results} kataScores={res?.kataScores} numbers={passages.numbers} matchZones={movedZones}
           tieBreaks={res?.tieBreaks.pools} kataTieBreak={res?.tieBreaks.kata} />
       </FitToPage>
     </section>
   );
 }
 
-/** /competitions/:id/impression[?categories=id1,id2] — hors de l'AppShell, toujours en noir sur blanc. */
+/** /competitions/:id/impression[?categories=id1,id2 | ?vague=id] — hors de l'AppShell, toujours en noir sur blanc. */
 export function PrintPage() {
   const { id = '' } = useParams();
   const [params] = useSearchParams();
@@ -73,9 +81,13 @@ export function PrintPage() {
   const { data: categories = [] } = useCategories(id);
   const entrants = useEntrantInfo(id);
   const wanted = params.get('categories')?.split(',').filter(Boolean);
+  // `?vague=` : les catégories de la vague (vide : vague implicite d'une compétition sans vague).
+  const wave = params.has('vague') ? params.get('vague') || null : undefined;
   const withResults = params.get('resultats') === '1';
   // Sans sélection : seulement les catégories à disputer (une catégorie dont tous les membres sont absents n'est pas imprimée).
-  const list = wanted ? categories.filter((c) => wanted.includes(c.id)) : categories.filter((c) => activeEntrantCount(c) >= 2);
+  const list = wanted
+    ? categories.filter((c) => wanted.includes(c.id))
+    : categories.filter((c) => activeEntrantCount(c) >= 2 && (wave === undefined || c.waveId === wave));
   const line = competition
     ? [competition.name, new Date(`${competition.date}T12:00:00`).toLocaleDateString('fr-FR', { dateStyle: 'long' }), competition.location].filter(Boolean).join(' — ')
     : '';

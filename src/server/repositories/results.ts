@@ -209,6 +209,8 @@ export interface QueueItem {
   a: string | null;
   b: string | null;
   katakas: number | null;
+  /** Bloc de kata séparé (finales de kata sur la zone des finales) : 'tour1' ou 'finale'. */
+  kataPart: 'tour1' | 'finale' | null;
   noRest: boolean;
 }
 
@@ -226,7 +228,7 @@ export async function schedule(db: AppDb, competitionId: string, waveId?: string
   const rows = new Map(db.select().from(categories).where(eq(categories.competitionId, competitionId)).all().map((r) => [r.id, r]));
   const who = labels(db, competitionId);
   const name = (rid: string | null) => (rid ? (who.get(rid)?.name ?? '?') : null);
-  const state = new Map<string, { matches: ReturnType<typeof resolveBracket>['matches']; finished: boolean }>();
+  const state = new Map<string, { matches: ReturnType<typeof resolveBracket>['matches']; finished: boolean; round1Done: boolean }>();
   const describe = async (c: (typeof cats)[number]) => {
     const { progress } = await getResults(db, competitionId, c.id);
     let matches: ReturnType<typeof resolveBracket>['matches'] = [];
@@ -234,7 +236,7 @@ export async function schedule(db: AppDb, competitionId: string, waveId?: string
       const { results } = validResults(c.bracket, loadRecords(db, c.id), loadTieBreaks(db, c.id).pools);
       matches = resolveBracket(c.bracket, results, loadTieBreaks(db, c.id).pools).matches;
     }
-    state.set(c.id, { matches, finished: progress.status === 'finished' });
+    state.set(c.id, { matches, finished: progress.status === 'finished', round1Done: progress.played >= (c.bracket?.entrants.length ?? 0) });
     // Numéro de passage ; sans zone, numérotation propre à la catégorie.
     const local = new Map([...matches].filter((m) => !m.bye).sort((x, y) => x.order - y.order).map((m, i) => [m.id, i + 1]));
     const nextMatches = matches
@@ -258,12 +260,14 @@ export async function schedule(db: AppDb, competitionId: string, waveId?: string
         const st = state.get(p.categoryId);
         if (!st) return [];
         const base = { number: p.number, categoryId: p.categoryId, categoryLabel: labelOf.get(p.categoryId) ?? '', noRest: p.noRest };
-        if (p.matchId === null) {
+        if (p.matchId === null || p.matchId.startsWith('kata:')) {
           const c = cats.find((x) => x.id === p.categoryId)!;
-          return st.finished ? [] : [{ ...base, matchId: null, a: null, b: null, katakas: c.bracket?.entrants.length ?? 0 }];
+          const kataPart = p.matchId === 'kata:tour1' ? ('tour1' as const) : p.matchId === 'kata:finale' ? ('finale' as const) : null;
+          const done = st.finished || (kataPart === 'tour1' && st.round1Done);
+          return done ? [] : [{ ...base, matchId: null, a: null, b: null, katakas: c.bracket?.entrants.length ?? 0, kataPart }];
         }
         const m = st.matches.find((x) => x.id === p.matchId);
-        return m && m.playable && !m.result ? [{ ...base, matchId: m.id, a: name(m.entrantA), b: name(m.entrantB), katakas: null }] : [];
+        return m && m.playable && !m.result ? [{ ...base, matchId: m.id, a: name(m.entrantA), b: name(m.entrantB), katakas: null, kataPart: null }] : [];
       })
       .slice(0, 6);
   // Dans l'ordre des zones de la compétition ; une zone sans catégorie n'apparaît pas.

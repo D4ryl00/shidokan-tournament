@@ -250,6 +250,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Format, repêchage et combat pour la 3e place se changent tant que la catégorie n’est pas lancée.',
         'Cliquez deux combattants pour les échanger.',
         '« Déverrouiller » rouvre une catégorie lancée (le tableau peut être refait si ses inscrits ont changé).',
+        'Vague figée : ses tableaux ne changent plus d’eux-mêmes. Si un combattant devient absent, « Régénérer (renuméroté à la suite) » refait le tableau et lui donne de nouveaux numéros, après le dernier numéro de sa zone : réimprimez-le (il porte « mis à jour à … »).',
       ],
       'Les catégories « Sans adversaire » ou « Tous absents » ne sont pas imprimées.',
     ],
@@ -260,6 +261,9 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     details: [
       [
         'À gauche : les catégories et leur zone de combat. À droite : par zone, les prochains combats dans l’ordre des numéros de passage (avec des vagues, ceux de la vague choisie en haut).',
+        '« Figer et imprimer la vague » : quand toutes ses catégories sont prêtes et ont une zone, les numéros de passage sont enregistrés et ne changent plus ; imprimez alors les tableaux de la vague. « Reprendre les numéros à 1 » repart de 1 sur chaque zone (nouveau jour). Les vagues se figent dans l’ordre.',
+        'Vague figée : fermée au recasement, ses tableaux ne bougent plus sans confirmation. Une catégorie nouvelle ou régénérée est « à numéroter » : « Numéroter à la suite » lui donne des numéros après le dernier de sa zone.',
+        '« Rouvrir la vague » rend modifiables les catégories sans résultat ; « Refiger la vague » ne renumérote que celles qui ont changé, à la suite.',
         'Cliquez un combat du tableau pour saisir le vainqueur et la méthode.',
         'Une égalité de poule ou de kata s’affiche avec « Départager » : classez les ex-æquo.',
         'Un résultat corrigé rend « à revoir » les combats suivants déjà joués : ils sont encadrés en orange.',
@@ -375,6 +379,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Chaque catégorie de kata forme un seul numéro, avant les combats de sa vague.',
         'Les numéros se suivent d’une vague à l’autre sur une même zone. Une exemption n’a pas de numéro.',
         'Quand un combattant enchaîne deux combats sans repos, le combat porte « pas de repos : prévoir une pause ».',
+        '« Finales sur la zone » : le combat pour la 1re place de chaque catégorie passe sur cette zone, à la fin de la vague, l’un après l’autre (le tableau imprimé l’indique). Les combats pour la 3e place et les repêchages restent sur leur zone. Option : les finales de kata aussi (le tour 1 reste sur sa zone).',
         'Une catégorie sans numéro de passage (sans zone possible ou sans vague) numérote ses combats « c1 », « c2 »… pour ne pas les confondre avec ceux d’une zone.',
       ],
       'Si aucune zone n’accueille une discipline, ses catégories restent sans zone ni numéro et un message le signale.',

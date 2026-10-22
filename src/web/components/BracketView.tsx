@@ -56,6 +56,8 @@ interface Props {
   numbers?: Map<string, number>;
   /** Combats sans repos (« pas de repos : prévoir une pause »). */
   noRest?: Set<string>;
+  /** Combats joués sur une autre zone que la catégorie (zone des finales) : nom de cette zone. */
+  matchZones?: Map<string, string>;
   results?: Record<string, MatchResult>;
   kataScores?: KataScores;
   printable?: boolean;
@@ -169,6 +171,7 @@ function CombatView(props: Props & { bracket: CombatBracket }) {
           {stale ? ' · à revoir' : ''}
           {!props.printable && props.noRest?.has(m.id) ? ' · pas de repos : prévoir une pause' : ''}
         </Text>
+        {props.matchZones?.get(m.id) && <Text size="xs" fw={700} data-testid="match-zone">Zone des finales : {props.matchZones.get(m.id)}</Text>}
         <EntrantLine id={m.entrantA} fallback={describe(m.a)} info={m.entrantA ? entrants.get(m.entrantA) : undefined} props={props} winner={winA} />
         {!props.printable && <Text size="xs" c="dimmed" ta="center">contre</Text>}
         <EntrantLine id={m.entrantB} fallback={describe(m.b)} info={m.entrantB ? entrants.get(m.entrantB) : undefined} props={props} winner={winB} />

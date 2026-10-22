@@ -364,6 +364,7 @@ export interface QueueItem {
   a: string | null;
   b: string | null;
   katakas: number | null;
+  kataPart: 'tour1' | 'finale' | null;
   noRest: boolean;
 }
 export interface ScheduleData {
@@ -379,6 +380,40 @@ export function useSchedule(id: string, waveId?: string | null, enabled = true) 
     queryFn: () => api<ScheduleData>('GET', `/api/competitions/${id}/schedule${waveId ? `?vague=${encodeURIComponent(waveId)}` : ''}`),
     enabled,
   });
+}
+
+// --- Lancement des vagues (étape 13) ---
+
+export type WaveState = 'preparation' | 'launched' | 'reopened' | 'finished';
+export interface LaunchStatus {
+  state: WaveState;
+  blocking: string[];
+  pending: { categoryId: string; label: string }[];
+  zones: { zoneId: string; first: number | null; last: number | null }[];
+}
+export interface NumberChanges {
+  changes: { categoryId: string; label: string; numbers: number[] }[];
+}
+
+/** État de lancement d'une vague (null : vague implicite) ; sous « categories » : rechargé avec elles. */
+export function useLaunchStatus(id: string, waveId: string | null, restart = false, enabled = true) {
+  return useQuery({
+    queryKey: ['categories', id, 'launch', waveId, restart],
+    queryFn: () => api<LaunchStatus>('GET', `/api/competitions/${id}/launch?vague=${encodeURIComponent(waveId ?? '')}${restart ? '&restart=1' : ''}`),
+    enabled,
+  });
+}
+function useLaunchAction<T, R = void>(id: string, method: 'POST', path: (arg: T) => string, body: (arg: T) => object | undefined) {
+  const qc = useQueryClient();
+  const invalidate = () => Promise.all(['categories', 'schedule', 'replacement'].map((k) => qc.invalidateQueries({ queryKey: [k, id] })));
+  return useMutation({ mutationFn: (arg: T) => api<R>(method, `/api/competitions/${id}${path(arg)}`, body(arg)), onSuccess: invalidate, onError: invalidate });
+}
+export const useLaunch = (id: string) => useLaunchAction<{ waveId: string | null; restart: boolean }>(id, 'POST', () => '/launch', (a) => a);
+export const useReopen = (id: string) => useLaunchAction<{ waveId: string | null }>(id, 'POST', () => '/launch/reopen', (a) => a);
+export const useNumberPending = (id: string) => useLaunchAction<{ waveId: string | null }, NumberChanges>(id, 'POST', () => '/launch/number', (a) => a);
+export const useRegenerate = (id: string) => useLaunchAction<string, NumberChanges>(id, 'POST', (cid) => `/categories/${cid}/regenerate`, () => undefined);
+export function useNumberPreview(id: string) {
+  return useMutation({ mutationFn: (body: { waveId: string | null }) => api<NumberChanges>('POST', `/api/competitions/${id}/launch/number/preview`, body) });
 }
 
 /** Zones et numéros de passage (clé sous « categories » : rechargés avec les catégories). */

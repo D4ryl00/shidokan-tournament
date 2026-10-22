@@ -6,6 +6,7 @@ import { activeEntrantCount } from '../../domain/categories.js';
 import { validResults } from '../../domain/results.js';
 import { useCategories, useCategoryResults, useDeleteResult, usePassages, useSchedule, useUpdateCategory, useZones } from '../api.js';
 import { ZonesImpossibleAlert } from '../components/ZonesImpossibleAlert.js';
+import { WaveLaunchPanel } from '../components/WaveLaunchPanel.js';
 import { categoryPassages } from '../passages.js';
 import { useSelectedWave } from '../useSelectedWave.js';
 import { BracketView, combatLabel } from '../components/BracketView.js';
@@ -91,6 +92,7 @@ export function MatchesPage() {
               <SegmentedControl data-testid="matches-wave" value={waveId ?? ''} onChange={select} data={waves.map((w) => ({ value: w.id, label: w.name }))} />
             </Group>
           )}
+          {ready && (waves.length === 0 || waveId) && <WaveLaunchPanel competitionId={id} waveId={waveId} />}
           <ZonesImpossibleAlert impossible={schedule?.impossible} />
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
             {(schedule?.zones ?? []).map((t) => (
@@ -100,7 +102,7 @@ export function MatchesPage() {
                 {t.queue.map((q) =>
                   q.matchId === null ? (
                     <Group key={`${q.categoryId}-kata`} justify="space-between" wrap="nowrap" mt={6} data-testid="next-kata">
-                      <Text size="sm">n° {q.number} — {q.categoryLabel}, {q.katakas} katakas</Text>
+                      <Text size="sm">n° {q.number} — {q.categoryLabel}{q.kataPart === 'tour1' ? ' (tour 1)' : q.kataPart === 'finale' ? ' (finale)' : ''}, {q.katakas} katakas</Text>
                       <Button size="xs" variant="light" style={{ flexShrink: 0 }} onClick={() => setSelectedId(q.categoryId)}>Noter</Button>
                     </Group>
                   ) : (

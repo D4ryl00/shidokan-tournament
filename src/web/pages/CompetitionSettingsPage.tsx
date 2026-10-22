@@ -169,6 +169,13 @@ export function CompetitionSettingsPage() {
         <Stack>
           <Select data-testid="passage-order" w={320} label="Ordre de passage des combats" data={PASSAGE_ORDER_OPTIONS} value={s.passageOrder} allowDeselect={false}
             onChange={(v) => v && set({ passageOrder: v as PassageOrderMode })} />
+          <Group align="flex-end">
+            <Select data-testid="finals-zone" w={320} label="Finales sur la zone" allowDeselect={false}
+              data={[{ value: '', label: 'Aucune (chaque finale reste sur sa zone)' }, ...(savedZones ?? []).map((z) => ({ value: z.id, label: z.name }))]}
+              value={s.finalsZoneId ?? ''} onChange={(v) => set({ finalsZoneId: v || null })} />
+            <Checkbox label="Finales de kata aussi sur cette zone" disabled={!s.finalsZoneId} checked={s.kataFinalsOnFinalsZone}
+              onChange={(e) => set({ kataFinalsOnFinalsZone: e.currentTarget.checked })} data-testid="kata-finals" />
+          </Group>
           <ZonesImpossibleAlert impossible={passages?.impossible} />
         </Stack>
       </Fieldset>

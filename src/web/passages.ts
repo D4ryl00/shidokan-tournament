@@ -1,21 +1,27 @@
 import type { PassagePlan } from '../domain/passages/index.js';
 
-/** Ce que le plan de passage dit d'une catégorie : zone (épinglée ou automatique), numéros de ses combats, bloc de kata. */
+/**
+ * Ce que le plan de passage dit d'une catégorie : zone (épinglée ou automatique), numéros de ses combats et leur zone
+ * (une finale peut passer sur la zone des finales), blocs de kata (entier, ou tour 1 et finale).
+ */
 export function categoryPassages(plan: PassagePlan | undefined, categoryId: string) {
   const numbers = new Map<string, number>();
   const noRest = new Set<string>();
-  let kataNumber: number | null = null;
+  const matchZones = new Map<string, string>();
+  const kata: { part: 'all' | 'tour1' | 'finale'; number: number; zoneId: string }[] = [];
   for (const z of plan?.zones ?? []) {
     for (const p of z.passages) {
       if (p.categoryId !== categoryId) continue;
-      if (p.matchId === null) kataNumber = p.number;
-      else {
-        numbers.set(p.matchId, p.number);
-        if (p.noRest) noRest.add(p.matchId);
+      if (p.matchId === null || p.matchId.startsWith('kata:')) {
+        kata.push({ part: p.matchId === null ? 'all' : p.matchId === 'kata:tour1' ? 'tour1' : 'finale', number: p.number, zoneId: z.zoneId });
+        continue;
       }
+      numbers.set(p.matchId, p.number);
+      matchZones.set(p.matchId, z.zoneId);
+      if (p.noRest) noRest.add(p.matchId);
     }
   }
   const zone = plan?.categories[categoryId] ?? { zoneId: null, auto: false };
   // Plan pas encore chargé : `numbers` absent (numérotation propre à la catégorie, sans marque).
-  return { zoneId: zone.zoneId, auto: zone.auto, numbers: plan ? numbers : undefined, noRest, kataNumber };
+  return { zoneId: zone.zoneId, auto: zone.auto, numbers: plan ? numbers : undefined, noRest, matchZones, kata: kata.sort((a, b) => a.number - b.number) };
 }

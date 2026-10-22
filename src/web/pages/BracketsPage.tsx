@@ -6,7 +6,7 @@ import { Link, useParams } from 'react-router';
 import { compatibleFormats, type BracketFormat } from '../../domain/brackets/index.js';
 import { activeEntrantCount, type Category, type CategoryStatus } from '../../domain/categories.js';
 import { normalizeName } from '../../domain/names.js';
-import { useCategories, usePassages, useRedraw, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
+import { useCategories, usePassages, useRedraw, useRegenerate, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
 import { categoryPassages } from '../passages.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { BracketView, type EntrantInfo } from '../components/BracketView.js';
@@ -41,6 +41,8 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   const { data: plan } = usePassages(id);
   const entrants = useEntrantInfo(id);
   const update = useUpdateCategory(id);
+  const regenerate = useRegenerate(id);
+  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
   const redraw = useRedraw(id);
   const swap = useSwap(id);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -131,6 +133,9 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
                     <Badge variant="outline" data-testid="category-zone">{zones.find((z) => z.id === passages?.zoneId)!.name}{passages?.auto ? ' (auto)' : ''}</Badge>
                   )}
                   {selected.stale && <Badge color="orange">Les inscrits ont changé depuis le lancement</Badge>}
+                  {selected.stale && selected.launchLocked && !locked && (
+                    <Button size="xs" color="orange" data-testid="category-regenerate" onClick={() => setConfirmRegenerate(true)}>Régénérer (renuméroté à la suite)</Button>
+                  )}
                 </Group>
               </div>
               <Button size="xs" variant="light" component={Link} to={`/competitions/${id}/impression?categories=${selected.id}`} target="_blank" data-testid="print-category">
@@ -174,10 +179,22 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
                 </Text>
               )}
             </Group>
-            <ApiErrorAlert error={update.error ?? redraw.error ?? swap.error} />
+            <ApiErrorAlert error={update.error ?? redraw.error ?? swap.error ?? regenerate.error} />
             <BracketView category={selected} entrants={entrants} numbers={passages?.numbers} noRest={passages?.noRest} selected={swapFrom} onSelect={locked ? undefined : onSelectEntrant} badges={badges} badgeDetails={badgeDetails} />
           </Stack>
         )}
+        <Modal opened={confirmRegenerate} onClose={() => setConfirmRegenerate(false)} title="Régénérer le tableau ?">
+          <Stack>
+            <Text>La vague est lancée. Le tableau sera refait avec les inscrits actuels et ses combats recevront de nouveaux numéros, à la suite du dernier numéro de sa zone : réimprimez-le. Les autres catégories ne changent pas.</Text>
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setConfirmRegenerate(false)}>Annuler</Button>
+              <Button color="orange" data-testid="regenerate-confirm" loading={regenerate.isPending}
+                onClick={() => selected && regenerate.mutate(selected.id, { onSuccess: () => setConfirmRegenerate(false) })}>
+                Régénérer
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
         <Modal opened={confirmUnlock} onClose={() => setConfirmUnlock(false)} title="Déverrouiller la catégorie ?">
           <Stack>
             <Text>La catégorie est lancée. La déverrouiller permet de la modifier, mais le tableau sera régénéré si ses inscrits ont changé.</Text>

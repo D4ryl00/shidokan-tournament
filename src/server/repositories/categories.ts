@@ -47,6 +47,8 @@ interface Context {
   grid: CategoryGrid;
   /** Tranches des combattants d'origine (non recasés) de chaque catégorie. */
   waveBands: Map<string, string[]>;
+  /** Catégories numérotées dans une vague lancée. */
+  launched: Set<string>;
 }
 
 async function loadContext(db: AppDb, competitionId: string): Promise<Context> {
@@ -69,6 +71,7 @@ async function loadContext(db: AppDb, competitionId: string): Promise<Context> {
   return {
     settings: competition.settings, members, active, entrants, waves: await listWaves(db, competitionId), grid: await getGrid(db, competitionId),
     waveBands: new Map([...waveBands].map(([k, v]) => [k, [...v]])),
+    launched: launchedCategoryIds(db, competitionId),
   };
 }
 
@@ -239,6 +242,7 @@ function toCategory(row: Row, ctx: Context): Category {
     effectiveFormat: row.bracketJson ? ((JSON.parse(row.bracketJson) as Bracket).kind === 'kata' ? 'kata_two_rounds' : (JSON.parse(row.bracketJson) as { format: BracketFormat }).format) : effectiveFormat(row, key, (ctx.active.get(row.id) ?? []).length, ctx),
     stale: row.stale,
     numbersUpdatedAt: row.numbersUpdatedAt,
+    launchLocked: ctx.launched.has(row.id),
   };
 }
 
