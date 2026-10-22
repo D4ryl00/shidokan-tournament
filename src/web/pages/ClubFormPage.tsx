@@ -42,9 +42,9 @@ export function ClubFormPage() {
         <Anchor href={`/api/competitions/${id}/club-form.ods`} download data-testid="club-form-download">
           <Button component="span" variant="light">Télécharger le modèle de fiche (.ods)</Button>
         </Anchor>
-        <Button component="a" href={`/competitions/${id}/impression/fiche-club`} target="_blank" variant="light" data-testid="paper-form-open">
-          Fiche papier (PDF)
-        </Button>
+        <Anchor href={`/api/competitions/${id}/club-form.pdf`} download data-testid="paper-form-download">
+          <Button component="span" variant="light">Télécharger la fiche papier (PDF)</Button>
+        </Anchor>
       </Group>
 
       <SectionHeader topic="fiche-club.importer" />

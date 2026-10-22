@@ -46,10 +46,9 @@ Cases encadrées à remplir : **Club**, **Coach**, **Téléphone**, **E-mail**, 
 - **Bas de page** : légende des abréviations d'âge avec les âges (« P poussins (6-7 ans) · … ») ; explication de la priorité shobu : « les règles shobu » = changer de discipline plutôt que passer en jiyu ; « la discipline » = passer en jiyu plutôt que changer de discipline ; « Boxing = shido-boxing, Mix = shido-mix martial ».
 - 💡 Pas de verso : tout tient au recto. 💡 Une mention « Page … / … » à remplir par le coach, pour les clubs de plus de 10 combattants (il imprime plusieurs feuilles).
 
-### 2.4 Où la trouver 💡
-- Dans l'onglet **Fiche club**, section « 1. Envoyer le modèle aux clubs » : un bouton **« Fiche papier (PDF) »** à côté du modèle .ods.
-- Il ouvre une page d'impression comme les autres (`/competitions/:id/impression/fiche-club`), une feuille vierge, avec « Imprimer » (ou « Enregistrer au format PDF ») ; l'organisateur envoie ce PDF aux clubs qui le veulent.
-- 🔧 Le constructeur peut aussi générer le PDF côté serveur s'il le juge plus simple ; le rendu doit rester celui décrit ici.
+### 2.4 Où la trouver ✅
+- Dans l'onglet **Fiche club**, section « 1. Envoyer le modèle aux clubs » : le bouton **« Télécharger la fiche papier (PDF) »** télécharge `fiche-club-<date>.pdf`, une page A4 paysage.
+- Le PDF est **dessiné par le serveur** (pdf-lib, polices standard), identique quel que soit le navigateur ou l'imprimante. *(Corrigé après essai : la première version était une page web à imprimer, qui sortait avec une page blanche en plus selon le navigateur.)*
 
 ### 2.5 Ce que la fiche papier change dans l'app
 - **Tranches d'âge proposées** 💡 : la fiche n'affiche que les tranches **proposées aux clubs**. Nouvelle case par tranche dans l'éditeur de grille : « Proposée sur la fiche club » (cochée par défaut ; pour la Coupe 2026, décochée pour les mini-poussins et les espoirs ✅). Une tranche non proposée reste dans la grille (passages d'âge, import FFK).

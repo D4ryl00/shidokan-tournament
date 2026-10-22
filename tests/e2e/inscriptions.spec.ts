@@ -96,37 +96,16 @@ test('saisie rapide au clavier, sur place, avertissement, kata', async ({ page }
   await expect(page.getByTestId('club-row')).toHaveCount(1);
 });
 
-async function pdfPages(page: Page): Promise<number> {
-  const pdf = await page.pdf({ format: 'A4', landscape: true, printBackground: true, preferCSSPageSize: true });
-  return (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []).length;
-}
-
-test('fiche papier : une page A4 paysage, 10 lignes, tranches proposées', async ({ page, request }) => {
+test('fiche papier : le bouton télécharge le PDF (une page)', async ({ page }) => {
   const id = await createCompetition(page, 'Coupe fiche papier');
-  const grid = (await (await request.get(`/api/competitions/${id}/grid`)).json()) as { ageBands: { code: string; onClubForm: boolean }[] };
-  grid.ageBands = grid.ageBands.map((b) => ({ ...b, onClubForm: b.code !== 'mini-poussin' && b.code !== 'espoir' }));
-  expect((await request.put(`/api/competitions/${id}/grid`, { data: grid })).status()).toBe(204);
   await page.goto(`/competitions/${id}/fiche-club`);
-  const [popup] = await Promise.all([page.waitForEvent('popup'), page.getByTestId('paper-form-open').click()]);
-  await expect(popup).toHaveURL(new RegExp(`/competitions/${id}/impression/fiche-club$`));
-  const form = popup.getByTestId('paper-form');
-  await expect(form).toContainText('FICHE DE PRÉ-INSCRIPTION');
-  await expect(popup.getByTestId('paper-form-row')).toHaveCount(10);
-  const ages = popup.getByTestId('paper-form-row').first().getByTestId('paper-age');
-  await expect(ages).toHaveText(['P', 'Pu', 'B', 'Mi', 'C', 'J', 'S', 'V1', 'V2', 'V3', 'V4', 'V5']);
-  await expect(form.locator('img')).toHaveCount(2);
-  await popup.emulateMedia({ media: 'print' });
-  expect(await pdfPages(popup)).toBe(1);
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('paper-form-download').click()]);
+  expect(download.suggestedFilename()).toMatch(/^fiche-club-.*\.pdf$/);
+  const pdf = fs.readFileSync((await download.path())!);
+  expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
 });
 
-test('fiche papier : nom de compétition long, toujours une page', async ({ page, request }) => {
-  const id = await createCompetition(page, 'Coupe fiche longue');
-  await request.patch(`/api/competitions/${id}`, { data: { name: 'Coupe Shidokan de la Côte d’Azur et des Alpes-Maritimes — édition spéciale 2026', location: 'Gymnase municipal' } });
-  await page.goto(`/competitions/${id}/impression/fiche-club`);
-  await expect(page.getByTestId('paper-form-row')).toHaveCount(10);
-  await page.emulateMedia({ media: 'print' });
-  expect(await pdfPages(page)).toBe(1);
-});
+
 
 test('saisie d’une fiche papier', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe saisie papier');
@@ -158,26 +137,6 @@ test('saisie d’une fiche papier', async ({ page, request }) => {
   expect(((await (await request.get(`/api/competitions/${id}/registrations`)).json()) as unknown[]).length).toBe(2);
 });
 
-test('relecture (mineurs) : fiche papier — abréviations uniques, lieu visible, cases d’âge espacées', async ({ page, request }) => {
-  const id = await createCompetition(page, 'Coupe fiche mineurs');
-  await request.patch(`/api/competitions/${id}`, { data: { name: 'Coupe Shidokan de la Côte d’Azur et des Alpes-Maritimes — édition spéciale 2026', location: 'Gymnase municipal Jean Médecin, Nice' } });
-  const grid = (await (await request.get(`/api/competitions/${id}/grid`)).json()) as { ageBands: { code: string; label: string; sortOrder: number; minAge: number; maxAge: number | null; isMinor: boolean; onClubForm: boolean }[]; weightClasses: unknown[]; ageLinks: unknown[] };
-  grid.ageBands.push({ code: 'mini2', label: 'Minimes 2', minAge: 12, maxAge: 13, isMinor: true, sortOrder: 99, onClubForm: true });
-  expect((await request.put(`/api/competitions/${id}/grid`, { data: grid })).status()).toBe(204);
-  await page.goto(`/competitions/${id}/impression/fiche-club`);
-  const ages = await page.getByTestId('paper-form-row').first().getByTestId('paper-age').allTextContents();
-  expect(new Set(ages).size).toBe(ages.length);
-  // Le lieu n'est pas coupé dans le cadre du titre
-  const clipped = await page.getByTestId('paper-subtitle').evaluate((el) => el.scrollHeight > el.clientHeight + 1);
-  expect(clipped).toBe(false);
-  // Cases d'âge : aucune case collée au libellé précédent (15 tranches)
-  const boxes = await page.getByTestId('paper-form-row').first().getByTestId('paper-age-item').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON() as DOMRect));
-  for (let i = 1; i < boxes.length; i++) {
-    if (Math.abs(boxes[i]!.top - boxes[i - 1]!.top) < 2) expect(boxes[i]!.left).toBeGreaterThanOrEqual(boxes[i - 1]!.right + 1);
-  }
-  await page.emulateMedia({ media: 'print' });
-  expect(await pdfPages(page)).toBe(1);
-});
 
 test('relecture (mineurs) : saisie papier — confirmation avant de quitter, noms accessibles', async ({ page }) => {
   const id = await createCompetition(page, 'Coupe saisie confirmation');

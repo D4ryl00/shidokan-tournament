@@ -10,7 +10,6 @@ import { CompetitionsPage } from './pages/CompetitionsPage.js';
 import { FfkImportPage } from './pages/FfkImportPage.js';
 import { GridEditorPage } from './pages/GridEditorPage.js';
 import { MatchesPage } from './pages/MatchesPage.js';
-import { PaperClubFormPage } from './pages/PaperClubFormPage.js';
 import { PodiumsPage } from './pages/PodiumsPage.js';
 import { PodiumsPrintPage, PrintPage } from './pages/PrintPage.js';
 import { RegistrationsPage } from './pages/RegistrationsPage.js';
@@ -24,7 +23,6 @@ export function App() {
         <Route path="/competitions/:id/impression" element={<PrintPage />} />
         <Route path="/competitions/:id/impression/pesee" element={<WeighInSheets />} />
         <Route path="/competitions/:id/impression/podiums" element={<PodiumsPrintPage />} />
-        <Route path="/competitions/:id/impression/fiche-club" element={<PaperClubFormPage />} />
         <Route path="*" element={<MainShell />} />
       </Routes>
     </BrowserRouter>

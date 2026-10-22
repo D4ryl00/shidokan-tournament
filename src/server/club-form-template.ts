@@ -22,7 +22,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
  * Logo Shidokan France en PNG, cherché à partir de ce fichier (indépendant du dossier courant) :
  * dans le dépôt (src/server → assets/brand) ou parmi les fichiers du site compilé (dist/server → dist/web).
  */
-function logoPng(): Buffer | null {
+export function logoPng(): Buffer | null {
   const candidates = [
     ...(process.env.WEB_DIST_DIR ? [path.resolve(process.env.WEB_DIST_DIR, 'shidokan-france-logo.png')] : []),
     path.resolve(here, '../../assets/brand/shidokan-france-logo.png'),

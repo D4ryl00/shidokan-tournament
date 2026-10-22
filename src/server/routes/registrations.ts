@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { NotAClubFormError, parseClubForm, parseClubFormLines } from '../../domain/club-form.js';
 import { buildClubFormTemplate } from '../club-form-template.js';
+import { buildClubFormPdf } from '../club-form-pdf.js';
 import type { AppDb } from '../db/client.js';
 import { getCompetition, getGrid } from '../repositories/competitions.js';
 import {
@@ -136,6 +137,15 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
   app.delete<{ Params: { id: string; rid: string } }>('/api/competitions/:id/registrations/:rid', async (req, reply) => {
     await deleteRegistration(db, req.params.id, req.params.rid);
     return reply.status(204).send();
+  });
+
+  app.get<P>('/api/competitions/:id/club-form.pdf', async (req, reply) => {
+    const competition = (await getCompetition(db, req.params.id))!;
+    const pdf = await buildClubFormPdf(competition, await getGrid(db, req.params.id));
+    return reply
+      .header('Content-Type', 'application/pdf')
+      .header('Content-Disposition', `attachment; filename="fiche-club-${competition.date}.pdf"`)
+      .send(pdf);
   });
 
   app.get<P>('/api/competitions/:id/club-form.ods', async (req, reply) => {

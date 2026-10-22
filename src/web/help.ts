@@ -106,7 +106,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Envoyez aux clubs le modèle à remplir sur ordinateur (.ods) ou la fiche papier à cocher (PDF).',
     details: [
       'Le modèle .ods s’ouvre avec LibreOffice ou Excel ; il contient des listes déroulantes (sexe, catégorie d’âge, discipline de combat, kata, règlement, reclassement, priorité shobu).',
-      '« Fiche papier (PDF) » ouvre une fiche A4 paysage à cocher, 10 combattants par feuille : cliquez « Imprimer » puis « Enregistrer au format PDF » pour l’envoyer, ou imprimez-la directement.',
+      '« Télécharger la fiche papier (PDF) » donne une fiche A4 paysage à cocher, 10 combattants par feuille, à envoyer aux clubs ou à imprimer telle quelle (une page, sans réglage).',
       'Une ligne par combattant : kata et combat sur la même ligne. Le coach donne le poids actuel ; la catégorie de poids en est déduite.',
       'Seules les tranches d’âge cochées « Fiche club » dans la grille sont proposées.',
     ],
