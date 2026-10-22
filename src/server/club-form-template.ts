@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import {
   CLUB_FORM_COLUMNS,
   CLUB_FORM_HEADER_FIELDS,
+  CLUB_FORM_RECLASS_HEADER,
   CLUB_FORM_ROWS,
   CLUB_FORM_TITLE,
   SHOBU_KEEP_LABELS,
@@ -60,8 +61,8 @@ export function buildClubFormTemplate(competition: Competition, grid: CategoryGr
         ...(last ? [c('« Oui » : le coach accepte d’avance les reclassements de ses combattants.', { style: 'note', colSpan: 8 })] : []),
       ];
     }),
-    [],
     [c('Reclassement : numérotez 1 puis 2 les autres disciplines acceptées si le combattant se retrouve seul. Shobu : « Les règles shobu » = changer de discipline plutôt que passer en jiyu ; « La discipline » = passer en jiyu plutôt que changer de discipline.', { style: 'note', colSpan: WIDTHS.length })],
+    [...Array.from({ length: 9 }, () => c(null)), c(CLUB_FORM_RECLASS_HEADER, { style: 'header', colSpan: 3 }), c(null)],
     CLUB_FORM_COLUMNS.map((label) => c(label, { style: 'header' })),
   ];
   for (let i = 0; i < CLUB_FORM_ROWS; i++) {
@@ -96,7 +97,7 @@ export function buildClubFormTemplate(competition: Competition, grid: CategoryGr
       rows,
       validations,
       columnWidthsCm: WIDTHS,
-      rowHeightsCm: { 0: 2.4, 1: 0.7, 2: 0.8, 3: 0.65, 4: 0.65, 5: 0.65, 6: 0.65, 7: 0.9, 9: 1.2, 10: 2.1 },
+      rowHeightsCm: { 0: 2.4, 1: 0.7, 2: 0.8, 3: 0.65, 4: 0.65, 5: 0.65, 6: 0.65, 7: 0.9, 8: 1.2, 9: 0.9, 10: 1.6 },
       defaultRowHeightCm: { from: 11, heightCm: 0.75 },
       ...(logo ? { image: { data: logo, widthCm: 2.2, heightCm: 2.2 } } : {}),
       print: { repeatRow: 10 },

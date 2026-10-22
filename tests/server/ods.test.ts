@@ -140,3 +140,9 @@ test('relecture (mineurs) : logo trouvé quel que soit le dossier courant', () =
     process.chdir(cwd);
   }
 });
+
+test('relecture : en-têtes de reclassement simples, sous un en-tête commun', async () => {
+  const fiche = readWorkbook(await template()).sheets.find((s) => s.name === 'Fiche club')!;
+  expect(fiche.cells[10]!.slice(9, 12)).toEqual(['Karaté', 'Boxing', 'Mix']);
+  expect(String(fiche.cells[9]![9])).toBe('Si reclassement : autres disciplines, numéroter 1, 2');
+});

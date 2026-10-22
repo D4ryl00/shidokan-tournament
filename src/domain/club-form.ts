@@ -27,11 +27,13 @@ export const CLUB_FORM_COLUMNS = [
   'Kata (Oui/Non)',
   'Grade (si kata)',
   'Règlement',
-  'Reclassement : Karaté (1, 2)',
-  'Reclassement : Shido-boxing (1, 2)',
-  'Reclassement : Shido-mix (1, 2)',
+  // Sous l'en-tête commun CLUB_FORM_RECLASS_HEADER (ligne au-dessus) : ordre 1 ou 2.
+  'Karaté',
+  'Boxing',
+  'Mix',
   'Shobu : si reclassement, garder en priorité',
 ] as const;
+export const CLUB_FORM_RECLASS_HEADER = 'Si reclassement : autres disciplines, numéroter 1, 2';
 /** Valeurs de la dernière colonne (fiche papier : « 1. les règles shobu », « 2. la discipline »). */
 export const SHOBU_KEEP_LABELS = { ruleset: 'Les règles shobu', discipline: 'La discipline' } as const;
 /** Ancien format (une ligne par inscription, catégorie de poids) : les fiches déjà renvoyées restent lisibles. */
