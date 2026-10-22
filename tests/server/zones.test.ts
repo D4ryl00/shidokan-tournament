@@ -111,12 +111,18 @@ test('migration d’une base antérieure : tatamis repris en zones, affectations
   raw.prepare("INSERT INTO competitions (id, name, date, tatami_count, settings_json) VALUES ('c1', 'Ancienne', '2026-11-22', 3, '{}')").run();
   raw.prepare("INSERT INTO categories (id, competition_id, key_string, key_json, label, status, seed, tatami) VALUES ('k1', 'c1', 'k', '{}', 'Cat', 'ready', 1, 2)").run();
   raw.prepare("INSERT INTO clubs (id, competition_id, name, name_key) VALUES ('club1', 'c1', 'Club', 'CLUB')").run();
+  // Ancienne app : catégorie restée sur le tatami 3 après passage à 2 tatamis
+  raw.prepare("INSERT INTO competitions (id, name, date, tatami_count, settings_json) VALUES ('c2', 'Réduite', '2026-11-22', 2, '{}')").run();
+  raw.prepare("INSERT INTO categories (id, competition_id, key_string, key_json, label, status, seed, tatami) VALUES ('k2', 'c2', 'k', '{}', 'Cat', 'started', 1, 3)").run();
   raw.close();
   const db = openDb(file);
   const z = db.$client.prepare('SELECT id, name, sort_order FROM zones WHERE competition_id = ? ORDER BY sort_order').all('c1') as { id: string; name: string }[];
   expect(z.map((x) => x.name)).toEqual(['Tatami 1', 'Tatami 2', 'Tatami 3']);
   const k = db.$client.prepare("SELECT zone_id FROM categories WHERE id = 'k1'").get() as { zone_id: string };
   expect(k.zone_id).toBe(z[1]!.id);
+  const z2 = db.$client.prepare('SELECT id, name FROM zones WHERE competition_id = ? ORDER BY sort_order').all('c2') as { id: string; name: string }[];
+  expect(z2.map((x) => x.name)).toEqual(['Tatami 1', 'Tatami 2', 'Tatami 3']);
+  expect(db.$client.prepare("SELECT zone_id FROM categories WHERE id = 'k2'").get()).toEqual({ zone_id: z2[2]!.id });
   // Rien n'est perdu ailleurs (pas de suppression en cascade pendant la migration)
   expect(db.$client.prepare("SELECT count(*) AS n FROM clubs WHERE competition_id = 'c1'").get()).toEqual({ n: 1 });
   closeDb(db);
