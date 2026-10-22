@@ -1,0 +1,110 @@
+/*
+ * Tableau à élimination : une colonne par tour, chaque combat au milieu de sa case (une case du tour suivant
+ * couvre exactement les deux cases qui l'alimentent), et des traits qui relient chaque paire au combat suivant.
+ */
+.bracket-tree {
+  --bracket-gap: 28px;
+  --bracket-col: 210px;
+  --bracket-slot: 124px;
+  --bracket-line: var(--mantine-color-gray-6);
+  display: flex;
+  gap: var(--bracket-gap);
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.print-root .bracket-tree {
+  --bracket-gap: 22px;
+  --bracket-col: 215px;
+  --bracket-slot: 84px;
+  --bracket-line: #000000;
+  overflow: visible;
+}
+/* 16 combattants : cases plus serrées pour tenir sur une page A4 paysage. */
+.print-root .bracket-tree.is-large {
+  --bracket-slot: 74px;
+}
+.bracket-round {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 var(--bracket-col);
+}
+.bracket-round-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(var(--bracket-first-round) * var(--bracket-slot));
+}
+/* Toutes les cases d'un tour ont la même hauteur (sinon les traits ne tombent plus au milieu des combats). */
+.bracket-slot {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  position: relative;
+  padding: 4px 0;
+}
+.bracket-slot > .bracket-card {
+  width: 100%;
+  position: relative;
+}
+/* Sortie vers le tour suivant. */
+.bracket-slot.has-next::after {
+  content: '';
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  width: calc(var(--bracket-gap) / 2);
+  border-top: 2px solid var(--bracket-line);
+}
+/* Branche verticale : du milieu de ce combat jusqu'à la limite de la paire, où part le combat suivant. */
+.bracket-slot.has-next.pair-top::before,
+.bracket-slot.has-next.pair-bottom::before {
+  content: '';
+  position: absolute;
+  left: calc(100% + var(--bracket-gap) / 2 - 2px);
+  border-left: 2px solid var(--bracket-line);
+}
+.bracket-slot.has-next.pair-top::before {
+  top: calc(50% - 1px);
+  bottom: 0;
+}
+.bracket-slot.has-next.pair-bottom::before {
+  top: 0;
+  bottom: calc(50% - 1px);
+}
+/* Entrée depuis le tour précédent. */
+.bracket-slot.has-prev > .bracket-card::before {
+  content: '';
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  width: calc(var(--bracket-gap) / 2);
+  border-top: 2px solid var(--bracket-line);
+}
+.bracket-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 2px 6px;
+  background: var(--mantine-color-default-hover);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+.print-root .bracket-card-head {
+  background: #eeeeee;
+  border-bottom-color: #000000;
+}
+.bracket-card-row + .bracket-card-row {
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+.print-root .bracket-card {
+  border-color: #000000;
+}
+.print-root .bracket-card-row + .bracket-card-row {
+  border-top-color: #000000;
+}
+/* Impression : nom et club sur une ligne, pour qu'un tableau de 16 tienne sur une page. */
+.bracket-entrant-inline {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -186,7 +186,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     details: [
       'Une vague a sa propre pesée et son propre recasement ; pendant qu’une vague combat, la suivante peut déjà se peser.',
       [
-        '« Ajouter une vague », nommez-la, puis cochez les tranches d’âge (et, si besoin, les disciplines) qu’elle prend.',
+        '« Ajouter une vague », nommez-la, puis cochez les tranches d’âge (et, si besoin, les disciplines) qu’elle prend. « Tout cocher » prend d’un coup toutes les tranches (ou toutes les disciplines).',
         'Une catégorie suit la plus jeune tranche d’âge de ses combattants ; un combattant recasé depuis une autre tranche ne la fait pas changer de vague. Une catégorie créée plus tard (inscription sur place) rejoint d’office la vague qui lui correspond.',
         'Si une catégorie correspond à deux vagues, elle va dans la première (dans l’ordre des cartes) et une alerte l’indique.',
         '« Retirer » met une catégorie en attente ; « Ajouter à… » la place à la main dans une vague (marquée « ajoutée à la main ») ; « Revenir aux règles » annule ce choix.',
@@ -210,7 +210,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Un combattant qui ne vient pas : cliquez « Absent ».',
         'Le kata n’a pas de pesée : pointez seulement la présence.',
       ],
-      'Le badge « ⚖ hors catégorie → … » signale un combattant trop lourd pour sa catégorie (au-delà de la tolérance) et indique celle de son poids ; le recasement s’en occupera.',
+      'Le badge « ⚖ hors catégorie → … » signale un combattant trop lourd pour sa catégorie (au-delà de la tolérance) et indique celle de son poids ; le recasement s’en occupera. La limite fait partie de la catégorie : 40,0 kg reste en -40 kg.',
       'La mention « recasé » indique un combattant déjà déplacé dans une autre catégorie.',
       '« Clôturer la pesée » marque absents tous les combattants non pesés. À faire une fois la pesée terminée.',
       'Avec des vagues : choisissez la vague en haut de l’écran. La liste, les compteurs, les feuilles de pesée et « Clôturer la pesée » ne portent que sur cette vague ; un combattant inscrit dans deux vagues est pointé dans chacune.',
@@ -226,8 +226,10 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         '« Aperçu » montre qui rencontrera qui avant de valider.',
         '« Refuser » écarte une proposition (elle reste en grisé, « Rétablir » la reprend).',
         '« Classer automatiquement tous les cas simples » valide d’un coup les propositions sans risque (poids voisin, retour dans la catégorie d’origine) ; « Tout classer automatiquement » valide aussi les autres, sous votre responsabilité.',
-        '« Déplacer manuellement vers… » place un combattant où vous voulez, avec les règles enfreintes affichées.',
+        '« Déplacer manuellement vers… » ne liste que les catégories cohérentes avec les réglages (âge, poids, règlement, mixité). « Toutes les catégories » ajoute les autres, marquées « ⚠ règle(s) enfreinte(s) » : le détail s’affiche avant de confirmer.',
       ],
+      'Sous le nom du combattant : sa tranche d’âge, sa discipline et son règlement, sa catégorie de poids, son poids (pesé ou approximatif) et les disciplines qu’il accepte.',
+      'Un combattant seul dans sa catégorie peut aussi recevoir le ou les deux plus lourds de la catégorie de poids juste en dessous, s’il y en reste au moins deux (« pour donner une poule à… »). Ces combattants n’avaient pas de problème : la proposition se valide à la main, jamais automatiquement.',
       'Badges : ⚖ Poids (catégorie de poids voisine), ⚖ Poids + (écart au-delà du seuil), ↑ Âge (tranche au-dessus), ⇄ Sen./Vét., ↑ Min./Adultes, ⚥ Mixte, Shobu → Jiyu, ⇄ Discipline, ↩ Retour, ✋ Manuel. Cliquez un badge validé pour son détail.',
       'Certains déplacements demandent normalement l’accord des coachs ; en les validant vous en prenez la responsabilité.',
       'Avec des vagues : choisissez la vague en haut de l’écran (la même que pour la pesée). Les cas, les compteurs et les validations automatiques ne portent que sur ses catégories.',
@@ -395,6 +397,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Écart de poids max (enfants et adultes séparément) : jusqu’à cet écart, un déplacement vers un poids voisin est sans risque ; au-delà, il reste proposé mais se valide à la main (badge « ⚖ Poids + »).',
         'Mélange mineurs / adultes, seniors / vétérans, filles / garçons : chaque mélange coché peut être proposé, mais se valide à la main.',
         'Filles / garçons : seulement dans les tranches d’âge cochées.',
+        'Passage de shobu à jiyu : désactivé par défaut. Coché, un combattant shobu sans adversaire peut être proposé dans la catégorie jiyu correspondante (validation à la main). Le passage de jiyu à shobu n’est jamais proposé.',
         'Plusieurs disciplines de combat le même jour : permet à un combattant d’être inscrit en karaté et en shido-boxing, par exemple.',
       ],
     ],
@@ -402,7 +405,10 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
   'reglages.pesee': {
     title: 'Pesée',
     short: 'La tolérance ajoutée à la limite de poids avant de déclarer un combattant hors catégorie.',
-    details: ['Règlement FFK : 300 g pour les hommes, 500 g pour les femmes. Seul un combattant trop lourd est hors catégorie.'],
+    details: [
+      'Règlement FFK : 300 g pour les hommes, 500 g pour les femmes. Seul un combattant trop lourd est hors catégorie.',
+      'Comme à la FFK, la limite fait partie de la catégorie : en -40 kg, un combattant pesé 40,0 kg reste en -40 kg (et jusqu’à 40,3 kg pour un homme, tolérance comprise). La dernière catégorie, ouverte (« +84 kg »), prend tous les poids au-dessus.',
+    ],
   },
   'reglages.tableaux': {
     title: 'Tableaux',

@@ -199,6 +199,8 @@ export function CompetitionSettingsPage() {
             <MultiSelect label="Tranches d'âge où le mélange filles / garçons est possible" data={bandOptions}
               value={s.mixSexes.ageBandCodes} onChange={(ageBandCodes) => set({ mixSexes: { ...s.mixSexes, ageBandCodes } })} />
           )}
+          <Switch label="Autoriser le passage de shobu à jiyu (validation manuelle)" checked={s.shobuToJiyu} data-testid="shobu-to-jiyu"
+            onChange={(e) => set({ shobuToJiyu: e.currentTarget.checked })} />
           <Switch label="Autoriser plusieurs disciplines de combat le même jour" checked={s.multipleCombatDisciplinesPerDay}
             onChange={(e) => set({ multipleCombatDisciplinesPerDay: e.currentTarget.checked })} />
         </Stack>

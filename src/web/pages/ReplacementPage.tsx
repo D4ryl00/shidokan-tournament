@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Card, Chip, Group, Loader, Modal, SegmentedControl, Select, SimpleGrid, Stack, Table, Text } from '@mantine/core';
+import { Alert, Badge, Button, Card, Chip, Group, Loader, Modal, SegmentedControl, Select, SimpleGrid, Stack, Switch, Table, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router';
@@ -8,6 +8,7 @@ import {
   useApplyProposal,
   useBulkReplacement,
   useCategories,
+  useGrid,
   useManualMove,
   usePreviewReplacement,
   useRefuseProposal,
@@ -15,12 +16,15 @@ import {
   useRegistrations,
   useReplacement,
   useUndoRecasement,
+  type CaseFighter,
 } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { SectionHeader } from '../components/Help.js';
 import { ProposalPreview } from '../components/ProposalPreview.js';
 import { PROPOSAL_TYPES, ReplacementBadge } from '../components/ReplacementBadge.js';
+import { ageBandLabel, disciplineLabel, prefsLabel, rulesetShort, weightLabel } from '../labels.js';
 import { useSelectedWave } from '../useSelectedWave.js';
+import type { CategoryGrid } from '../../domain/types.js';
 
 type Dialog =
   | { kind: 'proposal'; proposal: Proposal; confirm: boolean }
@@ -64,6 +68,20 @@ function WaveChangeWarning({ proposal, waves, name }: { proposal: Proposal | und
   );
 }
 
+/** Le combattant d'un cas en une ligne : tranche d'âge, sexe, discipline, règlement, catégorie de poids, poids, préférences. */
+function FighterDetail({ f, grid }: { f: CaseFighter | undefined; grid: CategoryGrid | undefined }) {
+  if (!f) return null;
+  const weight = f.weighInKg !== null ? `pesé(e) ${kg(f.weighInKg)} kg` : f.approxWeightKg !== null ? `≈ ${kg(f.approxWeightKg)} kg (non pesé)` : 'non pesé(e)';
+  const parts = [
+    `${ageBandLabel(grid, f.ageBandCode)} ${f.sex === 'F' ? 'F' : 'M'}`,
+    `${disciplineLabel(f.discipline)}${f.ruleset ? ` ${rulesetShort(f.ruleset)}` : ''}`,
+    ...(f.weightClassId ? [`${weightLabel(grid, f.weightClassId)} kg`, weight] : []),
+    ...(f.otherDisciplines.length ? [`accepte : ${prefsLabel(f.otherDisciplines)}`] : []),
+    ...(f.ruleset === 'shobu' && f.acceptsJiyuFirst ? ['accepte le jiyu en priorité'] : []),
+  ];
+  return <Text size="sm" data-testid="case-fighter">{parts.join(' · ')}</Text>;
+}
+
 function Stat({ label, value, color }: { label: string; value: number; color?: string }) {
   return (
     <Card withBorder padding="xs">
@@ -91,6 +109,8 @@ export function ReplacementPage() {
   const move = useManualMove(id);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [moveTarget, setMoveTarget] = useState<Record<string, string | null>>({});
+  const [allTargets, setAllTargets] = useState<Record<string, boolean>>({});
+  const { data: grid } = useGrid(id);
   const [kinds, setKinds] = useState<string[]>([]);
   const [logState, setLogState] = useState<'all' | 'validated' | 'undone'>('all');
   const [logType, setLogType] = useState<string | null>(null);
@@ -122,6 +142,22 @@ export function ReplacementPage() {
   // Tant que les vagues ne sont pas chargées, on ne sait pas quels cas afficher.
   if (!ready || !data) return <Stack>{waveSelector}<Loader /></Stack>;
   const s = data.summary;
+  /** Catégories proposées au déplacement manuel : les cohérentes avec les réglages, et les autres si on les demande. */
+  const moveOptions = (caseId: string) => {
+    const option = (t: { categoryId: string; warnings: string[] }) => {
+      const x = categories.find((k) => k.id === t.categoryId);
+      if (!x) return null;
+      return {
+        value: x.id,
+        label: `${x.label} (${x.registrationIds.length - x.absentIds.length})${waveId && x.waveId !== waveId ? ` · vague ${waveName(x.waveId)}` : ''}${t.warnings.length ? ` ⚠ ${t.warnings.length} règle(s) enfreinte(s)` : ''}`,
+      };
+    };
+    const targets = data.moveTargets[caseId] ?? [];
+    const ok = targets.filter((t) => t.warnings.length === 0).map(option).filter((o) => o !== null);
+    if (!allTargets[caseId]) return ok;
+    const others = targets.filter((t) => t.warnings.length > 0).map(option).filter((o) => o !== null);
+    return [{ group: 'Cohérentes avec les réglages', items: ok }, { group: 'Règles enfreintes (avertissement)', items: others }].filter((g) => g.items.length > 0);
+  };
   return (
     <Stack>
       {waveSelector}
@@ -160,7 +196,11 @@ export function ReplacementPage() {
             <Group justify="space-between" mb="xs">
               <div>
                 <Text fw={600}>{name(c.registrationId)}</Text>
-                <Text size="sm" c="dimmed">{c.detail}</Text>
+                <FighterDetail f={data.fighters[c.registrationId]} grid={grid} />
+                <Text size="sm" c="dimmed">
+                  {c.detail}
+                  {c.categoryId && categories.find((x) => x.id === c.categoryId) ? ` — ${categories.find((x) => x.id === c.categoryId)!.label}` : ''}
+                </Text>
               </div>
               <Badge variant="light" color={c.kind === 'return' ? 'gray' : 'orange'}>
                 {CASE_KINDS[c.kind]}
@@ -217,12 +257,16 @@ export function ReplacementPage() {
                 );
               })}
               <Group gap="xs">
-                <Select size="xs" w={360} placeholder="Déplacer manuellement vers…" searchable clearable data-testid="manual-move-select"
-                  data={categories.filter((x) => !x.registrationIds.includes(c.registrationId) && x.status !== 'started' && x.status !== 'finished').map((x) => ({
-                    value: x.id,
-                    label: `${x.label} (${x.registrationIds.length - x.absentIds.length})${waveId && x.waveId !== waveId ? ` · vague ${waveName(x.waveId)}` : ''}`,
-                  }))}
+                <Select size="xs" w={420} placeholder="Déplacer manuellement vers…" searchable clearable data-testid="manual-move-select"
+                  nothingFoundMessage={allTargets[c.id] ? 'Aucune catégorie' : 'Aucune catégorie compatible : cochez « Toutes les catégories »'}
+                  data={moveOptions(c.id)}
                   value={moveTarget[c.id] ?? null} onChange={(v) => setMoveTarget({ ...moveTarget, [c.id]: v })} />
+                <Switch size="xs" label="Toutes les catégories (règles enfreintes)" data-testid="manual-move-all" checked={allTargets[c.id] ?? false}
+                  onChange={(e) => {
+                    const on = e.currentTarget.checked;
+                    setAllTargets({ ...allTargets, [c.id]: on });
+                    if (!on && moveTarget[c.id] && !data.moveTargets[c.id]?.some((t) => t.categoryId === moveTarget[c.id] && t.warnings.length === 0)) setMoveTarget({ ...moveTarget, [c.id]: null });
+                  }} />
                 <Button size="xs" variant="default" disabled={!moveTarget[c.id]} data-testid="manual-move"
                   onClick={() => {
                     setDialog({ kind: 'move', registrationId: c.registrationId, categoryId: moveTarget[c.id]! });
@@ -293,7 +337,7 @@ export function ReplacementPage() {
             <Group justify="flex-end">
               <Button variant="default" onClick={() => setDialog(null)}>Annuler</Button>
               <Button color="orange" data-testid="manual-move-confirm" loading={move.isPending} disabled={!preview.data}
-                onClick={() => move.mutate({ registrationId: dialog.registrationId, categoryId: dialog.categoryId }, { onSuccess: () => done('Déplacement manuel effectué.') })}>
+                onClick={() => move.mutate({ registrationId: dialog.registrationId, categoryId: dialog.categoryId }, { onSuccess: () => { setMoveTarget({}); done('Déplacement manuel effectué.'); } })}>
                 Confirmer le déplacement
               </Button>
             </Group>

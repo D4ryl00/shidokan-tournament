@@ -17,6 +17,15 @@ interface Draft { key: string; id?: string; name: string; rules: WaveRules }
 const DISCIPLINE_LIST = Object.entries(DISCIPLINES) as [DisciplineId, { label: string }][];
 const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
+/** « Tout cocher » / « Tout décocher » d'une liste de cases. */
+function AllToggle({ all, onChange, testId }: { all: boolean; onChange: (all: boolean) => void; testId: string }) {
+  return (
+    <Button size="compact-xs" variant="subtle" data-testid={testId} onClick={() => onChange(!all)}>
+      {all ? 'Tout décocher' : 'Tout cocher'}
+    </Button>
+  );
+}
+
 export function WavesPage() {
   const { id = '' } = useParams();
   const { data: grid } = useGrid(id);
@@ -115,14 +124,22 @@ export function WavesPage() {
                   <ActionIcon variant="subtle" color="red" aria-label={`Supprimer la vague « ${d.name} »`}
                     onClick={() => (cats.length ? setDeleting(d.key) : remove(d.key))}>✕</ActionIcon>
                 </Group>
-                <Text size="xs" fw={600}>Tranches d’âge</Text>
+                <Group gap="xs">
+                  <Text size="xs" fw={600}>Tranches d’âge</Text>
+                  <AllToggle testId="wave-all-ages" all={grid.ageBands.every((b) => d.rules.ageBandCodes.includes(b.code))}
+                    onChange={(all) => setDraft(d.key, { rules: { ...d.rules, ageBandCodes: all ? grid.ageBands.map((b) => b.code) : [] } })} />
+                </Group>
                 <Group gap={4}>
                   {grid.ageBands.map((b) => (
                     <Chip key={b.code} size="xs" checked={d.rules.ageBandCodes.includes(b.code)}
                       onChange={() => setDraft(d.key, { rules: { ...d.rules, ageBandCodes: toggle(d.rules.ageBandCodes, b.code) } })}>{b.label}</Chip>
                   ))}
                 </Group>
-                <Text size="xs" fw={600}>Disciplines <Text span size="xs" c="dimmed">(aucune cochée : toutes)</Text></Text>
+                <Group gap="xs">
+                  <Text size="xs" fw={600}>Disciplines <Text span size="xs" c="dimmed">(aucune cochée : toutes)</Text></Text>
+                  <AllToggle testId="wave-all-disciplines" all={DISCIPLINE_LIST.every(([code]) => d.rules.disciplines.includes(code))}
+                    onChange={(all) => setDraft(d.key, { rules: { ...d.rules, disciplines: all ? DISCIPLINE_LIST.map(([code]) => code) : [] } })} />
+                </Group>
                 <Group gap={4}>
                   {DISCIPLINE_LIST.map(([code, dsc]) => (
                     <Chip key={code} size="xs" checked={d.rules.disciplines.includes(code)}

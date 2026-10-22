@@ -15,6 +15,7 @@ import type { Category } from '../../domain/categories.js';
 import type { ProposalType } from '../../domain/replacement/index.js';
 import type { RecasementEntry } from '../api.js';
 import { ReplacementBadge } from './ReplacementBadge.js';
+import '../bracket.css';
 
 export interface EntrantInfo {
   name: string;
@@ -90,7 +91,7 @@ export function BracketView(props: Props) {
   return category.bracket.kind === 'kata' ? <KataView {...props} bracket={category.bracket} /> : <CombatView {...props} bracket={category.bracket} />;
 }
 
-function EntrantLine({ id, fallback, info, props, winner }: { id: string | null; fallback: string; info?: EntrantInfo; props: Props; winner?: boolean }) {
+function EntrantLine({ id, fallback, info, props, winner, inline }: { id: string | null; fallback: string; info?: EntrantInfo; props: Props; winner?: boolean; inline?: boolean }) {
   const selected = id !== null && props.selected === id;
   const style: CSSProperties = {
     cursor: props.onSelect && id ? 'pointer' : undefined,
@@ -101,7 +102,11 @@ function EntrantLine({ id, fallback, info, props, winner }: { id: string | null;
   };
   return (
     <Box data-testid="bracket-entrant" data-entrant={id ?? ''} style={style} onClick={() => id && props.onSelect?.(id)}>
-      {id && info ? (
+      {id && info && inline ? (
+        <Text size="sm" lh={1.3} className="bracket-entrant-inline" fw={winner ? 800 : 400} td={winner ? 'underline' : undefined}>
+          {info.name} <Text span size="xs">{info.club}</Text>
+        </Text>
+      ) : id && info ? (
         <>
           <Text size={props.printable ? 'md' : 'sm'} fw={winner ? 800 : props.printable ? 400 : 500} td={winner && props.printable ? 'underline' : undefined} lh={1.2}>
             {info.name}
@@ -143,6 +148,39 @@ function CombatView(props: Props & { bracket: CombatBracket }) {
       default:
         return '—';
     }
+  };
+  const resultText = (m: ResolvedMatch) =>
+    m.result && (!props.printable || m.result.method !== 'points' || m.result.score) ? `${METHOD_SHORT[m.result.method]}${m.result.score ? ` ${m.result.score}` : ''}` : '';
+  /** Combat d'un arbre : en-tête (numéro, résultat), puis les deux combattants l'un sous l'autre. */
+  const treeCard = (m: ResolvedMatch) => {
+    const clickable = !props.printable && props.onMatchClick && m.playable;
+    const stale = props.stale?.has(m.id);
+    const row = (id: string | null, src: SlotSource, winner: boolean) => (
+      <Box className="bracket-card-row" px={2} py={1}>
+        <EntrantLine id={id} fallback={describe(src)} info={id ? entrants.get(id) : undefined} props={props} winner={winner} inline={props.printable} />
+      </Box>
+    );
+    return (
+      <Paper withBorder className="bracket-card" data-testid="bracket-match" data-match={m.id} data-bye={m.bye ? 'true' : undefined}
+        style={{ breakInside: 'avoid', overflow: 'visible', cursor: clickable ? 'pointer' : undefined, opacity: m.bye ? 0.6 : undefined, borderColor: stale ? 'var(--mantine-color-orange-6)' : undefined }}
+        onClick={() => clickable && props.onMatchClick!(m)}>
+        <div className="bracket-card-head">
+          <Text size="xs" fw={700}>{m.bye ? 'Exempt' : `Combat ${numbers.get(m.id)}`}</Text>
+          <Text size="xs" c="dimmed" ta="right">
+            {resultText(m)}
+            {stale ? ' · à revoir' : ''}
+            {!props.printable && props.noRest?.has(m.id) ? ' · pas de repos : prévoir une pause' : ''}
+          </Text>
+        </div>
+        {props.matchZones?.get(m.id) && <Text size="xs" fw={700} px={6} data-testid="match-zone">{props.matchZones.get(m.id)}</Text>}
+        {m.bye ? row(m.entrantA ?? m.entrantB, m.a, false) : (
+          <>
+            {row(m.entrantA, m.a, m.result?.winner === 'a')}
+            {row(m.entrantB, m.b, m.result?.winner === 'b')}
+          </>
+        )}
+      </Paper>
+    );
   };
   const card = (m: ResolvedMatch) => {
     if (m.bye) {
@@ -198,7 +236,10 @@ function CombatView(props: Props & { bracket: CombatBracket }) {
       ))}
       {props.printable &&
         bracket.pools?.map((pool, p) => (
-          <PoolGrid key={`grid-${p}`} title={`Poule ${poolName(p)}`} pool={pool} matches={matches.filter((m) => m.phase === 'pool' && m.pool === p)} entrants={entrants} numbers={numbers} />
+          <Box key={`grid-${p}`}>
+            <PoolGrid title={`Poule ${poolName(p)}`} pool={pool} matches={matches.filter((m) => m.phase === 'pool' && m.pool === p)} entrants={entrants} numbers={numbers} />
+            <PoolOrder matches={matches.filter((m) => m.phase === 'pool' && m.pool === p)} entrants={entrants} numbers={numbers} />
+          </Box>
         ))}
       {sections.map((s) => {
         if (props.printable && s.title.startsWith('Combats de la poule')) return null;
@@ -212,6 +253,31 @@ function CombatView(props: Props & { bracket: CombatBracket }) {
         }
         const rounds = [...new Set(s.matches.map((m) => m.round))].sort((a, b) => a - b);
         const maxRound = Math.max(...rounds);
+        const tree = s.title === 'Tableau' ? treeRounds(s.matches) : null;
+        if (tree) {
+          return (
+            <Box key={s.title} className={tree[0]!.length >= 8 ? 'bracket-tree is-large' : 'bracket-tree'} data-testid="bracket-tree" style={{ ['--bracket-first-round' as string]: tree[0]!.length }}>
+              {tree.map((list, r) => (
+                <div key={r} className="bracket-round">
+                  <Text size="xs" fw={700} tt="uppercase" c="dimmed" mb={4}>{roundTitle('main', r + 1, tree.length)}</Text>
+                  <div className="bracket-round-body">
+                    {list.map((m, k) => {
+                      // À l'impression, une exemption laisse sa case vide : l'exempté apparaît directement au tour suivant.
+                      const hidden = m.bye && props.printable;
+                      const fed = r > 0 && tree[r - 1]!.slice(2 * k, 2 * k + 2).some((x) => !(x.bye && props.printable));
+                      const cls = ['bracket-slot', !hidden && r < tree.length - 1 ? 'has-next' : '', k % 2 === 0 ? 'pair-top' : 'pair-bottom', fed ? 'has-prev' : ''];
+                      return (
+                        <div key={m.id} className={cls.filter(Boolean).join(' ')}>
+                          {!hidden && treeCard(m)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </Box>
+          );
+        }
         return (
           <Box key={s.title}>
             {s.title !== 'Tableau' && <Title order={5} mb={4}>{s.title}</Title>}
@@ -228,6 +294,41 @@ function CombatView(props: Props & { bracket: CombatBracket }) {
       })}
       {showPodium && <PodiumView podium={podium} entrants={entrants} />}
     </Stack>
+  );
+}
+
+/**
+ * Tours d'un tableau à élimination rangés pour l'arbre : le combat k d'un tour est alimenté par les combats 2k et 2k+1
+ * du tour précédent. `null` si le tableau n'a pas cette forme (il s'affiche alors en colonnes simples).
+ */
+export function treeRounds(matches: ResolvedMatch[]): ResolvedMatch[][] | null {
+  const rounds = [...new Set(matches.map((m) => m.round))].sort((a, b) => a - b);
+  const byRound = rounds.map((r) => matches.filter((m) => m.round === r).sort((a, b) => a.order - b.order));
+  if (byRound.length < 2 || byRound.at(-1)!.length !== 1) return null;
+  for (let r = 1; r < byRound.length; r++) {
+    if (byRound[r]!.length * 2 !== byRound[r - 1]!.length) return null;
+    const ok = byRound[r]!.every((m, k) =>
+      [m.a, m.b].every((src, i) => src.kind === 'winner' && src.matchId === byRound[r - 1]![2 * k + i]!.id),
+    );
+    if (!ok) return null;
+  }
+  return byRound;
+}
+
+/** Ordre des combats d'une poule imprimée (les numéros de la grille, dans l'ordre de passage). */
+function PoolOrder({ matches, entrants, numbers }: { matches: ResolvedMatch[]; entrants: Map<string, EntrantInfo>; numbers: Map<string, string> }) {
+  const n = (m: ResolvedMatch) => Number(String(numbers.get(m.id) ?? '').replace(/^c/, '')) || 0;
+  const name = (id: string | null) => (id ? (entrants.get(id)?.name ?? '?') : '?');
+  return (
+    <Box mt={6} data-testid="pool-order">
+      <Text size="sm" fw={700}>Ordre des combats</Text>
+      {[...matches].sort((a, b) => n(a) - n(b)).map((m) => (
+        <Text key={m.id} size="sm">
+          <b>Combat {numbers.get(m.id)}</b> : {name(m.entrantA)} contre {name(m.entrantB)}
+          {m.result ? ` — vainqueur ${name(m.result.winner === 'a' ? m.entrantA : m.entrantB)}` : ''}
+        </Text>
+      ))}
+    </Box>
   );
 }
 

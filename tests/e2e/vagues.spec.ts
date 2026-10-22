@@ -213,8 +213,29 @@ test('recasement par vague (relecture) : vague gardée d’un onglet à l’autr
   await cases.getByTestId('manual-move').click();
   await expect(page.getByTestId('wave-change-warning')).toContainText('passera dans la vague « Après-midi »');
   await page.keyboard.press('Escape');
+  // Juniors F : deux tranches d'écart, absente de la liste tant qu'on ne demande pas toutes les catégories.
   await select.click();
-  await page.getByRole('option', { name: /Juniors F.*vague en attente/ }).click();
+  await expect(page.getByRole('option', { name: /Juniors F/ })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await cases.getByTestId('manual-move-all').click();
+  await select.click();
+  await page.getByRole('option', { name: /Juniors F.*vague en attente.*règle\(s\) enfreinte\(s\)/ }).click();
   await cases.getByTestId('manual-move').click();
   await expect(page.getByTestId('wave-change-warning')).toContainText('dans aucune vague');
+});
+
+test('vagues : tout cocher les tranches d’âge et les disciplines', async ({ page }) => {
+  const id = await createCompetition(page, 'Coupe vagues tout cocher');
+  await page.goto(`/competitions/${id}/vagues`);
+  await page.getByTestId('wave-add').click();
+  const card = page.getByTestId('wave-card');
+  await card.getByTestId('wave-all-ages').click();
+  await expect(card.getByTestId('wave-all-ages')).toHaveText('Tout décocher');
+  await card.getByTestId('wave-all-disciplines').click();
+  await page.getByTestId('wave-save').click();
+  const waves = (await (await page.request.get(`/api/competitions/${id}/waves`)).json()) as { rules: { ageBandCodes: string[]; disciplines: string[] } }[];
+  expect(waves[0]!.rules.ageBandCodes.length).toBe(14);
+  expect(waves[0]!.rules.disciplines.length).toBe(5);
+  await card.getByTestId('wave-all-ages').click();
+  await expect(card.getByTestId('wave-all-ages')).toHaveText('Tout cocher');
 });

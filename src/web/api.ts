@@ -259,9 +259,10 @@ export function useWeighIn(id: string, waveId?: string | null) {
   });
 }
 
+/** Pesée et recasement changent les catégories, les vagues, l'ordre de passage… : toutes les données de la compétition sont rechargées. */
 function useInvalidateDay(id: string) {
   const qc = useQueryClient();
-  return () => Promise.all(['weigh-in', 'replacement', 'categories', 'registrations'].map((k) => qc.invalidateQueries({ queryKey: [k, id] })));
+  return () => qc.invalidateQueries({ predicate: (q) => q.queryKey[1] === id });
 }
 
 export function useSetWeighIn(id: string) {
@@ -294,8 +295,25 @@ export interface RecasementEntry {
   status: 'validated' | 'undone';
   createdAt: string;
 }
+/** Ce qu'il faut savoir d'un combattant à recaser. */
+export interface CaseFighter {
+  sex: 'M' | 'F';
+  ageBandCode: string;
+  discipline: DisciplineId;
+  ruleset: 'jiyu' | 'shobu' | null;
+  weightClassId: string | null;
+  weighInKg: number | null;
+  approxWeightKg: number | null;
+  otherDisciplines: DisciplineId[];
+  acceptsJiyuFirst: boolean | null;
+  presence: Presence;
+}
 export interface ReplacementData {
   cases: Case[];
+  /** Par inscription d'un cas. */
+  fighters: Record<string, CaseFighter>;
+  /** Par cas : catégories où le déplacer à la main, avec les règles enfreintes (aucune : déplacement cohérent). */
+  moveTargets: Record<string, { categoryId: string; warnings: string[] }[]>;
   /** Les propositions refusées suivent les autres, marquées `refused`. */
   proposals: Record<string, (Proposal & { refused?: true })[]>;
   summary: { present: number; absent: number; unknown: number; cases: number; alone: number; withoutProposal: number; readyCategories: number; startedCategories: number };

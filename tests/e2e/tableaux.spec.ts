@@ -26,6 +26,9 @@ test('tableaux : catégories, séparation des clubs, format, tirage, prête, imp
   await page.getByTestId('category-row').filter({ hasText: '-54' }).click();
   const matches = page.getByTestId('bracket-match');
   await expect(matches).toHaveCount(3);
+  // Tableau en arbre : demi-finales reliées à la finale.
+  await expect(page.getByTestId('bracket-tree')).toBeVisible();
+  await expect(page.locator('.bracket-slot.has-next')).toHaveCount(2);
   // 1er tour : les deux Tani Dojo ne s'affrontent pas.
   for (const i of [0, 1]) await expect(matches.nth(i)).not.toContainText(/TANI1[\s\S]*TANI2|TANI2[\s\S]*TANI1/);
 
