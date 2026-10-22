@@ -163,3 +163,18 @@ test('tranche de mixité retirée de la grille : les autres réglages restent mo
   expect(res.statusCode).toBe(200);
   expect(res.json().settings.mixSexes.ageBandCodes).toEqual(['v4']);
 });
+
+test('grille : une tranche peut ne pas être proposée sur la fiche club', async () => {
+  const id = (await create()).json().id;
+  const g = ffkDefaultGrid();
+  const off = new Set(['mini-poussin', 'espoir']);
+  const put = await app.inject({ method: 'PUT', url: `/api/competitions/${id}/grid`, payload: { ...g, ageBands: g.ageBands.map((b) => ({ ...b, onClubForm: !off.has(b.code) })) } });
+  expect(put.statusCode).toBe(204);
+  const bands = (await app.inject({ method: 'GET', url: `/api/competitions/${id}/grid` })).json().ageBands as { code: string; onClubForm: boolean }[];
+  expect(bands.filter((b) => !b.onClubForm).map((b) => b.code).sort()).toEqual(['espoir', 'mini-poussin']);
+  // Ancien client ou modèle enregistré sans le champ : toutes proposées
+  const legacy = { ...g, ageBands: g.ageBands.map(({ onClubForm: _o, ...b }) => b) };
+  expect((await app.inject({ method: 'PUT', url: `/api/competitions/${id}/grid`, payload: legacy })).statusCode).toBe(204);
+  const again = (await app.inject({ method: 'GET', url: `/api/competitions/${id}/grid` })).json().ageBands as { onClubForm: boolean }[];
+  expect(again.every((b) => b.onClubForm)).toBe(true);
+});

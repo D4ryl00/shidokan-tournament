@@ -24,6 +24,7 @@ export const ageBands = sqliteTable(
     maxAge: integer('max_age'),
     isMinor: integer('is_minor', { mode: 'boolean' }).notNull(),
     sortOrder: integer('sort_order').notNull(),
+    onClubForm: integer('on_club_form', { mode: 'boolean' }).notNull().default(true),
   },
   (t) => [primaryKey({ columns: [t.competitionId, t.code] })],
 );
@@ -80,6 +81,7 @@ export const fighters = sqliteTable('fighters', {
   sex: text('sex', { enum: ['M', 'F'] }).notNull(),
   ageBandCode: text('age_band_code').notNull(),
   licence: text('licence'),
+  grade: text('grade'),
   presence: text('presence', { enum: ['unknown', 'present', 'absent'] }).notNull().default('unknown'),
   weighInKg: real('weigh_in_kg'),
 });

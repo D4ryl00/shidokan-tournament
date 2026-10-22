@@ -24,6 +24,7 @@ interface FormState {
   acceptsJiyuFirst: boolean;
   approxWeightKg: number | '';
   onsite: boolean;
+  grade: string;
 }
 
 function fromRow(row: RegistrationRow): FormState {
@@ -40,12 +41,13 @@ function fromRow(row: RegistrationRow): FormState {
     acceptsJiyuFirst: row.acceptsJiyuFirst ?? false,
     approxWeightKg: row.approxWeightKg ?? '',
     onsite: row.source === 'onsite',
+    grade: row.fighter.grade ?? '',
   };
 }
 
 const EMPTY: FormState = {
   club: '', lastName: '', firstName: '', sex: 'F', ageBandCode: null, discipline: 'karate', ruleset: 'jiyu',
-  weightClassId: null, prefs: '', acceptsJiyuFirst: false, approxWeightKg: '', onsite: false,
+  weightClassId: null, prefs: '', acceptsJiyuFirst: false, approxWeightKg: '', onsite: false, grade: '',
 };
 
 /** Saisie rapide : « Entrée » enregistre et garde club, âge, sexe et discipline pour la suivante. */
@@ -87,6 +89,8 @@ export function RegistrationForm({ competitionId, edit, onDone }: { competitionI
       approxWeightKg: f.approxWeightKg === '' ? null : f.approxWeightKg,
       otherDisciplines: prefs.value,
       acceptsJiyuFirst: hasWeight && f.ruleset === 'shobu' ? f.acceptsJiyuFirst : null,
+      // Le grade ne concerne que le kata : ailleurs, celui du combattant est conservé.
+      ...(f.discipline === 'kata' ? { grade: f.grade.trim() || null } : {}),
       source: edit ? (edit.source === 'onsite' || edit.source === 'manual' ? (f.onsite ? 'onsite' : 'manual') : edit.source) : f.onsite ? 'onsite' : 'manual',
     };
     if (edit) {
@@ -97,7 +101,7 @@ export function RegistrationForm({ competitionId, edit, onDone }: { competitionI
     const res = await create.mutateAsync(input);
     setWarning(res.warning);
     setSaved(`${res.row.fighter.lastName} ${res.row.fighter.firstName} enregistré(e).`);
-    setF((s) => ({ ...s, lastName: '', firstName: '', prefs: '', approxWeightKg: '', acceptsJiyuFirst: false }));
+    setF((s) => ({ ...s, lastName: '', firstName: '', prefs: '', approxWeightKg: '', acceptsJiyuFirst: false, grade: '' }));
     lastNameRef.current?.focus();
   };
 
@@ -134,6 +138,10 @@ export function RegistrationForm({ competitionId, edit, onDone }: { competitionI
               onChange={(v) => set({ approxWeightKg: v === '' ? '' : Number(v) })} />
           </SimpleGrid>
         )}
+        {f.discipline === 'kata' && (
+          <TextInput data-testid="reg-grade" label="Grade (si kata)" placeholder="ex. 1er dan" maxLength={30} value={f.grade}
+            onChange={(e) => set({ grade: e.currentTarget.value })} />
+        )}
         {DISCIPLINES[f.discipline].inPreferences && (
           <TextInput data-testid="reg-prefs" label="Autres disciplines par ordre de préférence (1 karaté, 2 shido-boxing, 3 shido-mix)"
             placeholder="ex. 32" value={f.prefs} onChange={(e) => set({ prefs: e.currentTarget.value })}
@@ -142,7 +150,7 @@ export function RegistrationForm({ competitionId, edit, onDone }: { competitionI
         )}
         <Group>
           {hasWeight && f.ruleset === 'shobu' && (
-            <Checkbox data-testid="reg-jiyu-first" label="Accepte le jiyu en priorité, avant de changer de discipline"
+            <Checkbox data-testid="reg-jiyu-first" label="Si reclassement, garder en priorité la discipline (passer en jiyu plutôt que changer de discipline)"
               checked={f.acceptsJiyuFirst} onChange={(e) => set({ acceptsJiyuFirst: e.currentTarget.checked })} />
           )}
           {(!edit || edit.source === 'manual' || edit.source === 'onsite') && (

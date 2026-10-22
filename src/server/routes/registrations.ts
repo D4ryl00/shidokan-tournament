@@ -27,6 +27,7 @@ export const registrationInputSchema = z
     sex: z.enum(['M', 'F']),
     ageBandCode: z.string().min(1),
     licence: z.string().trim().max(30).nullable().optional(),
+    grade: z.string().trim().max(30).nullable().optional(),
     discipline,
     ruleset: z.enum(['jiyu', 'shobu']).nullable(),
     weightClassId: z.string().nullable(),

@@ -124,7 +124,7 @@ function findOrCreateFighter(
   if (existing) {
     const ageBandCode = opts.keepAge?.(existing.id) ? existing.ageBandCode : input.ageBandCode;
     db.update(fighters)
-      .set({ ageBandCode, licence: input.licence ?? existing.licence })
+      .set({ ageBandCode, licence: input.licence ?? existing.licence, ...(input.grade !== undefined ? { grade: input.grade } : {}) })
       .where(eq(fighters.id, existing.id))
       .run();
     return { ...existing, ageBandCode };
@@ -139,6 +139,7 @@ function findOrCreateFighter(
     sex: input.sex,
     ageBandCode: input.ageBandCode,
     licence: input.licence ?? null,
+    grade: input.grade ?? null,
     presence: 'unknown' as const,
     weighInKg: null,
   };
@@ -221,6 +222,7 @@ export async function updateRegistration(
         ageBandCode: input.ageBandCode,
         // Le formulaire ne renvoie pas la licence : absente = conservée.
         ...(input.licence !== undefined ? { licence: input.licence } : {}),
+        ...(input.grade !== undefined ? { grade: input.grade } : {}),
       })
       .where(eq(fighters.id, current.fighterId))
       .run();

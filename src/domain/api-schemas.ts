@@ -29,6 +29,7 @@ export const categoryGridSchema = z
         maxAge: z.number().int().min(0).nullable(),
         isMinor: z.boolean(),
         sortOrder: z.number().int(),
+        onClubForm: z.boolean().default(true),
       }).strict(),
     ),
     weightClasses: z.array(

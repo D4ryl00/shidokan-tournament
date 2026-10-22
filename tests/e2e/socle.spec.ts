@@ -84,3 +84,16 @@ test('éditeur de grille : la ligne ne bouge pas pendant la frappe ; icône d’
   await expect(page.getByTestId('weight-label-input').first()).toHaveValue('-50');
   await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', '/favicon.webp');
 });
+
+test('grille : décocher « Fiche club » pour une tranche', async ({ page }) => {
+  const id = await createCompetition(page, 'Grille fiche club');
+  await page.goto(`/competitions/${id}/grille`);
+  const first = page.getByLabel('Proposée sur la fiche club').first();
+  await expect(first).toBeChecked();
+  await first.uncheck();
+  await page.getByRole('button', { name: 'Enregistrer la grille' }).click();
+  await expect(page.getByText('Grille enregistrée')).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Proposée sur la fiche club').first()).not.toBeChecked();
+  await expect(page.getByLabel('Proposée sur la fiche club').nth(1)).toBeChecked();
+});

@@ -121,7 +121,7 @@ export async function getGrid(db: AppDb, competitionId: string): Promise<Categor
   const links = db.select().from(ageLinks).where(eq(ageLinks.competitionId, competitionId)).orderBy(asc(ageLinks.id)).all();
   const bandOrder = new Map(bands.map((b) => [b.code, b.sortOrder]));
   return {
-    ageBands: bands.map(({ code, label, minAge, maxAge, isMinor, sortOrder }) => ({ code, label, minAge, maxAge, isMinor, sortOrder })),
+    ageBands: bands.map(({ code, label, minAge, maxAge, isMinor, sortOrder, onClubForm }) => ({ code, label, minAge, maxAge, isMinor, sortOrder, onClubForm })),
     weightClasses: classes
       .sort((a, b) => (bandOrder.get(a.ageBandCode) ?? 0) - (bandOrder.get(b.ageBandCode) ?? 0) || a.sex.localeCompare(b.sex) || a.sortOrder - b.sortOrder)
       .map(({ id, ageBandCode, sex, label, maxKg, sortOrder }) => ({ id, ageBandCode, sex, label, maxKg, sortOrder })),

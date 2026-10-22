@@ -31,6 +31,8 @@ export interface Fighter {
   sex: Sex;
   ageBandCode: string;
   licence: string | null;
+  /** Grade (kata), pour informer les arbitres. */
+  grade: string | null;
 }
 
 export interface Registration {
@@ -62,6 +64,8 @@ export interface RegistrationInput {
   sex: Sex;
   ageBandCode: string;
   licence?: string | null;
+  /** Grade du combattant (kata) ; absent = conservé. */
+  grade?: string | null;
   discipline: DisciplineId;
   ruleset: Ruleset | null;
   weightClassId: string | null;

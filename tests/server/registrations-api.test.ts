@@ -113,3 +113,15 @@ test('premier onglet « fiche club » cassé : son erreur est signalée (pas de 
   expect(res.statusCode).toBe(400);
   expect(res.json().issues.join(' ')).toMatch(/En-tête du tableau/);
 });
+
+test('grade : enregistré sur le combattant, conservé si absent', async () => {
+  const body = { clubId: null, lastName: 'KATA', firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline: 'kata', ruleset: null, weightClassId: null, source: 'manual' };
+  const created = await app.inject({ method: 'POST', url: `${base}/registrations`, payload: { ...body, grade: '2e kyu' } });
+  expect(created.statusCode).toBe(201);
+  const row = created.json().row as { id: string; fighter: { grade: string | null } };
+  expect(row.fighter.grade).toBe('2e kyu');
+  const kept = await app.inject({ method: 'PUT', url: `${base}/registrations/${row.id}`, payload: body });
+  expect(kept.json().fighter.grade).toBe('2e kyu');
+  const cleared = await app.inject({ method: 'PUT', url: `${base}/registrations/${row.id}`, payload: { ...body, grade: null } });
+  expect(cleared.json().fighter.grade).toBeNull();
+});

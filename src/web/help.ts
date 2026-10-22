@@ -351,7 +351,10 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
   'grille.tranches': {
     title: 'Tranches d’âge',
     short: 'Les tranches d’âge, avec leurs âges et la limite mineurs / adultes.',
-    details: ['La case « Mineurs » sépare mineurs et adultes : ils ne sont jamais mélangés, sauf si le réglage le permet.'],
+    details: [
+      'La case « Mineurs » sépare mineurs et adultes : ils ne sont jamais mélangés, sauf si le réglage le permet.',
+      'La case « Fiche club » dit si la tranche est proposée aux clubs sur la fiche de pré-inscription (papier et tableur). Une tranche décochée reste dans la grille.',
+    ],
   },
   'grille.passages': {
     title: 'Passages d’âge autorisés',
