@@ -66,10 +66,11 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
     // Premier onglet qui est une fiche club (un coach peut ajouter des onglets). Un onglet reconnu (titre trouvé)
     // mais cassé est signalé : on ne lit pas à sa place un onglet suivant (copie ancienne, par exemple).
     const grid = await getGrid(db, competitionId);
+    const tolerance = (await getCompetition(db, competitionId))!.settings.weighInToleranceKg;
     const GENERIC = "Ce fichier n'est pas une fiche club.";
     for (const sheet of sheets) {
       try {
-        return parseClubForm(sheet.cells, grid);
+        return parseClubForm(sheet.cells, grid, tolerance);
       } catch (e) {
         if (!(e instanceof NotAClubFormError) || e.message !== GENERIC) throw e;
       }

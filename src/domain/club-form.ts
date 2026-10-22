@@ -3,8 +3,8 @@ import { DISCIPLINES, disciplineFromLabel } from './disciplines.js';
 export { disciplineFromLabel };
 import { normalizeName, parseSex, parseYesNo } from './names.js';
 import { parsePreferences, validateRegistration, type RegistrationInput } from './registration.js';
-import type { CategoryGrid, DisciplineId, Ruleset } from './types.js';
-import { resolveWeightCell } from './weights.js';
+import type { CategoryGrid, DisciplineId, Ruleset, Sex } from './types.js';
+import { resolveWeightCell, weightClassForWeight } from './weights.js';
 
 export const CLUB_FORM_TITLE = 'FICHE DE PRÉ-INSCRIPTION CLUB';
 /** Libellés en colonne A, valeurs en colonne B, lignes 4 à 8 du tableur. */
@@ -16,8 +16,26 @@ export const CLUB_FORM_HEADER_FIELDS = [
   'Pré-accord du coach (Oui/Non)',
 ] as const;
 export const CLUB_FORM_HEADER_FIRST_ROW = 4;
-/** En-tête du tableau des combattants, ligne 11 du tableur. */
+/** En-tête du tableau des combattants, ligne 11 du tableur : une ligne par combattant (ordre de la fiche papier). */
 export const CLUB_FORM_COLUMNS = [
+  'Nom',
+  'Prénom',
+  'Sexe',
+  "Catégorie d'âge",
+  'Poids actuel (kg)',
+  'Discipline de combat',
+  'Kata (Oui/Non)',
+  'Grade (si kata)',
+  'Règlement',
+  'Reclassement : Karaté (1, 2)',
+  'Reclassement : Shido-boxing (1, 2)',
+  'Reclassement : Shido-mix (1, 2)',
+  'Shobu : si reclassement, garder en priorité',
+] as const;
+/** Valeurs de la dernière colonne (fiche papier : « 1. les règles shobu », « 2. la discipline »). */
+export const SHOBU_KEEP_LABELS = { ruleset: 'Les règles shobu', discipline: 'La discipline' } as const;
+/** Ancien format (une ligne par inscription, catégorie de poids) : les fiches déjà renvoyées restent lisibles. */
+export const CLUB_FORM_LEGACY_COLUMNS = [
   'Nom',
   'Prénom',
   'Sexe',
@@ -56,6 +74,112 @@ export interface ClubFormParse {
 }
 
 export class NotAClubFormError extends Error {}
+
+export type CombatDiscipline = 'karate' | 'shido-boxing' | 'shido-mix' | 'triathlon';
+export type PrefDiscipline = 'karate' | 'shido-boxing' | 'shido-mix';
+/** Une ligne de fiche telle que remplie (papier, .ods ou saisie) : un combattant. */
+export interface ClubFormLine {
+  lastName: string;
+  firstName: string;
+  sex: Sex | null;
+  ageBandCode: string | null;
+  weightKg: number | null;
+  combat: CombatDiscipline | null;
+  kata: boolean;
+  grade: string | null;
+  ruleset: Ruleset | null;
+  prefs: Partial<Record<PrefDiscipline, 1 | 2>>;
+  shobuKeep: 'ruleset' | 'discipline' | null;
+}
+export type WeighInTolerance = { M: number; F: number };
+
+const ABBREVIATIONS: Record<string, string> = {
+  'mini-poussin': 'MP', poussin: 'P', pupille: 'Pu', benjamin: 'B', minime: 'Mi', cadet: 'C', junior: 'J', espoir: 'E', senior: 'S',
+  v1: 'V1', v2: 'V2', v3: 'V3', v4: 'V4', v5: 'V5',
+};
+/** Abréviation d'une tranche d'âge sur la fiche papier ; à défaut, les deux premières lettres du libellé. */
+export function ageBandAbbreviation(code: string, label: string): string {
+  return ABBREVIATIONS[code] ?? label.slice(0, 2);
+}
+
+/** Une ligne → une ou deux lignes d'inscription (combat puis kata), avec le même numéro de ligne. */
+export function lineToRows(line: ClubFormLine, lineNumber: number, grid: CategoryGrid, tolerance: WeighInTolerance): ClubFormRow[] {
+  const label = `${line.lastName.trim()} ${line.firstName.trim()}`.trim();
+  const common: string[] = [];
+  if (!line.sex) common.push('Sexe manquant.');
+  if (!line.ageBandCode) common.push("Catégorie d'âge manquante.");
+  if (!line.combat && !line.kata) common.push('Aucune discipline cochée.');
+  if (common.length || !line.sex || !line.ageBandCode) return [{ line: lineNumber, label, input: null, errors: common, warnings: [] }];
+  const base = {
+    clubId: null, lastName: line.lastName.trim(), firstName: line.firstName.trim(), sex: line.sex, ageBandCode: line.ageBandCode,
+    grade: line.grade?.trim() || null, source: 'club_form' as const,
+  };
+  const rows: ClubFormRow[] = [];
+  if (line.combat) {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const combat = line.combat;
+    if (!line.ruleset) errors.push('Règlement manquant (Jiyu ou Shobu).');
+    let weightClassId: string | null = null;
+    if (line.weightKg === null) errors.push('Poids actuel manquant (nécessaire pour la catégorie de poids).');
+    else {
+      const wc = weightClassForWeight(grid, line.ageBandCode, line.sex, line.weightKg, tolerance[line.sex]);
+      if (wc) weightClassId = wc.id;
+      else errors.push("Pas de catégorie de poids pour cet âge et ce sexe dans la grille.");
+    }
+    const ordered = (Object.entries(line.prefs) as [PrefDiscipline, 1 | 2][]).sort((a, b) => a[1] - b[1]).map(([d]) => d as DisciplineId);
+    let otherDisciplines: DisciplineId[] = [];
+    if (ordered.length && !DISCIPLINES[combat].inPreferences) {
+      warnings.push(`Pas de reclassement vers une autre discipline pour le ${DISCIPLINES[combat].label.toLowerCase()} : préférences ignorées.`);
+    } else {
+      if (ordered.includes(combat)) warnings.push('Reclassement vers sa propre discipline ignoré.');
+      otherDisciplines = ordered.filter((d) => d !== combat);
+    }
+    let acceptsJiyuFirst: boolean | null = null;
+    if (line.ruleset === 'shobu') acceptsJiyuFirst = line.shobuKeep === 'discipline' ? true : line.shobuKeep === 'ruleset' ? false : null;
+    else if (line.shobuKeep) warnings.push('« Garder en priorité » ignoré : le combattant n\'est pas inscrit en shobu.');
+    if (errors.length) rows.push({ line: lineNumber, label, input: null, errors, warnings });
+    else {
+      const input: RegistrationInput = { ...base, discipline: combat, ruleset: line.ruleset, weightClassId, approxWeightKg: line.weightKg, otherDisciplines, acceptsJiyuFirst };
+      const invalid = validateRegistration(input, grid);
+      rows.push(invalid.length ? { line: lineNumber, label, input: null, errors: invalid, warnings } : { line: lineNumber, label, input, errors: [], warnings });
+    }
+  }
+  if (line.kata) {
+    const input: RegistrationInput = { ...base, discipline: 'kata', ruleset: null, weightClassId: null, approxWeightKg: line.weightKg, otherDisciplines: [], acceptsJiyuFirst: null };
+    const invalid = validateRegistration(input, grid);
+    rows.push(invalid.length ? { line: lineNumber, label, input: null, errors: invalid, warnings: [] } : { line: lineNumber, label, input, errors: [], warnings: [] });
+  }
+  return rows;
+}
+
+const COMBAT_LABELS = new Set<DisciplineId>(['karate', 'shido-boxing', 'shido-mix', 'triathlon']);
+function cellsToLine(row: unknown[], grid: CategoryGrid): { line: ClubFormLine; warnings: string[] } {
+  const [lastName, firstName, sexCell, ageCell, weightCell, combatCell, kataCell, gradeCell, rulesetCell, prefK, prefB, prefM, keepCell] = row;
+  const warnings: string[] = [];
+  const combatRaw = disciplineFromLabel(combatCell);
+  const combat = combatRaw && COMBAT_LABELS.has(combatRaw) ? (combatRaw as CombatDiscipline) : null;
+  if (text(combatCell) && !combat) warnings.push(`Discipline de combat incompréhensible : « ${text(combatCell)} » (ignorée).`);
+  const weightText = text(weightCell).replace(',', '.');
+  const weightKg = weightText && Number(weightText) > 0 ? Number(weightText) : null;
+  if (weightText && weightKg === null) warnings.push(`Poids actuel incompréhensible : « ${text(weightCell)} ».`);
+  const prefs: ClubFormLine['prefs'] = {};
+  for (const [d, cell] of [['karate', prefK], ['shido-boxing', prefB], ['shido-mix', prefM]] as const) {
+    const n = text(cell);
+    if (n === '1' || n === '2') prefs[d] = Number(n) as 1 | 2;
+    else if (n) warnings.push(`Ordre de reclassement « ${n} » ignoré (1 ou 2).`);
+  }
+  const keep = normalizeName(text(keepCell));
+  const shobuKeep = !keep ? null : keep.includes('REGLE') || keep === '1' ? 'ruleset' : keep.includes('DISCIPLINE') || keep === '2' ? 'discipline' : null;
+  if (keep && !shobuKeep) warnings.push(`Priorité shobu incompréhensible : « ${text(keepCell)} ».`);
+  return {
+    line: {
+      lastName: text(lastName), firstName: text(firstName), sex: parseSex(sexCell), ageBandCode: ageBandFromLabel(ageCell, grid),
+      weightKg, combat, kata: parseYesNo(kataCell) === true, grade: textOrNull(gradeCell), ruleset: rulesetFromLabel(rulesetCell), prefs, shobuKeep,
+    },
+    warnings,
+  };
+}
 
 const text = (v: unknown): string => (v === null || v === undefined ? '' : String(v).trim());
 const textOrNull = (v: unknown): string | null => text(v) || null;
@@ -181,26 +305,45 @@ function parseRow(row: unknown[], line: number, grid: CategoryGrid): ClubFormRow
 }
 
 /** Lit une fiche club à partir des cellules du tableur (cells[ligne 0-based][colonne 0-based]). */
-export function parseClubForm(cells: unknown[][], grid: CategoryGrid): ClubFormParse {
+export function parseClubForm(cells: unknown[][], grid: CategoryGrid, tolerance: WeighInTolerance = { M: 0, F: 0 }): ClubFormParse {
   const { headerRows, columnsRow } = locate(cells);
   const header = parseHeader(cells, headerRows);
+  // Nouveau format reconnu à sa 5e colonne (« Poids actuel ») ; sinon, ancien format.
+  const isNew = normalizeName(text(cells[columnsRow]?.[4])).startsWith('POIDS ACTUEL');
+  const width = isNew ? CLUB_FORM_COLUMNS.length : CLUB_FORM_LEGACY_COLUMNS.length;
   const rows: ClubFormRow[] = [];
   const seen = new Map<string, number>();
   const combatByFighter = new Map<string, Set<DisciplineId>>();
   for (let r = columnsRow + 1; r < cells.length; r++) {
     const row = cells[r] ?? [];
-    if (row.slice(0, CLUB_FORM_COLUMNS.length).every((c) => text(c) === '')) continue;
-    const parsed = parseRow(row, r + 1, grid);
+    if (row.slice(0, width).every((c) => text(c) === '')) continue;
+    const parsedRows = isNew
+      ? (() => {
+          const { line, warnings } = cellsToLine(row, grid);
+          const out = lineToRows(line, r + 1, grid, tolerance);
+          out[0]!.warnings.unshift(...warnings);
+          return out;
+        })()
+      : [parseRow(row, r + 1, grid)];
     const who = normalizeName(`${text(row[0])} ${text(row[1])}`);
-    if (/^VETERANS?$/.test(normalizeName(text(row[3])))) parsed.warnings.push('« Vétéran » sans numéro : placé en V1 (à corriger si besoin).');
+    if (/^VETERANS?$/.test(normalizeName(text(row[3])))) parsedRows[0]!.warnings.push('« Vétéran » sans numéro : placé en V1 (à corriger si besoin).');
+    rows.push(...checkRows(parsedRows, who, r + 1, seen, combatByFighter));
+  }
+  return { header, rows };
+}
+
+/** Doublons (même combattant, même discipline) et deux disciplines de combat, sur les lignes d'inscription produites. */
+function checkRows(parsedRows: ClubFormRow[], who: string, line: number, seen: Map<string, number>, combatByFighter: Map<string, Set<DisciplineId>>): ClubFormRow[] {
+  const out: ClubFormRow[] = [];
+  for (const parsed of parsedRows) {
     if (parsed.input) {
       const key = `${who}|${parsed.input.discipline}`;
       const first = seen.get(key);
       if (first !== undefined) {
-        rows.push({ ...parsed, input: null, errors: [`Ligne en double (même combattant et même discipline que la ligne ${first}).`] });
+        out.push({ ...parsed, input: null, errors: [`Ligne en double (même combattant et même discipline que la ligne ${first}).`] });
         continue;
       }
-      seen.set(key, r + 1);
+      seen.set(key, line);
       if (parsed.input.discipline !== 'kata') {
         const set = combatByFighter.get(who) ?? new Set<DisciplineId>();
         if (set.size > 0 && !set.has(parsed.input.discipline)) {
@@ -210,7 +353,7 @@ export function parseClubForm(cells: unknown[][], grid: CategoryGrid): ClubFormP
         combatByFighter.set(who, set);
       }
     }
-    rows.push(parsed);
+    out.push(parsed);
   }
-  return { header, rows };
+  return out;
 }

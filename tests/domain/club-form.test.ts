@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import {
   CLUB_FORM_COLUMNS,
+  CLUB_FORM_LEGACY_COLUMNS,
+  ageBandAbbreviation,
   CLUB_FORM_FIRST_ROW,
   CLUB_FORM_HEADER_FIELDS,
   CLUB_FORM_TITLE,
@@ -20,10 +22,18 @@ function sheet(header: (string | null)[], lines: Line[]): unknown[][] {
   cells[0] = [CLUB_FORM_TITLE];
   cells[1] = ["Coupe Shidokan – Côte d'Azur — 22/11/2026"];
   CLUB_FORM_HEADER_FIELDS.forEach((label, i) => (cells[3 + i] = [label, header[i] ?? null]));
+  cells[10] = [...CLUB_FORM_LEGACY_COLUMNS];
+  lines.forEach((l, i) => (cells[CLUB_FORM_FIRST_ROW - 1 + i] = l));
+  return cells;
+}
+/** Même fiche, au nouveau format (une ligne par combattant). */
+function sheetNew(lines: Line[]): unknown[][] {
+  const cells = sheet(HEADER_NEW, []);
   cells[10] = [...CLUB_FORM_COLUMNS];
   lines.forEach((l, i) => (cells[CLUB_FORM_FIRST_ROW - 1 + i] = l));
   return cells;
 }
+const HEADER_NEW = ['Tani Dojo', 'Jean Coach', null, null, 'non'];
 const HEADER = ['Tani Dojo', 'Jean Coach', '06 00 00 00 00', 'coach@example.org', 'oui'];
 
 test('fiche correcte', () => {
@@ -187,4 +197,67 @@ describe('corrections reportées', () => {
   test('fichier sans en-tête : message explicite', () => {
     expect(() => parseClubForm([[CLUB_FORM_TITLE], ['x']], grid)).toThrow(/Nom, Prénom/);
   });
+});
+
+describe('nouveau format (une ligne par combattant)', () => {
+  const tol = { M: 0.3, F: 0.5 };
+  //                 Nom       Prénom  Sexe       Âge       Poids   Combat    Kata   Grade      Règl.   Rk  Rb   Rm   Priorité shobu
+  const line = (over: Partial<Record<number, string | number | null>> = {}): Line => {
+    const l: Line = ['MARTIN', 'Léa', 'Féminin', 'Cadets', '53,5', 'Karaté', 'Oui', '1er kyu', 'Jiyu', '', '2', '1', ''];
+    for (const [k, v] of Object.entries(over)) l[Number(k)] = v ?? null;
+    return l;
+  };
+
+  test('kata et karaté sur une ligne → deux inscriptions', () => {
+    const r = parseClubForm(sheetNew([line()]), grid, tol);
+    expect(r.rows.map((x) => x.errors)).toEqual([[], []]);
+    expect(r.rows.map((x) => x.line)).toEqual([12, 12]);
+    const [combat, kata] = r.rows.map((x) => x.input!);
+    expect(combat).toMatchObject({ discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54', approxWeightKg: 53.5, otherDisciplines: ['shido-mix', 'shido-boxing'], acceptsJiyuFirst: null, grade: '1er kyu' });
+    expect(kata).toMatchObject({ discipline: 'kata', ruleset: null, weightClassId: null, otherDisciplines: [], grade: '1er kyu' });
+  });
+
+  test('poids actuel → catégorie de poids, tolérance de pesée comprise', () => {
+    expect(parseClubForm(sheetNew([line({ 4: '54,4', 6: 'Non' })]), grid, tol).rows[0]!.input!.weightClassId).toBe('cadet:F:-54');
+    expect(parseClubForm(sheetNew([line({ 4: '54,6', 6: 'Non' })]), grid, tol).rows[0]!.input!.weightClassId).toBe('cadet:F:-61');
+  });
+
+  test('combat sans poids actuel → erreur', () => {
+    const r = parseClubForm(sheetNew([line({ 4: '', 6: 'Non' })]), grid, tol);
+    expect(r.rows[0]!.errors).toEqual(['Poids actuel manquant (nécessaire pour la catégorie de poids).']);
+  });
+
+  test('kata seul : pas de poids demandé', () => {
+    const r = parseClubForm(sheetNew([line({ 4: '', 5: '', 8: '', 10: '', 11: '' })]), grid, tol);
+    expect(r.rows).toHaveLength(1);
+    expect(r.rows[0]!.errors).toEqual([]);
+    expect(r.rows[0]!.input).toMatchObject({ discipline: 'kata', grade: '1er kyu' });
+  });
+
+  test('priorité shobu', () => {
+    const shobu = (keep: string) => parseClubForm(sheetNew([line({ 3: 'Seniors', 4: '60', 6: 'Non', 8: 'Shobu', 12: keep })]), grid, tol).rows[0]!;
+    expect(shobu('Les règles shobu').input!.acceptsJiyuFirst).toBe(false);
+    expect(shobu('La discipline').input!.acceptsJiyuFirst).toBe(true);
+    const jiyu = parseClubForm(sheetNew([line({ 6: 'Non', 12: 'La discipline' })]), grid, tol).rows[0]!;
+    expect(jiyu.input!.acceptsJiyuFirst).toBeNull();
+    expect(jiyu.warnings.join(' ')).toMatch(/shobu/i);
+  });
+
+  test('préférence vers sa propre discipline ignorée avec remarque', () => {
+    const r = parseClubForm(sheetNew([line({ 6: 'Non', 9: '1', 10: '', 11: '' })]), grid, tol).rows[0]!;
+    expect(r.errors).toEqual([]);
+    expect(r.input!.otherDisciplines).toEqual([]);
+    expect(r.warnings.length).toBe(1);
+  });
+});
+
+test('ancien format toujours lu', () => {
+  const r = parseClubForm(sheet(HEADER, [['MARTIN', 'Léa', 'Féminin', 'Cadets', '-54', 'Karaté', 'Jiyu', '2', null, null]]), grid);
+  expect(r.rows[0]!.input).toMatchObject({ weightClassId: 'cadet:F:-54', otherDisciplines: ['shido-boxing'] });
+});
+
+test('abréviations des tranches d’âge', () => {
+  expect(ageBandAbbreviation('pupille', 'Pupilles')).toBe('Pu');
+  expect(ageBandAbbreviation('v3', 'Vétérans 3')).toBe('V3');
+  expect(ageBandAbbreviation('ado', 'Adolescents')).toBe('Ad');
 });

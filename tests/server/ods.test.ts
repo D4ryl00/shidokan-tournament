@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { describe, expect, test } from 'vitest';
-import { CLUB_FORM_COLUMNS, CLUB_FORM_HEADER_FIELDS, CLUB_FORM_TITLE, parseClubForm } from '../../src/domain/club-form.js';
+import { CLUB_FORM_LEGACY_COLUMNS, CLUB_FORM_HEADER_FIELDS, CLUB_FORM_TITLE, parseClubForm } from '../../src/domain/club-form.js';
 import type { Competition } from '../../src/domain/competition.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 import { defaultSettings } from '../../src/domain/settings.js';
@@ -25,7 +25,7 @@ describe('modèle de fiche club', () => {
     expect(String(fiche.cells[1]![0])).toContain("Coupe Shidokan – Côte d'Azur");
     expect(String(fiche.cells[1]![0])).toContain('22/11/2026');
     CLUB_FORM_HEADER_FIELDS.forEach((label, i) => expect(fiche.cells[3 + i]![0]).toBe(label));
-    expect(fiche.cells[10]!.slice(0, CLUB_FORM_COLUMNS.length)).toEqual([...CLUB_FORM_COLUMNS]);
+    expect(fiche.cells[10]!.slice(0, CLUB_FORM_LEGACY_COLUMNS.length)).toEqual([...CLUB_FORM_LEGACY_COLUMNS]);
   });
 
   test('feuille « Aide » : codes et catégories de poids', async () => {

@@ -1,5 +1,5 @@
 import {
-  CLUB_FORM_COLUMNS,
+  CLUB_FORM_LEGACY_COLUMNS,
   CLUB_FORM_HEADER_FIELDS,
   CLUB_FORM_ROWS,
   CLUB_FORM_TITLE,
@@ -33,7 +33,7 @@ export function buildClubFormTemplate(competition: Competition, grid: CategoryGr
     ]),
     [],
     [c("Catégorie de poids sous la forme -35 ou +65 (liste dans l'onglet « Aide »). Autres disciplines : codes par ordre de préférence, ex. 32.")],
-    CLUB_FORM_COLUMNS.map((label) => c(label, { bold: true })),
+    CLUB_FORM_LEGACY_COLUMNS.map((label) => c(label, { bold: true })),
   ];
   for (let i = 0; i < CLUB_FORM_ROWS; i++) {
     rows.push([
