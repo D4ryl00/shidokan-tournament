@@ -1,7 +1,10 @@
 import { Alert, Badge, Button, Card, FileButton, Group, SimpleGrid, Stack, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useDecideZoneCard, useImportZoneJournal, useZoneCards, type JournalReport } from '../api.js';
+import { useAuthMe, useDecideZoneCard, useImportZoneJournal, useManagement, useZoneCards, type AuthMe, type JournalReport } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
+
+/** Les journaux de zone ne se reçoivent que sur un PC (rôle local) qui gère la compétition : le PC principal. */
+export const zoneCardsVisible = (role: AuthMe['role'] | undefined, managedHere: boolean | undefined) => role === 'local' && managedHere === true;
 
 const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
 /** Compte rendu d'un journal reçu : « 12 saisies reçues de Tatami 2 : 9 appliquées, 1 déjà présente, 2 à trancher ». */
@@ -37,8 +40,12 @@ function ImportJournalButton({ competitionId }: { competitionId: string }) {
 
 /** Section « À trancher » de l'onglet Combats (postes Organisation et Table centrale) : saisies de zones autonomes en conflit. */
 export function ZoneCards({ competitionId }: { competitionId: string }) {
-  const { data: cards = [] } = useZoneCards(competitionId);
+  const { data: me } = useAuthMe();
+  const { data: m } = useManagement(competitionId);
+  const visible = zoneCardsVisible(me?.role, m?.managedHere);
+  const { data: cards = [] } = useZoneCards(competitionId, visible);
   const decide = useDecideZoneCard(competitionId);
+  if (!visible) return null;
   return (
     <Stack gap="xs">
       <Group justify="space-between">
