@@ -43,6 +43,7 @@ import { mirrorRoutes } from './routes/mirror.js';
 import { startMirror } from './mirror.js';
 import { startFollow } from './sync/follow.js';
 import { zoneLinkRoutes } from './routes/zone-link.js';
+import { zoneJournalRoutes } from './routes/zone-journal.js';
 import { startZoneFollow } from './zone/link.js';
 import { registerZoneJournal } from './zone/autonomous.js';
 import { authRoutes } from './routes/auth.js';
@@ -186,6 +187,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     app.addHook('onClose', async () => stopFollow());
     // Portable de zone : suit le PC principal (réseau local).
     await app.register(zoneLinkRoutes, { db, dbPath: opts.dbPath });
+    await app.register(zoneJournalRoutes, { db });
     const stopZoneFollow = startZoneFollow(db, opts.dbPath, (e) => app.log.error(e));
     app.addHook('onClose', async () => stopZoneFollow());
   }
