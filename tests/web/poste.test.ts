@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import type { AuthMe } from '../../src/web/api.js';
-import { accountPoste, defaultTab, parsePoste, posteTabs, tabFor } from '../../src/web/poste.js';
+import { accountPoste, defaultTab, parsePoste, posteTabs, tabFor, zoneLinkPoste } from '../../src/web/poste.js';
 import { COMPETITION_TABS } from '../../src/web/tabs.js';
 
 test('onglets de chaque poste, dans l’ordre des onglets', () => {
@@ -40,4 +40,12 @@ test('poste imposé par le compte connecté (serveur) ; organisateur ou rôle lo
   expect(accountPoste(me('organisateur'), 'c1')).toBeNull();
   expect(accountPoste({ role: 'local', user: null }, 'c1')).toBeNull();
   expect(accountPoste(undefined, 'c1')).toBeNull();
+});
+
+test('portable en zone autonome : sa zone est imposée sur la compétition qu’il suit, et seulement en zone autonome', () => {
+  const link = { mainUrl: 'http://pc', competitionId: 'c1', zoneId: 'z2', autonomous: { since: '2026-11-22T13:32:00Z', finals: false } };
+  expect(zoneLinkPoste(link, 'c1')).toEqual({ kind: 'zone', zoneId: 'z2' });
+  expect(zoneLinkPoste(link, 'c2')).toBeNull();
+  expect(zoneLinkPoste({ ...link, autonomous: null }, 'c1')).toBeNull();
+  expect(zoneLinkPoste(null, 'c1')).toBeNull();
 });

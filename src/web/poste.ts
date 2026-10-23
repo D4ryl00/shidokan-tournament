@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useAuthMe, type AuthMe } from './api.js';
+import { useAuthMe, useZoneLink, type AuthMe, type ZoneLinkView } from './api.js';
 import { COMPETITION_TABS } from './tabs.js';
 
 /**
@@ -45,6 +45,11 @@ export function accountPoste(me: AuthMe | undefined, competitionId: string): Pos
   return { kind: 'zone', zoneId: user.competitionId === competitionId ? (user.zoneId ?? '') : '' };
 }
 
+/** Portable de zone en zone autonome : sa zone est imposée sur la compétition qu'il suit (le reste est en lecture seule). */
+export function zoneLinkPoste(link: ZoneLinkView['link'] | undefined, competitionId: string): Poste | null {
+  return link?.autonomous && link.competitionId === competitionId ? { kind: 'zone', zoneId: link.zoneId } : null;
+}
+
 const key = (competitionId: string) => `poste:${competitionId}`;
 const read = (competitionId: string) => {
   try {
@@ -56,10 +61,12 @@ const read = (competitionId: string) => {
 
 /**
  * Poste de ce navigateur pour la compétition, et son changement (partagé entre les onglets du navigateur) ; le troisième élément
- * est vrai quand le poste est imposé par le compte connecté (il ne se change pas).
+ * est vrai quand le poste est imposé par le compte connecté ou par la zone autonome (il ne se change pas).
  */
 export function usePoste(competitionId: string): [Poste, (p: Poste) => void, boolean] {
-  const imposed = accountPoste(useAuthMe().data, competitionId);
+  const me = useAuthMe().data;
+  const { data: zoneLink } = useZoneLink(me?.role === 'local');
+  const imposed = accountPoste(me, competitionId) ?? zoneLinkPoste(zoneLink?.link, competitionId);
   const [poste, setPoste] = useState<Poste>(() => read(competitionId));
   useEffect(() => {
     setPoste(read(competitionId));

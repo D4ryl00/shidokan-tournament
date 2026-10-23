@@ -5,6 +5,7 @@ import { kataRev, resultRev, tieBreakRev } from '../revisions.js';
 import { targetKey, type ZoneEntry, type ZoneJournalFile } from './entry.js';
 
 export type EntryStatus = 'applied' | 'present' | 'conflict' | 'waiting';
+export interface JournalReport { received: number; applied: number; present: number; conflicts: number; waiting: number; alreadyReceived: number }
 
 export const CHANGED_ENTRANTS = 'Les combattants de ce combat ont changé.';
 export const OTHER_ENTRY = 'Une autre saisie a été faite sur le PC principal.';
@@ -101,9 +102,9 @@ export const openCategories = (db: AppDb, competitionId: string, fromInstanceId:
   );
 
 /** Rejoue un journal de zone dans l'ordre ; chaque entrée reçue est gardée avec son sort, et une entrée déjà reçue est ignorée. */
-export function receiveJournal(db: AppDb, journal: ZoneJournalFile) {
+export function receiveJournal(db: AppDb, journal: ZoneJournalFile): Promise<JournalReport> {
   return serialized(journal.competitionId, async () => {
-    const counts = { received: journal.entries.length, applied: 0, present: 0, conflicts: 0, waiting: 0, alreadyReceived: 0 };
+    const counts: JournalReport = { received: journal.entries.length, applied: 0, present: 0, conflicts: 0, waiting: 0, alreadyReceived: 0 };
     const from = journal.from.instanceId;
     const blocked = openCategories(db, journal.competitionId, from);
     const lastAppliedRev = lastAppliedRevOf(db, journal.competitionId, from);

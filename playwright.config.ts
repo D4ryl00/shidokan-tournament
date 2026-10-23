@@ -23,5 +23,12 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 180_000,
     },
+    {
+      // Portable de zone (rôle local), relié au premier pendant les tests des zones autonomes.
+      command: 'node tests/e2e/portable-server.mjs',
+      url: 'http://localhost:3102/api/health',
+      reuseExistingServer: false,
+      timeout: 180_000,
+    },
   ],
 });

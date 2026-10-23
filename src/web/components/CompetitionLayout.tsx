@@ -10,6 +10,7 @@ import { useHasUnsaved } from '../unsaved.js';
 import { sessionParam } from '../useSelectedWave.js';
 import { HelpButton, HelpText } from './Help.js';
 import { ManagementBanner } from './SyncPanel.js';
+import { ZoneAutonomyBar } from './ZoneAutonomyBar.js';
 import { useCompetitionEvents } from '../liveUpdates.js';
 
 
@@ -65,6 +66,7 @@ export function CompetitionLayout() {
               data={[{ value: 'organisation', label: 'Organisation (tout)' }, { value: 'table', label: 'Table centrale' }, ...zones.map((z) => ({ value: `zone:${z.id}`, label: `Zone : ${z.name}` }))]} />
           )}
         </Group>
+        <ZoneAutonomyBar competitionId={id} />
         {zoneMissing && <Alert color="orange" mt="xs" data-testid="account-zone-missing">La zone de ce compte n’existe plus : demandez à un organisateur.</Alert>}
       </div>
       <Tabs value={current} onChange={(v) => v && v !== current && go(v)}>

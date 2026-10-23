@@ -3,7 +3,9 @@ import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
 import { competitionChanged } from '../events.js';
 import { getManagement } from '../sync/ownership.js';
-import { fromMain, getZoneLink, resetZoneLinkStatus, restartZoneFollow, setZoneLink, ZoneLinkError, zoneLinkStatus } from '../zone/link.js';
+import type { JournalReport } from '../zone/replay.js';
+import { journalFile, markSent, whileSending } from '../zone/autonomous.js';
+import { copyFromMain, fromMain, getZoneLink, resetZoneLinkStatus, restartZoneFollow, setZoneLink, ZoneLinkError, zoneLinkStatus } from '../zone/link.js';
 
 const mainUrlSchema = z
   .string()
@@ -63,6 +65,55 @@ export async function zoneLinkRoutes(app: FastifyInstance, { db, dbPath }: { db:
     if (!link || !getManagement(db, link.competitionId).copyOfMain) throw new ZoneLinkError(409, 'Seule une copie du PC principal peut passer en zone autonome.');
     if (!link.autonomous) setZoneLink(db, { ...link, autonomous: { since: new Date().toISOString(), finals: false } });
     competitionChanged(link.competitionId);
+    return reply.status(204).send();
+  });
+
+  const autonomousOnly = () => {
+    const link = getZoneLink(db);
+    if (!link?.autonomous) throw new ZoneLinkError(409, 'Ce PC n’est pas en zone autonome.');
+    return link;
+  };
+  const stopAutonomy = () => {
+    const link = getZoneLink(db);
+    if (link) setZoneLink(db, { ...link, autonomous: null });
+    if (link) competitionChanged(link.competitionId);
+  };
+
+  /** Réseau revenu : le journal part au PC principal ; la zone autonome s'arrête seulement s'il l'a reçu. */
+  app.post('/api/zone-link/online', async () => {
+    const link = autonomousOnly();
+    return whileSending(link.competitionId, async () => {
+      const journal = journalFile(db, link);
+      const report = await fromMain<JournalReport>(link.mainUrl, `/api/competitions/${encodeURIComponent(link.competitionId)}/zone-journal`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(journal),
+      });
+      markSent(db, journal.entries.map((e) => e.id));
+      stopAutonomy();
+      await copyFromMain(db, dbPath);
+      return { report, zoneName: journal.zoneName, mainUrl: link.mainUrl };
+    });
+  });
+
+  /** Réseau absent : le journal en fichier (clé USB), sans rien changer ici. */
+  app.get('/api/zone-link/journal.json', async (_req, reply) => {
+    const link = autonomousOnly();
+    const journal = journalFile(db, link);
+    const p = (n: number) => String(n).padStart(2, '0');
+    const d = new Date();
+    const stamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+    const zone = journal.zoneName.normalize('NFD').replace(/[^\w-]+/g, '-').replace(/-+/g, '-').slice(0, 40);
+    return reply.header('Content-Disposition', `attachment; filename="journal-${zone}-${stamp}.json"`).send(journal);
+  });
+
+  /** Après l'export du journal : la zone autonome s'arrête (ce qui serait saisi ensuite ne serait pas dans le fichier). */
+  app.post('/api/zone-link/stop', async (req, reply) => {
+    const { exported } = z.object({ exported: z.literal(true).optional() }).strict().parse(req.body ?? {});
+    const link = autonomousOnly();
+    if (!exported) throw new ZoneLinkError(400, 'Exportez d’abord le journal (fichier).');
+    markSent(db, journalFile(db, link).entries.map((e) => e.id));
+    stopAutonomy();
+    // La copie reprend dès que le PC principal répond.
+    void copyFromMain(db, dbPath).catch((e) => app.log.error(e));
     return reply.status(204).send();
   });
 

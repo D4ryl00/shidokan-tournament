@@ -13,9 +13,9 @@ export type Cat = { id: string; label: string; zoneId: string | null; bracket?: 
 
 /**
  * PC principal (rôle local) : compétition à deux zones et deux sessions. Session « Matin » (cadets, lancée) : -54 et kata sur
- * Tatami 1, -61 sur Tatami 2 ; session « Après-midi » (minimes, pas lancée) : -45 sur Tatami 1.
+ * Tatami 1, -61 sur Tatami 2 ; session « Après-midi » (minimes, pas lancée) : -45 sur Tatami 1. `finalsOnT2` : zone des finales Tatami 2.
  */
-export async function mainCompetition() {
+export async function mainCompetition(opts: { finalsOnT2?: boolean } = {}) {
   const mainPath = tmpDbPath();
   const main = await buildApp({ dbPath: mainPath, instanceName: 'PC-PRINCIPAL' });
   const onMain = (method: Method, url: string, payload?: unknown, headers: Record<string, string> = {}) => main.inject({ method, url, payload: payload as object, headers });
@@ -23,6 +23,7 @@ export async function mainCompetition() {
   const base = `/api/competitions/${id}`;
   const zones = (await onMain('GET', `${base}/zones`)).json() as { id: string; name: string }[];
   const [t1, t2] = zones.map((z) => z.id) as [string, string];
+  if (opts.finalsOnT2) expect((await onMain('PATCH', base, { settings: { finalsZoneId: t2 } })).statusCode).toBe(200);
   let n = 0;
   const register = (discipline: 'karate' | 'kata', ageBandCode: string, weightClassId: string | null) =>
     onMain('POST', `${base}/registrations`, { clubId: null, lastName: `NOM${++n}`, firstName: 'x', sex: 'F', ageBandCode, discipline, ruleset: discipline === 'kata' ? null : 'jiyu', weightClassId, source: 'manual' });
@@ -42,20 +43,20 @@ export async function mainCompetition() {
 }
 
 /** Le PC principal écoute, et un portable de zone relié à lui sur Tatami 1, avec sa copie. */
-export async function mainAndLaptop() {
-  const m = await mainCompetition();
+export async function mainAndLaptop(opts: { finalsOnT2?: boolean; zone?: 't1' | 't2' } = {}) {
+  const m = await mainCompetition(opts);
   await m.main.listen({ port: 0, host: '127.0.0.1' });
   const mainUrl = `http://127.0.0.1:${(m.main.server.address() as { port: number }).port}`;
   const laptopPath = tmpDbPath();
-  const laptop = await buildApp({ dbPath: laptopPath, instanceName: 'PORTABLE-T1' });
+  const laptop = await buildApp({ dbPath: laptopPath, instanceName: opts.zone === 't2' ? 'PORTABLE-T2' : 'PORTABLE-T1' });
   const laptopDb: AppDb = openDb(laptopPath);
   const onLaptop = (method: Method, url: string, payload?: unknown, headers: Record<string, string> = {}) => laptop.inject({ method, url, payload: payload as object, headers });
-  expect((await onLaptop('PUT', '/api/zone-link', { mainUrl, competitionId: m.id, zoneId: m.t1 })).statusCode).toBe(200);
+  expect((await onLaptop('PUT', '/api/zone-link', { mainUrl, competitionId: m.id, zoneId: opts.zone === 't2' ? m.t2 : m.t1 })).statusCode).toBe(200);
   expect(await copyFromMain(laptopDb, laptopPath)).toEqual({ ok: true });
   const close = async () => {
     closeDb(laptopDb);
     await laptop.close();
-    await m.main.close();
+    await m.main.close().catch(() => undefined);
   };
   return { ...m, mainUrl, laptop, laptopPath, laptopDb, onLaptop, close };
 }
@@ -74,6 +75,15 @@ export function holdResponses() {
     release();
     spy.mockRestore();
   };
+}
+/** Les requêtes partent et sont traitées par l'autre côté, mais leurs réponses sont perdues (coupure juste après). */
+export function loseResponses() {
+  const real = globalThis.fetch;
+  const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (...args: Parameters<typeof fetch>) => {
+    await real(...args);
+    throw new TypeError('fetch failed', { cause: { code: 'ECONNRESET' } });
+  });
+  return () => spy.mockRestore();
 }
 export const tick = (ms = 100) => new Promise((r) => setTimeout(r, ms));
 export const RESULT = { winner: 'a', method: 'points', score: null };

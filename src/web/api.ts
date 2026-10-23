@@ -419,7 +419,8 @@ export interface QueueItem {
   held: boolean;
 }
 export interface ScheduleData {
-  zones: { zone: Zone; categories: ScheduleCategory[]; queue: QueueItem[] }[];
+  /** `waitingOtherZones` : combats de la zone qui attendent les résultats d'une autre zone. */
+  zones: { zone: Zone; categories: ScheduleCategory[]; queue: QueueItem[]; waitingOtherZones: number }[];
   unassigned: ScheduleCategory[];
   impossible: PassagePlan['impossible'];
 }
@@ -875,6 +876,28 @@ export function useSetZoneLink() {
     mutationFn: (v: { mainUrl: string; competitionId: string; zoneId: string } | null) => api<ZoneLinkView>('PUT', '/api/zone-link', v),
     onSuccess: (l) => qc.setQueryData(['zone-link'], l),
   });
+}
+/** Gestes de la zone autonome : toutes les données sont relues ensuite (lecture seule levée ou remise, copie reprise). */
+function useZoneLinkMutation<V, R>(fn: (v: V) => Promise<R>) {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries() });
+}
+export const useStartAutonomy = () => useZoneLinkMutation(() => api<void>('POST', '/api/zone-link/autonomous'));
+export const useGoOnline = () =>
+  useZoneLinkMutation(() => api<{ report: JournalReport; zoneName: string; mainUrl: string }>('POST', '/api/zone-link/online'));
+export const useStopAutonomy = () => useZoneLinkMutation(() => api<void>('POST', '/api/zone-link/stop', { exported: true }));
+/** Le journal en fichier (clé USB) : téléchargé tel que le serveur le nomme. */
+export async function downloadZoneJournal(): Promise<void> {
+  const res = await fetch('/api/zone-link/journal.json');
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new ApiError(res.status, data.error ?? `Erreur ${res.status}`);
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'journal-zone.json';
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 export const useProbeMain = () =>
   useMutation({ mutationFn: (mainUrl: string) => api<{ competitions: { id: string; name: string; zones: { id: string; name: string }[] }[] }>('POST', '/api/zone-link/probe', { mainUrl }) });

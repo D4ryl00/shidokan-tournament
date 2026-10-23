@@ -5,7 +5,8 @@ import type { AppDb } from '../db/client.js';
 import { launchedCategoryIds } from '../repositories/launch-state.js';
 import { matchEntrants } from '../repositories/results.js';
 import { kataRev, resultRev, tieBreakRev } from '../revisions.js';
-import { targetKey, type ZoneEntry } from './entry.js';
+import { myIdentity } from '../sync/pull.js';
+import { targetKey, type ZoneEntry, type ZoneJournalFile } from './entry.js';
 import { getZoneLink, type ZoneLink } from './link.js';
 
 const C = '/api/competitions/:id';
@@ -30,8 +31,20 @@ export function autonomousLink(db: AppDb, competitionId: string | undefined): Zo
   return owner?.o && owner.o === link.mainInstanceId ? link : null;
 }
 
+/** Compétitions dont le journal part au PC principal : aucune saisie pendant l'envoi (elle ne serait pas dans le journal envoyé). */
+const sending = new Set<string>();
+export async function whileSending<T>(competitionId: string, fn: () => Promise<T>): Promise<T> {
+  sending.add(competitionId);
+  try {
+    return await fn();
+  } finally {
+    sending.delete(competitionId);
+  }
+}
+
 /** Décision de la garde en zone autonome : null = permis, sinon le message de refus. */
 export async function autonomousRefusal(db: AppDb, link: ZoneLink, method: string, route: string, params: Record<string, string>): Promise<string | null> {
+  if (sending.has(link.competitionId)) return 'Envoi du journal en cours : réessayez dans un instant.';
   const name = zoneName(db, link);
   if (!ZONE_WRITES[`${method} ${route}`] || !params.cid) return `Zone autonome : seules les saisies de la zone ${name} sont possibles sur ce PC.`;
   // Une session pas encore lancée sur la copie peut changer de zone au lancement sur le PC principal.
@@ -86,6 +99,21 @@ export function registerZoneJournal(app: FastifyInstance, db: AppDb): void {
       .run(entry.id, competitionId, entry.zoneId, entry.seq, entry.kind, entry.categoryId, targetKey(entry), JSON.stringify(entry));
     return payload;
   });
+}
+
+/** Le journal des saisies pas encore envoyées, tel qu'il part au PC principal (réseau ou fichier). */
+export function journalFile(db: AppDb, link: ZoneLink): ZoneJournalFile {
+  return {
+    format: 'shidokan-zone-journal', formatVersion: 1, competitionId: link.competitionId, zoneId: link.zoneId, zoneName: zoneName(db, link),
+    from: myIdentity(db), entries: pendingEntries(db, link.competitionId),
+  };
+}
+
+/** Saisies marquées envoyées (réseau réussi, ou fichier exporté). */
+export function markSent(db: AppDb, ids: string[]): void {
+  const now = new Date().toISOString();
+  const mark = db.$client.prepare('update zone_journal set sent_at = ? where id = ? and sent_at is null');
+  db.$client.transaction(() => ids.forEach((id) => mark.run(now, id)))();
 }
 
 /** Saisies pas encore envoyées au PC principal, dans l'ordre. */

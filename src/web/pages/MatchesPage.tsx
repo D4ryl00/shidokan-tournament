@@ -4,7 +4,7 @@ import { useParams } from 'react-router';
 import { resolveBracket, type ResolvedMatch } from '../../domain/brackets/index.js';
 import { activeEntrantCount } from '../../domain/categories.js';
 import { validResults } from '../../domain/results.js';
-import { useCategories, useCategoryResults, useDeleteResult, usePassages, useSchedule, useUpdateCategory, useZones } from '../api.js';
+import { useAuthMe, useCategories, useCategoryResults, useDeleteResult, usePassages, useSchedule, useUpdateCategory, useZoneLink, useZones } from '../api.js';
 import { ZonesImpossibleAlert } from '../components/ZonesImpossibleAlert.js';
 import { WaveLaunchPanel } from '../components/WaveLaunchPanel.js';
 import { MoveDialog } from '../components/MoveDialog.js';
@@ -51,6 +51,8 @@ export function MatchesPage() {
   // Avec une vague : ses catégories seulement.
   // Poste « Zone » : seulement sa zone (catégories qui s'y jouent, sa file), sans les réglages de zone et d'ordre.
   const [poste, , imposed] = usePoste(id);
+  const { data: me } = useAuthMe();
+  const autonomous = !!useZoneLink(me?.role === 'local').data?.link?.autonomous;
   const zoneOnly = poste.kind === 'zone' ? poste.zoneId : null;
   // Une catégorie dont un passage est dans la file de la zone (finales sur la zone des finales) en fait partie aussi.
   const inZoneQueue = new Set((schedule?.zones ?? []).filter((t) => t.zone.id === zoneOnly).flatMap((t) => t.queue.map((q) => q.categoryId)));
@@ -127,6 +129,11 @@ export function MatchesPage() {
               <Card key={t.zone.id} withBorder data-testid="zone-card">
                 <Group gap={4}><Title order={5}>{t.zone.name}</Title><HelpButton topic="combats.zone" /></Group>
                 {t.queue.length === 0 && <Text size="sm" c="dimmed">Aucun combat en attente.</Text>}
+                {autonomous && t.waitingOtherZones > 0 && (
+                  <Text size="sm" c="orange" data-testid="waiting-other-zones">
+                    {t.waitingOtherZones} combat{t.waitingOtherZones > 1 ? 's' : ''} en attente des résultats des autres zones
+                  </Text>
+                )}
                 {t.queue.map((q) =>
                   q.matchId === null ? (
                     <Group key={`${q.categoryId}-kata`} justify="space-between" wrap="nowrap" mt={6} data-testid="next-kata">
