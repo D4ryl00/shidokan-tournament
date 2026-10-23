@@ -28,6 +28,7 @@ import { waveRoutes } from './routes/waves.js';
 import { launchRoutes } from './routes/launches.js';
 import { zoneRoutes } from './routes/zones.js';
 import { backupRoutes } from './routes/backups.js';
+import { directoryRoutes } from './routes/directory.js';
 import { RestoreError, startAutoBackup } from './repositories/backups.js';
 import { ensureInstance } from './repositories/instance.js';
 import { ffkImportRoutes } from './routes/ffk-import.js';
@@ -125,6 +126,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(waveRoutes, { db });
   await app.register(launchRoutes, { db });
   await app.register(backupRoutes, { db, dbPath: opts.dbPath });
+  await app.register(directoryRoutes, { db });
 
   // Après toute écriture réussie qui touche aux inscriptions ou aux réglages : catégories et tableaux à jour.
   app.addHook('onResponse', async (req, reply) => {

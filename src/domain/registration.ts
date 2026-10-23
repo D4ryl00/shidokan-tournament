@@ -172,3 +172,21 @@ export function combatConflictWarning(
     ? `Ce combattant est déjà inscrit en ${DISCIPLINES[other.discipline].label} : une seule discipline de combat par jour est prévue.`
     : null;
 }
+
+/** Fiche de l'annuaire des clubs (indépendante des compétitions). */
+export interface DirectoryInput {
+  name: string;
+  affiliationNumber: string | null;
+  coachName: string | null;
+  coachPhone: string | null;
+  coachEmail: string | null;
+  notes: string | null;
+}
+export interface DirectoryEntry extends DirectoryInput {
+  id: string;
+  ffkEntity: string | null;
+  archived: boolean;
+  createdAt: string;
+  /** Nombre de clubs de compétition reliés à cette fiche. */
+  competitions: number;
+}
