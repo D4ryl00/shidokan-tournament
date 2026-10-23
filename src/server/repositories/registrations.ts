@@ -15,6 +15,7 @@ import type { ProposalType } from '../../domain/replacement/types.js';
 import type { DisciplineId } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
 import { withoutRowMeta } from '../db/row-versions.js';
+import { rowRev } from '../revisions.js';
 import { linkClub } from '../db/club-directory.js';
 import { categories, clubs, fighters, registrations } from '../db/schema.js';
 import { getCompetition, getGrid } from './competitions.js';
@@ -100,7 +101,7 @@ export async function listRegistrations(db: AppDb, competitionId: string): Promi
     .map((r) => {
       const f = fs.get(r.fighterId)!;
       const c = f.clubId ? cs.get(f.clubId) : undefined;
-      return { ...toRegistration(r), fighter: toFighter(f), club: c ? toClub(c) : null, _sort: `${c?.nameKey ?? '~'}|${f.nameKey}` };
+      return { ...toRegistration(r), fighter: toFighter(f), club: c ? toClub(c) : null, rev: `${rowRev(r.version)}:${rowRev(f.version)}`, _sort: `${c?.nameKey ?? '~'}|${f.nameKey}` };
     })
     .sort((a, b) => a._sort.localeCompare(b._sort))
     .map(({ _sort, ...row }) => row);
@@ -169,7 +170,7 @@ function rowById(db: AppDb, id: string): RegistrationRow {
   const r = db.select().from(registrations).where(eq(registrations.id, id)).get()!;
   const f = db.select().from(fighters).where(eq(fighters.id, r.fighterId)).get()!;
   const c = f.clubId ? db.select().from(clubs).where(eq(clubs.id, f.clubId)).get() : undefined;
-  return { ...toRegistration(r), fighter: toFighter(f), club: c ? toClub(c) : null };
+  return { ...toRegistration(r), fighter: toFighter(f), club: c ? toClub(c) : null, rev: `${rowRev(r.version)}:${rowRev(f.version)}` };
 }
 
 export async function createRegistration(

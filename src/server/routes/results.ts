@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
+import { checkRev, kataRev, resultRev, tieBreakRev } from '../revisions.js';
 import { getCompetition } from '../repositories/competitions.js';
 import { passagePlan } from '../repositories/passages.js';
 import { deleteResult, exportPodiums, exportResults, getResults, podiums, putKataNotes, putResult, putTieBreak, schedule } from '../repositories/results.js';
@@ -19,20 +20,24 @@ export async function resultRoutes(app: FastifyInstance, { db }: { db: AppDb }) 
       .object({ winner: z.enum(['a', 'b']), method: z.enum(['points', 'decision', 'ko', 'abandon', 'disqualification', 'forfeit']), score: z.string().trim().max(30).nullable().optional() })
       .strict()
       .parse(req.body);
+    checkRev(req.headers['if-match'], resultRev(db, req.params.cid, req.params.matchId));
     return putResult(db, req.params.id, req.params.cid, req.params.matchId, data);
   });
   app.delete<{ Params: { id: string; cid: string; matchId: string } }>('/api/competitions/:id/categories/:cid/results/:matchId', async (req, reply) => {
+    checkRev(req.headers['if-match'], resultRev(db, req.params.cid, req.params.matchId));
     await deleteResult(db, req.params.id, req.params.cid, req.params.matchId);
     return reply.status(204).send();
   });
   app.put<{ Params: { id: string; cid: string; rid: string; round: string } }>('/api/competitions/:id/categories/:cid/kata/:rid/:round', async (req, reply) => {
     const round = z.enum(['round1', 'final']).parse(req.params.round);
     const { notes } = z.object({ notes: z.array(z.number().min(0).max(10)).max(7) }).strict().parse(req.body);
+    checkRev(req.headers['if-match'], kataRev(db, req.params.cid, req.params.rid, round));
     await putKataNotes(db, req.params.id, req.params.cid, req.params.rid, round, notes);
     return reply.status(204).send();
   });
   app.put<P>('/api/competitions/:id/categories/:cid/tie-break', async (req, reply) => {
     const { scope, order } = z.object({ scope: z.string().regex(/^(kata|kata:final|pool:\d+)$/), order: z.array(z.string()).min(2) }).strict().parse(req.body);
+    checkRev(req.headers['if-match'], tieBreakRev(db, req.params.cid, scope));
     await putTieBreak(db, req.params.id, req.params.cid, scope, order);
     return reply.status(204).send();
   });

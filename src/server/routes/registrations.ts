@@ -5,6 +5,7 @@ import { NotAClubFormError, parseClubForm, parseClubFormLines } from '../../doma
 import { buildClubFormTemplate } from '../club-form-template.js';
 import { buildClubFormPdf } from '../club-form-pdf.js';
 import type { AppDb } from '../db/client.js';
+import { checkRev, registrationRev } from '../revisions.js';
 import { getCompetition, getGrid } from '../repositories/competitions.js';
 import {
   createRegistration,
@@ -132,11 +133,14 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
     return reply.status(201).send(result);
   });
 
-  app.put<{ Params: { id: string; rid: string } }>('/api/competitions/:id/registrations/:rid', async (req) =>
-    updateRegistration(db, req.params.id, req.params.rid, registrationInputSchema.parse(req.body)),
-  );
+  app.put<{ Params: { id: string; rid: string } }>('/api/competitions/:id/registrations/:rid', async (req) => {
+    const input = registrationInputSchema.parse(req.body);
+    checkRev(req.headers['if-match'], registrationRev(db, req.params.rid));
+    return updateRegistration(db, req.params.id, req.params.rid, input);
+  });
 
   app.delete<{ Params: { id: string; rid: string } }>('/api/competitions/:id/registrations/:rid', async (req, reply) => {
+    checkRev(req.headers['if-match'], registrationRev(db, req.params.rid));
     await deleteRegistration(db, req.params.id, req.params.rid);
     return reply.status(204).send();
   });

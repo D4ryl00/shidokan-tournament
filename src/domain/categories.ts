@@ -73,6 +73,8 @@ export type CategoryStatus = 'provisional' | 'ready' | 'started' | 'finished';
 
 export interface Category {
   id: string;
+  /** Révision : protection contre les écrasements entre postes. */
+  rev: string;
   competitionId: string;
   key: CategoryKey;
   label: string;

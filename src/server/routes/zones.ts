@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { DISCIPLINES } from '../../domain/disciplines.js';
 import type { DisciplineId } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
+import { checkRev, tableListRev } from '../revisions.js';
 import { getCompetition } from '../repositories/competitions.js';
 import { listZones, replaceZones } from '../repositories/zones.js';
 
@@ -17,9 +18,14 @@ export async function zoneRoutes(app: FastifyInstance, { db }: { db: AppDb }) {
     const id = (req.params as { id?: string }).id;
     if (id && !(await getCompetition(db, id))) return reply.status(404).send({ error: 'Compétition introuvable' });
   });
-  app.get<P>('/api/competitions/:id/zones', async (req) => listZones(db, req.params.id));
-  app.put<P>('/api/competitions/:id/zones', async (req) => {
+  app.get<P>('/api/competitions/:id/zones', async (req, reply) => {
+    reply.header('ETag', `"${tableListRev(db, 'zones', req.params.id)}"`);
+    return listZones(db, req.params.id);
+  });
+  app.put<P>('/api/competitions/:id/zones', async (req, reply) => {
     const body = zonesSchema.parse(req.body);
+    checkRev(req.headers['if-match'], tableListRev(db, 'zones', req.params.id));
+    reply.header('Cache-Control', 'no-store');
     return Array.isArray(body) ? replaceZones(db, req.params.id, body) : replaceZones(db, req.params.id, body.zones, body.knownIds);
   });
 }

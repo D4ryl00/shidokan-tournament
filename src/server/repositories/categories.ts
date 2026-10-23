@@ -20,6 +20,7 @@ import type { CompetitionSettings } from '../../domain/settings.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import { WAVE_NONE, waveOfCategory, type Wave } from '../../domain/waves.js';
 import type { AppDb } from '../db/client.js';
+import { rowRev } from '../revisions.js';
 import { categories, fighters, registrations, tieBreaks, zones } from '../db/schema.js';
 import { getCompetition, getGrid } from './competitions.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
@@ -224,6 +225,7 @@ function toCategory(row: Row, ctx: Context): Category {
   const ids = ctx.members.get(row.id) ?? [];
   return {
     id: row.id,
+    rev: rowRev(row.version),
     competitionId: row.competitionId,
     key,
     label: row.label,

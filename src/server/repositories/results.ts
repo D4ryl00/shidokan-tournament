@@ -4,6 +4,7 @@ import { resolveBracket, type Bracket, type MatchMethod } from '../../domain/bra
 import { kataScore, resolveKata, type KataScores } from '../../domain/brackets/kata.js';
 import { affectedBy, categoryProgress, checkResult, medalTable, validResults, type CategoryProgress, type ResultRecord } from '../../domain/results.js';
 import type { AppDb } from '../db/client.js';
+import { rowRev } from '../revisions.js';
 import { categories, clubs, fighters, kataScores, matchResults, registrations, tieBreaks } from '../db/schema.js';
 import { listCategories } from './categories.js';
 import { listZones } from './zones.js';
@@ -64,11 +65,14 @@ function kataTieBreaks(db: AppDb, categoryId: string): [string[], string[]] {
 }
 
 export interface CategoryResults {
-  records: ResultRecord[];
+  /** `rev` : révision de chaque résultat (protection contre les écrasements entre postes). */
+  records: (ResultRecord & { rev: string })[];
   ignored: ResultRecord[];
   progress: CategoryProgress;
   kataScores: KataScores;
   tieBreaks: { pools: Record<number, string[]>; kata: string[]; kataFinal: string[] };
+  kataRevs: Record<string, { round1?: string; final?: string }>;
+  tieBreakRevs: Record<string, string>;
 }
 
 export async function getResults(db: AppDb, competitionId: string, categoryId: string): Promise<CategoryResults> {
@@ -78,7 +82,15 @@ export async function getResults(db: AppDb, competitionId: string, categoryId: s
   const tb = loadTieBreaks(db, categoryId);
   const progress = categoryProgress(row.bracket, records, kata, tb.pools, tb.kata, tb.kataFinal);
   const ignored = row.bracket.kind === 'combat' ? validResults(row.bracket, records, tb.pools).ignored : [];
-  return { records, ignored, progress, kataScores: kata, tieBreaks: tb };
+  const revOf = new Map((db.$client.prepare('select match_id as m, version as v from match_results where category_id = ?').all(categoryId) as { m: string; v: number | null }[]).map((r) => [r.m, rowRev(r.v)]));
+  const kataRevs: CategoryResults['kataRevs'] = {};
+  for (const k of db.$client.prepare('select registration_id as r, round, version as v from kata_scores where category_id = ?').all(categoryId) as { r: string; round: 'round1' | 'final'; v: number | null }[]) {
+    (kataRevs[k.r] ??= {})[k.round] = rowRev(k.v);
+  }
+  const tieBreakRevs = Object.fromEntries(
+    (db.$client.prepare('select scope, version as v from tie_breaks where category_id = ?').all(categoryId) as { scope: string; v: number | null }[]).map((t) => [t.scope, rowRev(t.v)]),
+  );
+  return { records: records.map((r) => ({ ...r, rev: revOf.get(r.matchId) ?? '0' })), ignored, progress, kataScores: kata, tieBreaks: tb, kataRevs, tieBreakRevs };
 }
 
 /** Statut automatique après une saisie : lancée, terminée, ou sans aucun résultat de nouveau prête (une provisoire le reste). */

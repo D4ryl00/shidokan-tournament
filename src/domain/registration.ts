@@ -79,6 +79,8 @@ export interface RegistrationInput {
 export interface RegistrationRow extends Registration {
   fighter: Fighter;
   club: Club | null;
+  /** Révision (inscription et combattant) : protection contre les écrasements entre postes. */
+  rev: string;
 }
 
 const BY_CODE = new Map(

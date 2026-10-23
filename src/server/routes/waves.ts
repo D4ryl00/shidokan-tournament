@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { DISCIPLINES } from '../../domain/disciplines.js';
 import type { DisciplineId } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
+import { checkRev, tableListRev } from '../revisions.js';
 import { getCompetition } from '../repositories/competitions.js';
 import { listWaves, replaceWaves } from '../repositories/waves.js';
 
@@ -24,9 +25,14 @@ export async function waveRoutes(app: FastifyInstance, { db }: { db: AppDb }) {
     const id = (req.params as { id?: string }).id;
     if (id && !(await getCompetition(db, id))) return reply.status(404).send({ error: 'Compétition introuvable' });
   });
-  app.get<P>('/api/competitions/:id/waves', async (req) => listWaves(db, req.params.id));
-  app.put<P>('/api/competitions/:id/waves', async (req) => {
+  app.get<P>('/api/competitions/:id/waves', async (req, reply) => {
+    reply.header('ETag', `"${tableListRev(db, 'waves', req.params.id)}"`);
+    return listWaves(db, req.params.id);
+  });
+  app.put<P>('/api/competitions/:id/waves', async (req, reply) => {
     const body = wavesSchema.parse(req.body);
+    checkRev(req.headers['if-match'], tableListRev(db, 'waves', req.params.id));
+    reply.header('Cache-Control', 'no-store');
     return Array.isArray(body) ? replaceWaves(db, req.params.id, body) : replaceWaves(db, req.params.id, body.waves, body.knownIds);
   });
 }
