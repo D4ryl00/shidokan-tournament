@@ -8,11 +8,13 @@ import { useHasUnsaved } from '../unsaved.js';
 import { sessionParam } from '../useSelectedWave.js';
 import { HelpButton, HelpText } from './Help.js';
 import { ManagementBanner } from './SyncPanel.js';
+import { useCompetitionEvents } from '../liveUpdates.js';
 
 
 export function CompetitionLayout() {
   const { id = '' } = useParams();
   const { data, isLoading } = useCompetition(id);
+  useCompetitionEvents(id);
   const navigate = useNavigate();
   const current = useLocation().pathname.split('/')[3] ?? 'reglages';
   const unsaved = useHasUnsaved();

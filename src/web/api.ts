@@ -23,10 +23,14 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T>(method: string, url: string, body?: unknown): Promise<T> {
+/** `rev` : révision de la donnée telle que l'écran l'a lue (null : elle n'existait pas) ; envoyée en If-Match. */
+export async function api<T>(method: string, url: string, body?: unknown, opts: { rev?: string | null } = {}): Promise<T> {
   const res = await fetch(url, {
     method,
-    headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+    headers: {
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...(opts.rev === undefined ? {} : { 'If-Match': opts.rev ?? 'none' }),
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
@@ -117,17 +121,19 @@ export function useCreateRegistration(id: string) {
 
 export function useUpdateRegistration(id: string) {
   const invalidate = useInvalidateRegistrations(id);
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ rid, input }: { rid: string; input: RegistrationInput }) =>
-      api<RegistrationRow>('PUT', `/api/competitions/${id}/registrations/${rid}`, input),
+      api<RegistrationRow>('PUT', `/api/competitions/${id}/registrations/${rid}`, input, { rev: registrationRevOf(qc, id, rid) }),
     onSuccess: invalidate,
   });
 }
 
 export function useDeleteRegistration(id: string) {
   const invalidate = useInvalidateRegistrations(id);
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: (rid: string) => api<void>('DELETE', `/api/competitions/${id}/registrations/${rid}`),
+    mutationFn: (rid: string) => api<void>('DELETE', `/api/competitions/${id}/registrations/${rid}`, undefined, { rev: registrationRevOf(qc, id, rid) }),
     onSuccess: invalidate,
   });
 }
@@ -226,18 +232,27 @@ export function useCategories(id: string) {
   return useQuery({ queryKey: ['categories', id], queryFn: () => api<Category[]>('GET', `/api/competitions/${id}/categories`) });
 }
 
-function useCategoryMutation<T>(id: string, fn: (arg: T) => Promise<Category>) {
+function useCategoryMutation<T>(id: string, fn: (arg: T, qc: QC) => Promise<Category>) {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: fn, onSuccess: () => Promise.all(['categories', 'schedule'].map((k) => qc.invalidateQueries({ queryKey: [k, id] }))) });
+  return useMutation({
+    mutationFn: (arg: T) => fn(arg, qc),
+    onSuccess: (updated) => {
+      // Nouvelle révision tout de suite en cache : un second clic rapide ne passe pas pour une écriture périmée.
+      qc.setQueryData<Category[]>(['categories', id], (list) => list?.map((c) => (c.id === updated.id ? updated : c)));
+      return Promise.all(['categories', 'schedule'].map((k) => qc.invalidateQueries({ queryKey: [k, id] })));
+    },
+  });
 }
 
 export const useUpdateCategory = (id: string) =>
-  useCategoryMutation(id, ({ cid, ...patch }: { cid: string; format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null; status?: CategoryStatus; unlock?: boolean; zoneId?: string | null; waveOverride?: string | null; order?: number }) =>
-    api<Category>('PATCH', `/api/competitions/${id}/categories/${cid}`, patch),
+  useCategoryMutation(id, ({ cid, ...patch }: { cid: string; format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null; status?: CategoryStatus; unlock?: boolean; zoneId?: string | null; waveOverride?: string | null; order?: number }, qc) =>
+    api<Category>('PATCH', `/api/competitions/${id}/categories/${cid}`, patch, { rev: categoryRevOf(qc, id, cid) }),
   );
-export const useRedraw = (id: string) => useCategoryMutation(id, (cid: string) => api<Category>('POST', `/api/competitions/${id}/categories/${cid}/redraw`));
+export const useRedraw = (id: string) =>
+  useCategoryMutation(id, (cid: string, qc) => api<Category>('POST', `/api/competitions/${id}/categories/${cid}/redraw`, undefined, { rev: categoryRevOf(qc, id, cid) }));
 export const useSwap = (id: string) =>
-  useCategoryMutation(id, ({ cid, a, b }: { cid: string; a: string; b: string }) => api<Category>('POST', `/api/competitions/${id}/categories/${cid}/swap`, { a, b }));
+  useCategoryMutation(id, ({ cid, a, b }: { cid: string; a: string; b: string }, qc) =>
+    api<Category>('POST', `/api/competitions/${id}/categories/${cid}/swap`, { a, b }, { rev: categoryRevOf(qc, id, cid) }));
 
 // --- Pesée et recasement (étape 5) ---
 
@@ -367,12 +382,21 @@ export interface ScheduleCategory {
   nextMatches: { matchId: string; number: number; a: string; b: string }[];
 }
 export interface CategoryResultsData {
-  records: ResultRecord[];
+  records: (ResultRecord & { rev: string })[];
   ignored: ResultRecord[];
   progress: CategoryProgress;
   kataScores: KataScores;
   tieBreaks: { pools: Record<number, string[]>; kata: string[]; kataFinal: string[] };
+  kataRevs: Record<string, { round1?: string; final?: string }>;
+  tieBreakRevs: Record<string, string>;
 }
+
+// Révisions telles que l'écran les a lues (données en cache) : un autre poste qui a modifié entre-temps → 409.
+// `undefined` (rien en cache) : pas de contrôle.
+type QC = ReturnType<typeof useQueryClient>;
+const categoryRevOf = (qc: QC, id: string, cid: string) => qc.getQueryData<Category[]>(['categories', id])?.find((c) => c.id === cid)?.rev;
+const registrationRevOf = (qc: QC, id: string, rid: string) => qc.getQueryData<RegistrationRow[]>(['registrations', id])?.find((r) => r.id === rid)?.rev;
+const resultsOf = (qc: QC, id: string, cid: string) => qc.getQueryData<CategoryResultsData>(['results', id, cid]);
 
 /** Passage de la file d'une zone : un combat, ou un bloc de kata (`matchId` null). */
 export interface QueueItem {
@@ -424,10 +448,14 @@ export function useLaunchStatus(id: string, waveId: string | null, restart = fal
     enabled,
   });
 }
-function useLaunchAction<T, R = void>(id: string, method: 'POST', path: (arg: T) => string, body: (arg: T) => object | undefined) {
+function useLaunchAction<T, R = void>(id: string, method: 'POST', path: (arg: T) => string, body: (arg: T) => object | undefined, categoryOf?: (arg: T) => string) {
   const qc = useQueryClient();
   const invalidate = () => Promise.all(['categories', 'schedule', 'replacement'].map((k) => qc.invalidateQueries({ queryKey: [k, id] })));
-  return useMutation({ mutationFn: (arg: T) => api<R>(method, `/api/competitions/${id}${path(arg)}`, body(arg)), onSuccess: invalidate, onError: invalidate });
+  return useMutation({
+    mutationFn: (arg: T) => api<R>(method, `/api/competitions/${id}${path(arg)}`, body(arg), { rev: categoryOf ? categoryRevOf(qc, id, categoryOf(arg)) : undefined }),
+    onSuccess: invalidate,
+    onError: invalidate,
+  });
 }
 export const useLaunch = (id: string) => useLaunchAction<{ waveId: string | null; restart: boolean }>(id, 'POST', () => '/launch', (a) => a);
 export const useReopen = (id: string) => useLaunchAction<{ waveId: string | null }>(id, 'POST', () => '/launch/reopen', (a) => a);
@@ -437,7 +465,7 @@ export interface MoveResult {
   reprint: { categoryId: string; label: string }[];
 }
 export const useMoveCategory = (id: string) =>
-  useLaunchAction<{ cid: string; zoneId: string; mode: RenumberMode }, MoveResult>(id, 'POST', (a) => `/categories/${a.cid}/move`, ({ zoneId, mode }) => ({ zoneId, mode }));
+  useLaunchAction<{ cid: string; zoneId: string; mode: RenumberMode }, MoveResult>(id, 'POST', (a) => `/categories/${a.cid}/move`, ({ zoneId, mode }) => ({ zoneId, mode }), (a) => a.cid);
 /** Aperçu d'un déplacement ; `enabled` faux une fois le déplacement lancé (sinon l'aperçu rechargé dirait « déjà sur cette zone »). */
 export function useMovePreview(id: string, cid: string, zoneId: string, mode: RenumberMode, enabled = true) {
   return useQuery({
@@ -448,7 +476,7 @@ export function useMovePreview(id: string, cid: string, zoneId: string, mode: Re
   });
 }
 export const useNumberPending = (id: string) => useLaunchAction<{ waveId: string | null; categoryIds?: string[]; mode?: RenumberMode }, NumberChanges>(id, 'POST', () => '/launch/number', (a) => a);
-export const useRegenerate = (id: string) => useLaunchAction<string, NumberChanges>(id, 'POST', (cid) => `/categories/${cid}/regenerate`, () => undefined);
+export const useRegenerate = (id: string) => useLaunchAction<string, NumberChanges>(id, 'POST', (cid) => `/categories/${cid}/regenerate`, () => undefined, (cid) => cid);
 export function useNumberPreview(id: string) {
   return useMutation({ mutationFn: (body: { waveId: string | null; mode?: RenumberMode }) => api<NumberChanges>('POST', `/api/competitions/${id}/launch/number/preview`, body) });
 }
@@ -500,30 +528,47 @@ function useInvalidateResults(id: string) {
   const qc = useQueryClient();
   return () => Promise.all(['results', 'schedule', 'categories', 'podiums'].map((k) => qc.invalidateQueries({ queryKey: [k, id] })));
 }
+const resultRevOf = (qc: QC, id: string, cid: string, matchId: string) => {
+  const data = resultsOf(qc, id, cid);
+  return data ? (data.records.find((r) => r.matchId === matchId)?.rev ?? null) : undefined;
+};
 export function usePutResult(id: string) {
   const invalidate = useInvalidateResults(id);
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ cid, matchId, ...data }: { cid: string; matchId: string; winner: 'a' | 'b'; method: MatchMethod; score?: string | null }) =>
-      api<{ affected: string[] }>('PUT', `/api/competitions/${id}/categories/${cid}/results/${matchId}`, data),
+      api<{ affected: string[] }>('PUT', `/api/competitions/${id}/categories/${cid}/results/${matchId}`, data, { rev: resultRevOf(qc, id, cid, matchId) }),
     onSuccess: invalidate,
   });
 }
 export function useDeleteResult(id: string) {
   const invalidate = useInvalidateResults(id);
-  return useMutation({ mutationFn: ({ cid, matchId }: { cid: string; matchId: string }) => api<void>('DELETE', `/api/competitions/${id}/categories/${cid}/results/${matchId}`), onSuccess: invalidate });
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ cid, matchId }: { cid: string; matchId: string }) =>
+      api<void>('DELETE', `/api/competitions/${id}/categories/${cid}/results/${matchId}`, undefined, { rev: resultRevOf(qc, id, cid, matchId) }),
+    onSuccess: invalidate,
+  });
 }
 export function usePutKataNotes(id: string) {
   const invalidate = useInvalidateResults(id);
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ cid, rid, round, notes }: { cid: string; rid: string; round: 'round1' | 'final'; notes: number[] }) =>
-      api<void>('PUT', `/api/competitions/${id}/categories/${cid}/kata/${rid}/${round}`, { notes }),
+    mutationFn: ({ cid, rid, round, notes }: { cid: string; rid: string; round: 'round1' | 'final'; notes: number[] }) => {
+      const data = resultsOf(qc, id, cid);
+      return api<void>('PUT', `/api/competitions/${id}/categories/${cid}/kata/${rid}/${round}`, { notes }, { rev: data ? (data.kataRevs[rid]?.[round] ?? null) : undefined });
+    },
     onSuccess: invalidate,
   });
 }
 export function usePutTieBreak(id: string) {
   const invalidate = useInvalidateResults(id);
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ cid, scope, order }: { cid: string; scope: string; order: string[] }) => api<void>('PUT', `/api/competitions/${id}/categories/${cid}/tie-break`, { scope, order }),
+    mutationFn: ({ cid, scope, order }: { cid: string; scope: string; order: string[] }) => {
+      const data = resultsOf(qc, id, cid);
+      return api<void>('PUT', `/api/competitions/${id}/categories/${cid}/tie-break`, { scope, order }, { rev: data ? (data.tieBreakRevs[scope] ?? null) : undefined });
+    },
     onSuccess: invalidate,
   });
 }
