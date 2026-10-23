@@ -44,6 +44,7 @@ import { startMirror } from './mirror.js';
 import { startFollow } from './sync/follow.js';
 import { zoneLinkRoutes } from './routes/zone-link.js';
 import { startZoneFollow } from './zone/link.js';
+import { registerZoneJournal } from './zone/autonomous.js';
 import { authRoutes } from './routes/auth.js';
 import { appSettingsRoutes } from './routes/app-settings.js';
 import { nodemailerTransport, type MailTransport } from './mail.js';
@@ -83,6 +84,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   registerGuard(app, db, role);
   registerPermissions(app, db, role);
   registerReadOnlyGuard(app, db);
+  registerZoneJournal(app, db);
   registerCategoryRevGuard(app, db);
   registerCompetitionEvents(app);
   ensureInstance(db, opts.instanceName ?? 'PC');

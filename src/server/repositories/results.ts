@@ -110,6 +110,16 @@ function clearTieBreaks(db: AppDb, categoryId: string, scopes: string[]): void {
   for (const scope of scopes) db.delete(tieBreaks).where(and(eq(tieBreaks.categoryId, categoryId), eq(tieBreaks.scope, scope))).run();
 }
 
+/** Les deux combattants actuels d'un combat (sans tenir compte de son propre résultat) ; null s'ils ne sont pas connus. */
+export async function matchEntrants(db: AppDb, competitionId: string, categoryId: string, matchId: string): Promise<[string, string] | null> {
+  const row = categoryRow(db, competitionId, categoryId);
+  if (row.bracket.kind !== 'combat') return null;
+  const tb = loadTieBreaks(db, categoryId);
+  const { results } = validResults(row.bracket, loadRecords(db, categoryId).filter((r) => r.matchId !== matchId), tb.pools);
+  const match = resolveBracket(row.bracket, results, tb.pools).matches.find((m) => m.id === matchId);
+  return match?.entrantA && match.entrantB ? [match.entrantA, match.entrantB] : null;
+}
+
 export async function putResult(
   db: AppDb,
   competitionId: string,

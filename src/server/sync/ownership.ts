@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { frenchDate } from '../../domain/mail-template.js';
 import type { AppDb } from '../db/client.js';
+import { autonomousLink, autonomousRefusal } from '../zone/autonomous.js';
 
 /** Où est la main sur une compétition, pour le bandeau des écrans. */
 export interface Management {
@@ -56,7 +57,15 @@ export function registerReadOnlyGuard(app: FastifyInstance, db: AppDb): void {
     if (req.method === 'GET' || req.method === 'HEAD' || !route.startsWith('/api/competitions/:id') || EXEMPT.some((e) => e.test(route))) return;
     const id = (req.params as { id?: string }).id;
     const r = id ? row(db, id) : undefined;
-    if (r?.ownerId) throw new ReadOnlyCompetitionError(readOnlyMessage(r));
+    if (!r?.ownerId) return;
+    // Portable en zone autonome : les saisies de sa zone seulement.
+    const link = autonomousLink(db, id);
+    if (link) {
+      const refusal = await autonomousRefusal(db, link, req.method, route, (req.params ?? {}) as Record<string, string>);
+      if (refusal) throw new ReadOnlyCompetitionError(refusal);
+      return;
+    }
+    throw new ReadOnlyCompetitionError(readOnlyMessage(r));
   });
   app.get<{ Params: { id: string } }>('/api/competitions/:id/management', async (req) => getManagement(db, req.params.id));
 }

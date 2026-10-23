@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
+import { competitionChanged } from '../events.js';
+import { getManagement } from '../sync/ownership.js';
 import { fromMain, getZoneLink, resetZoneLinkStatus, restartZoneFollow, setZoneLink, ZoneLinkError, zoneLinkStatus } from '../zone/link.js';
 
 const mainUrlSchema = z
@@ -53,6 +55,15 @@ export async function zoneLinkRoutes(app: FastifyInstance, { db, dbPath }: { db:
     resetZoneLinkStatus(dbPath);
     restartZoneFollow(dbPath);
     return view();
+  });
+
+  /** Réseau coupé : la copie devient modifiable ici pour les saisies de la zone seulement, notées dans le journal. */
+  app.post('/api/zone-link/autonomous', async (_req, reply) => {
+    const link = getZoneLink(db);
+    if (!link || !getManagement(db, link.competitionId).copyOfMain) throw new ZoneLinkError(409, 'Seule une copie du PC principal peut passer en zone autonome.');
+    if (!link.autonomous) setZoneLink(db, { ...link, autonomous: { since: new Date().toISOString(), finals: false } });
+    competitionChanged(link.competitionId);
+    return reply.status(204).send();
   });
 
   app.post('/api/zone-link/probe', async (req) => {
