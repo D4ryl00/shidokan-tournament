@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { InstanceRole } from '../auth/guard.js';
@@ -19,6 +20,8 @@ export interface SyncPackage {
   handOver: boolean;
   /** Copie servie par le serveur alors qu'un PC a la main : son nom (affiché sur la copie), sinon null. */
   heldBy?: string | null;
+  /** Copie servie par le serveur : empreinte de sa version (competitionFingerprint), retenue par le PC. */
+  fingerprint?: string;
   competitionId: string;
   tables: Record<string, Record<string, unknown>[]>;
   directory: Record<string, unknown>[];
@@ -43,7 +46,6 @@ export class PackageError extends Error {
   readonly statusCode = 400;
 }
 
-/** État de la main : propre à chaque installation, il ne voyage jamais dans un paquet. */
 /** Colonnes de la compétition propres à l'installation : la main, les échanges avec le serveur, le secours. */
 export const OWNER_COLUMNS = ['owner_instance_id', 'owner_name', 'owner_since', 'owner_token_id', 'last_sync_at', 'server_fingerprint', 'rescue_since'];
 
@@ -91,6 +93,24 @@ export function buildPackage(db: AppDb, competitionId: string, opts: { handOver:
     from: { instanceId: me?.id ?? 'inconnue', instanceName: me?.name ?? 'inconnue', role: opts.role },
     handOver: opts.handOver, competitionId, tables, directory,
   };
+}
+
+/**
+ * Empreinte d'une compétition : sha256 du contenu des lignes de son paquet, triées par clé primaire. Les colonnes de la main, l'état
+ * des inscriptions en ligne (figées par une prise de main) et les versions de lignes n'en font pas partie : prendre ou rendre la main
+ * ne la change pas, une donnée modifiée la change.
+ */
+export function competitionFingerprint(db: AppDb, competitionId: string): string {
+  const { tables } = buildPackage(db, competitionId, { handOver: false, role: 'local' });
+  const ignored = new Set(['version', 'updated_at', 'club_entry_status']);
+  const canonical = PACKAGE_TABLES.map((t) => {
+    // age_links est renumérotée à chaque réception : son numéro de ligne ne compte pas, seul son contenu.
+    const pk = t === 'age_links' ? [] : pkOf(db, t);
+    const rows = (tables[t] ?? []).map((r) => Object.keys(r).filter((k) => !ignored.has(k) && !(t === 'age_links' && k === 'id')).sort().map((k) => [k, r[k] ?? null]));
+    const key = (r: unknown[][]) => JSON.stringify(pk.length ? pk.map((k) => r.find(([c]) => c === k)?.[1] ?? null) : r);
+    return [t, rows.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0))];
+  });
+  return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
 }
 
 /** Contrôles d'un paquet reçu (réseau ou fichier), avant toute écriture ; renvoie le paquet typé. */
@@ -171,11 +191,12 @@ export async function importPackage(
   raw: unknown,
   owner: { id: string; name: string } | null,
   now = new Date(),
+  { backup = true }: { backup?: boolean } = {},
 ): Promise<{ competitionId: string; created: boolean }> {
   const pkg = validatePackage(db, raw);
   const id = pkg.competitionId;
   const created = !db.$client.prepare('select 1 from competitions where id = ?').get(id);
-  await backupNow(db, dbPath);
+  if (backup) await backupNow(db, dbPath);
   const client = db.$client;
   // Seules les fiches d'annuaire des clubs du paquet sont reprises.
   const linked = new Set((pkg.tables.clubs ?? []).map((c) => c.directory_club_id).filter(Boolean));

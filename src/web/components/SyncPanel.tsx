@@ -1,4 +1,4 @@
-import { Alert, Anchor, Badge, Button, Checkbox, CopyButton, FileButton, Group, Modal, Radio, Stack, Table, Text, TextInput } from '@mantine/core';
+import { Alert, Anchor, Badge, Button, Checkbox, CopyButton, FileButton, Group, Modal, NumberInput, Radio, Stack, Table, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -14,6 +14,8 @@ import {
   useReceivedCopies,
   useRevokeSyncToken,
   useServerCompetitions,
+  useSetSyncFollow,
+  useSyncFollow,
   useSyncCopy,
   useSyncReturn,
   useSyncSettings,
@@ -86,6 +88,7 @@ export function SyncPanel({ competitionId }: { competitionId: string }) {
     <Stack data-testid="sync-panel">
       <Text fw={600}>{managementText(m)}</Text>
       {!server && !linked && <Text size="sm" c="dimmed">Ce PC n’est pas relié au serveur (Réglages de l’application → Synchronisation) : les échanges se font par fichier.</Text>}
+      {linked && m.copyOfServer && <FollowControl competitionId={competitionId} />}
       {linked && m.copyOfServer && (
         <Group>
           <Button variant="light" data-testid="sync-refresh" loading={pull.isPending && !pull.variables?.take}
@@ -135,6 +138,33 @@ export function SyncPanel({ competitionId }: { competitionId: string }) {
         )}
       </Group>
       <ApiErrorAlert error={pull.error ?? copy.error ?? back.error ?? takeBack.error ?? exportHandOver.error} />
+    </Stack>
+  );
+}
+
+/** « Garder cette copie à jour » : la copie est récupérée de nouveau toutes les N minutes, tant que le serveur a la main. */
+function FollowControl({ competitionId }: { competitionId: string }) {
+  const { data } = useSyncFollow(true);
+  const set = useSetSyncFollow();
+  const [typed, setTyped] = useState<number | null>(null);
+  if (!data) return null;
+  const on = data.competitionId === competitionId;
+  const minutes = typed ?? data.intervalMin;
+  return (
+    <Stack gap={4}>
+      <Group align="end">
+        <Checkbox label="Garder cette copie à jour" data-testid="sync-follow" checked={on} disabled={set.isPending}
+          onChange={(e) => set.mutate(e.currentTarget.checked ? { competitionId, intervalMin: minutes } : null)} />
+        <NumberInput size="xs" w={150} min={1} max={60} label="toutes les … minutes" value={minutes}
+          onChange={(v) => setTyped(typeof v === 'number' ? v : null)}
+          onBlur={() => on && minutes !== data.intervalMin && minutes >= 1 && minutes <= 60 && set.mutate({ competitionId, intervalMin: minutes })} />
+      </Group>
+      {on && (
+        <Text size="sm" c={data.lastError ? 'red' : 'dimmed'} data-testid="sync-follow-status">
+          {data.lastError ?? (data.lastSuccessAt ? `Dernière mise à jour : ${when(data.lastSuccessAt)}` : 'Première mise à jour dans la minute.')}
+        </Text>
+      )}
+      <ApiErrorAlert error={set.error} />
     </Stack>
   );
 }

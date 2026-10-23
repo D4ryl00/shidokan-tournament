@@ -2,29 +2,17 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { InstanceRole } from '../auth/guard.js';
 import type { AppDb } from '../db/client.js';
-import { getInstance } from '../repositories/instance.js';
 import { NotFoundError } from '../repositories/registrations.js';
 import { clearSyncServer, getSyncServer, rememberServerInstance, remote, setSyncServer, syncUrlAllowed } from '../sync/client.js';
+import { followStatus, getFollow, resetFollowStatus, setFollow } from '../sync/follow.js';
 import { getManagement } from '../sync/ownership.js';
 import { buildPackage, importPackage, type SyncPackage } from '../sync/package.js';
-
-class SyncConflictError extends Error {
-  readonly statusCode = 409;
-}
-
-const SERVER_NAME = 'le serveur en ligne';
-/** Nom affiché d'une copie du serveur : celui du serveur, et le PC qui a la main s'il y en a un. */
-const serverCopyName = (heldBy: string | null | undefined) => (heldBy ? `${SERVER_NAME} — la main est à ${heldBy}` : SERVER_NAME);
+import { pullCopy, SERVER_NAME, serverCopyName, SyncConflictError } from '../sync/pull.js';
 
 const exists = (db: AppDb, id: string) => !!db.$client.prepare('select 1 from competitions where id = ?').get(id);
-const migrations = (db: AppDb) => (db.$client.prepare('select count(*) as n from __drizzle_migrations').get() as { n: number }).n;
 
 /** PC de la compétition (rôle local) : relier au serveur et faire les gestes. */
 export async function syncLocalRoutes(app: FastifyInstance, { db, dbPath }: { db: AppDb; dbPath: string }) {
-  const me = () => {
-    const i = getInstance(db);
-    return { instanceId: i?.id ?? 'inconnue', instanceName: i?.name ?? 'PC' };
-  };
   const mustManageHere = (id: string) => {
     if (!exists(db, id)) throw new NotFoundError('Compétition introuvable');
     if (!getManagement(db, id).managedHere) throw new SyncConflictError('Ce PC n’a pas la main sur cette compétition.');
@@ -59,17 +47,17 @@ export async function syncLocalRoutes(app: FastifyInstance, { db, dbPath }: { db
 
   app.post('/api/sync/pull', async (req) => {
     const { competitionId, take } = z.object({ competitionId: z.string().min(1).max(100), take: z.boolean() }).parse(req.body);
-    // Ce PC a la main : récupérer depuis le serveur écraserait son travail.
-    if (exists(db, competitionId) && getManagement(db, competitionId).managedHere) {
-      throw new SyncConflictError('Ce PC a la main sur cette compétition : envoyez une copie au serveur ou rendez-lui la main.');
-    }
-    const path = `/competitions/${encodeURIComponent(competitionId)}`;
-    const pkg = take
-      ? await remote<SyncPackage>(db, 'POST', `${path}/take`, { ...me(), migrations: migrations(db) })
-      : await remote<SyncPackage>(db, 'GET', `${path}/package`);
-    if (pkg?.competitionId !== competitionId) throw new SyncConflictError('Le serveur a renvoyé une autre compétition : vérifiez son adresse.');
-    rememberServerInstance(db, pkg.from.instanceId);
-    return importPackage(db, dbPath, pkg, take ? null : { id: pkg.from.instanceId, name: serverCopyName(pkg.heldBy) });
+    return pullCopy(db, dbPath, competitionId, take);
+  });
+
+  // Copie tenue à jour : « Récupérer une copie » refait toutes les N minutes, tant que la compétition est une copie du serveur.
+  const followView = () => ({ competitionId: getFollow(db)?.competitionId ?? null, intervalMin: getFollow(db)?.intervalMin ?? 5, ...followStatus(dbPath) });
+  app.get('/api/sync/follow', async () => followView());
+  app.put('/api/sync/follow', async (req) => {
+    const value = z.object({ competitionId: z.string().min(1).max(100), intervalMin: z.number().int().min(1).max(60) }).strict().nullable().parse(req.body ?? null); // corps vide ou null : arrêter
+    setFollow(db, value);
+    resetFollowStatus(dbPath);
+    return followView();
   });
 
   app.post<{ Params: { id: string } }>('/api/competitions/:id/sync/copy', async (req) => {

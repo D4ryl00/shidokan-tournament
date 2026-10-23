@@ -6,7 +6,7 @@ import { competitionChanged } from '../events.js';
 import { competitions, receivedCopies } from '../db/schema.js';
 import { NotFoundError } from '../repositories/registrations.js';
 import { getManagement } from '../sync/ownership.js';
-import { buildPackage, importPackage, validatePackage } from '../sync/package.js';
+import { buildPackage, competitionFingerprint, importPackage, validatePackage } from '../sync/package.js';
 import { getInstance } from '../repositories/instance.js';
 import { checkSyncToken, createSyncToken, listSyncTokens, revokeSyncToken } from '../sync/tokens.js';
 
@@ -99,7 +99,7 @@ export async function syncRemoteRoutes(app: FastifyInstance, { db, dbPath }: { d
     );
     remote.get<{ Params: { cid: string } }>('/api/sync/remote/competitions/:cid/package', async (req) => {
       const c = competitionRow(req.params.cid);
-      return { ...buildPackage(db, c.id, { handOver: false, role: 'serveur' }), heldBy: c.ownerInstanceId ? c.ownerName : null };
+      return { ...buildPackage(db, c.id, { handOver: false, role: 'serveur' }), heldBy: c.ownerInstanceId ? c.ownerName : null, fingerprint: competitionFingerprint(db, c.id) };
     });
     remote.post<{ Params: { cid: string } }>('/api/sync/remote/competitions/:cid/take', async (req) => {
       const body = z.object({ instanceId: z.string().min(1).max(100), instanceName: z.string().min(1).max(100), migrations: z.number().int().optional() }).parse(req.body);

@@ -786,6 +786,17 @@ function useSyncMutation<V, R>(fn: (v: V) => Promise<R>) {
   return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries() });
 }
 export const usePull = () => useSyncMutation((v: { competitionId: string; take: boolean }) => api<{ competitionId: string; created: boolean }>('POST', '/api/sync/pull', v));
+/** Copie tenue à jour (PC relié) : réglage et dernier état. */
+export interface SyncFollowView { competitionId: string | null; intervalMin: number; lastSuccessAt: string | null; lastError: string | null }
+export const useSyncFollow = (enabled: boolean) =>
+  useQuery({ queryKey: ['sync-follow'], queryFn: () => api<SyncFollowView>('GET', '/api/sync/follow'), enabled, refetchInterval: 30_000 });
+export function useSetSyncFollow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { competitionId: string; intervalMin: number } | null) => api<SyncFollowView>('PUT', '/api/sync/follow', v),
+    onSuccess: (f) => qc.setQueryData(['sync-follow'], f),
+  });
+}
 export const useSyncCopy = (id: string) => useSyncMutation(() => api<{ sentAt: string }>('POST', `/api/competitions/${id}/sync/copy`));
 export const useSyncReturn = (id: string) => useSyncMutation(() => api<void>('POST', `/api/competitions/${id}/sync/return`));
 export const useTakeBack = (id: string) => useSyncMutation((source: 'server' | 'lastCopy') => api<void>('POST', `/api/competitions/${id}/take-back`, { source }));

@@ -41,6 +41,7 @@ import { syncRemoteRoutes } from './routes/sync-remote.js';
 import { syncFileRoutes, syncLocalRoutes } from './routes/sync-local.js';
 import { mirrorRoutes } from './routes/mirror.js';
 import { startMirror } from './mirror.js';
+import { startFollow } from './sync/follow.js';
 import { authRoutes } from './routes/auth.js';
 import { appSettingsRoutes } from './routes/app-settings.js';
 import { nodemailerTransport, type MailTransport } from './mail.js';
@@ -175,6 +176,8 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     await app.register(mirrorRoutes, { db, dbPath: opts.dbPath });
     const stopMirror = startMirror(db, opts.dbPath, (e) => app.log.error(e));
     app.addHook('onClose', async () => stopMirror());
+    const stopFollow = startFollow(db, opts.dbPath, (e) => app.log.error(e));
+    app.addHook('onClose', async () => stopFollow());
   }
   await app.register(syncFileRoutes, { db, dbPath: opts.dbPath, role });
   await app.register(appSettingsRoutes, { db, mailTransport });
