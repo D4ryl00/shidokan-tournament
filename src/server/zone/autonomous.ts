@@ -2,7 +2,10 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { entryZones } from '../auth/permissions.js';
 import type { AppDb } from '../db/client.js';
+import type { Bracket } from '../../domain/brackets/index.js';
+import { finalMatchIds } from '../../domain/passages/index.js';
 import { launchedCategoryIds } from '../repositories/launch-state.js';
+import { passagePlan } from '../repositories/passages.js';
 import { matchEntrants } from '../repositories/results.js';
 import { kataRev, resultRev, tieBreakRev } from '../revisions.js';
 import { myIdentity } from '../sync/pull.js';
@@ -51,7 +54,20 @@ export async function autonomousRefusal(db: AppDb, link: ZoneLink, method: strin
   if (!launchedCategoryIds(db, link.competitionId).has(params.cid)) return 'Session suivante pas encore lancée sur cette copie.';
   const target = params.matchId ? { matchId: params.matchId } : params.round ? { kataRound: params.round === 'final' ? ('final' as const) : ('round1' as const) } : ('tie-break' as const);
   const zones = await entryZones(db, link.competitionId, params.cid, target);
-  return zones.has(link.zoneId) ? null : `Ce combat ne se joue pas sur la zone ${name}.`;
+  if (zones.has(link.zoneId)) return null;
+  // « Jouer ici les finales de mes catégories » : les finales des catégories de sa zone, même prévues sur la zone des finales.
+  if (link.autonomous?.finals && (await isFinalOfMyCategory(db, link, params.cid, target))) return null;
+  return `Ce combat ne se joue pas sur la zone ${name}.`;
+}
+
+async function isFinalOfMyCategory(db: AppDb, link: ZoneLink, categoryId: string, target: { matchId: string } | { kataRound: 'round1' | 'final' } | 'tie-break'): Promise<boolean> {
+  if (target === 'tie-break') return false;
+  const plan = await passagePlan(db, link.competitionId);
+  if (plan.categories[categoryId]?.zoneId !== link.zoneId) return false;
+  if ('kataRound' in target) return target.kataRound === 'final';
+  const row = db.$client.prepare('select bracket_json as b from categories where id = ?').get(categoryId) as { b: string | null } | undefined;
+  const bracket = row?.b ? (JSON.parse(row.b) as Bracket) : null;
+  return bracket?.kind === 'combat' && finalMatchIds(bracket).includes(target.matchId);
 }
 
 declare module 'fastify' {

@@ -1,7 +1,7 @@
 import { Alert, Anchor, Button, Group, Modal, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
-import { ApiError, downloadZoneJournal, useAuthMe, useGoOnline, useManagement, useStartAutonomy, useStopAutonomy, useZoneLink } from '../api.js';
+import { ApiError, downloadZoneJournal, useAuthMe, useGoOnline, useManagement, usePlayFinalsHere, useStartAutonomy, useStopAutonomy, useZoneLink } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { journalReportText } from './ZoneCards.js';
 
@@ -34,6 +34,7 @@ export function ZoneAutonomyBar({ competitionId }: { competitionId: string }) {
   const start = useStartAutonomy();
   const online = useGoOnline();
   const stop = useStopAutonomy();
+  const finals = usePlayFinalsHere();
   const [exported, setExported] = useState(false);
   const [exportError, setExportError] = useState<unknown>(null);
   const [back, setBack] = useState<string | null>(null);
@@ -75,6 +76,11 @@ export function ZoneAutonomyBar({ competitionId }: { competitionId: string }) {
           onClick={() => downloadZoneJournal().then(() => { setExported(true); setExportError(null); }, setExportError)}>
           Exporter le journal (fichier)
         </Button>
+        {!link.autonomous.finals && (
+          <Confirmed label="Jouer ici les finales de mes catégories" testId="zone-finals" variant="light" loading={finals.isPending}
+            text="Les finales de vos catégories se joueront ici, même si une zone des finales est prévue. Si elle les joue aussi, la table centrale tranchera."
+            onConfirm={() => finals.mutate()} />
+        )}
         {exported && (
           <Confirmed label="Arrêter la zone autonome" testId="zone-stop" color="red" variant="subtle" loading={stop.isPending}
             text="Importez le fichier exporté sur le PC principal (onglet Combats, « Importer un journal de zone (fichier) »). Ce qui serait saisi ici ensuite ne serait pas dans le fichier : ce portable redevient une copie en lecture seule."
@@ -85,7 +91,7 @@ export function ZoneAutonomyBar({ competitionId }: { competitionId: string }) {
         <Text size="sm" mt="xs" c="red">{online.error.message} La zone reste autonome et rien n’est perdu : réessayez plus tard, ou exportez le journal (fichier).</Text>
       )}
       {!(online.error instanceof ApiError && online.error.status === 502) && <ApiErrorAlert error={online.error} />}
-      <ApiErrorAlert error={exportError ?? stop.error} />
+      <ApiErrorAlert error={exportError ?? stop.error ?? finals.error} />
     </Alert>
   );
 }

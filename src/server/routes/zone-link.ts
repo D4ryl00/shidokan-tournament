@@ -79,6 +79,14 @@ export async function zoneLinkRoutes(app: FastifyInstance, { db, dbPath }: { db:
     if (link) competitionChanged(link.competitionId);
   };
 
+  /** « Jouer ici les finales de mes catégories » : la zone autonome s'étend aux finales des catégories de sa zone. */
+  app.post('/api/zone-link/finals', async (_req, reply) => {
+    const link = autonomousOnly();
+    setZoneLink(db, { ...link, autonomous: { ...link.autonomous!, finals: true } });
+    competitionChanged(link.competitionId);
+    return reply.status(204).send();
+  });
+
   /** Réseau revenu : le journal part au PC principal ; la zone autonome s'arrête seulement s'il l'a reçu. */
   app.post('/api/zone-link/online', async () => {
     const link = autonomousOnly();

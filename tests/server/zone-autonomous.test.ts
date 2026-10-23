@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { copyFromMain } from '../../src/server/zone/link.js';
 import { pendingEntries } from '../../src/server/zone/autonomous.js';
 import { holdResponses, mainAndLaptop, RESULT, tick } from '../helpers/zones-fixture.js';
@@ -101,4 +101,48 @@ test('bandeau : GET /api/zone-link donne autonomous.since et pending = 3', async
   expect((await f.onLaptop('PUT', `${f.base}/categories/${f.a54.id}/results/w2-0`, RESULT)).statusCode).toBe(200);
   const view = (await f.onLaptop('GET', '/api/zone-link')).json();
   expect(view).toMatchObject({ zoneName: 'Tatami 1', pending: 3, link: { autonomous: { since: expect.any(String), finals: false } } });
+});
+
+describe('finales de ses catégories (zone des finales sur Tatami 2)', () => {
+  let g: Awaited<ReturnType<typeof mainAndLaptop>>;
+  beforeEach(async () => {
+    g = await mainAndLaptop({ finalsOnT2: true });
+    expect((await g.onLaptop('POST', '/api/zone-link/autonomous')).statusCode).toBe(204);
+    for (const m of ['w1-0', 'w1-1']) expect((await g.onLaptop('PUT', `${g.base}/categories/${g.a54.id}/results/${m}`, RESULT)).statusCode).toBe(200);
+  });
+  afterEach(async () => {
+    await g.close();
+  });
+
+  test('la finale de -54 refusée au portable Tatami 1 ; après « finals », permise et journalisée ; une finale d’une catégorie de Tatami 2 reste refusée', async () => {
+    const refused = await g.onLaptop('PUT', `${g.base}/categories/${g.a54.id}/results/w2-0`, RESULT);
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error).toBe(OTHER_ZONE);
+    expect((await g.onLaptop('POST', '/api/zone-link/finals')).statusCode).toBe(204);
+    expect((await g.onLaptop('GET', '/api/zone-link')).json()).toMatchObject({ link: { autonomous: { finals: true } } });
+    expect((await g.onLaptop('PUT', `${g.base}/categories/${g.a54.id}/results/w2-0`, RESULT)).statusCode).toBe(200);
+    expect(pendingEntries(g.laptopDb, g.id).at(-1)).toMatchObject({ seq: 3, kind: 'result', matchId: 'w2-0' });
+    const other = await g.onLaptop('PUT', `${g.base}/categories/${g.b61.id}/results/w2-0`, RESULT);
+    expect(other.statusCode).toBe(409);
+    expect(other.json().error).toBe(OTHER_ZONE);
+  });
+
+  test('« finals » : seulement en zone autonome', async () => {
+    await g.onLaptop('POST', '/api/zone-link/online');
+    const res = await g.onLaptop('POST', '/api/zone-link/finals');
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toBe('Ce PC n’est pas en zone autonome.');
+  });
+
+  test('au rejeu, une finale déjà jouée sur la zone des finales → carte', async () => {
+    await g.onLaptop('POST', '/api/zone-link/finals');
+    expect((await g.onLaptop('PUT', `${g.base}/categories/${g.a54.id}/results/w2-0`, RESULT)).statusCode).toBe(200);
+    // Sur le PC principal, la zone des finales a reçu les demi-finales (par fichier) et joué la finale avec l'autre vainqueur.
+    for (const m of ['w1-0', 'w1-1']) await g.onMain('PUT', `${g.base}/categories/${g.a54.id}/results/${m}`, RESULT);
+    await g.onMain('PUT', `${g.base}/categories/${g.a54.id}/results/w2-0`, { winner: 'b', method: 'points', score: null });
+    const res = await g.onLaptop('POST', '/api/zone-link/online');
+    expect(res.json().report).toMatchObject({ received: 3, present: 2, conflicts: 1 });
+    const cards = (await g.onMain('GET', `${g.base}/zone-cards`)).json() as { target: string; reason: string }[];
+    expect(cards).toMatchObject([{ reason: 'Une autre saisie a été faite sur le PC principal.' }]);
+  });
 });
