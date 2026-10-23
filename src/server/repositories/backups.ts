@@ -34,12 +34,14 @@ function stripSecrets(file: string): void {
   try {
     copy.pragma('secure_delete = ON');
     const has = (t: string) => !!copy.prepare("select 1 from sqlite_master where type = 'table' and name = ?").get(t);
-    if (has('sessions')) copy.exec('DELETE FROM sessions');
-    if (has('users')) copy.exec('DELETE FROM users');
-    if (has('sync_tokens')) copy.exec('DELETE FROM sync_tokens');
-    if (has('app_settings')) copy.exec("UPDATE app_settings SET value_json = json_remove(value_json, '$.token') WHERE key = 'syncServer'");
-    if (has('app_settings')) copy.exec("UPDATE app_settings SET value_json = json_remove(value_json, '$.password') WHERE key = 'smtp'");
-    copy.exec('VACUUM');
+    let changes = 0;
+    for (const t of ['sessions', 'users', 'sync_tokens']) if (has(t)) changes += copy.prepare(`DELETE FROM ${t}`).run().changes;
+    if (has('app_settings')) {
+      changes += copy.prepare("UPDATE app_settings SET value_json = json_remove(value_json, '$.password') WHERE key = 'smtp' AND json_extract(value_json, '$.password') IS NOT NULL").run().changes;
+      changes += copy.prepare("UPDATE app_settings SET value_json = json_remove(value_json, '$.token') WHERE key = 'syncServer' AND json_extract(value_json, '$.token') IS NOT NULL").run().changes;
+    }
+    // Recompactée seulement s'il y avait un secret à effacer (jamais sur le PC de la compétition, sans comptes).
+    if (changes) copy.exec('VACUUM');
   } finally {
     copy.close();
   }
