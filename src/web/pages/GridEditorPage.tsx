@@ -9,6 +9,7 @@ import { parseWeightLabel } from '../../domain/weights.js';
 import { ApiError, useGrid, useGridTemplates, useLoadTemplate, useReplaceGrid, useSaveTemplate } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { HelpLine } from '../components/Help.js';
+import { useUnsaved } from '../unsaved.js';
 import { HELP } from '../help.js';
 
 const AGE_LINK_KINDS = [
@@ -55,6 +56,8 @@ export function GridEditorPage() {
       setBand((b) => b ?? data.ageBands[0]?.code ?? null);
     }
   }, [data]);
+  // Saisie en cours : la mise à jour automatique (autre poste) attend, et quitter l'onglet demande confirmation.
+  useUnsaved('grille', !!data && !!grid && JSON.stringify(grid) !== JSON.stringify(data));
 
   const rows = useMemo(
     () =>

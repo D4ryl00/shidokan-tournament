@@ -15,7 +15,7 @@ export interface MirrorStatus {
 
 const KEEP = 100;
 const NAME = /^copie-\d{8}-\d{6}\.sqlite$/;
-const status = new Map<string, MirrorStatus & { lastAttemptAt: number }>();
+const status = new Map<string, MirrorStatus & { lastSuccessMs: number; running: boolean }>();
 
 export const copiesDir = (dbPath: string) => path.join(backupDir(dbPath), 'copies');
 export const isCopyName = (name: string) => NAME.test(name);
@@ -56,11 +56,13 @@ export function listCopies(dbPath: string): { name: string; size: number; create
 /** Une copie : téléchargée sous un nom provisoire, vérifiée (base SQLite), puis renommée ; on garde les 100 dernières. */
 export async function mirrorOnce(db: AppDb, dbPath: string, now = new Date()): Promise<{ file: string } | { error: string }> {
   const settings = getMirror(db);
-  const entry = status.get(dbPath) ?? { lastSuccessAt: null, lastError: null, lastAttemptAt: 0 };
-  status.set(dbPath, { ...entry, lastAttemptAt: now.getTime() });
+  const current = status.get(dbPath) ?? { lastSuccessAt: null, lastError: null, lastSuccessMs: 0, running: false };
   if (!settings) return { error: 'Aucune copie de secours réglée.' };
+  if (current.running) return { error: 'Une copie est déjà en cours.' };
+  status.set(dbPath, { ...current, running: true });
+  const done = (patch: Partial<MirrorStatus & { lastSuccessMs: number }>) => status.set(dbPath, { ...status.get(dbPath)!, ...patch, running: false });
   const fail = (error: string) => {
-    status.set(dbPath, { ...status.get(dbPath)!, lastError: error });
+    done({ lastError: error });
     return { error };
   };
   let data: Buffer;
@@ -74,23 +76,33 @@ export async function mirrorOnce(db: AppDb, dbPath: string, now = new Date()): P
   }
   if (data.subarray(0, 15).toString() !== 'SQLite format 3') return fail('La réponse du PC principal n’est pas une base de l’application.');
   const dir = copiesDir(dbPath);
-  fs.mkdirSync(dir, { recursive: true });
   const file = `copie-${stamp(now)}.sqlite`;
   const partial = path.join(dir, `${file}.partiel`);
-  fs.writeFileSync(partial, data);
-  fs.renameSync(partial, path.join(dir, file));
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(partial, data);
+    fs.renameSync(partial, path.join(dir, file));
+  } catch (e) {
+    fs.rmSync(partial, { force: true });
+    return fail(`Copie impossible à écrire sur ce PC : ${(e as Error).message}.`);
+  }
   for (const old of fs.readdirSync(dir).filter(isCopyName).sort().slice(0, -KEEP)) fs.rmSync(path.join(dir, old), { force: true });
-  status.set(dbPath, { ...status.get(dbPath)!, lastSuccessAt: now.toISOString(), lastError: null });
+  done({ lastSuccessAt: now.toISOString(), lastError: null, lastSuccessMs: now.getTime() });
   return { file };
+}
+
+/** Une copie est-elle due ? Pas pendant une copie en cours ; après un échec, dès le tour suivant. */
+export function mirrorDue(dbPath: string, intervalMin: number, nowMs = Date.now()): boolean {
+  const s = status.get(dbPath);
+  if (s?.running) return false;
+  return nowMs - (s?.lastSuccessMs ?? 0) >= intervalMin * 60_000;
 }
 
 /** Tâche de fond : vérifie chaque minute s'il est temps de faire une copie (le réglage est relu à chaque tour). */
 export function startMirror(db: AppDb, dbPath: string, onError: (e: unknown) => void): () => void {
   const tick = () => {
     const settings = getMirror(db);
-    if (!settings) return;
-    const last = status.get(dbPath)?.lastAttemptAt ?? 0;
-    if (Date.now() - last < settings.intervalMin * 60_000) return;
+    if (!settings || !mirrorDue(dbPath, settings.intervalMin)) return;
     mirrorOnce(db, dbPath).catch(onError);
   };
   const timer = setInterval(tick, 60_000);

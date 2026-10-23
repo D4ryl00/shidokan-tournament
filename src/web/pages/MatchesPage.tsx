@@ -44,10 +44,15 @@ export function MatchesPage() {
   // Poste « Zone » : seulement sa zone (catégories qui s'y jouent, sa file), sans les réglages de zone et d'ordre.
   const [poste] = usePoste(id);
   const zoneOnly = poste.kind === 'zone' ? poste.zoneId : null;
+  // Une catégorie dont un passage est dans la file de la zone (finales sur la zone des finales) en fait partie aussi.
+  const inZoneQueue = new Set((schedule?.zones ?? []).filter((t) => t.zone.id === zoneOnly).flatMap((t) => t.queue.map((q) => q.categoryId)));
   const playable = categories.filter(
-    (c) => c.bracket && activeEntrantCount(c) >= 2 && (!waveId || c.waveId === waveId) && (!zoneOnly || (plan?.categories[c.id]?.zoneId ?? c.zoneId) === zoneOnly),
+    (c) =>
+      c.bracket && activeEntrantCount(c) >= 2 && (!waveId || c.waveId === waveId) &&
+      (!zoneOnly || (plan?.categories[c.id]?.zoneId ?? c.zoneId) === zoneOnly || inZoneQueue.has(c.id)),
   );
-  const selected = playable.find((c) => c.id === selectedId) ?? null;
+  // Choisie depuis la file d'une zone : trouvée parmi toutes les catégories (pas seulement la liste filtrée).
+  const selected = playable.find((c) => c.id === selectedId) ?? categories.find((c) => c.id === selectedId && c.bracket) ?? null;
   const { data: res } = useCategoryResults(id, selected?.id ?? null);
   // Zone : automatique (répartie par l'app) ou épinglée à la main.
   const zoneOptions = (cid: string, launched: boolean) => {
@@ -85,8 +90,8 @@ export function MatchesPage() {
                   {!zoneOnly && (<>
                   <Select size="xs" w={190} data={zoneOptions(c.id, c.launchLocked)} value={c.zoneId ?? ''} allowDeselect={false} data-testid="schedule-zone" aria-label="Zone de combat"
                     onChange={(v) => (c.launchLocked ? v && v !== c.zoneId && setMoving({ category: c, zoneId: v }) : update.mutate({ cid: c.id, zoneId: v || null }))} />
-                  <NumberInput size="xs" w={70} min={0} max={99} value={c.order} aria-label="Ordre" data-testid="schedule-order"
-                    onChange={(v) => typeof v === 'number' && update.mutate({ cid: c.id, order: v })} />
+                  <NumberInput key={`${c.id}-${c.order}`} size="xs" w={70} min={0} max={99} defaultValue={c.order} aria-label="Ordre" data-testid="schedule-order"
+                    onBlur={(e) => { const v = Number(e.currentTarget.value); if (Number.isInteger(v) && v !== c.order) update.mutate({ cid: c.id, order: v }); }} />
                   </>)}
                 </Group>
               </Card>

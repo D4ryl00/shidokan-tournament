@@ -42,13 +42,14 @@ export function MirrorCopies() {
   const { data: me } = useAuthMe();
   const local = me?.role === 'local';
   const { data: mirror } = useMirror(local);
-  const { data: copies = [] } = useMirrorCopies(local && !!mirror?.url);
+  const { data: copies = [] } = useMirrorCopies(local);
   const restore = useRestoreMirrorCopy();
   const [confirm, setConfirm] = useState<string | null>(null);
-  if (!local || !mirror?.url) return null;
+  // Visibles même sans adresse réglée (arrêtée après une restauration) : on peut encore restaurer une autre copie.
+  if (!local || (!mirror?.url && copies.length === 0)) return null;
   return (
     <Stack gap="xs">
-      <Text fw={600}>Copies du PC principal ({mirror.url})</Text>
+      <Text fw={600}>Copies du PC principal{mirror?.url ? ` (${mirror.url})` : ''}</Text>
       {copies.length === 0 && <Text size="sm" c="dimmed">Aucune copie pour l’instant.</Text>}
       <Table>
         <Table.Tbody>

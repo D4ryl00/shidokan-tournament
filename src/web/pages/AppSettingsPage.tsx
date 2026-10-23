@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { PublicAppSettings, SmtpSettings } from '../../domain/app-settings.js';
 import { useAppSettings, useAuthMe, useSendTestMail, useUpdateAppSettings } from '../api.js';
 import { SyncSettingsCard } from '../components/SyncPanel.js';
-import { MirrorSettingsCard } from '../components/MirrorPanels.js';
+import { MirrorCopies, MirrorSettingsCard } from '../components/MirrorPanels.js';
 import { DayChecklist } from '../components/DayChecklist.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { SectionHeader } from '../components/Help.js';
@@ -119,6 +119,7 @@ export function AppSettingsPage() {
           <Stack>
             <Title order={4}>Copie de secours d’un autre PC</Title>
             <MirrorSettingsCard />
+            <MirrorCopies />
           </Stack>
         </Card>
       )}

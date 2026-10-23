@@ -1,4 +1,5 @@
 import { Button, Group, Loader, Modal, Select, Stack, Tabs, Text, Title } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useCompetition, useZones } from '../api.js';
@@ -30,11 +31,16 @@ export function CompetitionLayout() {
   // Un onglet masqué pour ce poste (adresse tapée, poste changé) mène à l'onglet par défaut du poste.
   const target = tabFor(poste, current);
   useEffect(() => {
-    if (target !== current) navigate(path(target), { replace: true });
-  }, [target, current]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Pas pendant une saisie non enregistrée (poste changé dans un autre onglet) : la redirection attend.
+    if (target !== current && !unsaved) navigate(path(target), { replace: true });
+  }, [target, current, unsaved]); // eslint-disable-line react-hooks/exhaustive-deps
   const posteValue = poste.kind === 'zone' ? `zone:${poste.zoneId}` : poste.kind;
   const choosePoste = (v: string | null) => {
     if (!v) return;
+    if (unsaved) {
+      notifications.show({ color: 'orange', message: 'Enregistrez ou abandonnez la saisie en cours avant de changer de poste.' });
+      return;
+    }
     const p: Poste = v.startsWith('zone:') ? { kind: 'zone', zoneId: v.slice(5) } : v === 'table' ? { kind: 'table' } : { kind: 'organisation' };
     setPoste(p);
   };

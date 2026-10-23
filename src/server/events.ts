@@ -5,13 +5,24 @@ import type { FastifyInstance } from 'fastify';
 const bus = new EventEmitter();
 bus.setMaxListeners(0);
 
-export function competitionChanged(competitionId: string): void {
-  bus.emit(competitionId);
+const EVERYTHING = Symbol('toutes les compétitions');
+
+/** `origin` : identifiant de l'onglet qui a écrit (il ne se recharge pas pour sa propre écriture). */
+export function competitionChanged(competitionId: string, origin: string | null = null): void {
+  bus.emit(competitionId, origin);
+}
+/** Toutes les compétitions ont pu changer (restauration d'une sauvegarde). */
+export function everythingChanged(): void {
+  bus.emit(EVERYTHING, null);
 }
 
-export function onCompetitionChange(competitionId: string, listener: () => void): () => void {
+export function onCompetitionChange(competitionId: string, listener: (origin: string | null) => void): () => void {
   bus.on(competitionId, listener);
-  return () => bus.off(competitionId, listener);
+  bus.on(EVERYTHING, listener);
+  return () => {
+    bus.off(competitionId, listener);
+    bus.off(EVERYTHING, listener);
+  };
 }
 
 /** Flux d'événements d'une compétition (Server-Sent Events), et prévenir après chaque écriture réussie. */
@@ -23,7 +34,7 @@ export function registerCompetitionEvents(app: FastifyInstance): void {
     // « identity » : Caddy (encode gzip) ne compresse pas une réponse qui a déjà un Content-Encoding, donc ne la retient pas.
     res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Content-Encoding': 'identity', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
     res.write(': connecté\n\n');
-    const off = onCompetitionChange(req.params.id, () => res.write('event: change\ndata: {}\n\n'));
+    const off = onCompetitionChange(req.params.id, (origin) => res.write(`event: change\ndata: ${JSON.stringify({ origin })}\n\n`));
     const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
     const close = () => {
       clearInterval(ping);
@@ -34,14 +45,17 @@ export function registerCompetitionEvents(app: FastifyInstance): void {
     open.add(close);
     req.raw.on('close', close);
   });
-  // Les flux ouverts ne doivent pas empêcher l'arrêt du serveur.
-  app.addHook('onClose', async () => {
+  // Les flux ouverts ne doivent pas empêcher l'arrêt du serveur : fermés avant que Fastify attende la fin des connexions.
+  app.addHook('preClose', async () => {
     for (const close of [...open]) close();
   });
   app.addHook('onResponse', async (req, reply) => {
     if (req.method === 'GET' || req.method === 'HEAD' || reply.statusCode >= 400) return;
-    if (!(req.routeOptions.url ?? '').startsWith('/api/competitions/:id')) return;
+    const route = req.routeOptions.url ?? '';
+    // Les aperçus ne changent rien (et un aperçu relu à chaque changement relancerait les postes en boucle).
+    if (!route.startsWith('/api/competitions/:id') || route.endsWith('/preview')) return;
     const id = (req.params as { id?: string }).id;
-    if (id) competitionChanged(id);
+    const origin = req.headers['x-poste-id'];
+    if (id) competitionChanged(id, typeof origin === 'string' ? origin.slice(0, 64) : null);
   });
 }

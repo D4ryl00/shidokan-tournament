@@ -7,7 +7,7 @@ import { weightClassesFor } from '../../domain/grid.js';
 import { normalizeName } from '../../domain/names.js';
 import { parsePreferences, type RegistrationInput, type RegistrationRow } from '../../domain/registration.js';
 import type { DisciplineId, Ruleset, Sex } from '../../domain/types.js';
-import { useClubs, useCreateRegistration, useGrid, useUpdateRegistration, useUpsertClub } from '../api.js';
+import { ApiError, useClubs, useCreateRegistration, useGrid, useUpdateRegistration, useUpsertClub } from '../api.js';
 import { DISCIPLINE_OPTIONS, prefsLabel, prefsToCodes } from '../labels.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 
@@ -96,7 +96,13 @@ export function RegistrationForm({ competitionId, edit, onDone }: { competitionI
       source: edit ? (edit.source === 'onsite' || edit.source === 'manual' ? (f.onsite ? 'onsite' : 'manual') : edit.source) : f.onsite ? 'onsite' : 'manual',
     };
     if (edit) {
-      await update.mutateAsync({ rid: edit.id, input, rev: openRev });
+      try {
+        await update.mutateAsync({ rid: edit.id, input, rev: openRev });
+      } catch (e) {
+        // Modifiée entre-temps sur un autre poste : le formulaire se ferme (la liste est rechargée, le message affiché).
+        if (e instanceof ApiError && e.status === 409) onDone?.();
+        throw e;
+      }
       onDone?.();
       return;
     }

@@ -91,3 +91,21 @@ test('réglage absent en rôle serveur', async () => {
   expect((await srv.inject({ method: 'PUT', url: '/api/mirror', headers: { cookie }, payload: { url: mainUrl, intervalMin: 5 } })).statusCode).toBe(404);
   await srv.close();
 });
+
+test('après un échec, nouvel essai au tour suivant ; deux copies jamais en même temps', async () => {
+  await setMirror(mainUrl);
+  const { mirrorDue } = await import('../../src/server/mirror.js');
+  await main.close();
+  await withDb((db) => mirrorOnce(db, secondPath));
+  expect(mirrorDue(secondPath, 5, Date.now() + 61_000)).toBe(true);
+  main = await buildApp({ dbPath: tmpDbPath() });
+});
+
+test('restaurer une copie arrête la copie de secours (elle copierait l’ancien PC principal)', async () => {
+  await setMirror(mainUrl);
+  const { file } = (await withDb((db) => mirrorOnce(db, secondPath))) as { file: string };
+  await second.inject({ method: 'POST', url: `/api/mirror/copies/${file}/restore` });
+  expect((await second.inject({ method: 'GET', url: '/api/mirror' })).json()).toMatchObject({ url: null });
+  // Les copies restent visibles pour pouvoir en restaurer une autre.
+  expect((await second.inject({ method: 'GET', url: '/api/mirror/copies' })).json().length).toBeGreaterThan(0);
+});

@@ -23,6 +23,9 @@ export class ApiError extends Error {
   }
 }
 
+/** Identifiant de cet onglet : envoyé avec chaque écriture, il évite à l'onglet de se recharger pour sa propre écriture. */
+export const TAB_ID = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Math.random()).slice(2);
+
 /** `rev` : révision de la donnée telle que l'écran l'a lue (null : elle n'existait pas) ; envoyée en If-Match. */
 export async function api<T>(method: string, url: string, body?: unknown, opts: { rev?: string | null } = {}): Promise<T> {
   const res = await fetch(url, {
@@ -30,6 +33,7 @@ export async function api<T>(method: string, url: string, body?: unknown, opts: 
     headers: {
       ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
       ...(opts.rev === undefined ? {} : { 'If-Match': opts.rev ?? 'none' }),
+      ...(method === 'GET' ? {} : { 'X-Poste-Id': TAB_ID }),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });

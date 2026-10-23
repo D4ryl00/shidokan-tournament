@@ -12,6 +12,7 @@ import { ZonesImpossibleAlert } from '../components/ZonesImpossibleAlert.js';
 import { nextZoneName, validateZones, ZONE_MAX } from '../../domain/zones.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { HelpLine } from '../components/Help.js';
+import { useUnsaved } from '../unsaved.js';
 import { SyncPanel } from '../components/SyncPanel.js';
 import { HELP } from '../help.js';
 
@@ -88,6 +89,14 @@ export function CompetitionSettingsPage() {
     setInfo({ name: competition.name, date: competition.date, location: competition.location ?? '' });
     setS(competition.settings);
   }, [competition]);
+  // Saisie en cours : la mise à jour automatique (autre poste) attend, et quitter l'onglet demande confirmation.
+  const savedZoneView = JSON.stringify((savedZones ?? []).map(({ id: zid, name, disciplines }) => ({ key: zid, id: zid, name, disciplines })));
+  const dirty =
+    !!competition && !!s &&
+    (JSON.stringify(s) !== JSON.stringify(competition.settings) ||
+      JSON.stringify(info) !== JSON.stringify({ name: competition.name, date: competition.date, location: competition.location ?? '' }) ||
+      (savedZones !== undefined && JSON.stringify(zones) !== savedZoneView));
+  useUnsaved('reglages', dirty);
 
   if (!s) return null;
   const set = (patch: Partial<CompetitionSettings>) => setS({ ...s, ...patch });

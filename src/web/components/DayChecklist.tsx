@@ -10,6 +10,7 @@ const STEPS = [
   'Ne jamais quitter Docker Desktop sur le PC principal : fermer le navigateur ne pose aucun problème, quitter Docker arrête tout.',
   'Sur chaque poste, ouvrir l’adresse ci-dessous et choisir son poste en haut de l’écran de la compétition.',
   'Si possible, un second PC avec la copie de secours réglée (Réglages de l’application).',
+  'Sur chaque poste, peu d’onglets de compétition ouverts à la fois : un navigateur n’ouvre que 6 connexions vers le PC principal (les onglets cachés libèrent la leur).',
 ];
 
 /** Fiche « Préparer le jour J » : la liste à cocher et l'adresse à ouvrir sur les autres postes. */

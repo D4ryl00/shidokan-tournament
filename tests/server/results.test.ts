@@ -138,6 +138,19 @@ test('programme des zones', async () => {
   expect(t1.categories[1]!.nextMatches).toHaveLength(2);
 });
 
+test('programme : la zone des finales, sans catégorie à elle, apparaît avec la finale dans sa file', async () => {
+  const c = await fourInElimination();
+  const [t1, t2] = (await call('GET', '/zones')).json() as { id: string }[];
+  await call('PATCH', '', { settings: { finalsZoneId: t2!.id } });
+  await call('PATCH', `/categories/${c.id}`, { zoneId: t1!.id });
+  await put(c.id, 'w1-0', 'a');
+  await put(c.id, 'w1-1', 'a');
+  const s = (await call('GET', '/schedule')).json() as { zones: { zone: { id: string }; categories: unknown[]; queue: { matchId: string | null }[] }[] };
+  const finals = s.zones.find((t) => t.zone.id === t2!.id);
+  expect(finals?.categories).toEqual([]);
+  expect(finals?.queue.map((q) => q.matchId)).toEqual(['w2-0']);
+});
+
 test('exports .xlsx et .ods relus', async () => {
   const c = await fourInElimination();
   await put(c.id, 'w1-0', 'a');

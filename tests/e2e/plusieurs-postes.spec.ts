@@ -72,3 +72,20 @@ test('poste Zone : seulement Combats et Tableaux, sa zone seulement, même aprè
   await choosePoste(page, 'Organisation (tout)');
   await expect(page.getByRole('tab', { name: 'Réglages' })).toBeVisible();
 });
+
+test('poste sur la zone des finales : la finale est dans sa file et se saisit', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe zone des finales');
+  const { cat, zones } = await seed(request, id);
+  await request.patch(`/api/competitions/${id}`, { data: { settings: { finalsZoneId: zones[1]!.id } } });
+  for (const m of ['w1-0', 'w1-1']) await request.put(`/api/competitions/${id}/categories/${cat.id}/results/${m}`, { data: { winner: 'a', method: 'points' } });
+  await page.goto(`/competitions/${id}/combats`);
+  await choosePoste(page, `Zone : ${zones[1]!.name}`);
+  const final = page.getByTestId('zone-card').getByTestId('next-match');
+  await expect(final).toHaveCount(1);
+  await final.getByRole('button', { name: 'Saisir' }).click();
+  await expect(page.getByTestId('result-save')).toBeVisible();
+  await page.getByTestId('result-winner-a').click();
+  await page.getByTestId('result-save').click();
+  await expect(page.getByTestId('result-save')).toHaveCount(0);
+  await expect(final).toHaveCount(0);
+});

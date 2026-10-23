@@ -285,11 +285,11 @@ export async function schedule(db: AppDb, competitionId: string, waveId?: string
         return m && m.playable && !m.result ? [{ ...base, matchId: m.id, a: name(m.entrantA), b: name(m.entrantB), katakas: null, kataPart: null }] : [];
       })
       .slice(0, 6);
-  // Dans l'ordre des zones de la compétition ; une zone sans catégorie n'apparaît pas.
+  // Dans l'ordre des zones de la compétition ; une zone sans catégorie ni passage à elle (finales) n'apparaît pas.
   return {
     zones: (await listZones(db, competitionId))
-      .filter((z) => byZone.has(z.id))
-      .map((zone) => ({ zone, categories: byZone.get(zone.id)!.sort((a, b) => a.order - b.order), queue: queue(zone.id) })),
+      .map((zone) => ({ zone, categories: (byZone.get(zone.id) ?? []).sort((a, b) => a.order - b.order), queue: queue(zone.id) }))
+      .filter((t) => t.categories.length > 0 || t.queue.length > 0),
     unassigned,
     impossible: plan.impossible,
   };

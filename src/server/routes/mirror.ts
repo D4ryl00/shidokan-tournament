@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
+import { everythingChanged } from '../events.js';
 import { copiesDir, getMirror, isCopyName, listCopies, mirrorStatus, setMirror } from '../mirror.js';
 import { backupNow, restoreFrom } from '../repositories/backups.js';
 import { NotFoundError } from '../repositories/registrations.js';
@@ -28,6 +29,9 @@ export async function mirrorRoutes(app: FastifyInstance, { db, dbPath }: { db: A
     const file = path.join(copiesDir(dbPath), req.params.name);
     if (!isCopyName(req.params.name) || !fs.existsSync(file)) throw new NotFoundError('Copie introuvable');
     await restoreFrom(db, fs.readFileSync(file), () => backupNow(db, dbPath)); // filet de sécurité avant d'écraser
+    // Ce PC a pris le relais : il ne recopie plus l'ancien PC principal.
+    setMirror(db, null);
+    everythingChanged();
     return reply.status(204).send();
   });
 }

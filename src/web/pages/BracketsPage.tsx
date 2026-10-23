@@ -9,6 +9,7 @@ import { normalizeName } from '../../domain/names.js';
 import { useCategories, usePassages, useRedraw, useRegenerate, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
 import { categoryPassages, kataPassageText, movedMatchZones } from '../passages.js';
 import { useSelectedWave } from '../useSelectedWave.js';
+import { usePoste } from '../poste.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { BracketView, type EntrantInfo } from '../components/BracketView.js';
 import { useRecasementDetails } from '../components/ReplacementBadge.js';
@@ -37,6 +38,9 @@ function OptionToggle({ label, value, inherited, onChange, disabled }: { label: 
 
 export function BracketsPage({ settingsRepechage = false, settingsThird = false }: { settingsRepechage?: boolean; settingsThird?: boolean }) {
   const { id = '' } = useParams();
+  // Poste « Zone » : tableaux en lecture (pas de format, de tirage ni d'échange depuis l'écran d'une zone).
+  const [poste] = usePoste(id);
+  const readOnlyPoste = poste.kind === 'zone';
   const { data: categories = [] } = useCategories(id);
   const { data: zones = [] } = useZones(id);
   const { data: plan } = usePassages(id);
@@ -167,6 +171,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
                 Imprimer
               </Button>
             </Group>
+            {!readOnlyPoste && (<>
             <Group align="flex-end">
               <Select data-testid="category-format" size="xs" w={260} label="Format" disabled={locked} allowDeselect={false}
                 data={[{ value: 'auto', label: `Automatique (${selected.effectiveFormat ? ALL_FORMAT_LABELS[selected.effectiveFormat] : '—'})` },
@@ -204,8 +209,9 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
                 </Text>
               )}
             </Group>
+            </>)}
             <ApiErrorAlert error={update.error ?? redraw.error ?? swap.error ?? regenerate.error} />
-            <BracketView category={selected} entrants={entrants} numbers={passages?.numbers} noRest={passages?.noRest} matchZones={movedMatchZones(passages, zones, selected.bracket)} selected={swapFrom} onSelect={locked ? undefined : onSelectEntrant} badges={badges} badgeDetails={badgeDetails} />
+            <BracketView category={selected} entrants={entrants} numbers={passages?.numbers} noRest={passages?.noRest} matchZones={movedMatchZones(passages, zones, selected.bracket)} selected={swapFrom} onSelect={locked || readOnlyPoste ? undefined : onSelectEntrant} badges={badges} badgeDetails={badgeDetails} />
           </Stack>
         )}
         <Modal opened={confirmRegenerate} onClose={() => setConfirmRegenerate(false)} title="Régénérer le tableau ?">

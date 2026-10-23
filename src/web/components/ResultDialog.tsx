@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import type { CombatBracket, MatchMethod, ResolvedMatch } from '../../domain/brackets/index.js';
 import { affectedBy, type ResultRecord } from '../../domain/results.js';
 import type { Ruleset } from '../../domain/types.js';
-import { useDeleteResult, usePutResult } from '../api.js';
+import { ApiError, useDeleteResult, usePutResult } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { HelpButton, HelpText } from './Help.js';
 import type { EntrantInfo } from './BracketView.js';
@@ -50,6 +50,10 @@ export function ResultDialog({ competitionId, categoryId, bracket, ruleset, matc
     put.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [match?.id]);
+  // Refusé parce qu'un autre poste a enregistré ce combat entre-temps : la saisie se ferme (l'écran est rechargé, le message affiché).
+  const closeIfStale = (e: Error) => {
+    if (e instanceof ApiError && e.status === 409) onClose();
+  };
   if (!match) return null;
   const affected = existing && winner && winner !== match.result?.winner ? affectedBy(bracket, records, match.id, winner, tieBreaks) : [];
   const affectedByDelete = existing ? affectedBy(bracket, records, match.id, null, tieBreaks) : [];
@@ -71,7 +75,7 @@ export function ResultDialog({ competitionId, categoryId, bracket, ruleset, matc
     );
   };
   const save = () =>
-    winner && put.mutate({ cid: categoryId, matchId: match.id, winner, method, score: score.trim() || null, rev: openRev }, { onSuccess: onClose });
+    winner && put.mutate({ cid: categoryId, matchId: match.id, winner, method, score: score.trim() || null, rev: openRev }, { onSuccess: onClose, onError: closeIfStale });
 
   return (
     <Modal opened onClose={onClose} closeOnEscape={!helpOpen} title={`Combat ${number ?? ''} — résultat`} size="lg">
@@ -101,7 +105,7 @@ export function ResultDialog({ competitionId, categoryId, bracket, ruleset, matc
             <Group justify="flex-end" mt="xs">
               <Button size="xs" variant="default" onClick={() => setConfirmDelete(false)}>Non</Button>
               <Button size="xs" color="red" data-testid="result-delete-confirm" loading={del.isPending}
-                onClick={() => del.mutate({ cid: categoryId, matchId: match.id, rev: openRev }, { onSuccess: onClose })}>
+                onClick={() => del.mutate({ cid: categoryId, matchId: match.id, rev: openRev }, { onSuccess: onClose, onError: closeIfStale })}>
                 Effacer le résultat
               </Button>
             </Group>

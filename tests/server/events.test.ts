@@ -73,3 +73,48 @@ test('rôle serveur sans session → 401', async () => {
   expect((await srv.inject({ method: 'GET', url: `/api/competitions/${id}/events` })).statusCode).toBe(401);
   await srv.close();
 });
+
+test('arrêt du serveur avec un flux ouvert : il se ferme au lieu d’attendre', async () => {
+  const controller = new AbortController();
+  const res = await fetch(`${url}/api/competitions/${id}/events`, { signal: controller.signal });
+  expect(res.status).toBe(200);
+  const started = Date.now();
+  await app.close();
+  expect(Date.now() - started).toBeLessThan(2000);
+  controller.abort();
+  app = await buildApp({ dbPath: tmpDbPath() });
+});
+
+test('aperçus (routes …/preview) : aucun change (sinon les postes se rechargent en boucle)', async () => {
+  const pkg = { header: { club: 'Tani Dojo', coachName: null, coachPhone: null, coachEmail: null, preApproval: false }, lines: [] };
+  expect(await changesDuring(id, () => app.inject({ method: 'POST', url: `/api/competitions/${id}/club-forms/entry/preview`, payload: pkg }))).toBe(0);
+});
+
+test('le change porte l’identifiant du poste qui a écrit (en-tête X-Poste-Id)', async () => {
+  const controller = new AbortController();
+  const res = await fetch(`${url}/api/competitions/${id}/events`, { signal: controller.signal });
+  const reader = res.body!.getReader();
+  let text = '';
+  const reading = (async () => {
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        text += new TextDecoder().decode(value);
+      }
+    } catch {
+      /* fermé */
+    }
+  })();
+  await new Promise((r) => setTimeout(r, 100));
+  await app.inject({ method: 'PATCH', url: `/api/competitions/${id}`, headers: { 'x-poste-id': 'onglet-42' }, payload: { location: 'Nice' } });
+  await new Promise((r) => setTimeout(r, 300));
+  controller.abort();
+  await reading;
+  expect(text).toContain('data: {"origin":"onglet-42"}');
+});
+
+test('une restauration prévient toutes les compétitions', async () => {
+  const snapshot = (await app.inject({ method: 'GET', url: '/api/backup.sqlite' })).rawPayload;
+  expect(await changesDuring(id, () => app.inject({ method: 'POST', url: '/api/restore', payload: snapshot, headers: { 'content-type': 'application/octet-stream' } }))).toBeGreaterThanOrEqual(1);
+});
