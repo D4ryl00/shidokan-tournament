@@ -6,6 +6,7 @@ import { closeDb, openDb } from '../../src/server/db/client.js';
 import { hashPassword, verifyPassword } from '../../src/server/auth/passwords.js';
 import { createUser } from '../../src/server/auth/sessions.js';
 import { RateLimiter } from '../../src/server/auth/guard.js';
+import { registeredRoutes } from '../helpers/routes.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance | null = null;
@@ -29,20 +30,8 @@ const login = async (a: FastifyInstance, password = PASSWORD) =>
   a.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'orga@example.org', password } });
 const cookieOf = (res: { headers: Record<string, unknown> }) => String(res.headers['set-cookie']).split(';')[0]!;
 
-/** Toutes les routes enregistrées (« méthode adresse »), depuis l'arbre de printRoutes. */
-function routes(a: FastifyInstance): { method: string; url: string }[] {
-  const stack: string[] = [];
-  const out: { method: string; url: string }[] = [];
-  for (const line of a.printRoutes({ commonPrefix: false }).split('\n')) {
-    const m = line.match(/^([│ ]*)[├└]── (\S+)(?: \(([^)]+)\))?/);
-    if (!m) continue;
-    const depth = m[1]!.length / 4;
-    stack.length = depth;
-    stack.push(m[2]!);
-    for (const method of (m[3] ?? '').split(', ').filter(Boolean)) out.push({ method, url: stack.join('').replace(/:[A-Za-z]+/g, 'x') });
-  }
-  return out;
-}
+/** Toutes les routes enregistrées, paramètres remplacés par « x ». */
+const routes = (a: FastifyInstance) => registeredRoutes(a).map((r) => ({ method: r.method, url: r.pattern.replace(/:[A-Za-z]+/g, 'x') }));
 
 test('hashPassword / verifyPassword : bon et mauvais mot de passe ; deux empreintes du même mot de passe diffèrent', () => {
   const a = hashPassword(PASSWORD);

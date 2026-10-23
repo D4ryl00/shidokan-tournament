@@ -33,6 +33,7 @@ import { invitationRoutes } from './routes/invitations.js';
 import { clubEntryRoutes } from './routes/club-entry.js';
 import { loggerOptions } from './log.js';
 import { registerGuard, type InstanceRole } from './auth/guard.js';
+import { registerReadOnlyGuard } from './sync/ownership.js';
 import { authRoutes } from './routes/auth.js';
 import { appSettingsRoutes } from './routes/app-settings.js';
 import { nodemailerTransport, type MailTransport } from './mail.js';
@@ -70,6 +71,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: loggerOptions(opts.logger ?? false), bodyLimit: 20 * 1024 * 1024, trustProxy });
   const db = openDb(opts.dbPath);
   registerGuard(app, db, role);
+  registerReadOnlyGuard(app, db);
   ensureInstance(db, opts.instanceName ?? 'PC');
   const stopBackups = startAutoBackup(db, opts.dbPath, opts.backupIntervalMin ?? 0, (e) => app.log.error(e));
   const stopRetention = startRetention(db, opts.dbPath, (e) => app.log.error(e));
