@@ -12,11 +12,11 @@ const emptyLine = (): ClubFormLine => ({
   lastName: '', firstName: '', sex: null, ageBandCode: null, weightKg: null, combat: null, kata: false, grade: null, ruleset: null, prefs: {}, shobuKeep: null,
 });
 const EMPTY_HEADER: ClubFormHeader = { club: '', coachName: null, coachPhone: null, coachEmail: null, preApproval: false };
-const COMBATS: [CombatDiscipline, string][] = [['karate', 'Karaté'], ['shido-boxing', 'Boxing'], ['shido-mix', 'Mix'], ['triathlon', 'Triathlon']];
-const PREFS: [PrefDiscipline, string, string][] = [['karate', 'Karaté', 'Ka'], ['shido-boxing', 'Boxing', 'Bx'], ['shido-mix', 'Mix', 'Mx']];
+export const COMBATS: [CombatDiscipline, string][] = [['karate', 'Karaté'], ['shido-boxing', 'Boxing'], ['shido-mix', 'Mix'], ['triathlon', 'Triathlon']];
+export const PREFS: [PrefDiscipline, string, string][] = [['karate', 'Karaté', 'Ka'], ['shido-boxing', 'Boxing', 'Bx'], ['shido-mix', 'Mix', 'Mx']];
 
 /** Cases à choix unique, comme sur la fiche : un second clic décoche. */
-function OneOf<T extends string>({ value, options, onChange }: { value: T | null; options: [T, string][]; onChange: (v: T | null) => void }) {
+export function OneOf<T extends string>({ value, options, onChange }: { value: T | null; options: [T, string][]; onChange: (v: T | null) => void }) {
   return (
     <Group gap={4} wrap="wrap">
       {options.map(([v, label]) => (

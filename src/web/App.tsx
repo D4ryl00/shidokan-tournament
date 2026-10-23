@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import { AppHeader } from './components/AppHeader.js';
 import { CompetitionLayout } from './components/CompetitionLayout.js';
 import { BracketsRoute } from './pages/BracketsRoute.js';
+import { ClubEntryPage } from './pages/ClubEntryPage.js';
 import { ClubFormPage } from './pages/ClubFormPage.js';
 import { ClubsPage } from './pages/ClubsPage.js';
 import { CompetitionSettingsPage } from './pages/CompetitionSettingsPage.js';
@@ -25,6 +26,7 @@ export function App() {
         <Route path="/competitions/:id/impression" element={<PrintPage />} />
         <Route path="/competitions/:id/impression/pesee" element={<WeighInSheets />} />
         <Route path="/competitions/:id/impression/podiums" element={<PodiumsPrintPage />} />
+        <Route path="/inscription/:token" element={<ClubEntryPage />} />
         <Route path="*" element={<MainShell />} />
       </Routes>
     </BrowserRouter>
