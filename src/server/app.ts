@@ -35,6 +35,7 @@ import { loggerOptions } from './log.js';
 import { registerGuard, type InstanceRole } from './auth/guard.js';
 import { registerReadOnlyGuard } from './sync/ownership.js';
 import { syncRemoteRoutes } from './routes/sync-remote.js';
+import { syncLocalRoutes } from './routes/sync-local.js';
 import { authRoutes } from './routes/auth.js';
 import { appSettingsRoutes } from './routes/app-settings.js';
 import { nodemailerTransport, type MailTransport } from './mail.js';
@@ -107,7 +108,9 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     if (error instanceof SyntaxError && (error as { statusCode?: number }).statusCode === 400) return reply.status(400).send({ error: 'Requête mal formée (JSON invalide)' });
     const status = (error as { statusCode?: number }).statusCode ?? 500;
     if (status >= 500) app.log.error(error);
-    return reply.status(status).send({ error: status >= 500 ? 'Erreur interne du serveur' : (error as Error).message });
+    // Une erreur d'au moins 500 garde son message seulement s'il est fait pour l'écran (`expose`, par exemple le serveur injoignable).
+    const expose = (error as { expose?: boolean }).expose === true;
+    return reply.status(status).send({ error: status >= 500 && !expose ? 'Erreur interne du serveur' : (error as Error).message });
   });
 
   // Fichiers (fiches club, exports FFK) envoyés en corps brut.
@@ -157,6 +160,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(clubEntryRoutes, { db });
   await app.register(authRoutes, { db, role });
   await app.register(syncRemoteRoutes, { db, dbPath: opts.dbPath, role });
+  await app.register(syncLocalRoutes, { db, dbPath: opts.dbPath, role });
   await app.register(appSettingsRoutes, { db, mailTransport });
 
   // Après toute écriture réussie qui touche aux inscriptions ou aux réglages : catégories et tableaux à jour.

@@ -9,7 +9,9 @@ export function getAppSettings(db: AppDb): AppSettings {
 }
 
 /** Réglages tels que renvoyés à l'écran : jamais le mot de passe SMTP. */
-export function publicAppSettings(s: AppSettings): PublicAppSettings {
+export function publicAppSettings(full: AppSettings): PublicAppSettings {
+  // Le serveur relié (et son jeton) ne passe que par /api/sync/settings.
+  const { syncServer: _sync, ...s } = full as AppSettings & { syncServer?: unknown };
   if (!s.smtp) return { ...s, smtp: null };
   const { password, ...smtp } = s.smtp;
   return { ...s, smtp: { ...smtp, hasPassword: !!password } };
