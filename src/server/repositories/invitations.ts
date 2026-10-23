@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { and, count, eq, isNull } from 'drizzle-orm';
+import { and, count, desc, eq, isNull } from 'drizzle-orm';
 import type { AppDb } from '../db/client.js';
-import { clubDirectory, clubInvitations, clubs, competitions, fighters } from '../db/schema.js';
+import { clubDirectory, clubInvitations, clubs, competitions, fighters, mailLog } from '../db/schema.js';
 import { NotFoundError } from './registrations.js';
 
 export const newToken = (): string => randomBytes(24).toString('base64url');
@@ -21,6 +21,8 @@ export interface ClubInvitationRow {
   invitedAt: string | null;
   lastUsedAt: string | null;
   fighters: number;
+  /** Dernier mail envoyé au club pour cette compétition. */
+  lastMail: { sentAt: string; status: 'sent' | 'error'; error: string | null } | null;
 }
 export type ClubEntryStatus = 'closed' | 'open' | 'frozen';
 export interface ClubEntrySettings {
@@ -67,9 +69,11 @@ export function listInvitations(db: AppDb, competitionId: string): ClubInvitatio
     .map((c) => {
       const link = db.select().from(clubInvitations).where(active(competitionId, c.id)).get();
       const n = db.select({ n: count() }).from(fighters).where(eq(fighters.clubId, c.id)).get()!.n;
+      const mail = db.select().from(mailLog).where(eq(mailLog.clubId, c.id)).orderBy(desc(mailLog.sentAt)).get();
       return {
         clubId: c.id, clubName: c.name, directoryClubId: c.directoryClubId, coachEmail: c.coachEmail,
         invited: !!link, invitedAt: link?.createdAt ?? null, lastUsedAt: link?.lastUsedAt ?? null, fighters: n,
+        lastMail: mail ? { sentAt: mail.sentAt, status: mail.status, error: mail.error } : null,
       };
     });
 }
@@ -144,6 +148,12 @@ export function resolveInvitation(db: AppDb, token: string): { competitionId: st
   if (!link) return null;
   db.update(clubInvitations).set({ lastUsedAt: NOW() }).where(eq(clubInvitations.id, link.id)).run();
   return { competitionId: link.competitionId, clubId: link.clubId };
+}
+
+/** État d'un jeton : actif, remplacé ou révoqué (l'empreinte est gardée), ou inconnu. */
+export function invitationStatus(db: AppDb, token: string): 'active' | 'revoked' | 'unknown' {
+  const link = db.select().from(clubInvitations).where(eq(clubInvitations.tokenHash, hashToken(token))).get();
+  return !link ? 'unknown' : link.revokedAt ? 'revoked' : 'active';
 }
 
 export function getClubEntrySettings(db: AppDb, competitionId: string): ClubEntrySettings {

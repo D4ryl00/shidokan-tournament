@@ -61,12 +61,12 @@ test('GET : compétition, en-tête, tranches proposées, lignes de tous les comb
   expect(v.lines.map((l) => l.line.lastName)).toEqual(['DURAND', 'MARTIN']);
 });
 
-test('lien inconnu ou révoqué → 404 « Lien inconnu ou expiré. »', async () => {
+test('lien inconnu → 404 « Lien inconnu ou expiré. » ; révoqué → 410', async () => {
   const unknown = await app.inject({ method: 'GET', url: '/api/inscription/inconnu' });
   expect(unknown.statusCode).toBe(404);
   expect(unknown.json().error).toBe('Lien inconnu ou expiré.');
   await app.inject({ method: 'DELETE', url: `${base}/invitations/${clubId}` });
-  expect((await app.inject({ method: 'GET', url: url() })).statusCode).toBe(404);
+  expect((await app.inject({ method: 'GET', url: url() })).statusCode).toBe(410); // lien révoqué : « remplacé »
 });
 
 test('ajouter une ligne combat + kata → deux inscriptions « online », catégorie de poids déduite ; GET la renvoie identique', async () => {

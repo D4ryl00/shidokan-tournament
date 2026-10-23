@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { mailTemplateSchema } from './app-settings.js';
 
 export const COMBAT_FORMATS = [
   'single_match',
@@ -37,6 +38,8 @@ export const competitionSettingsSchema = z
     /** Zone où passent les combats pour la 1re place (null : aucune). */
     finalsZoneId: z.string().nullable(),
     kataFinalsOnFinalsZone: z.boolean(),
+    /** Message envoyé aux clubs pour cette compétition (null : celui des réglages de l'application). */
+    invitationMail: mailTemplateSchema.nullable(),
   })
   .strict();
 
@@ -59,6 +62,7 @@ export function defaultSettings(): CompetitionSettings {
     passageOrder: 'rounds',
     finalsZoneId: null,
     kataFinalsOnFinalsZone: false,
+    invitationMail: null,
   };
 }
 

@@ -1,6 +1,7 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
+import { invitationMessage, mailtoInvitation, sendInvitations, type MailTransport } from '../mail.js';
 import { getCompetition } from '../repositories/competitions.js';
 import {
   getClubEntrySettings,
@@ -15,7 +16,9 @@ type P = { Params: { id: string } };
 type PC = { Params: { id: string; clubId: string } };
 
 /** Liens personnels des clubs, ouverture et gel des inscriptions en ligne (côté organisateur). */
-export async function invitationRoutes(app: FastifyInstance, { db }: { db: AppDb }) {
+export async function invitationRoutes(app: FastifyInstance, { db, mailTransport, publicUrl, mailPauseMs }: { db: AppDb; mailTransport: MailTransport; publicUrl?: string; mailPauseMs?: number }) {
+  /** Base des liens envoyés : l'adresse publique du serveur, sinon celle par laquelle l'organisateur est venu. */
+  const baseUrl = (req: FastifyRequest) => publicUrl ?? `${req.protocol}://${req.host}`;
   app.addHook('preHandler', async (req, reply) => {
     const id = (req.params as { id?: string }).id;
     if (id && !(await getCompetition(db, id))) return reply.status(404).send({ error: 'Compétition introuvable' });
@@ -30,6 +33,16 @@ export async function invitationRoutes(app: FastifyInstance, { db }: { db: AppDb
   app.delete<PC>('/api/competitions/:id/invitations/:clubId', async (req, reply) => {
     revokeInvitation(db, req.params.id, req.params.clubId);
     return reply.status(204).send();
+  });
+
+  app.post<P>('/api/competitions/:id/invitations/send', async (req) => {
+    const { clubIds } = z.object({ clubIds: z.array(z.string()).min(1).max(500) }).parse(req.body);
+    return sendInvitations(db, mailTransport, req.params.id, clubIds, baseUrl(req), mailPauseMs);
+  });
+  app.post<PC>('/api/competitions/:id/invitations/:clubId/mailto', async (req) => mailtoInvitation(db, req.params.id, req.params.clubId, baseUrl(req)));
+  app.get<P & { Querystring: { clubId?: string } }>('/api/competitions/:id/invitations/preview', async (req) => {
+    const { clubId } = z.object({ clubId: z.string().min(1) }).parse(req.query);
+    return invitationMessage(db, req.params.id, clubId, '{lien}');
   });
 
   app.get<P>('/api/competitions/:id/club-entry', async (req) => getClubEntrySettings(db, req.params.id));

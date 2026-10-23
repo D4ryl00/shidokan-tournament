@@ -3,11 +3,18 @@ import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
 import { syncCategories } from '../repositories/categories.js';
 import { deleteClubLine, getClubEntry, saveClubLine, updateClubEntryHeader, type ClubAccess } from '../repositories/club-entry.js';
-import { resolveInvitation } from '../repositories/invitations.js';
+import { invitationStatus, resolveInvitation } from '../repositories/invitations.js';
 import { NotFoundError } from '../repositories/registrations.js';
 import { clubFormLineSchema } from './registrations.js';
 
 type T = { Params: { token: string } };
+
+class ReplacedLinkError extends Error {
+  readonly statusCode = 410;
+  constructor() {
+    super('Ce lien a été remplacé : utilisez celui du dernier mail reçu.');
+  }
+}
 type TF = { Params: { token: string; fighterId: string } };
 
 const text = (max: number) => z.string().trim().max(max).transform((v) => v || null).nullable();
@@ -27,8 +34,9 @@ export async function clubEntryRoutes(app: FastifyInstance, { db }: { db: AppDb 
   const resync = (competitionId: string) => syncCategories(db, competitionId).catch((e) => app.log.error(e));
   const access = (token: string): ClubAccess => {
     const found = resolveInvitation(db, token);
-    if (!found) throw new NotFoundError('Lien inconnu ou expiré.');
-    return found;
+    if (found) return found;
+    if (invitationStatus(db, token) === 'revoked') throw new ReplacedLinkError();
+    throw new NotFoundError('Lien inconnu ou expiré.');
   };
 
   app.get<T>('/api/inscription/:token', async (req) => getClubEntry(db, access(req.params.token)));

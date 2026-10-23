@@ -35,6 +35,7 @@ import { loggerOptions } from './log.js';
 import { registerGuard, type InstanceRole } from './auth/guard.js';
 import { authRoutes } from './routes/auth.js';
 import { appSettingsRoutes } from './routes/app-settings.js';
+import { nodemailerTransport, type MailTransport } from './mail.js';
 import { RestoreError, startAutoBackup } from './repositories/backups.js';
 import { ensureInstance } from './repositories/instance.js';
 import { ffkImportRoutes } from './routes/ffk-import.js';
@@ -53,6 +54,10 @@ export interface AppOptions {
   role?: InstanceRole;
   /** Adresse publique du serveur (base des liens envoyés aux clubs) ; à défaut, l'origine de la requête. */
   publicUrl?: string;
+  /** Envoi des mails (nodemailer par défaut ; remplacé dans les tests). */
+  mailTransport?: MailTransport;
+  /** Pause entre deux mails d'un envoi groupé (300 ms par défaut). */
+  mailPauseMs?: number;
 }
 
 const NOT_FOUND = { error: 'Compétition introuvable' };
@@ -139,10 +144,11 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(launchRoutes, { db });
   await app.register(backupRoutes, { db, dbPath: opts.dbPath });
   await app.register(directoryRoutes, { db });
-  await app.register(invitationRoutes, { db });
+  const mailTransport = opts.mailTransport ?? nodemailerTransport;
+  await app.register(invitationRoutes, { db, mailTransport, publicUrl: opts.publicUrl, mailPauseMs: opts.mailPauseMs });
   await app.register(clubEntryRoutes, { db });
   await app.register(authRoutes, { db, role });
-  await app.register(appSettingsRoutes, { db });
+  await app.register(appSettingsRoutes, { db, mailTransport });
 
   // Après toute écriture réussie qui touche aux inscriptions ou aux réglages : catégories et tableaux à jour.
   app.addHook('onResponse', async (req, reply) => {
