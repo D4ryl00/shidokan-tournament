@@ -21,6 +21,21 @@ import { writeOds } from '../spreadsheet/ods.js';
 
 const discipline = z.enum(['karate', 'shido-boxing', 'shido-mix', 'triathlon', 'kata']);
 const pref = z.union([z.literal(1), z.literal(2)]).optional();
+/** Une ligne de fiche (un combattant), saisie à l'écran. */
+export const clubFormLineSchema = z.object({
+  lastName: z.string(),
+  firstName: z.string(),
+  sex: z.enum(['M', 'F']).nullable(),
+  ageBandCode: z.string().nullable(),
+  weightKg: z.number().positive().nullable(),
+  combat: z.enum(['karate', 'shido-boxing', 'shido-mix', 'triathlon']).nullable(),
+  kata: z.boolean(),
+  grade: z.string().trim().max(30).nullable(),
+  ruleset: z.enum(['jiyu', 'shobu']).nullable(),
+  prefs: z.object({ karate: pref, 'shido-boxing': pref, 'shido-mix': pref }),
+  shobuKeep: z.enum(['ruleset', 'discipline']).nullable(),
+});
+
 /** Fiche papier saisie à l'écran : en-tête du club et lignes (un combattant par ligne). */
 const paperEntrySchema = z.object({
   header: z.object({
@@ -30,21 +45,7 @@ const paperEntrySchema = z.object({
     coachEmail: z.string().trim().nullable(),
     preApproval: z.boolean(),
   }),
-  lines: z.array(
-    z.object({
-      lastName: z.string(),
-      firstName: z.string(),
-      sex: z.enum(['M', 'F']).nullable(),
-      ageBandCode: z.string().nullable(),
-      weightKg: z.number().positive().nullable(),
-      combat: z.enum(['karate', 'shido-boxing', 'shido-mix', 'triathlon']).nullable(),
-      kata: z.boolean(),
-      grade: z.string().trim().max(30).nullable(),
-      ruleset: z.enum(['jiyu', 'shobu']).nullable(),
-      prefs: z.object({ karate: pref, 'shido-boxing': pref, 'shido-mix': pref }),
-      shobuKeep: z.enum(['ruleset', 'discipline']).nullable(),
-    }),
-  ).max(200),
+  lines: z.array(clubFormLineSchema).max(200),
 });
 
 export const registrationInputSchema = z
@@ -62,7 +63,7 @@ export const registrationInputSchema = z
     approxWeightKg: z.number().positive().max(250).nullable().optional(),
     otherDisciplines: z.array(discipline).optional(),
     acceptsJiyuFirst: z.boolean().nullable().optional(),
-    source: z.enum(['club_form', 'ffk', 'manual', 'onsite']),
+    source: z.enum(['club_form', 'ffk', 'manual', 'onsite', 'online']),
   })
   .strict();
 

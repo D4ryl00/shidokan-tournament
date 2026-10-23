@@ -30,6 +30,7 @@ import { zoneRoutes } from './routes/zones.js';
 import { backupRoutes } from './routes/backups.js';
 import { directoryRoutes } from './routes/directory.js';
 import { invitationRoutes } from './routes/invitations.js';
+import { clubEntryRoutes } from './routes/club-entry.js';
 import { RestoreError, startAutoBackup } from './repositories/backups.js';
 import { ensureInstance } from './repositories/instance.js';
 import { ffkImportRoutes } from './routes/ffk-import.js';
@@ -129,6 +130,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(backupRoutes, { db, dbPath: opts.dbPath });
   await app.register(directoryRoutes, { db });
   await app.register(invitationRoutes, { db });
+  await app.register(clubEntryRoutes, { db });
 
   // Après toute écriture réussie qui touche aux inscriptions ou aux réglages : catégories et tableaux à jour.
   app.addHook('onResponse', async (req, reply) => {

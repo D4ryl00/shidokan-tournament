@@ -85,3 +85,26 @@ export function linkAllClubs(db: AppDb): number {
   })();
   return pending.length;
 }
+
+export class AffiliationConflictError extends Error {
+  readonly statusCode = 400;
+}
+
+/**
+ * Numéro d'affiliation donné par le club lui-même : s'il est libre, son entrée le reçoit ; s'il est tenu par une autre entrée,
+ * le club est relié à celle-ci ; si son entrée a déjà un autre numéro, refus.
+ */
+export function assignAffiliationNumber(db: AppDb, clubId: string, number: string): void {
+  const entryId = db.select().from(clubs).where(eq(clubs.id, clubId)).get()?.directoryClubId ?? linkClub(db, clubId);
+  const entry = db.select().from(clubDirectory).where(eq(clubDirectory.id, entryId)).get()!;
+  if (entry.affiliationNumber === number) return;
+  const holder = db.select().from(clubDirectory).where(eq(clubDirectory.affiliationNumber, number)).get();
+  if (holder) {
+    db.update(clubs).set({ directoryClubId: holder.id }).where(eq(clubs.id, clubId)).run();
+    return;
+  }
+  if (entry.affiliationNumber) {
+    throw new AffiliationConflictError(`Ce club a déjà le numéro d’affiliation ${entry.affiliationNumber} : contactez l’organisateur.`);
+  }
+  db.update(clubDirectory).set({ affiliationNumber: number }).where(eq(clubDirectory.id, entryId)).run();
+}

@@ -257,6 +257,37 @@ const originalDiscipline = (r: { discipline: DisciplineId; originalJson: string 
   r.originalJson ? (JSON.parse(r.originalJson) as { discipline: DisciplineId }).discipline : r.discipline;
 
 /**
+ * Crée ou met à jour l'inscription du combattant pour la discipline (d'origine) de `input`, comme l'import d'une fiche :
+ * une inscription existante garde son origine, une inscription confirmée FFK garde sa catégorie de poids, une inscription
+ * réaffectée ne voit changer que ses valeurs d'origine. `exclude` : inscriptions déjà traitées. Renvoie l'id de l'inscription.
+ */
+export function upsertFighterRegistration(t: AppDb, competitionId: string, fighterId: string, input: RegistrationInput, exclude: Set<string>): string {
+  const candidates = t
+    .select()
+    .from(registrations)
+    .where(eq(registrations.fighterId, fighterId))
+    .all()
+    .filter((r) => originalDiscipline(r) === input.discipline && !exclude.has(r.id));
+  // Celle de la fiche précédente d'abord ; sinon une inscription venue d'ailleurs (export FFK, saisie) : on la complète, sans doublon.
+  const same = candidates.find((r) => r.source === 'club_form') ?? candidates[0];
+  if (!same) {
+    const id = crypto.randomUUID();
+    t.insert(registrations).values({ id, competitionId, fighterId, ...registrationValues(input) }).run();
+    return id;
+  }
+  const values = { ...registrationValues(input), source: same.source };
+  if (same.ffkConfirmed) values.weightClassId = same.weightClassId;
+  if (same.originalJson) {
+    // Inscription réaffectée : la fiche met à jour les valeurs d'origine, pas le placement validé.
+    const { discipline, ruleset, weightClassId, ...rest } = values;
+    const original = JSON.parse(same.originalJson) as { weightClassId: string | null };
+    const fields = { discipline, ruleset, weightClassId: same.ffkConfirmed ? original.weightClassId : weightClassId };
+    t.update(registrations).set({ ...rest, originalJson: JSON.stringify({ ...original, ...fields }) }).where(eq(registrations.id, same.id)).run();
+  } else t.update(registrations).set(values).where(eq(registrations.id, same.id)).run();
+  return same.id;
+}
+
+/**
  * Importe une fiche club : met à jour le club ; les inscriptions de la fiche précédente sont mises à jour
  * sur place (mêmes identifiants), celles qui ont disparu de la fiche sont retirées.
  */
@@ -287,31 +318,7 @@ export async function importClubForm(
       // Une inscription confirmée par l'export FFK garde l'âge et le poids FFK (l'export fait foi).
       const confirmedFighters = new Set(previous.filter((r) => r.ffkConfirmed).map((r) => r.fighterId));
       const fighter = findOrCreateFighter(t, competitionId, input, { keepAge: (id) => confirmedFighters.has(id) });
-      const same =
-        previous.find((r) => r.fighterId === fighter.id && originalDiscipline(r) === input.discipline && !kept.has(r.id)) ??
-        // Inscription venue d'ailleurs (export FFK, saisie) pour la même discipline : on la complète, sans doublon.
-        t
-          .select()
-          .from(registrations)
-          .where(eq(registrations.fighterId, fighter.id))
-          .all()
-          .find((r) => originalDiscipline(r) === input.discipline && !kept.has(r.id));
-      if (same) {
-        const values = registrationValues(input);
-        if (same.ffkConfirmed) values.weightClassId = same.weightClassId;
-        if (same.source !== 'club_form') values.source = same.source;
-        if (same.originalJson) {
-          // Inscription recasée : la fiche met à jour les valeurs d'origine, pas le placement validé.
-          const { discipline, ruleset, weightClassId, ...rest } = values;
-          const original = JSON.parse(same.originalJson) as { weightClassId: string | null };
-          const fields = { discipline, ruleset, weightClassId: same.ffkConfirmed ? original.weightClassId : weightClassId };
-          t.update(registrations).set({ ...rest, originalJson: JSON.stringify({ ...original, ...fields }) }).where(eq(registrations.id, same.id)).run();
-        } else t.update(registrations).set(values).where(eq(registrations.id, same.id)).run();
-        kept.add(same.id);
-      } else {
-        const id = crypto.randomUUID();
-        t.insert(registrations).values({ id, competitionId, fighterId: fighter.id, ...registrationValues(input) }).run();
-      }
+      kept.add(upsertFighterRegistration(t, competitionId, fighter.id, input, kept));
       imported++;
     }
     // Une inscription d'une catégorie lancée n'est jamais retirée par un réimport.
