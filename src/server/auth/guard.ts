@@ -43,7 +43,7 @@ export function cookieValue(req: FastifyRequest, name: string): string | null {
 
 /** Routes ouvertes sans connexion (motifs des routes de Fastify, pas les adresses brutes). */
 const PUBLIC_ROUTES = new Set(['/api/health', '/api/auth/me', '/api/auth/login']);
-const isPublicRoute = (route: string) =>
+export const isPublicRoute = (route: string) =>
   PUBLIC_ROUTES.has(route) || route === '/api/inscription/:token' || route.startsWith('/api/inscription/:token/') || route.startsWith('/api/sync/remote/'); // ouvertes par leur jeton
 const TOO_MANY = { error: 'Trop de requêtes : réessayez dans quelques minutes.' };
 

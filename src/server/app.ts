@@ -33,6 +33,7 @@ import { invitationRoutes } from './routes/invitations.js';
 import { clubEntryRoutes } from './routes/club-entry.js';
 import { loggerOptions } from './log.js';
 import { registerGuard, type InstanceRole } from './auth/guard.js';
+import { registerPermissions } from './auth/permissions.js';
 import { registerReadOnlyGuard } from './sync/ownership.js';
 import { registerCategoryRevGuard } from './revisions.js';
 import { registerCompetitionEvents } from './events.js';
@@ -77,6 +78,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: loggerOptions(opts.logger ?? false), bodyLimit: 20 * 1024 * 1024, trustProxy });
   const db = openDb(opts.dbPath);
   registerGuard(app, db, role);
+  registerPermissions(app, db, role);
   registerReadOnlyGuard(app, db);
   registerCategoryRevGuard(app, db);
   registerCompetitionEvents(app);
@@ -126,8 +128,8 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
 
   app.get('/api/health', async () => ({ ok: true }));
 
-  app.get('/api/competitions', async () => await listCompetitions(db));
-
+  // Un compte Zone ne voit que la compétition de sa zone.
+  app.get('/api/competitions', async (req) => (await listCompetitions(db)).filter((c) => req.user?.role !== 'zone' || c.id === req.user.competitionId));
 
   app.get<{ Params: { id: string } }>('/api/competitions/:id', async (req, reply) => {
     const c = await getCompetition(db, req.params.id);
