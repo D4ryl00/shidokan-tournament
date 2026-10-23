@@ -1,4 +1,4 @@
-import { Group, Title, UnstyledButton } from '@mantine/core';
+import { Anchor, Group, Title, UnstyledButton } from '@mantine/core';
 import { Link } from 'react-router';
 import { Logo } from './Logo.js';
 import { ThemeToggle } from './ThemeToggle.js';
@@ -12,7 +12,10 @@ export function AppHeader() {
           <Title order={3}>Shidokan France — Compétitions</Title>
         </Group>
       </UnstyledButton>
-      <ThemeToggle />
+      <Group gap="md" wrap="nowrap">
+        <Anchor component={Link} to="/annuaire" data-testid="nav-directory">Annuaire des clubs</Anchor>
+        <ThemeToggle />
+      </Group>
     </Group>
   );
 }

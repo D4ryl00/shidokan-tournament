@@ -86,3 +86,8 @@ test('vocabulaire : « session » et « réaffectation », plus « vague » ni �
     expect(text, id).not.toMatch(/\bvagues?\b|\brecas/i);
   }
 });
+
+test("annuaire : aide présente, elle parle du numéro d'affiliation et de la fusion", () => {
+  expect(all('annuaire')).toContain('affiliation');
+  expect(all('annuaire')).toContain('Fusionner');
+});

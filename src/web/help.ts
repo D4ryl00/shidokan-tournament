@@ -5,6 +5,7 @@
  */
 export type HelpTopicId =
   | 'competitions'
+  | 'annuaire'
   | 'impression'
   | 'inscriptions'
   | 'clubs'
@@ -62,6 +63,18 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Cliquez le nom d’une compétition pour l’ouvrir.',
       ],
       'Ordre habituel : réglages et grille, fiche club envoyée aux clubs, inscriptions, import FFK, pesée, réaffectation, tableaux, combats, podiums.',
+    ],
+  },
+  annuaire: {
+    title: 'Annuaire des clubs',
+    short: 'Les clubs connus, d’une compétition à l’autre : invitez-les ensuite aux inscriptions en ligne d’une compétition.',
+    details: [
+      'L’annuaire ne dépend d’aucune compétition. Il se remplit tout seul avec les clubs des fiches, de l’import FFK et des saisies ; vous pouvez aussi y créer des clubs à l’avance.',
+      [
+        'Le numéro d’affiliation FFK (les chiffres en tête du club dans l’export FFK) reconnaît un club à coup sûr, même si son nom est écrit autrement.',
+        '« Modifier » change le nom, le numéro d’affiliation, le coach ou les notes ; « Archiver » cache un club qui ne vient plus, sans rien effacer.',
+        '« Fusionner avec… » réunit deux fiches du même club : les compétitions de l’une passent à l’autre, puis la première est supprimée.',
+      ],
     ],
   },
   impression: {

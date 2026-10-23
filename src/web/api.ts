@@ -5,7 +5,7 @@ import type { CategoryProgress, MedalRow, ResultRecord } from '../domain/results
 import type { Category, CategoryStatus } from '../domain/categories.js';
 import type { ClubFormHeader, ClubFormLine, ClubFormParse } from '../domain/club-form.js';
 import type { ColumnMapping, FfkChoices, FfkImportPlan } from '../domain/ffk-import.js';
-import type { Club, RegistrationInput, RegistrationRow } from '../domain/registration.js';
+import type { Club, DirectoryEntry, DirectoryInput, RegistrationInput, RegistrationRow } from '../domain/registration.js';
 import type { Case, Presence, Proposal, ProposalType } from '../domain/replacement/index.js';
 import type { CategoryGrid, DisciplineId } from '../domain/types.js';
 import type { Wave, WaveInput } from '../domain/waves.js';
@@ -563,3 +563,16 @@ export function useLoadTemplate(id: string) {
   const qc = useQueryClient();
   return useMutation({ mutationFn: (templateId: string) => api<void>('POST', `/api/competitions/${id}/grid/load-template`, { templateId }), onSuccess: () => qc.invalidateQueries({ queryKey: ['grid', id] }) });
 }
+
+// Annuaire des clubs (indépendant des compétitions).
+export const useDirectory = () => useQuery({ queryKey: ['club-directory'], queryFn: () => api<DirectoryEntry[]>('GET', '/api/club-directory') });
+
+function useDirectoryMutation<V>(fn: (v: V) => Promise<DirectoryEntry>) {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries({ queryKey: ['club-directory'] }) });
+}
+export const useCreateDirectoryEntry = () => useDirectoryMutation((input: DirectoryInput) => api<DirectoryEntry>('POST', '/api/club-directory', input));
+export const useUpdateDirectoryEntry = () =>
+  useDirectoryMutation(({ id, ...patch }: Partial<DirectoryInput> & { id: string; archived?: boolean }) => api<DirectoryEntry>('PATCH', `/api/club-directory/${id}`, patch));
+export const useMergeDirectoryEntries = () =>
+  useDirectoryMutation((ids: { keepId: string; mergeId: string }) => api<DirectoryEntry>('POST', '/api/club-directory/merge', ids));
