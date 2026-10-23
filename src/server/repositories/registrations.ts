@@ -15,6 +15,7 @@ import type { ProposalType } from '../../domain/replacement/types.js';
 import type { DisciplineId } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
 import { withoutRowMeta } from '../db/row-versions.js';
+import { linkClub } from './club-directory.js';
 import { categories, clubs, fighters, registrations } from '../db/schema.js';
 import { getCompetition, getGrid } from './competitions.js';
 
@@ -66,12 +67,14 @@ function upsertClubSync(db: AppDb, competitionId: string, data: ClubUpsert): Clu
   const defined = Object.fromEntries(Object.entries(data).filter(([k, v]) => v !== undefined && k !== 'name'));
   if (existing) {
     if (Object.keys(defined).length) db.update(clubs).set(defined).where(eq(clubs.id, existing.id)).run();
+    linkClub(db, existing.id);
     return toClub(db.select().from(clubs).where(eq(clubs.id, existing.id)).get()!);
   }
   const id = crypto.randomUUID();
   db.insert(clubs)
     .values({ id, competitionId, nameKey, name: data.name.trim(), ffkEntity: null, coachName: null, coachPhone: null, coachEmail: null, preApproval: false, ...defined })
     .run();
+  linkClub(db, id);
   return toClub(db.select().from(clubs).where(eq(clubs.id, id)).get()!);
 }
 
@@ -85,6 +88,7 @@ export async function updateClub(db: AppDb, competitionId: string, clubId: strin
   if (!row) throw new NotFoundError('Club introuvable');
   const set = { ...patch, ...(patch.name ? { nameKey: normalizeName(patch.name) } : {}) };
   db.update(clubs).set(set).where(eq(clubs.id, clubId)).run();
+  linkClub(db, clubId);
   return toClub(db.select().from(clubs).where(eq(clubs.id, clubId)).get()!);
 }
 

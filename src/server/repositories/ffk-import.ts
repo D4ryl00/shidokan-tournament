@@ -15,6 +15,7 @@ import { mergeWeightClasses, validateGrid } from '../../domain/grid.js';
 import { normalizeName } from '../../domain/names.js';
 import type { ProposalType } from '../../domain/replacement/types.js';
 import type { AppDb } from '../db/client.js';
+import { linkClub } from './club-directory.js';
 import { clubAliases, clubs, fighters, importMappings, registrations, uploads, weightClasses } from '../db/schema.js';
 import { readWorkbook } from '../spreadsheet/read.js';
 import { GridValidationError, getGrid } from './competitions.js';
@@ -156,12 +157,14 @@ export async function applyFfkPlan(
             .run();
         }
         clubIdByEntity.set(link.clubEntity, club.id);
+        linkClub(t, club.id);
       } else {
         const id = crypto.randomUUID();
         t.insert(clubs)
           .values({ id, competitionId, name: link.clubName, nameKey: normalizeName(link.clubName), ffkEntity: link.clubEntity, preApproval: false })
           .run();
         clubIdByEntity.set(link.clubEntity, id);
+        linkClub(t, id);
       }
     }
 

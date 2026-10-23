@@ -165,4 +165,20 @@ test('restauration : une compétition gérée par l’installation d’origine o
   ]);
 });
 
-test.todo("restauration d'une sauvegarde de l'étape 14 (olderDb(13), avec un club) : mise à niveau, lignes versionnées, club relié à l'annuaire");
+test("restauration d'une sauvegarde de l'étape 14 (olderDb(13), avec un club) : mise à niveau, lignes versionnées, club relié à l'annuaire", async () => {
+  const before = localInstance();
+  const file = olderDb(13);
+  const r = new Database(file);
+  r.exec(`
+    INSERT INTO competitions (id, name, date, settings_json) VALUES ('c1', 'Ancienne', '2025-11-22', '{}');
+    INSERT INTO clubs (id, competition_id, name, name_key, ffk_entity, pre_approval) VALUES ('k1', 'c1', 'Tani Dojo', 'TANI DOJO', '0060893 TANI DOJO', 0);
+  `);
+  r.close();
+  const res = await app.inject({ method: 'POST', url: '/api/restore', payload: fs.readFileSync(file), headers: { 'content-type': 'application/octet-stream' } });
+  expect(res.statusCode).toBe(204);
+  const db = new Database(dbPath, { readonly: true });
+  expect(db.prepare('select count(*) as n from competitions where version is null').get()).toEqual({ n: 0 });
+  expect(db.prepare('select e.affiliation_number as number from clubs c join club_directory e on e.id = c.directory_club_id').all()).toEqual([{ number: '0060893' }]);
+  db.close();
+  expect(localInstance()).toEqual(before);
+});
