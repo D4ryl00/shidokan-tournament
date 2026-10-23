@@ -24,6 +24,7 @@ import {
   waveMoves,
 } from '../../domain/replacement/index.js';
 import type { AppDb } from '../db/client.js';
+import { withoutRowMeta } from '../db/row-versions.js';
 import { categories, clubs, competitions, fighters, recasements, refusals, registrations, waves } from '../db/schema.js';
 import { listWaves } from './waves.js';
 import { launchedWaveKeys } from './launch-state.js';
@@ -391,7 +392,7 @@ export async function listRecasements(db: AppDb, competitionId: string) {
     .where(eq(recasements.competitionId, competitionId))
     .all()
     .sort((a, b) => b.n - a.n)
-    .map(({ row: { snapshotJson: _s, ...r } }) => r);
+    .map(({ row: { snapshotJson: _s, ...r } }) => withoutRowMeta(r));
 }
 
 // --- Pesée ---

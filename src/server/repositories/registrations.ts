@@ -14,6 +14,7 @@ import {
 import type { ProposalType } from '../../domain/replacement/types.js';
 import type { DisciplineId } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
+import { withoutRowMeta } from '../db/row-versions.js';
 import { categories, clubs, fighters, registrations } from '../db/schema.js';
 import { getCompetition, getGrid } from './competitions.js';
 
@@ -43,15 +44,15 @@ type ClubUpsert = { name: string } & Partial<Omit<ClubData, 'name'>>;
 const fighterKey = (lastName: string, firstName: string) => normalizeName(`${lastName} ${firstName}`);
 
 function toClub(row: typeof clubs.$inferSelect): Club {
-  const { nameKey: _k, ...club } = row;
+  const { nameKey: _k, directoryClubId: _d, ...club } = withoutRowMeta(row);
   return club;
 }
 function toFighter(row: typeof fighters.$inferSelect): Fighter {
-  const { nameKey: _k, ...fighter } = row;
+  const { nameKey: _k, ...fighter } = withoutRowMeta(row);
   return fighter;
 }
 function toRegistration(row: typeof registrations.$inferSelect): Registration {
-  const { otherDisciplinesJson, ...rest } = row;
+  const { otherDisciplinesJson, ...rest } = withoutRowMeta(row);
   return { ...rest, recasementType: rest.recasementType as ProposalType | null, otherDisciplines: JSON.parse(otherDisciplinesJson) as DisciplineId[] };
 }
 
