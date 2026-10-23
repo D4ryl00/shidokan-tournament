@@ -171,6 +171,7 @@ Aujourd'hui, les pages ne se rafraîchissent pas toutes seules. Désormais, quan
 - Rôles : **organisateur** (tout), **table centrale** (inscriptions, pesée, réaffectations, résultats de toutes les zones), **zone** (résultats et notes de kata de sa zone seulement).
 - **En réseau local** 💡 : pas de mot de passe. Chaque navigateur choisit son poste (« Table centrale », « Zone Tatami 1 »…), et le choix est retenu par le navigateur. Le rôle sert à simplifier l'écran et à éviter les erreurs, pas à protéger. La protection vient du Wi-Fi fermé.
 - **En ligne** : comptes avec mot de passe (§8.2), et chaque compte a un rôle.
+- *(Construit, 2026-10-23, étape E :)* en ligne, le serveur refuse (403) ce que le rôle ne permet pas, et l'écran se règle sur le poste du compte (sans liste « Poste »). La table centrale peut aussi lancer et rouvrir les sessions et déplacer des catégories ; elle ne touche ni aux réglages, ni à la grille, ni aux sessions et zones, ni aux imports et invitations. Un compte **Zone est attaché à une zone d'une compétition précise** ✅ (choix de l'organisateur, 2026-10-23) : il est à refaire, ou à changer de rôle, pour chaque compétition. Il saisit un combat sur la zone de son passage (un combat déjà joué avant un déplacement reste à l'ancienne zone).
 - Le **PC principal peut aussi être le poste d'une zone** ✅ : son navigateur est un poste comme les autres.
 
 ### 7.4 Copie de secours sur un autre poste
@@ -192,6 +193,7 @@ Un réglage au démarrage choisit le rôle de l'installation : `local` (par déf
 - Table `users` : identifiant (e-mail), empreinte du mot de passe (fonction lente, par exemple scrypt de Node), rôle, zone éventuelle, date de création. Plus une table de sessions.
 - Le premier compte organisateur est créé en ligne de commande, ou au premier lancement en mode serveur 🔧.
 - Les comptes ne voyagent pas avec les compétitions.
+- *(Construit, 2026-10-23, étape E :)* rôles `organisateur`, `table`, `zone` (avec `competition_id` et `zone_id`) ; le rôle se change depuis l'écran Comptes (pas le sien), et vaut tout de suite. La ligne de commande ne crée que des organisateurs.
 
 ### 8.3 Sécurité et données personnelles
 - HTTPS obligatoire. Nombre de requêtes limité sur `/inscription/*` et sur la connexion (contre les essais de jetons ou de mots de passe).
@@ -245,6 +247,7 @@ Chaque écran de compétition indique où est la main : « Gérée ici », « G�
 ### 9.5 Reprise forcée
 - **PC perdu ou en panne, côté serveur** : un organisateur peut **reprendre la main** en ligne, après confirmation. Le serveur repart de sa dernière version, ou de la dernière copie reçue (geste 3), au choix. Le PC verra ensuite son « Rendre la main » refusé, avec un message expliquant la situation. Il pourra encore exporter un fichier pour qu'un organisateur le récupère à la main.
 - **Reprise par un second PC** (§7.4) : ce PC restaure la copie, mais son identité est différente (§3.1). *(Simplifié à la construction, 2026-10-23 :)* il exporte la compétition en fichier, et un organisateur l'importe en ligne en confirmant « Reprendre la main ».
+- **PC en secours quand tout tourne en ligne** ✅ (choix de l'organisateur, 2026-10-23 ; *construit, étape E*) : le PC relié garde une copie en lecture seule, récupérée de nouveau toutes les N minutes (« Garder cette copie à jour », dans un seul sens : ce n'est pas une synchronisation, §12). Internet coupé : « Prendre la main en secours » la rend modifiable sans le serveur. Internet revenu : « Prévenir le serveur » envoie la compétition avec l'empreinte de la version du serveur que le PC avait copiée. Si le serveur n'a pas changé depuis, la main passe au PC, comme après « Prendre la main ». Sinon le serveur refuse, et « Remplacer la version en ligne » (confirmé) met la version du PC en ligne ; celle du serveur reste dans sa sauvegarde automatique. Aucune fusion.
 
 ## 10. Plus tard : PC de zone autonomes (étape F) ✅ (principes 💡)
 
@@ -271,6 +274,8 @@ Ce cas ne se justifie que **s'il n'y a ni internet ni réseau local**. Dans tous
 Ordre choisi ✅ (2026-10-23) : **0 → B → C → D → A → E → F**. Les inscriptions en ligne sont la priorité ; elles sont utilisables par les clubs à la fin de l'étape C, et une compétition inscrite en ligne se déroule hors ligne le jour J à partir de l'étape D (transfert par fichier au minimum). Les lettres gardent leur nom d'origine.
 
 Seule l'étape 0 est à faire avant le 22 novembre ✅.
+
+*(État au 2026-10-23 :)* étapes 0, B, C, D, A et E construites (feuille de route, étapes 15 à 20). Reste F, seulement si le besoin se confirme.
 
 ## 12. Hors périmètre et anti-objectifs
 - Fusion automatique de deux bases, et règle « la dernière modification gagne ».

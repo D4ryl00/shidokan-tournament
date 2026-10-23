@@ -53,7 +53,12 @@ Pour une autre adresse que `competitions.shidokanfrance.com`, il y a deux endroi
 docker compose exec -it app node dist/server/cli.js add-user votre.adresse@exemple.fr
 ```
 
-Le mot de passe est demandé deux fois, sans s'afficher (10 caractères au moins). Connectez-vous ensuite sur `https://competitions.shidokanfrance.com`. Les autres comptes se créent depuis l'application, menu **Comptes**.
+Le mot de passe est demandé deux fois, sans s'afficher (10 caractères au moins). Connectez-vous ensuite sur `https://competitions.shidokanfrance.com`. Les autres comptes se créent depuis l'application, menu **Comptes**, avec un rôle :
+- **Organisateur** : tout ;
+- **Table centrale** : inscriptions, clubs, pesée, réaffectations, tableaux, sessions à lancer et résultats de toutes les zones ;
+- **Zone** : résultats, notes de kata et départages de **sa zone**, dans **une** compétition. Pour la compétition suivante, changez son rôle (« Changer le rôle ») ou créez un autre compte.
+
+Le serveur refuse ce que le rôle ne permet pas, et l'écran de chacun se règle sur son rôle.
 
 Autres commandes : `… cli.js list-users`, `… cli.js delete-user <e-mail>`.
 
@@ -111,6 +116,22 @@ La compétition se déroule sur le PC de la salle, sans internet. Une compétiti
 - Si un second PC a continué la compétition, exportez-la en fichier depuis ce PC, puis importez-la en ligne.
 
 Les comptes, les sessions, les jetons, les réglages d'envoi des mails et la mention ne voyagent jamais : chaque installation garde les siens.
+
+## Variante : le jour J tout en ligne, avec le PC en secours
+
+S'il y a internet dans la salle, la compétition peut se dérouler directement sur le serveur : chaque zone et la table centrale ouvrent `https://competitions.shidokanfrance.com` et se connectent avec leur compte.
+
+**La veille** :
+1. Créez un compte **Zone** par zone de la compétition, et un compte **Table centrale** (menu Comptes).
+2. Sur le PC de la salle, relié au serveur : « Récupérer une copie » de la compétition, puis cochez **« Garder cette copie à jour »** (onglet Réglages de la compétition, section « Échanges avec le serveur »). Le PC la récupère de nouveau toutes les quelques minutes, en lecture seule.
+
+**Si internet tombe** :
+1. Sur le PC : « **Prendre la main en secours** ». La copie devient modifiable tout de suite, sans le serveur.
+2. Les postes ouvrent l'adresse du PC sur le Wi-Fi de la salle (voir la fiche « Préparer le jour J »), et reprennent les saisies faites depuis la dernière copie.
+
+**Quand internet revient** : sur le PC, « **Prévenir le serveur** ».
+- Si rien n'a changé en ligne depuis la copie du PC, la main passe au PC, et la compétition est en lecture seule en ligne. La suite est la même que d'habitude : « Rendre la main au serveur » à la fin.
+- Sinon, le serveur refuse et l'explique. « **Remplacer la version en ligne** » met alors la version du PC en ligne ; celle du serveur reste dans la sauvegarde qu'il fait juste avant.
 
 ## Conservation des données
 

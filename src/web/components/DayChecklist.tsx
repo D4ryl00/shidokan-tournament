@@ -13,9 +13,16 @@ const STEPS = [
   'Sur chaque poste, peu d’onglets de compétition ouverts à la fois : un navigateur n’ouvre que 6 connexions vers le PC principal (les onglets cachés libèrent la leur).',
 ];
 
+/** Jour J tout en ligne : ce qu'il faut en plus, et le secours par le PC si internet tombe. */
+const ONLINE_STEPS = [
+  'Jour J en ligne : un compte Zone par zone de la compétition, et un compte Table centrale (menu Comptes du serveur).',
+  'Jour J en ligne : le PC de la salle relié au serveur, avec « Garder cette copie à jour » coché sur la compétition.',
+  'Si internet tombe : sur le PC, « Prendre la main en secours », puis les postes ouvrent l’adresse du PC ; quand internet revient, « Prévenir le serveur ».',
+];
+
 /** Fiche « Préparer le jour J » : la liste à cocher et l'adresse à ouvrir sur les autres postes. */
 export function DayChecklist() {
-  const [done, setDone] = useState<boolean[]>(STEPS.map(() => false));
+  const [done, setDone] = useState<boolean[]>([...STEPS, ...ONLINE_STEPS].map(() => false));
   const here = window.location.hostname;
   const local = here === 'localhost' || here === '127.0.0.1' || here === '[::1]';
   return (
@@ -28,7 +35,7 @@ export function DayChecklist() {
       ) : (
         <Text fz={28} fw={700} data-testid="day-address">{window.location.origin}</Text>
       )}
-      {STEPS.map((step, i) => (
+      {[...STEPS, ...ONLINE_STEPS].map((step, i) => (
         <Checkbox key={step} label={step} checked={done[i]} onChange={(e) => setDone((d) => d.map((x, j) => (j === i ? e.currentTarget.checked : x)))} />
       ))}
     </Stack>
