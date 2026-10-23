@@ -9,10 +9,13 @@ const tableNames = (db: AppDb): string[] =>
 const columnNames = (db: AppDb, table: string): string[] =>
   (db.$client.prepare('select name from pragma_table_info(?)').all(table) as { name: string }[]).map((c) => c.name);
 
-/** Tables versionnées, calculées depuis sqlite_master : competitions, club_directory, et les tables qui ont competition_id sauf uploads. Triées. */
+/**
+ * Tables versionnées, calculées depuis sqlite_master : competitions, club_directory, et les tables qui ont competition_id sauf uploads
+ * et users (un compte Zone porte la compétition où il saisit, mais les comptes sont propres à l'installation). Triées.
+ */
 export function versionedTables(db: AppDb): string[] {
   return tableNames(db)
-    .filter((t) => t === 'competitions' || t === 'club_directory' || (t !== 'uploads' && columnNames(db, t).includes('competition_id')))
+    .filter((t) => t === 'competitions' || t === 'club_directory' || (t !== 'uploads' && t !== 'users' && columnNames(db, t).includes('competition_id')))
     .sort();
 }
 

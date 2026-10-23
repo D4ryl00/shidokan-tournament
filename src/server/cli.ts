@@ -1,5 +1,5 @@
 /**
- * Comptes des organisateurs en ligne de commande (premier compte d'un serveur) :
+ * Comptes des organisateurs en ligne de commande (premier compte d'un serveur ; les autres rôles se donnent à l'écran Comptes) :
  *   node dist/server/cli.js add-user <e-mail>     mot de passe demandé deux fois (ou lu sur l'entrée standard, une ligne)
  *   node dist/server/cli.js list-users
  *   node dist/server/cli.js delete-user <e-mail>
@@ -65,7 +65,11 @@ async function main(): Promise<number> {
   const db = openDb(dbPath);
   try {
     if (command === 'list-users') {
-      for (const u of listUsers(db)) console.log(`${u.email}  (créé le ${u.createdAt.slice(0, 10)})`);
+      const label = { organisateur: 'Organisateur', table: 'Table centrale', zone: 'Zone' } as const;
+      for (const u of listUsers(db)) {
+        const zone = u.role === 'zone' ? ` ${u.zoneName ?? '(zone supprimée)'} — ${u.competitionName ?? '(compétition supprimée)'}` : '';
+        console.log(`${u.email}  ${label[u.role]}${zone}  (créé le ${u.createdAt.slice(0, 10)})`);
+      }
       return 0;
     }
     if (command === 'add-user' && email) {

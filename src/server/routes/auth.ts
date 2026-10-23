@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
 import { cookieValue, SESSION_COOKIE, type InstanceRole } from '../auth/guard.js';
 import { DUMMY_HASH, verifyPassword } from '../auth/passwords.js';
-import { changePassword, createSession, createUser, deleteSession, deleteUser, findUserByEmail, listUsers, SESSION_DAYS } from '../auth/sessions.js';
+import { changePassword, createSession, createUser, deleteSession, deleteUser, findUserByEmail, listUsers, SESSION_DAYS, setUserRole } from '../auth/sessions.js';
 
 /** Connexion des organisateurs et gestion des comptes (utiles en rôle serveur). */
 export async function authRoutes(app: FastifyInstance, { db, role }: { db: AppDb; role: InstanceRole }) {
@@ -13,7 +13,8 @@ export async function authRoutes(app: FastifyInstance, { db, role }: { db: AppDb
   app.get('/api/auth/me', async (req, reply) => {
     if (role === 'local') return { role, user: null };
     if (!req.user) return reply.status(401).send({ error: 'Non connecté.' });
-    return { role, user: { email: req.user.email } };
+    const { email, role: userRole, competitionId, zoneId } = req.user;
+    return { role, user: { email, role: userRole, competitionId, zoneId } };
   });
 
   app.post('/api/auth/login', async (req, reply) => {
@@ -32,12 +33,22 @@ export async function authRoutes(app: FastifyInstance, { db, role }: { db: AppDb
     return reply.status(204).send();
   });
 
-  const account = z.object({ email: z.string().max(200), password: z.string().max(200) });
+  const access = z.object({
+    role: z.enum(['organisateur', 'table', 'zone']),
+    competitionId: z.string().max(100).nullable().default(null),
+    zoneId: z.string().max(100).nullable().default(null),
+  });
+  const account = z.object({ email: z.string().max(200), password: z.string().max(200) }).and(access.partial({ role: true }));
   app.get('/api/users', async () => listUsers(db));
   app.post('/api/users', async (req, reply) => {
-    const { email, password } = account.parse(req.body);
-    const user = createUser(db, email, password);
+    const { email, password, role: userRole = 'organisateur', competitionId, zoneId } = account.parse(req.body);
+    const user = createUser(db, email, password, { role: userRole, competitionId, zoneId });
     return reply.status(201).send({ id: user.id, email: user.email });
+  });
+  app.patch<{ Params: { userId: string } }>('/api/users/:userId', async (req, reply) => {
+    if (req.user?.id === req.params.userId) return reply.status(400).send({ error: 'Vous ne pouvez pas changer le rôle de votre propre compte.' });
+    setUserRole(db, req.params.userId, access.parse(req.body));
+    return reply.status(204).send();
   });
   app.delete<{ Params: { userId: string } }>('/api/users/:userId', async (req, reply) => {
     if (req.user?.id === req.params.userId) return reply.status(400).send({ error: 'Vous ne pouvez pas supprimer votre propre compte.' });

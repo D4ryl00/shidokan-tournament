@@ -25,6 +25,10 @@ export const competitions = sqliteTable('competitions', {
   clubEntryDeadline: text('club_entry_deadline'),
   /** Données d'organisation effacées (délai de conservation dépassé) : palmarès seul gardé. */
   purgedAt: text('purged_at'),
+  /** PC : empreinte de la version du serveur reçue avec la dernière copie (propre à l'installation, ne voyage pas). */
+  serverFingerprint: text('server_fingerprint'),
+  /** PC : main prise en secours, sans le serveur, depuis cette date (effacée quand le serveur est prévenu). */
+  rescueSince: text('rescue_since'),
   ...rowMeta(),
 });
 
@@ -33,7 +37,10 @@ export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
   email: text('email').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
-  role: text('role', { enum: ['organisateur'] }).notNull().default('organisateur'),
+  role: text('role', { enum: ['organisateur', 'table', 'zone'] }).notNull().default('organisateur'),
+  /** Compte Zone : la compétition et la zone où il saisit (sans clé étrangère : les comptes ne suivent pas les compétitions). */
+  competitionId: text('competition_id'),
+  zoneId: text('zone_id'),
   createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
 });
 

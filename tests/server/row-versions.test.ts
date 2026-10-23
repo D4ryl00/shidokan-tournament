@@ -211,7 +211,7 @@ test('schéma drizzle : chaque table versionnée déclare version et updatedAt',
   const missing = (Object.values(schema) as unknown[])
     .filter((t) => t instanceof SQLiteTable)
     .map((t) => getTableConfig(t as Parameters<typeof getTableConfig>[0]))
-    .filter((c) => c.name === 'competitions' || c.name === 'club_directory' || (c.name !== 'uploads' && c.columns.some((col) => col.name === 'competition_id')))
+    .filter((c) => c.name === 'competitions' || c.name === 'club_directory' || (c.name !== 'uploads' && c.name !== 'users' && c.columns.some((col) => col.name === 'competition_id')))
     .filter((c) => !['version', 'updated_at'].every((n) => c.columns.some((col) => col.name === n)))
     .map((c) => c.name);
   expect(missing).toEqual([]);

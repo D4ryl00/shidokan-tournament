@@ -44,7 +44,8 @@ export class PackageError extends Error {
 }
 
 /** État de la main : propre à chaque installation, il ne voyage jamais dans un paquet. */
-const OWNER_COLUMNS = ['owner_instance_id', 'owner_name', 'owner_since', 'owner_token_id', 'last_sync_at'];
+/** Colonnes de la compétition propres à l'installation : la main, les échanges avec le serveur, le secours. */
+export const OWNER_COLUMNS = ['owner_instance_id', 'owner_name', 'owner_since', 'owner_token_id', 'last_sync_at', 'server_fingerprint', 'rescue_since'];
 
 /**
  * Colonnes qui désignent une ligne d'une autre table (sans clé étrangère en base pour la plupart) : une valeur qui désigne une ligne

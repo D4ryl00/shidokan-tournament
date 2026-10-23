@@ -85,7 +85,7 @@ test('connexion : cookie HttpOnly, SameSite=Lax, Secure ; avec le cookie → 200
   expect(header).toContain('Secure');
   const cookie = cookieOf(ok);
   expect((await a.inject({ method: 'GET', url: '/api/competitions', headers: { cookie } })).statusCode).toBe(200);
-  expect((await a.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } })).json()).toEqual({ role: 'serveur', user: { email: 'orga@example.org' } });
+  expect((await a.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } })).json()).toEqual({ role: 'serveur', user: { email: 'orga@example.org', role: 'organisateur', competitionId: null, zoneId: null } });
   expect((await a.inject({ method: 'POST', url: '/api/auth/logout', headers: { cookie } })).statusCode).toBe(204);
   expect((await a.inject({ method: 'GET', url: '/api/competitions', headers: { cookie } })).statusCode).toBe(401);
 });
