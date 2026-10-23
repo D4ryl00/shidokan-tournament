@@ -588,6 +588,7 @@ export interface ClubInvitationRow {
   invitedAt: string | null;
   lastUsedAt: string | null;
   fighters: number;
+  lastMail: { sentAt: string; status: 'sent' | 'error'; error: string | null } | null;
 }
 export interface InvitationLink { clubId: string; clubName: string; token: string }
 export interface ClubEntrySettings { status: 'closed' | 'open' | 'frozen'; deadline: string | null; managedHere: boolean }
@@ -624,6 +625,7 @@ export interface ClubEntryView {
   club: ClubEntryHeader & { name: string };
   ageBands: { code: string; label: string }[];
   lines: ClubLine[];
+  privacyNotice: string;
 }
 
 export const useClubEntry = (token: string) =>
@@ -685,3 +687,16 @@ export function useUpdateAppSettings() {
   });
 }
 export const useSendTestMail = () => useMutation({ mutationFn: (to: string) => api<void>('POST', '/api/app-settings/test-mail', { to }) });
+
+// Envoi des liens par mail (un nouveau lien à chaque envoi).
+export interface SendResult { clubId: string; clubName: string; email: string | null; status: 'sent' | 'error'; error: string | null }
+export const useSendInvitations = (id: string) =>
+  useOnlineEntryMutation(id, (clubIds: string[]) => api<SendResult[]>('POST', `/api/competitions/${id}/invitations/send`, { clubIds }));
+export const useMailtoInvitation = (id: string) =>
+  useOnlineEntryMutation(id, (clubId: string) => api<{ to: string | null; subject: string; body: string }>('POST', `/api/competitions/${id}/invitations/${clubId}/mailto`));
+export const useInvitationPreview = (id: string, clubId: string | null, version: string) =>
+  useQuery({
+    queryKey: ['invitation-preview', id, clubId, version],
+    queryFn: () => api<{ subject: string; body: string }>('GET', `/api/competitions/${id}/invitations/preview?clubId=${clubId}`),
+    enabled: !!clubId,
+  });

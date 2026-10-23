@@ -1,6 +1,8 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { lineToRows, type ClubFormLine } from '../../domain/club-form.js';
 import { registrationsToLine } from '../../domain/club-line.js';
+import { renderPrivacyNotice } from '../../domain/app-settings.js';
+import { getAppSettings } from './app-settings.js';
 import { normalizeName } from '../../domain/names.js';
 import type { DisciplineId } from '../../domain/types.js';
 import { assignAffiliationNumber, linkClub } from '../db/club-directory.js';
@@ -36,6 +38,8 @@ export interface ClubEntryView {
   club: ClubEntryHeader & { name: string };
   ageBands: { code: string; label: string }[];
   lines: ClubLine[];
+  /** Mention sur les données personnelles, rendue (réglages de l'application). */
+  privacyNotice: string;
 }
 
 export class ClubEntryClosedError extends Error {
@@ -114,6 +118,7 @@ export async function getClubEntry(db: AppDb, access: ClubAccess): Promise<ClubE
     club: headerOf(db, club),
     ageBands: grid.ageBands.filter((b) => b.onClubForm).map((b) => ({ code: b.code, label: b.label })),
     lines,
+    privacyNotice: renderPrivacyNotice(getAppSettings(db)),
   };
 }
 

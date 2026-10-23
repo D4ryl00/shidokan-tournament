@@ -1,4 +1,4 @@
-import { Alert, Button, CopyButton, Group, Modal, MultiSelect, Stack, Table, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Checkbox, Chip, CopyButton, Group, Modal, MultiSelect, Stack, Table, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
 import {
   useClubEntrySettings,
@@ -7,9 +7,15 @@ import {
   useInviteClubs,
   useRegenerateInvitation,
   useRevokeInvitation,
+  useAppSettings,
+  useMailtoInvitation,
+  useSendInvitations,
   useUpdateClubEntrySettings,
+  type ClubInvitationRow,
   type InvitationLink,
+  type SendResult,
 } from '../api.js';
+import { CompetitionMessage, NEW_LINK_WARNING, SendResultsModal } from './InvitationMail.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { SectionHeader } from './Help.js';
 
@@ -52,12 +58,31 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
   const invite = useInviteClubs(competitionId);
   const regenerate = useRegenerateInvitation(competitionId);
   const revoke = useRevokeInvitation(competitionId);
+  const { data: appSettings } = useAppSettings();
+  const send = useSendInvitations(competitionId);
+  const mailto = useMailtoInvitation(competitionId);
   const [chosen, setChosen] = useState<string[]>([]);
   const [links, setLinks] = useState<InvitationLink[]>([]);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [filters, setFilters] = useState<string[]>([]);
+  const [confirmSend, setConfirmSend] = useState(false);
+  const [results, setResults] = useState<SendResult[]>([]);
   if (!settings) return null;
 
   // Tableau : seulement les clubs invités ; les autres se choisissent dans l'annuaire (qui contient tous les clubs passés).
   const invited = invitations.filter((i) => i.invited);
+  const FILTERS: Record<string, (i: ClubInvitationRow) => boolean> = {
+    never: (i) => !i.lastMail,
+    empty: (i) => i.fighters === 0,
+    email: (i) => !!i.coachEmail,
+  };
+  const shown = invited.filter((i) => filters.every((f) => FILTERS[f]!(i)));
+  const toggle = (id: string, on: boolean) => setChecked((c) => { const n = new Set(c); if (on) n.add(id); else n.delete(id); return n; });
+  const selected = shown.filter((i) => checked.has(i.clubId));
+  const openMailto = (clubId: string) =>
+    mailto.mutate(clubId, {
+      onSuccess: (m) => { window.location.href = `mailto:${encodeURIComponent(m.to ?? '')}?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.body)}`; },
+    });
   const invitedEntries = new Set(invited.map((i) => i.directoryClubId));
   const candidates = directory
     .filter((e) => !e.archived && !invitedEntries.has(e.id))
@@ -85,31 +110,79 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
           Inviter les clubs choisis
         </Button>
       </Group>
-      {invited.length > 0 && (
-        <Table>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Club invité</Table.Th><Table.Th>Invité le</Table.Th><Table.Th>Dernière visite</Table.Th><Table.Th>Combattants</Table.Th><Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {invited.map((i) => (
-              <Table.Tr key={i.clubId} data-testid="invitation-row">
-                <Table.Td>{i.clubName}</Table.Td>
-                <Table.Td>{day(i.invitedAt)}</Table.Td>
-                <Table.Td>{day(i.lastUsedAt)}</Table.Td>
-                <Table.Td>{i.fighters}</Table.Td>
-                <Table.Td>
-                  <Group gap="xs" justify="flex-end" wrap="nowrap">
-                    <Button size="xs" variant="light" onClick={() => regenerate.mutate(i.clubId, { onSuccess: (l) => setLinks([l]) })}>Régénérer le lien</Button>
-                    <Button size="xs" variant="subtle" color="red" onClick={() => revoke.mutate(i.clubId)}>Révoquer</Button>
-                  </Group>
-                </Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+      {appSettings && !appSettings.privacyContact.trim() && (
+        <Alert color="yellow">Complétez l’adresse de contact de la mention sur les données personnelles (Réglages de l’application) avant d’ouvrir les inscriptions.</Alert>
       )}
+      {invited.length > 0 && (
+        <>
+          <Group gap="xs">
+            <Text size="sm">Afficher :</Text>
+            <Chip.Group multiple value={filters} onChange={setFilters}>
+              <Chip size="xs" value="never">Jamais envoyé</Chip>
+              <Chip size="xs" value="empty">Sans combattant</Chip>
+              <Chip size="xs" value="email">Avec e-mail</Chip>
+            </Chip.Group>
+          </Group>
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>
+                  <Checkbox aria-label="Tout cocher" checked={shown.length > 0 && selected.length === shown.length}
+                    onChange={(e) => setChecked(e.currentTarget.checked ? new Set(shown.map((i) => i.clubId)) : new Set())} />
+                </Table.Th>
+                <Table.Th>Club invité</Table.Th><Table.Th>E-mail</Table.Th><Table.Th>Dernier mail</Table.Th><Table.Th>Dernière visite</Table.Th><Table.Th>Combattants</Table.Th><Table.Th />
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {shown.map((i) => (
+                <Table.Tr key={i.clubId} data-testid="invitation-row">
+                  <Table.Td><Checkbox aria-label={`Choisir ${i.clubName}`} checked={checked.has(i.clubId)} onChange={(e) => toggle(i.clubId, e.currentTarget.checked)} /></Table.Td>
+                  <Table.Td>{i.clubName}</Table.Td>
+                  <Table.Td>{i.coachEmail ?? '—'}</Table.Td>
+                  <Table.Td>
+                    {i.lastMail ? (
+                      <Text size="sm" c={i.lastMail.status === 'sent' ? undefined : 'red'}>
+                        {i.lastMail.status === 'sent' ? `Envoyé le ${day(i.lastMail.sentAt)}` : `Erreur : ${i.lastMail.error}`}
+                      </Text>
+                    ) : '—'}
+                  </Table.Td>
+                  <Table.Td>{day(i.lastUsedAt)}</Table.Td>
+                  <Table.Td>{i.fighters}</Table.Td>
+                  <Table.Td>
+                    <Group gap="xs" justify="flex-end" wrap="nowrap">
+                      <Button size="xs" variant="light" loading={mailto.isPending && mailto.variables === i.clubId} onClick={() => openMailto(i.clubId)}>Ouvrir dans ma messagerie</Button>
+                      <Button size="xs" variant="light" onClick={() => regenerate.mutate(i.clubId, { onSuccess: (l) => setLinks([l]) })}>Régénérer le lien</Button>
+                      <Button size="xs" variant="subtle" color="red" onClick={() => revoke.mutate(i.clubId)}>Révoquer</Button>
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+          <Group>
+            <Button data-testid="send-invitations" disabled={selected.length === 0} loading={send.isPending} onClick={() => setConfirmSend(true)}>
+              Envoyer le lien par mail ({selected.length})
+            </Button>
+            <Text size="sm" c="dimmed">{NEW_LINK_WARNING}</Text>
+          </Group>
+          <CompetitionMessage competitionId={competitionId} previewClubId={selected[0]?.clubId ?? null} />
+        </>
+      )}
+      <ApiErrorAlert error={send.error ?? mailto.error} />
+      <Modal opened={confirmSend} onClose={() => setConfirmSend(false)} title="Envoyer le lien par mail">
+        <Stack>
+          <Text>{selected.length} club(s) : {selected.map((i) => i.clubName).join(', ')}.</Text>
+          <Alert color="yellow">{NEW_LINK_WARNING}</Alert>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setConfirmSend(false)}>Annuler</Button>
+            <Button data-testid="send-confirm" loading={send.isPending}
+              onClick={() => send.mutate(selected.map((i) => i.clubId), { onSuccess: (r) => { setConfirmSend(false); setChecked(new Set()); setResults(r); }, onError: () => setConfirmSend(false) })}>
+              Envoyer
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+      <SendResultsModal results={results} onClose={() => setResults([])} />
       <LinksModal links={links} onClose={() => setLinks([])} />
     </Stack>
   );

@@ -116,6 +116,7 @@ export function ClubEntryPage() {
                 <Button data-testid="add-fighter" onClick={() => setEditing('new')}>Ajouter un combattant</Button>
               </Group>
             )}
+            <Text size="xs" c="dimmed" mt="lg" data-testid="privacy-notice">{view.privacyNotice}</Text>
             <ClubLineForm key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.fighterId} token={token} line={editing === 'new' ? null : editing}
               ageBands={view.ageBands} opened={editing !== null} onClose={close} />
           </>

@@ -242,3 +242,13 @@ test('suppression sans version → 400 ; poids et nom bornés', async () => {
   expect((await add({ ...LINE, lastName: 'AUTRE', weightKg: 5000 })).statusCode).toBe(400);
   expect((await add({ ...LINE, lastName: 'X'.repeat(81) })).statusCode).toBe(400);
 });
+
+test('la vue contient la mention sur les données ; sans adresse de contact, pas de phrase de contact', async () => {
+  const without = (await app.inject({ method: 'GET', url: url() })).json().privacyNotice as string;
+  expect(without).toContain('traitées par Shidokan France');
+  expect(without).not.toContain('{contact}');
+  expect(without).not.toContain('exercer vos droits');
+  await app.inject({ method: 'PATCH', url: '/api/app-settings', payload: { privacyContact: 'rgpd@shidokanfrance.com' } });
+  const withContact = (await app.inject({ method: 'GET', url: url() })).json().privacyNotice as string;
+  expect(withContact.endsWith('exercer vos droits sur ces données : rgpd@shidokanfrance.com.')).toBe(true);
+});
