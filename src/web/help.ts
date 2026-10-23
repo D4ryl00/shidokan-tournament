@@ -41,6 +41,7 @@ export type HelpTopicId =
   | 'reglages.echanges'
   | 'synchronisation'
   | 'jour-j'
+  | 'zones-autonomes'
   | 'reglages.zones'
   | 'reglages.ordre'
   | 'reglages.recasement'
@@ -153,6 +154,24 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Chaque poste choisit son rôle en haut de l’écran d’une compétition (« Poste ») : Organisation (tout), Table centrale (inscriptions, pesée, réaffectation, combats, podiums) ou une zone (seulement les combats de sa zone). Le choix est gardé par le navigateur.',
       'Les écrans se mettent à jour tout seuls ; une saisie faite sur une donnée modifiée entre-temps par un autre poste est refusée avec le message « Modifié entre-temps par un autre poste ».',
       'Un second PC peut garder une copie de secours du PC principal (Réglages de l’application → Copie de secours) : en cas de panne, restaurez la dernière copie sur ce PC et ouvrez son adresse sur les autres postes.',
+      'Si chaque zone a son PC portable avec l’application installée, reliez-le au PC principal (Réglages de l’application → Portable de zone) : si le réseau tombe, la zone continue sur son portable (voir « Portable de zone et coupure du réseau »).',
+    ],
+  },
+  'zones-autonomes': {
+    title: 'Portable de zone et coupure du réseau',
+    short: 'Le portable d’une zone garde une copie à jour du PC principal ; si le réseau tombe, la zone continue dessus, puis renvoie ses saisies.',
+    details: [
+      'Avant : sur le portable de la zone, indiquez l’adresse du PC principal (par exemple http://192.168.1.10:3000), cliquez « Chercher », choisissez la compétition et la zone, puis enregistrez. La copie se met à jour quelques secondes après chaque changement ; l’arbitre continue à utiliser le PC principal dans son navigateur.',
+      [
+        'Le réseau tombe : sur le portable, ouvrez l’application locale (http://localhost:3000), la compétition, puis « Continuer sans réseau (zone …) ». Seuls les résultats, notes de kata et départages de cette zone sont possibles, dans les sessions déjà lancées ; chaque saisie est notée pour être renvoyée.',
+        'Finales : par défaut, elles attendent les résultats des autres zones. « Jouer ici les finales de mes catégories » les joue sur le portable ; si la zone des finales les joue aussi, la table centrale tranchera.',
+        '« Recevoir une copie plus récente » (par le réseau s’il revient un moment, ou avec un fichier de compétition) : la copie est remplacée et les saisies de la zone y sont réappliquées ; elles restent à renvoyer.',
+      ],
+      [
+        'Le réseau revient : « Repasser en ligne » envoie les saisies au PC principal, puis rouvrez l’adresse du PC principal dans le navigateur. Si l’envoi échoue, rien n’est perdu : la zone reste autonome.',
+        'Sans réseau : « Exporter le journal (fichier) » sur le portable, puis « Importer un journal de zone (fichier) » sur le PC principal (onglet Combats). Une saisie déjà reçue n’est jamais appliquée deux fois.',
+      ],
+      'Sur le PC principal, une saisie de zone qui contredit le PC (autre résultat saisi à la table centrale, combattants changés) devient une carte « À trancher » dans l’onglet Combats : « Garder celui de la zone » ou « Garder celui du PC ». Les combats de la catégorie attendent la décision.',
     ],
   },
   impression: {
@@ -377,6 +396,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Cliquez un combat du tableau pour saisir le vainqueur et la méthode.',
         'Une égalité de poule ou de kata s’affiche avec « Départager » : classez les ex-æquo.',
         'Un résultat corrigé rend « à revoir » les combats suivants déjà joués : ils sont encadrés en orange.',
+        '« À trancher » : saisies d’un portable de zone, faites pendant une coupure du réseau, qui contredisent le PC principal. Gardez celle de la zone ou celle du PC ; d’ici là, les combats de la catégorie sont « En attente d’une décision à la table centrale ».',
       ],
     ],
   },

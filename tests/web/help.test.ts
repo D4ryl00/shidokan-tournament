@@ -112,3 +112,13 @@ test("synchronisation : l'aide explique les quatre gestes et le fichier", () => 
   for (const g of ['Récupérer une copie', 'Prendre la main', 'Envoyer une copie au serveur', 'Rendre la main au serveur', 'Exporter la compétition (fichier)']) expect(text).toContain(g);
   expect(all('synchronisation')).toContain('jeton');
 });
+
+test('zones autonomes : une aide à part, signalée dans l’aide des Combats et du jour J', () => {
+  expect(HELP['zones-autonomes'].title).toBe('Portable de zone et coupure du réseau');
+  const text = HELP['zones-autonomes'].details.flat().join(' ');
+  for (const label of ['Continuer sans réseau', 'Repasser en ligne', 'Exporter le journal (fichier)', 'Importer un journal de zone (fichier)', 'Jouer ici les finales de mes catégories', 'Recevoir une copie plus récente', 'Garder celui de la zone', 'Garder celui du PC']) {
+    expect(text).toContain(label);
+  }
+  expect(HELP.combats.details.flat().join(' ')).toContain('À trancher');
+  expect(HELP['jour-j'].details.flat().join(' ')).toContain('portable');
+});

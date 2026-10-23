@@ -258,6 +258,7 @@ Ce cas ne se justifie que **s'il n'y a ni internet ni réseau local**. Dans tous
 - **Un vrai conflit est montré à un humain**, jamais résolu tout seul. Par exemple : deux résultats différents pour un même combat, ou un résultat pour un combat dont les combattants ont changé depuis. On le présente sous forme de cartes, comme pour les réaffectations.
 - Ce que l'étape 0 prépare pour ce cas : l'identité de chaque installation (§3.1), les versions de lignes (§3.4) et le fait qu'une compétition se suffise à elle-même (§3.5). `match_results` garde déjà les deux combattants au moment de la saisie, ce qui permet de détecter un combat qui a changé.
 - 🔧 Forme exacte du journal. À concevoir le jour où le besoin se confirme.
+- *(2026-10-23 :)* conçue et construite : `docs/superpowers/specs/2026-10-23-zones-autonomes-design.md` (portables de zone qui suivent le PC principal en réseau local, zone autonome si le réseau tombe, journal renvoyé par le réseau ou par fichier, cartes « À trancher »), qui précise et remplace ce paragraphe.
 
 ## 11. Ordre des étapes ✅
 
@@ -275,7 +276,7 @@ Ordre choisi ✅ (2026-10-23) : **0 → B → C → D → A → E → F**. Les i
 
 Seule l'étape 0 est à faire avant le 22 novembre ✅.
 
-*(État au 2026-10-23 :)* étapes 0, B, C, D, A et E construites (feuille de route, étapes 15 à 20). Reste F, seulement si le besoin se confirme.
+*(État au 2026-10-23 :)* étapes 0, B, C, D, A, E et F construites (feuille de route, étapes 15 à 21).
 
 ## 12. Hors périmètre et anti-objectifs
 - Fusion automatique de deux bases, et règle « la dernière modification gagne ».

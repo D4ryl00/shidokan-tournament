@@ -10,6 +10,7 @@ const STEPS = [
   'Ne jamais quitter Docker Desktop sur le PC principal : fermer le navigateur ne pose aucun problème, quitter Docker arrête tout.',
   'Sur chaque poste, ouvrir l’adresse ci-dessous et choisir son poste en haut de l’écran de la compétition.',
   'Si possible, un second PC avec la copie de secours réglée (Réglages de l’application).',
+  'Portables de zone (si vous en avez) : chacun relié au PC principal (Réglages de l’application → Portable de zone). Si le réseau tombe : « Continuer sans réseau » sur le portable ; au retour, « Repasser en ligne » (ou le journal par clé USB).',
   'Sur chaque poste, peu d’onglets de compétition ouverts à la fois : un navigateur n’ouvre que 6 connexions vers le PC principal (les onglets cachés libèrent la leur).',
 ];
 

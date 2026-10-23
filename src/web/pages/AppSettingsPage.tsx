@@ -127,7 +127,7 @@ export function AppSettingsPage() {
       {me?.role === 'local' && (
         <Card withBorder>
           <Stack>
-            <Title order={4}>Portable de zone</Title>
+            <SectionHeader topic="zones-autonomes" />
             <ZoneLinkCard />
           </Stack>
         </Card>
