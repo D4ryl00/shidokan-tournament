@@ -35,6 +35,7 @@ const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('fr-
 export function managementText(m: Management): string {
   if (m.managedHere && m.rescueSince) return `Gérée ici en secours depuis le ${when(m.rescueSince)} — le serveur n’est pas encore prévenu`;
   if (m.managedHere) return m.lastSyncAt ? `Gérée ici — dernier échange avec le serveur le ${when(m.lastSyncAt)}` : 'Gérée ici';
+  if (m.copyOfMain) return `Copie du PC principal — à jour à ${m.lastSyncAt ? new Date(m.lastSyncAt).toLocaleTimeString('fr-FR') : '—'} — lecture seule`;
   if (m.copyOfServer) {
     const held = m.ownerName?.match(/— la main est à (.+)$/)?.[1];
     return `Copie du serveur — synchronisé le ${when(m.lastSyncAt)} — lecture seule${held ? ` (la main est à ${held})` : ''}`;

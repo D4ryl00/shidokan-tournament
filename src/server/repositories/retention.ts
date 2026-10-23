@@ -31,7 +31,7 @@ export function purgeExpiredData(db: AppDb, dbPath: string, now = new Date()): P
       client.prepare('update fighters set weigh_in_kg = null, licence = null, grade = null where competition_id = ?').run(id);
       client.prepare('update registrations set approx_weight_kg = null where competition_id = ?').run(id);
       client.prepare('update clubs set coach_phone = null, coach_email = null where competition_id = ?').run(id);
-      for (const table of ['club_invitations', 'mail_log', 'uploads', 'received_copies']) client.prepare(`delete from ${table} where competition_id = ?`).run(id);
+      for (const table of ['club_invitations', 'mail_log', 'uploads', 'received_copies', 'zone_journal', 'zone_entries']) client.prepare(`delete from ${table} where competition_id = ?`).run(id);
       client.prepare('update competitions set purged_at = ? where id = ?').run(now.toISOString(), id);
     }
     report.competitions = expired.length;

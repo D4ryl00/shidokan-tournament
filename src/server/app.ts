@@ -42,6 +42,8 @@ import { syncFileRoutes, syncLocalRoutes } from './routes/sync-local.js';
 import { mirrorRoutes } from './routes/mirror.js';
 import { startMirror } from './mirror.js';
 import { startFollow } from './sync/follow.js';
+import { zoneLinkRoutes } from './routes/zone-link.js';
+import { startZoneFollow } from './zone/link.js';
 import { authRoutes } from './routes/auth.js';
 import { appSettingsRoutes } from './routes/app-settings.js';
 import { nodemailerTransport, type MailTransport } from './mail.js';
@@ -180,6 +182,10 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     app.addHook('onClose', async () => stopMirror());
     const stopFollow = startFollow(db, opts.dbPath, (e) => app.log.error(e));
     app.addHook('onClose', async () => stopFollow());
+    // Portable de zone : suit le PC principal (réseau local).
+    await app.register(zoneLinkRoutes, { db, dbPath: opts.dbPath });
+    const stopZoneFollow = startZoneFollow(db, opts.dbPath, (e) => app.log.error(e));
+    app.addHook('onClose', async () => stopZoneFollow());
   }
   await app.register(syncFileRoutes, { db, dbPath: opts.dbPath, role });
   await app.register(appSettingsRoutes, { db, mailTransport });

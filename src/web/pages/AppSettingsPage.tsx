@@ -6,6 +6,7 @@ import { useAppSettings, useAuthMe, useSendTestMail, useUpdateAppSettings } from
 import { SyncSettingsCard } from '../components/SyncPanel.js';
 import { MirrorCopies, MirrorSettingsCard } from '../components/MirrorPanels.js';
 import { DayChecklist } from '../components/DayChecklist.js';
+import { ZoneLinkCard } from '../components/ZoneLinkCard.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { SectionHeader } from '../components/Help.js';
 
@@ -120,6 +121,14 @@ export function AppSettingsPage() {
             <Title order={4}>Copie de secours d’un autre PC</Title>
             <MirrorSettingsCard />
             <MirrorCopies />
+          </Stack>
+        </Card>
+      )}
+      {me?.role === 'local' && (
+        <Card withBorder>
+          <Stack>
+            <Title order={4}>Portable de zone</Title>
+            <ZoneLinkCard />
           </Stack>
         </Card>
       )}

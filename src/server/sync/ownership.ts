@@ -12,6 +12,8 @@ export interface Management {
   copyOfServer: boolean;
   /** PC : main prise en secours, sans le serveur, depuis cette date ; null une fois le serveur prévenu. */
   rescueSince: string | null;
+  /** Portable de zone : copie en lecture seule reçue du PC principal auquel il est relié. */
+  copyOfMain: boolean;
 }
 
 const row = (db: AppDb, competitionId: string) =>
@@ -23,12 +25,15 @@ const row = (db: AppDb, competitionId: string) =>
 
 export function getManagement(db: AppDb, competitionId: string): Management {
   const r = row(db, competitionId);
-  if (!r) return { managedHere: true, ownerName: null, ownerSince: null, lastSyncAt: null, copyOfServer: false, rescueSince: null };
+  if (!r) return { managedHere: true, ownerName: null, ownerSince: null, lastSyncAt: null, copyOfServer: false, rescueSince: null, copyOfMain: false };
   const sync = db.$client.prepare("select value_json as v from app_settings where key = 'syncServer'").get() as { v: string } | undefined;
   const serverId = sync ? (JSON.parse(sync.v) as { serverInstanceId?: string }).serverInstanceId : undefined;
+  const zone = db.$client.prepare("select value_json as v from app_settings where key = 'zoneLink'").get() as { v: string } | undefined;
+  const mainId = zone ? (JSON.parse(zone.v) as { competitionId?: string; mainInstanceId?: string } | null) : null;
   return {
     managedHere: r.ownerId === null, ownerName: r.ownerName, ownerSince: r.ownerSince, lastSyncAt: r.lastSyncAt, copyOfServer: !!r.ownerId && r.ownerId === serverId,
     rescueSince: r.ownerId === null ? r.rescueSince : null,
+    copyOfMain: !!r.ownerId && mainId?.competitionId === competitionId && r.ownerId === mainId.mainInstanceId,
   };
 }
 

@@ -459,3 +459,42 @@ export const gridTemplates = sqliteTable('grid_templates', {
   gridJson: text('grid_json').notNull(),
   createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
 });
+
+/** Portable de zone : saisies faites en zone autonome, à renvoyer au PC principal (`sent_at` vide : pas encore envoyée). */
+export const zoneJournal = sqliteTable('zone_journal', {
+  id: text('id').primaryKey(),
+  competitionId: text('competition_id')
+    .notNull()
+    .references(() => competitions.id, { onDelete: 'cascade' }),
+  zoneId: text('zone_id').notNull(),
+  seq: integer('seq').notNull(),
+  kind: text('kind', { enum: ['result', 'delete', 'kata', 'tie-break'] }).notNull(),
+  categoryId: text('category_id').notNull(),
+  targetKey: text('target_key').notNull(),
+  entryJson: text('entry_json').notNull(),
+  createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  sentAt: text('sent_at'),
+  ...rowMeta(),
+});
+
+/** PC principal : entrées reçues des journaux de zone, avec leur sort (une entrée n'est jamais appliquée deux fois). */
+export const zoneEntries = sqliteTable('zone_entries', {
+  id: text('id').primaryKey(),
+  competitionId: text('competition_id')
+    .notNull()
+    .references(() => competitions.id, { onDelete: 'cascade' }),
+  fromInstanceId: text('from_instance_id').notNull(),
+  zoneId: text('zone_id').notNull(),
+  zoneName: text('zone_name').notNull(),
+  seq: integer('seq').notNull(),
+  kind: text('kind', { enum: ['result', 'delete', 'kata', 'tie-break'] }).notNull(),
+  categoryId: text('category_id').notNull(),
+  targetKey: text('target_key').notNull(),
+  entryJson: text('entry_json').notNull(),
+  status: text('status', { enum: ['applied', 'present', 'conflict', 'waiting', 'kept-zone', 'kept-pc'] }).notNull(),
+  reason: text('reason'),
+  appliedRev: text('applied_rev'),
+  receivedAt: text('received_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  decidedAt: text('decided_at'),
+  ...rowMeta(),
+});

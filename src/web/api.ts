@@ -768,7 +768,7 @@ export const useInvitationPreview = (id: string, clubId: string | null, version:
   });
 
 // Passage de main entre le serveur et le PC.
-export interface Management { managedHere: boolean; ownerName: string | null; ownerSince: string | null; lastSyncAt: string | null; copyOfServer: boolean; rescueSince: string | null }
+export interface Management { managedHere: boolean; ownerName: string | null; ownerSince: string | null; lastSyncAt: string | null; copyOfServer: boolean; rescueSince: string | null; copyOfMain: boolean }
 export interface ServerCompetition { id: string; name: string; date: string; managedHere: boolean; ownerName: string | null; clubEntryStatus: 'closed' | 'open' | 'frozen' }
 export const useManagement = (id: string) =>
   useQuery({ queryKey: ['management', id], queryFn: () => api<Management>('GET', `/api/competitions/${id}/management`) });
@@ -832,6 +832,23 @@ export function useSetMirror() {
 }
 export const useMirrorCopies = (enabled: boolean) =>
   useQuery({ queryKey: ['mirror-copies'], queryFn: () => api<{ name: string; size: number; createdAt: string }[]>('GET', '/api/mirror/copies'), enabled, refetchInterval: 60_000 });
+// Portable de zone : relié au PC principal, il en garde une copie à jour.
+export interface ZoneLinkView {
+  link: { mainUrl: string; competitionId: string; zoneId: string; autonomous: { since: string; finals: boolean } | null } | null;
+  zoneName: string | null;
+  status: { lastCopyAt: string | null; lastError: string | null };
+  pending: number;
+}
+export const useZoneLink = (enabled: boolean) => useQuery({ queryKey: ['zone-link'], queryFn: () => api<ZoneLinkView>('GET', '/api/zone-link'), enabled, refetchInterval: 5_000 });
+export function useSetZoneLink() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { mainUrl: string; competitionId: string; zoneId: string } | null) => api<ZoneLinkView>('PUT', '/api/zone-link', v),
+    onSuccess: (l) => qc.setQueryData(['zone-link'], l),
+  });
+}
+export const useProbeMain = () =>
+  useMutation({ mutationFn: (mainUrl: string) => api<{ competitions: { id: string; name: string; zones: { id: string; name: string }[] }[] }>('POST', '/api/zone-link/probe', { mainUrl }) });
 export function useRestoreMirrorCopy() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: (name: string) => api<void>('POST', `/api/mirror/copies/${encodeURIComponent(name)}/restore`), onSuccess: () => qc.invalidateQueries() });

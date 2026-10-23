@@ -44,9 +44,9 @@ test('gérée ici : écritures acceptées', async () => {
 
 test('GET management : les trois états', async () => {
   const get = async () => (await app.inject({ method: 'GET', url: `/api/competitions/${id}/management` })).json();
-  expect(await get()).toEqual({ managedHere: true, ownerName: null, ownerSince: null, lastSyncAt: null, copyOfServer: false, rescueSince: null });
+  expect(await get()).toEqual({ managedHere: true, ownerName: null, ownerSince: null, lastSyncAt: null, copyOfServer: false, rescueSince: null, copyOfMain: false });
   setOwner('pc-1', 'PC-SALLE', '2026-11-21T08:00:00.000Z');
-  expect(await get()).toEqual({ managedHere: false, ownerName: 'PC-SALLE', ownerSince: '2026-11-21T08:00:00.000Z', lastSyncAt: '2026-11-21T08:00:00.000Z', copyOfServer: false, rescueSince: null });
+  expect(await get()).toEqual({ managedHere: false, ownerName: 'PC-SALLE', ownerSince: '2026-11-21T08:00:00.000Z', lastSyncAt: '2026-11-21T08:00:00.000Z', copyOfServer: false, rescueSince: null, copyOfMain: false });
   setOwner('srv', 'le serveur en ligne', '2026-11-20T08:00:00.000Z');
   const r = new Database(dbPath);
   r.prepare("insert into app_settings (key, value_json) values ('syncServer', ?)").run(JSON.stringify({ url: 'https://x', token: 't', serverInstanceId: 'srv' }));

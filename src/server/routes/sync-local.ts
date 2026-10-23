@@ -7,7 +7,7 @@ import { NotFoundError } from '../repositories/registrations.js';
 import { clearSyncServer, getSyncServer, rememberServerInstance, remote, setSyncServer, syncUrlAllowed } from '../sync/client.js';
 import { followStatus, getFollow, resetFollowStatus, setFollow } from '../sync/follow.js';
 import { getManagement } from '../sync/ownership.js';
-import { buildPackage, importPackage, type SyncPackage } from '../sync/package.js';
+import { buildPackage, competitionFingerprint, importPackage, type SyncPackage } from '../sync/package.js';
 import { myIdentity, pullCopy, SERVER_NAME, serverCopyName, SyncConflictError, whileReturning } from '../sync/pull.js';
 
 const exists = (db: AppDb, id: string) => !!db.$client.prepare('select 1 from competitions where id = ?').get(id);
@@ -128,7 +128,8 @@ export async function syncLocalRoutes(app: FastifyInstance, { db, dbPath }: { db
 export async function syncFileRoutes(app: FastifyInstance, { db, dbPath, role }: { db: AppDb; dbPath: string; role: InstanceRole }) {
   app.get<{ Params: { id: string } }>('/api/competitions/:id/export.json', async (req, reply) => {
     if (!exists(db, req.params.id)) throw new NotFoundError('Compétition introuvable');
-    const pkg = buildPackage(db, req.params.id, { handOver: false, role });
+    // L'empreinte permet à un portable de zone de ne pas réimporter une copie inchangée.
+    const pkg = { ...buildPackage(db, req.params.id, { handOver: false, role }), fingerprint: competitionFingerprint(db, req.params.id) };
     const name = String(pkg.tables.competitions![0]!.name).normalize('NFD').replace(/[^\w-]+/g, '-').replace(/-+/g, '-').slice(0, 60);
     return reply.header('Content-Disposition', `attachment; filename="competition-${name}.json"`).send(pkg);
   });
