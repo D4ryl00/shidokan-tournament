@@ -56,6 +56,26 @@ export async function backupNow(db: AppDb, dbPath: string): Promise<string> {
   return file;
 }
 
+/** Date d'une sauvegarde d'après son nom (`shidokan-AAAAMMJJ-HHMMSS-mmm.sqlite`, heure locale), ou null. */
+function backupDate(name: string): Date | null {
+  const m = name.match(/^shidokan-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/);
+  return m ? new Date(+m[1]!, +m[2]! - 1, +m[3]!, +m[4]!, +m[5]!, +m[6]!) : null;
+}
+
+/** Supprime les sauvegardes plus anciennes que `before`, sauf la plus récente de toutes. Renvoie le nombre supprimé. */
+export function pruneOldBackups(dbPath: string, before: Date): number {
+  const dir = backupDir(dbPath);
+  if (!fs.existsSync(dir)) return 0;
+  const dated = fs
+    .readdirSync(dir)
+    .map((name) => ({ name, date: backupDate(name) }))
+    .filter((b): b is { name: string; date: Date } => b.date !== null)
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+  const old = dated.slice(0, -1).filter((b) => b.date < before);
+  for (const b of old) fs.rmSync(path.join(dir, b.name), { force: true });
+  return old.length;
+}
+
 export async function listBackups(dbPath: string): Promise<{ name: string; size: number; createdAt: string }[]> {
   const dir = backupDir(dbPath);
   if (!fs.existsSync(dir)) return [];

@@ -38,6 +38,7 @@ import { appSettingsRoutes } from './routes/app-settings.js';
 import { nodemailerTransport, type MailTransport } from './mail.js';
 import { RestoreError, startAutoBackup } from './repositories/backups.js';
 import { ensureInstance } from './repositories/instance.js';
+import { startRetention } from './repositories/retention.js';
 import { ffkImportRoutes } from './routes/ffk-import.js';
 import { registrationRoutes } from './routes/registrations.js';
 import { UnreadableFileError } from './spreadsheet/read.js';
@@ -69,8 +70,10 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   registerGuard(app, db, role);
   ensureInstance(db, opts.instanceName ?? 'PC');
   const stopBackups = startAutoBackup(db, opts.dbPath, opts.backupIntervalMin ?? 0, (e) => app.log.error(e));
+  const stopRetention = startRetention(db, opts.dbPath, (e) => app.log.error(e));
   app.addHook('onClose', async () => {
     stopBackups();
+    stopRetention();
     closeDb(db);
   });
 
