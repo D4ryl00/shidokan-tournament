@@ -130,12 +130,17 @@ export async function zoneLinkRoutes(app: FastifyInstance, { db, dbPath }: { db:
     return reply.header('Content-Disposition', `attachment; filename="journal-${zone}-${stamp}.json"`).send(journal);
   });
 
-  /** Après l'export du journal : la zone autonome s'arrête (ce qui serait saisi ensuite ne serait pas dans le fichier). */
+  /**
+   * Après l'export du journal : la zone autonome s'arrête (ce qui serait saisi ensuite ne serait pas dans le fichier). `exportedUpToSeq` :
+   * dernière saisie du fichier exporté ; une saisie faite après l'export est refusée (elle serait perdue).
+   */
   app.post('/api/zone-link/stop', async (req, reply) => {
-    const { exported } = z.object({ exported: z.literal(true).optional() }).strict().parse(req.body ?? {});
+    const { exportedUpToSeq } = z.object({ exportedUpToSeq: z.number().int().min(0).optional() }).strict().parse(req.body ?? {});
     const link = autonomousOnly();
-    if (!exported) throw new ZoneLinkError(400, 'Exportez d’abord le journal (fichier).');
-    markSent(db, journalFile(db, link).entries.map((e) => e.id));
+    if (exportedUpToSeq === undefined) throw new ZoneLinkError(400, 'Exportez d’abord le journal (fichier).');
+    const entries = journalFile(db, link).entries;
+    if (entries.some((e) => e.seq > exportedUpToSeq)) throw new ZoneLinkError(409, 'Des saisies ont été faites après l’export : exportez à nouveau le journal (fichier).');
+    markSent(db, entries.map((e) => e.id));
     stopAutonomy();
     // La copie reprend dès que le PC principal répond.
     void copyFromMain(db, dbPath).catch((e) => app.log.error(e));

@@ -64,11 +64,25 @@ test('journal.json puis stop exported → plus autonome ; le fichier importé su
   const refused = await f.onLaptop('POST', '/api/zone-link/stop', {});
   expect(refused.statusCode).toBe(400);
   expect(refused.json().error).toBe('Exportez d’abord le journal (fichier).');
-  expect((await f.onLaptop('POST', '/api/zone-link/stop', { exported: true })).statusCode).toBe(204);
+  expect((await f.onLaptop('POST', '/api/zone-link/stop', { exportedUpToSeq: 2 })).statusCode).toBe(204);
   expect(await view()).toMatchObject({ link: { autonomous: null }, pending: 0 });
   expect(pendingEntries(f.laptopDb, f.id)).toEqual([]);
   expect((await f.onMain('POST', `${f.base}/zone-journal`, journal)).json()).toMatchObject({ received: 2, applied: 2 });
   expect(await mainRecords()).toEqual(['w1-0', 'w1-1']);
+});
+
+test('arrêter après une saisie faite depuis l’export → 409, rien n’est marqué envoyé ; après un nouvel export, permis', async () => {
+  const first = (await f.onLaptop('GET', '/api/zone-link/journal.json')).json() as { entries: { seq: number }[] };
+  const upTo = Math.max(...first.entries.map((e) => e.seq));
+  expect((await f.onLaptop('PUT', `${f.base}/categories/${f.a54.id}/results/w2-0`, RESULT)).statusCode).toBe(200);
+  const res = await f.onLaptop('POST', '/api/zone-link/stop', { exportedUpToSeq: upTo });
+  expect(res.statusCode).toBe(409);
+  expect(res.json().error).toBe('Des saisies ont été faites après l’export : exportez à nouveau le journal (fichier).');
+  expect(await view()).toMatchObject({ pending: 3, link: { autonomous: { finals: false } } });
+  const again = (await f.onLaptop('GET', '/api/zone-link/journal.json')).json() as { entries: { seq: number }[] };
+  expect(again.entries).toHaveLength(3);
+  expect((await f.onLaptop('POST', '/api/zone-link/stop', { exportedUpToSeq: Math.max(...again.entries.map((e) => e.seq)) })).statusCode).toBe(204);
+  expect(await view()).toMatchObject({ pending: 0, link: { autonomous: null } });
 });
 
 test('pendant l’envoi, les saisies sont refusées (elles ne seraient pas dans le journal envoyé)', async () => {

@@ -75,7 +75,8 @@ export function ZoneAutonomyBar({ competitionId }: { competitionId: string }) {
   const online = useGoOnline();
   const stop = useStopAutonomy();
   const finals = usePlayFinalsHere();
-  const [exported, setExported] = useState(false);
+  // Dernière saisie du fichier exporté (null : pas encore exporté) : « Arrêter » est refusé si une saisie a suivi l'export.
+  const [exported, setExported] = useState<number | null>(null);
   const [exportError, setExportError] = useState<unknown>(null);
   const [back, setBack] = useState<string | null>(null);
   const link = data?.link;
@@ -113,7 +114,7 @@ export function ZoneAutonomyBar({ competitionId }: { competitionId: string }) {
           Repasser en ligne
         </Button>
         <Button size="xs" variant="default" data-testid="zone-journal-export"
-          onClick={() => downloadZoneJournal().then(() => { setExported(true); setExportError(null); }, setExportError)}>
+          onClick={() => downloadZoneJournal().then((seq) => { setExported(seq); setExportError(null); }, setExportError)}>
           Exporter le journal (fichier)
         </Button>
         {!link.autonomous.finals && (
@@ -122,10 +123,10 @@ export function ZoneAutonomyBar({ competitionId }: { competitionId: string }) {
             onConfirm={() => finals.mutate()} />
         )}
         <RefreshCopy />
-        {exported && (
+        {exported !== null && (
           <Confirmed label="Arrêter la zone autonome" testId="zone-stop" color="red" variant="subtle" loading={stop.isPending}
             text="Importez le fichier exporté sur le PC principal (onglet Combats, « Importer un journal de zone (fichier) »). Ce qui serait saisi ici ensuite ne serait pas dans le fichier : ce portable redevient une copie en lecture seule."
-            onConfirm={() => stop.mutate(undefined, { onSuccess: () => setExported(false) })} />
+            onConfirm={() => stop.mutate(exported, { onSuccess: () => setExported(null) })} />
         )}
       </Group>
       {online.error instanceof ApiError && online.error.status === 502 && (

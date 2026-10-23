@@ -889,19 +889,21 @@ export const useGoOnline = () =>
 export const useRefreshZoneCopy = () =>
   useZoneLinkMutation((pkg: unknown) => api<{ reapplied: number; present: number; conflicts: number }>('POST', '/api/zone-link/refresh', pkg ?? undefined));
 export const usePlayFinalsHere = () => useZoneLinkMutation(() => api<void>('POST', '/api/zone-link/finals'));
-export const useStopAutonomy = () => useZoneLinkMutation(() => api<void>('POST', '/api/zone-link/stop', { exported: true }));
-/** Le journal en fichier (clé USB) : téléchargé tel que le serveur le nomme. */
-export async function downloadZoneJournal(): Promise<void> {
+export const useStopAutonomy = () => useZoneLinkMutation((exportedUpToSeq: number) => api<void>('POST', '/api/zone-link/stop', { exportedUpToSeq }));
+/** Le journal en fichier (clé USB) : téléchargé tel que le serveur le nomme ; renvoie la dernière saisie qu'il contient (0 : aucune). */
+export async function downloadZoneJournal(): Promise<number> {
   const res = await fetch('/api/zone-link/journal.json');
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     throw new ApiError(res.status, data.error ?? `Erreur ${res.status}`);
   }
   const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'journal-zone.json';
-  const url = URL.createObjectURL(await res.blob());
+  const text = await res.text();
+  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
   const a = Object.assign(document.createElement('a'), { href: url, download: name });
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return Math.max(0, ...(JSON.parse(text) as { entries: { seq: number }[] }).entries.map((e) => e.seq));
 }
 export const useProbeMain = () =>
   useMutation({ mutationFn: (mainUrl: string) => api<{ competitions: { id: string; name: string; zones: { id: string; name: string }[] }[] }>('POST', '/api/zone-link/probe', { mainUrl }) });
