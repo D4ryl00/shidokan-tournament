@@ -141,6 +141,8 @@ function findOrCreateFighter(
     licence: input.licence ?? null,
     grade: input.grade ?? null,
     weighInKg: null,
+    version: null,
+    updatedAt: null,
   };
   db.insert(fighters).values(row).run();
   return row;

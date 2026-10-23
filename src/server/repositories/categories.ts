@@ -169,6 +169,8 @@ export async function syncCategories(db: AppDb, competitionId: string, opts: { r
           waveOverride: null,
           sortOrder: 0,
           numbersUpdatedAt: null,
+          version: null,
+          updatedAt: null,
         };
         t.insert(categories).values(row).run();
         cat = row;

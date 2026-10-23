@@ -2,13 +2,14 @@ import { DISCIPLINES, RULESETS, disciplineFromLabel } from './disciplines.js';
 import type { ProposalType } from './replacement/types.js';
 import type { CategoryGrid, DisciplineId, Ruleset, Sex } from './types.js';
 
-export type RegistrationSource = 'club_form' | 'ffk' | 'manual' | 'onsite';
+export type RegistrationSource = 'club_form' | 'ffk' | 'manual' | 'onsite' | 'online';
 
 export const SOURCE_LABELS: Record<RegistrationSource, string> = {
   club_form: 'Fiche club',
   ffk: 'FFK',
   manual: 'Manuelle',
   onsite: 'Sur place',
+  online: 'En ligne',
 };
 
 export interface Club {
