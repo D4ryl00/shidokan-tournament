@@ -64,17 +64,18 @@ But ✅ : modifier dès maintenant la base pour que toutes les étapes suivantes
 - **Une restauration ne touche pas à cette table** : `restoreFrom` l'exclut des tables copiées. En revanche, une copie brute du dossier `data/` emporte la même identité. La fiche jour J (§7.5) et l'aide de la restauration le disent : pour reprendre sur un autre PC, on **restaure** une sauvegarde, on ne copie pas le dossier.
 
 ### 3.2 Annuaire des clubs
-- Nouvelle table `club_directory`, indépendante des compétitions. Colonnes : `id` (UUID), `name`, `name_key` (même normalisation que `clubs.name_key`, **non unique**), `ffk_entity` (nullable, **unique quand renseigné**), `coach_name`, `coach_phone`, `coach_email` (tous nullables), `notes` (nullable), `archived` (booléen, faux par défaut), `created_at`.
+- Nouvelle table `club_directory`, indépendante des compétitions. Colonnes : `id` (UUID), `name`, `name_key` (même normalisation que `clubs.name_key`, **non unique**), `affiliation_number` (numéro d'affiliation FFK du club, 7 chiffres, nullable, **unique quand renseigné**) ✅, `ffk_entity` (texte complet de l'entité FFK, par exemple `0060808 ISSA KYOKUSHIN SCHOOL`, nullable), `coach_name`, `coach_phone`, `coach_email` (tous nullables), `notes` (nullable), `archived` (booléen, faux par défaut), `created_at`.
 - `clubs` reçoit `directory_club_id` (nullable, référence `club_directory.id`, `on delete set null`). Le club d'une compétition reste une **copie propre à la compétition** : coordonnées du coach au moment de l'inscription, pré-accord des reclassements. L'annuaire porte la fiche durable.
 - **Comment on reconnaît un club** 💡 : un même club arrive sous deux orthographes, celle de l'export FFK et celle que le coach a tapée. `club_aliases` relie déjà les deux. La règle de rapprochement, dans l'ordre :
-  1. même entité FFK (celle du club ou celle que `club_aliases` donne pour son nom) ;
-  2. sinon, même `name_key`, à condition que l'entrée trouvée n'ait pas une **autre** entité FFK ;
+  1. même **numéro d'affiliation** ✅ : les chiffres en tête de l'entité FFK du club, ou de celle que `club_aliases` donne pour son nom. Le numéro ne change pas, alors que le nom peut changer ou être mal orthographié ;
+  2. sinon, même `name_key`, à condition que l'entrée trouvée n'ait pas un **autre** numéro d'affiliation ;
   3. sinon, une nouvelle entrée.
 - **Reprise des données existantes**, dans la migration : on applique cette règle à tous les `clubs` existants. Les coordonnées d'une entrée sont prises dans le club de la compétition la plus récente (par date de compétition) qui les renseigne, et tous les `clubs` sont reliés à leur entrée. 🔧 La migration peut être une migration SQL écrite à la main, ou une étape de code jouée une seule fois au démarrage.
-- **Création de clubs à partir de maintenant** : `upsertClubSync` dans `registrations.ts`, et la création de club dans `ffk-import.ts`. Tout nouveau club de compétition est relié à une entrée selon la même règle. Quand un club reçoit son entité FFK (lien fait à l'import FFK), son entrée la reçoit aussi, si elle n'en a pas.
+- **Création de clubs à partir de maintenant** : `upsertClubSync` dans `registrations.ts`, et la création de club dans `ffk-import.ts`. Tout nouveau club de compétition est relié à une entrée selon la même règle. Quand un club reçoit son entité FFK (lien fait à l'import FFK), son entrée reçoit l'entité et le numéro d'affiliation, si elle ne les a pas.
 - Les coordonnées de l'annuaire ne sont **pas** écrasées par une fiche importée ; elles sont seulement complétées si elles sont vides. Elles ne changent que par une modification dans l'annuaire, ou par le coach lui-même sur sa page (§5.2).
 - **Renommer un club de compétition** ne change pas son entrée d'annuaire.
-- Il restera des doublons que la règle ne peut pas voir, par exemple deux orthographes sans entité FFK. Ils se corrigent avec la **fusion d'entrées** de l'étape B (§4).
+- Il restera des doublons que la règle ne peut pas voir, par exemple deux orthographes sans numéro d'affiliation. Ils se corrigent avec la **fusion d'entrées** de l'étape B (§4).
+- 💡 Plus tard (étape B) : la page d'inscription en ligne et les fiches pourront demander le numéro d'affiliation au coach, pour reconnaître directement un club qui ne passe pas par l'import FFK.
 - `club_aliases` reste tel quel. Le rattachement à l'entité FFK pourra plus tard migrer vers `club_directory.ffk_entity` 🔧.
 
 ### 3.3 Qui a la main sur la compétition
@@ -250,19 +251,21 @@ Ce cas ne se justifie que **s'il n'y a ni internet ni réseau local**. Dans tous
 - Ce que l'étape 0 prépare pour ce cas : l'identité de chaque installation (§3.1), les versions de lignes (§3.4) et le fait qu'une compétition se suffise à elle-même (§3.5). `match_results` garde déjà les deux combattants au moment de la saisie, ce qui permet de détecter un combat qui a changé.
 - 🔧 Forme exacte du journal. À concevoir le jour où le besoin se confirme.
 
-## 11. Ordre des étapes 💡
+## 11. Ordre des étapes ✅
 
 | Étape | Contenu | Utile sans serveur |
 |---|---|---|
 | **0** | Données (§3) : identité, annuaire en base, main, versions, règle de garde | Oui (invisible) |
-| **A** | Plusieurs postes en réseau local (§7, sans comptes) : mise à jour automatique, protection contre les écrasements, postes, copie de secours, fiche jour J | Oui |
 | **B** | Annuaire des clubs (§4) et page d'inscription du club (§5), utilisables d'abord en local | Oui |
 | **C** | Mise en ligne (§8) et mails (§6) | — |
 | **D** | Passage de main, transfert par le réseau ou par fichier (§9) | Transfert par fichier : oui |
+| **A** | Plusieurs postes en réseau local (§7, sans comptes) : mise à jour automatique, protection contre les écrasements, postes, copie de secours, fiche jour J | Oui |
 | **E** | Tout en ligne le jour J : étape A sur le serveur, avec des comptes par rôle, et prise de main par le PC en secours (§9.5) | — |
 | **F** | PC de zone autonomes (§10), seulement si le besoin se confirme | — |
 
-Seule l'étape 0 est à faire maintenant ✅. L'étape A viendra après le 22 novembre ✅.
+Ordre choisi ✅ (2026-10-23) : **0 → B → C → D → A → E → F**. Les inscriptions en ligne sont la priorité ; elles sont utilisables par les clubs à la fin de l'étape C, et une compétition inscrite en ligne se déroule hors ligne le jour J à partir de l'étape D (transfert par fichier au minimum). Les lettres gardent leur nom d'origine.
+
+Seule l'étape 0 est à faire avant le 22 novembre ✅.
 
 ## 12. Hors périmètre et anti-objectifs
 - Fusion automatique de deux bases, et règle « la dernière modification gagne ».
