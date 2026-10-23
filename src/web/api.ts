@@ -795,3 +795,17 @@ export function useUnlinkSync() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: () => api<void>('DELETE', '/api/sync/settings'), onSuccess: () => qc.invalidateQueries({ queryKey: ['sync-settings'] }) });
 }
+
+// Copie de secours d'un autre PC (rôle local).
+export interface MirrorView { url: string | null; intervalMin: number; lastSuccessAt: string | null; lastError: string | null }
+export const useMirror = (enabled: boolean) => useQuery({ queryKey: ['mirror'], queryFn: () => api<MirrorView>('GET', '/api/mirror'), enabled, refetchInterval: 60_000 });
+export function useSetMirror() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (v: { url: string | null; intervalMin: number }) => api<MirrorView>('PUT', '/api/mirror', v), onSuccess: (m) => qc.setQueryData(['mirror'], m) });
+}
+export const useMirrorCopies = (enabled: boolean) =>
+  useQuery({ queryKey: ['mirror-copies'], queryFn: () => api<{ name: string; size: number; createdAt: string }[]>('GET', '/api/mirror/copies'), enabled, refetchInterval: 60_000 });
+export function useRestoreMirrorCopy() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (name: string) => api<void>('POST', `/api/mirror/copies/${encodeURIComponent(name)}/restore`), onSuccess: () => qc.invalidateQueries() });
+}

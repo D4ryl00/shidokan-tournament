@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { PublicAppSettings, SmtpSettings } from '../../domain/app-settings.js';
 import { useAppSettings, useAuthMe, useSendTestMail, useUpdateAppSettings } from '../api.js';
 import { SyncSettingsCard } from '../components/SyncPanel.js';
+import { MirrorSettingsCard } from '../components/MirrorPanels.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { SectionHeader } from '../components/Help.js';
 
@@ -103,6 +104,14 @@ export function AppSettingsPage() {
           <Stack>
             <SectionHeader topic="synchronisation" />
             <SyncSettingsCard role={me.role} />
+          </Stack>
+        </Card>
+      )}
+      {me?.role === 'local' && (
+        <Card withBorder>
+          <Stack>
+            <Title order={4}>Copie de secours d’un autre PC</Title>
+            <MirrorSettingsCard />
           </Stack>
         </Card>
       )}

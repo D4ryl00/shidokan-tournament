@@ -3,6 +3,7 @@ import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useBackupNow, useBackups, usePodiums, useRestore } from '../api.js';
+import { MirrorCopies } from '../components/MirrorPanels.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { SectionHeader } from '../components/Help.js';
 import { useEntrantInfo } from './BracketsPage.js';
@@ -84,6 +85,7 @@ export function PodiumsPage() {
           ))}
         </Table.Tbody>
       </Table>
+      <MirrorCopies />
       <ApiErrorAlert error={restore.error ?? backupNow.error} />
       <Modal opened={restoreFile !== null} onClose={() => setRestoreFile(null)} title="Restaurer cette sauvegarde ?">
         <Stack>

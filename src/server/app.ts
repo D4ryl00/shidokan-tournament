@@ -38,6 +38,8 @@ import { registerCategoryRevGuard } from './revisions.js';
 import { registerCompetitionEvents } from './events.js';
 import { syncRemoteRoutes } from './routes/sync-remote.js';
 import { syncFileRoutes, syncLocalRoutes } from './routes/sync-local.js';
+import { mirrorRoutes } from './routes/mirror.js';
+import { startMirror } from './mirror.js';
 import { authRoutes } from './routes/auth.js';
 import { appSettingsRoutes } from './routes/app-settings.js';
 import { nodemailerTransport, type MailTransport } from './mail.js';
@@ -165,7 +167,13 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(authRoutes, { db, role });
   // Échanges de compétitions : les routes du serveur en ligne et celles du PC ne tournent que dans leur rôle.
   if (role === 'serveur') await app.register(syncRemoteRoutes, { db, dbPath: opts.dbPath });
-  else await app.register(syncLocalRoutes, { db, dbPath: opts.dbPath });
+  else {
+    await app.register(syncLocalRoutes, { db, dbPath: opts.dbPath });
+    // Copie de secours d'un autre PC : seulement entre PC de la compétition (le PC principal ne demande pas de connexion).
+    await app.register(mirrorRoutes, { db, dbPath: opts.dbPath });
+    const stopMirror = startMirror(db, opts.dbPath, (e) => app.log.error(e));
+    app.addHook('onClose', async () => stopMirror());
+  }
   await app.register(syncFileRoutes, { db, dbPath: opts.dbPath, role });
   await app.register(appSettingsRoutes, { db, mailTransport });
 
