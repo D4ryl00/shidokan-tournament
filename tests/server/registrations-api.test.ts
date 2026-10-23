@@ -185,3 +185,15 @@ test('relecture (mineurs) : import HTTP d’une fiche .ods au nouveau format', a
   expect(rows.find((r) => r.discipline === 'karate')!.weightClassId).toBe('cadet:F:-54');
   expect(rows.every((r) => r.fighter.grade === '1er kyu')).toBe(true);
 });
+
+test("saisie d'une fiche papier : les catégories sont à jour dès l'enregistrement", async () => {
+  const res = await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: ENTRY_HEADER, lines: [ENTRY_LINE] } });
+  expect(res.statusCode).toBe(200);
+  const rows = (await app.inject({ method: 'GET', url: `${base}/registrations` })).json() as { categoryId: string | null }[];
+  expect(rows).toHaveLength(2);
+  const categories = (await app.inject({ method: 'GET', url: `${base}/categories` })).json() as { id: string }[];
+  for (const r of rows) {
+    expect(r.categoryId).not.toBeNull();
+    expect(categories.map((c) => c.id)).toContain(r.categoryId);
+  }
+});

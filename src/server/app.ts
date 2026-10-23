@@ -130,7 +130,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   app.addHook('onResponse', async (req, reply) => {
     const id = (req.params as { id?: string } | undefined)?.id;
     if (!id || req.method === 'GET' || reply.statusCode >= 400) return;
-    if (/\/(registrations|club-forms\/import|ffk-imports\/[^/]+\/commit|grid)(\/|$)|^\/api\/competitions\/[^/]+$/.test(req.url)) {
+    if (/\/(registrations|club-forms\/(entry\/)?import|ffk-imports\/[^/]+\/commit|grid)(\/|$)|^\/api\/competitions\/[^/]+$/.test(req.url)) {
       await syncCategories(db, id).catch((e) => app.log.error(e));
     }
   });
