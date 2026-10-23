@@ -100,8 +100,9 @@ export async function restoreFrom(db: AppDb, file: Buffer, beforeCopy: () => Pro
     }
     await beforeCopy(); // sauvegarde de sécurité, seulement pour un fichier valide
     // L'identité de l'installation n'est jamais copiée : une copie de base ne donne pas la même identité à un autre PC.
+    // Le compteur de versions non plus : il ne recule jamais (les lignes copiées le relèvent au besoin, déclencheur « version_keep »).
     const tables = (
-      client.prepare("select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name not in ('__drizzle_migrations', 'instance')").all() as { name: string }[]
+      client.prepare("select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name not in ('__drizzle_migrations', 'instance', 'change_counter')").all() as { name: string }[]
     ).map((t) => t.name);
     client.pragma('foreign_keys = OFF');
     client.exec(`ATTACH DATABASE ${quote(tmp)} AS src`);

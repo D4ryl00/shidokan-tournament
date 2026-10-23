@@ -163,3 +163,15 @@ test('API inchangée : journal des réaffectations sans version ni updatedAt', a
   expect(res.body).not.toContain('"version"');
   expect(res.body).not.toContain('"updatedAt"');
 });
+
+test('déclencheur à l’ancienne définition → remplacé par la définition actuelle à l’ouverture suivante', () => {
+  const file = tmpDbPath();
+  closeDb(openDb(file));
+  const r = new Database(file);
+  const current = (r.prepare("select sql from sqlite_master where name = 'zones__version_update'").get() as { sql: string }).sql;
+  r.exec('DROP TRIGGER "zones__version_update"');
+  r.exec('CREATE TRIGGER "zones__version_update" AFTER UPDATE ON "zones" BEGIN SELECT 1; END');
+  r.close();
+  db = openDb(file);
+  expect((raw(db).prepare("select sql from sqlite_master where name = 'zones__version_update'").get() as { sql: string }).sql).toBe(current);
+});

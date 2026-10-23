@@ -182,3 +182,22 @@ test("restauration d'une sauvegarde de l'étape 14 (olderDb(13), avec un club) :
   db.close();
   expect(localInstance()).toEqual(before);
 });
+
+test('restauration d’une sauvegarde plus ancienne : le compteur de versions ne recule pas, une ligne recréée a une version plus grande', async () => {
+  const created = await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Compteur', date: '2026-11-22' } });
+  const id = created.json().id as string;
+  const snapshot = (await app.inject({ method: 'GET', url: '/api/backup.sqlite' })).rawPayload;
+  for (let i = 0; i < 20; i++) await app.inject({ method: 'PATCH', url: `/api/competitions/${id}`, payload: { location: `Salle ${i}` } });
+  const read = () => new Database(dbPath, { readonly: true });
+  let d = read();
+  const counterBefore = (d.prepare('select value from change_counter').get() as { value: number }).value;
+  const maxBefore = (d.prepare('select max(version) as v from competitions').get() as { v: number }).v;
+  d.close();
+  const res = await app.inject({ method: 'POST', url: '/api/restore', payload: snapshot, headers: { 'content-type': 'application/octet-stream' } });
+  expect(res.statusCode).toBe(204);
+  await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Après', date: '2026-11-22' } });
+  d = read();
+  expect((d.prepare('select value from change_counter').get() as { value: number }).value).toBeGreaterThan(counterBefore);
+  expect((d.prepare("select version from competitions where name = 'Après'").get() as { version: number }).version).toBeGreaterThan(maxBefore);
+  d.close();
+});

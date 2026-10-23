@@ -15,7 +15,8 @@ export function versionedTables(db: AppDb): string[] {
 }
 
 /**
- * Crée la ligne du compteur et les déclencheurs (IF NOT EXISTS), puis donne une version aux lignes qui n'en ont pas. Idempotente.
+ * Crée la ligne du compteur et (re)crée les déclencheurs — une définition corrigée remplace ainsi l'ancienne dans les bases existantes —,
+ * puis donne une version aux lignes qui n'en ont pas. Idempotente.
  * Ne fait rien si la table change_counter n'existe pas (base d'avant 0014, ouverte par le helper de test olderDb).
  * Une version vient d'un compteur unique pour toute la base : une ligne effacée puis recréée ne reprend jamais une ancienne version.
  */
@@ -30,14 +31,17 @@ export function ensureRowVersions(db: AppDb): void {
       const next = `UPDATE change_counter SET value = value + 1 WHERE id = 1;`;
       const current = '(SELECT value FROM change_counter WHERE id = 1)';
       client.exec(`
-        CREATE TRIGGER IF NOT EXISTS "${t}__version_insert" AFTER INSERT ON "${t}" WHEN NEW.version IS NULL BEGIN
+        DROP TRIGGER IF EXISTS "${t}__version_insert";
+        DROP TRIGGER IF EXISTS "${t}__version_keep";
+        DROP TRIGGER IF EXISTS "${t}__version_update";
+        CREATE TRIGGER "${t}__version_insert" AFTER INSERT ON "${t}" WHEN NEW.version IS NULL BEGIN
           ${next}
           UPDATE "${t}" SET version = ${current}, updated_at = coalesce(NEW.updated_at, ${NOW}) WHERE rowid = NEW.rowid;
         END;
-        CREATE TRIGGER IF NOT EXISTS "${t}__version_keep" AFTER INSERT ON "${t}" WHEN NEW.version IS NOT NULL BEGIN
+        CREATE TRIGGER "${t}__version_keep" AFTER INSERT ON "${t}" WHEN NEW.version IS NOT NULL BEGIN
           UPDATE change_counter SET value = max(value, NEW.version) WHERE id = 1;
         END;
-        CREATE TRIGGER IF NOT EXISTS "${t}__version_update" AFTER UPDATE ON "${t}" BEGIN
+        CREATE TRIGGER "${t}__version_update" AFTER UPDATE ON "${t}" BEGIN
           ${next}
           UPDATE "${t}" SET version = ${current}, updated_at = ${NOW} WHERE rowid = NEW.rowid;
         END;
