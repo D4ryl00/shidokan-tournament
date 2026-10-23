@@ -4,6 +4,7 @@ import type { InstanceRole } from '../auth/guard.js';
 import type { AppDb } from '../db/client.js';
 import { versionedTables } from '../db/row-versions.js';
 import { backupNow } from '../repositories/backups.js';
+import { competitionChanged } from '../events.js';
 import { getInstance } from '../repositories/instance.js';
 
 /** Une compétition entière, telle qu'elle passe d'une installation à l'autre (réseau ou fichier). */
@@ -231,5 +232,6 @@ export async function importPackage(
     if (e instanceof PackageError) throw e;
     throw new PackageError(`Paquet invalide : ${(e as Error).message}.`);
   }
+  competitionChanged(id);
   return { competitionId: id, created };
 }

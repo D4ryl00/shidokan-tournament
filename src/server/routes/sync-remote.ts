@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
+import { competitionChanged } from '../events.js';
 import { competitions, receivedCopies } from '../db/schema.js';
 import { NotFoundError } from '../repositories/registrations.js';
 import { getManagement } from '../sync/ownership.js';
@@ -113,6 +114,7 @@ export async function syncRemoteRoutes(app: FastifyInstance, { db, dbPath }: { d
         .set({ ownerInstanceId: body.instanceId, ownerName: body.instanceName, ownerSince: c.ownerInstanceId ? c.ownerSince : now, ownerTokenId: tokenOf.get(req)!, lastSyncAt: now, clubEntryStatus: 'frozen' })
         .where(eq(competitions.id, c.id))
         .run();
+      competitionChanged(c.id);
       return buildPackage(db, c.id, { handOver: true, role: 'serveur' });
     });
     remote.post<{ Params: { cid: string } }>('/api/sync/remote/competitions/:cid/copy', async (req, reply) => {

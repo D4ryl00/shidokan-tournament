@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { optionalEmail } from './fields.js';
 import type { AppDb } from '../db/client.js';
+import { competitionChanged } from '../events.js';
 import { syncCategories } from '../repositories/categories.js';
 import { deleteClubLine, getClubEntry, saveClubLine, updateClubEntryHeader, type ClubAccess } from '../repositories/club-entry.js';
 import { invitationStatus, resolveInvitation } from '../repositories/invitations.js';
@@ -36,7 +37,10 @@ export async function clubEntryRoutes(app: FastifyInstance, { db }: { db: AppDb 
     route.bodyLimit = 64 * 1024;
   });
   // Les données sont déjà enregistrées : un échec du recalcul des catégories ne doit pas faire croire au coach que rien n'est passé.
-  const resync = (competitionId: string) => syncCategories(db, competitionId).catch((e) => app.log.error(e));
+  const resync = (competitionId: string) => {
+    competitionChanged(competitionId);
+    return syncCategories(db, competitionId).catch((e) => app.log.error(e));
+  };
   const access = (token: string): ClubAccess => {
     const found = resolveInvitation(db, token);
     if (found) return found;
@@ -46,7 +50,12 @@ export async function clubEntryRoutes(app: FastifyInstance, { db }: { db: AppDb 
 
   app.get<T>('/api/inscription/:token', async (req) => getClubEntry(db, access(req.params.token)));
 
-  app.patch<T>('/api/inscription/:token/club', async (req) => updateClubEntryHeader(db, access(req.params.token), headerSchema.parse(req.body)));
+  app.patch<T>('/api/inscription/:token/club', async (req) => {
+    const a = access(req.params.token);
+    const club = await updateClubEntryHeader(db, a, headerSchema.parse(req.body));
+    competitionChanged(a.competitionId);
+    return club;
+  });
 
   app.post<T>('/api/inscription/:token/lines', async (req, reply) => {
     const a = access(req.params.token);

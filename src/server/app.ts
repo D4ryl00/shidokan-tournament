@@ -35,6 +35,7 @@ import { loggerOptions } from './log.js';
 import { registerGuard, type InstanceRole } from './auth/guard.js';
 import { registerReadOnlyGuard } from './sync/ownership.js';
 import { registerCategoryRevGuard } from './revisions.js';
+import { registerCompetitionEvents } from './events.js';
 import { syncRemoteRoutes } from './routes/sync-remote.js';
 import { syncFileRoutes, syncLocalRoutes } from './routes/sync-local.js';
 import { authRoutes } from './routes/auth.js';
@@ -76,6 +77,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   registerGuard(app, db, role);
   registerReadOnlyGuard(app, db);
   registerCategoryRevGuard(app, db);
+  registerCompetitionEvents(app);
   ensureInstance(db, opts.instanceName ?? 'PC');
   const stopBackups = startAutoBackup(db, opts.dbPath, opts.backupIntervalMin ?? 0, (e) => app.log.error(e));
   const stopRetention = startRetention(db, opts.dbPath, (e) => app.log.error(e));
