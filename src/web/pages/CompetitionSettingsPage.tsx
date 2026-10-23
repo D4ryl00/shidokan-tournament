@@ -12,6 +12,7 @@ import { ZonesImpossibleAlert } from '../components/ZonesImpossibleAlert.js';
 import { nextZoneName, validateZones, ZONE_MAX } from '../../domain/zones.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { HelpLine } from '../components/Help.js';
+import { SyncPanel } from '../components/SyncPanel.js';
 import { HELP } from '../help.js';
 
 export const FORMAT_LABELS: Record<CombatFormat, string> = {
@@ -251,6 +252,11 @@ export function CompetitionSettingsPage() {
           Enregistrer
         </Button>
       </Group>
+
+      <Fieldset legend={HELP['reglages.echanges'].title}>
+        <HelpLine topic="reglages.echanges" />
+        <SyncPanel competitionId={id} />
+      </Fieldset>
     </Stack>
   );
 }

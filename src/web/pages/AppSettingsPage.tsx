@@ -2,7 +2,8 @@ import { Button, Card, Group, NativeSelect, NumberInput, PasswordInput, SimpleGr
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import type { PublicAppSettings, SmtpSettings } from '../../domain/app-settings.js';
-import { useAppSettings, useSendTestMail, useUpdateAppSettings } from '../api.js';
+import { useAppSettings, useAuthMe, useSendTestMail, useUpdateAppSettings } from '../api.js';
+import { SyncSettingsCard } from '../components/SyncPanel.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { SectionHeader } from '../components/Help.js';
 
@@ -87,6 +88,7 @@ function TextsCard({ settings }: { settings: PublicAppSettings }) {
 
 export function AppSettingsPage() {
   const { data } = useAppSettings();
+  const { data: me } = useAuthMe();
   return (
     <Stack maw={960}>
       <SectionHeader topic="parametres" order={2} />
@@ -95,6 +97,14 @@ export function AppSettingsPage() {
           <SmtpCard settings={data} />
           <TextsCard settings={data} />
         </>
+      )}
+      {me && (
+        <Card withBorder>
+          <Stack>
+            <SectionHeader topic="synchronisation" />
+            <SyncSettingsCard role={me.role} />
+          </Stack>
+        </Card>
       )}
     </Stack>
   );

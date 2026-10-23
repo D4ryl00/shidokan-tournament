@@ -38,6 +38,8 @@ export type HelpTopicId =
   | 'podiums.clubs'
   | 'podiums.sauvegardes'
   | 'reglages.competition'
+  | 'reglages.echanges'
+  | 'synchronisation'
   | 'reglages.zones'
   | 'reglages.ordre'
   | 'reglages.recasement'
@@ -106,6 +108,30 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Message aux clubs : le modèle de mail, avec les variables {club}, {coach}, {competition}, {date}, {lieu}, {date_limite} et {lien} ; chaque compétition peut avoir le sien.',
       'Données personnelles : la mention affichée en bas de la page de chaque club, et l’adresse à laquelle écrire pour exercer ses droits (à compléter avant d’ouvrir les inscriptions).',
       'Conservation : après ce nombre de mois, le poids, la licence, le grade, les coordonnées des coachs, les liens et les mails d’une compétition sont effacés tout seuls ; le palmarès reste. Un club de l’annuaire sans compétition depuis ce nombre d’années est archivé et ses coordonnées effacées.',
+    ],
+  },
+  synchronisation: {
+    title: 'Synchronisation',
+    short: 'Relier le PC de la compétition au serveur en ligne, pour s’échanger les compétitions.',
+    details: [
+      'Sur le serveur en ligne : « Créer un jeton » donne un jeton de synchronisation, affiché une seule fois. Il ne sert qu’aux échanges de compétitions, et se révoque à tout moment.',
+      'Sur le PC : collez l’adresse du serveur (par exemple https://competitions.shidokanfrance.com) et ce jeton, puis enregistrez.',
+      'Le jeton n’est jamais réaffiché ni copié dans les sauvegardes.',
+    ],
+  },
+  'reglages.echanges': {
+    title: 'Échanges avec le serveur',
+    short: 'Où est la main sur cette compétition, et comment la faire passer entre le serveur en ligne et le PC.',
+    details: [
+      'Une compétition n’est modifiable qu’à un seul endroit à la fois : là où est la main. Ailleurs, elle est en lecture seule.',
+      [
+        '« Récupérer une copie » : le PC télécharge la compétition, en lecture seule (pour préparer ou vérifier).',
+        '« Prendre la main » : la veille ou le matin de la compétition, après le gel des inscriptions. Le PC devient le seul endroit où la modifier ; en ligne, elle passe en lecture seule.',
+        '« Envoyer une copie au serveur » : pendant la journée, s’il y a internet, une copie de secours part en ligne (le PC garde la main).',
+        '« Rendre la main au serveur » : après la compétition. Le serveur reprend la compétition entière, avec ses résultats ; le PC garde une copie en lecture seule.',
+        'Sans internet : « Exporter la compétition (fichier) » sur une clé USB, puis « Importer une compétition (fichier) » de l’autre côté.',
+        'Sur le serveur, « Reprendre la main » sert si le PC est perdu ou en panne : à partir de la version du serveur, ou de la dernière copie reçue.',
+      ],
     ],
   },
   impression: {

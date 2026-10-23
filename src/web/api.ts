@@ -707,3 +707,41 @@ export const useInvitationPreview = (id: string, clubId: string | null, version:
     queryFn: () => api<{ subject: string; body: string }>('GET', `/api/competitions/${id}/invitations/preview?clubId=${clubId}`),
     enabled: !!clubId,
   });
+
+// Passage de main entre le serveur et le PC.
+export interface Management { managedHere: boolean; ownerName: string | null; ownerSince: string | null; lastSyncAt: string | null; copyOfServer: boolean }
+export interface ServerCompetition { id: string; name: string; date: string; managedHere: boolean; ownerName: string | null }
+export const useManagement = (id: string) =>
+  useQuery({ queryKey: ['management', id], queryFn: () => api<Management>('GET', `/api/competitions/${id}/management`) });
+export const useSyncSettings = () => useQuery({ queryKey: ['sync-settings'], queryFn: () => api<{ url: string | null; hasToken: boolean }>('GET', '/api/sync/settings') });
+export function useUpdateSyncSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { url: string; token: string | null }) => api<{ url: string | null; hasToken: boolean }>('PATCH', '/api/sync/settings', v),
+    onSuccess: (s) => qc.setQueryData(['sync-settings'], s),
+  });
+}
+export const useServerCompetitions = (enabled: boolean) =>
+  useQuery({ queryKey: ['server-competitions'], queryFn: () => api<ServerCompetition[]>('GET', '/api/sync/server-competitions'), enabled });
+/** Après un échange : toutes les données sont relues (la compétition a pu changer entièrement). */
+function useSyncMutation<V, R>(fn: (v: V) => Promise<R>) {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries() });
+}
+export const usePull = () => useSyncMutation((v: { competitionId: string; take: boolean }) => api<{ competitionId: string; created: boolean }>('POST', '/api/sync/pull', v));
+export const useSyncCopy = (id: string) => useSyncMutation(() => api<{ sentAt: string }>('POST', `/api/competitions/${id}/sync/copy`));
+export const useSyncReturn = (id: string) => useSyncMutation(() => api<void>('POST', `/api/competitions/${id}/sync/return`));
+export const useTakeBack = (id: string) => useSyncMutation((source: 'server' | 'lastCopy') => api<void>('POST', `/api/competitions/${id}/take-back`, { source }));
+export const useReceivedCopies = (id: string, enabled: boolean) =>
+  useQuery({ queryKey: ['received-copies', id], queryFn: () => api<{ id: string; fromName: string; receivedAt: string }[]>('GET', `/api/competitions/${id}/received-copies`), enabled });
+export const useImportCompetition = () =>
+  useSyncMutation(({ pkg, confirm }: { pkg: unknown; confirm?: 'replace' | 'takeOver' }) =>
+    api<{ competitionId: string; created: boolean }>('POST', `/api/competitions/import${confirm ? `?${confirm}=1` : ''}`, pkg));
+export interface SyncTokenRow { id: string; name: string; createdAt: string; lastUsedAt: string | null; revoked: boolean }
+export const useSyncTokens = (enabled: boolean) => useQuery({ queryKey: ['sync-tokens'], queryFn: () => api<SyncTokenRow[]>('GET', '/api/sync/tokens'), enabled });
+function useTokenMutation<V, R>(fn: (v: V) => Promise<R>) {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries({ queryKey: ['sync-tokens'] }) });
+}
+export const useCreateSyncToken = () => useTokenMutation((name: string) => api<{ id: string; name: string; token: string }>('POST', '/api/sync/tokens', { name }));
+export const useRevokeSyncToken = () => useTokenMutation((id: string) => api<void>('DELETE', `/api/sync/tokens/${id}`));

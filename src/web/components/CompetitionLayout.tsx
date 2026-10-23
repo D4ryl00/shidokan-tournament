@@ -7,6 +7,7 @@ import { COMPETITION_TABS } from '../tabs.js';
 import { useHasUnsaved } from '../unsaved.js';
 import { sessionParam } from '../useSelectedWave.js';
 import { HelpButton, HelpText } from './Help.js';
+import { ManagementBanner } from './SyncPanel.js';
 
 
 export function CompetitionLayout() {
@@ -30,6 +31,7 @@ export function CompetitionLayout() {
           {new Date(`${data.date}T12:00:00`).toLocaleDateString('fr-FR', { dateStyle: 'full' })}
           {data.location ? ` — ${data.location}` : ''}
         </Text>
+        <ManagementBanner competitionId={id} />
       </div>
       <Tabs value={current} onChange={(v) => v && v !== current && go(v)}>
         <Tabs.List>

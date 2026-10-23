@@ -4,6 +4,7 @@ import { Link } from 'react-router';
 import { useCompetitions, useCreateCompetition, useGridTemplates } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { SectionHeader } from '../components/Help.js';
+import { ImportCompetitionButton, ServerCompetitionsButton } from '../components/SyncPanel.js';
 
 export function CompetitionsPage() {
   const { data = [] } = useCompetitions();
@@ -23,9 +24,13 @@ export function CompetitionsPage() {
     <Stack>
       <Group justify="space-between">
         <SectionHeader topic="competitions" order={2} />
-        <Button data-testid="new-competition" onClick={() => setOpen(true)}>
-          Nouvelle compétition
-        </Button>
+        <Group>
+          <ServerCompetitionsButton />
+          <ImportCompetitionButton />
+          <Button data-testid="new-competition" onClick={() => setOpen(true)}>
+            Nouvelle compétition
+          </Button>
+        </Group>
       </Group>
       {data.length === 0 ? (
         <Text c="dimmed">Aucune compétition pour l'instant.</Text>

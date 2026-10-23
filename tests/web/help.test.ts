@@ -106,3 +106,9 @@ test("parametres : l'aide Gmail parle du mot de passe d'application", () => {
   expect(all('parametres')).toContain('mot de passe d’application');
   expect(all('parametres')).toContain('smtp.gmail.com');
 });
+
+test("synchronisation : l'aide explique les quatre gestes et le fichier", () => {
+  const text = all('reglages.echanges');
+  for (const g of ['Récupérer une copie', 'Prendre la main', 'Envoyer une copie au serveur', 'Rendre la main au serveur', 'Exporter la compétition (fichier)']) expect(text).toContain(g);
+  expect(all('synchronisation')).toContain('jeton');
+});
