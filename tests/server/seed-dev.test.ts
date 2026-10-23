@@ -41,4 +41,4 @@ test('script de dev : mêmes données pour une même graine, sans toucher aux au
       .map((r) => `${r.fighter.lastName} ${r.fighter.firstName}`).sort();
   expect(await names(a.competitionId)).toEqual(await names(b.competitionId));
   expect((await app.inject({ method: 'GET', url: `/api/competitions/${other}/registrations` })).json()).toEqual([]);
-});
+}, 20_000); // deux compétitions générées : plus lent que les autres quand toute la suite tourne en parallèle
