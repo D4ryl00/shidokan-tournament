@@ -5,6 +5,7 @@ import type { PublicAppSettings, SmtpSettings } from '../../domain/app-settings.
 import { useAppSettings, useAuthMe, useSendTestMail, useUpdateAppSettings } from '../api.js';
 import { SyncSettingsCard } from '../components/SyncPanel.js';
 import { MirrorSettingsCard } from '../components/MirrorPanels.js';
+import { DayChecklist } from '../components/DayChecklist.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { SectionHeader } from '../components/Help.js';
 
@@ -107,6 +108,12 @@ export function AppSettingsPage() {
           </Stack>
         </Card>
       )}
+      <Card withBorder>
+        <Stack>
+          <SectionHeader topic="jour-j" />
+          <DayChecklist />
+        </Stack>
+      </Card>
       {me?.role === 'local' && (
         <Card withBorder>
           <Stack>

@@ -1,7 +1,8 @@
-import { Button, Group, Loader, Modal, Stack, Tabs, Text, Title } from '@mantine/core';
-import { useState } from 'react';
+import { Button, Group, Loader, Modal, Select, Stack, Tabs, Text, Title } from '@mantine/core';
+import { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
-import { useCompetition } from '../api.js';
+import { useCompetition, useZones } from '../api.js';
+import { posteTabs, tabFor, usePoste, type Poste } from '../poste.js';
 import { HELP, type HelpTopicId } from '../help.js';
 import { COMPETITION_TABS } from '../tabs.js';
 import { useHasUnsaved } from '../unsaved.js';
@@ -17,12 +18,26 @@ export function CompetitionLayout() {
   useCompetitionEvents(id);
   const navigate = useNavigate();
   const current = useLocation().pathname.split('/')[3] ?? 'reglages';
+  const [poste, setPoste] = usePoste(id);
+  const { data: zones = [] } = useZones(id);
+  const allowed = posteTabs(poste);
   const unsaved = useHasUnsaved();
   const [pending, setPending] = useState<string | null>(null);
   // La vague choisie (`?session=`) suit d'un onglet à l'autre : de la pesée d'une vague à son recasement.
   const session = sessionParam(useSearchParams()[0]);
   const path = (tab: string) => `/competitions/${id}/${tab}${session ? `?session=${encodeURIComponent(session)}` : ''}`;
   const go = (tab: string) => (unsaved ? setPending(tab) : navigate(path(tab)));
+  // Un onglet masqué pour ce poste (adresse tapée, poste changé) mène à l'onglet par défaut du poste.
+  const target = tabFor(poste, current);
+  useEffect(() => {
+    if (target !== current) navigate(path(target), { replace: true });
+  }, [target, current]); // eslint-disable-line react-hooks/exhaustive-deps
+  const posteValue = poste.kind === 'zone' ? `zone:${poste.zoneId}` : poste.kind;
+  const choosePoste = (v: string | null) => {
+    if (!v) return;
+    const p: Poste = v.startsWith('zone:') ? { kind: 'zone', zoneId: v.slice(5) } : v === 'table' ? { kind: 'table' } : { kind: 'organisation' };
+    setPoste(p);
+  };
   if (isLoading) return <Loader />;
   if (!data) return <Text>Compétition introuvable.</Text>;
   return (
@@ -33,11 +48,15 @@ export function CompetitionLayout() {
           {new Date(`${data.date}T12:00:00`).toLocaleDateString('fr-FR', { dateStyle: 'full' })}
           {data.location ? ` — ${data.location}` : ''}
         </Text>
-        <ManagementBanner competitionId={id} />
+        <Group justify="space-between" align="center" mt={4}>
+          <ManagementBanner competitionId={id} />
+          <Select size="xs" w={220} label="Poste" data-testid="poste-select" allowDeselect={false} value={posteValue} onChange={choosePoste}
+            data={[{ value: 'organisation', label: 'Organisation (tout)' }, { value: 'table', label: 'Table centrale' }, ...zones.map((z) => ({ value: `zone:${z.id}`, label: `Zone : ${z.name}` }))]} />
+        </Group>
       </div>
       <Tabs value={current} onChange={(v) => v && v !== current && go(v)}>
         <Tabs.List>
-          {COMPETITION_TABS.map((t) => (
+          {COMPETITION_TABS.filter((t) => allowed.includes(t.path)).map((t) => (
             <Tabs.Tab key={t.path} value={t.path}>
               {t.label}
             </Tabs.Tab>

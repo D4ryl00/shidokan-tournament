@@ -10,6 +10,7 @@ import { WaveLaunchPanel } from '../components/WaveLaunchPanel.js';
 import { MoveDialog } from '../components/MoveDialog.js';
 import { categoryPassages, movedMatchZones } from '../passages.js';
 import { useSelectedWave } from '../useSelectedWave.js';
+import { usePoste } from '../poste.js';
 import { BracketView, combatLabel } from '../components/BracketView.js';
 import { KataScoring } from '../components/KataScoring.js';
 import { HelpButton, HelpText, SectionHeader } from '../components/Help.js';
@@ -40,7 +41,12 @@ export function MatchesPage() {
   // Vague lancée : changer la zone d'une catégorie numérotée = « Déplacer vers… » (aperçu, renumérotation).
   const [moving, setMoving] = useState<{ category: { id: string; label: string }; zoneId: string } | null>(null);
   // Avec une vague : ses catégories seulement.
-  const playable = categories.filter((c) => c.bracket && activeEntrantCount(c) >= 2 && (!waveId || c.waveId === waveId));
+  // Poste « Zone » : seulement sa zone (catégories qui s'y jouent, sa file), sans les réglages de zone et d'ordre.
+  const [poste] = usePoste(id);
+  const zoneOnly = poste.kind === 'zone' ? poste.zoneId : null;
+  const playable = categories.filter(
+    (c) => c.bracket && activeEntrantCount(c) >= 2 && (!waveId || c.waveId === waveId) && (!zoneOnly || (plan?.categories[c.id]?.zoneId ?? c.zoneId) === zoneOnly),
+  );
   const selected = playable.find((c) => c.id === selectedId) ?? null;
   const { data: res } = useCategoryResults(id, selected?.id ?? null);
   // Zone : automatique (répartie par l'app) ou épinglée à la main.
@@ -76,10 +82,12 @@ export function MatchesPage() {
                 </UnstyledButton>
                 <Group gap={4} mt={4}>
                   <Badge size="xs" variant="light">{STATUS_LABELS[c.status]}</Badge>
+                  {!zoneOnly && (<>
                   <Select size="xs" w={190} data={zoneOptions(c.id, c.launchLocked)} value={c.zoneId ?? ''} allowDeselect={false} data-testid="schedule-zone" aria-label="Zone de combat"
                     onChange={(v) => (c.launchLocked ? v && v !== c.zoneId && setMoving({ category: c, zoneId: v }) : update.mutate({ cid: c.id, zoneId: v || null }))} />
                   <NumberInput size="xs" w={70} min={0} max={99} value={c.order} aria-label="Ordre" data-testid="schedule-order"
                     onChange={(v) => typeof v === 'number' && update.mutate({ cid: c.id, order: v })} />
+                  </>)}
                 </Group>
               </Card>
             ))}
@@ -95,10 +103,13 @@ export function MatchesPage() {
               <SegmentedControl data-testid="matches-wave" value={waveId ?? ''} onChange={select} data={waves.map((w) => ({ value: w.id, label: w.name }))} />
             </Group>
           )}
-          {ready && (waves.length === 0 || waveId) && <WaveLaunchPanel competitionId={id} waveId={waveId} />}
+          {zoneOnly && zones.length > 0 && !zones.some((z) => z.id === zoneOnly) && (
+            <Alert color="orange">La zone de ce poste n’existe plus : choisissez un autre poste en haut de l’écran.</Alert>
+          )}
+          {!zoneOnly && ready && (waves.length === 0 || waveId) && <WaveLaunchPanel competitionId={id} waveId={waveId} />}
           <ZonesImpossibleAlert impossible={schedule?.impossible} />
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
-            {(schedule?.zones ?? []).map((t) => (
+            {(schedule?.zones ?? []).filter((t) => !zoneOnly || t.zone.id === zoneOnly).map((t) => (
               <Card key={t.zone.id} withBorder data-testid="zone-card">
                 <Group gap={4}><Title order={5}>{t.zone.name}</Title><HelpButton topic="combats.zone" /></Group>
                 {t.queue.length === 0 && <Text size="sm" c="dimmed">Aucun combat en attente.</Text>}
@@ -121,7 +132,7 @@ export function MatchesPage() {
                 )}
               </Card>
             ))}
-            {(schedule?.unassigned.length ?? 0) > 0 && (
+            {!zoneOnly && (schedule?.unassigned.length ?? 0) > 0 && (
               <Card withBorder>
                 <Title order={6}>Sans zone</Title>
                 <Text size="sm" c="dimmed">{schedule!.unassigned.length} catégorie(s) sans zone possible ou sans session.</Text>

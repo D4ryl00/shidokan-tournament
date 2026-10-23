@@ -40,6 +40,7 @@ export type HelpTopicId =
   | 'reglages.competition'
   | 'reglages.echanges'
   | 'synchronisation'
+  | 'jour-j'
   | 'reglages.zones'
   | 'reglages.ordre'
   | 'reglages.recasement'
@@ -132,6 +133,15 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Sans internet : « Exporter la compétition (fichier) » sur une clé USB, puis « Importer une compétition (fichier) » de l’autre côté.',
         'Sur le serveur, « Reprendre la main » sert si le PC est perdu ou en panne : à partir de la version du serveur, ou de la dernière copie reçue.',
       ],
+    ],
+  },
+  'jour-j': {
+    title: 'Préparer le jour J (plusieurs postes)',
+    short: 'Un PC principal fait tourner l’application ; les autres postes (zones, table centrale) l’ouvrent dans leur navigateur, sur le Wi-Fi de la salle.',
+    details: [
+      'Chaque poste choisit son rôle en haut de l’écran d’une compétition (« Poste ») : Organisation (tout), Table centrale (inscriptions, pesée, réaffectation, combats, podiums) ou une zone (seulement les combats de sa zone). Le choix est gardé par le navigateur.',
+      'Les écrans se mettent à jour tout seuls ; une saisie faite sur une donnée modifiée entre-temps par un autre poste est refusée avec le message « Modifié entre-temps par un autre poste ».',
+      'Un second PC peut garder une copie de secours du PC principal (Réglages de l’application → Copie de secours) : en cas de panne, restaurez la dernière copie sur ce PC et ouvrez son adresse sur les autres postes.',
     ],
   },
   impression: {
