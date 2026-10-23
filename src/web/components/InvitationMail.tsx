@@ -38,6 +38,11 @@ export function CompetitionMessage({ competitionId, previewClubId }: { competiti
                 <Text size="sm" fw={600}>Aperçu pour le premier club coché (le lien sera créé à l’envoi)</Text>
                 <Text size="sm">Objet : {preview.data.subject}</Text>
                 <Text size="sm" style={{ whiteSpace: 'pre-wrap' }} p="xs" bg="var(--mantine-color-default-hover)">{preview.data.body}</Text>
+                {competition && (
+                  <Text size="sm" data-testid="invitation-attachments">
+                    Pièces jointes : fiche-club-{competition.date}.pdf (fiche à imprimer) et fiche-club-{competition.date}.ods (tableur)
+                  </Text>
+                )}
               </Stack>
             )}
           </Stack>

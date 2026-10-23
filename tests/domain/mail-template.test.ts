@@ -24,6 +24,8 @@ test('message par défaut rendu exactement', () => {
       '',
       'Ce lien est personnel à votre club : ne le transmettez pas.',
       '',
+      'Vous pouvez aussi inscrire vos élèves avec les fiches jointes à ce mail : la fiche à imprimer (PDF), à remplir à la main, ou le tableur (.ods, qui s’ouvre avec Excel ou LibreOffice), à remplir sur l’ordinateur. Renvoyez-la-nous en réponse à ce mail avant le 15/11/2026.',
+      '',
       'Sportivement,',
       'Shidokan France',
     ].join('\n'),

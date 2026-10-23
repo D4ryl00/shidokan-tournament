@@ -1,4 +1,4 @@
-import { Alert, Button, Checkbox, Chip, CopyButton, Group, Modal, MultiSelect, Stack, Table, Text, TextInput } from '@mantine/core';
+import { Alert, Anchor, Button, Checkbox, Chip, CopyButton, Group, Modal, MultiSelect, Stack, Table, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
 import {
   useClubEntrySettings,
@@ -187,6 +187,11 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
       <Modal opened={mailtoClub !== null} onClose={() => setMailtoClub(null)} title="Ouvrir dans ma messagerie">
         <Stack>
           <Text>Un nouveau lien est créé pour {mailtoClub?.clubName} et l’ancien ne fonctionnera plus : envoyez bien ce mail depuis votre messagerie.</Text>
+          <Text size="sm" data-testid="mailto-attachments">
+            Votre messagerie ne recevra pas les pièces jointes : joignez-y vous-même la{' '}
+            <Anchor href={`/api/competitions/${competitionId}/club-form.pdf`} download>fiche à imprimer (PDF)</Anchor> et le{' '}
+            <Anchor href={`/api/competitions/${competitionId}/club-form.ods`} download>tableur (.ods)</Anchor>.
+          </Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setMailtoClub(null)}>Annuler</Button>
             <Button onClick={() => { if (mailtoClub) openMailto(mailtoClub.clubId); setMailtoClub(null); }}>Ouvrir ma messagerie</Button>

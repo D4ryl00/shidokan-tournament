@@ -4,7 +4,7 @@ import { buildApp } from '../../src/server/app.js';
 import type { MailTransport } from '../../src/server/mail.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
-type Sent = { from: { name: string; address: string }; to: { name: string; address: string }; subject: string; text: string };
+type Sent = { from: { name: string; address: string }; to: { name: string; address: string }; subject: string; text: string; attachments?: { filename: string; content: Buffer; contentType: string }[] };
 let sent: (Omit<Sent, 'to'> & { to: string })[];
 let failFor: Set<string>;
 let verifyError: string | null;
@@ -196,3 +196,47 @@ test('rôle serveur sans PUBLIC_URL → envoi refusé (les liens ne doivent pas 
   expect(res.json().error).toBe('L’adresse publique du serveur (PUBLIC_URL) n’est pas réglée.');
   await srv.close();
 });
+
+test('pièces jointes : la fiche à imprimer (PDF) et le tableur (.ods), à chaque club ; le message le dit', async () => {
+  await smtp();
+  const links = await invited({ name: 'Tani Dojo', coachEmail: 'tani@example.org' }, { name: 'Budo', coachEmail: 'budo@example.org' });
+  await send(links.map((l) => l.clubId));
+  expect(sent).toHaveLength(2);
+  for (const m of sent) {
+    expect(m.attachments?.map((a) => [a.filename, a.contentType])).toEqual([
+      ['fiche-club-2026-11-22.pdf', 'application/pdf'],
+      ['fiche-club-2026-11-22.ods', 'application/vnd.oasis.opendocument.spreadsheet'],
+    ]);
+    expect(m.attachments![0]!.content.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(m.attachments![1]!.content.subarray(0, 2).toString()).toBe('PK');
+    expect(m.text).toContain('Vous pouvez aussi inscrire vos élèves avec les fiches jointes à ce mail');
+    expect(m.text).toContain('avant le 15/11/2026');
+  }
+});
+
+test('message enregistré identique à l’ancien message par défaut : remplacé par le nouveau ; un message personnalisé reste tel quel', async () => {
+  await smtp();
+  const legacy = { subject: 'Inscriptions — {competition}', body: LEGACY_BODY };
+  expect((await app.inject({ method: 'PATCH', url: '/api/app-settings', payload: { invitationMail: legacy } })).statusCode).toBe(200);
+  const [tani] = await invited({ name: 'Tani Dojo', coachEmail: 'tani@example.org' });
+  await send([tani!.clubId]);
+  expect(sent[0]!.text).toContain('Vous pouvez aussi inscrire vos élèves');
+  const custom = { subject: 'Coupe {competition}', body: 'Club {club} : {lien}' };
+  await app.inject({ method: 'PATCH', url: '/api/app-settings', payload: { invitationMail: custom } });
+  await send([tani!.clubId]);
+  expect(sent[1]!.text).toMatch(/^Club Tani Dojo : https:/);
+  expect(sent[1]!.attachments).toHaveLength(2);
+});
+
+const LEGACY_BODY = [
+  'Bonjour {coach},',
+  '',
+  'Les inscriptions à la compétition « {competition} » ({date}, {lieu}) sont ouvertes.',
+  "Inscrivez les combattants de {club} sur cette page, et revenez-y pour les modifier jusqu'au {date_limite} :",
+  '{lien}',
+  '',
+  'Ce lien est personnel à votre club : ne le transmettez pas.',
+  '',
+  'Sportivement,',
+  'Shidokan France',
+].join('\n');

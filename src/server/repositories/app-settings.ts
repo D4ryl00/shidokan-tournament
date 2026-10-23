@@ -1,11 +1,12 @@
-import { DEFAULT_APP_SETTINGS, type AppSettings, type AppSettingsPatch, type PublicAppSettings } from '../../domain/app-settings.js';
+import { currentInvitationMail, DEFAULT_APP_SETTINGS, type AppSettings, type AppSettingsPatch, type PublicAppSettings } from '../../domain/app-settings.js';
 import type { AppDb } from '../db/client.js';
 import { appSettings } from '../db/schema.js';
 
 /** Réglages enregistrés, complétés par les valeurs par défaut. */
 export function getAppSettings(db: AppDb): AppSettings {
   const stored = Object.fromEntries(db.select().from(appSettings).all().map((r) => [r.key, JSON.parse(r.valueJson) as unknown]));
-  return { ...DEFAULT_APP_SETTINGS, ...stored } as AppSettings;
+  const settings = { ...DEFAULT_APP_SETTINGS, ...stored } as AppSettings;
+  return { ...settings, invitationMail: currentInvitationMail(settings.invitationMail) };
 }
 
 /** Réglages tels que renvoyés à l'écran : jamais le mot de passe SMTP. */

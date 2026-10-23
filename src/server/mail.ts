@@ -1,11 +1,14 @@
 import nodemailer from 'nodemailer';
 import { and, eq } from 'drizzle-orm';
-import type { MailTemplate, SmtpSettings } from '../domain/app-settings.js';
+import { currentInvitationMail, type MailTemplate, type SmtpSettings } from '../domain/app-settings.js';
+import { buildClubFormPdf } from './club-form-pdf.js';
+import { buildClubFormTemplate } from './club-form-template.js';
+import { writeOds } from './spreadsheet/ods.js';
 import { frenchDate, isSingleEmail, renderTemplate, type MailValues } from '../domain/mail-template.js';
 import type { AppDb } from './db/client.js';
 import { clubs, mailLog } from './db/schema.js';
 import { getAppSettings } from './repositories/app-settings.js';
-import { getCompetition } from './repositories/competitions.js';
+import { getCompetition, getGrid } from './repositories/competitions.js';
 import { addInvitationLink, keepOnlyLink, regenerateInvitation, revokeLink } from './repositories/invitations.js';
 import { NotFoundError } from './repositories/registrations.js';
 
@@ -18,6 +21,12 @@ export interface OutgoingMail {
   to: MailAddress;
   subject: string;
   text: string;
+  attachments?: MailAttachment[];
+}
+export interface MailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType: string;
 }
 /** `verify` : contrôle de la connexion au serveur d'envoi avant un envoi groupé. */
 export type MailTransport = (smtp: SmtpSettings) => { verify?(): Promise<unknown>; sendMail(m: OutgoingMail): Promise<unknown> };
@@ -65,7 +74,7 @@ export async function invitationMessage(db: AppDb, competitionId: string, clubId
   const competition = await getCompetition(db, competitionId);
   if (!competition) throw new NotFoundError('Compétition introuvable');
   const club = clubOf(db, competitionId, clubId);
-  const template = competition.settings.invitationMail ?? getAppSettings(db).invitationMail;
+  const template = competition.settings.invitationMail ? currentInvitationMail(competition.settings.invitationMail) : getAppSettings(db).invitationMail;
   const row = db.$client.prepare('select club_entry_deadline as d from competitions where id = ?').get(competitionId) as { d: string | null };
   const values: MailValues = {
     club: club.name,
@@ -77,6 +86,17 @@ export async function invitationMessage(db: AppDb, competitionId: string, clubId
     lien: link,
   };
   return { subject: renderTemplate(template.subject, values), body: renderTemplate(template.body, values) };
+}
+
+/** Fiches d'inscription jointes au mail : la fiche à imprimer (PDF) et le tableur (.ods), les mêmes que dans l'onglet Fiche club. */
+export async function clubFormAttachments(db: AppDb, competitionId: string): Promise<MailAttachment[]> {
+  const competition = await getCompetition(db, competitionId);
+  if (!competition) throw new NotFoundError('Compétition introuvable');
+  const grid = await getGrid(db, competitionId);
+  return [
+    { filename: `fiche-club-${competition.date}.pdf`, content: await buildClubFormPdf(competition, grid), contentType: 'application/pdf' },
+    { filename: `fiche-club-${competition.date}.ods`, content: await writeOds(buildClubFormTemplate(competition, grid)), contentType: 'application/vnd.oasis.opendocument.spreadsheet' },
+  ];
 }
 
 export const linkUrl = (baseUrl: string, token: string) => `${baseUrl.replace(/\/+$/, '')}/inscription/${token}`;
@@ -94,6 +114,8 @@ export async function sendInvitations(db: AppDb, transport: MailTransport, compe
   } catch (e) {
     throw new MailError(`Envoi impossible, aucun lien n’a changé : ${errorText(e)}`);
   }
+  // Les mêmes fiches pour chaque club : préparées une fois, avant le premier envoi.
+  const attachments = await clubFormAttachments(db, competitionId);
   const results: SendResult[] = [];
   let sentBefore = false;
   for (const clubId of clubIds) {
@@ -115,7 +137,7 @@ export async function sendInvitations(db: AppDb, transport: MailTransport, compe
     let error: string | null = null;
     try {
       const message = await invitationMessage(db, competitionId, clubId, linkUrl(baseUrl, link.token));
-      await mailer.sendMail({ from: fromOf(smtp), to: { name: club.name, address: email }, subject: message.subject, text: message.body });
+      await mailer.sendMail({ from: fromOf(smtp), to: { name: club.name, address: email }, subject: message.subject, text: message.body, attachments });
       keepOnlyLink(db, competitionId, clubId, link.token);
     } catch (e) {
       error = errorText(e);

@@ -225,6 +225,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         '« Régénérer le lien » crée un nouveau lien et désactive l’ancien (lien perdu, mauvais destinataire) ; « Révoquer » désactive le lien sans en créer d’autre.',
         '« Ouvrir les inscriptions » rend les pages des clubs modifiables ; la date limite est seulement affichée aux clubs.',
         '« Figer les inscriptions » met toutes les pages des clubs en lecture seule ; les changements suivants se font par l’organisation. On peut rouvrir.',
+        'Les mails envoyés par l’application portent aussi en pièces jointes la fiche à imprimer (PDF) et le tableur (.ods) : un club peut inscrire ses élèves par l’un ou l’autre. « Ouvrir dans ma messagerie » ne peut pas joindre de fichier : joignez-les vous-même (ils sont proposés au téléchargement).',
       ],
     ],
   },

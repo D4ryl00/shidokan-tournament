@@ -37,10 +37,33 @@ export const DEFAULT_INVITATION_MAIL: MailTemplate = {
     '',
     'Ce lien est personnel à votre club : ne le transmettez pas.',
     '',
+    'Vous pouvez aussi inscrire vos élèves avec les fiches jointes à ce mail : la fiche à imprimer (PDF), à remplir à la main, ou le tableur (.ods, qui s’ouvre avec Excel ou LibreOffice), à remplir sur l’ordinateur. Renvoyez-la-nous en réponse à ce mail avant le {date_limite}.',
+    '',
     'Sportivement,',
     'Shidokan France',
   ].join('\n'),
 };
+
+/** Anciens messages par défaut : un message enregistré tel quel (sans retouche) suit le message par défaut actuel. */
+const PREVIOUS_DEFAULT_INVITATION_MAILS: MailTemplate[] = [
+  {
+    subject: 'Inscriptions — {competition}',
+    body: [
+      'Bonjour {coach},',
+      '',
+      'Les inscriptions à la compétition « {competition} » ({date}, {lieu}) sont ouvertes.',
+      "Inscrivez les combattants de {club} sur cette page, et revenez-y pour les modifier jusqu'au {date_limite} :",
+      '{lien}',
+      '',
+      'Ce lien est personnel à votre club : ne le transmettez pas.',
+      '',
+      'Sportivement,',
+      'Shidokan France',
+    ].join('\n'),
+  },
+];
+export const currentInvitationMail = (t: MailTemplate): MailTemplate =>
+  PREVIOUS_DEFAULT_INVITATION_MAILS.some((p) => p.subject === t.subject && p.body === t.body) ? DEFAULT_INVITATION_MAIL : t;
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   smtp: null,
