@@ -40,7 +40,7 @@ const insertResult = (d: AppDb) =>
 
 test('versionedTables : liste exacte', () => {
   expect(versionedTables(freshDb())).toEqual([
-    'age_bands', 'age_links', 'categories', 'club_directory', 'clubs', 'competitions', 'fighters', 'frozen_passages', 'kata_scores',
+    'age_bands', 'age_links', 'categories', 'club_directory', 'club_invitations', 'clubs', 'competitions', 'fighters', 'frozen_passages', 'kata_scores',
     'match_results', 'recasements', 'refusals', 'registrations', 'tie_breaks', 'wave_launches', 'waves', 'weight_classes', 'zones',
   ]);
 });

@@ -55,6 +55,23 @@ export const clubDirectory = sqliteTable(
   (t) => [index('club_directory_name_key').on(t.nameKey)],
 );
 
+/** Lien personnel d'un club pour une compétition (seule l'empreinte du jeton est gardée). */
+export const clubInvitations = sqliteTable('club_invitations', {
+  id: text('id').primaryKey(),
+  competitionId: text('competition_id')
+    .notNull()
+    .references(() => competitions.id, { onDelete: 'cascade' }),
+  clubId: text('club_id')
+    .notNull()
+    .references(() => clubs.id, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull().unique(),
+  createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  sentAt: text('sent_at'),
+  revokedAt: text('revoked_at'),
+  lastUsedAt: text('last_used_at'),
+  ...rowMeta(),
+});
+
 export const ageBands = sqliteTable(
   'age_bands',
   {
