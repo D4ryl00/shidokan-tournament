@@ -124,3 +124,30 @@ test("base de l'étape 14 (olderDb(13)) avec trois clubs, dont deux de même nom
     ['Tani Dojo', '0600000002'],
   ]);
 });
+
+test('club relié à une entrée sans numéro, qui reçoit ensuite un numéro déjà tenu par une autre entrée → relié à cette autre entrée', async () => {
+  const { d, a, b } = await twoCompetitions();
+  const ffk = await upsertClub(d, a, { name: 'TANI DOJO', ffkEntity: '0060893 TANI DOJO' });
+  const typed = await upsertClub(d, b, { name: 'Dojo Tani' });
+  expect(entryOf(d, typed.id)!.id).not.toBe(entryOf(d, ffk.id)!.id);
+  await updateClub(d, b, typed.id, { ffkEntity: '0060893 TANI DOJO' });
+  expect(entryOf(d, typed.id)!.id).toBe(entryOf(d, ffk.id)!.id);
+});
+
+test('club sans numéro, plusieurs entrées numérotées de même nom → nouvelle entrée (ambigu), pas un choix au hasard', async () => {
+  const { d, a, b } = await twoCompetitions();
+  await upsertClub(d, a, { name: 'KARATE CLUB', ffkEntity: '0060001 KARATE CLUB' });
+  const c = await createCompetition(d, { name: 'Coupe 2027', date: '2027-11-22' });
+  await upsertClub(d, c.id, { name: 'KARATE CLUB', ffkEntity: '0130002 KARATE CLUB' });
+  const typed = await upsertClub(d, b, { name: 'Karate Club' });
+  const entry = entryOf(d, typed.id)!;
+  expect(entry.affiliation_number).toBeNull();
+  expect(entries(d)).toHaveLength(3);
+});
+
+test('club sans numéro, une seule entrée numérotée de même nom → reliée à elle', async () => {
+  const { d, a, b } = await twoCompetitions();
+  const ffk = await upsertClub(d, a, { name: 'KARATE CLUB', ffkEntity: '0060001 KARATE CLUB' });
+  const typed = await upsertClub(d, b, { name: 'Karate Club' });
+  expect(entryOf(d, typed.id)!.id).toBe(entryOf(d, ffk.id)!.id);
+});

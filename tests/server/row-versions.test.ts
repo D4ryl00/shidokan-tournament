@@ -51,11 +51,11 @@ test('règle de garde : chaque table a competition_id ou est déclarée globale'
   expect(missing).toEqual([]);
 });
 
-test('chaque table versionnée a version, updated_at et ses trois déclencheurs', () => {
+test('chaque table versionnée a version, updated_at et ses quatre déclencheurs', () => {
   const d = freshDb();
   for (const t of versionedTables(d)) {
     expect(columns(d, t), t).toEqual(expect.arrayContaining(['version', 'updated_at']));
-    expect(triggers(d, t), t).toEqual([`${t}__version_insert`, `${t}__version_keep`, `${t}__version_update`]);
+    expect(triggers(d, t), t).toEqual([`${t}__version_insert`, `${t}__version_keep`, `${t}__version_set`, `${t}__version_update`]);
   }
 });
 
@@ -174,4 +174,66 @@ test('déclencheur à l’ancienne définition → remplacé par la définition 
   r.close();
   db = openDb(file);
   expect((raw(db).prepare("select sql from sqlite_master where name = 'zones__version_update'").get() as { sql: string }).sql).toBe(current);
+});
+
+test('insertion sans version : une seule valeur du compteur consommée, updated_at fourni gardé', () => {
+  const d = freshDb();
+  const before = counter(d);
+  raw(d).exec(
+    "INSERT INTO match_results (competition_id, category_id, match_id, winner, method, entrant_a, entrant_b, updated_at) VALUES ('c1', 'cat1', 'w1-0', 'a', 'ko', 'r1', 'r2', '2026-01-01T00:00:00.000Z')",
+  );
+  expect(counter(d)).toBe(before + 1);
+  expect(result(d)).toEqual({ version: before + 1, updated_at: '2026-01-01T00:00:00.000Z' });
+});
+
+test('modification qui fixe la version (futur transfert) : version gardée, compteur relevé', () => {
+  const d = freshDb();
+  insertResult(d);
+  raw(d).exec("UPDATE match_results SET method = 'points', version = 9000 WHERE match_id = 'w1-0'");
+  expect(result(d).version).toBe(9000);
+  expect(counter(d)).toBeGreaterThanOrEqual(9000);
+});
+
+test('table de compétition sans version ni updated_at : colonnes ajoutées à l’ouverture, pas d’erreur au démarrage', () => {
+  const file = tmpDbPath();
+  closeDb(openDb(file));
+  const r = new Database(file);
+  r.exec('CREATE TABLE extra (competition_id text, note text)');
+  r.close();
+  db = openDb(file);
+  expect(columns(db, 'extra')).toEqual(expect.arrayContaining(['version', 'updated_at']));
+  expect(triggers(db, 'extra')).toHaveLength(4);
+});
+
+test('schéma drizzle : chaque table versionnée déclare version et updatedAt', async () => {
+  const schema = await import('../../src/server/db/schema.js');
+  const { getTableConfig, SQLiteTable } = await import('drizzle-orm/sqlite-core');
+  const missing = (Object.values(schema) as unknown[])
+    .filter((t) => t instanceof SQLiteTable)
+    .map((t) => getTableConfig(t as Parameters<typeof getTableConfig>[0]))
+    .filter((c) => c.name === 'competitions' || c.name === 'club_directory' || (c.name !== 'uploads' && c.columns.some((col) => col.name === 'competition_id')))
+    .filter((c) => !['version', 'updated_at'].every((n) => c.columns.some((col) => col.name === n)))
+    .map((c) => c.name);
+  expect(missing).toEqual([]);
+});
+
+test('API inchangée : réponses des créations et modifications sans nouvelle colonne', async () => {
+  app = await buildApp({ dbPath: tmpDbPath() });
+  const keys = ['version', 'updatedAt', 'directoryClubId', 'ownerInstanceId', 'lastSyncAt', 'clubEntryStatus', 'clubEntryDeadline'];
+  const check = (label: string, res: { statusCode: number; body: string }) => {
+    expect(res.statusCode, label).toBeLessThan(300);
+    for (const key of keys) expect(res.body, `${label} : ${key}`).not.toContain(`"${key}"`);
+  };
+  const created = await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22' } });
+  check('POST compétition', created);
+  const base = `/api/competitions/${created.json().id}`;
+  check('PATCH compétition', await app.inject({ method: 'PATCH', url: base, payload: { location: 'Nice' } }));
+  const club = await app.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Tani Dojo' } });
+  check('POST club', club);
+  check('PATCH club', await app.inject({ method: 'PATCH', url: `${base}/clubs/${club.json().id}`, payload: { coachName: 'Jean' } }));
+  const input = { clubId: club.json().id, lastName: 'MARTIN', firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline: 'kata', ruleset: null, weightClassId: null, source: 'manual' };
+  const reg = await app.inject({ method: 'POST', url: `${base}/registrations`, payload: input });
+  check('POST inscription', reg);
+  const regId = reg.json().row.id as string;
+  check('PUT inscription', await app.inject({ method: 'PUT', url: `${base}/registrations/${regId}`, payload: { ...input, firstName: 'Lea' } }));
 });

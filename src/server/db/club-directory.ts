@@ -9,27 +9,40 @@ export function affiliationNumber(entity: string | null): string | null {
 
 type Entry = typeof clubDirectory.$inferSelect;
 
-/** Entrée d'annuaire d'un club : même numéro d'affiliation, sinon même nom sans autre numéro, sinon aucune. */
+/**
+ * Entrée d'annuaire d'un club : même numéro d'affiliation ; sinon même nom sans autre numéro, en préférant une entrée sans numéro.
+ * Un club sans numéro face à plusieurs entrées numérotées de même nom est ambigu : aucune (une nouvelle entrée sera créée, à fusionner).
+ */
 function findEntry(db: AppDb, nameKey: string, number: string | null): Entry | undefined {
   if (number) {
     const byNumber = db.select().from(clubDirectory).where(eq(clubDirectory.affiliationNumber, number)).get();
     if (byNumber) return byNumber;
   }
   const byName = db.select().from(clubDirectory).where(eq(clubDirectory.nameKey, nameKey)).orderBy(asc(clubDirectory.createdAt), asc(clubDirectory.id)).all();
-  const compatible = byName.filter((e) => !number || !e.affiliationNumber || e.affiliationNumber === number);
-  return compatible.find((e) => number && e.affiliationNumber === number) ?? compatible[0];
+  const withoutNumber = byName.filter((e) => !e.affiliationNumber);
+  if (withoutNumber.length) return withoutNumber[0];
+  return !number && byName.length === 1 ? byName[0] : undefined;
 }
 
 /**
  * Relie le club de compétition à son entrée d'annuaire, en la créant au besoin ; complète les coordonnées vides de l'entrée
- * et lui donne l'entité FFK et le numéro d'affiliation du club si elle ne les a pas. Ne change jamais un lien existant. Renvoie l'id de l'entrée.
+ * et lui donne l'entité FFK et le numéro d'affiliation du club si elle ne les a pas. Ne change un lien existant que si son entrée n'a pas
+ * de numéro et qu'une autre porte celui du club. Renvoie l'id de l'entrée.
  */
 export function linkClub(db: AppDb, clubId: string): string {
   const club = db.select().from(clubs).where(eq(clubs.id, clubId)).get();
   if (!club) throw new Error(`Club introuvable : ${clubId}`);
   const entity = club.ffkEntity ?? db.select().from(clubAliases).where(eq(clubAliases.nameKey, club.nameKey)).get()?.clubEntity ?? null;
   const number = affiliationNumber(entity);
-  const linked = club.directoryClubId ? db.select().from(clubDirectory).where(eq(clubDirectory.id, club.directoryClubId)).get() : undefined;
+  let linked = club.directoryClubId ? db.select().from(clubDirectory).where(eq(clubDirectory.id, club.directoryClubId)).get() : undefined;
+  // Seule exception au lien qui ne change pas : l'entrée n'a pas de numéro et une autre porte celui que le club vient de recevoir.
+  if (linked && number && !linked.affiliationNumber) {
+    const holder = db.select().from(clubDirectory).where(eq(clubDirectory.affiliationNumber, number)).get();
+    if (holder) {
+      db.update(clubs).set({ directoryClubId: holder.id }).where(eq(clubs.id, clubId)).run();
+      linked = holder;
+    }
+  }
   const entry = linked ?? findEntry(db, club.nameKey, number);
   if (!entry) {
     const id = crypto.randomUUID();
