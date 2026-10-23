@@ -22,6 +22,7 @@ Le projet est découpé en étapes (1 à 7 : première version ; 8 à 14 : conce
 | 12 ✅ | **Ordre de passage** | Répartition sur les zones avec contraintes, kata d'abord, tour par tour / catégorie par catégorie, repos signalé, numéros imprimés, file par zone (plan `2026-10-22-12-ordre-de-passage.md`) | 10 | 10 nov. |
 | 13 ✅ | **Figeage et finales** | Figer et imprimer une vague, rouvrir, finales (et finales de kata) sur une zone (plan `2026-10-22-13-figeage-finales.md`) | 12 | 13 nov. |
 | 14 ✅ | **Déplacements en cours** | Déplacer une catégorie vers une autre zone, « à la suite » / « mélangés », aperçu, « mis à jour à HH:MM » (plan `2026-10-22-14-deplacements.md`) | 13 | 16 nov. |
+| 15 ✅ | **Données compatibles** | Étape 0 de la conception `2026-10-23-inscriptions-en-ligne-et-synchronisation-design.md` : identité de l'installation, annuaire des clubs (numéro d'affiliation), main et inscriptions en ligne en base, versions de lignes, règle de garde ; rien de visible (plan `2026-10-23-15-donnees-compatibles.md`) | 14 | 23 oct. |
 | — | **Répétition générale** | Compétition fictive complète sur le PC de la table centrale, avec Docker et sans internet | 6 | 20-21 nov. |
 
 ## État au 2026-10-22
