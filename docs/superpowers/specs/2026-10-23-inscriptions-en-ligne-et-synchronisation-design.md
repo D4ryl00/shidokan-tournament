@@ -165,6 +165,7 @@ Aujourd'hui, les pages ne se rafraîchissent pas toutes seules. Désormais, quan
 - Toute modification d'une ligne qui a une `version` (§3.4) envoie la version lue. Si la ligne a changé entre-temps, le serveur refuse (409). Le poste affiche alors « Modifié entre-temps par un autre poste », recharge, et n'écrase rien.
 - Concerne en priorité : saisie et effacement de résultats, notes de kata, départages, inscriptions et combattants, déplacements de catégories, sessions et zones.
 - 💡 La création d'un résultat pour un combat sans résultat est refusée si un résultat a été créé entre-temps.
+- *(Construit, 2026-10-23 :)* la révision voyage dans l'en-tête `If-Match` ; la saisie d'un résultat et le formulaire d'une inscription retiennent celle de leur ouverture. Les listes des sessions et des zones gardent leur contrôle existant (`knownIds`).
 
 ### 7.3 Postes et rôles
 - Rôles : **organisateur** (tout), **table centrale** (inscriptions, pesée, réaffectations, résultats de toutes les zones), **zone** (résultats et notes de kata de sa zone seulement).
@@ -175,7 +176,7 @@ Aujourd'hui, les pages ne se rafraîchissent pas toutes seules. Désormais, quan
 ### 7.4 Copie de secours sur un autre poste
 - Une seconde installation peut être réglée pour **recopier régulièrement** la base du PC principal à travers le réseau (`/api/backup.sqlite`, toutes les N minutes). Les copies sont rangées dans ses propres sauvegardes.
 - En cas de panne du PC principal, on restaure la dernière copie sur la seconde installation, et les zones changent d'adresse. Au pire, on perd les quelques minutes de saisie qui ont suivi la dernière copie.
-- 🔧 Réglage au démarrage (par exemple `MIRROR_FROM=http://192.168.1.10:3000`).
+- *(Construit, 2026-10-23 :)* réglage dans les Réglages de l'application du PC de secours (adresse du PC principal, fréquence), copies listées et restaurables dans la section Sauvegardes.
 
 ### 7.5 Fiche « Préparer le jour J » (aide à l'écran)
 Routeur Wi-Fi sans internet ; adresse fixe réservée pour le PC principal ; pare-feu Windows ouvert sur le port 3000 ; PC principal toujours branché, sans veille ; Windows Update suspendu pour la journée ; **ne jamais quitter Docker Desktop** ; adresse à ouvrir sur les autres postes, affichée en grand dans l'application.

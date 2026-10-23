@@ -33,6 +33,10 @@ Il n'y a **pas d'internet sur place** : construisez l'image (`docker compose up 
 
 En ligne, l'application tourne en rôle serveur (`INSTANCE_ROLE=serveur`) : connexion obligatoire pour les organisateurs, pages des clubs ouvertes avec leur lien personnel, envoi des liens par mail. Installation sur un serveur Ubuntu, à partir de l'image publiée sur Docker Hub (`d4ryl00/shidokan-tournament`) et derrière Caddy (HTTPS automatique) : voir [docs/installation-serveur.md](docs/installation-serveur.md), avec `deploy/compose.yaml` et `deploy/Caddyfile`.
 
+## Plusieurs postes le jour J
+
+Le PC principal fait tourner l'application ; les autres postes (zones, table centrale) ouvrent `http://<adresse du PC>:3000` sur le Wi-Fi de la salle et choisissent leur poste en haut de l'écran de la compétition. Les écrans se mettent à jour tout seuls. Fiche « Préparer le jour J » et copie de secours sur un second PC : menu Réglages de l'application.
+
 ## Déroulé d'une compétition
 
 1. **Réglages** et **grille âge / poids** (grille FFK par défaut, modifiable, enregistrable comme modèle).
