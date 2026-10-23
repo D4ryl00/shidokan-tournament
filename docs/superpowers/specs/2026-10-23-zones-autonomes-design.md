@@ -32,7 +32,7 @@ Le §2 de la conception d'origine tient toujours : **on ne fusionne jamais deux 
 ## 3. Avant la coupure : le portable suit le PC principal
 
 - **Réglage du portable** (Réglages de l'application, rôle local) : adresse du PC principal (par exemple `http://192.168.1.10:3000`), compétition, et zone (choisie dans la liste des zones de la compétition) ✅.
-- Le portable **récupère une copie** de la compétition toutes les minutes 💡, en lecture seule. Il passe par l'export de compétition qui existe déjà (`GET /api/competitions/:id/export.json`, ouvert sans connexion en rôle local). L'état « dernière copie à HH:MM » ou « PC principal injoignable » est affiché. 🔧 Réutiliser la mécanique de « Garder cette copie à jour » (étape 20) et du paquet de compétition (étape 18).
+- Le portable **récupère une copie** de la compétition, en lecture seule, **dans les secondes qui suivent chaque changement** sur le PC principal 💡 : il écoute le flux d'événements de la compétition (`GET /api/competitions/:id/events`, étape A), puis copie (regroupé, au plus une copie à la fois), avec en plus une copie chaque minute par sécurité. Il passe par l'export de compétition qui existe déjà (`GET /api/competitions/:id/export.json`, ouvert sans connexion en rôle local). Ainsi, au moment de la coupure, il ne manque presque jamais de saisie. L'état « à jour à HH:MM:SS » ou « PC principal injoignable » est affiché. 🔧 S'inspirer de « Garder cette copie à jour » (étape 20) et du paquet de compétition (étape 18) ; une copie inchangée n'est pas réimportée.
 - Pendant ce temps, **rien ne change pour l'arbitre** ✅ : le navigateur du portable reste le poste « Zone » du PC principal, ouvert à son adresse.
 - La copie est rangée comme une copie en lecture seule « du PC principal » (bandeau « Copie du PC principal — à jour à HH:MM — lecture seule »). 💡
 
@@ -42,16 +42,27 @@ Le §2 de la conception d'origine tient toujours : **on ne fusionne jamais deux 
 - La copie locale devient **modifiable pour les saisies de cette zone seulement** ✅ :
   - résultats des combats, effacement d'un résultat, notes de kata, départages ;
   - la zone d'une saisie suit la même règle que les comptes Zone de l'étape 20 (zone du passage du combat ou du bloc de kata, sinon celle de la catégorie ; départage : une zone qui a un passage de la catégorie).
+- **Seulement les sessions déjà lancées dans la copie** ✅ : un combat ou un bloc de kata d'une session qui n'est pas lancée sur la copie n'est pas modifiable (sa zone pourrait changer au lancement sur le PC principal, et deux zones joueraient le même combat). L'écran dit « Session suivante pas encore lancée sur cette copie ».
+- **Finales** ✅ : les trois possibilités, voir §4.1.
 - **Tout le reste est en lecture seule** : inscriptions, pesée, réaffectations, déplacements, sessions, autres zones. Le serveur local refuse (409) avec un message clair. L'écran se règle sur le poste « Zone » de cette zone.
 - **Chaque saisie est notée dans un journal** ✅. Une entrée contient :
   - un identifiant unique et un numéro d'ordre ;
   - le type (résultat, effacement, notes de kata, départage) et ce qui a été saisi ;
   - la catégorie, le combat (ou l'inscription et le tour pour un kata, la portée pour un départage) ;
-  - **les deux combattants du combat au moment de la saisie**, et la version de la ligne lue (résultat, notes, départage) et de la catégorie ;
+  - **les deux combattants du combat au moment de la saisie**, et la version de la ligne lue (résultat, notes, départage). La version de la catégorie est notée pour l'affichage seulement : elle change à chaque résultat, elle ne sert pas à détecter un conflit 💡 ;
   - l'heure et la zone.
 - Bandeau permanent : **« Zone autonome Tatami 2 depuis 14 h 32 — 5 saisies à renvoyer »** ✅.
 - Les tableaux et les feuilles s'impriment depuis la copie locale, comme d'habitude.
+- Une zone qui corrige sa propre saisie (même combat saisi deux fois pendant la coupure) : au rejeu, la seconde entrée se compare à la première, pas à la version du PC principal 💡.
 - Pendant ce temps, le PC principal **continue normalement** ✅. La table centrale peut saisir un combat de cette zone ; ce sera un conflit au retour.
+
+### 4.1 Finales pendant une coupure ✅
+
+Quand une zone des finales est réglée, les finales (et les finales de kata) de toutes les catégories s'y jouent, avec des combattants venus des autres zones. Pendant la coupure, le portable de la zone des finales ne connaît pas ces vainqueurs. Les trois possibilités sont construites, dans cet ordre ✅ :
+
+- **a. Les finales attendent** (par défaut) : elles s'affichent « En attente des résultats des autres zones » jusqu'au retour des journaux.
+- **b. « Jouer ici les finales de mes catégories »** : bouton du portable en zone autonome, avec confirmation. La zone autonome s'étend aux finales des catégories dont les autres passages sont sur sa zone. Au rejeu, si la zone des finales (ou le PC principal) a joué la même finale, c'est une carte « À trancher », comme tout conflit.
+- **c. Recevoir une copie plus récente pendant la coupure** (par fichier, ou par le réseau s'il revient un moment) : le portable prend la nouvelle copie, puis **rejoue chez lui ses propres saisies pas encore renvoyées**, avec les mêmes règles et les mêmes cartes en cas de conflit. Il ne perd rien. Cela sert aux finales (après un aller-retour des journaux par clé USB : journaux des zones vers le PC principal, puis nouvelle copie vers le portable des finales), et aussi à rafraîchir une copie en retard. Construit en dernier.
 
 ## 5. Au retour : « Repasser en ligne »
 
@@ -73,6 +84,7 @@ Le §2 de la conception d'origine tient toujours : **on ne fusionne jamais deux 
   - les règles refusent la saisie (combat qui n'existe plus, catégorie verrouillée…).
 - Chaque conflit devient une **carte** dans une section **« À trancher »** de l'onglet Combats du PC principal ✅, visible des postes Organisation et Table centrale. La carte montre côte à côte ce qu'a saisi la zone et ce qu'il y a sur le PC principal, avec **« Garder celui de la zone »** et **« Garder celui du PC »** ✅. « Garder celui de la zone » n'est proposé que si les règles l'acceptent (combattants identiques) ; sinon la carte dit pourquoi, et « Garder celui du PC » la ferme.
 - **Saisies qui dépendent d'un conflit** ✅ : le combat suivant d'un vainqueur dépend du résultat en conflit. Ces saisies ne sont pas devinées : elles deviennent aussi des cartes, liées à la première. 💡 Après chaque décision, les cartes en attente sont réexaminées, et celles qui n'ont plus de conflit s'appliquent toutes seules.
+- **Sur l'écran de la zone, au retour** 💡 : tant qu'une carte d'une catégorie est ouverte, les combats de cette catégorie sont marqués « En attente d'une décision à la table centrale » dans la file de la zone, et ne lui sont pas proposés comme prochains combats (sinon un même combat pourrait être joué deux fois, avec d'autres combattants).
 - Un compte rendu s'affiche à la réception : « 12 saisies reçues de Tatami 2 : 9 appliquées, 1 déjà présente, 2 à trancher ».
 - Les écrans des autres postes se mettent à jour, comme pour toute écriture (étape A).
 
