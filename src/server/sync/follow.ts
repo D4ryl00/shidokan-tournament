@@ -43,7 +43,7 @@ export async function followOnce(db: AppDb, dbPath: string, now = new Date()): P
   try {
     await pullCopy(db, dbPath, follow.competitionId, false);
   } catch (e) {
-    const error = (e as Error).message;
+    const error = getManagement(db, follow.competitionId).managedHere ? HELD_HERE : (e as Error).message;
     done({ lastError: error });
     return { error };
   }

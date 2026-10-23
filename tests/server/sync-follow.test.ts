@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
 import { createUser } from '../../src/server/auth/sessions.js';
 import { closeDb, openDb, type AppDb } from '../../src/server/db/client.js';
@@ -111,4 +111,54 @@ test('réglage : intervalle de 1 à 60 minutes ; null arrête', async () => {
   expect((await local('PUT', '/api/sync/follow', null)).statusCode).toBe(200);
   expect((await local('GET', '/api/sync/follow')).json()).toMatchObject({ competitionId: null });
   expect(await followOnce(pcDb, pcPath)).toEqual({ error: 'Aucune copie à tenir à jour.' });
+});
+
+/** Les réponses du serveur sont retenues jusqu'à `release()` (la requête, elle, est déjà traitée par le serveur). */
+function holdResponses() {
+  const real = globalThis.fetch;
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (...args: Parameters<typeof fetch>) => {
+    const res = await real(...args);
+    await gate;
+    return res;
+  });
+  return () => {
+    release();
+    spy.mockRestore();
+  };
+}
+const tick = () => new Promise((r) => setTimeout(r, 100));
+
+test('copie à jour en cours quand le PC prend la main en secours : la réponse arrivée après n’écrase rien', async () => {
+  await local('POST', '/api/sync/pull', { competitionId: id, take: false });
+  await local('PUT', '/api/sync/follow', { competitionId: id, intervalMin: 5 });
+  await register('MARTIN');
+  const release = holdResponses();
+  const running = followOnce(pcDb, pcPath);
+  await tick();
+  expect((await local('POST', `/api/competitions/${id}/sync/rescue`)).statusCode).toBe(204);
+  expect((await local('PATCH', `/api/competitions/${id}`, { location: 'Gymnase' })).statusCode).toBe(200);
+  release();
+  expect(await running).toEqual({ error: 'Ce PC a la main : la copie n’est plus mise à jour.' });
+  expect((await local('GET', `/api/competitions/${id}`)).json().location).toBe('Gymnase');
+  expect((await local('GET', `/api/competitions/${id}/management`)).json()).toMatchObject({ managedHere: true });
+});
+
+test('« Rendre la main » en cours puis refusé : la copie à jour ne passe pas entre les deux, le travail du PC reste', async () => {
+  await local('POST', '/api/sync/pull', { competitionId: id, take: true });
+  await local('PUT', '/api/sync/follow', { competitionId: id, intervalMin: 5 });
+  expect((await local('PATCH', `/api/competitions/${id}`, { location: 'Gymnase' })).statusCode).toBe(200);
+  // Un organisateur a repris la main en ligne : le retour du PC sera refusé.
+  expect((await orga('POST', `/api/competitions/${id}/take-back`, { source: 'server' })).statusCode).toBe(204);
+  const release = holdResponses();
+  const returning = local('POST', `/api/competitions/${id}/sync/return`);
+  await tick();
+  const follow = followOnce(pcDb, pcPath);
+  await tick();
+  release();
+  expect((await returning).statusCode).toBe(409);
+  expect('error' in (await follow)).toBe(true);
+  expect((await local('GET', `/api/competitions/${id}`)).json().location).toBe('Gymnase');
+  expect((await local('GET', `/api/competitions/${id}/management`)).json()).toMatchObject({ managedHere: true });
 });

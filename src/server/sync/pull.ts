@@ -12,6 +12,20 @@ export const SERVER_NAME = 'le serveur en ligne';
 /** Nom affiché d'une copie du serveur : celui du serveur, et le PC qui a la main s'il y en a un. */
 export const serverCopyName = (heldBy: string | null | undefined) => (heldBy ? `${SERVER_NAME} — la main est à ${heldBy}` : SERVER_NAME);
 
+const HELD_HERE = 'Ce PC a la main sur cette compétition : envoyez une copie au serveur ou rendez-lui la main.';
+const RETURNING = 'La main est en train d’être rendue au serveur : réessayez dans un instant.';
+/** Compétitions dont la main est en train d'être rendue au serveur : en lecture seule ici, mais encore le travail du PC. */
+const returning = new Set<string>();
+/** « Rendre la main » : pendant l'envoi, aucune copie du serveur ne peut remplacer la compétition. */
+export async function whileReturning<T>(competitionId: string, fn: () => Promise<T>): Promise<T> {
+  returning.add(competitionId);
+  try {
+    return await fn();
+  } finally {
+    returning.delete(competitionId);
+  }
+}
+
 const exists = (db: AppDb, id: string) => !!db.$client.prepare('select 1 from competitions where id = ?').get(id);
 export const migrationCount = (db: AppDb) => (db.$client.prepare('select count(*) as n from __drizzle_migrations').get() as { n: number }).n;
 export const myIdentity = (db: AppDb) => {
@@ -24,18 +38,22 @@ export const myIdentity = (db: AppDb) => {
  * présente en lecture seule est remplacée sans sauvegarde (rien à perdre ici), et pas du tout si le serveur n'a pas changé.
  */
 export async function pullCopy(db: AppDb, dbPath: string, competitionId: string, take: boolean): Promise<{ competitionId: string; created: boolean }> {
-  const present = exists(db, competitionId);
-  // Ce PC a la main : récupérer depuis le serveur écraserait son travail.
-  if (present && getManagement(db, competitionId).managedHere) {
-    throw new SyncConflictError('Ce PC a la main sur cette compétition : envoyez une copie au serveur ou rendez-lui la main.');
-  }
+  // Ce PC a la main (ou est en train de la rendre) : récupérer depuis le serveur écraserait son travail.
+  const guard = () => {
+    if (returning.has(competitionId)) throw new SyncConflictError(RETURNING);
+    if (exists(db, competitionId) && getManagement(db, competitionId).managedHere) throw new SyncConflictError(HELD_HERE);
+  };
+  guard();
+  const wasCopy = exists(db, competitionId) && getManagement(db, competitionId).copyOfServer;
   const path = `/competitions/${encodeURIComponent(competitionId)}`;
   const pkg = take
     ? await remote<SyncPackage>(db, 'POST', `${path}/take`, { ...myIdentity(db), migrations: migrationCount(db) })
     : await remote<SyncPackage>(db, 'GET', `${path}/package`);
   if (pkg?.competitionId !== competitionId) throw new SyncConflictError('Le serveur a renvoyé une autre compétition : vérifiez son adresse.');
+  // Pendant l'échange, ce PC a pu prendre la main (en secours, ou « Prendre la main ») ou commencer à la rendre.
+  guard();
   rememberServerInstance(db, pkg.from.instanceId);
-  const copyHere = present && getManagement(db, competitionId).copyOfServer;
+  const copyHere = wasCopy && getManagement(db, competitionId).copyOfServer;
   const stored = (db.$client.prepare('select server_fingerprint as f from competitions where id = ?').get(competitionId) as { f: string | null } | undefined)?.f;
   const owner = take ? null : { id: pkg.from.instanceId, name: serverCopyName(pkg.heldBy) };
   let result = { competitionId, created: false };

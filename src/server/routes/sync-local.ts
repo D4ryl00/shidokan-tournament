@@ -8,7 +8,7 @@ import { clearSyncServer, getSyncServer, rememberServerInstance, remote, setSync
 import { followStatus, getFollow, resetFollowStatus, setFollow } from '../sync/follow.js';
 import { getManagement } from '../sync/ownership.js';
 import { buildPackage, importPackage, type SyncPackage } from '../sync/package.js';
-import { myIdentity, pullCopy, SERVER_NAME, serverCopyName, SyncConflictError } from '../sync/pull.js';
+import { myIdentity, pullCopy, SERVER_NAME, serverCopyName, SyncConflictError, whileReturning } from '../sync/pull.js';
 
 const exists = (db: AppDb, id: string) => !!db.$client.prepare('select 1 from competitions where id = ?').get(id);
 
@@ -98,19 +98,22 @@ export async function syncLocalRoutes(app: FastifyInstance, { db, dbPath }: { db
   app.post<{ Params: { id: string } }>('/api/competitions/:id/sync/return', async (req, reply) => {
     mustManageHere(req.params.id);
     // Lecture seule d'abord : une saisie faite pendant l'envoi serait perdue. En cas d'échec, la main revient au PC.
-    const serverId = getSyncServer(db)?.serverInstanceId ?? 'serveur';
-    setOwner(req.params.id, { id: serverId, name: SERVER_NAME });
-    try {
-      const pkg = buildPackage(db, req.params.id, { handOver: true, role: 'local' });
-      const res = await remote<{ instanceId?: string }>(db, 'POST', `/competitions/${encodeURIComponent(req.params.id)}/return`, pkg);
-      if (res?.instanceId) {
-        rememberServerInstance(db, res.instanceId);
-        setOwner(req.params.id, { id: res.instanceId, name: SERVER_NAME });
+    // Pendant l'envoi, la copie tenue à jour ne doit pas remplacer la compétition (elle est encore le travail du PC).
+    await whileReturning(req.params.id, async () => {
+      const serverId = getSyncServer(db)?.serverInstanceId ?? 'serveur';
+      setOwner(req.params.id, { id: serverId, name: SERVER_NAME });
+      try {
+        const pkg = buildPackage(db, req.params.id, { handOver: true, role: 'local' });
+        const res = await remote<{ instanceId?: string }>(db, 'POST', `/competitions/${encodeURIComponent(req.params.id)}/return`, pkg);
+        if (res?.instanceId) {
+          rememberServerInstance(db, res.instanceId);
+          setOwner(req.params.id, { id: res.instanceId, name: SERVER_NAME });
+        }
+      } catch (e) {
+        setOwner(req.params.id, null);
+        throw e;
       }
-    } catch (e) {
-      setOwner(req.params.id, null);
-      throw e;
-    }
+    });
     return reply.status(204).send();
   });
 }
