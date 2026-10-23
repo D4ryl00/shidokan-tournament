@@ -107,6 +107,16 @@ test('zone autonome : importer la compétition par fichier (même en reprenant l
   expect((await f.onLaptop('PUT', `${f.base}/categories/${f.b61.id}/results/w1-0`, RESULT)).statusCode).toBe(409);
 });
 
+test('zone autonome : l’adresse du PC principal peut changer (nouvelle adresse après une panne du routeur) sans arrêter la garde ; compétition et zone non', async () => {
+  await autonomous();
+  const moved = f.mainUrl.replace('127.0.0.1', 'localhost');
+  expect((await f.onLaptop('PUT', '/api/zone-link', { mainUrl: moved, competitionId: f.id, zoneId: f.t1 })).statusCode).toBe(200);
+  expect((await f.onLaptop('GET', '/api/zone-link')).json()).toMatchObject({ link: { mainUrl: moved, autonomous: { finals: false } } });
+  expect((await f.onLaptop('PUT', `${f.base}/categories/${f.a54.id}/results/w1-0`, RESULT)).statusCode).toBe(200);
+  expect((await f.onLaptop('PUT', '/api/zone-link', { mainUrl: moved, competitionId: f.id, zoneId: f.t2 })).statusCode).toBe(409);
+  expect((await f.onLaptop('POST', '/api/zone-link/online')).json().report).toMatchObject({ applied: 1 });
+});
+
 test('bandeau : GET /api/zone-link donne autonomous.since et pending = 3', async () => {
   await autonomous();
   for (const m of ['w1-0', 'w1-1']) await f.onLaptop('PUT', `${f.base}/categories/${f.a54.id}/results/${m}`, RESULT);

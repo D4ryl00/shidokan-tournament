@@ -165,6 +165,9 @@ export function decideCard(db: AppDb, competitionId: string, entryId: string, ke
     const e = JSON.parse(row.e) as ZoneEntry;
     const now = new Date().toISOString();
     const ownRev = ownRevOf(db, competitionId, row.from);
+    if (keep === 'zone' && row.status === 'waiting') {
+      throw new CardError(409, 'Tranchez d’abord la carte précédente de cette catégorie : celle-ci s’appliquera ensuite toute seule si elle le peut.');
+    }
     if (keep === 'zone') {
       const r = await evaluateEntry(db, competitionId, e, { blockedCategories: new Set(), ownRev, apply: true, ignoreRev: true });
       if (r.status === 'conflict') {

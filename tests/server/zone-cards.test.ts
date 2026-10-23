@@ -87,6 +87,16 @@ test('garder celui de la zone quand les combattants ont changé → 409 avec le 
   expect((await decide(final.id, 'pc')).statusCode).toBe(409);
 });
 
+test('carte en attente : « Garder celui de la zone » refusé (la carte précédente de la catégorie d’abord) ; « Garder celui du PC » la ferme', async () => {
+  const [first, final] = await conflictThenWaiting();
+  const res = await decide(final.id, 'zone');
+  expect(res.statusCode).toBe(409);
+  expect(res.json().error).toBe('Tranchez d’abord la carte précédente de cette catégorie : celle-ci s’appliquera ensuite toute seule si elle le peut.');
+  expect((await b.records(f.a54.id)).some((r) => r.matchId === 'w2-0')).toBe(false);
+  expect((await decide(final.id, 'pc')).statusCode).toBe(204);
+  expect((await cards()).map((c) => c.id)).toEqual([first.id]);
+});
+
 test('schedule : held sur les passages d’une catégorie qui a une carte ouverte ; plus après la décision', async () => {
   const [first] = await conflictThenWaiting();
   const held = (await queueOf(f.t1)).filter((q) => q.categoryId === f.a54.id);

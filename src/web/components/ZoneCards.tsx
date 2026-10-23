@@ -63,9 +63,9 @@ export function ZoneCards({ competitionId }: { competitionId: string }) {
                   <Alert p="xs" color="blue" title={`Saisi par ${c.zoneName}`}><Text size="sm" data-testid="zone-card-zone">{c.zone}</Text></Alert>
                   <Alert p="xs" color="gray" title="Sur le PC principal"><Text size="sm" data-testid="zone-card-pc">{c.pc}</Text></Alert>
                 </SimpleGrid>
-                {!c.canKeepZone && <Text size="xs" c="orange">Les combattants de ce combat ont changé : la saisie de la zone ne peut plus être gardée.</Text>}
+                {c.status === 'conflict' && !c.canKeepZone && <Text size="xs" c="orange">Les combattants de ce combat ont changé : la saisie de la zone ne peut plus être gardée.</Text>}
                 <Group justify="flex-end">
-                  {c.canKeepZone && (
+                  {c.status === 'conflict' && c.canKeepZone && (
                     <Button size="xs" variant="light" data-testid="zone-keep-zone" loading={decide.isPending && decide.variables?.entryId === c.id && decide.variables.keep === 'zone'}
                       onClick={() => decide.mutate({ entryId: c.id, keep: 'zone' })}>Garder celui de la zone</Button>
                   )}

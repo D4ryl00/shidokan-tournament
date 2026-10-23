@@ -28,12 +28,21 @@ export function ZoneLinkCard() {
         sur ce portable (écran de la compétition, « Continuer sans réseau »).
       </Text>
       <Group align="end">
-        <TextInput data-testid="zone-link-url" label="Adresse du PC principal" placeholder="http://192.168.1.10:3000" value={shownUrl} onChange={(e) => setUrl(e.currentTarget.value)} w={300} disabled={autonomous} />
+        <TextInput data-testid="zone-link-url" label="Adresse du PC principal" placeholder="http://192.168.1.10:3000" value={shownUrl} onChange={(e) => setUrl(e.currentTarget.value)} w={300} />
         <Button variant="light" data-testid="zone-link-probe" loading={probe.isPending} disabled={!shownUrl.trim() || autonomous} onClick={() => probe.mutate(shownUrl.trim())}>
           Chercher
         </Button>
       </Group>
-      {competitions.length > 0 && (
+      {autonomous && data.link && (
+        <Group>
+          <Text size="sm" c="dimmed">Zone autonome en cours : seule l’adresse du PC principal peut changer (même PC, nouvelle adresse).</Text>
+          <Button size="xs" variant="light" data-testid="zone-link-save-url" loading={set.isPending} disabled={!shownUrl.trim() || shownUrl.trim() === data.link.mainUrl}
+            onClick={() => set.mutate({ mainUrl: shownUrl.trim(), competitionId: data.link!.competitionId, zoneId: data.link!.zoneId }, { onSuccess: () => notifications.show({ color: 'green', message: 'Adresse du PC principal enregistrée.' }) })}>
+            Enregistrer l’adresse
+          </Button>
+        </Group>
+      )}
+      {!autonomous && competitions.length > 0 && (
         <Group align="end">
           <NativeSelect data-testid="zone-link-competition" label="Compétition" data={competitions.map((c) => ({ value: c.id, label: c.name }))} value={shownCompetition}
             onChange={(e) => { setCompetitionId(e.currentTarget.value); setZoneId(null); }} w={260} />

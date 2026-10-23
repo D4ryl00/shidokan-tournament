@@ -51,8 +51,9 @@ export async function zoneLinkRoutes(app: FastifyInstance, { db, dbPath }: { db:
       db,
       value && {
         ...value,
-        // L'identité du PC principal est réapprise à la prochaine copie si l'adresse change.
-        mainInstanceId: current?.mainUrl === value.mainUrl ? current.mainInstanceId : undefined,
+        // L'identité du PC principal est réapprise à la prochaine copie si l'adresse change ; gardée en zone autonome (même PC
+        // principal, nouvelle adresse après une panne du routeur : la garde de la zone doit tenir).
+        mainInstanceId: current?.mainUrl === value.mainUrl || current?.autonomous ? current?.mainInstanceId : undefined,
         autonomous: current?.autonomous ?? null,
       },
     );
