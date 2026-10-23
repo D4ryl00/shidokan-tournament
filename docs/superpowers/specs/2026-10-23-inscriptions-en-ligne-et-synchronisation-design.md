@@ -146,6 +146,7 @@ La valeur `online` est ajoutée à `registrations.source` (inscription faite par
 - **Réglages d'envoi** (globaux, page Réglages de l'application) : serveur SMTP, port, chiffrement, identifiant, mot de passe, nom et adresse de l'expéditeur. Un bouton **« Envoyer un mail d'essai »**.
 - Aide affichée pour **Gmail** : il faut activer la validation en deux étapes et créer un **mot de passe d'application**, car le mot de passe normal ne fonctionne pas en SMTP. Gmail accepte environ 500 destinataires par jour, ce qui suffit.
 - **Message modifiable** ✅ : objet et texte, avec des variables `{club}`, `{coach}`, `{competition}`, `{date}`, `{lieu}`, `{date_limite}`, `{lien}`. 💡 Un modèle par défaut global, copié dans chaque compétition et modifiable pour elle.
+- **Un nouveau lien à chaque envoi** ✅ (2026-10-23) : seule l'empreinte des liens est gardée, donc un envoi (premier mail, relance, « Ouvrir dans ma messagerie ») crée un lien neuf et désactive le précédent. Un coach qui ouvre un lien remplacé voit : « Ce lien a été remplacé : utilisez celui du dernier mail reçu. »
 - **Envoi à un ou plusieurs clubs** ✅ : on coche des clubs invités (filtres « jamais envoyé », « sans inscription », « avec e-mail »), on voit un aperçu du message pour un club, puis on envoie.
 - Chaque envoi est noté (table `mail_log` : club, adresse, date, envoyé ou erreur avec son message). L'état apparaît à côté de chaque club : « Envoyé le … », « Erreur : … ».
 - Sans réglages SMTP, ou en cas de problème, on dispose de deux boutons par club : **« Copier le lien »** et **« Ouvrir dans ma messagerie »** (lien `mailto:` avec l'objet et le texte déjà remplis).
@@ -194,13 +195,14 @@ Un réglage au démarrage choisit le rôle de l'installation : `local` (par déf
 ### 8.3 Sécurité et données personnelles
 - HTTPS obligatoire. Nombre de requêtes limité sur `/inscription/*` et sur la connexion (contre les essais de jetons ou de mots de passe).
 - Ce sont des **données de mineurs** (nom, âge, poids). La page du club affiche une courte mention : qui traite les données, dans quel but, combien de temps, et qui contacter.
+- **Texte proposé par défaut** ✅ (2026-10-23), modifiable dans les réglages de l'application : « Les informations saisies sur cette page sont traitées par Shidokan France pour organiser la compétition (inscriptions, catégories, tableaux). Le poids, le grade et les coordonnées du coach sont effacés 13 mois après la compétition ; les résultats (nom, club, catégorie, classement) sont conservés comme archive sportive. Pour toute question, ou pour exercer vos droits sur ces données : {contact}. » L'adresse de contact est à compléter dans les réglages avant d'ouvrir les inscriptions ; tant qu'elle est vide, l'organisateur est prévenu.
 ### 8.4 Durée de conservation ✅
 - **Effacement automatique, sans avertissement** ✅ : un délai réglable (**13 mois** par défaut) après la date de la compétition. Une fois le délai passé, l'application efface d'elle-même les données qui ne servaient qu'à organiser la compétition, sans prévenir l'organisateur :
   - le poids (pesée et poids approximatif), la licence et le grade des combattants ;
   - la **copie** du téléphone et de l'e-mail du coach gardée dans le club de cette compétition. Les coordonnées de l'**annuaire** ne sont pas touchées : elles servent à recontacter le club pour les compétitions suivantes ✅ ;
   - les liens personnels (`club_invitations`) et le journal des mails (`mail_log`) ;
   - les fichiers importés (`uploads`).
-- **Le palmarès est gardé** ✅ : nom, prénom, club, catégorie, résultats et places, tant que l'organisateur ne supprime pas la compétition.
+- **Le palmarès est gardé** ✅ : nom, prénom, club, catégorie, tableaux, résultats des combats et notes de kata, places et podiums, tant que l'organisateur ne supprime pas la compétition. C'est une archive sportive, comme sur les plateformes de compétition (Smoothcomp garde aussi les vainqueurs) ✅ (2026-10-23).
 - **Annuaire** ✅ : un club qui n'a participé à aucune compétition depuis **3 ans** est archivé, et ses coordonnées (coach, téléphone, e-mail, notes) sont effacées automatiquement. 💡 L'effacement est fait, comme le reste, sans avertissement.
 - Le délai de 13 mois laisse le temps de traiter les contestations, et permet de reprendre les combattants de l'an dernier à l'édition suivante.
 - 💡 S'applique **sur toutes les installations** (serveur et PC), au démarrage puis une fois par jour. Les **sauvegardes** plus anciennes que le délai sont supprimées, sauf la plus récente.
