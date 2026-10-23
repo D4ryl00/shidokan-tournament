@@ -5,6 +5,7 @@
  *   node dist/server/cli.js delete-user <e-mail>
  * Dans Docker : docker compose exec -it app node dist/server/cli.js add-user <e-mail>
  */
+import fs from 'node:fs';
 import { createInterface } from 'node:readline';
 import { closeDb, openDb } from './db/client.js';
 import { createUser, deleteUser, findUserByEmail, listUsers } from './auth/sessions.js';
@@ -45,9 +46,23 @@ function askPassword(question: string): Promise<string> {
   });
 }
 
+/**
+ * Lancé en administrateur (`docker compose exec`) sur une base qui appartient à un autre utilisateur : on prend son identité,
+ * pour ne jamais créer de fichier de base que l'application ne pourrait plus écrire.
+ */
+function actAsDatabaseOwner(dbPath: string): void {
+  if (process.getuid?.() !== 0 || !fs.existsSync(dbPath)) return;
+  const { uid, gid } = fs.statSync(dbPath);
+  if (uid === 0) return;
+  process.setgid!(gid);
+  process.setuid!(uid);
+}
+
 async function main(): Promise<number> {
   const [command, email] = process.argv.slice(2);
-  const db = openDb(process.env.DATABASE_PATH ?? './data/shidokan.sqlite');
+  const dbPath = process.env.DATABASE_PATH ?? './data/shidokan.sqlite';
+  actAsDatabaseOwner(dbPath);
+  const db = openDb(dbPath);
   try {
     if (command === 'list-users') {
       for (const u of listUsers(db)) console.log(`${u.email}  (créé le ${u.createdAt.slice(0, 10)})`);

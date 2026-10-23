@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { optionalEmail } from './fields.js';
 import type { AppDb } from '../db/client.js';
 import { syncCategories } from '../repositories/categories.js';
 import { deleteClubLine, getClubEntry, saveClubLine, updateClubEntryHeader, type ClubAccess } from '../repositories/club-entry.js';
@@ -22,7 +23,7 @@ const headerSchema = z
   .object({
     coachName: text(120),
     coachPhone: text(40),
-    coachEmail: text(160),
+    coachEmail: optionalEmail,
     preApproval: z.boolean(),
     affiliationNumber: z.string().trim().regex(/^(\d{7})?$/, 'Le numéro d’affiliation FFK a 7 chiffres.').transform((v) => v || null).nullable(),
   })
@@ -30,6 +31,10 @@ const headerSchema = z
 
 /** Page d'inscription d'un club, ouverte avec son lien personnel (sans compte). */
 export async function clubEntryRoutes(app: FastifyInstance, { db }: { db: AppDb }) {
+  // Routes publiques (sans compte) : petites requêtes seulement, au lieu des 20 Mo des imports de l'organisateur.
+  app.addHook('onRoute', (route) => {
+    route.bodyLimit = 64 * 1024;
+  });
   // Les données sont déjà enregistrées : un échec du recalcul des catégories ne doit pas faire croire au coach que rien n'est passé.
   const resync = (competitionId: string) => syncCategories(db, competitionId).catch((e) => app.log.error(e));
   const access = (token: string): ClubAccess => {

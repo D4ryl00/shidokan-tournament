@@ -10,9 +10,10 @@ import { ApiError } from './api.js';
 import { colorSchemeManager, theme } from './theme.js';
 
 // Retour sur un onglet (impression, autre écran ouvert à côté) : ses données sont rechargées.
-// Session expirée ou supprimée (rôle serveur) : l'état de connexion est relu, ce qui ramène à l'écran de connexion.
+// Session expirée ou supprimée (rôle serveur) : la fenêtre de reconnexion s'ouvre par-dessus l'écran, sans perdre la saisie en cours.
+const SESSION_LOST = new Set(['Connexion requise.', 'Non connecté.']);
 const onError = (e: unknown) => {
-  if (e instanceof ApiError && e.status === 401 && e.message === 'Connexion requise.') void queryClient.invalidateQueries({ queryKey: ['auth'] });
+  if (e instanceof ApiError && e.status === 401 && SESSION_LOST.has(e.message)) queryClient.setQueryData(['auth-expired'], true);
 };
 const queryClient: QueryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, refetchOnWindowFocus: true } },

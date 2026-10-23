@@ -183,3 +183,12 @@ test('serveur : la limite de connexion ne se contourne ni par une adresse encodÃ
   }
   expect(tries.at(-1)).toBe(429);
 });
+
+test('changer son mot de passe ferme les autres sessions (cookie volÃ©), pas la sienne', async () => {
+  const { app: a } = await serverApp();
+  const mine = cookieOf(await login(a));
+  const stolen = cookieOf(await login(a));
+  expect((await a.inject({ method: 'PUT', url: '/api/users/me/password', headers: { cookie: mine }, payload: { current: PASSWORD, next: 'nouveau-mot-de-passe' } })).statusCode).toBe(204);
+  expect((await a.inject({ method: 'GET', url: '/api/competitions', headers: { cookie: stolen } })).statusCode).toBe(401);
+  expect((await a.inject({ method: 'GET', url: '/api/competitions', headers: { cookie: mine } })).statusCode).toBe(200);
+});

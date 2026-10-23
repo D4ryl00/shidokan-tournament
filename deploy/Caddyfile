@@ -3,5 +3,13 @@
 # des clubs contiennent leur lien personnel).
 competitions.shidokanfrance.com {
 	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		X-Frame-Options "DENY"
+		Content-Security-Policy "frame-ancestors 'none'"
+		-Server
+	}
 	reverse_proxy app:3000
 }

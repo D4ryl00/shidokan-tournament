@@ -44,11 +44,16 @@ export function deleteUser(db: AppDb, id: string): void {
   if (!db.delete(users).where(eq(users.id, id)).run().changes) throw new HttpError(404, 'Compte introuvable.');
 }
 
-export function changePassword(db: AppDb, userId: string, current: string, next: string): void {
+/** Change le mot de passe et ferme toutes les autres sessions du compte (un cookie volé ne sert plus). */
+export function changePassword(db: AppDb, userId: string, current: string, next: string, keepToken: string | null = null): void {
   const user = db.select().from(users).where(eq(users.id, userId)).get();
   if (!user || !verifyPassword(current, user.passwordHash)) throw new HttpError(400, 'Mot de passe actuel incorrect.');
   if (next.length < MIN_PASSWORD) throw new HttpError(400, `Le mot de passe doit faire au moins ${MIN_PASSWORD} caractères.`);
   db.update(users).set({ passwordHash: hashPassword(next) }).where(eq(users.id, userId)).run();
+  const keep = keepToken ? hash(keepToken) : null;
+  for (const s of db.select().from(sessions).where(eq(sessions.userId, userId)).all()) {
+    if (s.tokenHash !== keep) db.delete(sessions).where(eq(sessions.id, s.id)).run();
+  }
 }
 
 /** Nouvelle session : renvoie le jeton du cookie (seule son empreinte est gardée). */

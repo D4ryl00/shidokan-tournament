@@ -20,3 +20,24 @@ test('serveur : connexion obligatoire, puis les écrans habituels ; déconnexion
   await page.goto('/inscription/inconnu');
   await expect(page.getByTestId('club-entry-error')).toHaveText('Lien inconnu ou expiré.');
 });
+
+test('serveur : session perdue pendant une saisie → reconnexion par-dessus l’écran, la saisie est gardée', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('login-email').fill('orga@e2e.example');
+  await page.getByTestId('login-password').fill('mot-de-passe-e2e');
+  await page.getByTestId('login-submit').click();
+  await page.getByTestId('new-competition').click();
+  await page.getByTestId('competition-name').fill('Coupe après reconnexion');
+  // La session disparaît (cookie volé puis mot de passe changé, expiration…).
+  await page.request.post('/api/auth/logout');
+  await page.getByTestId('competition-submit').click();
+  const relogin = page.getByRole('dialog', { name: 'Session expirée : reconnectez-vous' });
+  await expect(relogin).toBeVisible();
+  await relogin.getByTestId('login-email').fill('orga@e2e.example');
+  await relogin.getByTestId('login-password').fill('mot-de-passe-e2e');
+  await relogin.getByTestId('login-submit').click();
+  await expect(relogin).toHaveCount(0);
+  await expect(page.getByTestId('competition-name')).toHaveValue('Coupe après reconnexion');
+  await page.getByTestId('competition-submit').click();
+  await expect(page.getByTestId('competition-row').filter({ hasText: 'Coupe après reconnexion' })).toBeVisible();
+});

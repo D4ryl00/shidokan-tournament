@@ -47,7 +47,7 @@ export async function authRoutes(app: FastifyInstance, { db, role }: { db: AppDb
   app.put('/api/users/me/password', async (req, reply) => {
     if (!req.user) return reply.status(400).send({ error: 'Aucun compte connecté.' });
     const { current, next } = z.object({ current: z.string().max(200), next: z.string().max(200) }).parse(req.body);
-    changePassword(db, req.user.id, current, next);
+    changePassword(db, req.user.id, current, next, cookieValue(req, SESSION_COOKIE));
     return reply.status(204).send();
   });
 }

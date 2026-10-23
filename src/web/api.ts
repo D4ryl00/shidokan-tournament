@@ -657,11 +657,18 @@ export interface AuthMe { role: 'serveur' | 'local'; user: { email: string } | n
 export interface UserRow { id: string; email: string; createdAt: string }
 
 export const useAuthMe = () => useQuery({ queryKey: ['auth'], queryFn: () => api<AuthMe>('GET', '/api/auth/me'), staleTime: 60_000 });
+/** Vrai quand la session a été perdue en cours de route (la fenêtre de reconnexion s'affiche par-dessus l'écran). */
+export const useAuthExpired = () =>
+  useQuery({ queryKey: ['auth-expired'], queryFn: async () => false, initialData: false, staleTime: Infinity }).data;
 export function useLogin() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (v: { email: string; password: string }) => api<void>('POST', '/api/auth/login', v),
-    onSuccess: () => qc.resetQueries(),
+    // Les écrans ouverts gardent leur état : seules les données sont relues.
+    onSuccess: () => {
+      qc.setQueryData(['auth-expired'], false);
+      return qc.invalidateQueries();
+    },
   });
 }
 export function useLogout() {

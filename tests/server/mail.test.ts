@@ -4,26 +4,34 @@ import { buildApp } from '../../src/server/app.js';
 import type { MailTransport } from '../../src/server/mail.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
-type Sent = { from: string; to: string; subject: string; text: string };
-let sent: Sent[];
+type Sent = { from: { name: string; address: string }; to: { name: string; address: string }; subject: string; text: string };
+let sent: (Omit<Sent, 'to'> & { to: string })[];
 let failFor: Set<string>;
+let verifyError: string | null;
 const transport: MailTransport = () => ({
+  verify: async () => {
+    if (verifyError) throw new Error(verifyError);
+    return true;
+  },
   sendMail: async (m: Sent) => {
-    if (failFor.has(m.to)) throw new Error('550 Adresse refusée');
-    sent.push(m);
+    if (failFor.has(m.to.address)) throw new Error('550 Adresse refusée');
+    sent.push({ ...m, to: m.to.address });
     return {};
   },
 });
 
 let app: FastifyInstance;
 let base: string;
+let dbPathOf: string;
 const SMTP = { host: 'smtp.gmail.com', port: 465, security: 'tls', user: 'orga@gmail.com', password: 'secret', fromName: 'Shidokan France', fromEmail: 'orga@gmail.com' };
 const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmail: null, notes: null };
 
 beforeEach(async () => {
   sent = [];
   failFor = new Set();
-  app = await buildApp({ dbPath: tmpDbPath(), mailTransport: transport, publicUrl: 'https://competitions.example.org' });
+  verifyError = null;
+  dbPathOf = tmpDbPath();
+  app = await buildApp({ dbPath: dbPathOf, mailTransport: transport, publicUrl: 'https://competitions.example.org' });
   base = `/api/competitions/${(await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe 2026', date: '2026-11-22', location: 'Nice' } })).json().id}`;
   await app.inject({ method: 'PATCH', url: `${base}/club-entry`, payload: { status: 'open', deadline: '2026-11-15' } });
 });
@@ -46,7 +54,7 @@ test('envoi à deux clubs : mails rendus, liens neufs qui fonctionnent, journal 
   expect(res.json().map((r: { status: string }) => r.status)).toEqual(['sent', 'sent']);
   expect(sent).toHaveLength(2);
   const tani = sent.find((m) => m.to === 'tani@example.org')!;
-  expect(tani.from).toBe('"Shidokan France" <orga@gmail.com>');
+  expect(tani.from).toEqual({ name: 'Shidokan France', address: 'orga@gmail.com' });
   expect(tani.subject).toBe('Inscriptions — Coupe 2026');
   expect(tani.text).toContain('Bonjour Jean,');
   expect(tani.text).toContain('« Coupe 2026 » (22/11/2026, Nice)');
@@ -126,4 +134,65 @@ test('jeton inconnu → 404, révoqué → 410', async () => {
   expect((await app.inject({ method: 'GET', url: '/api/inscription/inconnu' })).statusCode).toBe(404);
   await app.inject({ method: 'DELETE', url: `${base}/invitations/${link!.clubId}` });
   expect((await app.inject({ method: 'GET', url: `/api/inscription/${link!.token}` })).statusCode).toBe(410);
+});
+
+test('SMTP indisponible (vérification en échec) → 400, aucun lien changé, aucun mail', async () => {
+  await smtp();
+  verifyError = '535 Mot de passe refusé';
+  const [link] = await invited({ name: 'Tani Dojo', coachEmail: 'tani@example.org' });
+  const res = await send([link!.clubId]);
+  expect(res.statusCode).toBe(400);
+  expect(res.json().error).toBe('Envoi impossible, aucun lien n’a changé : 535 Mot de passe refusé');
+  expect(sent).toEqual([]);
+  expect((await app.inject({ method: 'GET', url: `/api/inscription/${link!.token}` })).statusCode).toBe(200);
+});
+
+test('club en erreur : son ancien lien fonctionne toujours', async () => {
+  await smtp();
+  failFor.add('budo@example.org');
+  const links = await invited({ name: 'Budo', coachEmail: 'budo@example.org' });
+  await send([links[0]!.clubId]);
+  expect((await app.inject({ method: 'GET', url: `/api/inscription/${links[0]!.token}` })).statusCode).toBe(200);
+  const rows = (await app.inject({ method: 'GET', url: `${base}/invitations` })).json() as { invited: boolean }[];
+  expect(rows[0]!.invited).toBe(true);
+});
+
+test('un club inconnu au milieu : erreur pour lui seul, les autres partent', async () => {
+  await smtp();
+  const links = await invited({ name: 'Tani Dojo', coachEmail: 'tani@example.org' }, { name: 'Budo', coachEmail: 'budo@example.org' });
+  const res = await send([links[0]!.clubId, 'inconnu', links[1]!.clubId]);
+  expect(res.statusCode).toBe(200);
+  expect(res.json().map((r: { status: string }) => r.status)).toEqual(['sent', 'error', 'sent']);
+});
+
+test('adresse enregistrée invalide (liste, texte) → erreur pour ce club, lien inchangé', async () => {
+  await smtp();
+  const [link] = await invited({ name: 'Tani Dojo', coachEmail: 'tani@example.org' });
+  // Une fiche importée peut contenir n'importe quel texte : il est vérifié à l'envoi.
+  await app.inject({ method: 'PATCH', url: `${base}/clubs/${link!.clubId}`, payload: { coachEmail: null } });
+  const raw = new (await import('better-sqlite3')).default(dbPathOf);
+  raw.prepare('update clubs set coach_email = ? where id = ?').run('a@x.fr, b@y.fr', link!.clubId);
+  raw.close();
+  const res = (await send([link!.clubId])).json();
+  expect(res).toEqual([expect.objectContaining({ status: 'error', error: 'Adresse e-mail invalide pour ce club.' })]);
+  expect(sent).toEqual([]);
+  expect((await app.inject({ method: 'GET', url: `/api/inscription/${link!.token}` })).statusCode).toBe(200);
+});
+
+test('rôle serveur sans PUBLIC_URL → envoi refusé (les liens ne doivent pas dépendre des en-têtes de la requête)', async () => {
+  const { createUser } = await import('../../src/server/auth/sessions.js');
+  const { openDb, closeDb } = await import('../../src/server/db/client.js');
+  const { tmpDbPath: tmp } = await import('../helpers/tmp-db.js');
+  const p = tmp();
+  const d = openDb(p);
+  createUser(d, 'orga@example.org', 'mot-de-passe-long');
+  closeDb(d);
+  const srv = await buildApp({ dbPath: p, role: 'serveur', mailTransport: transport });
+  const login = await srv.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'orga@example.org', password: 'mot-de-passe-long' } });
+  const cookie = String(login.headers['set-cookie']).split(';')[0]!;
+  const c = (await srv.inject({ method: 'POST', url: '/api/competitions', headers: { cookie }, payload: { name: 'Coupe', date: '2026-11-22' } })).json();
+  const res = await srv.inject({ method: 'POST', url: `/api/competitions/${c.id}/invitations/x/mailto`, headers: { cookie } });
+  expect(res.statusCode).toBe(400);
+  expect(res.json().error).toBe('L’adresse publique du serveur (PUBLIC_URL) n’est pas réglée.');
+  await srv.close();
 });

@@ -54,7 +54,7 @@ export function SendResultsModal({ results, onClose }: { results: SendResult[]; 
     <Modal opened={results.length > 0} onClose={onClose} title="Envoi des liens" size="lg">
       <Stack data-testid="send-results">
         <Alert color={errors.length ? 'orange' : 'green'}>
-          {results.length - errors.length} mail(s) envoyé(s){errors.length ? `, ${errors.length} en erreur : renvoyez-les après correction (le lien de ces clubs a pu changer).` : '.'}
+          {results.length - errors.length} mail(s) envoyé(s) : leur ancien lien ne fonctionne plus.{errors.length ? ` ${errors.length} en erreur : le lien de ces clubs n’a pas changé ; corrigez puis renvoyez.` : ''}
         </Alert>
         {results.map((r) => (
           <Group key={r.clubId} justify="space-between" wrap="nowrap">

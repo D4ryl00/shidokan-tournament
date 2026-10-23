@@ -252,3 +252,16 @@ test('la vue contient la mention sur les données ; sans adresse de contact, pas
   const withContact = (await app.inject({ method: 'GET', url: url() })).json().privacyNotice as string;
   expect(withContact.endsWith('exercer vos droits sur ces données : rgpd@shidokanfrance.com.')).toBe(true);
 });
+
+test('en-tête : e-mail du coach = une seule adresse (pas de liste) → sinon 400', async () => {
+  const header = { coachName: null, coachPhone: null, preApproval: false, affiliationNumber: null };
+  for (const coachEmail of ['a@x.fr, b@y.fr', 'a@x.fr;b@y.fr', 'pas une adresse', '"A" <a@x.fr>']) {
+    expect((await app.inject({ method: 'PATCH', url: url('/club'), payload: { ...header, coachEmail } })).statusCode, coachEmail).toBe(400);
+  }
+  expect((await app.inject({ method: 'PATCH', url: url('/club'), payload: { ...header, coachEmail: 'coach@tani.example' } })).statusCode).toBe(200);
+});
+
+test('pages publiques : corps de requête limité à 64 Ko (413 au-delà)', async () => {
+  const res = await app.inject({ method: 'POST', url: url('/lines'), payload: { line: { ...LINE, lastName: 'X'.repeat(70 * 1024) } } });
+  expect(res.statusCode).toBe(413);
+});

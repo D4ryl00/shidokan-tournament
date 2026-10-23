@@ -52,3 +52,10 @@ test('entrée inconnue → 404', async () => {
   expect((await app.inject({ method: 'PATCH', url: '/api/club-directory/inconnue', payload: { name: 'X' } })).statusCode).toBe(404);
   expect((await app.inject({ method: 'POST', url: '/api/club-directory/merge', payload: { keepId: 'a', mergeId: 'b' } })).statusCode).toBe(404);
 });
+
+test('e-mail invalide (liste) refusé dans l’annuaire et dans les clubs d’une compétition', async () => {
+  expect((await create({ name: 'Liste', coachEmail: 'a@x.fr, b@y.fr' })).statusCode).toBe(400);
+  const c = (await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22' } })).json().id;
+  expect((await app.inject({ method: 'POST', url: `/api/competitions/${c}/clubs`, payload: { name: 'Club', coachEmail: 'a@x.fr, b@y.fr' } })).statusCode).toBe(400);
+  expect((await app.inject({ method: 'POST', url: `/api/competitions/${c}/clubs`, payload: { name: 'Club', coachEmail: 'a@x.fr' } })).statusCode).toBe(201);
+});

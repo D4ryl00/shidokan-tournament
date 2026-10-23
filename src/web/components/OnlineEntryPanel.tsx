@@ -67,6 +67,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
   const [filters, setFilters] = useState<string[]>([]);
   const [confirmSend, setConfirmSend] = useState(false);
   const [results, setResults] = useState<SendResult[]>([]);
+  const [mailtoClub, setMailtoClub] = useState<ClubInvitationRow | null>(null);
   if (!settings) return null;
 
   // Tableau : seulement les clubs invités ; les autres se choisissent dans l'annuaire (qui contient tous les clubs passés).
@@ -150,7 +151,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
                   <Table.Td>{i.fighters}</Table.Td>
                   <Table.Td>
                     <Group gap="xs" justify="flex-end" wrap="nowrap">
-                      <Button size="xs" variant="light" loading={mailto.isPending && mailto.variables === i.clubId} onClick={() => openMailto(i.clubId)}>Ouvrir dans ma messagerie</Button>
+                      <Button size="xs" variant="light" loading={mailto.isPending && mailto.variables === i.clubId} onClick={() => setMailtoClub(i)}>Ouvrir dans ma messagerie</Button>
                       <Button size="xs" variant="light" onClick={() => regenerate.mutate(i.clubId, { onSuccess: (l) => setLinks([l]) })}>Régénérer le lien</Button>
                       <Button size="xs" variant="subtle" color="red" onClick={() => revoke.mutate(i.clubId)}>Révoquer</Button>
                     </Group>
@@ -183,6 +184,15 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
         </Stack>
       </Modal>
       <SendResultsModal results={results} onClose={() => setResults([])} />
+      <Modal opened={mailtoClub !== null} onClose={() => setMailtoClub(null)} title="Ouvrir dans ma messagerie">
+        <Stack>
+          <Text>Un nouveau lien est créé pour {mailtoClub?.clubName} et l’ancien ne fonctionnera plus : envoyez bien ce mail depuis votre messagerie.</Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setMailtoClub(null)}>Annuler</Button>
+            <Button onClick={() => { if (mailtoClub) openMailto(mailtoClub.clubId); setMailtoClub(null); }}>Ouvrir ma messagerie</Button>
+          </Group>
+        </Stack>
+      </Modal>
       <LinksModal links={links} onClose={() => setLinks([])} />
     </Stack>
   );

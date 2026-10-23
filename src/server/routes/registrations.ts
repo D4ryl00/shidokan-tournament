@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { optionalEmail } from './fields.js';
 import { NotAClubFormError, parseClubForm, parseClubFormLines } from '../../domain/club-form.js';
 import { buildClubFormTemplate } from '../club-form-template.js';
 import { buildClubFormPdf } from '../club-form-pdf.js';
@@ -73,7 +74,7 @@ const clubSchema = z
     ffkEntity: z.string().trim().max(160).nullable().optional(),
     coachName: z.string().trim().max(120).nullable().optional(),
     coachPhone: z.string().trim().max(40).nullable().optional(),
-    coachEmail: z.string().trim().max(160).nullable().optional(),
+    coachEmail: optionalEmail.optional(),
     preApproval: z.boolean().optional(),
   })
   .strict();

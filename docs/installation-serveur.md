@@ -91,7 +91,9 @@ La compétition se déroule sur le PC de la salle, sans internet.
 
 1. Sur le serveur, après le gel : onglet **Podiums**, section **Sauvegardes**, « Télécharger la base complète ».
 2. Sur le PC : même section, « Restaurer une sauvegarde… ». **Toute la base du PC est remplacée** (une copie de l'état précédent est faite juste avant). Travaillez donc uniquement sur le serveur jusque-là.
-3. Après la compétition, pour l'archive en ligne : faites l'inverse.
+3. Après la compétition, **gardez la sauvegarde du PC** (« Télécharger la base complète » sur le PC) comme archive : c'est le fichier qui contient les résultats.
+
+   **Ne la restaurez sur le serveur que si rien d'autre n'y a changé depuis le téléchargement de l'étape 1.** Une restauration remplace *toutes* les compétitions du serveur : les inscriptions en ligne d'une autre compétition faites depuis seraient perdues, et les liens envoyés aux clubs depuis ne fonctionneraient plus. La synchronisation prévue plus tard fera ce retour sans ce risque.
 
 Les comptes, les sessions, les réglages d'envoi des mails et la mention ne voyagent jamais avec une sauvegarde : chaque installation garde les siens.
 
@@ -131,17 +133,21 @@ rsync -a utilisateur@serveur:shidokan/data/sauvegardes/ ~/sauvegardes-shidokan/
        ports:
          - "127.0.0.1:3000:3000"
    ```
-2. Dans votre serveur web, faites suivre le domaine (en HTTPS) vers `http://127.0.0.1:3000`. Transmettez les en-têtes `Host`, `X-Forwarded-For` et `X-Forwarded-Proto`, et autorisez des requêtes de 20 Mo (import des fiches).
+2. Dans votre serveur web, faites suivre le domaine (en HTTPS) vers `http://127.0.0.1:3000`. Transmettez les en-têtes `Host`, `X-Forwarded-For` et `X-Forwarded-Proto`, et autorisez des requêtes de 20 Mo (import des fiches). `X-Forwarded-For` doit contenir **seulement** l'adresse du client vue par votre serveur web : l'application ne fait confiance qu'au dernier intermédiaire, et s'en sert pour limiter les essais de mot de passe.
 
    Exemple pour nginx :
    ```nginx
    location / {
        proxy_pass http://127.0.0.1:3000;
        proxy_set_header Host $host;
-       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-For $remote_addr;   # pas $proxy_add_x_forwarded_for : le client ne doit pas choisir son adresse
        proxy_set_header X-Forwarded-Proto $scheme;
        client_max_body_size 20m;
        access_log off;   # les adresses des pages des clubs contiennent leur lien personnel
+       add_header Strict-Transport-Security "max-age=31536000" always;
+       add_header X-Content-Type-Options "nosniff" always;
+       add_header Referrer-Policy "no-referrer" always;
+       add_header X-Frame-Options "DENY" always;
    }
    ```
 3. **Journaux d'accès** : ne journalisez pas les adresses `/inscription/…`, ou masquez-les. L'application les masque déjà dans son propre journal.

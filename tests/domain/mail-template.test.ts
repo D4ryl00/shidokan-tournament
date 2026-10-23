@@ -29,3 +29,7 @@ test('message par défaut rendu exactement', () => {
     ].join('\n'),
   );
 });
+
+test('variables héritées ignorées : {constructor} et {__proto__} restent tels quels', () => {
+  expect(renderTemplate('{constructor} {__proto__} {toString}', VALUES)).toBe('{constructor} {__proto__} {toString}');
+});

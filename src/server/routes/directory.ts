@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { optionalEmail } from './fields.js';
 import type { AppDb } from '../db/client.js';
 import { createDirectoryEntry, listDirectory, mergeDirectoryEntries, updateDirectoryEntry } from '../repositories/directory.js';
 
@@ -10,7 +11,7 @@ const directorySchema = z
     affiliationNumber: z.string().trim().regex(/^\d{7}$/, 'Le numéro d’affiliation FFK a 7 chiffres.').nullable(),
     coachName: text(120),
     coachPhone: text(40),
-    coachEmail: text(160),
+    coachEmail: optionalEmail,
     notes: text(1000),
   })
   .strict();

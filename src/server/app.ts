@@ -150,7 +150,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(backupRoutes, { db, dbPath: opts.dbPath });
   await app.register(directoryRoutes, { db });
   const mailTransport = opts.mailTransport ?? nodemailerTransport;
-  await app.register(invitationRoutes, { db, mailTransport, publicUrl: opts.publicUrl, mailPauseMs: opts.mailPauseMs });
+  await app.register(invitationRoutes, { db, mailTransport, publicUrl: opts.publicUrl, mailPauseMs: opts.mailPauseMs, role });
   await app.register(clubEntryRoutes, { db });
   await app.register(authRoutes, { db, role });
   await app.register(appSettingsRoutes, { db, mailTransport });

@@ -49,8 +49,11 @@ export async function backupNow(db: AppDb, dbPath: string): Promise<string> {
   fs.mkdirSync(dir, { recursive: true });
   let file = path.join(dir, `shidokan-${stamp()}.sqlite`);
   for (let i = 1; fs.existsSync(file); i++) file = path.join(dir, `shidokan-${stamp(new Date(Date.now() + i))}.sqlite`);
-  db.$client.exec(`VACUUM INTO ${quote(file)}`);
-  stripSecrets(file);
+  // Écrite sous un nom provisoire, débarrassée de ses secrets, puis renommée : jamais de sauvegarde avec secrets dans le dossier.
+  const partial = `${file}.partiel`;
+  db.$client.exec(`VACUUM INTO ${quote(partial)}`);
+  stripSecrets(partial);
+  fs.renameSync(partial, file);
   const all = (await listBackups(dbPath)).map((b) => b.name).sort();
   for (const old of all.slice(0, Math.max(0, all.length - KEEP))) fs.rmSync(path.join(dir, old), { force: true });
   return file;

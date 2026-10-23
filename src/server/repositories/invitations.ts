@@ -142,6 +142,25 @@ export function revokeInvitation(db: AppDb, competitionId: string, clubId: strin
   db.update(clubInvitations).set({ revokedAt: NOW() }).where(active(competitionId, clubId)).run();
 }
 
+/** Nouveau lien pour le club, sans désactiver l'actuel (envoi par mail : l'ancien n'est désactivé que si le mail part). */
+export function addInvitationLink(db: AppDb, competitionId: string, clubId: string): InvitationLink {
+  const club = competitionClub(db, competitionId, clubId);
+  return createLink(db, competitionId, clubId, club.name);
+}
+
+/** Garde seulement ce lien actif pour le club (les autres sont désactivés). */
+export function keepOnlyLink(db: AppDb, competitionId: string, clubId: string, token: string): void {
+  const keep = hashToken(token);
+  for (const l of db.select().from(clubInvitations).where(active(competitionId, clubId)).all()) {
+    if (l.tokenHash !== keep) db.update(clubInvitations).set({ revokedAt: NOW() }).where(eq(clubInvitations.id, l.id)).run();
+  }
+}
+
+/** Désactive un lien (envoi raté : le lien précédent reste celui qui fonctionne). */
+export function revokeLink(db: AppDb, token: string): void {
+  db.update(clubInvitations).set({ revokedAt: NOW() }).where(eq(clubInvitations.tokenHash, hashToken(token))).run();
+}
+
 /** Compétition et club d'un lien actif (sa dernière visite est notée), sinon null. */
 export function resolveInvitation(db: AppDb, token: string): { competitionId: string; clubId: string } | null {
   const link = db.select().from(clubInvitations).where(and(eq(clubInvitations.tokenHash, hashToken(token)), isNull(clubInvitations.revokedAt))).get();
