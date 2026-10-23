@@ -17,6 +17,7 @@ export function AppHeader() {
       </UnstyledButton>
       <Group gap="md" wrap="nowrap">
         <Anchor component={Link} to="/annuaire" data-testid="nav-directory">Annuaire des clubs</Anchor>
+        <Anchor component={Link} to="/parametres" data-testid="nav-settings">Réglages de l’application</Anchor>
         {me?.user && (
           <>
             <Anchor component={Link} to="/comptes" data-testid="nav-accounts">Comptes</Anchor>

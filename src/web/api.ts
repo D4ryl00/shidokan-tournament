@@ -9,6 +9,7 @@ import type { Club, DirectoryEntry, DirectoryInput, RegistrationInput, Registrat
 import type { Case, Presence, Proposal, ProposalType } from '../domain/replacement/index.js';
 import type { CategoryGrid, DisciplineId } from '../domain/types.js';
 import type { Wave, WaveInput } from '../domain/waves.js';
+import type { AppSettingsPatch, PublicAppSettings } from '../domain/app-settings.js';
 import type { Zone, ZoneInput } from '../domain/zones.js';
 import type { PassagePlan } from '../domain/passages/index.js';
 
@@ -673,3 +674,14 @@ function useUsersMutation<V>(fn: (v: V) => Promise<unknown>) {
 export const useCreateUser = () => useUsersMutation((v: { email: string; password: string }) => api('POST', '/api/users', v));
 export const useDeleteUser = () => useUsersMutation((id: string) => api('DELETE', `/api/users/${id}`));
 export const useChangePassword = () => useMutation({ mutationFn: (v: { current: string; next: string }) => api<void>('PUT', '/api/users/me/password', v) });
+
+// Réglages de l'application (envoi des mails, mention, conservation, message aux clubs).
+export const useAppSettings = () => useQuery({ queryKey: ['app-settings'], queryFn: () => api<PublicAppSettings>('GET', '/api/app-settings') });
+export function useUpdateAppSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: AppSettingsPatch) => api<PublicAppSettings>('PATCH', '/api/app-settings', patch),
+    onSuccess: (s) => qc.setQueryData(['app-settings'], s),
+  });
+}
+export const useSendTestMail = () => useMutation({ mutationFn: (to: string) => api<void>('POST', '/api/app-settings/test-mail', { to }) });

@@ -5,6 +5,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import { AppHeader } from './components/AppHeader.js';
 import { CompetitionLayout } from './components/CompetitionLayout.js';
 import { AccountsPage } from './pages/AccountsPage.js';
+import { AppSettingsPage } from './pages/AppSettingsPage.js';
 import { BracketsRoute } from './pages/BracketsRoute.js';
 import { ClubEntryPage } from './pages/ClubEntryPage.js';
 import { ClubFormPage } from './pages/ClubFormPage.js';
@@ -62,6 +63,7 @@ function MainShell() {
             <Route path="/" element={<CompetitionsPage />} />
             <Route path="/annuaire" element={<DirectoryPage />} />
             <Route path="/comptes" element={<AccountsPage />} />
+            <Route path="/parametres" element={<AppSettingsPage />} />
             <Route path="/competitions/:id" element={<CompetitionLayout />}>
               <Route index element={<Navigate to="reglages" replace />} />
               <Route path="inscriptions" element={<RegistrationsPage />} />

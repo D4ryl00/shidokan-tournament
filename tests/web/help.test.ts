@@ -101,3 +101,8 @@ test("comptes : l'aide parle du mot de passe d'au moins 10 caractères et de la 
   expect(all('comptes')).toContain('10 caractères');
   expect(all('comptes')).toContain('add-user');
 });
+
+test("parametres : l'aide Gmail parle du mot de passe d'application", () => {
+  expect(all('parametres')).toContain('mot de passe d’application');
+  expect(all('parametres')).toContain('smtp.gmail.com');
+});

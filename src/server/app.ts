@@ -34,6 +34,7 @@ import { clubEntryRoutes } from './routes/club-entry.js';
 import { loggerOptions } from './log.js';
 import { registerGuard, type InstanceRole } from './auth/guard.js';
 import { authRoutes } from './routes/auth.js';
+import { appSettingsRoutes } from './routes/app-settings.js';
 import { RestoreError, startAutoBackup } from './repositories/backups.js';
 import { ensureInstance } from './repositories/instance.js';
 import { ffkImportRoutes } from './routes/ffk-import.js';
@@ -141,6 +142,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(invitationRoutes, { db });
   await app.register(clubEntryRoutes, { db });
   await app.register(authRoutes, { db, role });
+  await app.register(appSettingsRoutes, { db });
 
   // Après toute écriture réussie qui touche aux inscriptions ou aux réglages : catégories et tableaux à jour.
   app.addHook('onResponse', async (req, reply) => {
