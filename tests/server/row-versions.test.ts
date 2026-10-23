@@ -8,7 +8,7 @@ import { fillClubForm } from '../helpers/club-form-fill.js';
 import { olderDb } from '../helpers/older-db.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
-const GLOBAL_TABLES = ['competitions', 'instance', 'change_counter', 'users', 'sessions', 'app_settings', 'club_directory', 'club_aliases', 'import_mappings', 'grid_templates', '__drizzle_migrations'];
+const GLOBAL_TABLES = ['competitions', 'instance', 'change_counter', 'users', 'sessions', 'app_settings', 'sync_tokens', 'club_directory', 'club_aliases', 'import_mappings', 'grid_templates', '__drizzle_migrations'];
 
 let db: AppDb | null = null;
 let app: FastifyInstance | null = null;
@@ -41,7 +41,7 @@ const insertResult = (d: AppDb) =>
 test('versionedTables : liste exacte', () => {
   expect(versionedTables(freshDb())).toEqual([
     'age_bands', 'age_links', 'categories', 'club_directory', 'club_invitations', 'clubs', 'competitions', 'fighters', 'frozen_passages', 'kata_scores',
-    'mail_log', 'match_results', 'recasements', 'refusals', 'registrations', 'tie_breaks', 'wave_launches', 'waves', 'weight_classes', 'zones',
+    'mail_log', 'match_results', 'received_copies', 'recasements', 'refusals', 'registrations', 'tie_breaks', 'wave_launches', 'waves', 'weight_classes', 'zones',
   ]);
 });
 

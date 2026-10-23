@@ -26,9 +26,9 @@ function stamp(d = new Date()): string {
  * Tables propres à l'installation, jamais copiées par une restauration : son identité, son compteur de versions (qui ne recule
  * jamais), ses comptes et sessions, ses réglages (envoi des mails…).
  */
-export const INSTALLATION_TABLES = ['instance', 'change_counter', 'users', 'sessions', 'app_settings'];
+export const INSTALLATION_TABLES = ['instance', 'change_counter', 'users', 'sessions', 'app_settings', 'sync_tokens'];
 
-/** Retire d'une copie de base ce qui ne doit pas quitter l'installation : comptes, sessions, mot de passe SMTP (effacés pour de bon). */
+/** Retire d'une copie de base ce qui ne doit pas quitter l'installation : comptes, sessions, jetons, mots de passe (effacés pour de bon). */
 function stripSecrets(file: string): void {
   const copy = new Database(file);
   try {
@@ -36,6 +36,8 @@ function stripSecrets(file: string): void {
     const has = (t: string) => !!copy.prepare("select 1 from sqlite_master where type = 'table' and name = ?").get(t);
     if (has('sessions')) copy.exec('DELETE FROM sessions');
     if (has('users')) copy.exec('DELETE FROM users');
+    if (has('sync_tokens')) copy.exec('DELETE FROM sync_tokens');
+    if (has('app_settings')) copy.exec("UPDATE app_settings SET value_json = json_remove(value_json, '$.token') WHERE key = 'syncServer'");
     if (has('app_settings')) copy.exec("UPDATE app_settings SET value_json = json_remove(value_json, '$.password') WHERE key = 'smtp'");
     copy.exec('VACUUM');
   } finally {

@@ -14,6 +14,9 @@ export const competitions = sqliteTable('competitions', {
   createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
   /** Installation qui a la main sur la compétition ; vide = gérée ici. */
   ownerInstanceId: text('owner_instance_id'),
+  /** Nom de l'installation qui a la main (affiché « Gérée par … ») et depuis quand. */
+  ownerName: text('owner_name'),
+  ownerSince: text('owner_since'),
   lastSyncAt: text('last_sync_at'),
   /** Inscriptions en ligne des clubs : pas encore ouvertes, ouvertes, figées. */
   clubEntryStatus: text('club_entry_status', { enum: ['closed', 'open', 'frozen'] }).notNull().default('closed'),
@@ -84,6 +87,29 @@ export const clubDirectory = sqliteTable(
   },
   (t) => [index('club_directory_name_key').on(t.nameKey)],
 );
+
+/** Jetons de synchronisation (serveur) : un PC relié s'en sert pour échanger les compétitions. Seule l'empreinte est gardée. */
+export const syncTokens = sqliteTable('sync_tokens', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  tokenHash: text('token_hash').notNull().unique(),
+  createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  lastUsedAt: text('last_used_at'),
+  revokedAt: text('revoked_at'),
+});
+
+/** Copies d'une compétition envoyées par le PC qui a la main, pendant la journée (les 5 dernières). */
+export const receivedCopies = sqliteTable('received_copies', {
+  id: text('id').primaryKey(),
+  competitionId: text('competition_id')
+    .notNull()
+    .references(() => competitions.id, { onDelete: 'cascade' }),
+  fromInstanceId: text('from_instance_id').notNull(),
+  fromName: text('from_name').notNull(),
+  receivedAt: text('received_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  packageJson: text('package_json').notNull(),
+  ...rowMeta(),
+});
 
 /** Journal des mails envoyés aux clubs (lien personnel). */
 export const mailLog = sqliteTable('mail_log', {
