@@ -18,7 +18,37 @@ export const competitions = sqliteTable('competitions', {
   /** Inscriptions en ligne des clubs : pas encore ouvertes, ouvertes, figées. */
   clubEntryStatus: text('club_entry_status', { enum: ['closed', 'open', 'frozen'] }).notNull().default('closed'),
   clubEntryDeadline: text('club_entry_deadline'),
+  /** Données d'organisation effacées (délai de conservation dépassé) : palmarès seul gardé. */
+  purgedAt: text('purged_at'),
   ...rowMeta(),
+});
+
+/** Comptes des organisateurs (rôle serveur). Propres à l'installation : jamais copiés par une restauration ni gardés dans une sauvegarde. */
+export const users = sqliteTable('users', {
+  id: text('id').primaryKey(),
+  email: text('email').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  role: text('role', { enum: ['organisateur'] }).notNull().default('organisateur'),
+  createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+});
+
+/** Sessions de connexion (seule l'empreinte du jeton du cookie est gardée). */
+export const sessions = sqliteTable('sessions', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull().unique(),
+  createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  expiresAt: text('expires_at').notNull(),
+  lastSeenAt: text('last_seen_at').notNull(),
+});
+
+/** Réglages de l'application (envoi des mails, mention sur les données, conservation…), propres à l'installation. */
+export const appSettings = sqliteTable('app_settings', {
+  key: text('key').primaryKey(),
+  valueJson: text('value_json').notNull(),
+  updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
 });
 
 /** Identité de cette installation (une seule ligne, créée au démarrage ; jamais copiée par une restauration). */
@@ -54,6 +84,22 @@ export const clubDirectory = sqliteTable(
   },
   (t) => [index('club_directory_name_key').on(t.nameKey)],
 );
+
+/** Journal des mails envoyés aux clubs (lien personnel). */
+export const mailLog = sqliteTable('mail_log', {
+  id: text('id').primaryKey(),
+  competitionId: text('competition_id')
+    .notNull()
+    .references(() => competitions.id, { onDelete: 'cascade' }),
+  clubId: text('club_id')
+    .notNull()
+    .references(() => clubs.id, { onDelete: 'cascade' }),
+  email: text('email').notNull(),
+  sentAt: text('sent_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  status: text('status', { enum: ['sent', 'error'] }).notNull(),
+  error: text('error'),
+  ...rowMeta(),
+});
 
 /** Lien personnel d'un club pour une compétition (seule l'empreinte du jeton est gardée). */
 export const clubInvitations = sqliteTable('club_invitations', {

@@ -1,4 +1,5 @@
 import { buildApp } from './app.js';
+import { roleFromEnv } from './auth/guard.js';
 
 const port = Number(process.env.PORT ?? 3000);
 const app = await buildApp({
@@ -7,6 +8,8 @@ const app = await buildApp({
   logger: process.env.LOG !== 'off',
   backupIntervalMin: Number(process.env.BACKUP_INTERVAL_MIN ?? 5),
   instanceName: process.env.INSTANCE_NAME || process.env.COMPUTERNAME || 'PC',
+  role: roleFromEnv(process.env.INSTANCE_ROLE),
+  publicUrl: process.env.PUBLIC_URL || undefined,
 });
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

@@ -32,6 +32,8 @@ import { directoryRoutes } from './routes/directory.js';
 import { invitationRoutes } from './routes/invitations.js';
 import { clubEntryRoutes } from './routes/club-entry.js';
 import { loggerOptions } from './log.js';
+import { registerGuard, type InstanceRole } from './auth/guard.js';
+import { authRoutes } from './routes/auth.js';
 import { RestoreError, startAutoBackup } from './repositories/backups.js';
 import { ensureInstance } from './repositories/instance.js';
 import { ffkImportRoutes } from './routes/ffk-import.js';
@@ -46,13 +48,19 @@ export interface AppOptions {
   logger?: boolean;
   /** Nom de cette installation (« Gérée par le PC … »), utilisé à sa création seulement. */
   instanceName?: string;
+  /** `serveur` : en ligne, connexion obligatoire pour les organisateurs ; `local` (défaut) : le PC de la compétition, sans connexion. */
+  role?: InstanceRole;
+  /** Adresse publique du serveur (base des liens envoyés aux clubs) ; à défaut, l'origine de la requête. */
+  publicUrl?: string;
 }
 
 const NOT_FOUND = { error: 'Compétition introuvable' };
 
 export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
-  const app = Fastify({ logger: loggerOptions(opts.logger ?? false), bodyLimit: 20 * 1024 * 1024 });
+  const role = opts.role ?? 'local';
+  const app = Fastify({ logger: loggerOptions(opts.logger ?? false), bodyLimit: 20 * 1024 * 1024, trustProxy: role === 'serveur' });
   const db = openDb(opts.dbPath);
+  registerGuard(app, db, role);
   ensureInstance(db, opts.instanceName ?? 'PC');
   const stopBackups = startAutoBackup(db, opts.dbPath, opts.backupIntervalMin ?? 0, (e) => app.log.error(e));
   app.addHook('onClose', async () => {
@@ -132,6 +140,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(directoryRoutes, { db });
   await app.register(invitationRoutes, { db });
   await app.register(clubEntryRoutes, { db });
+  await app.register(authRoutes, { db, role });
 
   // Après toute écriture réussie qui touche aux inscriptions ou aux réglages : catégories et tableaux à jour.
   app.addHook('onResponse', async (req, reply) => {

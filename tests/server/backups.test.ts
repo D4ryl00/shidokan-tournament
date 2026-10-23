@@ -201,3 +201,51 @@ test('restauration d’une sauvegarde plus ancienne : le compteur de versions ne
   expect((d.prepare("select version from competitions where name = 'Après'").get() as { version: number }).version).toBeGreaterThan(maxBefore);
   d.close();
 });
+
+test('une sauvegarde ne contient ni compte, ni session, ni mot de passe SMTP', async () => {
+  const { createUser, createSession } = await import('../../src/server/auth/sessions.js');
+  await app.close();
+  const db = (await import('../../src/server/db/client.js')).openDb(dbPath);
+  const user = createUser(db, 'orga@example.org', 'mot-de-passe-long');
+  createSession(db, user.id);
+  db.$client.prepare("insert into app_settings (key, value_json) values ('smtp', ?)").run(JSON.stringify({ host: 'smtp.gmail.com', port: 465, security: 'tls', user: 'u', password: 'SECRET-SMTP', fromName: 'X', fromEmail: 'x@example.org' }));
+  (await import('../../src/server/db/client.js')).closeDb(db);
+  app = await buildApp({ dbPath });
+  const files = [
+    (await app.inject({ method: 'GET', url: '/api/backup.sqlite' })).rawPayload,
+    (await app.inject({ method: 'GET', url: `/api/backups/${(await app.inject({ method: 'POST', url: '/api/backups' })).json().file}` })).rawPayload,
+  ];
+  for (const file of files) {
+    const copy = path.join(path.dirname(dbPath), `copie-${Math.random()}.sqlite`);
+    fs.writeFileSync(copy, file);
+    const r = new Database(copy, { readonly: true });
+    expect(r.prepare('select count(*) as n from users').get()).toEqual({ n: 0 });
+    expect(r.prepare('select count(*) as n from sessions').get()).toEqual({ n: 0 });
+    expect(JSON.stringify(r.prepare('select * from app_settings').all())).not.toContain('SECRET-SMTP');
+    r.close();
+    expect(file.includes(Buffer.from('SECRET-SMTP'))).toBe(false);
+  }
+});
+
+test('restaurer une sauvegarde d’une autre installation ne touche pas aux comptes, sessions ni réglages', async () => {
+  const { createUser } = await import('../../src/server/auth/sessions.js');
+  const otherPath = tmpDbPath();
+  const otherDb = (await import('../../src/server/db/client.js')).openDb(otherPath);
+  createUser(otherDb, 'autre@example.org', 'mot-de-passe-long');
+  otherDb.$client.prepare("insert into app_settings (key, value_json) values ('privacyContact', '\"autre@example.org\"')").run();
+  (await import('../../src/server/db/client.js')).closeDb(otherDb);
+  const other = await buildApp({ dbPath: otherPath });
+  const snapshot = (await other.inject({ method: 'GET', url: '/api/backup.sqlite' })).rawPayload;
+  await other.close();
+  await app.close();
+  const db = (await import('../../src/server/db/client.js')).openDb(dbPath);
+  createUser(db, 'local@example.org', 'mot-de-passe-long');
+  db.$client.prepare("insert into app_settings (key, value_json) values ('privacyContact', '\"local@example.org\"')").run();
+  (await import('../../src/server/db/client.js')).closeDb(db);
+  app = await buildApp({ dbPath });
+  expect((await app.inject({ method: 'POST', url: '/api/restore', payload: snapshot, headers: { 'content-type': 'application/octet-stream' } })).statusCode).toBe(204);
+  const r = new Database(dbPath, { readonly: true });
+  expect(r.prepare('select email from users').all()).toEqual([{ email: 'local@example.org' }]);
+  expect(r.prepare("select value_json from app_settings where key = 'privacyContact'").get()).toEqual({ value_json: '"local@example.org"' });
+  r.close();
+});

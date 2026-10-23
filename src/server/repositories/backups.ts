@@ -22,13 +22,35 @@ function stamp(d = new Date()): string {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}-${p(d.getMilliseconds(), 3)}`;
 }
 
-/** Copie cohérente de la base (VACUUM INTO), puis rotation (KEEP fichiers). */
+/**
+ * Tables propres à l'installation, jamais copiées par une restauration : son identité, son compteur de versions (qui ne recule
+ * jamais), ses comptes et sessions, ses réglages (envoi des mails…).
+ */
+export const INSTALLATION_TABLES = ['instance', 'change_counter', 'users', 'sessions', 'app_settings'];
+
+/** Retire d'une copie de base ce qui ne doit pas quitter l'installation : comptes, sessions, mot de passe SMTP (effacés pour de bon). */
+function stripSecrets(file: string): void {
+  const copy = new Database(file);
+  try {
+    copy.pragma('secure_delete = ON');
+    const has = (t: string) => !!copy.prepare("select 1 from sqlite_master where type = 'table' and name = ?").get(t);
+    if (has('sessions')) copy.exec('DELETE FROM sessions');
+    if (has('users')) copy.exec('DELETE FROM users');
+    if (has('app_settings')) copy.exec("UPDATE app_settings SET value_json = json_remove(value_json, '$.password') WHERE key = 'smtp'");
+    copy.exec('VACUUM');
+  } finally {
+    copy.close();
+  }
+}
+
+/** Copie cohérente de la base (VACUUM INTO), sans secrets, puis rotation (KEEP fichiers). */
 export async function backupNow(db: AppDb, dbPath: string): Promise<string> {
   const dir = backupDir(dbPath);
   fs.mkdirSync(dir, { recursive: true });
   let file = path.join(dir, `shidokan-${stamp()}.sqlite`);
   for (let i = 1; fs.existsSync(file); i++) file = path.join(dir, `shidokan-${stamp(new Date(Date.now() + i))}.sqlite`);
   db.$client.exec(`VACUUM INTO ${quote(file)}`);
+  stripSecrets(file);
   const all = (await listBackups(dbPath)).map((b) => b.name).sort();
   for (const old of all.slice(0, Math.max(0, all.length - KEEP))) fs.rmSync(path.join(dir, old), { force: true });
   return file;
@@ -58,6 +80,7 @@ export function backupFile(dbPath: string, name: string): string | null {
 export function freshCopy(db: AppDb): Buffer {
   const tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'shidokan-copie-')), 'copie.sqlite');
   db.$client.exec(`VACUUM INTO ${quote(tmp)}`);
+  stripSecrets(tmp);
   const buf = fs.readFileSync(tmp);
   fs.rmSync(path.dirname(tmp), { recursive: true, force: true });
   return buf;
@@ -99,11 +122,12 @@ export async function restoreFrom(db: AppDb, file: Buffer, beforeCopy: () => Pro
       if (migrations !== current) throw new RestoreError();
     }
     await beforeCopy(); // sauvegarde de sécurité, seulement pour un fichier valide
-    // L'identité de l'installation n'est jamais copiée : une copie de base ne donne pas la même identité à un autre PC.
-    // Le compteur de versions non plus : il ne recule jamais (les lignes copiées le relèvent au besoin, déclencheur « version_keep »).
+    // Les tables propres à l'installation ne sont jamais copiées (INSTALLATION_TABLES).
     const tables = (
-      client.prepare("select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name not in ('__drizzle_migrations', 'instance', 'change_counter')").all() as { name: string }[]
-    ).map((t) => t.name);
+      client.prepare("select name from sqlite_master where type = 'table' and name not like 'sqlite_%'").all() as { name: string }[]
+    )
+      .map((t) => t.name)
+      .filter((t) => t !== '__drizzle_migrations' && !INSTALLATION_TABLES.includes(t));
     client.pragma('foreign_keys = OFF');
     client.exec(`ATTACH DATABASE ${quote(tmp)} AS src`);
     try {
