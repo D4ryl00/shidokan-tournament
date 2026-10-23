@@ -3,7 +3,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { linkAllClubs } from '../repositories/club-directory.js';
+import { linkAllClubs } from './club-directory.js';
 import { ensureRowVersions } from './row-versions.js';
 import * as schema from './schema.js';
 

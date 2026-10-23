@@ -15,7 +15,7 @@ import type { ProposalType } from '../../domain/replacement/types.js';
 import type { DisciplineId } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
 import { withoutRowMeta } from '../db/row-versions.js';
-import { linkClub } from './club-directory.js';
+import { linkClub } from '../db/club-directory.js';
 import { categories, clubs, fighters, registrations } from '../db/schema.js';
 import { getCompetition, getGrid } from './competitions.js';
 

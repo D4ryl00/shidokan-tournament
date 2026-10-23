@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, expect, test } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
 import { closeDb, openDb, type AppDb } from '../../src/server/db/client.js';
-import { affiliationNumber } from '../../src/server/repositories/club-directory.js';
+import { affiliationNumber } from '../../src/server/db/club-directory.js';
 import { createCompetition } from '../../src/server/repositories/competitions.js';
 import { updateClub, upsertClub } from '../../src/server/repositories/registrations.js';
 import { fillClubForm } from '../helpers/club-form-fill.js';

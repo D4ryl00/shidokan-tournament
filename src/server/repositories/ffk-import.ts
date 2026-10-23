@@ -15,7 +15,7 @@ import { mergeWeightClasses, validateGrid } from '../../domain/grid.js';
 import { normalizeName } from '../../domain/names.js';
 import type { ProposalType } from '../../domain/replacement/types.js';
 import type { AppDb } from '../db/client.js';
-import { linkClub } from './club-directory.js';
+import { linkClub } from '../db/club-directory.js';
 import { clubAliases, clubs, fighters, importMappings, registrations, uploads, weightClasses } from '../db/schema.js';
 import { readWorkbook } from '../spreadsheet/read.js';
 import { GridValidationError, getGrid } from './competitions.js';

@@ -1,6 +1,6 @@
 import { asc, desc, eq, isNull } from 'drizzle-orm';
-import type { AppDb } from '../db/client.js';
-import { clubAliases, clubDirectory, clubs, competitions } from '../db/schema.js';
+import type { AppDb } from './client.js';
+import { clubAliases, clubDirectory, clubs, competitions } from './schema.js';
 
 /** Numéro d'affiliation FFK : les chiffres en tête de l'entité (« 0060808 ISSA KYOKUSHIN SCHOOL » → « 0060808 »), sinon null. */
 export function affiliationNumber(entity: string | null): string | null {
