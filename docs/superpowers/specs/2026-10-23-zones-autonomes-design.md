@@ -1,0 +1,100 @@
+# PC de zone autonomes (étape F) — conception
+
+**Date :** 2026-10-23 · **Complète :** `docs/superpowers/specs/2026-10-23-inscriptions-en-ligne-et-synchronisation-design.md` §2 (une seule machine a la main) et §10 (principes de l'étape F), qu'elle précise et remplace pour ce cas.
+
+Légende : ✅ décidé par l'organisateur · 💡 choix du rédacteur (à vérifier en relisant) · 🔧 laissé au constructeur.
+
+---
+
+## 1. Pourquoi
+
+Le jour J se déroule en réseau local : le PC principal a la main, la table centrale y travaille, et chaque zone saisit ses résultats depuis le navigateur d'un PC portable, comme poste « Zone » du PC principal (étape A).
+
+On veut **anticiper une coupure du réseau en pleine journée** ✅ (routeur en panne, câble arraché), qu'elle soit brève ou longue ✅. L'organisateur veut la solution technique, pas seulement le papier ✅. Ce n'est pas un besoin déjà vécu, mais une précaution ✅.
+
+Matériel ✅ : **un PC portable par zone, avec l'application déjà installée** (Docker), en plus du PC principal.
+
+**Réussi si :**
+- au moment de la coupure, chaque zone continue à faire combattre et à saisir ses résultats en moins d'une minute, sans ressaisir ce qui précède ;
+- au retour du réseau (ou par clé USB), tous les résultats des zones arrivent sur le PC principal ;
+- rien n'est écrasé ni perdu sans qu'une personne l'ait décidé.
+
+**Échec même si « ça marche » :**
+- un résultat de zone remplace en silence un résultat différent saisi à la table centrale ;
+- un résultat est appliqué à un combat dont les combattants ont changé entre-temps (réaffectation, déplacement, régénération) ;
+- un même journal appliqué deux fois, ou une saisie perdue parce que l'envoi a échoué ;
+- une zone autonome qui modifie autre chose que ses propres combats.
+
+## 2. Principe
+
+Le §2 de la conception d'origine tient toujours : **on ne fusionne jamais deux bases**. Pendant la coupure, le PC principal garde la main sur la compétition. Chaque portable de zone n'a la main que sur **les saisies de sa zone**, sur sa copie locale. Au retour, il n'envoie pas sa base : il envoie un **journal d'opérations**, que le PC principal rejoue avec ses règles habituelles. Un vrai conflit est montré à une personne, jamais tranché tout seul.
+
+## 3. Avant la coupure : le portable suit le PC principal
+
+- **Réglage du portable** (Réglages de l'application, rôle local) : adresse du PC principal (par exemple `http://192.168.1.10:3000`), compétition, et zone (choisie dans la liste des zones de la compétition) ✅.
+- Le portable **récupère une copie** de la compétition toutes les minutes 💡, en lecture seule. Il passe par l'export de compétition qui existe déjà (`GET /api/competitions/:id/export.json`, ouvert sans connexion en rôle local). L'état « dernière copie à HH:MM » ou « PC principal injoignable » est affiché. 🔧 Réutiliser la mécanique de « Garder cette copie à jour » (étape 20) et du paquet de compétition (étape 18).
+- Pendant ce temps, **rien ne change pour l'arbitre** ✅ : le navigateur du portable reste le poste « Zone » du PC principal, ouvert à son adresse.
+- La copie est rangée comme une copie en lecture seule « du PC principal » (bandeau « Copie du PC principal — à jour à HH:MM — lecture seule »). 💡
+
+## 4. Pendant la coupure : zone autonome
+
+- Sur le portable, l'opérateur ouvre l'application locale (`http://localhost:3000`) et clique **« Continuer sans réseau (zone Tatami 2) »** ✅. La fiche « Préparer le jour J » l'explique, et l'aide de l'écran Combats aussi. 💡
+- La copie locale devient **modifiable pour les saisies de cette zone seulement** ✅ :
+  - résultats des combats, effacement d'un résultat, notes de kata, départages ;
+  - la zone d'une saisie suit la même règle que les comptes Zone de l'étape 20 (zone du passage du combat ou du bloc de kata, sinon celle de la catégorie ; départage : une zone qui a un passage de la catégorie).
+- **Tout le reste est en lecture seule** : inscriptions, pesée, réaffectations, déplacements, sessions, autres zones. Le serveur local refuse (409) avec un message clair. L'écran se règle sur le poste « Zone » de cette zone.
+- **Chaque saisie est notée dans un journal** ✅. Une entrée contient :
+  - un identifiant unique et un numéro d'ordre ;
+  - le type (résultat, effacement, notes de kata, départage) et ce qui a été saisi ;
+  - la catégorie, le combat (ou l'inscription et le tour pour un kata, la portée pour un départage) ;
+  - **les deux combattants du combat au moment de la saisie**, et la version de la ligne lue (résultat, notes, départage) et de la catégorie ;
+  - l'heure et la zone.
+- Bandeau permanent : **« Zone autonome Tatami 2 depuis 14 h 32 — 5 saisies à renvoyer »** ✅.
+- Les tableaux et les feuilles s'impriment depuis la copie locale, comme d'habitude.
+- Pendant ce temps, le PC principal **continue normalement** ✅. La table centrale peut saisir un combat de cette zone ; ce sera un conflit au retour.
+
+## 5. Au retour : « Repasser en ligne »
+
+- Sur le portable, le bouton **« Repasser en ligne »** ✅ envoie le journal au PC principal par le réseau.
+  - Envoi réussi : la zone autonome s'arrête, le portable redevient une copie en lecture seule, et l'opérateur rouvre l'adresse du PC principal dans son navigateur (l'écran le lui propose).
+  - Envoi impossible (PC principal injoignable) : la zone reste autonome, le journal est gardé, rien n'est perdu ✅.
+- **Par clé USB** ✅, si le réseau ne revient pas : « Exporter le journal (fichier) » sur le portable, puis « Importer un journal de zone (fichier) » sur le PC principal. Les règles sont les mêmes. Une fois le fichier exporté, le portable peut aussi arrêter la zone autonome (avec confirmation : ce qui serait saisi ensuite ne serait pas dans le fichier). 💡
+- **Un journal n'est appliqué qu'une fois** ✅ : chaque entrée garde son identifiant ; une entrée déjà reçue est ignorée, même si le journal est renvoyé ou importé deux fois.
+
+## 6. Sur le PC principal : rejouer, et montrer les conflits
+
+- Les entrées sont rejouées **dans l'ordre**, chacune à travers les règles habituelles de l'application (les mêmes contrôles que si elle avait été saisie sur place) ✅.
+- **Sans conflit, elle s'applique tout de suite** ✅ :
+  - le combat a toujours les mêmes deux combattants, et le résultat sur le PC principal est toujours celui que la zone avait lu (même version, ou pas de résultat des deux côtés) ;
+  - ou le PC principal a déjà **exactement le même résultat** (par exemple saisi juste avant la coupure) : rien à faire, l'entrée est notée comme « déjà présente ».
+- **Conflit : rien n'est écrasé** ✅. Cas :
+  - le PC principal a un autre résultat pour ce combat (saisi par la table centrale, ou effacé) ;
+  - les combattants du combat ont changé (réaffectation, déplacement, régénération du tableau) ;
+  - les règles refusent la saisie (combat qui n'existe plus, catégorie verrouillée…).
+- Chaque conflit devient une **carte** dans une section **« À trancher »** de l'onglet Combats du PC principal ✅, visible des postes Organisation et Table centrale. La carte montre côte à côte ce qu'a saisi la zone et ce qu'il y a sur le PC principal, avec **« Garder celui de la zone »** et **« Garder celui du PC »** ✅. « Garder celui de la zone » n'est proposé que si les règles l'acceptent (combattants identiques) ; sinon la carte dit pourquoi, et « Garder celui du PC » la ferme.
+- **Saisies qui dépendent d'un conflit** ✅ : le combat suivant d'un vainqueur dépend du résultat en conflit. Ces saisies ne sont pas devinées : elles deviennent aussi des cartes, liées à la première. 💡 Après chaque décision, les cartes en attente sont réexaminées, et celles qui n'ont plus de conflit s'appliquent toutes seules.
+- Un compte rendu s'affiche à la réception : « 12 saisies reçues de Tatami 2 : 9 appliquées, 1 déjà présente, 2 à trancher ».
+- Les écrans des autres postes se mettent à jour, comme pour toute écriture (étape A).
+
+## 7. Non-objectifs et anti-objectifs
+
+- Pas de fusion de bases, ni de « la dernière modification gagne » (conception d'origine, §12).
+- Une zone autonome ne fait **que** les saisies de sa zone : pas d'inscription, de pesée, de déplacement, de régénération.
+- Pas de renvoi automatique du journal : c'est un geste ✅.
+- Pas de zones autonomes face au serveur en ligne : ce cas est couvert par le PC en secours de l'étape 20. Ici, seulement le PC principal en réseau local. 💡
+- Pas de nouvelle protection par mot de passe en réseau local (comme l'étape A : la protection vient du Wi-Fi fermé).
+
+## 8. Ce qui existe déjà et sert ici
+
+- Identité de chaque installation, versions de lignes et révisions (étapes 15 et 19).
+- Résultats qui gardent les deux combattants au moment de la saisie (`match_results.entrant_a`, `entrant_b`).
+- Plan de passage, zone d'un combat et d'un bloc de kata (`entryZones`, étape 20).
+- Paquet de compétition, export par fichier, copie tenue à jour (étapes 18 et 20).
+- Cartes de décision, comme pour les réaffectations (étape 5).
+
+## 9. Laissé au constructeur 🔧
+
+- Forme exacte du journal (table, format du fichier) et de sa réception.
+- Manière de marquer la copie « du PC principal » et la zone autonome sur le portable (à côté de la main de l'étape 18).
+- Disposition des cartes « À trancher ».
+- Messages et textes d'aide, dans le style des étapes précédentes.
