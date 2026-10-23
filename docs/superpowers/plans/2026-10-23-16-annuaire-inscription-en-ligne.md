@@ -49,6 +49,20 @@
 
 ---
 
+### Task 0 : Défaut existant — catégories après la saisie d'une fiche papier
+
+**Files:**
+- Modify: `src/server/app.ts` (expression du hook `onResponse` qui relance `syncCategories`)
+- Test: `tests/server/registrations-api.test.ts`
+
+**Constat à vérifier :** le hook ne reconnaît que `club-forms/import`, pas `club-forms/entry/import` (« Enregistrer la fiche » de la saisie papier). Les catégories ne seraient donc recalculées qu'à la prochaine écriture.
+
+- [ ] **Step 1 : test** `saisie d'une fiche papier : les catégories sont à jour dès l'enregistrement`. Enregistrer une ligne par `POST …/club-forms/entry/import`, puis vérifier avec `GET …/categories` que la catégorie de l'inscription existe et la contient.
+- [ ] **Step 2 : lancer le test**, qui doit échouer : `npx vitest run tests/server/registrations-api.test.ts`. Attendu : FAIL. Si le test passe, le défaut n'existe pas : le noter dans le bilan et passer à la Task 1.
+- [ ] **Step 3 : corriger l'expression** pour reconnaître `club-forms/(entry/)?import`.
+- [ ] **Step 4 : lancer le test**, qui doit passer.
+- [ ] **Step 5 : commit** : `fix(fiche papier): catégories recalculées dès l'enregistrement d'une fiche saisie`
+
 ### Task 1 : Ligne de fiche reconstruite depuis les inscriptions (domaine)
 
 **Files:**
