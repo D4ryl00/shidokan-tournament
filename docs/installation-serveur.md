@@ -85,17 +85,32 @@ Dans l'application, menu **Réglages de l'application** :
 4. Suivez les inscriptions dans l'onglet Inscriptions. Leur origine s'affiche « En ligne ».
 5. À la date limite, cliquez « Figer les inscriptions » : les pages des clubs passent en lecture seule.
 
-## Le jour J (en attendant la synchronisation)
+## Le jour J : passer la compétition au PC, puis la rendre au serveur
 
-La compétition se déroule sur le PC de la salle, sans internet.
+La compétition se déroule sur le PC de la salle, sans internet. Une compétition n'est modifiable qu'à un seul endroit à la fois, **là où est la main**. Ailleurs, elle est en lecture seule, et un bandeau le dit.
 
-1. Sur le serveur, après le gel : onglet **Podiums**, section **Sauvegardes**, « Télécharger la base complète ».
-2. Sur le PC : même section, « Restaurer une sauvegarde… ». **Toute la base du PC est remplacée** (une copie de l'état précédent est faite juste avant). Travaillez donc uniquement sur le serveur jusque-là.
-3. Après la compétition, **gardez la sauvegarde du PC** (« Télécharger la base complète » sur le PC) comme archive : c'est le fichier qui contient les résultats.
+**Une fois : relier le PC au serveur.**
+1. En ligne, menu **Réglages de l'application**, section **Synchronisation** : cliquez « Créer un jeton », puis copiez-le (il ne s'affiche qu'une fois).
+2. Sur le PC, même menu et même section : indiquez l'adresse `https://competitions.shidokanfrance.com` et le jeton, puis cliquez « Enregistrer ».
 
-   **Ne la restaurez sur le serveur que si rien d'autre n'y a changé depuis le téléchargement de l'étape 1.** Une restauration remplace *toutes* les compétitions du serveur : les inscriptions en ligne d'une autre compétition faites depuis seraient perdues, et les liens envoyés aux clubs depuis ne fonctionneraient plus. La synchronisation prévue plus tard fera ce retour sans ce risque.
+**Avant la compétition** (internet nécessaire) : sur le PC, liste des compétitions, « Récupérer depuis le serveur », puis cliquez « Prendre la main » sur la compétition.
+- Le PC devient le seul endroit où la modifier.
+- En ligne, elle passe en lecture seule, et les inscriptions des clubs sont figées.
+- « Récupérer une copie » permet aussi de la regarder avant, en lecture seule.
 
-Les comptes, les sessions, les réglages d'envoi des mails et la mention ne voyagent jamais avec une sauvegarde : chaque installation garde les siens.
+**Pendant la journée**, s'il y a internet : onglet Réglages de la compétition, section « Échanges avec le serveur », « Envoyer une copie au serveur ». C'est une copie de secours ; le PC garde la main.
+
+**Après la compétition** : même section, « Rendre la main au serveur ». Le serveur reprend la compétition entière, avec ses résultats. Les autres compétitions en ligne, les liens des clubs et les mails envoyés ne sont pas touchés.
+
+**Sans internet** : « Exporter la compétition (fichier) » d'un côté, sur une clé USB, puis « Importer une compétition (fichier) » de l'autre.
+- Sur le serveur, cochez « et donner la main au PC qui l'importera ».
+- Au retour, importez le fichier du PC en ligne, et confirmez « Reprendre la main ».
+
+**PC perdu ou en panne** : en ligne, section « Échanges avec le serveur », « Reprendre la main ».
+- Elle repart de la version du serveur, ou de la dernière copie reçue pendant la journée.
+- Si un second PC a continué la compétition, exportez-la en fichier depuis ce PC, puis importez-la en ligne.
+
+Les comptes, les sessions, les jetons, les réglages d'envoi des mails et la mention ne voyagent jamais : chaque installation garde les siens.
 
 ## Conservation des données
 

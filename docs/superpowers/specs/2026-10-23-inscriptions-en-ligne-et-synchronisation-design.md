@@ -234,7 +234,7 @@ Chaque écran de compétition indique où est la main : « Gérée ici », « G�
 ### 9.3 Ce qui voyage
 - **Le paquet d'une compétition** : toutes les lignes des tables qui ont son `competition_id` (§3.5), sauf `uploads`, `club_invitations` et `mail_log`. On y ajoute les entrées d'annuaire reliées à ses clubs, la version de l'application et le nombre de migrations.
 - 🔧 Format : un fichier JSON, éventuellement compressé.
-- **Recevoir un paquet** remplace entièrement la compétition de même `id` sur la machine qui le reçoit, dans une seule transaction, après une sauvegarde automatique. Chaque entrée d'annuaire reçue est rapprochée des entrées locales : d'abord par `id`, puis selon la règle du §3.2. Si elle correspond à une entrée locale, les clubs de la compétition sont reliés à cette entrée, qui n'est **pas écrasée**. Sinon, elle est ajoutée.
+- **Recevoir un paquet** remplace entièrement la compétition de même `id` sur la machine qui le reçoit, dans une seule transaction, après une sauvegarde automatique. *(Précisé à la construction :)* les lignes sont mises à jour par leur clé, et celles qui ne sont plus dans le paquet sont supprimées ; les liens des clubs, le journal des mails et les fichiers importés de l'installation qui reçoit restent, ainsi qu'un club qui en a. Un paquet dont une ligne appartient à une autre compétition est refusé. Chaque entrée d'annuaire reçue est rapprochée des entrées locales : d'abord par `id`, puis selon la règle du §3.2. Si elle correspond à une entrée locale, les clubs de la compétition sont reliés à cette entrée, qui n'est **pas écrasée**. Sinon, elle est ajoutée.
 - **Sans internet**, le même paquet peut aussi passer **par fichier** (clé USB) : « Exporter la compétition » et « Importer une compétition ». Les règles de main sont les mêmes.
 
 ### 9.4 Versions et refus
@@ -243,7 +243,7 @@ Chaque écran de compétition indique où est la main : « Gérée ici », « G�
 
 ### 9.5 Reprise forcée
 - **PC perdu ou en panne, côté serveur** : un organisateur peut **reprendre la main** en ligne, après confirmation. Le serveur repart de sa dernière version, ou de la dernière copie reçue (geste 3), au choix. Le PC verra ensuite son « Rendre la main » refusé, avec un message expliquant la situation. Il pourra encore exporter un fichier pour qu'un organisateur le récupère à la main.
-- **Reprise par un second PC** (§7.4) : ce PC restaure la copie, mais son identité est différente (§3.1). Pour rendre la main, il faut qu'un organisateur accepte la reprise en ligne (« Le PC <B> remplace le PC <A> pour cette compétition »).
+- **Reprise par un second PC** (§7.4) : ce PC restaure la copie, mais son identité est différente (§3.1). *(Simplifié à la construction, 2026-10-23 :)* il exporte la compétition en fichier, et un organisateur l'importe en ligne en confirmant « Reprendre la main ».
 
 ## 10. Plus tard : PC de zone autonomes (étape F) ✅ (principes 💡)
 
