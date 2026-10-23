@@ -24,7 +24,7 @@ interface Props {
   ruleset: Ruleset | null;
   match: ResolvedMatch | null;
   number?: number | string;
-  records: ResultRecord[];
+  records: (ResultRecord & { rev?: string })[];
   tieBreaks: Record<number, string[]>;
   entrants: Map<string, EntrantInfo>;
   onClose: () => void;
@@ -39,7 +39,10 @@ export function ResultDialog({ competitionId, categoryId, bracket, ruleset, matc
   const [score, setScore] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  // Révision du résultat à l'ouverture de la saisie : si un autre poste l'enregistre entre-temps, la saisie est refusée.
+  const [openRev, setOpenRev] = useState<string | null | undefined>(undefined);
   useEffect(() => {
+    setOpenRev(existing ? (existing.rev ?? undefined) : null);
     setWinner(match?.result?.winner ?? null);
     setMethod(match?.result?.method ?? 'points');
     setScore(match?.result?.score ?? '');
@@ -68,7 +71,7 @@ export function ResultDialog({ competitionId, categoryId, bracket, ruleset, matc
     );
   };
   const save = () =>
-    winner && put.mutate({ cid: categoryId, matchId: match.id, winner, method, score: score.trim() || null }, { onSuccess: onClose });
+    winner && put.mutate({ cid: categoryId, matchId: match.id, winner, method, score: score.trim() || null, rev: openRev }, { onSuccess: onClose });
 
   return (
     <Modal opened onClose={onClose} closeOnEscape={!helpOpen} title={`Combat ${number ?? ''} — résultat`} size="lg">
@@ -98,7 +101,7 @@ export function ResultDialog({ competitionId, categoryId, bracket, ruleset, matc
             <Group justify="flex-end" mt="xs">
               <Button size="xs" variant="default" onClick={() => setConfirmDelete(false)}>Non</Button>
               <Button size="xs" color="red" data-testid="result-delete-confirm" loading={del.isPending}
-                onClick={() => del.mutate({ cid: categoryId, matchId: match.id }, { onSuccess: onClose })}>
+                onClick={() => del.mutate({ cid: categoryId, matchId: match.id, rev: openRev }, { onSuccess: onClose })}>
                 Effacer le résultat
               </Button>
             </Group>

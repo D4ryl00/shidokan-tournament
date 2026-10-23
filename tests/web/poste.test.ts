@@ -23,3 +23,8 @@ test('lecture du poste enregistré : illisible ou absent → Organisation', () =
   expect(parsePoste(JSON.stringify({ kind: 'zone', zoneId: 'z1' }))).toEqual({ kind: 'zone', zoneId: 'z1' });
   expect(parsePoste(JSON.stringify({ kind: 'table' }))).toEqual({ kind: 'table' });
 });
+
+test('une adresse qui n’est pas un onglet (ancienne adresse redirigée ailleurs) n’est pas touchée', () => {
+  expect(tabFor({ kind: 'organisation' }, 'vagues')).toBe('vagues');
+  expect(tabFor({ kind: 'zone', zoneId: 'z1' }, 'recasement')).toBe('recasement');
+});

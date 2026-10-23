@@ -123,8 +123,8 @@ export function useUpdateRegistration(id: string) {
   const invalidate = useInvalidateRegistrations(id);
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ rid, input }: { rid: string; input: RegistrationInput }) =>
-      api<RegistrationRow>('PUT', `/api/competitions/${id}/registrations/${rid}`, input, { rev: registrationRevOf(qc, id, rid) }),
+    mutationFn: ({ rid, input, rev }: { rid: string; input: RegistrationInput; rev?: string }) =>
+      api<RegistrationRow>('PUT', `/api/competitions/${id}/registrations/${rid}`, input, { rev: rev ?? registrationRevOf(qc, id, rid) }),
     onSuccess: invalidate,
   });
 }
@@ -536,8 +536,9 @@ export function usePutResult(id: string) {
   const invalidate = useInvalidateResults(id);
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ cid, matchId, ...data }: { cid: string; matchId: string; winner: 'a' | 'b'; method: MatchMethod; score?: string | null }) =>
-      api<{ affected: string[] }>('PUT', `/api/competitions/${id}/categories/${cid}/results/${matchId}`, data, { rev: resultRevOf(qc, id, cid, matchId) }),
+    // `rev` : celle du résultat à l'ouverture de la saisie (sinon celle en cache au moment d'enregistrer).
+    mutationFn: ({ cid, matchId, rev, ...data }: { cid: string; matchId: string; winner: 'a' | 'b'; method: MatchMethod; score?: string | null; rev?: string | null }) =>
+      api<{ affected: string[] }>('PUT', `/api/competitions/${id}/categories/${cid}/results/${matchId}`, data, { rev: rev !== undefined ? rev : resultRevOf(qc, id, cid, matchId) }),
     onSuccess: invalidate,
   });
 }
@@ -545,8 +546,8 @@ export function useDeleteResult(id: string) {
   const invalidate = useInvalidateResults(id);
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ cid, matchId }: { cid: string; matchId: string }) =>
-      api<void>('DELETE', `/api/competitions/${id}/categories/${cid}/results/${matchId}`, undefined, { rev: resultRevOf(qc, id, cid, matchId) }),
+    mutationFn: ({ cid, matchId, rev }: { cid: string; matchId: string; rev?: string | null }) =>
+      api<void>('DELETE', `/api/competitions/${id}/categories/${cid}/results/${matchId}`, undefined, { rev: rev !== undefined ? rev : resultRevOf(qc, id, cid, matchId) }),
     onSuccess: invalidate,
   });
 }

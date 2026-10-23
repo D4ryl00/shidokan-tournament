@@ -58,6 +58,8 @@ export function RegistrationForm({ competitionId, edit, onDone }: { competitionI
   const create = useCreateRegistration(competitionId);
   const update = useUpdateRegistration(competitionId);
   const [f, setF] = useState<FormState>(edit ? fromRow(edit) : EMPTY);
+  // Révision à l'ouverture du formulaire : une modification faite entre-temps sur un autre poste n'est pas écrasée.
+  const [openRev] = useState(edit?.rev);
   const [warning, setWarning] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const lastNameRef = useRef<HTMLInputElement>(null);
@@ -94,7 +96,7 @@ export function RegistrationForm({ competitionId, edit, onDone }: { competitionI
       source: edit ? (edit.source === 'onsite' || edit.source === 'manual' ? (f.onsite ? 'onsite' : 'manual') : edit.source) : f.onsite ? 'onsite' : 'manual',
     };
     if (edit) {
-      await update.mutateAsync({ rid: edit.id, input });
+      await update.mutateAsync({ rid: edit.id, input, rev: openRev });
       onDone?.();
       return;
     }
