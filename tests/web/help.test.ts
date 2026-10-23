@@ -91,3 +91,8 @@ test("annuaire : aide présente, elle parle du numéro d'affiliation et de la fu
   expect(all('annuaire')).toContain('affiliation');
   expect(all('annuaire')).toContain('Fusionner');
 });
+
+test("inscriptions en ligne : les liens ne s'affichent qu'une fois, figer met la page du club en lecture seule", () => {
+  expect(all('fiche-club.en-ligne')).toContain('une seule fois');
+  expect(all('fiche-club.en-ligne')).toContain('lecture seule');
+});

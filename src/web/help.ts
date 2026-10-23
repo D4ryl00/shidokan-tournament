@@ -20,6 +20,7 @@ export type HelpTopicId =
   | 'podiums'
   | 'reglages'
   | 'grille'
+  | 'fiche-club.en-ligne'
   | 'fiche-club.envoyer'
   | 'fiche-club.importer'
   | 'fiche-club.saisir'
@@ -116,6 +117,19 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     details: [
       'La fiche club apporte ce que l’export FFK n’a pas : le poids actuel, les disciplines acceptées en cas de reclassement, la priorité en shobu, le grade pour le kata et le coach.',
       'Elle part plusieurs semaines avant la compétition ; l’export FFK n’arrive qu’à la clôture des inscriptions.',
+    ],
+  },
+  'fiche-club.en-ligne': {
+    title: 'Inscriptions en ligne',
+    short: 'Chaque club invité reçoit un lien personnel pour inscrire et corriger lui-même ses combattants, jusqu’au gel.',
+    details: [
+      'Le coach ouvre son lien sur ordinateur ou sur téléphone. Il voit tous les combattants de son club dans cette compétition, quelle que soit leur origine (fiche, export FFK, saisie), et peut en ajouter, en modifier ou en retirer.',
+      [
+        'Cochez des clubs de l’annuaire puis « Inviter les clubs cochés » : un lien est créé pour chacun. Copiez-les tout de suite : pour des raisons de sécurité, un lien ne s’affiche qu’une seule fois.',
+        '« Régénérer le lien » crée un nouveau lien et désactive l’ancien (lien perdu, mauvais destinataire) ; « Révoquer » désactive le lien sans en créer d’autre.',
+        '« Ouvrir les inscriptions » rend les pages des clubs modifiables ; la date limite est seulement affichée aux clubs.',
+        '« Figer les inscriptions » met toutes les pages des clubs en lecture seule ; les changements suivants se font par l’organisation. On peut rouvrir.',
+      ],
     ],
   },
   'fiche-club.envoyer': {

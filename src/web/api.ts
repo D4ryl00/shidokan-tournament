@@ -576,3 +576,38 @@ export const useUpdateDirectoryEntry = () =>
   useDirectoryMutation(({ id, ...patch }: Partial<DirectoryInput> & { id: string; archived?: boolean }) => api<DirectoryEntry>('PATCH', `/api/club-directory/${id}`, patch));
 export const useMergeDirectoryEntries = () =>
   useDirectoryMutation((ids: { keepId: string; mergeId: string }) => api<DirectoryEntry>('POST', '/api/club-directory/merge', ids));
+
+// Inscriptions en ligne : liens personnels des clubs, ouverture et gel.
+export interface ClubInvitationRow {
+  clubId: string;
+  clubName: string;
+  directoryClubId: string | null;
+  coachEmail: string | null;
+  invited: boolean;
+  invitedAt: string | null;
+  lastUsedAt: string | null;
+  fighters: number;
+}
+export interface InvitationLink { clubId: string; clubName: string; token: string }
+export interface ClubEntrySettings { status: 'closed' | 'open' | 'frozen'; deadline: string | null; managedHere: boolean }
+
+export const useInvitations = (id: string) =>
+  useQuery({ queryKey: ['invitations', id], queryFn: () => api<ClubInvitationRow[]>('GET', `/api/competitions/${id}/invitations`) });
+export const useClubEntrySettings = (id: string) =>
+  useQuery({ queryKey: ['club-entry', id], queryFn: () => api<ClubEntrySettings>('GET', `/api/competitions/${id}/club-entry`) });
+
+function useOnlineEntryMutation<V, R>(id: string, fn: (v: V) => Promise<R>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => Promise.all([['invitations', id], ['club-entry', id], ['clubs', id], ['club-directory']].map((queryKey) => qc.invalidateQueries({ queryKey }))),
+  });
+}
+export const useInviteClubs = (id: string) =>
+  useOnlineEntryMutation(id, (directoryIds: string[]) => api<InvitationLink[]>('POST', `/api/competitions/${id}/invitations`, { directoryIds }));
+export const useRegenerateInvitation = (id: string) =>
+  useOnlineEntryMutation(id, (clubId: string) => api<InvitationLink>('POST', `/api/competitions/${id}/invitations/${clubId}/regenerate`));
+export const useRevokeInvitation = (id: string) =>
+  useOnlineEntryMutation(id, (clubId: string) => api<void>('DELETE', `/api/competitions/${id}/invitations/${clubId}`));
+export const useUpdateClubEntrySettings = (id: string) =>
+  useOnlineEntryMutation(id, (patch: { status?: 'open' | 'frozen'; deadline?: string | null }) => api<ClubEntrySettings>('PATCH', `/api/competitions/${id}/club-entry`, patch));

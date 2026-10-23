@@ -6,6 +6,7 @@ import { useGrid, useImportClubForm, usePreviewClubForm } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { ClubFormPreviewTable } from '../components/ClubFormPreviewTable.js';
 import { SectionHeader } from '../components/Help.js';
+import { OnlineEntryPanel } from '../components/OnlineEntryPanel.js';
 import { PaperEntryTable } from '../components/PaperEntryTable.js';
 
 export function ClubFormPage() {
@@ -37,6 +38,8 @@ export function ClubFormPage() {
 
   return (
     <Stack>
+      <OnlineEntryPanel competitionId={id} />
+
       <SectionHeader topic="fiche-club.envoyer" />
       <Group>
         <Anchor href={`/api/competitions/${id}/club-form.ods`} download data-testid="club-form-download">
