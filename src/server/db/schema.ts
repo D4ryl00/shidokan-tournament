@@ -493,7 +493,8 @@ export const zoneEntries = sqliteTable('zone_entries', {
   entryJson: text('entry_json').notNull(),
   status: text('status', { enum: ['applied', 'present', 'conflict', 'waiting', 'kept-zone', 'kept-pc'] }).notNull(),
   reason: text('reason'),
-  appliedRev: text('applied_rev'),
+  /** Révisions laissées par la saisie (appliquée ou déjà présente) : sa cible et les départages de la catégorie (JSON, clé → révision). */
+  ownRevsJson: text('own_revs_json'),
   receivedAt: text('received_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
   decidedAt: text('decided_at'),
   ...rowMeta(),

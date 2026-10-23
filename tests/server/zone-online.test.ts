@@ -147,3 +147,15 @@ test('repasser en ligne, tout en conflit, sans copie entre-temps : le portable n
     await fresh.close();
   }
 });
+
+test('kata : notes, départage, note corrigée (le départage est réécrit des deux côtés), nouveau départage → tout appliqué, aucun conflit', async () => {
+  const rids = f.kata.bracket!.entrants!.map((e) => e.registrationId);
+  const kata = (rid: string, notes: number[]) => f.onLaptop('PUT', `${f.base}/categories/${f.kata.id}/kata/${rid}/round1`, { notes });
+  const tieBreak = (order: string[]) => f.onLaptop('PUT', `${f.base}/categories/${f.kata.id}/tie-break`, { scope: 'kata', order });
+  for (const rid of rids) expect((await kata(rid, [8, 8, 8])).statusCode).toBe(204);
+  expect((await tieBreak(rids)).statusCode).toBe(204);
+  expect((await kata(rids[0]!, [9, 9, 9])).statusCode).toBe(204);
+  expect((await tieBreak([rids[2]!, rids[1]!])).statusCode).toBe(204);
+  const report = (await f.onLaptop('POST', '/api/zone-link/online')).json().report;
+  expect(report).toMatchObject({ received: 8, applied: 8, conflicts: 0, waiting: 0 });
+});

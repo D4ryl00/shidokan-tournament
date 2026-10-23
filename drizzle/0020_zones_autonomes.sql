@@ -11,7 +11,7 @@ CREATE TABLE `zone_entries` (
 	`entry_json` text NOT NULL,
 	`status` text NOT NULL,
 	`reason` text,
-	`applied_rev` text,
+	`own_revs_json` text,
 	`received_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	`decided_at` text,
 	`version` integer,

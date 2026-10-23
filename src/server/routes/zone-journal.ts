@@ -46,7 +46,8 @@ const journalSchema = z
     formatVersion: z.literal(1),
     competitionId: id,
     zoneId: id,
-    zoneName: z.string().min(1).max(100),
+    // Affichage seulement : le nom d'une zone n'a pas de limite, un journal ne doit jamais être refusé pour lui.
+    zoneName: z.string().max(1000),
     from: z.object({ instanceId: id, instanceName: z.string().max(100) }).strict(),
     entries: z.array(entrySchema).max(10_000),
   })

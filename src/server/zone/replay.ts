@@ -1,7 +1,7 @@
 import type { MatchMethod } from '../../domain/brackets/index.js';
 import type { AppDb } from '../db/client.js';
 import { deleteResult, matchEntrants, putKataNotes, putResult, putTieBreak } from '../repositories/results.js';
-import { kataRev, resultRev, tieBreakRev } from '../revisions.js';
+import { kataRev, resultRev, rowRev, tieBreakRev } from '../revisions.js';
 import { targetKey, type ZoneEntry, type ZoneJournalFile } from './entry.js';
 
 export type EntryStatus = 'applied' | 'present' | 'conflict' | 'waiting';
@@ -36,6 +36,15 @@ function alreadyThere(db: AppDb, e: ZoneEntry, entrants: [string, string] | null
   return JSON.stringify([...previous.filter((id) => !order.includes(id)), ...order]) === r.o;
 }
 
+/**
+ * Révisions laissées par une saisie de la zone (appliquée, ou déjà présente) : sa cible, et les départages de sa catégorie, qu'un
+ * résultat ou une note réécrit en passant. Une saisie suivante de la zone sur l'une d'elles n'est pas un conflit.
+ */
+function ownRevs(db: AppDb, e: ZoneEntry): Record<string, string> {
+  const tieBreaks = db.$client.prepare('select scope, version as v from tie_breaks where category_id = ?').all(e.categoryId) as { scope: string; v: number | null }[];
+  return { ...Object.fromEntries(tieBreaks.map((t) => [`tb:${t.scope}`, rowRev(t.v)])), [targetKey(e)]: currentRev(db, e) };
+}
+
 async function write(db: AppDb, competitionId: string, e: ZoneEntry): Promise<void> {
   if (e.kind === 'result') {
     const d = e.data as { winner: 'a' | 'b'; method: MatchMethod; score: string | null };
@@ -47,17 +56,17 @@ async function write(db: AppDb, competitionId: string, e: ZoneEntry): Promise<vo
 
 /**
  * Une entrée contre l'état actuel : en attente derrière un conflit de sa catégorie, conflit si les combattants ont changé, déjà
- * présente, appliquée si la donnée est celle que la zone avait lue (ou celle de sa propre saisie précédente), sinon conflit.
+ * présente, appliquée si la donnée est celle que la zone avait lue (ou celle laissée par sa propre saisie précédente), sinon conflit.
  * `apply` : l'écrire si possible ; `ignoreRev` : « Garder celui de la zone » (sans contrôle de révision, mêmes combattants exigés).
  */
 export async function evaluateEntry(
   db: AppDb,
   competitionId: string,
   e: ZoneEntry,
-  ctx: { blockedCategories: Set<string>; lastAppliedRev: (e: ZoneEntry) => string | null; apply: boolean; ignoreRev?: boolean },
-): Promise<{ status: EntryStatus; reason: string | null; appliedRev: string | null }> {
-  const conflict = (reason: string) => ({ status: 'conflict' as const, reason, appliedRev: null });
-  if (ctx.blockedCategories.has(e.categoryId)) return { status: 'waiting', reason: null, appliedRev: null };
+  ctx: { blockedCategories: Set<string>; ownRev: (e: ZoneEntry) => string | null; apply: boolean; ignoreRev?: boolean },
+): Promise<{ status: EntryStatus; reason: string | null; ownRevs: Record<string, string> | null }> {
+  const conflict = (reason: string) => ({ status: 'conflict' as const, reason, ownRevs: null });
+  if (ctx.blockedCategories.has(e.categoryId)) return { status: 'waiting', reason: null, ownRevs: null };
   let entrants: [string, string] | null = null;
   try {
     if (e.kind === 'result' || e.kind === 'delete') {
@@ -67,16 +76,16 @@ export async function evaluateEntry(
   } catch (err) {
     return conflict((err as Error).message);
   }
-  if (alreadyThere(db, e, entrants)) return { status: 'present', reason: null, appliedRev: null };
+  if (alreadyThere(db, e, entrants)) return { status: 'present', reason: null, ownRevs: ownRevs(db, e) };
   const rev = currentRev(db, e);
-  if (!ctx.ignoreRev && rev !== e.baseRev && rev !== ctx.lastAppliedRev(e)) return conflict(OTHER_ENTRY);
-  if (!ctx.apply) return { status: 'applied', reason: null, appliedRev: null };
+  if (!ctx.ignoreRev && rev !== e.baseRev && rev !== ctx.ownRev(e)) return conflict(OTHER_ENTRY);
+  if (!ctx.apply) return { status: 'applied', reason: null, ownRevs: null };
   try {
     await write(db, competitionId, e);
   } catch (err) {
     return conflict((err as Error).message);
   }
-  return { status: 'applied', reason: null, appliedRev: currentRev(db, e) };
+  return { status: 'applied', reason: null, ownRevs: ownRevs(db, e) };
 }
 
 /** Une réception à la fois par compétition (réseau et fichier en même temps, ou une décision pendant une réception). */
@@ -87,13 +96,18 @@ export function serialized<T>(competitionId: string, fn: () => Promise<T>): Prom
   return run;
 }
 
-/** Révision laissée par la dernière saisie appliquée de ce portable sur la même donnée (sa propre correction n'est pas un conflit). */
-export const lastAppliedRevOf = (db: AppDb, competitionId: string, fromInstanceId: string) => (e: ZoneEntry) =>
-  (
-    db.$client
-      .prepare("select applied_rev as r from zone_entries where competition_id = ? and from_instance_id = ? and category_id = ? and target_key = ? and seq < ? and status in ('applied', 'kept-zone') order by seq desc limit 1")
-      .get(competitionId, fromInstanceId, e.categoryId, targetKey(e), e.seq) as { r: string | null } | undefined
-  )?.r ?? null;
+/** Révision de la cible laissée par la dernière saisie de ce portable qui l'a touchée (sa propre correction n'est pas un conflit). */
+export const ownRevOf = (db: AppDb, competitionId: string, fromInstanceId: string) => (e: ZoneEntry) => {
+  const rows = db.$client
+    .prepare("select own_revs_json as r from zone_entries where competition_id = ? and from_instance_id = ? and category_id = ? and seq < ? and own_revs_json is not null and status in ('applied', 'present', 'kept-zone') order by seq desc")
+    .all(competitionId, fromInstanceId, e.categoryId, e.seq) as { r: string }[];
+  const key = targetKey(e);
+  for (const row of rows) {
+    const revs = JSON.parse(row.r) as Record<string, string>;
+    if (key in revs) return revs[key]!;
+  }
+  return null;
+};
 
 /** Catégories bloquées pour ce portable : une de ses entrées y est encore à trancher. */
 export const openCategories = (db: AppDb, competitionId: string, fromInstanceId: string) =>
@@ -107,18 +121,18 @@ export function receiveJournal(db: AppDb, journal: ZoneJournalFile): Promise<Jou
     const counts: JournalReport = { received: journal.entries.length, applied: 0, present: 0, conflicts: 0, waiting: 0, alreadyReceived: 0 };
     const from = journal.from.instanceId;
     const blocked = openCategories(db, journal.competitionId, from);
-    const lastAppliedRev = lastAppliedRevOf(db, journal.competitionId, from);
+    const ownRev = ownRevOf(db, journal.competitionId, from);
     const known = db.$client.prepare('select 1 from zone_entries where id = ?');
     const insert = db.$client.prepare(
-      'insert into zone_entries (id, competition_id, from_instance_id, zone_id, zone_name, seq, kind, category_id, target_key, entry_json, status, reason, applied_rev) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'insert into zone_entries (id, competition_id, from_instance_id, zone_id, zone_name, seq, kind, category_id, target_key, entry_json, status, reason, own_revs_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     );
     for (const e of [...journal.entries].sort((a, b) => a.seq - b.seq)) {
       if (known.get(e.id)) {
         counts.alreadyReceived++;
         continue;
       }
-      const r = await evaluateEntry(db, journal.competitionId, e, { blockedCategories: blocked, lastAppliedRev, apply: true });
-      insert.run(e.id, journal.competitionId, from, journal.zoneId, journal.zoneName, e.seq, e.kind, e.categoryId, targetKey(e), JSON.stringify(e), r.status, r.reason, r.appliedRev);
+      const r = await evaluateEntry(db, journal.competitionId, e, { blockedCategories: blocked, ownRev, apply: true });
+      insert.run(e.id, journal.competitionId, from, journal.zoneId, journal.zoneName, e.seq, e.kind, e.categoryId, targetKey(e), JSON.stringify(e), r.status, r.reason, r.ownRevs && JSON.stringify(r.ownRevs));
       if (r.status === 'conflict' || r.status === 'waiting') blocked.add(e.categoryId);
       counts[r.status === 'applied' ? 'applied' : r.status === 'present' ? 'present' : r.status === 'conflict' ? 'conflicts' : 'waiting']++;
     }
@@ -150,13 +164,13 @@ export function decideCard(db: AppDb, competitionId: string, entryId: string, ke
     if (row.status !== 'conflict' && row.status !== 'waiting') throw new CardError(409, 'Cette carte a déjà été tranchée.');
     const e = JSON.parse(row.e) as ZoneEntry;
     const now = new Date().toISOString();
-    const lastAppliedRev = lastAppliedRevOf(db, competitionId, row.from);
+    const ownRev = ownRevOf(db, competitionId, row.from);
     if (keep === 'zone') {
-      const r = await evaluateEntry(db, competitionId, e, { blockedCategories: new Set(), lastAppliedRev, apply: true, ignoreRev: true });
+      const r = await evaluateEntry(db, competitionId, e, { blockedCategories: new Set(), ownRev, apply: true, ignoreRev: true });
       if (r.status === 'conflict') {
         throw new CardError(409, r.reason === CHANGED_ENTRANTS ? 'Les combattants de ce combat ont changé : impossible de garder la saisie de la zone.' : (r.reason ?? 'Saisie refusée.'));
       }
-      db.$client.prepare("update zone_entries set status = 'kept-zone', reason = null, applied_rev = ?, decided_at = ? where id = ?").run(r.appliedRev, now, entryId);
+      db.$client.prepare("update zone_entries set status = 'kept-zone', reason = null, own_revs_json = ?, decided_at = ? where id = ?").run(r.ownRevs && JSON.stringify(r.ownRevs), now, entryId);
     } else {
       db.$client.prepare("update zone_entries set status = 'kept-pc', decided_at = ? where id = ?").run(now, entryId);
     }
@@ -166,8 +180,8 @@ export function decideCard(db: AppDb, competitionId: string, entryId: string, ke
       .all(competitionId, row.from, e.categoryId) as (EntryRow & { seq: number })[];
     for (const w of waiting) {
       if (w.status === 'conflict') break;
-      const r = await evaluateEntry(db, competitionId, JSON.parse(w.e) as ZoneEntry, { blockedCategories: new Set(), lastAppliedRev, apply: true });
-      db.$client.prepare('update zone_entries set status = ?, reason = ?, applied_rev = ? where id = ?').run(r.status, r.reason, r.appliedRev, w.id);
+      const r = await evaluateEntry(db, competitionId, JSON.parse(w.e) as ZoneEntry, { blockedCategories: new Set(), ownRev, apply: true });
+      db.$client.prepare('update zone_entries set status = ?, reason = ?, own_revs_json = ? where id = ?').run(r.status, r.reason, r.ownRevs && JSON.stringify(r.ownRevs), w.id);
       if (r.status === 'conflict') break;
     }
   });

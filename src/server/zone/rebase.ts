@@ -22,14 +22,13 @@ export async function rebaseOnto(db: AppDb, dbPath: string, raw: unknown): Promi
   await importPackage(db, dbPath, pkg, { id: pkg.from.instanceId, name: MAIN_NAME });
   const counts = { reapplied: 0, present: 0, conflicts: 0 };
   const blocked = new Set<string>();
-  const applied = new Map<string, string>();
-  const key = (e: { categoryId: string } & Parameters<typeof targetKey>[0]) => `${e.categoryId}|${targetKey(e)}`;
+  // Révisions laissées par les saisies déjà réappliquées (ou déjà présentes), par catégorie et cible.
+  const own = new Map<string, string>();
   for (const e of pendingEntries(db, link.competitionId)) {
-    const r = await evaluateEntry(db, link.competitionId, e, { blockedCategories: blocked, lastAppliedRev: (x) => applied.get(key(x)) ?? null, apply: true });
-    if (r.status === 'applied') {
-      applied.set(key(e), r.appliedRev!);
-      counts.reapplied++;
-    } else if (r.status === 'present') counts.present++;
+    const r = await evaluateEntry(db, link.competitionId, e, { blockedCategories: blocked, ownRev: (x) => own.get(`${x.categoryId}|${targetKey(x)}`) ?? null, apply: true });
+    for (const [k, rev] of Object.entries(r.ownRevs ?? {})) own.set(`${e.categoryId}|${k}`, rev);
+    if (r.status === 'applied') counts.reapplied++;
+    else if (r.status === 'present') counts.present++;
     else {
       blocked.add(e.categoryId);
       counts.conflicts++;

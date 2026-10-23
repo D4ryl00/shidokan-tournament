@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3351a896-ac7f-4cc3-9198-84c0a701d17e",
+  "id": "9c7c3749-3c65-4da9-b35e-c858524d17ef",
   "prevId": "6fb5f5ac-69e5-4e01-aab5-38466d09be91",
   "tables": {
     "age_bands": {
@@ -2689,8 +2689,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "applied_rev": {
-          "name": "applied_rev",
+        "own_revs_json": {
+          "name": "own_revs_json",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

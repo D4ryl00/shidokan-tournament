@@ -77,6 +77,21 @@ test('correction par la zone de sa propre saisie (seq 1 puis seq 2 sur le même 
   expect(await records(f.a54.id)).toMatchObject([{ matchId: 'w1-0', winner: 'b', method: 'decision' }]);
 });
 
+test('saisie déjà présente puis corrigée par la zone → present puis applied (la correction se compare à la première saisie)', async () => {
+  const first = await b.resultEntry(f.a54.id, 'w1-0');
+  await putOnMain(f.a54.id, 'w1-0', RESULT as Result); // la table centrale a saisi la même chose juste avant la coupure
+  const second = await b.resultEntry(f.a54.id, 'w1-0', { winner: 'b', method: 'decision', score: null }, { baseRev: '987654' });
+  expect((await b.send([first, second])).json()).toEqual(counts({ received: 2, present: 1, applied: 1 }));
+  expect(await records(f.a54.id)).toMatchObject([{ matchId: 'w1-0', winner: 'b', method: 'decision' }]);
+});
+
+test('nom de zone vide ou très long : le journal est reçu quand même', async () => {
+  for (const zoneName of ['', 'Z'.repeat(150)]) {
+    const res = await f.onMain('POST', `${f.base}/zone-journal`, b.journal([await b.resultEntry(f.a54.id, zoneName ? 'w1-1' : 'w1-0')], { zoneName }));
+    expect(res.statusCode).toBe(200);
+  }
+});
+
 test('effacement : applied, puis present ; effacement d’un résultat changé entre-temps → conflict', async () => {
   await putOnMain(f.a54.id, 'w1-0', RESULT as Result);
   expect((await b.send([await b.deleteEntry(f.a54.id, 'w1-0')])).json()).toEqual(counts({ received: 1, applied: 1 }));
