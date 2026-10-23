@@ -3,7 +3,7 @@ import { competitionChanged } from '../events.js';
 import { importPackage, PackageError, validatePackage, type SyncPackage } from '../sync/package.js';
 import { pendingEntries } from './autonomous.js';
 import { targetKey } from './entry.js';
-import { getZoneLink, MAIN_NAME } from './link.js';
+import { getZoneLink, MAIN_NAME, rememberCopy, ZoneLinkError } from './link.js';
 import { evaluateEntry } from './replay.js';
 
 /**
@@ -19,7 +19,9 @@ export async function rebaseOnto(db: AppDb, dbPath: string, raw: unknown): Promi
   }
   const pkg = validatePackage(db, raw);
   if (link.mainInstanceId && pkg.from.instanceId !== link.mainInstanceId) throw new PackageError('Cette copie ne vient pas du PC principal relié à ce portable.');
+  if (link.copyExportedAt && pkg.exportedAt < link.copyExportedAt) throw new ZoneLinkError(409, 'Cette copie est plus ancienne que celle de ce portable : rien n’a changé.');
   await importPackage(db, dbPath, pkg, { id: pkg.from.instanceId, name: MAIN_NAME });
+  rememberCopy(db, pkg);
   const counts = { reapplied: 0, present: 0, conflicts: 0 };
   const blocked = new Set<string>();
   // Révisions laissées par les saisies déjà réappliquées (ou déjà présentes), par catégorie et cible.

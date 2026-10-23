@@ -9,6 +9,8 @@ export interface ZoneLink {
   zoneId: string;
   /** Identité du PC principal, apprise à la première copie (pour reconnaître ses copies). */
   mainInstanceId?: string;
+  /** Date d'export (horloge du PC principal) de la copie actuelle : une copie plus ancienne n'est pas reprise pendant la coupure. */
+  copyExportedAt?: string;
   autonomous: { since: string; finals: boolean } | null;
 }
 
@@ -53,6 +55,12 @@ export async function fromMain<T>(mainUrl: string, path: string, init: RequestIn
   } catch (e) {
     throw new ZoneLinkError(502, `PC principal injoignable : ${(e as Error).message}.`);
   }
+}
+
+/** La copie actuelle vient de ce paquet : sa date d'export est retenue. */
+export function rememberCopy(db: AppDb, pkg: Pick<SyncPackage, 'exportedAt'>): void {
+  const current = getZoneLink(db);
+  if (current) setZoneLink(db, { ...current, copyExportedAt: pkg.exportedAt });
 }
 
 const status = new Map<string, { lastCopyAt: string | null; lastError: string | null; chain: Promise<unknown> }>();
@@ -125,6 +133,7 @@ async function copyNow(db: AppDb, dbPath: string, fetchImpl: typeof fetch): Prom
     return fail((e as Error).message);
   }
   db.$client.prepare('update competitions set server_fingerprint = ? where id = ?').run(pkg.fingerprint ?? null, link.competitionId);
+  rememberCopy(db, pkg);
   s.lastCopyAt = now.toISOString();
   s.lastError = null;
   return { ok: true };

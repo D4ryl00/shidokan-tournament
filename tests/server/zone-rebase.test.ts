@@ -70,6 +70,16 @@ test('toutes les entrées restent non envoyées ; « Repasser en ligne » ensuit
   expect(online.json().report).toEqual({ received: 3, applied: 2, present: 0, conflicts: 1, waiting: 0, alreadyReceived: 0 });
 });
 
+test('copie plus ancienne que celle du portable → 409, rien ne change', async () => {
+  const old = (await f.onMain('GET', `${f.base}/export.json`)).json();
+  await f.onMain('PUT', `${f.base}/categories/${f.a54.id}/results/w1-0`, RESULT);
+  expect((await refresh()).statusCode).toBe(200);
+  const res = await refresh(old);
+  expect(res.statusCode).toBe(409);
+  expect(res.json().error).toBe('Cette copie est plus ancienne que celle de ce portable : rien n’a changé.');
+  expect((await laptopRecords(f.a54.id)).map((r) => r.matchId)).toEqual(['w1-0']);
+});
+
 test('fichier d’une autre compétition → 400 ; hors zone autonome → 409', async () => {
   const other = (await f.onMain('POST', '/api/competitions', { name: 'Open', date: '2026-12-06' })).json().id as string;
   const pkg = (await f.onMain('GET', `/api/competitions/${other}/export.json`)).json();
