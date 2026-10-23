@@ -1,18 +1,7 @@
-# À adapter : le nom de domaine (ligne suivante) et l'empreinte du mot de passe organisateur (bloc basic_auth).
-inscriptions.exemple.fr {
+# Le nom de domaine du serveur (certificat HTTPS obtenu et renouvelé automatiquement).
+# La connexion des organisateurs est faite par l'application ; Caddy ne tient pas de journal d'accès (les adresses des pages
+# des clubs contiennent leur lien personnel).
+competitions.shidokanfrance.com {
 	encode gzip
-
-	# Pages des clubs : ouvertes avec leur lien personnel, sans mot de passe.
-	@public path /inscription/* /api/inscription/* /assets/* /favicon.webp /shidokan-france-logo.png /shidokan-france-logo.webp /api/health
-	handle @public {
-		reverse_proxy app:3000
-	}
-
-	# Tout le reste (l'application des organisateurs) : mot de passe obligatoire, en attendant les comptes de l'étape C.
-	handle {
-		basic_auth {
-			organisateur REMPLACER_PAR_L_EMPREINTE
-		}
-		reverse_proxy app:3000
-	}
+	reverse_proxy app:3000
 }

@@ -31,7 +31,7 @@ Il n'y a **pas d'internet sur place** : construisez l'image (`docker compose up 
 
 ## Mise en ligne (inscriptions des clubs)
 
-Pour installer l'application sur un serveur, à partir de l'image publiée sur Docker Hub (`d4ryl00/shidokan-tournament`) et derrière Caddy (HTTPS automatique, mot de passe pour les organisateurs) : voir [docs/installation-serveur.md](docs/installation-serveur.md), avec les fichiers `deploy/compose.yaml` et `deploy/Caddyfile`.
+En ligne, l'application tourne en rôle serveur (`INSTANCE_ROLE=serveur`) : connexion obligatoire pour les organisateurs, pages des clubs ouvertes avec leur lien personnel, envoi des liens par mail. Installation sur un serveur Ubuntu, à partir de l'image publiée sur Docker Hub (`d4ryl00/shidokan-tournament`) et derrière Caddy (HTTPS automatique) : voir [docs/installation-serveur.md](docs/installation-serveur.md), avec `deploy/compose.yaml` et `deploy/Caddyfile`.
 
 ## Déroulé d'une compétition
 

@@ -1,4 +1,4 @@
-# Installation sur un serveur : l'application (image publiée sur Docker Hub) derrière Caddy (HTTPS automatique, mot de passe organisateur).
+# Installation sur un serveur : l'application (image publiée sur Docker Hub) en rôle « serveur » derrière Caddy (HTTPS automatique).
 # Procédure : docs/installation-serveur.md
 services:
   app:
@@ -7,7 +7,9 @@ services:
     volumes:
       - ./data:/data
     environment:
+      - INSTANCE_ROLE=serveur
       - INSTANCE_NAME=SERVEUR
+      - PUBLIC_URL=https://competitions.shidokanfrance.com
       - BACKUP_INTERVAL_MIN=30
     # Pas de port publié : seul Caddy y accède.
 
