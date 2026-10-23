@@ -123,3 +123,46 @@ test('restauration d’une sauvegarde d’une version plus récente : refus expl
   expect(res.statusCode).toBe(400);
   expect(res.json().error).toContain('version plus récente');
 });
+
+/** Base d'une autre installation : une compétition par valeur de owner_instance_id, et la sauvegarde de cette base. */
+async function otherInstallBackup(owners: (instanceIds: { source: string; local: string }) => Record<string, string | null>): Promise<Buffer> {
+  const otherPath = tmpDbPath();
+  const other = await buildApp({ dbPath: otherPath, instanceName: 'SERVEUR' });
+  for (const name of ['Source', 'Locale', 'Tierce']) {
+    await other.inject({ method: 'POST', url: '/api/competitions', payload: { name, date: '2026-11-22' } });
+  }
+  const snapshot = (await other.inject({ method: 'GET', url: '/api/backup.sqlite' })).rawPayload;
+  await other.close();
+  const file = path.join(path.dirname(otherPath), 'modifiee.sqlite');
+  fs.writeFileSync(file, snapshot);
+  const r = new Database(file);
+  const source = (r.prepare('select id from instance').get() as { id: string }).id;
+  const local = (new Database(dbPath, { readonly: true }).prepare('select id from instance').get() as { id: string }).id;
+  for (const [name, owner] of Object.entries(owners({ source, local }))) r.prepare('update competitions set owner_instance_id = ? where name = ?').run(owner, name);
+  r.close();
+  return fs.readFileSync(file);
+}
+
+const localInstance = () => new Database(dbPath, { readonly: true }).prepare('select id, name from instance').get();
+
+test("restauration : l'identité locale ne change pas", async () => {
+  const before = localInstance();
+  const backup = await otherInstallBackup(() => ({}));
+  const res = await app.inject({ method: 'POST', url: '/api/restore', payload: backup, headers: { 'content-type': 'application/octet-stream' } });
+  expect(res.statusCode).toBe(204);
+  expect(localInstance()).toEqual(before);
+});
+
+test('restauration : une compétition gérée par l’installation d’origine ou locale redevient « gérée ici » ; une tierce garde sa valeur', async () => {
+  const backup = await otherInstallBackup(({ source, local }) => ({ Source: source, Locale: local, Tierce: 'pc-tiers' }));
+  const res = await app.inject({ method: 'POST', url: '/api/restore', payload: backup, headers: { 'content-type': 'application/octet-stream' } });
+  expect(res.statusCode).toBe(204);
+  const owners = new Database(dbPath, { readonly: true }).prepare('select name, owner_instance_id as owner from competitions order by name').all();
+  expect(owners).toEqual([
+    { name: 'Locale', owner: null },
+    { name: 'Source', owner: null },
+    { name: 'Tierce', owner: 'pc-tiers' },
+  ]);
+});
+
+test.todo("restauration d'une sauvegarde de l'étape 14 (olderDb(13), avec un club) : mise à niveau, lignes versionnées, club relié à l'annuaire");

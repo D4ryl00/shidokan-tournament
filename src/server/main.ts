@@ -6,6 +6,7 @@ const app = await buildApp({
   webDistDir: process.env.WEB_DIST_DIR ?? 'dist/web',
   logger: process.env.LOG !== 'off',
   backupIntervalMin: Number(process.env.BACKUP_INTERVAL_MIN ?? 5),
+  instanceName: process.env.INSTANCE_NAME || process.env.COMPUTERNAME || 'PC',
 });
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

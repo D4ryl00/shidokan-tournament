@@ -99,7 +99,10 @@ export async function restoreFrom(db: AppDb, file: Buffer, beforeCopy: () => Pro
       if (migrations !== current) throw new RestoreError();
     }
     await beforeCopy(); // sauvegarde de sécurité, seulement pour un fichier valide
-    const tables = (client.prepare("select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name <> '__drizzle_migrations'").all() as { name: string }[]).map((t) => t.name);
+    // L'identité de l'installation n'est jamais copiée : une copie de base ne donne pas la même identité à un autre PC.
+    const tables = (
+      client.prepare("select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name not in ('__drizzle_migrations', 'instance')").all() as { name: string }[]
+    ).map((t) => t.name);
     client.pragma('foreign_keys = OFF');
     client.exec(`ATTACH DATABASE ${quote(tmp)} AS src`);
     try {
@@ -109,6 +112,10 @@ export async function restoreFrom(db: AppDb, file: Buffer, beforeCopy: () => Pro
           const cols = (client.prepare(`select name from pragma_table_info('${t}')`).all() as { name: string }[]).map((c) => `"${c.name}"`).join(', ');
           client.exec(`DELETE FROM main."${t}"`);
           client.exec(`INSERT INTO main."${t}" (${cols}) SELECT ${cols} FROM src."${t}"`);
+        }
+        // Restaurer, c'est reprendre la main sur ce que gérait l'installation d'origine ; et une installation n'est jamais « l'autre » pour elle-même.
+        if (client.prepare("select 1 from src.sqlite_master where type = 'table' and name = 'instance'").get()) {
+          client.exec('UPDATE main.competitions SET owner_instance_id = NULL WHERE owner_instance_id IN (SELECT id FROM src.instance UNION SELECT id FROM main.instance)');
         }
       })();
     } finally {

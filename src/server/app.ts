@@ -29,6 +29,7 @@ import { launchRoutes } from './routes/launches.js';
 import { zoneRoutes } from './routes/zones.js';
 import { backupRoutes } from './routes/backups.js';
 import { RestoreError, startAutoBackup } from './repositories/backups.js';
+import { ensureInstance } from './repositories/instance.js';
 import { ffkImportRoutes } from './routes/ffk-import.js';
 import { registrationRoutes } from './routes/registrations.js';
 import { UnreadableFileError } from './spreadsheet/read.js';
@@ -39,6 +40,8 @@ export interface AppOptions {
   backupIntervalMin?: number;
   webDistDir?: string;
   logger?: boolean;
+  /** Nom de cette installation (« Gérée par le PC … »), utilisé à sa création seulement. */
+  instanceName?: string;
 }
 
 const NOT_FOUND = { error: 'Compétition introuvable' };
@@ -46,6 +49,7 @@ const NOT_FOUND = { error: 'Compétition introuvable' };
 export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 20 * 1024 * 1024 });
   const db = openDb(opts.dbPath);
+  ensureInstance(db, opts.instanceName ?? 'PC');
   const stopBackups = startAutoBackup(db, opts.dbPath, opts.backupIntervalMin ?? 0, (e) => app.log.error(e));
   app.addHook('onClose', async () => {
     stopBackups();

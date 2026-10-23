@@ -8,4 +8,7 @@ services:
       - ./data:/data
     environment:
       - BACKUP_INTERVAL_MIN=${BACKUP_INTERVAL_MIN:-5}
+      # Nom de cette installation (par défaut le nom du PC Windows).
+      - INSTANCE_NAME=${INSTANCE_NAME:-}
+      - COMPUTERNAME=${COMPUTERNAME:-}
     restart: unless-stopped
