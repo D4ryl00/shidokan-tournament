@@ -145,3 +145,44 @@ test('règle de garde : chaque table de compétition voyage ou reste expliciteme
   const a = await seeded();
   expect(unclassifiedTables(a.db)).toEqual([]);
 });
+
+test('paquet piégé par une référence vers une autre compétition (catégorie, combattant) → 400, rien n’est écrit', async () => {
+  const a = await seeded();
+  const b = await seeded();
+  const otherCategory = (b.db.$client.prepare('select id from categories where competition_id = ? limit 1').get(b.id) as { id: string }).id;
+  const otherFighter = (b.db.$client.prepare('select id from fighters where competition_id = ? limit 1').get(b.id) as { id: string }).id;
+  const pkg = buildPackage(a.db, a.id, { handOver: false, role: 'local' });
+  const trapped1 = { ...pkg, tables: { ...pkg.tables, match_results: [...pkg.tables.match_results!, { ...pkg.tables.match_results![0]!, category_id: otherCategory, match_id: 'w9-9' }] } };
+  await expect(importPackage(b.db, b.dbPath, trapped1, null)).rejects.toThrow('Paquet invalide : des données appartiennent à une autre compétition.');
+  const trapped2 = { ...pkg, tables: { ...pkg.tables, registrations: pkg.tables.registrations!.map((r, i) => (i === 0 ? { ...r, fighter_id: otherFighter } : r)) } };
+  await expect(importPackage(b.db, b.dbPath, trapped2, null)).rejects.toThrow('Paquet invalide : des données appartiennent à une autre compétition.');
+  expect(b.db.$client.prepare('select count(*) as n from competitions where id = ?').get(a.id)).toEqual({ n: 0 });
+});
+
+test('valeurs trafiquées (version géante, objet, booléen) → 400 ; le compteur de versions reste un entier', async () => {
+  const a = await seeded();
+  const b = await seeded();
+  const pkg = buildPackage(a.db, a.id, { handOver: false, role: 'local' });
+  const huge = { ...pkg, tables: { ...pkg.tables, zones: pkg.tables.zones!.map((z) => ({ ...z, version: 9223372036854775807 })) } };
+  await expect(importPackage(b.db, b.dbPath, huge, null)).rejects.toThrow(/^Paquet invalide/);
+  const object = { ...pkg, tables: { ...pkg.tables, zones: pkg.tables.zones!.map((z) => ({ ...z, name: { x: 1 } })) } };
+  await expect(importPackage(b.db, b.dbPath, object, null)).rejects.toThrow(/^Paquet invalide/);
+  const missing = { ...pkg, tables: { ...pkg.tables, zones: pkg.tables.zones!.map(({ name: _n, ...z }) => z) } };
+  await expect(importPackage(b.db, b.dbPath, missing, null)).rejects.toThrow(/^Paquet invalide/);
+  expect(b.db.$client.prepare('select typeof(value) as t from change_counter').get()).toEqual({ t: 'integer' });
+});
+
+test('le paquet ne contient jamais l’état de la main ; seules les fiches d’annuaire reliées sont ajoutées', async () => {
+  const a = await seeded();
+  const b = await seeded();
+  a.db.$client.prepare("update competitions set owner_instance_id = 'pc-x', owner_name = 'PC-X' where id = ?").run(a.id);
+  const pkg = buildPackage(a.db, a.id, { handOver: false, role: 'serveur' });
+  expect(pkg.tables.competitions![0]).not.toHaveProperty('owner_instance_id');
+  expect(pkg.tables.competitions![0]).not.toHaveProperty('owner_name');
+  const before = (b.db.$client.prepare('select count(*) as n from club_directory').get() as { n: number }).n;
+  const linked = new Set(pkg.tables.clubs!.map((c) => c.directory_club_id));
+  const withExtra = { ...pkg, directory: [...pkg.directory, { id: 'orpheline', name: 'Orpheline', name_key: 'ORPHELINE', archived: 0, created_at: '2026-01-01T00:00:00.000Z' }] };
+  await importPackage(b.db, b.dbPath, withExtra, null);
+  expect(b.db.$client.prepare("select count(*) as n from club_directory where id = 'orpheline'").get()).toEqual({ n: 0 });
+  expect((b.db.$client.prepare('select count(*) as n from club_directory').get() as { n: number }).n).toBeLessThanOrEqual(before + linked.size);
+});

@@ -1,0 +1,1 @@
+ALTER TABLE `competitions` ADD `owner_token_id` text;

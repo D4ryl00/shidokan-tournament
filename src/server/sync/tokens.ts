@@ -22,12 +22,12 @@ export function revokeSyncToken(db: AppDb, id: string): void {
   if (!db.update(syncTokens).set({ revokedAt: new Date().toISOString() }).where(eq(syncTokens.id, id)).run().changes) throw new NotFoundError('Jeton introuvable');
 }
 
-/** Vrai pour un en-tête `Bearer <jeton>` d'un jeton actif (sa dernière utilisation est notée). */
-export function checkSyncToken(db: AppDb, authorization: string | undefined): boolean {
+/** Identifiant du jeton actif d'un en-tête `Bearer <jeton>` (sa dernière utilisation est notée), sinon null. */
+export function checkSyncToken(db: AppDb, authorization: string | undefined): string | null {
   const token = authorization?.match(/^Bearer\s+(\S+)$/)?.[1];
-  if (!token) return false;
+  if (!token) return null;
   const row = db.select().from(syncTokens).where(and(eq(syncTokens.tokenHash, hash(token)), isNull(syncTokens.revokedAt))).get();
-  if (!row) return false;
+  if (!row) return null;
   db.update(syncTokens).set({ lastUsedAt: new Date().toISOString() }).where(eq(syncTokens.id, row.id)).run();
-  return true;
+  return row.id;
 }

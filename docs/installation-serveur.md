@@ -106,7 +106,7 @@ La compétition se déroule sur le PC de la salle, sans internet. Une compétiti
 - Sur le serveur, cochez « et donner la main au PC qui l'importera ».
 - Au retour, importez le fichier du PC en ligne, et confirmez « Reprendre la main ».
 
-**PC perdu ou en panne** : en ligne, section « Échanges avec le serveur », « Reprendre la main ».
+**PC perdu ou en panne** : en ligne, section « Échanges avec le serveur », « Reprendre la main ». **Révoquez aussi le jeton de ce PC** (Réglages de l'application → Synchronisation) : il permet de lire toutes les compétitions du serveur.
 - Elle repart de la version du serveur, ou de la dernière copie reçue pendant la journée.
 - Si un second PC a continué la compétition, exportez-la en fichier depuis ce PC, puis importez-la en ligne.
 

@@ -4,7 +4,7 @@ import type { InstanceRole } from '../auth/guard.js';
 import type { AppDb } from '../db/client.js';
 import { getInstance } from '../repositories/instance.js';
 import { NotFoundError } from '../repositories/registrations.js';
-import { getSyncServer, rememberServerInstance, remote, setSyncServer } from '../sync/client.js';
+import { clearSyncServer, getSyncServer, rememberServerInstance, remote, setSyncServer, syncUrlAllowed } from '../sync/client.js';
 import { getManagement } from '../sync/ownership.js';
 import { buildPackage, importPackage, type SyncPackage } from '../sync/package.js';
 
@@ -13,49 +13,68 @@ class SyncConflictError extends Error {
 }
 
 const SERVER_NAME = 'le serveur en ligne';
-const FILE_OWNER = { id: 'file', name: 'un PC (par fichier)' };
+/** Nom affiché d'une copie du serveur : celui du serveur, et le PC qui a la main s'il y en a un. */
+const serverCopyName = (heldBy: string | null | undefined) => (heldBy ? `${SERVER_NAME} — la main est à ${heldBy}` : SERVER_NAME);
 
-/** Côté PC : relier au serveur et faire les gestes ; dans les deux rôles : échange par fichier. */
-export async function syncLocalRoutes(app: FastifyInstance, { db, dbPath, role }: { db: AppDb; dbPath: string; role: InstanceRole }) {
-  const exists = (id: string) => !!db.$client.prepare('select 1 from competitions where id = ?').get(id);
+const exists = (db: AppDb, id: string) => !!db.$client.prepare('select 1 from competitions where id = ?').get(id);
+const migrations = (db: AppDb) => (db.$client.prepare('select count(*) as n from __drizzle_migrations').get() as { n: number }).n;
+
+/** PC de la compétition (rôle local) : relier au serveur et faire les gestes. */
+export async function syncLocalRoutes(app: FastifyInstance, { db, dbPath }: { db: AppDb; dbPath: string }) {
   const me = () => {
     const i = getInstance(db);
     return { instanceId: i?.id ?? 'inconnue', instanceName: i?.name ?? 'PC' };
   };
   const mustManageHere = (id: string) => {
-    if (!exists(id)) throw new NotFoundError('Compétition introuvable');
+    if (!exists(db, id)) throw new NotFoundError('Compétition introuvable');
     if (!getManagement(db, id).managedHere) throw new SyncConflictError('Ce PC n’a pas la main sur cette compétition.');
   };
+  const settingsView = () => {
+    const s = getSyncServer(db);
+    return { url: s?.url ?? null, hasToken: !!s?.token };
+  };
+  const setOwner = (id: string, owner: { id: string; name: string } | null) => {
+    const now = new Date().toISOString();
+    db.$client.prepare('update competitions set owner_instance_id = ?, owner_name = ?, owner_since = ?, last_sync_at = ? where id = ?').run(owner?.id ?? null, owner?.name ?? null, owner ? now : null, now, id);
+  };
 
-  app.get('/api/sync/settings', async () => {
-    const s = getSyncServer(db);
-    return { url: s?.url ?? null, hasToken: !!s?.token };
-  });
+  app.get('/api/sync/settings', async () => settingsView());
   app.patch('/api/sync/settings', async (req) => {
-    const patch = z.object({ url: z.string().trim().url().max(300), token: z.string().trim().max(200).nullable() }).strict().parse(req.body);
+    const patch = z
+      .object({
+        url: z.string().trim().max(300).refine(syncUrlAllowed, 'L’adresse du serveur doit commencer par https://'),
+        token: z.string().trim().max(200).nullable(),
+      })
+      .strict()
+      .parse(req.body);
     setSyncServer(db, patch);
-    const s = getSyncServer(db);
-    return { url: s?.url ?? null, hasToken: !!s?.token };
+    return settingsView();
+  });
+  app.delete('/api/sync/settings', async (_req, reply) => {
+    clearSyncServer(db);
+    return reply.status(204).send();
   });
 
   app.get('/api/sync/server-competitions', async () => remote(db, 'GET', '/competitions'));
 
   app.post('/api/sync/pull', async (req) => {
-    const { competitionId, take } = z.object({ competitionId: z.string().min(1), take: z.boolean() }).parse(req.body);
+    const { competitionId, take } = z.object({ competitionId: z.string().min(1).max(100), take: z.boolean() }).parse(req.body);
     // Ce PC a la main : récupérer depuis le serveur écraserait son travail.
-    if (exists(competitionId) && getManagement(db, competitionId).managedHere) {
+    if (exists(db, competitionId) && getManagement(db, competitionId).managedHere) {
       throw new SyncConflictError('Ce PC a la main sur cette compétition : envoyez une copie au serveur ou rendez-lui la main.');
     }
+    const path = `/competitions/${encodeURIComponent(competitionId)}`;
     const pkg = take
-      ? await remote<SyncPackage>(db, 'POST', `/competitions/${competitionId}/take`, me())
-      : await remote<SyncPackage>(db, 'GET', `/competitions/${competitionId}/package`);
+      ? await remote<SyncPackage>(db, 'POST', `${path}/take`, { ...me(), migrations: migrations(db) })
+      : await remote<SyncPackage>(db, 'GET', `${path}/package`);
+    if (pkg?.competitionId !== competitionId) throw new SyncConflictError('Le serveur a renvoyé une autre compétition : vérifiez son adresse.');
     rememberServerInstance(db, pkg.from.instanceId);
-    return importPackage(db, dbPath, pkg, take ? null : { id: pkg.from.instanceId, name: SERVER_NAME });
+    return importPackage(db, dbPath, pkg, take ? null : { id: pkg.from.instanceId, name: serverCopyName(pkg.heldBy) });
   });
 
   app.post<{ Params: { id: string } }>('/api/competitions/:id/sync/copy', async (req) => {
     mustManageHere(req.params.id);
-    await remote(db, 'POST', `/competitions/${req.params.id}/copy`, buildPackage(db, req.params.id, { handOver: false, role }));
+    await remote(db, 'POST', `/competitions/${encodeURIComponent(req.params.id)}/copy`, buildPackage(db, req.params.id, { handOver: false, role: 'local' }));
     const sentAt = new Date().toISOString();
     db.$client.prepare('update competitions set last_sync_at = ? where id = ?').run(sentAt, req.params.id);
     return { sentAt };
@@ -63,26 +82,29 @@ export async function syncLocalRoutes(app: FastifyInstance, { db, dbPath, role }
 
   app.post<{ Params: { id: string } }>('/api/competitions/:id/sync/return', async (req, reply) => {
     mustManageHere(req.params.id);
-    await remote(db, 'POST', `/competitions/${req.params.id}/return`, buildPackage(db, req.params.id, { handOver: true, role }));
+    // Lecture seule d'abord : une saisie faite pendant l'envoi serait perdue. En cas d'échec, la main revient au PC.
     const serverId = getSyncServer(db)?.serverInstanceId ?? 'serveur';
-    const now = new Date().toISOString();
-    db.$client.prepare('update competitions set owner_instance_id = ?, owner_name = ?, owner_since = ?, last_sync_at = ? where id = ?').run(serverId, SERVER_NAME, now, now, req.params.id);
+    setOwner(req.params.id, { id: serverId, name: SERVER_NAME });
+    try {
+      const pkg = buildPackage(db, req.params.id, { handOver: true, role: 'local' });
+      const res = await remote<{ instanceId?: string }>(db, 'POST', `/competitions/${encodeURIComponent(req.params.id)}/return`, pkg);
+      if (res?.instanceId) {
+        rememberServerInstance(db, res.instanceId);
+        setOwner(req.params.id, { id: res.instanceId, name: SERVER_NAME });
+      }
+    } catch (e) {
+      setOwner(req.params.id, null);
+      throw e;
+    }
     return reply.status(204).send();
   });
+}
 
-  // Fichier (sans internet) : export et import, dans les deux rôles.
-  app.get<{ Params: { id: string }; Querystring: { handOver?: string } }>('/api/competitions/:id/export.json', async (req, reply) => {
-    if (!exists(req.params.id)) throw new NotFoundError('Compétition introuvable');
-    const handOver = role === 'serveur' && req.query.handOver === '1';
-    if (handOver) {
-      if (!getManagement(db, req.params.id).managedHere) throw new SyncConflictError('Cette compétition est déjà gérée ailleurs.');
-      const now = new Date().toISOString();
-      db.$client
-        .prepare("update competitions set owner_instance_id = ?, owner_name = ?, owner_since = ?, last_sync_at = ?, club_entry_status = 'frozen' where id = ?")
-        .run(FILE_OWNER.id, FILE_OWNER.name, now, now, req.params.id);
-    }
-    const pkg = buildPackage(db, req.params.id, { handOver, role });
-    if (handOver) pkg.tables.competitions![0] = { ...pkg.tables.competitions![0], owner_instance_id: null, owner_name: null, owner_since: null };
+/** Les deux rôles : échange d'une compétition par fichier (sans internet). */
+export async function syncFileRoutes(app: FastifyInstance, { db, dbPath, role }: { db: AppDb; dbPath: string; role: InstanceRole }) {
+  app.get<{ Params: { id: string } }>('/api/competitions/:id/export.json', async (req, reply) => {
+    if (!exists(db, req.params.id)) throw new NotFoundError('Compétition introuvable');
+    const pkg = buildPackage(db, req.params.id, { handOver: false, role });
     const name = String(pkg.tables.competitions![0]!.name).normalize('NFD').replace(/[^\w-]+/g, '-').replace(/-+/g, '-').slice(0, 60);
     return reply.header('Content-Disposition', `attachment; filename="competition-${name}.json"`).send(pkg);
   });
@@ -90,14 +112,21 @@ export async function syncLocalRoutes(app: FastifyInstance, { db, dbPath, role }
   app.post<{ Querystring: { replace?: string; takeOver?: string } }>('/api/competitions/import', async (req) => {
     const pkg = req.body as Partial<SyncPackage> | null;
     const id = typeof pkg?.competitionId === 'string' ? pkg.competitionId : null;
-    const present = id !== null && exists(id);
+    const present = id !== null && exists(db, id);
+    const plainServerCopy = pkg?.handOver === false && pkg.from?.role === 'serveur';
     if (present) {
       const m = getManagement(db, id!);
       if (m.managedHere && req.query.replace !== '1') throw new SyncConflictError('Cette compétition existe déjà ici : confirmez son remplacement.');
-      if (!m.managedHere && req.query.takeOver !== '1') throw new SyncConflictError(`Cette compétition est gérée par ${m.ownerName ?? 'une autre installation'} : confirmez la reprise de la main avec ce fichier.`);
+      if (!m.managedHere) {
+        // Sur le PC, une simple copie du serveur ne donne pas la main : sinon la compétition serait modifiable des deux côtés.
+        if (role === 'local' && plainServerCopy) {
+          throw new SyncConflictError('Ce fichier est une simple copie du serveur : il ne donne pas la main. Prenez la main depuis le serveur, ou exportez-la en ligne en donnant la main au PC.');
+        }
+        if (req.query.takeOver !== '1') throw new SyncConflictError(`Cette compétition est gérée par ${m.ownerName ?? 'une autre installation'} : confirmez la reprise de la main avec ce fichier.`);
+      }
     }
     // Copie simple venue du serveur (sans la main) : gardée en lecture seule ; tout le reste est géré ici.
-    const readOnly = !present && pkg?.handOver === false && pkg.from?.role === 'serveur';
-    return importPackage(db, dbPath, pkg, readOnly ? { id: pkg!.from!.instanceId, name: SERVER_NAME } : null);
+    const readOnly = role === 'local' && plainServerCopy;
+    return importPackage(db, dbPath, pkg, readOnly ? { id: pkg!.from!.instanceId, name: serverCopyName(pkg!.heldBy) } : null);
   });
 }

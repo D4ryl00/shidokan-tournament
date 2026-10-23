@@ -16,6 +16,8 @@ export interface SyncPackage {
   from: { instanceId: string; instanceName: string; role: InstanceRole };
   /** Vrai : le destinataire prend la main (prise de main, retour, fichier « donner la main »). */
   handOver: boolean;
+  /** Copie servie par le serveur alors qu'un PC a la main : son nom (affiché sur la copie), sinon null. */
+  heldBy?: string | null;
   competitionId: string;
   tables: Record<string, Record<string, unknown>[]>;
   directory: Record<string, unknown>[];
@@ -40,6 +42,24 @@ export class PackageError extends Error {
   readonly statusCode = 400;
 }
 
+/** État de la main : propre à chaque installation, il ne voyage jamais dans un paquet. */
+const OWNER_COLUMNS = ['owner_instance_id', 'owner_name', 'owner_since', 'owner_token_id', 'last_sync_at'];
+
+/**
+ * Colonnes qui désignent une ligne d'une autre table (sans clé étrangère en base pour la plupart) : une valeur qui désigne une ligne
+ * d'une autre compétition est refusée (elle ferait apparaître des données dans cette autre compétition).
+ */
+const REFERENCES: [table: string, column: string, target: string][] = [
+  ['registrations', 'fighter_id', 'fighters'], ['registrations', 'category_id', 'categories'], ['fighters', 'club_id', 'clubs'],
+  ['categories', 'zone_id', 'zones'], ['categories', 'wave_override', 'waves'], ['frozen_passages', 'zone_id', 'zones'],
+  ['frozen_passages', 'category_id', 'categories'], ['match_results', 'category_id', 'categories'], ['match_results', 'entrant_a', 'registrations'],
+  ['match_results', 'entrant_b', 'registrations'], ['kata_scores', 'category_id', 'categories'], ['kata_scores', 'registration_id', 'registrations'],
+  ['tie_breaks', 'category_id', 'categories'], ['recasements', 'registration_id', 'registrations'], ['wave_launches', 'wave_key', 'waves'],
+];
+
+/** Valeur acceptée dans une ligne : texte, nombre fini dans l'intervalle des entiers sûrs, ou vide. */
+const scalar = (v: unknown) => v === null || typeof v === 'string' || (typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= Number.MAX_SAFE_INTEGER);
+
 const APP_VERSION = (() => {
   try {
     return (JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../../../package.json'), 'utf8')) as { version: string }).version;
@@ -59,6 +79,7 @@ export function buildPackage(db: AppDb, competitionId: string, opts: { handOver:
   for (const t of PACKAGE_TABLES) {
     tables[t] = db.$client.prepare(`select * from "${t}" where ${competitionColumn(t)} = ?`).all(competitionId) as Record<string, unknown>[];
   }
+  tables.competitions = tables.competitions!.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => !OWNER_COLUMNS.includes(k))));
   if (tables.competitions!.length !== 1) throw new PackageError('Compétition introuvable');
   const directory = db.$client
     .prepare('select * from club_directory where id in (select directory_club_id from clubs where competition_id = ?)')
@@ -70,7 +91,8 @@ export function buildPackage(db: AppDb, competitionId: string, opts: { handOver:
   };
 }
 
-function checkPackage(db: AppDb, raw: unknown): SyncPackage {
+/** Contrôles d'un paquet reçu (réseau ou fichier), avant toute écriture ; renvoie le paquet typé. */
+export function validatePackage(db: AppDb, raw: unknown): SyncPackage {
   const pkg = raw as Partial<SyncPackage> | null;
   if (!pkg || pkg.format !== 'shidokan-competition' || pkg.formatVersion !== 1 || typeof pkg.competitionId !== 'string' || !pkg.tables || typeof pkg.tables !== 'object') {
     throw new PackageError('Ce fichier n’est pas une compétition exportée par l’application.');
@@ -79,24 +101,42 @@ function checkPackage(db: AppDb, raw: unknown): SyncPackage {
     throw new PackageError('Ce paquet vient d’une version plus récente de l’application : mettez cette installation à jour.');
   }
   const invalid = () => new PackageError('Paquet invalide : des données appartiennent à une autre compétition.');
+  const malformed = (what: string) => new PackageError(`Paquet invalide : ${what}.`);
+  const id = pkg.competitionId;
   const competitions = pkg.tables.competitions;
-  if (!Array.isArray(competitions) || competitions.length !== 1 || competitions[0]!.id !== pkg.competitionId) throw invalid();
-  for (const t of PACKAGE_TABLES) {
-    const rows = pkg.tables[t] ?? [];
-    if (!Array.isArray(rows)) throw invalid();
-    if (t === 'competitions' || t === 'age_links') {
-      if (t === 'age_links' && rows.some((r) => r.competition_id !== pkg.competitionId)) throw invalid();
-      continue;
+  if (!Array.isArray(competitions) || competitions.length !== 1 || competitions[0]?.id !== id) throw invalid();
+  if (!Array.isArray(pkg.directory)) throw malformed('annuaire illisible');
+  for (const [t, rows] of [...PACKAGE_TABLES.map((t) => [t, pkg.tables![t] ?? []] as const), ['club_directory', pkg.directory] as const]) {
+    if (!Array.isArray(rows)) throw malformed(`table ${t} illisible`);
+    for (const r of rows as unknown[]) {
+      if (!r || typeof r !== 'object' || Array.isArray(r)) throw malformed(`ligne illisible dans ${t}`);
+      for (const [k, v] of Object.entries(r)) {
+        if (!scalar(v)) throw malformed(`valeur illisible (${t}.${k})`);
+        if (k === 'version' && v !== null && !(Number.isSafeInteger(v) && (v as number) >= 0)) throw malformed(`version illisible (${t})`);
+      }
     }
+  }
+  for (const t of PACKAGE_TABLES) {
+    if (t === 'competitions') continue;
+    const rows = pkg.tables[t] ?? [];
+    if (rows.some((r) => r.competition_id !== id)) throw invalid();
+    if (t === 'age_links') continue;
     const pk = pkOf(db, t);
     const find = db.$client.prepare(`select competition_id as c from "${t}" where ${pk.map((k) => `"${k}" = ?`).join(' and ')}`);
     for (const r of rows) {
-      if (r.competition_id !== pkg.competitionId) throw invalid();
       const existing = find.get(...pk.map((k) => r[k])) as { c: string } | undefined;
-      if (existing && existing.c !== pkg.competitionId) throw invalid();
+      if (existing && existing.c !== id) throw invalid();
     }
   }
-  if (!Array.isArray(pkg.directory)) throw invalid();
+  // Aucune référence vers une ligne d'une autre compétition.
+  for (const [table, column, target] of REFERENCES) {
+    const values = [...new Set((pkg.tables[table] ?? []).map((r) => r[column]).filter((v): v is string => typeof v === 'string' && v !== ''))];
+    const find = db.$client.prepare(`select competition_id as c from "${target}" where id = ?`);
+    for (const v of values) {
+      const existing = find.get(v) as { c: string } | undefined;
+      if (existing && existing.c !== id) throw invalid();
+    }
+  }
   return pkg as SyncPackage;
 }
 
@@ -130,57 +170,66 @@ export async function importPackage(
   owner: { id: string; name: string } | null,
   now = new Date(),
 ): Promise<{ competitionId: string; created: boolean }> {
-  const pkg = checkPackage(db, raw);
+  const pkg = validatePackage(db, raw);
   const id = pkg.competitionId;
   const created = !db.$client.prepare('select 1 from competitions where id = ?').get(id);
   await backupNow(db, dbPath);
   const client = db.$client;
-  client.transaction(() => {
-    client.pragma('defer_foreign_keys = ON');
-    const entryOf = new Map(pkg.directory.map((e) => [e.id as string, localEntry(db, e)]));
+  // Seules les fiches d'annuaire des clubs du paquet sont reprises.
+  const linked = new Set((pkg.tables.clubs ?? []).map((c) => c.directory_club_id).filter(Boolean));
+  try {
+    client.transaction(() => {
+      client.pragma('defer_foreign_keys = ON');
+      const entryOf = new Map(pkg.directory.filter((e) => linked.has(e.id)).map((e) => [e.id as string, localEntry(db, e)]));
 
-    for (const t of PACKAGE_TABLES) {
-      const rows = (pkg.tables[t] ?? []).map((r) => (t === 'clubs' ? { ...r, directory_club_id: r.directory_club_id ? (entryOf.get(r.directory_club_id as string) ?? null) : null } : r));
-      if (t === 'age_links') {
-        client.prepare('delete from age_links where competition_id = ?').run(id);
-        const cols = columnsOf(db, t).map((c) => c.name).filter((c) => c !== 'id');
-        const insert = client.prepare(`insert into age_links (${cols.map((c) => `"${c}"`).join(', ')}) values (${cols.map(() => '?').join(', ')})`);
-        for (const r of rows) insert.run(...cols.map((c) => r[c] ?? null));
-        continue;
+      for (const t of PACKAGE_TABLES) {
+        const rows = (pkg.tables[t] ?? []).map((r) => (t === 'clubs' ? { ...r, directory_club_id: r.directory_club_id ? (entryOf.get(r.directory_club_id as string) ?? null) : null } : r));
+        if (t === 'age_links') {
+          client.prepare('delete from age_links where competition_id = ?').run(id);
+          const cols = columnsOf(db, t).map((c) => c.name).filter((c) => c !== 'id');
+          const insert = client.prepare(`insert into age_links (${cols.map((c) => `"${c}"`).join(', ')}) values (${cols.map(() => '?').join(', ')})`);
+          for (const r of rows) insert.run(...cols.map((c) => r[c] ?? null));
+          continue;
+        }
+        const local = new Set(columnsOf(db, t).map((c) => c.name).filter((c) => t !== 'competitions' || !OWNER_COLUMNS.includes(c)));
+        const pk = pkOf(db, t);
+        for (const r of rows) {
+          const cols = Object.keys(r).filter((c) => local.has(c));
+          const updates = cols.filter((c) => !pk.includes(c));
+          client
+            .prepare(
+              `insert into "${t}" (${cols.map((c) => `"${c}"`).join(', ')}) values (${cols.map(() => '?').join(', ')}) on conflict (${pk.map((k) => `"${k}"`).join(', ')}) do ` +
+                (updates.length ? `update set ${updates.map((c) => `"${c}" = excluded."${c}"`).join(', ')}` : 'nothing'),
+            )
+            .run(...cols.map((c) => r[c] ?? null));
+        }
       }
-      const local = new Set(columnsOf(db, t).map((c) => c.name));
-      const pk = pkOf(db, t);
-      for (const r of rows) {
-        const cols = Object.keys(r).filter((c) => local.has(c));
-        const updates = cols.filter((c) => !pk.includes(c));
-        client
-          .prepare(
-            `insert into "${t}" (${cols.map((c) => `"${c}"`).join(', ')}) values (${cols.map(() => '?').join(', ')}) on conflict (${pk.map((k) => `"${k}"`).join(', ')}) do ` +
-              (updates.length ? `update set ${updates.map((c) => `"${c}" = excluded."${c}"`).join(', ')}` : 'nothing'),
-          )
-          .run(...cols.map((c) => r[c] ?? null));
-      }
-    }
 
-    // Lignes de la compétition qui ne sont plus dans le paquet : supprimées (des dernières tables aux premières).
-    for (const t of [...PACKAGE_TABLES].reverse()) {
-      if (t === 'competitions' || t === 'age_links') continue;
-      const pk = pkOf(db, t);
-      const keyOf = (r: Record<string, unknown>) => JSON.stringify(pk.map((k) => r[k]));
-      const kept = new Set((pkg.tables[t] ?? []).map(keyOf));
-      const del = client.prepare(`delete from "${t}" where ${pk.map((k) => `"${k}" = ?`).join(' and ')}`);
-      for (const r of client.prepare(`select ${pk.map((k) => `"${k}"`).join(', ')} from "${t}" where competition_id = ?`).all(id) as Record<string, unknown>[]) {
-        if (kept.has(keyOf(r))) continue;
-        // Un club qui a des liens ou des mails sur cette installation est gardé (ils seraient supprimés avec lui).
-        if (t === 'clubs' && client.prepare('select 1 from club_invitations where club_id = ? union select 1 from mail_log where club_id = ?').get(r.id, r.id)) continue;
-        del.run(...pk.map((k) => r[k]));
+      // Lignes de la compétition qui ne sont plus dans le paquet : supprimées (des dernières tables aux premières).
+      for (const t of [...PACKAGE_TABLES].reverse()) {
+        if (t === 'competitions' || t === 'age_links') continue;
+        const pk = pkOf(db, t);
+        const keyOf = (r: Record<string, unknown>) => JSON.stringify(pk.map((k) => r[k]));
+        const kept = new Set((pkg.tables[t] ?? []).map(keyOf));
+        const del = client.prepare(`delete from "${t}" where ${pk.map((k) => `"${k}" = ?`).join(' and ')}`);
+        for (const r of client.prepare(`select ${pk.map((k) => `"${k}"`).join(', ')} from "${t}" where competition_id = ?`).all(id) as Record<string, unknown>[]) {
+          if (kept.has(keyOf(r))) continue;
+          // Un club qui a des liens ou des mails sur cette installation est gardé (ils seraient supprimés avec lui).
+          if (t === 'clubs' && client.prepare('select 1 from club_invitations where club_id = ? union select 1 from mail_log where club_id = ?').get(r.id, r.id)) continue;
+          del.run(...pk.map((k) => r[k]));
+        }
       }
-    }
 
-    const stamp = now.toISOString();
-    client
-      .prepare('update competitions set owner_instance_id = ?, owner_name = ?, owner_since = ?, last_sync_at = ? where id = ?')
-      .run(owner?.id ?? null, owner?.name ?? null, owner ? stamp : null, stamp, id);
-  })();
+      const stamp = now.toISOString();
+      client
+        .prepare('update competitions set owner_instance_id = ?, owner_name = ?, owner_since = ?, last_sync_at = ? where id = ?')
+        .run(owner?.id ?? null, owner?.name ?? null, owner ? stamp : null, stamp, id);
+      client.prepare('update competitions set owner_token_id = null where id = ?').run(id);
+    })();
+  } catch (e) {
+    // Paquet incomplet ou incohérent (colonne obligatoire absente, référence impossible) : rien n'a été écrit.
+    if (e instanceof PackageError) throw e;
+    throw new PackageError(`Paquet invalide : ${(e as Error).message}.`);
+  }
   return { competitionId: id, created };
 }

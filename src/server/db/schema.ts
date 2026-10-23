@@ -17,6 +17,8 @@ export const competitions = sqliteTable('competitions', {
   /** Nom de l'installation qui a la main (affiché « Gérée par … ») et depuis quand. */
   ownerName: text('owner_name'),
   ownerSince: text('owner_since'),
+  /** Sur le serveur : le jeton de synchronisation du PC qui a pris la main (lui seul peut envoyer une copie ou la rendre). */
+  ownerTokenId: text('owner_token_id'),
   lastSyncAt: text('last_sync_at'),
   /** Inscriptions en ligne des clubs : pas encore ouvertes, ouvertes, figées. */
   clubEntryStatus: text('club_entry_status', { enum: ['closed', 'open', 'frozen'] }).notNull().default('closed'),

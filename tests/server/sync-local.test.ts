@@ -93,7 +93,7 @@ test('fichier : export puis import ; confirmations replace et takeOver', async (
 });
 
 test('serveur : exporter en fichier en donnant la main ; le PC qui l’importe a la main', async () => {
-  const file = (await orga('GET', `/api/competitions/${id}/export.json?handOver=1`)).json();
+  const file = (await orga('POST', `/api/competitions/${id}/export-handover`)).json();
   expect(file.handOver).toBe(true);
   expect(await management(server, { cookie })).toMatchObject({ managedHere: false, ownerName: 'un PC (par fichier)' });
   const res = await pc.inject({ method: 'POST', url: '/api/competitions/import', payload: file });
@@ -102,8 +102,43 @@ test('serveur : exporter en fichier en donnant la main ; le PC qui l’importe a
 });
 
 test('serveur injoignable → 502', async () => {
-  await local('PATCH', '/api/sync/settings', { url: 'http://127.0.0.1:1', token: null });
+  await local('PATCH', '/api/sync/settings', { url: 'http://127.0.0.1:1', token: 'un-jeton' });
   const res = await local('GET', '/api/sync/server-competitions');
   expect(res.statusCode).toBe(502);
   expect(res.json().error).toMatch(/^Serveur injoignable : /);
+});
+
+test('adresse : https obligatoire (sauf cette machine) ; nouvelle adresse sans jeton → jeton effacé ; délier', async () => {
+  expect((await local('PATCH', '/api/sync/settings', { url: 'http://exemple.org', token: 'x' })).statusCode).toBe(400);
+  expect((await local('PATCH', '/api/sync/settings', { url: 'https://autre.example.org', token: null })).json()).toEqual({ url: 'https://autre.example.org', hasToken: false });
+  expect((await pc.inject({ method: 'DELETE', url: '/api/sync/settings' })).statusCode).toBe(204);
+  expect((await local('GET', '/api/sync/settings')).json()).toEqual({ url: null, hasToken: false });
+});
+
+test('rendre la main : serveur injoignable → la main reste au PC (rien de perdu)', async () => {
+  await local('POST', '/api/sync/pull', { competitionId: id, take: true });
+  await server.close();
+  const res = await local('POST', `/api/competitions/${id}/sync/return`);
+  expect(res.statusCode).toBe(502);
+  expect(await management(pc)).toMatchObject({ managedHere: true });
+  server = await buildApp({ dbPath: tmpDbPath() });
+});
+
+test('PC : une simple copie du serveur en fichier ne donne pas la main sur une copie en lecture seule', async () => {
+  await local('POST', '/api/sync/pull', { competitionId: id, take: false });
+  const plain = (await orga('GET', `/api/competitions/${id}/export.json`)).json();
+  const res = await pc.inject({ method: 'POST', url: '/api/competitions/import?takeOver=1', payload: plain });
+  expect(res.statusCode).toBe(409);
+  expect(res.json().error).toMatch(/^Ce fichier est une simple copie du serveur/);
+  expect(await management(pc)).toMatchObject({ managedHere: false });
+});
+
+test('copie récupérée alors qu’un PC a la main : le bandeau le dit', async () => {
+  await local('POST', '/api/sync/pull', { competitionId: id, take: true });
+  const other = await buildApp({ dbPath: tmpDbPath(), instanceName: 'PC-2' });
+  const token = (await orga('POST', '/api/sync/tokens', { name: 'PC-2' })).json().token;
+  await other.inject({ method: 'PATCH', url: '/api/sync/settings', payload: { url: serverUrl, token } });
+  await other.inject({ method: 'POST', url: '/api/sync/pull', payload: { competitionId: id, take: false } });
+  expect(await management(other)).toMatchObject({ copyOfServer: true, ownerName: 'le serveur en ligne — la main est à PC-SALLE' });
+  await other.close();
 });

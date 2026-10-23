@@ -96,7 +96,9 @@ test('pesée puis réaffectation : aperçu, validation, refus, masse, retour, an
     await page.getByTestId('bulk-confirm').click();
     await expect(page.getByText(/réaffectation\(s\) appliquée\(s\)/)).toBeVisible();
   }
-  await expect(page.getByTestId('replacement-proposal')).toHaveCount(0);
+  // Tout ce qui respecte les règles est classé. Une proposition hors de l'écart de poids autorisé peut rester (selon celle que le
+  // refus de l'étape 3 a écartée) : « Tout classer automatiquement » ne l'applique jamais.
+  await expect(page.getByTestId('replacement-proposal').filter({ hasNotText: 'au-delà du seuil' })).toHaveCount(0);
 
   // 5. Inscription sur place d'une nouvelle -47 → retour proposé et validé
   await request.post(`/api/competitions/${id}/registrations`, {

@@ -81,7 +81,9 @@ test('retour : compétition remplacée, main revenue au serveur ; autre PC → 4
   const other = await remote('POST', `/competitions/${id}/return`, { ...changed, from: { instanceId: 'pc-2', instanceName: 'AUTRE', role: 'local' } });
   expect(other.statusCode).toBe(409);
   expect(other.json().error).toBe('Ce PC n’a pas la main sur cette compétition : exportez-la en fichier et demandez à un organisateur de l’importer en ligne.');
-  expect((await remote('POST', `/competitions/${id}/return`, changed)).statusCode).toBe(204);
+  const back = await remote('POST', `/competitions/${id}/return`, changed);
+  expect(back.statusCode).toBe(200);
+  expect(back.json()).toEqual({ instanceId: expect.any(String) });
   expect(owner()).toMatchObject({ id: null });
   expect((await orga('GET', `/api/competitions/${id}`)).json().location).toBe('Gymnase du PC');
 });
@@ -104,4 +106,41 @@ test('routes distantes : la limite de 120 requêtes par 10 minutes s’applique'
   let last = 0;
   for (let i = 0; i < 121; i++) last = (await remote('GET', '/competitions')).statusCode;
   expect(last).toBe(429);
+});
+
+test('la main est liée au jeton : un autre jeton ne peut ni copier, ni rendre, ni reprendre en se faisant passer pour le PC', async () => {
+  const pkg = (await remote('POST', `/competitions/${id}/take`, PC)).json();
+  const other = (await orga('POST', '/api/sync/tokens', { name: 'Autre PC' })).json().token as string;
+  expect((await remote('POST', `/competitions/${id}/copy`, fromPc(pkg), other)).statusCode).toBe(409);
+  expect((await remote('POST', `/competitions/${id}/return`, fromPc(pkg), other)).statusCode).toBe(409);
+  expect((await remote('POST', `/competitions/${id}/take`, PC, other)).statusCode).toBe(409);
+  // Le paquet servi ne révèle pas l'identité du PC qui a la main.
+  expect(JSON.stringify((await remote('GET', `/competitions/${id}/package`)).json())).not.toContain('pc-1');
+});
+
+test('compétition donnée par fichier : aucun jeton ne peut la prendre en se disant « file »', async () => {
+  await orga('POST', `/api/competitions/${id}/export-handover`);
+  expect((await remote('POST', `/competitions/${id}/take`, { instanceId: 'file', instanceName: 'X' })).statusCode).toBe(409);
+});
+
+test('copie reçue : vérifiée (même compétition, paquet valide) ; reprise depuis la dernière copie revérifiée', async () => {
+  const pkg = (await remote('POST', `/competitions/${id}/take`, PC)).json();
+  const other = (await orga('POST', '/api/competitions', { name: 'Autre', date: '2026-12-01' })).json().id as string;
+  expect((await remote('POST', `/competitions/${id}/copy`, { ...fromPc(pkg), competitionId: other })).statusCode).toBe(400);
+  expect((await remote('POST', `/competitions/${id}/copy`, { ...fromPc(pkg), format: 'autre' })).statusCode).toBe(400);
+  expect((await orga('GET', `/api/competitions/${id}/received-copies`)).json()).toHaveLength(0);
+});
+
+test('PC dont la version est plus ancienne que le serveur → prise de main refusée avant tout changement', async () => {
+  const res = await remote('POST', `/competitions/${id}/take`, { ...PC, migrations: 1 });
+  expect(res.statusCode).toBe(409);
+  expect(res.json().error).toBe('Mettez d’abord ce PC à jour : il a une version plus ancienne de l’application que le serveur.');
+  expect(owner()).toMatchObject({ id: null });
+});
+
+test('retour ou reprise : les copies reçues sont effacées ; et effacées par la conservation des données', async () => {
+  const pkg = (await remote('POST', `/competitions/${id}/take`, PC)).json();
+  await remote('POST', `/competitions/${id}/copy`, fromPc(pkg));
+  expect((await remote('POST', `/competitions/${id}/return`, fromPc(pkg))).statusCode).toBe(200);
+  expect((await orga('GET', `/api/competitions/${id}/received-copies`)).json()).toHaveLength(0);
 });

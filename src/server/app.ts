@@ -35,7 +35,7 @@ import { loggerOptions } from './log.js';
 import { registerGuard, type InstanceRole } from './auth/guard.js';
 import { registerReadOnlyGuard } from './sync/ownership.js';
 import { syncRemoteRoutes } from './routes/sync-remote.js';
-import { syncLocalRoutes } from './routes/sync-local.js';
+import { syncFileRoutes, syncLocalRoutes } from './routes/sync-local.js';
 import { authRoutes } from './routes/auth.js';
 import { appSettingsRoutes } from './routes/app-settings.js';
 import { nodemailerTransport, type MailTransport } from './mail.js';
@@ -159,8 +159,10 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(invitationRoutes, { db, mailTransport, publicUrl: opts.publicUrl, mailPauseMs: opts.mailPauseMs, role });
   await app.register(clubEntryRoutes, { db });
   await app.register(authRoutes, { db, role });
-  await app.register(syncRemoteRoutes, { db, dbPath: opts.dbPath, role });
-  await app.register(syncLocalRoutes, { db, dbPath: opts.dbPath, role });
+  // Échanges de compétitions : les routes du serveur en ligne et celles du PC ne tournent que dans leur rôle.
+  if (role === 'serveur') await app.register(syncRemoteRoutes, { db, dbPath: opts.dbPath });
+  else await app.register(syncLocalRoutes, { db, dbPath: opts.dbPath });
+  await app.register(syncFileRoutes, { db, dbPath: opts.dbPath, role });
   await app.register(appSettingsRoutes, { db, mailTransport });
 
   // Après toute écriture réussie qui touche aux inscriptions ou aux réglages : catégories et tableaux à jour.

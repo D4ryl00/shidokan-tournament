@@ -30,8 +30,9 @@ test('passage de main : jeton en ligne → PC relié → prise de main (lecture 
   await page.goto('/');
   await page.getByTestId('server-competitions').click();
   await page.getByTestId('server-competition').filter({ hasText: name }).getByRole('button', { name: 'Prendre la main' }).click();
+  await page.getByTestId('server-take-confirm').click();
   await expect(page).toHaveURL(/\/competitions\/[^/]+\/reglages$/);
-  await expect(page.getByTestId('management-banner')).toHaveText('Gérée ici');
+  await expect(page.getByTestId('management-banner')).toContainText('Gérée ici');
 
   // En ligne : lecture seule.
   await online.goto(onlineUrl);
@@ -48,6 +49,6 @@ test('passage de main : jeton en ligne → PC relié → prise de main (lecture 
 
   // En ligne : la main est revenue, avec la saisie du PC.
   await online.reload();
-  await expect(online.getByTestId('management-banner')).toHaveText('Gérée ici');
+  await expect(online.getByTestId('management-banner')).toContainText('Gérée ici');
   await expect(online.getByText('Gymnase du PC')).toBeVisible();
 });

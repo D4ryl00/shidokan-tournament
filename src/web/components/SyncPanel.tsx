@@ -6,7 +6,9 @@ import {
   ApiError,
   useAuthMe,
   useCreateSyncToken,
+  useExportHandOver,
   useImportCompetition,
+  useUnlinkSync,
   useManagement,
   usePull,
   useReceivedCopies,
@@ -27,8 +29,11 @@ const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('fr-
 
 /** Texte du bandeau : où est la main sur la compétition. */
 export function managementText(m: Management): string {
-  if (m.managedHere) return 'Gérée ici';
-  if (m.copyOfServer) return `Copie du serveur — synchronisé le ${when(m.lastSyncAt)} — lecture seule`;
+  if (m.managedHere) return m.lastSyncAt ? `Gérée ici — dernier échange avec le serveur le ${when(m.lastSyncAt)}` : 'Gérée ici';
+  if (m.copyOfServer) {
+    const held = m.ownerName?.match(/— la main est à (.+)$/)?.[1];
+    return `Copie du serveur — synchronisé le ${when(m.lastSyncAt)} — lecture seule${held ? ` (la main est à ${held})` : ''}`;
+  }
   return `Gérée par ${m.ownerName ?? 'une autre installation'} depuis le ${day(m.ownerSince)} — lecture seule`;
 }
 
@@ -36,7 +41,7 @@ export function managementText(m: Management): string {
 export function ManagementBanner({ competitionId }: { competitionId: string }) {
   const { data } = useManagement(competitionId);
   if (!data) return null;
-  if (data.managedHere) return <Badge variant="light" color="gray" data-testid="management-banner">Gérée ici</Badge>;
+  if (data.managedHere) return <Badge variant="light" color="gray" tt="none" data-testid="management-banner">{managementText(data)}</Badge>;
   return <Alert color="yellow" data-testid="management-banner">{managementText(data)}</Alert>;
 }
 
@@ -72,6 +77,7 @@ export function SyncPanel({ competitionId }: { competitionId: string }) {
   const copies = useReceivedCopies(competitionId, server && !!m && !m.managedHere);
   const [source, setSource] = useState<'server' | 'lastCopy'>('server');
   const [handOver, setHandOver] = useState(false);
+  const exportHandOver = useExportHandOver(competitionId);
   if (!m) return null;
   const linked = !server && !!settings?.url && settings.hasToken;
   const done = (message: string) => () => notifications.show({ color: 'green', message });
@@ -115,17 +121,30 @@ export function SyncPanel({ competitionId }: { competitionId: string }) {
         </Stack>
       )}
       <Group>
-        <Anchor href={`/api/competitions/${competitionId}/export.json${handOver ? '?handOver=1' : ''}`} download data-testid="export-file"
-          onClick={() => handOver && setTimeout(() => setHandOver(false), 500)}>
-          <Button component="span" variant="default">Exporter la compétition (fichier)</Button>
-        </Anchor>
+        {handOver ? (
+          <Confirmed testId="export-handover" label="Exporter la compétition (fichier)" loading={exportHandOver.isPending}
+            text="La compétition passe en lecture seule en ligne, et les inscriptions des clubs sont figées, jusqu’à ce que le fichier du PC soit importé ici."
+            onConfirm={() => exportHandOver.mutate(undefined, { onSuccess: (pkg) => { download(pkg, competitionId); setHandOver(false); } })} />
+        ) : (
+          <Anchor href={`/api/competitions/${competitionId}/export.json`} download data-testid="export-file">
+            <Button component="span" variant="default">Exporter la compétition (fichier)</Button>
+          </Anchor>
+        )}
         {server && m.managedHere && (
           <Checkbox label="et donner la main au PC qui l’importera (la compétition passe en lecture seule en ligne)" checked={handOver} onChange={(e) => setHandOver(e.currentTarget.checked)} />
         )}
       </Group>
-      <ApiErrorAlert error={pull.error ?? copy.error ?? back.error ?? takeBack.error} />
+      <ApiErrorAlert error={pull.error ?? copy.error ?? back.error ?? takeBack.error ?? exportHandOver.error} />
     </Stack>
   );
+}
+
+/** Téléchargement d'un paquet reçu par une requête (export en donnant la main). */
+function download(pkg: unknown, competitionId: string) {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(pkg)], { type: 'application/json' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: `competition-${competitionId}.json` });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /** « Importer une compétition (fichier) » : confirmation quand elle existe déjà ou est gérée ailleurs. */
@@ -190,7 +209,13 @@ export function ServerCompetitionsButton() {
                   <Table.Td>
                     <Group gap="xs" justify="flex-end" wrap="nowrap">
                       <Button size="xs" variant="light" loading={pull.isPending} onClick={() => get(c.id, false)}>Récupérer une copie</Button>
-                      <Button size="xs" loading={pull.isPending} onClick={() => get(c.id, true)}>Prendre la main</Button>
+                      {c.managedHere ? (
+                        <Confirmed testId="server-take" label="Prendre la main" loading={pull.isPending}
+                          text={`Ce PC devient le seul endroit où modifier « ${c.name} » ; en ligne, elle passe en lecture seule.${c.clubEntryStatus === 'open' ? ' Attention : les inscriptions en ligne des clubs sont ouvertes, elles seront figées.' : ''}`}
+                          onConfirm={() => get(c.id, true)} />
+                      ) : (
+                        <Text size="xs" c="dimmed">main à {c.ownerName}</Text>
+                      )}
                     </Group>
                   </Table.Td>
                 </Table.Tr>
@@ -208,6 +233,7 @@ export function ServerCompetitionsButton() {
 export function SyncSettingsCard({ role }: { role: 'serveur' | 'local' }) {
   const settings = useSyncSettings();
   const update = useUpdateSyncSettings();
+  const unlink = useUnlinkSync();
   const tokens = useSyncTokens(role === 'serveur');
   const create = useCreateSyncToken();
   const revoke = useRevokeSyncToken();
@@ -259,8 +285,13 @@ export function SyncSettingsCard({ role }: { role: 'serveur' | 'local' }) {
           onClick={() => update.mutate({ url: shownUrl, token: token || null }, { onSuccess: () => { setToken(''); notifications.show({ color: 'green', message: 'Serveur relié.' }); } })}>
           Enregistrer
         </Button>
+        {settings.data?.url && (
+          <Button variant="subtle" color="red" loading={unlink.isPending} onClick={() => unlink.mutate(undefined, { onSuccess: () => { setUrl(''); notifications.show({ color: 'green', message: 'Ce PC n’est plus relié au serveur.' }); } })}>
+            Délier ce PC
+          </Button>
+        )}
       </Group>
-      <ApiErrorAlert error={update.error} />
+      <ApiErrorAlert error={update.error ?? unlink.error} />
     </Stack>
   );
 }

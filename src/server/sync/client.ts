@@ -29,11 +29,31 @@ function saveSyncServer(db: AppDb, value: SyncServerSettings): void {
     .run(JSON.stringify(value));
 }
 
-/** Adresse et jeton : `token` null = inchangé, '' = effacé. */
+/** HTTPS obligatoire, sauf pour un serveur sur cette machine (essais). */
+export function syncUrlAllowed(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' || (u.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Adresse et jeton : `token` null = inchangé, '' = effacé. Une nouvelle adresse sans nouveau jeton efface l'ancien jeton :
+ * il ne doit jamais partir vers une autre adresse que celle pour laquelle il a été donné.
+ */
 export function setSyncServer(db: AppDb, patch: { url: string; token: string | null }): void {
   const current = getSyncServer(db);
-  const token = patch.token === null ? (current?.token ?? null) : patch.token || null;
-  saveSyncServer(db, { url: patch.url.trim().replace(/\/+$/, ''), token, serverInstanceId: current?.url === patch.url.trim().replace(/\/+$/, '') ? current?.serverInstanceId : undefined });
+  const url = patch.url.trim().replace(/\/+$/, '');
+  const sameServer = current?.url === url;
+  const token = patch.token === null ? (sameServer ? (current?.token ?? null) : null) : patch.token || null;
+  saveSyncServer(db, { url, token, serverInstanceId: sameServer ? current?.serverInstanceId : undefined });
+}
+
+/** Délie ce PC du serveur (adresse et jeton effacés). */
+export function clearSyncServer(db: AppDb): void {
+  db.$client.prepare("delete from app_settings where key = 'syncServer'").run();
 }
 
 export function rememberServerInstance(db: AppDb, instanceId: string): void {

@@ -710,7 +710,7 @@ export const useInvitationPreview = (id: string, clubId: string | null, version:
 
 // Passage de main entre le serveur et le PC.
 export interface Management { managedHere: boolean; ownerName: string | null; ownerSince: string | null; lastSyncAt: string | null; copyOfServer: boolean }
-export interface ServerCompetition { id: string; name: string; date: string; managedHere: boolean; ownerName: string | null }
+export interface ServerCompetition { id: string; name: string; date: string; managedHere: boolean; ownerName: string | null; clubEntryStatus: 'closed' | 'open' | 'frozen' }
 export const useManagement = (id: string) =>
   useQuery({ queryKey: ['management', id], queryFn: () => api<Management>('GET', `/api/competitions/${id}/management`) });
 export const useSyncSettings = () => useQuery({ queryKey: ['sync-settings'], queryFn: () => api<{ url: string | null; hasToken: boolean }>('GET', '/api/sync/settings') });
@@ -745,3 +745,8 @@ function useTokenMutation<V, R>(fn: (v: V) => Promise<R>) {
 }
 export const useCreateSyncToken = () => useTokenMutation((name: string) => api<{ id: string; name: string; token: string }>('POST', '/api/sync/tokens', { name }));
 export const useRevokeSyncToken = () => useTokenMutation((id: string) => api<void>('DELETE', `/api/sync/tokens/${id}`));
+export const useExportHandOver = (id: string) => useSyncMutation(() => api<unknown>('POST', `/api/competitions/${id}/export-handover`));
+export function useUnlinkSync() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: () => api<void>('DELETE', '/api/sync/settings'), onSuccess: () => qc.invalidateQueries({ queryKey: ['sync-settings'] }) });
+}
