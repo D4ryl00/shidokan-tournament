@@ -1,7 +1,10 @@
-import { AppShell } from '@mantine/core';
+import { AppShell, Center, Loader } from '@mantine/core';
+import type { ReactNode } from 'react';
+import { useAuthMe } from './api.js';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router';
 import { AppHeader } from './components/AppHeader.js';
 import { CompetitionLayout } from './components/CompetitionLayout.js';
+import { AccountsPage } from './pages/AccountsPage.js';
 import { BracketsRoute } from './pages/BracketsRoute.js';
 import { ClubEntryPage } from './pages/ClubEntryPage.js';
 import { ClubFormPage } from './pages/ClubFormPage.js';
@@ -11,6 +14,7 @@ import { CompetitionsPage } from './pages/CompetitionsPage.js';
 import { DirectoryPage } from './pages/DirectoryPage.js';
 import { FfkImportPage } from './pages/FfkImportPage.js';
 import { GridEditorPage } from './pages/GridEditorPage.js';
+import { LoginPage } from './pages/LoginPage.js';
 import { MatchesPage } from './pages/MatchesPage.js';
 import { PodiumsPage } from './pages/PodiumsPage.js';
 import { PodiumsPrintPage, PrintPage } from './pages/PrintPage.js';
@@ -23,14 +27,22 @@ export function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/competitions/:id/impression" element={<PrintPage />} />
-        <Route path="/competitions/:id/impression/pesee" element={<WeighInSheets />} />
-        <Route path="/competitions/:id/impression/podiums" element={<PodiumsPrintPage />} />
+        <Route path="/competitions/:id/impression" element={<AuthGate><PrintPage /></AuthGate>} />
+        <Route path="/competitions/:id/impression/pesee" element={<AuthGate><WeighInSheets /></AuthGate>} />
+        <Route path="/competitions/:id/impression/podiums" element={<AuthGate><PodiumsPrintPage /></AuthGate>} />
         <Route path="/inscription/:token" element={<ClubEntryPage />} />
-        <Route path="*" element={<MainShell />} />
+        <Route path="*" element={<AuthGate><MainShell /></AuthGate>} />
       </Routes>
     </BrowserRouter>
   );
+}
+
+/** En ligne (rôle serveur) : l'écran de connexion tant qu'aucun organisateur n'est connecté. Sur le PC : rien à faire. */
+function AuthGate({ children }: { children: ReactNode }) {
+  const { data, isLoading } = useAuthMe();
+  if (isLoading) return <Center mih="100vh"><Loader /></Center>;
+  if (!data) return <LoginPage />;
+  return <>{children}</>;
 }
 
 /** Anciens onglets « vagues » et « recasement » (renommés le 2026-10-23) : redirigés, avec le reste de l'adresse. */
@@ -49,6 +61,7 @@ function MainShell() {
           <Routes>
             <Route path="/" element={<CompetitionsPage />} />
             <Route path="/annuaire" element={<DirectoryPage />} />
+            <Route path="/comptes" element={<AccountsPage />} />
             <Route path="/competitions/:id" element={<CompetitionLayout />}>
               <Route index element={<Navigate to="reglages" replace />} />
               <Route path="inscriptions" element={<RegistrationsPage />} />

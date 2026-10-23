@@ -648,3 +648,28 @@ export const useSaveClubLine = (token: string) =>
 export const useDeleteClubLine = (token: string) =>
   useClubEntryMutation(token, ({ fighterId, version }: { fighterId: string; version: string }) =>
     api<void>('DELETE', `/api/inscription/${token}/lines/${fighterId}?version=${encodeURIComponent(version)}`));
+
+// Connexion des organisateurs (rôle serveur) et comptes.
+export interface AuthMe { role: 'serveur' | 'local'; user: { email: string } | null }
+export interface UserRow { id: string; email: string; createdAt: string }
+
+export const useAuthMe = () => useQuery({ queryKey: ['auth'], queryFn: () => api<AuthMe>('GET', '/api/auth/me'), staleTime: 60_000 });
+export function useLogin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { email: string; password: string }) => api<void>('POST', '/api/auth/login', v),
+    onSuccess: () => qc.resetQueries(),
+  });
+}
+export function useLogout() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: () => api<void>('POST', '/api/auth/logout'), onSuccess: () => qc.resetQueries() });
+}
+export const useUsers = () => useQuery({ queryKey: ['users'], queryFn: () => api<UserRow[]>('GET', '/api/users') });
+function useUsersMutation<V>(fn: (v: V) => Promise<unknown>) {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }) });
+}
+export const useCreateUser = () => useUsersMutation((v: { email: string; password: string }) => api('POST', '/api/users', v));
+export const useDeleteUser = () => useUsersMutation((id: string) => api('DELETE', `/api/users/${id}`));
+export const useChangePassword = () => useMutation({ mutationFn: (v: { current: string; next: string }) => api<void>('PUT', '/api/users/me/password', v) });

@@ -96,3 +96,8 @@ test("inscriptions en ligne : les liens ne s'affichent qu'une fois, figer met la
   expect(all('fiche-club.en-ligne')).toContain('une seule fois');
   expect(all('fiche-club.en-ligne')).toContain('lecture seule');
 });
+
+test("comptes : l'aide parle du mot de passe d'au moins 10 caractères et de la commande add-user", () => {
+  expect(all('comptes')).toContain('10 caractères');
+  expect(all('comptes')).toContain('add-user');
+});

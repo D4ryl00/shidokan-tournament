@@ -6,6 +6,7 @@
 export type HelpTopicId =
   | 'competitions'
   | 'annuaire'
+  | 'comptes'
   | 'impression'
   | 'inscriptions'
   | 'clubs'
@@ -75,6 +76,19 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Le numéro d’affiliation FFK (les chiffres en tête du club dans l’export FFK) reconnaît un club à coup sûr, même si son nom est écrit autrement.',
         '« Modifier » change le nom, le numéro d’affiliation, le coach ou les notes ; « Archiver » cache un club qui ne vient plus, sans rien effacer.',
         '« Fusionner avec… » réunit deux fiches du même club : les compétitions de l’une passent à l’autre, puis la première est supprimée.',
+      ],
+    ],
+  },
+  comptes: {
+    title: 'Comptes',
+    short: 'Les organisateurs qui peuvent se connecter à l’application en ligne.',
+    details: [
+      'Sur le serveur en ligne, chaque organisateur se connecte avec son e-mail et son mot de passe. Le PC de la compétition, lui, ne demande pas de connexion.',
+      [
+        '« Ajouter un compte » : e-mail et mot de passe de 10 caractères au moins, à transmettre à la personne (elle pourra le changer).',
+        '« Changer mon mot de passe » : il faut le mot de passe actuel.',
+        'Le premier compte d’un serveur se crée sur le serveur lui-même : docker compose exec -it app node dist/server/cli.js add-user <e-mail>.',
+        'Les comptes ne sont jamais copiés dans les sauvegardes : après une restauration sur un nouveau serveur, recréez-les avec la même commande.',
       ],
     ],
   },
