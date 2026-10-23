@@ -10,7 +10,7 @@ import { matchEntrants } from '../repositories/results.js';
 import { kataRev, resultRev, tieBreakRev } from '../revisions.js';
 import { myIdentity } from '../sync/pull.js';
 import { targetKey, type ZoneEntry, type ZoneJournalFile } from './entry.js';
-import { getZoneLink, type ZoneLink } from './link.js';
+import { getZoneLink, ZoneLinkError, type ZoneLink } from './link.js';
 
 const C = '/api/competitions/:id';
 /** Saisies permises en zone autonome (les mêmes que celles d'un compte Zone). */
@@ -34,20 +34,27 @@ export function autonomousLink(db: AppDb, competitionId: string | undefined): Zo
   return owner?.o && owner.o === link.mainInstanceId ? link : null;
 }
 
-/** Compétitions dont le journal part au PC principal : aucune saisie pendant l'envoi (elle ne serait pas dans le journal envoyé). */
-const sending = new Set<string>();
-export async function whileSending<T>(competitionId: string, fn: () => Promise<T>): Promise<T> {
-  sending.add(competitionId);
+/**
+ * Compétitions dont le journal part au PC principal, ou qui reçoivent une copie plus récente : aucune saisie pendant ce temps
+ * (elle ne serait pas dans le journal envoyé, ou serait remplacée par la copie). La valeur est le message de refus.
+ */
+const busy = new Map<string, string>();
+export async function whileBusy<T>(competitionId: string, message: string, fn: () => Promise<T>): Promise<T> {
+  if (busy.has(competitionId)) throw new ZoneLinkError(409, busy.get(competitionId)!);
+  busy.set(competitionId, message);
   try {
     return await fn();
   } finally {
-    sending.delete(competitionId);
+    busy.delete(competitionId);
   }
 }
+export const SENDING = 'Envoi du journal en cours : réessayez dans un instant.';
+export const REFRESHING = 'Nouvelle copie en cours de réception : réessayez dans un instant.';
 
 /** Décision de la garde en zone autonome : null = permis, sinon le message de refus. */
 export async function autonomousRefusal(db: AppDb, link: ZoneLink, method: string, route: string, params: Record<string, string>): Promise<string | null> {
-  if (sending.has(link.competitionId)) return 'Envoi du journal en cours : réessayez dans un instant.';
+  const pause = busy.get(link.competitionId);
+  if (pause) return pause;
   const name = zoneName(db, link);
   if (!ZONE_WRITES[`${method} ${route}`] || !params.cid) return `Zone autonome : seules les saisies de la zone ${name} sont possibles sur ce PC.`;
   // Une session pas encore lancée sur la copie peut changer de zone au lancement sur le PC principal.
@@ -113,6 +120,8 @@ export function registerZoneJournal(app: FastifyInstance, db: AppDb): void {
     db.$client
       .prepare('insert into zone_journal (id, competition_id, zone_id, seq, kind, category_id, target_key, entry_json) values (?, ?, ?, ?, ?, ?, ?, ?)')
       .run(entry.id, competitionId, entry.zoneId, entry.seq, entry.kind, entry.categoryId, targetKey(entry), JSON.stringify(entry));
+    // La copie n'est plus celle du PC principal : la prochaine copie la remplace même si le PC principal n'a pas changé.
+    db.$client.prepare('update competitions set server_fingerprint = null where id = ?').run(competitionId);
     return payload;
   });
 }

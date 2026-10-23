@@ -1,9 +1,49 @@
-import { Alert, Anchor, Button, Group, Modal, Stack, Text } from '@mantine/core';
+import { Alert, Anchor, Button, FileButton, Group, Modal, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
-import { ApiError, downloadZoneJournal, useAuthMe, useGoOnline, useManagement, usePlayFinalsHere, useStartAutonomy, useStopAutonomy, useZoneLink } from '../api.js';
+import { ApiError, downloadZoneJournal, useAuthMe, useGoOnline, useManagement, usePlayFinalsHere, useRefreshZoneCopy, useStartAutonomy, useStopAutonomy, useZoneLink } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { journalReportText } from './ZoneCards.js';
+
+const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
+const rebaseText = (r: { reapplied: number; present: number; conflicts: number }) =>
+  `Nouvelle copie prise : ${plural(r.reapplied, 'saisie réappliquée', 'saisies réappliquées')}, ${plural(r.present, 'déjà présente', 'déjà présentes')}, ${r.conflicts} en conflit (elles seront tranchées à la table centrale).`;
+
+/** « Recevoir une copie plus récente » : par le réseau s'il revient un moment, ou avec un fichier de compétition (clé USB). */
+function RefreshCopy() {
+  const refresh = useRefreshZoneCopy();
+  const [open, setOpen] = useState(false);
+  const run = (pkg: unknown) =>
+    refresh.mutate(pkg, { onSuccess: (r) => { setOpen(false); notifications.show({ color: r.conflicts > 0 ? 'orange' : 'green', message: rebaseText(r), autoClose: false }); } });
+  const onFile = async (file: File | null) => {
+    if (!file) return;
+    try {
+      run(JSON.parse(await file.text()));
+    } catch {
+      notifications.show({ color: 'red', message: 'Ce fichier n’est pas une compétition exportée par l’application.' });
+    }
+  };
+  return (
+    <>
+      <Button size="xs" variant="light" data-testid="zone-refresh" onClick={() => setOpen(true)}>Recevoir une copie plus récente</Button>
+      <Modal opened={open} onClose={() => setOpen(false)} title="Recevoir une copie plus récente">
+        <Stack>
+          <Text size="sm">
+            La copie de ce portable est remplacée par une version plus récente du PC principal (par exemple après le retour des journaux des autres zones), puis les saisies
+            de ce portable pas encore renvoyées sont réappliquées dessus. Elles restent à renvoyer.
+          </Text>
+          <Group justify="flex-end">
+            <FileButton onChange={onFile} accept="application/json,.json">
+              {(props) => <Button variant="default" loading={refresh.isPending} {...props}>Avec un fichier</Button>}
+            </FileButton>
+            <Button data-testid="zone-refresh-network" loading={refresh.isPending} onClick={() => run(null)}>Par le réseau</Button>
+          </Group>
+          <ApiErrorAlert error={refresh.error} />
+        </Stack>
+      </Modal>
+    </>
+  );
+}
 
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 
@@ -81,6 +121,7 @@ export function ZoneAutonomyBar({ competitionId }: { competitionId: string }) {
             text="Les finales de vos catégories se joueront ici, même si une zone des finales est prévue. Si elle les joue aussi, la table centrale tranchera."
             onConfirm={() => finals.mutate()} />
         )}
+        <RefreshCopy />
         {exported && (
           <Confirmed label="Arrêter la zone autonome" testId="zone-stop" color="red" variant="subtle" loading={stop.isPending}
             text="Importez le fichier exporté sur le PC principal (onglet Combats, « Importer un journal de zone (fichier) »). Ce qui serait saisi ici ensuite ne serait pas dans le fichier : ce portable redevient une copie en lecture seule."

@@ -885,6 +885,9 @@ function useZoneLinkMutation<V, R>(fn: (v: V) => Promise<R>) {
 export const useStartAutonomy = () => useZoneLinkMutation(() => api<void>('POST', '/api/zone-link/autonomous'));
 export const useGoOnline = () =>
   useZoneLinkMutation(() => api<{ report: JournalReport; zoneName: string; mainUrl: string }>('POST', '/api/zone-link/online'));
+/** Copie plus récente pendant la coupure : par le réseau (sans `pkg`) ou un fichier de compétition. */
+export const useRefreshZoneCopy = () =>
+  useZoneLinkMutation((pkg: unknown) => api<{ reapplied: number; present: number; conflicts: number }>('POST', '/api/zone-link/refresh', pkg ?? undefined));
 export const usePlayFinalsHere = () => useZoneLinkMutation(() => api<void>('POST', '/api/zone-link/finals'));
 export const useStopAutonomy = () => useZoneLinkMutation(() => api<void>('POST', '/api/zone-link/stop', { exported: true }));
 /** Le journal en fichier (clé USB) : téléchargé tel que le serveur le nomme. */

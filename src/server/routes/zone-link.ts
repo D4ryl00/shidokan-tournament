@@ -4,7 +4,9 @@ import type { AppDb } from '../db/client.js';
 import { competitionChanged } from '../events.js';
 import { getManagement } from '../sync/ownership.js';
 import type { JournalReport } from '../zone/replay.js';
-import { journalFile, markSent, whileSending } from '../zone/autonomous.js';
+import { journalFile, markSent, REFRESHING, SENDING, whileBusy } from '../zone/autonomous.js';
+import { rebaseOnto } from '../zone/rebase.js';
+import type { SyncPackage } from '../sync/package.js';
 import { copyFromMain, fromMain, getZoneLink, resetZoneLinkStatus, restartZoneFollow, setZoneLink, ZoneLinkError, zoneLinkStatus } from '../zone/link.js';
 
 const mainUrlSchema = z
@@ -90,7 +92,7 @@ export async function zoneLinkRoutes(app: FastifyInstance, { db, dbPath }: { db:
   /** Réseau revenu : le journal part au PC principal ; la zone autonome s'arrête seulement s'il l'a reçu. */
   app.post('/api/zone-link/online', async () => {
     const link = autonomousOnly();
-    return whileSending(link.competitionId, async () => {
+    return whileBusy(link.competitionId, SENDING, async () => {
       const journal = journalFile(db, link);
       const report = await fromMain<JournalReport>(link.mainUrl, `/api/competitions/${encodeURIComponent(link.competitionId)}/zone-journal`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(journal),
@@ -99,6 +101,21 @@ export async function zoneLinkRoutes(app: FastifyInstance, { db, dbPath }: { db:
       stopAutonomy();
       await copyFromMain(db, dbPath);
       return { report, zoneName: journal.zoneName, mainUrl: link.mainUrl };
+    });
+  });
+
+  /**
+   * « Recevoir une copie plus récente » pendant la coupure (par le réseau s'il revient un moment, ou un fichier de compétition en corps) :
+   * les saisies de la zone pas encore renvoyées sont réappliquées dessus, et restent à renvoyer.
+   */
+  app.post('/api/zone-link/refresh', async (req) => {
+    const link = autonomousOnly();
+    return whileBusy(link.competitionId, REFRESHING, async () => {
+      const body = req.body as { format?: unknown } | null | undefined;
+      const pkg = body && typeof body === 'object' && 'format' in body
+        ? body
+        : await fromMain<SyncPackage>(link.mainUrl, `/api/competitions/${encodeURIComponent(link.competitionId)}/export.json`);
+      return rebaseOnto(db, dbPath, pkg);
     });
   });
 

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { pendingEntries } from '../../src/server/zone/autonomous.js';
+import { copyFromMain } from '../../src/server/zone/link.js';
 import { holdResponses, loseResponses, mainAndLaptop, mainCompetition, RESULT, tick } from '../helpers/zones-fixture.js';
 
 let f: Awaited<ReturnType<typeof mainAndLaptop>>;
@@ -92,5 +93,43 @@ test('schedule : waitingOtherZones compte les combats de la zone qui attendent l
     expect(await waiting()).toMatchObject({ [m.t2]: 0 });
   } finally {
     await m.main.close();
+  }
+});
+
+test('repasser en ligne quand le PC principal n’a rien appliqué (tout en conflit) : la copie reprend quand même celle du PC principal', async () => {
+  // Saisies de la zone sur w1-0 et w1-1 ; avant la coupure, la table centrale avait déjà saisi autre chose (le portable ne l'a pas vu).
+  const fresh = await mainAndLaptop();
+  try {
+    await fresh.onMain('PUT', `${fresh.base}/categories/${fresh.b61.id}/results/w1-0`, RESULT); // rien sur -54 : empreinte inchangée ensuite
+    expect((await fresh.onLaptop('POST', '/api/zone-link/autonomous')).statusCode).toBe(204);
+    expect((await fresh.onLaptop('PUT', `${fresh.base}/categories/${fresh.a54.id}/results/w1-0`, RESULT)).statusCode).toBe(200);
+    expect((await fresh.onMain('PUT', `${fresh.base}/categories/${fresh.a54.id}/results/w1-0`, { winner: 'b', method: 'points', score: null })).statusCode).toBe(200);
+    // Le portable reçoit cette version (copie juste avant la coupure, par exemple) : son empreinte est celle du PC principal.
+    const res = await fresh.onLaptop('POST', '/api/zone-link/refresh');
+    expect(res.json()).toMatchObject({ conflicts: 1 });
+    expect((await fresh.onLaptop('POST', '/api/zone-link/online')).json().report).toMatchObject({ conflicts: 1 });
+    const laptop = (await fresh.onLaptop('GET', `${fresh.base}/categories/${fresh.a54.id}/results`)).json() as { records: { matchId: string; winner: string }[] };
+    expect(laptop.records).toMatchObject([{ matchId: 'w1-0', winner: 'b' }]);
+  } finally {
+    await fresh.close();
+  }
+});
+
+test('repasser en ligne, tout en conflit, sans copie entre-temps : le portable ne garde pas sa saisie locale', async () => {
+  const fresh = await mainAndLaptop();
+  try {
+    // Avant la coupure : w1-0 gagné par A, vu par le portable.
+    await fresh.onMain('PUT', `${fresh.base}/categories/${fresh.a54.id}/results/w1-0`, RESULT);
+    await copyFromMain(fresh.laptopDb, fresh.laptopPath);
+    expect((await fresh.onLaptop('POST', '/api/zone-link/autonomous')).statusCode).toBe(204);
+    expect((await fresh.onLaptop('PUT', `${fresh.base}/categories/${fresh.a54.id}/results/w1-0`, { winner: 'b', method: 'decision', score: null })).statusCode).toBe(200);
+    // La table centrale change ce résultat, puis revient au premier : même contenu (même empreinte), autre version.
+    await fresh.onMain('PUT', `${fresh.base}/categories/${fresh.a54.id}/results/w1-0`, { winner: 'b', method: 'points', score: null });
+    await fresh.onMain('PUT', `${fresh.base}/categories/${fresh.a54.id}/results/w1-0`, RESULT);
+    expect((await fresh.onLaptop('POST', '/api/zone-link/online')).json().report).toMatchObject({ conflicts: 1 });
+    const laptop = (await fresh.onLaptop('GET', `${fresh.base}/categories/${fresh.a54.id}/results`)).json() as { records: { matchId: string; winner: string; method: string }[] };
+    expect(laptop.records).toMatchObject([{ matchId: 'w1-0', winner: 'a', method: 'points' }]);
+  } finally {
+    await fresh.close();
   }
 });
