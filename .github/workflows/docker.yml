@@ -1,0 +1,74 @@
+# Image Docker multi-architecture (amd64, arm64) poussée sur Docker Hub : d4ryl00/shidokan-tournament.
+# Appelée par release.yml à chaque nouvelle version (tags X.Y.Z, X.Y, X, latest et le commit court), ou lancée à la main
+# (onglet Actions) : sans version, seul le tag du commit court est poussé.
+# Secrets du dépôt : DOCKERHUB_USERNAME, DOCKERHUB_TOKEN (jeton d'accès Docker Hub, droits Read & Write).
+name: Docker
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Version publiée (sans « v »)
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version (sans « v ») ; vide = seulement le tag du commit
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: d4ryl00/shidokan-tournament
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Appelé après une release : le commit du tag (celui de la version), pas un éventuel commit plus récent.
+          ref: ${{ inputs.version && format('v{0}', inputs.version) || github.sha }}
+
+      - name: Tags de l'image
+        id: tags
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          short=$(git rev-parse --short HEAD)
+          tags="$IMAGE:$short"
+          if [ -n "$VERSION" ]; then
+            major=${VERSION%%.*}
+            minor=$(echo "$VERSION" | cut -d. -f1-2)
+            tags="$tags,$IMAGE:$VERSION,$IMAGE:$minor,$IMAGE:$major,$IMAGE:latest"
+          fi
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+
+      # La version affichée par l'application (et portée par les paquets de compétition) vient de package.json.
+      - name: Version dans package.json
+        if: inputs.version != ''
+        run: npm version "${{ inputs.version }}" --no-git-tag-version --allow-same-version
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ inputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
