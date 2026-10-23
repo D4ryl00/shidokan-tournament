@@ -79,8 +79,8 @@ async function isFinalOfMyCategory(db: AppDb, link: ZoneLink, categoryId: string
 
 declare module 'fastify' {
   interface FastifyRequest {
-    /** Saisie de zone autonome en préparation (révision lue, combattants), notée si l'écriture réussit. */
-    zoneEntry?: Omit<ZoneEntry, 'id' | 'seq' | 'data' | 'at'>;
+    /** Saisie de zone autonome notée au journal avant l'écriture ; retirée si l'écriture échoue. */
+    zoneEntryId?: string;
   }
 }
 
@@ -92,7 +92,10 @@ const dataOf = (kind: ZoneEntry['kind'], body: unknown): ZoneEntry['data'] => {
   return null;
 };
 
-/** Prépare l'entrée (révision lue, combattants) avant l'écriture ; l'enregistre si l'écriture a réussi. */
+/**
+ * Note la saisie au journal (révision lue, combattants) avant l'écriture, et la retire si l'écriture échoue : une saisie faite est
+ * toujours dans le journal, même si le journal ne peut pas être écrit (la saisie est alors refusée) ou si le PC s'arrête entre les deux.
+ */
 export function registerZoneJournal(app: FastifyInstance, db: AppDb): void {
   app.addHook('preHandler', async (req: FastifyRequest) => {
     const kind = ZONE_WRITES[`${req.method} ${req.routeOptions.url ?? ''}`];
@@ -105,23 +108,23 @@ export function registerZoneJournal(app: FastifyInstance, db: AppDb): void {
       kind === 'result' || kind === 'delete' ? resultRev(db, p.cid, p.matchId!) : kind === 'kata' ? kataRev(db, p.cid, p.rid!, p.round!) : tieBreakRev(db, p.cid, scope!);
     const entrants = kind === 'result' || kind === 'delete' ? await matchEntrants(db, link.competitionId, p.cid, p.matchId!).catch(() => null) : null;
     const version = (db.$client.prepare('select version as v from categories where id = ?').get(p.cid) as { v: number | null } | undefined)?.v ?? null;
-    req.zoneEntry = {
-      kind, categoryId: p.cid, zoneId: link.zoneId, baseRev: baseRev ?? 'none', entrants, categoryVersion: version,
+    // Numéro d'ordre et insertion d'un seul tenant (sans attente entre les deux) : deux saisies simultanées ont deux numéros.
+    const seq = ((db.$client.prepare('select max(seq) as s from zone_journal where competition_id = ?').get(link.competitionId) as { s: number | null }).s ?? 0) + 1;
+    const entry: ZoneEntry = {
+      id: randomUUID(), seq, kind, categoryId: p.cid, zoneId: link.zoneId, baseRev: baseRev ?? 'none', entrants, categoryVersion: version, data: dataOf(kind, req.body),
+      at: new Date().toISOString(),
       ...(p.matchId ? { matchId: p.matchId } : {}), ...(p.rid ? { registrationId: p.rid } : {}), ...(round ? { round } : {}), ...(scope !== undefined ? { scope } : {}),
     };
-  });
-  // Avant l'envoi de la réponse : une saisie confirmée à l'écran est toujours dans le journal.
-  app.addHook('onSend', async (req, reply, payload) => {
-    const pre = req.zoneEntry;
-    if (!pre || reply.statusCode >= 400) return payload;
-    const competitionId = (req.params as Params).id!;
-    const seq = ((db.$client.prepare('select max(seq) as s from zone_journal where competition_id = ?').get(competitionId) as { s: number | null }).s ?? 0) + 1;
-    const entry: ZoneEntry = { id: randomUUID(), seq, ...pre, data: dataOf(pre.kind, req.body), at: new Date().toISOString() };
     db.$client
       .prepare('insert into zone_journal (id, competition_id, zone_id, seq, kind, category_id, target_key, entry_json) values (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(entry.id, competitionId, entry.zoneId, entry.seq, entry.kind, entry.categoryId, targetKey(entry), JSON.stringify(entry));
+      .run(entry.id, link.competitionId, entry.zoneId, entry.seq, entry.kind, entry.categoryId, targetKey(entry), JSON.stringify(entry));
     // La copie n'est plus celle du PC principal : la prochaine copie la remplace même si le PC principal n'a pas changé.
-    db.$client.prepare('update competitions set server_fingerprint = null where id = ?').run(competitionId);
+    db.$client.prepare('update competitions set server_fingerprint = null where id = ?').run(link.competitionId);
+    req.zoneEntryId = entry.id;
+  });
+  // Écriture refusée (règles, données invalides, panne) : l'entrée est retirée.
+  app.addHook('onSend', async (req, reply, payload) => {
+    if (req.zoneEntryId && reply.statusCode >= 400) db.$client.prepare('delete from zone_journal where id = ?').run(req.zoneEntryId);
     return payload;
   });
 }

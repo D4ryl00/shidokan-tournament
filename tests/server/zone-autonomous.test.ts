@@ -117,6 +117,20 @@ test('zone autonome : l’adresse du PC principal peut changer (nouvelle adresse
   expect((await f.onLaptop('POST', '/api/zone-link/online')).json().report).toMatchObject({ applied: 1 });
 });
 
+test('journal noté avant la saisie : si le journal ne peut pas être écrit (disque plein…), la saisie n’est pas faite', async () => {
+  await autonomous();
+  f.laptopDb.$client.exec("create trigger journal_plein before insert on zone_journal begin select raise(abort, 'disque plein'); end;");
+  const res = await f.onLaptop('PUT', `${f.base}/categories/${f.a54.id}/results/w1-0`, RESULT);
+  expect(res.statusCode).toBe(500);
+  expect(((await f.onLaptop('GET', `${f.base}/categories/${f.a54.id}/results`)).json() as { records: unknown[] }).records).toEqual([]);
+  f.laptopDb.$client.exec('drop trigger journal_plein');
+  // Une saisie refusée ensuite par les règles retire son entrée : rien à renvoyer.
+  expect((await f.onLaptop('PUT', `${f.base}/categories/${f.a54.id}/results/w2-0`, RESULT)).statusCode).toBe(400);
+  expect(pendingEntries(f.laptopDb, f.id)).toEqual([]);
+  expect((await f.onLaptop('PUT', `${f.base}/categories/${f.a54.id}/results/w1-0`, RESULT)).statusCode).toBe(200);
+  expect(pendingEntries(f.laptopDb, f.id)).toMatchObject([{ seq: 1, matchId: 'w1-0' }]);
+});
+
 test('bandeau : GET /api/zone-link donne autonomous.since et pending = 3', async () => {
   await autonomous();
   for (const m of ['w1-0', 'w1-1']) await f.onLaptop('PUT', `${f.base}/categories/${f.a54.id}/results/${m}`, RESULT);
