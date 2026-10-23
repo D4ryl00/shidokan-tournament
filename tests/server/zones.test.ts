@@ -6,7 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
 import { closeDb, openDb } from '../../src/server/db/client.js';
-import { tmpDbPath } from '../helpers/tmp-db.js';
+import { tmpDbPath, tmpDir } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
 let dbPath: string;
@@ -93,7 +93,7 @@ test('sauvegarde puis restauration : zones conservées', async () => {
 });
 
 test('migration d’une base antérieure : tatamis repris en zones, affectations gardées', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'migr-'));
+  const dir = tmpDir('migr-');
   const src = path.resolve('drizzle');
   fs.mkdirSync(path.join(dir, 'meta'));
   const journal = JSON.parse(fs.readFileSync(path.join(src, 'meta/_journal.json'), 'utf8')) as { entries: { idx: number; tag: string }[] };
@@ -166,7 +166,7 @@ test('disciplines par zone : enregistrées et relues ; liste vide refusée ; omi
 });
 
 test('migration : une zone d’une base antérieure accueille toutes les disciplines', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'migr-'));
+  const dir = tmpDir('migr-');
   const src = path.resolve('drizzle');
   fs.mkdirSync(path.join(dir, 'meta'));
   const journal = JSON.parse(fs.readFileSync(path.join(src, 'meta/_journal.json'), 'utf8')) as { entries: { idx: number; tag: string }[] };
