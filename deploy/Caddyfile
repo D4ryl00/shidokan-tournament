@@ -1,0 +1,18 @@
+# À adapter : le nom de domaine (ligne suivante) et l'empreinte du mot de passe organisateur (bloc basic_auth).
+inscriptions.exemple.fr {
+	encode gzip
+
+	# Pages des clubs : ouvertes avec leur lien personnel, sans mot de passe.
+	@public path /inscription/* /api/inscription/* /assets/* /favicon.webp /shidokan-france-logo.png /shidokan-france-logo.webp /api/health
+	handle @public {
+		reverse_proxy app:3000
+	}
+
+	# Tout le reste (l'application des organisateurs) : mot de passe obligatoire, en attendant les comptes de l'étape C.
+	handle {
+		basic_auth {
+			organisateur REMPLACER_PAR_L_EMPREINTE
+		}
+		reverse_proxy app:3000
+	}
+}

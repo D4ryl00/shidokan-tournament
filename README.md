@@ -29,6 +29,10 @@ Toutes les données sont dans le dossier **`data/`**, à côté de ce fichier (`
 
 Il n'y a **pas d'internet sur place** : construisez l'image (`docker compose up -d --build`) **avant** d'arriver au gymnase, sur le PC qui servira le jour J, et vérifiez qu'elle démarre.
 
+## Mise en ligne (inscriptions des clubs)
+
+Pour installer l'application sur un serveur, à partir de l'image publiée sur Docker Hub (`d4ryl00/shidokan-tournament`) et derrière Caddy (HTTPS automatique, mot de passe pour les organisateurs) : voir [docs/installation-serveur.md](docs/installation-serveur.md), avec les fichiers `deploy/compose.yaml` et `deploy/Caddyfile`.
+
 ## Déroulé d'une compétition
 
 1. **Réglages** et **grille âge / poids** (grille FFK par défaut, modifiable, enregistrable comme modèle).

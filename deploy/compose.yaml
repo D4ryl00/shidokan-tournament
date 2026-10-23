@@ -1,0 +1,30 @@
+# Installation sur un serveur : l'application (image publiée sur Docker Hub) derrière Caddy (HTTPS automatique, mot de passe organisateur).
+# Procédure : docs/installation-serveur.md
+services:
+  app:
+    image: d4ryl00/shidokan-tournament:latest
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+    environment:
+      - INSTANCE_NAME=SERVEUR
+      - BACKUP_INTERVAL_MIN=30
+    # Pas de port publié : seul Caddy y accède.
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:
