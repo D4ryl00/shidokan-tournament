@@ -7,7 +7,7 @@ const text = (max: number) => z.string().trim().max(max).transform((v) => v || n
 const directorySchema = z
   .object({
     name: z.string().trim().min(1, 'Le nom du club est obligatoire.').max(120),
-    affiliationNumber: z.string().trim().regex(/^\d{1,12}$/, 'Le numéro d’affiliation ne contient que des chiffres.').nullable(),
+    affiliationNumber: z.string().trim().regex(/^\d{7}$/, 'Le numéro d’affiliation FFK a 7 chiffres.').nullable(),
     coachName: text(120),
     coachPhone: text(40),
     coachEmail: text(160),

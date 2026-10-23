@@ -16,8 +16,9 @@ export interface ClubAccess {
 }
 export interface ClubLine {
   fighterId: string;
-  /** Plus grande version du combattant et de ses inscriptions : une écriture sur une version périmée est refusée. */
-  version: number;
+  /** Empreinte du combattant et de ses inscriptions (ids et versions) : une écriture sur une empreinte périmée est refusée,
+   *  y compris quand l'organisateur a supprimé une inscription entre-temps. */
+  version: string;
   line: ClubFormLine;
   editable: boolean;
   reason: string | null;
@@ -54,6 +55,7 @@ export class LineReadOnlyError extends Error {
 }
 
 export const LOCKED_REASON = 'Ses combats ont commencé : contactez l’organisateur.';
+export const FFK_IDENTITY = 'Le sexe et la catégorie d’âge viennent de l’export FFK : contactez l’organisateur pour les changer.';
 
 function competitionRow(db: AppDb, access: ClubAccess) {
   const c = db.select().from(competitions).where(eq(competitions.id, access.competitionId)).get();
@@ -83,7 +85,7 @@ function lineOf(db: AppDb, fighter: typeof fighters.$inferSelect): ClubLine {
       otherDisciplines: JSON.parse(r.otherDisciplinesJson) as DisciplineId[], acceptsJiyuFirst: r.acceptsJiyuFirst, originalJson: r.originalJson,
     })),
   );
-  const version = Math.max(fighter.version ?? 0, ...regs.map((r) => r.version ?? 0));
+  const version = [String(fighter.version ?? 0), ...regs.map((r) => `${r.id}:${r.version ?? 0}`).sort()].join('|');
   return locked ? { fighterId: fighter.id, version, line, editable: false, reason: LOCKED_REASON } : { fighterId: fighter.id, version, line, editable, reason };
 }
 
@@ -143,7 +145,7 @@ function duplicateOf(db: AppDb, clubId: string, line: ClubFormLine, exceptId: st
 }
 
 /** Ligne existante du club, vérifiée avant une écriture : version à jour, ni verrouillée ni en lecture seule. */
-function checkedLine(db: AppDb, clubId: string, fighterId: string, expectedVersion: number) {
+function checkedLine(db: AppDb, clubId: string, fighterId: string, expectedVersion: string) {
   const fighter = db.select().from(fighters).where(and(eq(fighters.id, fighterId), eq(fighters.clubId, clubId))).get();
   if (!fighter) throw new NotFoundError('Combattant introuvable');
   const current = lineOf(db, fighter);
@@ -153,7 +155,7 @@ function checkedLine(db: AppDb, clubId: string, fighterId: string, expectedVersi
 }
 
 /** Crée (fighterId null) ou modifie la ligne d'un combattant du club : ses inscriptions suivent la ligne (combat et/ou kata). */
-export async function saveClubLine(db: AppDb, access: ClubAccess, fighterId: string | null, line: ClubFormLine, expectedVersion: number | null): Promise<ClubLine> {
+export async function saveClubLine(db: AppDb, access: ClubAccess, fighterId: string | null, line: ClubFormLine, expectedVersion: string | null): Promise<ClubLine> {
   assertWritable(db, access);
   const club = clubRow(db, access);
   const competition = (await getCompetition(db, access.competitionId))!;
@@ -172,7 +174,10 @@ export async function saveClubLine(db: AppDb, access: ClubAccess, fighterId: str
     };
     let id = fighterId;
     if (id) {
-      checkedLine(t, club.id, id, expectedVersion ?? -1);
+      const current = checkedLine(t, club.id, id, expectedVersion ?? '');
+      // L'export FFK fait foi pour le sexe et l'âge (comme à l'import d'une fiche) : sa catégorie de poids en dépend.
+      const ffk = t.select().from(registrations).where(and(eq(registrations.fighterId, id), eq(registrations.ffkConfirmed, true))).get();
+      if (ffk && (current.sex !== fields.sex || current.ageBandCode !== fields.ageBandCode)) throw new RegistrationValidationError([FFK_IDENTITY]);
       t.update(fighters).set(fields).where(eq(fighters.id, id)).run();
     } else {
       id = crypto.randomUUID();
@@ -188,7 +193,7 @@ export async function saveClubLine(db: AppDb, access: ClubAccess, fighterId: str
 }
 
 /** Retire un combattant du club : ses inscriptions et lui. */
-export async function deleteClubLine(db: AppDb, access: ClubAccess, fighterId: string, expectedVersion: number): Promise<void> {
+export async function deleteClubLine(db: AppDb, access: ClubAccess, fighterId: string, expectedVersion: string): Promise<void> {
   assertWritable(db, access);
   const club = clubRow(db, access);
   db.transaction((tx) => {

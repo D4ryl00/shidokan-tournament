@@ -125,7 +125,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     details: [
       'Le coach ouvre son lien sur ordinateur ou sur téléphone. Il voit tous les combattants de son club dans cette compétition, quelle que soit leur origine (fiche, export FFK, saisie), et peut en ajouter, en modifier ou en retirer.',
       [
-        'Cochez des clubs de l’annuaire puis « Inviter les clubs cochés » : un lien est créé pour chacun. Copiez-les tout de suite : pour des raisons de sécurité, un lien ne s’affiche qu’une seule fois.',
+        'Choisissez des clubs de l’annuaire dans « Clubs à inviter » puis « Inviter les clubs choisis » : un lien est créé pour chacun. Copiez-les tout de suite : pour des raisons de sécurité, un lien ne s’affiche qu’une seule fois.',
         '« Régénérer le lien » crée un nouveau lien et désactive l’ancien (lien perdu, mauvais destinataire) ; « Révoquer » désactive le lien sans en créer d’autre.',
         '« Ouvrir les inscriptions » rend les pages des clubs modifiables ; la date limite est seulement affichée aux clubs.',
         '« Figer les inscriptions » met toutes les pages des clubs en lecture seule ; les changements suivants se font par l’organisation. On peut rouvrir.',

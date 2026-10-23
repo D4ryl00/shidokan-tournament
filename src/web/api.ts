@@ -613,7 +613,9 @@ export const useUpdateClubEntrySettings = (id: string) =>
   useOnlineEntryMutation(id, (patch: { status?: 'open' | 'frozen'; deadline?: string | null }) => api<ClubEntrySettings>('PATCH', `/api/competitions/${id}/club-entry`, patch));
 
 // Page d'inscription d'un club (lien personnel, sans compte).
-export interface ClubLine { fighterId: string; version: number; line: ClubFormLine; editable: boolean; reason: string | null }
+/** Refus après lesquels la page du club est rechargée et le formulaire fermé. */
+export const RELOAD_STATUSES = new Set([403, 404, 409]);
+export interface ClubLine { fighterId: string; version: string; line: ClubFormLine; editable: boolean; reason: string | null }
 export interface ClubEntryHeader { coachName: string | null; coachPhone: string | null; coachEmail: string | null; preApproval: boolean; affiliationNumber: string | null }
 export interface ClubEntryView {
   competition: { name: string; date: string; location: string | null; deadline: string | null; status: 'closed' | 'open' | 'frozen' };
@@ -626,23 +628,23 @@ export interface ClubEntryView {
 export const useClubEntry = (token: string) =>
   useQuery({ queryKey: ['inscription', token], queryFn: () => api<ClubEntryView>('GET', `/api/inscription/${token}`) });
 
-/** Après une écriture (réussie, refusée car périmée ou close) : la page du club est rechargée. */
+/** Après une écriture (réussie, ou refusée : périmée, close, combattant ou lien disparus) : la page du club est rechargée. */
 function useClubEntryMutation<V, R>(token: string, fn: (v: V) => Promise<R>) {
   const qc = useQueryClient();
   const reload = () => qc.invalidateQueries({ queryKey: ['inscription', token] });
   return useMutation({
     mutationFn: fn,
     onSuccess: reload,
-    onError: (e) => (e instanceof ApiError && (e.status === 403 || e.status === 409) ? reload() : undefined),
+    onError: (e) => (e instanceof ApiError && RELOAD_STATUSES.has(e.status) ? reload() : undefined),
   });
 }
 export const useSaveClubHeader = (token: string) =>
   useClubEntryMutation(token, (header: ClubEntryHeader) => api<ClubEntryView['club']>('PATCH', `/api/inscription/${token}/club`, header));
 export const useSaveClubLine = (token: string) =>
-  useClubEntryMutation(token, ({ fighterId, line, version }: { fighterId: string | null; line: ClubFormLine; version: number | null }) =>
+  useClubEntryMutation(token, ({ fighterId, line, version }: { fighterId: string | null; line: ClubFormLine; version: string | null }) =>
     fighterId
       ? api<ClubLine>('PUT', `/api/inscription/${token}/lines/${fighterId}`, { line, version })
       : api<ClubLine>('POST', `/api/inscription/${token}/lines`, { line }));
 export const useDeleteClubLine = (token: string) =>
-  useClubEntryMutation(token, ({ fighterId, version }: { fighterId: string; version: number }) =>
-    api<void>('DELETE', `/api/inscription/${token}/lines/${fighterId}?version=${version}`));
+  useClubEntryMutation(token, ({ fighterId, version }: { fighterId: string; version: string }) =>
+    api<void>('DELETE', `/api/inscription/${token}/lines/${fighterId}?version=${encodeURIComponent(version)}`));

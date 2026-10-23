@@ -2,7 +2,7 @@ import { Button, Checkbox, Group, Modal, NativeSelect, Select, SimpleGrid, Stack
 import { useMediaQuery } from '@mantine/hooks';
 import { useState } from 'react';
 import type { ClubFormLine } from '../../domain/club-form.js';
-import { ApiError, useDeleteClubLine, useSaveClubLine, type ClubLine } from '../api.js';
+import { ApiError, RELOAD_STATUSES, useDeleteClubLine, useSaveClubLine, type ClubLine } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { COMBATS, OneOf, PREFS } from './PaperEntryTable.js';
 
@@ -21,24 +21,15 @@ export function ClubLineForm({ token, line, ageBands, opened, onClose }: {
   const mobile = useMediaQuery('(max-width: 600px)');
   const save = useSaveClubLine(token);
   const remove = useDeleteClubLine(token);
-  const [form, setForm] = useState<ClubFormLine>(EMPTY_LINE);
-  const [weight, setWeight] = useState('');
+  // Le parent remonte le formulaire (key) pour chaque combattant : l'état part de la ligne ouverte.
+  const [form, setForm] = useState<ClubFormLine>(line?.line ?? EMPTY_LINE);
+  const [weight, setWeight] = useState(line?.line.weightKg != null ? String(line.line.weightKg).replace('.', ',') : '');
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [shownFor, setShownFor] = useState<ClubLine | null | undefined>(undefined);
-  if (opened && shownFor !== line) {
-    setShownFor(line);
-    setForm(line?.line ?? EMPTY_LINE);
-    setWeight(line?.line.weightKg !== null && line?.line.weightKg !== undefined ? String(line.line.weightKg).replace('.', ',') : '');
-    setConfirmDelete(false);
-    save.reset();
-    remove.reset();
-  }
-  if (!opened && shownFor !== undefined) setShownFor(undefined);
 
   const set = (patch: Partial<ClubFormLine>) => setForm((f) => ({ ...f, ...patch }));
-  // Un refus parce que la ligne a changé entre-temps (ou que les inscriptions sont closes) ferme le formulaire : la liste est rechargée.
+  // Un refus parce que la ligne a changé ou disparu entre-temps (ou que les inscriptions sont closes) ferme le formulaire : la liste est rechargée.
   const onError = (e: Error) => {
-    if (e instanceof ApiError && (e.status === 409 || e.status === 403)) onClose(e.message);
+    if (e instanceof ApiError && RELOAD_STATUSES.has(e.status)) onClose(e.message);
   };
   const submit = () =>
     save.mutate({ fighterId: line?.fighterId ?? null, line: form, version: line?.version ?? null }, { onSuccess: () => onClose(), onError });

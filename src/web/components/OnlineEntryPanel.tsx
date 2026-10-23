@@ -1,4 +1,4 @@
-import { Alert, Button, Checkbox, CopyButton, Group, Modal, Stack, Table, Text, TextInput } from '@mantine/core';
+import { Alert, Button, CopyButton, Group, Modal, MultiSelect, Stack, Table, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
 import {
   useClubEntrySettings,
@@ -52,13 +52,16 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
   const invite = useInviteClubs(competitionId);
   const regenerate = useRegenerateInvitation(competitionId);
   const revoke = useRevokeInvitation(competitionId);
-  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [chosen, setChosen] = useState<string[]>([]);
   const [links, setLinks] = useState<InvitationLink[]>([]);
   if (!settings) return null;
 
-  const byEntry = new Map(invitations.filter((i) => i.directoryClubId).map((i) => [i.directoryClubId!, i]));
-  const rows = directory.filter((e) => !e.archived || byEntry.get(e.id)?.invited).map((e) => ({ entry: e, invitation: byEntry.get(e.id) }));
-  const toggle = (id: string, on: boolean) => setChecked((s) => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n; });
+  // Tableau : seulement les clubs invités ; les autres se choisissent dans l'annuaire (qui contient tous les clubs passés).
+  const invited = invitations.filter((i) => i.invited);
+  const invitedEntries = new Set(invited.map((i) => i.directoryClubId));
+  const candidates = directory
+    .filter((e) => !e.archived && !invitedEntries.has(e.id))
+    .map((e) => ({ value: e.id, label: e.affiliationNumber ? `${e.name} (${e.affiliationNumber})` : e.name }));
   const action = settings.status === 'open' ? { label: 'Figer les inscriptions', status: 'frozen' as const } :
     settings.status === 'frozen' ? { label: 'Rouvrir les inscriptions', status: 'open' as const } : { label: 'Ouvrir les inscriptions', status: 'open' as const };
 
@@ -74,44 +77,39 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
       </Group>
       {!settings.managedHere && <Text size="sm" c="dimmed">Cette compétition est gérée par une autre installation : les inscriptions en ligne s’y règlent.</Text>}
       <ApiErrorAlert error={updateSettings.error ?? invite.error ?? regenerate.error ?? revoke.error} />
-      {rows.length === 0 ? (
-        <Text c="dimmed">L’annuaire des clubs est vide : ajoutez-y des clubs pour les inviter.</Text>
-      ) : (
+      <Group align="end">
+        <MultiSelect data-testid="invite-select" label="Clubs à inviter" placeholder={candidates.length ? 'Chercher un club de l’annuaire' : 'Tous les clubs de l’annuaire sont invités'}
+          searchable clearable data={candidates} value={chosen} onChange={setChosen} w={420} maw="100%" nothingFoundMessage="Aucun club : ajoutez-le dans l’Annuaire des clubs." />
+        <Button data-testid="invite-clubs" disabled={chosen.length === 0} loading={invite.isPending}
+          onClick={() => invite.mutate(chosen, { onSuccess: (l) => { setChosen([]); setLinks(l); } })}>
+          Inviter les clubs choisis
+        </Button>
+      </Group>
+      {invited.length > 0 && (
         <Table>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th /><Table.Th>Club</Table.Th><Table.Th>Invité le</Table.Th><Table.Th>Dernière visite</Table.Th><Table.Th>Combattants</Table.Th><Table.Th />
+              <Table.Th>Club invité</Table.Th><Table.Th>Invité le</Table.Th><Table.Th>Dernière visite</Table.Th><Table.Th>Combattants</Table.Th><Table.Th />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {rows.map(({ entry, invitation }) => (
-              <Table.Tr key={entry.id} data-testid="invitation-row">
+            {invited.map((i) => (
+              <Table.Tr key={i.clubId} data-testid="invitation-row">
+                <Table.Td>{i.clubName}</Table.Td>
+                <Table.Td>{day(i.invitedAt)}</Table.Td>
+                <Table.Td>{day(i.lastUsedAt)}</Table.Td>
+                <Table.Td>{i.fighters}</Table.Td>
                 <Table.Td>
-                  {!invitation?.invited && <Checkbox aria-label={`Inviter ${entry.name}`} checked={checked.has(entry.id)} onChange={(e) => toggle(entry.id, e.currentTarget.checked)} />}
-                </Table.Td>
-                <Table.Td>{entry.name}</Table.Td>
-                <Table.Td>{invitation?.invited ? day(invitation.invitedAt) : '—'}</Table.Td>
-                <Table.Td>{invitation?.invited ? day(invitation.lastUsedAt) : '—'}</Table.Td>
-                <Table.Td>{invitation?.fighters ?? 0}</Table.Td>
-                <Table.Td>
-                  {invitation?.invited && (
-                    <Group gap="xs" justify="flex-end" wrap="nowrap">
-                      <Button size="xs" variant="light" onClick={() => regenerate.mutate(invitation.clubId, { onSuccess: (l) => setLinks([l]) })}>Régénérer le lien</Button>
-                      <Button size="xs" variant="subtle" color="red" onClick={() => revoke.mutate(invitation.clubId)}>Révoquer</Button>
-                    </Group>
-                  )}
+                  <Group gap="xs" justify="flex-end" wrap="nowrap">
+                    <Button size="xs" variant="light" onClick={() => regenerate.mutate(i.clubId, { onSuccess: (l) => setLinks([l]) })}>Régénérer le lien</Button>
+                    <Button size="xs" variant="subtle" color="red" onClick={() => revoke.mutate(i.clubId)}>Révoquer</Button>
+                  </Group>
                 </Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>
         </Table>
       )}
-      <Group>
-        <Button data-testid="invite-clubs" disabled={checked.size === 0} loading={invite.isPending}
-          onClick={() => invite.mutate([...checked], { onSuccess: (l) => { setChecked(new Set()); setLinks(l); } })}>
-          Inviter les clubs cochés
-        </Button>
-      </Group>
       <LinksModal links={links} onClose={() => setLinks([])} />
     </Stack>
   );

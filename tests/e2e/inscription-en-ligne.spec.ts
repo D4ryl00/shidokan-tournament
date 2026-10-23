@@ -39,7 +39,9 @@ test('inscription en ligne : annuaire → invitation → le coach inscrit, modif
   await page.goto(`/competitions/${id}/fiche-club`);
   await page.getByTestId('club-entry-toggle').click();
   await expect(page.getByTestId('club-entry-status')).toHaveText('Inscriptions ouvertes');
-  await page.getByRole('checkbox', { name: `Inviter ${club}` }).check();
+  await page.getByTestId('invite-select').click();
+  await page.getByTestId('invite-select').fill(club);
+  await page.getByRole('option', { name: club }).click();
   await page.getByTestId('invite-clubs').click();
   const url = await page.getByTestId('invitation-link').filter({ hasText: club }).getByTestId('invitation-url').innerText();
   expect(url).toMatch(/\/inscription\/[A-Za-z0-9_-]{32}$/);

@@ -17,12 +17,14 @@ const headerSchema = z
     coachPhone: text(40),
     coachEmail: text(160),
     preApproval: z.boolean(),
-    affiliationNumber: z.string().trim().regex(/^\d{0,12}$/, 'Le numéro d’affiliation ne contient que des chiffres.').transform((v) => v || null).nullable(),
+    affiliationNumber: z.string().trim().regex(/^(\d{7})?$/, 'Le numéro d’affiliation FFK a 7 chiffres.').transform((v) => v || null).nullable(),
   })
   .strict();
 
 /** Page d'inscription d'un club, ouverte avec son lien personnel (sans compte). */
 export async function clubEntryRoutes(app: FastifyInstance, { db }: { db: AppDb }) {
+  // Les données sont déjà enregistrées : un échec du recalcul des catégories ne doit pas faire croire au coach que rien n'est passé.
+  const resync = (competitionId: string) => syncCategories(db, competitionId).catch((e) => app.log.error(e));
   const access = (token: string): ClubAccess => {
     const found = resolveInvitation(db, token);
     if (!found) throw new NotFoundError('Lien inconnu ou expiré.');
@@ -37,22 +39,23 @@ export async function clubEntryRoutes(app: FastifyInstance, { db }: { db: AppDb 
     const a = access(req.params.token);
     const { line } = z.object({ line: clubFormLineSchema }).parse(req.body);
     const saved = await saveClubLine(db, a, null, line, null);
-    await syncCategories(db, a.competitionId);
+    await resync(a.competitionId);
     return reply.status(201).send(saved);
   });
 
   app.put<TF>('/api/inscription/:token/lines/:fighterId', async (req) => {
     const a = access(req.params.token);
-    const { line, version } = z.object({ line: clubFormLineSchema, version: z.number().int() }).parse(req.body);
+    const { line, version } = z.object({ line: clubFormLineSchema, version: z.string().min(1) }).parse(req.body);
     const saved = await saveClubLine(db, a, req.params.fighterId, line, version);
-    await syncCategories(db, a.competitionId);
+    await resync(a.competitionId);
     return saved;
   });
 
   app.delete<TF & { Querystring: { version?: string } }>('/api/inscription/:token/lines/:fighterId', async (req, reply) => {
     const a = access(req.params.token);
-    await deleteClubLine(db, a, req.params.fighterId, Number(req.query.version));
-    await syncCategories(db, a.competitionId);
+    const { version } = z.object({ version: z.string().min(1) }).parse(req.query);
+    await deleteClubLine(db, a, req.params.fighterId, version);
+    await resync(a.competitionId);
     return reply.status(204).send();
   });
 }

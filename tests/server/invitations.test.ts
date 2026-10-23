@@ -91,3 +91,14 @@ test('ouverture et gel : closed → open (date limite) → frozen → open ; ref
   const refused = await patch({ status: 'frozen' });
   expect(refused.statusCode).toBe(409);
 });
+
+test('inviter une fiche de même nom qu’un club déjà relié à une autre fiche → 409, rien n’est déplacé', async () => {
+  const a = await entry('Shidokan Nice', { affiliationNumber: '0060001' });
+  const b = await entry('Shidokan Nice', { affiliationNumber: '0060002' });
+  await invite([a]);
+  const res = await invite([b]);
+  expect(res.statusCode).toBe(409);
+  expect(res.json().error).toBe('« Shidokan Nice » : un club du même nom, relié à une autre fiche de l’annuaire, est déjà dans cette compétition. Fusionnez les fiches ou renommez-en une.');
+  const rows = (await app.inject({ method: 'GET', url: `${base}/invitations` })).json() as { directoryClubId: string; invited: boolean }[];
+  expect(rows).toEqual([expect.objectContaining({ directoryClubId: a, invited: true })]);
+});

@@ -31,6 +31,7 @@ import { backupRoutes } from './routes/backups.js';
 import { directoryRoutes } from './routes/directory.js';
 import { invitationRoutes } from './routes/invitations.js';
 import { clubEntryRoutes } from './routes/club-entry.js';
+import { loggerOptions } from './log.js';
 import { RestoreError, startAutoBackup } from './repositories/backups.js';
 import { ensureInstance } from './repositories/instance.js';
 import { ffkImportRoutes } from './routes/ffk-import.js';
@@ -50,7 +51,7 @@ export interface AppOptions {
 const NOT_FOUND = { error: 'Compétition introuvable' };
 
 export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
-  const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 20 * 1024 * 1024 });
+  const app = Fastify({ logger: loggerOptions(opts.logger ?? false), bodyLimit: 20 * 1024 * 1024 });
   const db = openDb(opts.dbPath);
   ensureInstance(db, opts.instanceName ?? 'PC');
   const stopBackups = startAutoBackup(db, opts.dbPath, opts.backupIntervalMin ?? 0, (e) => app.log.error(e));

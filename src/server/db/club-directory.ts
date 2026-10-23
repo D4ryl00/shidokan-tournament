@@ -91,17 +91,16 @@ export class AffiliationConflictError extends Error {
 }
 
 /**
- * Numéro d'affiliation donné par le club lui-même : s'il est libre, son entrée le reçoit ; s'il est tenu par une autre entrée,
- * le club est relié à celle-ci ; si son entrée a déjà un autre numéro, refus.
+ * Numéro d'affiliation donné par le club lui-même : s'il est libre, son entrée le reçoit. S'il est déjà celui d'une autre entrée,
+ * ou si l'entrée a déjà un autre numéro, refus : seul l'organisateur rapproche deux fiches (fusion), pour qu'un coach ne
+ * puisse pas se faire passer pour un autre club.
  */
 export function assignAffiliationNumber(db: AppDb, clubId: string, number: string): void {
   const entryId = db.select().from(clubs).where(eq(clubs.id, clubId)).get()?.directoryClubId ?? linkClub(db, clubId);
   const entry = db.select().from(clubDirectory).where(eq(clubDirectory.id, entryId)).get()!;
   if (entry.affiliationNumber === number) return;
-  const holder = db.select().from(clubDirectory).where(eq(clubDirectory.affiliationNumber, number)).get();
-  if (holder) {
-    db.update(clubs).set({ directoryClubId: holder.id }).where(eq(clubs.id, clubId)).run();
-    return;
+  if (db.select().from(clubDirectory).where(eq(clubDirectory.affiliationNumber, number)).get()) {
+    throw new AffiliationConflictError('Ce numéro d’affiliation est celui d’un autre club de l’annuaire : contactez l’organisateur.');
   }
   if (entry.affiliationNumber) {
     throw new AffiliationConflictError(`Ce club a déjà le numéro d’affiliation ${entry.affiliationNumber} : contactez l’organisateur.`);

@@ -13,14 +13,10 @@ const orNull = (v: string) => v.trim() || null;
 function EntryModal({ entry, onClose }: { entry: DirectoryEntry | 'new' | null; onClose: () => void }) {
   const create = useCreateDirectoryEntry();
   const update = useUpdateDirectoryEntry();
-  const [form, setForm] = useState<DirectoryInput>(EMPTY);
-  const [shownFor, setShownFor] = useState<DirectoryEntry | 'new' | null>(null);
-  if (entry !== shownFor) {
-    setShownFor(entry);
-    setForm(entry && entry !== 'new' ? { name: entry.name, affiliationNumber: entry.affiliationNumber, coachName: entry.coachName, coachPhone: entry.coachPhone, coachEmail: entry.coachEmail, notes: entry.notes } : EMPTY);
-    create.reset();
-    update.reset();
-  }
+  // Le parent remonte la fenêtre (key) pour chaque fiche : l'état part de la fiche ouverte.
+  const [form, setForm] = useState<DirectoryInput>(
+    entry && entry !== 'new' ? { name: entry.name, affiliationNumber: entry.affiliationNumber, coachName: entry.coachName, coachPhone: entry.coachPhone, coachEmail: entry.coachEmail, notes: entry.notes } : EMPTY,
+  );
   const set = (patch: Partial<DirectoryInput>) => setForm((f) => ({ ...f, ...patch }));
   const save = () => {
     const done = { onSuccess: onClose };
@@ -130,7 +126,7 @@ export function DirectoryPage() {
           </Table.Tbody>
         </Table>
       )}
-      <EntryModal entry={editing} onClose={() => setEditing(null)} />
+      <EntryModal key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.id} entry={editing} onClose={() => setEditing(null)} />
       <MergeModal merged={merging} entries={entries} onClose={() => setMerging(null)} />
     </Stack>
   );

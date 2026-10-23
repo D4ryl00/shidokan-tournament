@@ -30,6 +30,10 @@ export interface ClubEntrySettings {
   managedHere: boolean;
 }
 
+export class InvitationConflictError extends Error {
+  readonly statusCode = 409;
+}
+
 export class NotManagedHereError extends Error {
   readonly statusCode = 409;
   constructor() {
@@ -82,7 +86,16 @@ export function inviteClubs(db: AppDb, competitionId: string, directoryIds: stri
       const entry = t.select().from(clubDirectory).where(eq(clubDirectory.id, entryId)).get();
       if (!entry) throw new NotFoundError('Club introuvable dans l’annuaire');
       const inCompetition = (cond: ReturnType<typeof eq>) => t.select().from(clubs).where(and(eq(clubs.competitionId, competitionId), cond)).get();
-      let club = inCompetition(eq(clubs.directoryClubId, entry.id)) ?? inCompetition(eq(clubs.nameKey, entry.nameKey));
+      let club = inCompetition(eq(clubs.directoryClubId, entry.id));
+      if (!club) {
+        // Club de même nom : repris, sauf s'il est relié à une autre fiche qui porte un autre numéro d'affiliation (deux clubs distincts).
+        const sameName = inCompetition(eq(clubs.nameKey, entry.nameKey));
+        const other = sameName?.directoryClubId ? t.select().from(clubDirectory).where(eq(clubDirectory.id, sameName.directoryClubId)).get() : undefined;
+        if (other && other.id !== entry.id && other.affiliationNumber && entry.affiliationNumber && other.affiliationNumber !== entry.affiliationNumber) {
+          throw new InvitationConflictError(`« ${entry.name} » : un club du même nom, relié à une autre fiche de l’annuaire, est déjà dans cette compétition. Fusionnez les fiches ou renommez-en une.`);
+        }
+        club = sameName;
+      }
       if (club) {
         const fill = {
           directoryClubId: entry.id,

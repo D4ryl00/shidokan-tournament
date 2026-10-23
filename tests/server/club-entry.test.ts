@@ -34,11 +34,11 @@ type View = {
   competition: { name: string; status: string; deadline: string | null }; editable: boolean;
   club: { name: string; coachPhone: string | null; affiliationNumber: string | null };
   ageBands: { code: string }[];
-  lines: { fighterId: string; version: number; line: ClubFormLine; editable: boolean; reason: string | null }[];
+  lines: { fighterId: string; version: string; line: ClubFormLine; editable: boolean; reason: string | null }[];
 };
 const view = async () => (await app.inject({ method: 'GET', url: url() })).json() as View;
 const add = (line: ClubFormLine = LINE) => app.inject({ method: 'POST', url: url('/lines'), payload: { line } });
-const put = (fighterId: string, line: ClubFormLine, version: number) => app.inject({ method: 'PUT', url: url(`/lines/${fighterId}`), payload: { line, version } });
+const put = (fighterId: string, line: ClubFormLine, version: string) => app.inject({ method: 'PUT', url: url(`/lines/${fighterId}`), payload: { line, version } });
 type Reg = { id: string; discipline: string; source: string; weightClassId: string | null; categoryId: string | null; fighter: { id: string; lastName: string } };
 const registrations = async () => (await app.inject({ method: 'GET', url: `${base}/registrations` })).json() as Reg[];
 const raw = (sql: string, ...params: unknown[]) => {
@@ -134,8 +134,8 @@ test('version périmée (l’organisateur a modifié entre-temps) → 409, rien 
 test('supprimer une ligne → inscriptions et combattant supprimés ; version périmée → 409', async () => {
   await add();
   const [line] = (await view()).lines;
-  expect((await app.inject({ method: 'DELETE', url: url(`/lines/${line!.fighterId}?version=${line!.version - 1}`) })).statusCode).toBe(409);
-  expect((await app.inject({ method: 'DELETE', url: url(`/lines/${line!.fighterId}?version=${line!.version}`) })).statusCode).toBe(204);
+  expect((await app.inject({ method: 'DELETE', url: url(`/lines/${line!.fighterId}?version=perimee`) })).statusCode).toBe(409);
+  expect((await app.inject({ method: 'DELETE', url: url(`/lines/${line!.fighterId}?version=${encodeURIComponent(line!.version)}`) })).statusCode).toBe(204);
   expect(await registrations()).toEqual([]);
   expect((await view()).lines).toEqual([]);
 });
@@ -147,7 +147,7 @@ test('catégorie commencée → modifier et supprimer refusés (409) ; la ligne 
   const [line] = (await view()).lines;
   expect(line).toMatchObject({ editable: false, reason: 'Ses combats ont commencé : contactez l’organisateur.' });
   expect((await put(line!.fighterId, { ...LINE, firstName: 'Lea' }, line!.version)).statusCode).toBe(409);
-  expect((await app.inject({ method: 'DELETE', url: url(`/lines/${line!.fighterId}?version=${line!.version}`) })).statusCode).toBe(409);
+  expect((await app.inject({ method: 'DELETE', url: url(`/lines/${line!.fighterId}?version=${encodeURIComponent(line!.version)}`) })).statusCode).toBe(409);
 });
 
 test('deux disciplines de combat → ligne en lecture seule', async () => {
@@ -168,7 +168,7 @@ test('inscriptions figées, fermées ou gérées ailleurs → lecture seule ; to
     for (const res of [
       await add({ ...LINE, lastName: 'NOUVEAU' }),
       await put(line!.fighterId, LINE, line!.version),
-      await app.inject({ method: 'DELETE', url: url(`/lines/${line!.fighterId}?version=${line!.version}`) }),
+      await app.inject({ method: 'DELETE', url: url(`/lines/${line!.fighterId}?version=${encodeURIComponent(line!.version)}`) }),
       await app.inject({ method: 'PATCH', url: url('/club'), payload: { coachName: 'X', coachPhone: null, coachEmail: null, preApproval: false, affiliationNumber: null } }),
     ]) {
       expect(res.statusCode).toBe(403);
@@ -182,7 +182,7 @@ test('inscriptions figées, fermées ou gérées ailleurs → lecture seule ; to
   await closed();
 });
 
-test('en-tête : club et annuaire mis à jour ; n° d’affiliation libre, tenu par une autre entrée, ou en conflit', async () => {
+test('en-tête : club et annuaire mis à jour ; n° d’affiliation libre, ou en conflit avec le numéro déjà connu', async () => {
   const header = { coachName: 'Jean', coachPhone: '0611111111', coachEmail: 'jean@tani.example', preApproval: true, affiliationNumber: '0060893' };
   const res = await app.inject({ method: 'PATCH', url: url('/club'), payload: header });
   expect(res.statusCode).toBe(200);
@@ -191,16 +191,54 @@ test('en-tête : club et annuaire mis à jour ; n° d’affiliation libre, tenu 
   expect(clubs[0]).toMatchObject({ coachName: 'Jean', preApproval: true });
   const dir = (await app.inject({ method: 'GET', url: '/api/club-directory' })).json() as { id: string; coachPhone: string; affiliationNumber: string }[];
   expect(dir.find((e) => e.id === entryId)).toMatchObject({ coachPhone: '0611111111', affiliationNumber: '0060893' });
-  const conflict = await app.inject({ method: 'PATCH', url: url('/club'), payload: { ...header, affiliationNumber: '0130002' } });
+  const conflict = await app.inject({ method: 'PATCH', url: url('/club'), payload: { ...header, affiliationNumber: '0130002' } }); // numéro libre, mais le club en a déjà un
   expect(conflict.statusCode).toBe(400);
   expect(conflict.json().error).toBe('Ce club a déjà le numéro d’affiliation 0060893 : contactez l’organisateur.');
 });
 
-test('en-tête : n° d’affiliation tenu par une autre entrée → le club est relié à celle-ci', async () => {
+test('inscription supprimée par l’organisateur pendant que le coach a le formulaire ouvert → 409, rien n’est recréé', async () => {
+  await add();
+  const [line] = (await view()).lines;
+  const karate = (await registrations()).find((r) => r.discipline === 'karate')!;
+  expect((await app.inject({ method: 'DELETE', url: `${base}/registrations/${karate.id}` })).statusCode).toBe(204);
+  const res = await put(line!.fighterId, LINE, line!.version);
+  expect(res.statusCode).toBe(409);
+  expect((await registrations()).map((r) => r.discipline)).toEqual(['kata']);
+});
+
+test('combattant confirmé par l’export FFK : sexe et catégorie d’âge non modifiables par le coach (400)', async () => {
+  await add({ ...LINE, kata: false, grade: null });
+  const [reg] = await registrations();
+  raw('update registrations set ffk_confirmed = 1 where id = ?', reg!.id);
+  const [line] = (await view()).lines;
+  const res = await put(line!.fighterId, { ...LINE, kata: false, grade: null, sex: 'M', weightKg: 80 }, line!.version);
+  expect(res.statusCode).toBe(400);
+  expect(res.json().issues).toEqual(['Le sexe et la catégorie d’âge viennent de l’export FFK : contactez l’organisateur pour les changer.']);
+  const again = await put(line!.fighterId, { ...LINE, kata: false, grade: null, ageBandCode: 'junior' }, line!.version);
+  expect(again.statusCode).toBe(400);
+});
+
+test('en-tête : n° d’affiliation d’une autre fiche de l’annuaire → 400, rien n’est relié ni écrasé', async () => {
   const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmail: null, notes: null };
-  const holder = (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, name: 'TANI DOJO NICE', affiliationNumber: '0060893' } })).json().id;
-  const res = await app.inject({ method: 'PATCH', url: url('/club'), payload: { coachName: null, coachPhone: null, coachEmail: null, preApproval: false, affiliationNumber: '0060893' } });
-  expect(res.statusCode).toBe(200);
-  const rows = (await app.inject({ method: 'GET', url: `${base}/invitations` })).json() as { directoryClubId: string }[];
-  expect(rows[0]!.directoryClubId).toBe(holder);
+  await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, name: 'Autre Club', affiliationNumber: '0069999', coachEmail: 'autre@club.example' } });
+  const res = await app.inject({ method: 'PATCH', url: url('/club'), payload: { coachName: 'Jean', coachPhone: null, coachEmail: 'jean@tani.example', preApproval: false, affiliationNumber: '0069999' } });
+  expect(res.statusCode).toBe(400);
+  expect(res.json().error).toBe('Ce numéro d’affiliation est celui d’un autre club de l’annuaire : contactez l’organisateur.');
+  const dir = (await app.inject({ method: 'GET', url: '/api/club-directory' })).json() as { name: string; coachEmail: string | null }[];
+  expect(dir.find((e) => e.name === 'Autre Club')!.coachEmail).toBe('autre@club.example');
+  expect(((await app.inject({ method: 'GET', url: `${base}/invitations` })).json() as { directoryClubId: string }[])[0]!.directoryClubId).toBe(entryId);
+});
+
+test('en-tête : n° d’affiliation de 7 chiffres exactement', async () => {
+  const header = { coachName: null, coachPhone: null, coachEmail: null, preApproval: false };
+  expect((await app.inject({ method: 'PATCH', url: url('/club'), payload: { ...header, affiliationNumber: '123' } })).statusCode).toBe(400);
+  expect((await app.inject({ method: 'PATCH', url: url('/club'), payload: { ...header, affiliationNumber: '0060893' } })).statusCode).toBe(200);
+});
+
+test('suppression sans version → 400 ; poids et nom bornés', async () => {
+  await add();
+  const [line] = (await view()).lines;
+  expect((await app.inject({ method: 'DELETE', url: url(`/lines/${line!.fighterId}`) })).statusCode).toBe(400);
+  expect((await add({ ...LINE, lastName: 'AUTRE', weightKg: 5000 })).statusCode).toBe(400);
+  expect((await add({ ...LINE, lastName: 'X'.repeat(81) })).statusCode).toBe(400);
 });
