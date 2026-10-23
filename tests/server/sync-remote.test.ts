@@ -83,7 +83,7 @@ test('retour : compétition remplacée, main revenue au serveur ; autre PC → 4
   expect(other.json().error).toBe('Ce PC n’a pas la main sur cette compétition : exportez-la en fichier et demandez à un organisateur de l’importer en ligne.');
   const back = await remote('POST', `/competitions/${id}/return`, changed);
   expect(back.statusCode).toBe(200);
-  expect(back.json()).toEqual({ instanceId: expect.any(String) });
+  expect(back.json()).toEqual({ instanceId: expect.any(String), fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/) });
   expect(owner()).toMatchObject({ id: null });
   expect((await orga('GET', `/api/competitions/${id}`)).json().location).toBe('Gymnase du PC');
 });

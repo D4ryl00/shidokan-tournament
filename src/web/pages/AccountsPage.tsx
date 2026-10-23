@@ -1,7 +1,7 @@
 import { Button, Group, Modal, PasswordInput, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
-import { useAuthMe, useChangePassword, useCompetitions, useCreateUser, useDeleteUser, useUpdateUserRole, useUsers, useZones, type AccountRole, type UserRole, type UserRow } from '../api.js';
+import { isOrganiser, useAuthMe, useChangePassword, useCompetitions, useCreateUser, useDeleteUser, useUpdateUserRole, useUsers, useZones, type AccountRole, type UserRole, type UserRow } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { SectionHeader } from '../components/Help.js';
 
@@ -40,7 +40,9 @@ function RoleFields({ value, onChange }: { value: AccountRole; onChange: (v: Acc
 
 export function AccountsPage() {
   const { data: me } = useAuthMe();
-  const { data: users = [] } = useUsers();
+  // Table centrale et Zone : seulement leur mot de passe (la liste des comptes est à l'organisateur).
+  const organiser = isOrganiser(me);
+  const { data: users = [] } = useUsers(organiser);
   const create = useCreateUser();
   const remove = useDeleteUser();
   const updateRole = useUpdateUserRole();
@@ -54,6 +56,7 @@ export function AccountsPage() {
 
   return (
     <Stack maw={900}>
+      {organiser && (<>
       <SectionHeader topic="comptes" order={2} />
       <Table>
         <Table.Thead><Table.Tr><Table.Th>E-mail</Table.Th><Table.Th>Rôle</Table.Th><Table.Th>Créé le</Table.Th><Table.Th /></Table.Tr></Table.Thead>
@@ -94,6 +97,7 @@ export function AccountsPage() {
         </Button>
       </Group>
       <ApiErrorAlert error={create.error} />
+      </>)}
 
       <Title order={4}>Changer mon mot de passe</Title>
       <Group align="end">
@@ -105,7 +109,7 @@ export function AccountsPage() {
         </Button>
       </Group>
       <ApiErrorAlert error={change.error} />
-      <Text size="sm" c="dimmed">Le premier compte d’un serveur se crée en ligne de commande (voir l’aide).</Text>
+      {organiser && <Text size="sm" c="dimmed">Le premier compte d’un serveur se crée en ligne de commande (voir l’aide).</Text>}
 
       <Modal opened={editing !== null} onClose={() => setEditing(null)} title={`Rôle de ${editing?.user.email ?? ''}`}>
         {editing && (

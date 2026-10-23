@@ -24,7 +24,9 @@ export function AppHeader() {
         )}
         {me?.user && (
           <>
-            {isOrganiser(me) && <Anchor component={Link} to="/comptes" data-testid="nav-accounts">Comptes</Anchor>}
+            {isOrganiser(me)
+              ? <Anchor component={Link} to="/comptes" data-testid="nav-accounts">Comptes</Anchor>
+              : <Anchor component={Link} to="/comptes" data-testid="nav-password">Mon mot de passe</Anchor>}
             <Text size="sm" c="dimmed" visibleFrom="md">{me.user.email}</Text>
             <Button size="xs" variant="subtle" data-testid="logout" loading={logout.isPending} onClick={() => logout.mutate()}>Se déconnecter</Button>
           </>

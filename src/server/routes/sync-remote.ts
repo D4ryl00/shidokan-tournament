@@ -124,7 +124,7 @@ export async function syncRemoteRoutes(app: FastifyInstance, { db, dbPath }: { d
         .where(eq(competitions.id, c.id))
         .run();
       competitionChanged(c.id);
-      return buildPackage(db, c.id, { handOver: true, role: 'serveur' });
+      return { ...buildPackage(db, c.id, { handOver: true, role: 'serveur' }), fingerprint: competitionFingerprint(db, c.id) };
     });
     /** Copie reçue d'un PC, gardée (les 5 dernières) pour une reprise forcée. */
     const keepCopy = (competitionId: string, fromName: string, pkg: SyncPackage) => {
@@ -170,7 +170,7 @@ export async function syncRemoteRoutes(app: FastifyInstance, { db, dbPath }: { d
       await importPackage(db, dbPath, pkg, null);
       handBack(c.id);
       dropCopies(c.id);
-      return { instanceId: getInstance(db)?.id ?? 'serveur' };
+      return { instanceId: getInstance(db)?.id ?? 'serveur', fingerprint: competitionFingerprint(db, c.id) };
     });
   });
 }

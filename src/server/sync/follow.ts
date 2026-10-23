@@ -21,7 +21,11 @@ export function setFollow(db: AppDb, value: SyncFollow | null): void {
     .run(JSON.stringify(value));
 }
 /** Nouveau réglage : l'état du réglage précédent est oublié (et la prochaine copie est due tout de suite). */
-export const resetFollowStatus = (dbPath: string) => status.delete(dbPath);
+export const resetFollowStatus = (dbPath: string) => {
+  // Une mise à jour en cours le reste : une seconde ne doit pas démarrer en même temps.
+  const s = status.get(dbPath);
+  if (s) status.set(dbPath, { lastSuccessAt: null, lastError: null, lastAttemptMs: 0, running: s.running });
+};
 export const followStatus = (dbPath: string) => {
   const s = status.get(dbPath);
   return { lastSuccessAt: s?.lastSuccessAt ?? null, lastError: s?.lastError ?? null };
@@ -35,6 +39,11 @@ export async function followOnce(db: AppDb, dbPath: string, now = new Date()): P
   if (current.running) return { error: 'Une mise à jour est déjà en cours.' };
   const done = (patch: { lastSuccessAt?: string; lastError: string | null }) =>
     status.set(dbPath, { ...current, ...patch, lastAttemptMs: now.getTime(), running: false });
+  if (!db.$client.prepare('select 1 from competitions where id = ?').get(follow.competitionId)) {
+    const error = 'Cette compétition n’est pas sur ce PC : récupérez-en d’abord une copie.';
+    done({ lastError: error });
+    return { error };
+  }
   if (!getManagement(db, follow.competitionId).copyOfServer) {
     done({ lastError: HELD_HERE });
     return { error: HELD_HERE };

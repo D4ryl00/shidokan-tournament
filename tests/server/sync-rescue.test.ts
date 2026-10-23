@@ -127,3 +127,28 @@ test('jeton révoqué → 401 relayé ; le PC garde la main en secours', async (
   expect(await management(pc)).toMatchObject({ managedHere: true });
   expect((await management(pc)).rescueSince).not.toBeNull();
 });
+
+test('secours refusé sur une copie dont la main est à un autre PC', async () => {
+  expect((await orga('POST', `/api/competitions/${id}/export-handover`)).statusCode).toBe(200);
+  expect((await local('POST', '/api/sync/pull', { competitionId: id, take: false })).statusCode).toBe(200);
+  const res = await rescue();
+  expect(res.statusCode).toBe(409);
+  expect(res.json().error).toBe('La main est à un PC (par fichier) : reprenez-la d’abord en ligne (« Reprendre la main »), puis récupérez une nouvelle copie.');
+  expect(await management(pc)).toMatchObject({ managedHere: false, copyOfServer: true });
+});
+
+test('compétition remplacée par un fichier pendant le secours : elle n’est plus « en secours »', async () => {
+  await local('POST', '/api/sync/pull', { competitionId: id, take: false });
+  await rescue();
+  const file = (await local('GET', `/api/competitions/${id}/export.json`)).json();
+  expect((await pc.inject({ method: 'POST', url: '/api/competitions/import?replace=1', payload: file })).statusCode).toBe(200);
+  expect(await management(pc)).toMatchObject({ managedHere: true, rescueSince: null });
+});
+
+test('prise de main, retour, puis secours aussitôt : le serveur n’a pas changé, pas de refus', async () => {
+  await local('POST', '/api/sync/pull', { competitionId: id, take: true });
+  await local('PATCH', `/api/competitions/${id}`, { location: 'Gymnase' });
+  expect((await local('POST', `/api/competitions/${id}/sync/return`)).statusCode).toBe(204);
+  expect((await rescue()).statusCode).toBe(204);
+  expect((await notify()).statusCode).toBe(204);
+});

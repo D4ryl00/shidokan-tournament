@@ -54,15 +54,24 @@ const register = (lastName: string) =>
   orga('POST', `/api/competitions/${id}/registrations`, { clubId: null, lastName, firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54', source: 'manual' });
 const pcNames = async () => ((await local('GET', `/api/competitions/${id}/registrations`)).json() as { fighter: { lastName: string } }[]).map((r) => r.fighter.lastName).sort();
 
-test('empreinte : stable à la relecture ; change après une écriture ; ne change pas quand la main change', async () => {
+test('empreinte : stable à la relecture ; change après une écriture, et quand les inscriptions en ligne s’ouvrent', async () => {
   const first = serverFingerprint();
   expect(first).toMatch(/^[0-9a-f]{64}$/);
   expect(serverFingerprint()).toBe(first);
   await register('DURAND');
   const afterWrite = serverFingerprint();
   expect(afterWrite).not.toBe(first);
+  expect((await orga('PATCH', `/api/competitions/${id}/club-entry`, { status: 'open' })).statusCode).toBe(200);
+  expect(serverFingerprint()).not.toBe(afterWrite);
+});
+
+test('prise de main puis retour : le PC retient chaque fois l’empreinte du serveur', async () => {
+  await register('DURAND');
   expect((await local('POST', '/api/sync/pull', { competitionId: id, take: true })).statusCode).toBe(200);
-  expect(serverFingerprint()).toBe(afterWrite);
+  expect(storedFingerprint()).toBe(serverFingerprint());
+  expect((await local('PATCH', `/api/competitions/${id}`, { location: 'Gymnase' })).statusCode).toBe(200);
+  expect((await local('POST', `/api/competitions/${id}/sync/return`)).statusCode).toBe(204);
+  expect(storedFingerprint()).toBe(serverFingerprint());
 });
 
 test('récupérer une copie : le PC retient l’empreinte de la version du serveur', async () => {
@@ -161,4 +170,21 @@ test('« Rendre la main » en cours puis refusé : la copie à jour ne passe pas
   expect('error' in (await follow)).toBe(true);
   expect((await local('GET', `/api/competitions/${id}`)).json().location).toBe('Gymnase');
   expect((await local('GET', `/api/competitions/${id}/management`)).json()).toMatchObject({ managedHere: true });
+});
+
+test('nouveau réglage pendant une mise à jour : pas de seconde mise à jour en même temps', async () => {
+  await local('POST', '/api/sync/pull', { competitionId: id, take: false });
+  await local('PUT', '/api/sync/follow', { competitionId: id, intervalMin: 5 });
+  const release = holdResponses();
+  const first = followOnce(pcDb, pcPath);
+  await tick();
+  await local('PUT', '/api/sync/follow', { competitionId: id, intervalMin: 10 });
+  expect(await followOnce(pcDb, pcPath)).toEqual({ error: 'Une mise à jour est déjà en cours.' });
+  release();
+  expect(await first).toEqual({ ok: true });
+});
+
+test('compétition absente de ce PC : message clair', async () => {
+  await local('PUT', '/api/sync/follow', { competitionId: id, intervalMin: 5 });
+  expect(await followOnce(pcDb, pcPath)).toEqual({ error: 'Cette compétition n’est pas sur ce PC : récupérez-en d’abord une copie.' });
 });

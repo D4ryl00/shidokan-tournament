@@ -96,13 +96,13 @@ export function buildPackage(db: AppDb, competitionId: string, opts: { handOver:
 }
 
 /**
- * Empreinte d'une compétition : sha256 du contenu des lignes de son paquet, triées par clé primaire. Les colonnes de la main, l'état
- * des inscriptions en ligne (figées par une prise de main) et les versions de lignes n'en font pas partie : prendre ou rendre la main
- * ne la change pas, une donnée modifiée la change.
+ * Empreinte d'une compétition : sha256 du contenu des lignes de son paquet, triées par clé primaire. Les colonnes de la main et les
+ * versions de lignes n'en font pas partie ; l'état des inscriptions en ligne, si. Le serveur la donne avec chaque copie, prise de main
+ * et retour, calculée après le changement : le PC garde celle de la dernière version qu'il connaît.
  */
 export function competitionFingerprint(db: AppDb, competitionId: string): string {
   const { tables } = buildPackage(db, competitionId, { handOver: false, role: 'local' });
-  const ignored = new Set(['version', 'updated_at', 'club_entry_status']);
+  const ignored = new Set(['version', 'updated_at']);
   const canonical = PACKAGE_TABLES.map((t) => {
     // age_links est renumérotée à chaque réception : son numéro de ligne ne compte pas, seul son contenu.
     const pk = t === 'age_links' ? [] : pkOf(db, t);
@@ -245,7 +245,8 @@ export async function importPackage(
 
       const stamp = now.toISOString();
       client
-        .prepare('update competitions set owner_instance_id = ?, owner_name = ?, owner_since = ?, last_sync_at = ? where id = ?')
+        // Une compétition reçue n'est plus « en secours » : elle est remplacée, ou gérée selon le paquet.
+        .prepare('update competitions set owner_instance_id = ?, owner_name = ?, owner_since = ?, last_sync_at = ?, rescue_since = null where id = ?')
         .run(owner?.id ?? null, owner?.name ?? null, owner ? stamp : null, stamp, id);
       client.prepare('update competitions set owner_token_id = null where id = ?').run(id);
     })();

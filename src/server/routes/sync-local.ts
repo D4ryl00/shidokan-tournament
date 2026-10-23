@@ -64,7 +64,11 @@ export async function syncLocalRoutes(app: FastifyInstance, { db, dbPath }: { db
   /** Internet coupé : la copie du serveur devient modifiable ici, sans demander au serveur (il sera prévenu plus tard). */
   app.post<{ Params: { id: string } }>('/api/competitions/:id/sync/rescue', async (req, reply) => {
     if (!exists(db, req.params.id)) throw new NotFoundError('Compétition introuvable');
-    if (!getManagement(db, req.params.id).copyOfServer) throw new SyncConflictError('Seule une copie du serveur peut être prise en secours.');
+    const m = getManagement(db, req.params.id);
+    if (!m.copyOfServer) throw new SyncConflictError('Seule une copie du serveur peut être prise en secours.');
+    // La main est à un autre PC : le serveur refuserait toujours d'être prévenu (les saisies resteraient bloquées ici).
+    const heldBy = m.ownerName?.startsWith(`${SERVER_NAME} — la main est à `) ? m.ownerName.slice(`${SERVER_NAME} — la main est à `.length) : null;
+    if (heldBy) throw new SyncConflictError(`La main est à ${heldBy} : reprenez-la d’abord en ligne (« Reprendre la main »), puis récupérez une nouvelle copie.`);
     db.$client
       .prepare('update competitions set owner_instance_id = null, owner_name = null, owner_since = null, rescue_since = ? where id = ?')
       .run(new Date().toISOString(), req.params.id);
@@ -104,11 +108,13 @@ export async function syncLocalRoutes(app: FastifyInstance, { db, dbPath }: { db
       setOwner(req.params.id, { id: serverId, name: SERVER_NAME });
       try {
         const pkg = buildPackage(db, req.params.id, { handOver: true, role: 'local' });
-        const res = await remote<{ instanceId?: string }>(db, 'POST', `/competitions/${encodeURIComponent(req.params.id)}/return`, pkg);
+        const res = await remote<{ instanceId?: string; fingerprint?: string }>(db, 'POST', `/competitions/${encodeURIComponent(req.params.id)}/return`, pkg);
         if (res?.instanceId) {
           rememberServerInstance(db, res.instanceId);
           setOwner(req.params.id, { id: res.instanceId, name: SERVER_NAME });
         }
+        // Empreinte de la version du serveur après le retour : un secours aussitôt après n'est pas refusé pour rien.
+        db.$client.prepare('update competitions set server_fingerprint = ? where id = ?').run(res?.fingerprint ?? null, req.params.id);
       } catch (e) {
         setOwner(req.params.id, null);
         throw e;

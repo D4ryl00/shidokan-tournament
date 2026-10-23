@@ -733,7 +733,7 @@ export function useLogout() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: () => api<void>('POST', '/api/auth/logout'), onSuccess: () => qc.resetQueries() });
 }
-export const useUsers = () => useQuery({ queryKey: ['users'], queryFn: () => api<UserRow[]>('GET', '/api/users') });
+export const useUsers = (enabled = true) => useQuery({ queryKey: ['users'], enabled, queryFn: () => api<UserRow[]>('GET', '/api/users') });
 function useUsersMutation<V>(fn: (v: V) => Promise<unknown>) {
   const qc = useQueryClient();
   return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }) });

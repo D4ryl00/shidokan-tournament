@@ -77,6 +77,14 @@ test('compte Table centrale : poste imposé, aucun menu de l’organisateur, cha
     await expect(page.getByRole('tab', { name: tab, exact: true })).toHaveAttribute('aria-selected', 'true');
     await page.waitForLoadState('networkidle');
   }
+  // Son mot de passe : un écran à lui, sans la liste des comptes.
+  await page.getByTestId('nav-password').click();
+  await expect(page.getByTestId('account-row')).toHaveCount(0);
+  await page.getByLabel('Mot de passe actuel').fill(PASSWORD);
+  await page.getByLabel('Nouveau mot de passe').fill('nouveau-mot-de-passe');
+  await page.getByRole('button', { name: 'Changer' }).click();
+  await expect(page.getByText('Mot de passe changé.')).toBeVisible();
+  await page.waitForLoadState('networkidle');
   expect(forbidden).toEqual([]);
 });
 
