@@ -19,6 +19,7 @@ test('réglages par défaut (spec §9.2, §8, §11.1, §12, §4.1)', () => {
     passageOrder: 'rounds',
     finalsZoneId: null,
     kataFinalsOnFinalsZone: false,
+    invitationMail: null,
   });
 });
 
