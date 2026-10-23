@@ -43,7 +43,8 @@ export function cookieValue(req: FastifyRequest, name: string): string | null {
 
 /** Routes ouvertes sans connexion (motifs des routes de Fastify, pas les adresses brutes). */
 const PUBLIC_ROUTES = new Set(['/api/health', '/api/auth/me', '/api/auth/login']);
-const isPublicRoute = (route: string) => PUBLIC_ROUTES.has(route) || route === '/api/inscription/:token' || route.startsWith('/api/inscription/:token/');
+const isPublicRoute = (route: string) =>
+  PUBLIC_ROUTES.has(route) || route === '/api/inscription/:token' || route.startsWith('/api/inscription/:token/') || route.startsWith('/api/sync/remote/'); // ouvertes par leur jeton
 const TOO_MANY = { error: 'Trop de requêtes : réessayez dans quelques minutes.' };
 
 /** Chemin décodé (`/%61pi` → `/api`), barres répétées réduites ; null si l'encodage est invalide. */
@@ -67,6 +68,7 @@ export function registerGuard(app: FastifyInstance, db: AppDb, role: InstanceRol
   const clubPages = new RateLimiter(300, 10 * 60 * 1000);
   const logins = new RateLimiter(10, 15 * 60 * 1000);
   const loginsPerAccount = new RateLimiter(30, 60 * 60 * 1000);
+  const syncCalls = new RateLimiter(120, 10 * 60 * 1000);
   app.addHook('onRequest', async (req, reply) => {
     const path = decodedPath(req.url);
     if (path === null) return reply.status(400).send({ error: 'Adresse invalide.' });
@@ -82,6 +84,7 @@ export function registerGuard(app: FastifyInstance, db: AppDb, role: InstanceRol
       if (host !== req.headers.host) return reply.status(403).send({ error: 'Origine refusée.' });
     }
     if ((route.startsWith('/api/inscription/') || path.startsWith('/api/inscription/')) && !clubPages.hit(req.ip)) return reply.status(429).send(TOO_MANY);
+    if ((route.startsWith('/api/sync/remote/') || path.startsWith('/api/sync/remote/')) && !syncCalls.hit(req.ip)) return reply.status(429).send(TOO_MANY);
     if ((route === '/api/auth/login' || path === '/api/auth/login') && req.method === 'POST' && !logins.hit(req.ip)) return reply.status(429).send(TOO_MANY);
     const token = cookieValue(req, SESSION_COOKIE);
     req.user = token ? sessionUser(db, token) : null;

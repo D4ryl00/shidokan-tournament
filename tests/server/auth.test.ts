@@ -44,13 +44,21 @@ test('hashPassword / verifyPassword : bon et mauvais mot de passe ; deux emprein
 test('serveur : toutes les routes /api non publiques répondent 401 sans session', async () => {
   const { app: a } = await serverApp();
   await a.ready();
-  const PUBLIC = [/^\/api\/health$/, /^\/api\/auth\/me$/, /^\/api\/auth\/login$/, /^\/api\/inscription(\/|$)/];
+  const PUBLIC = [/^\/api\/health$/, /^\/api\/auth\/me$/, /^\/api\/auth\/login$/, /^\/api\/inscription(\/|$)/, /^\/api\/sync\/remote\//];
   const list = routes(a).filter((r) => r.url.startsWith('/api/') && r.method !== 'HEAD' && !PUBLIC.some((p) => p.test(r.url)));
   expect(list.length).toBeGreaterThan(40);
   for (const r of list) {
     const res = await a.inject({ method: r.method as 'GET', url: r.url, payload: r.method === 'GET' ? undefined : {} });
     expect(res.statusCode, `${r.method} ${r.url}`).toBe(401);
     expect(res.json().error, `${r.method} ${r.url}`).toBe('Connexion requise.');
+  }
+  // Routes des PC reliés : ouvertes par leur jeton, sinon 401.
+  const synced = routes(a).filter((r) => r.url.startsWith('/api/sync/remote/') && r.method !== 'HEAD');
+  expect(synced.length).toBeGreaterThan(3);
+  for (const r of synced) {
+    const res = await a.inject({ method: r.method as 'GET', url: r.url, payload: r.method === 'GET' ? undefined : {} });
+    expect(res.statusCode, `${r.method} ${r.url}`).toBe(401);
+    expect(res.json().error).toBe('Jeton de synchronisation invalide.');
   }
 });
 
