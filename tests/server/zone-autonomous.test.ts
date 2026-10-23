@@ -95,6 +95,18 @@ test('zone autonome : seulement sur une copie du PC principal', async () => {
   expect(res.json().error).toBe('Seule une copie du PC principal peut passer en zone autonome.');
 });
 
+test('zone autonome : importer la compétition par fichier (même en reprenant la main) est refusé, rien ne change', async () => {
+  await autonomous();
+  const pkg = (await f.onMain('GET', `${f.base}/export.json`)).json();
+  for (const q of ['', '?takeOver=1', '?replace=1']) {
+    const res = await f.laptop.inject({ method: 'POST', url: `/api/competitions/import${q}`, payload: pkg });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toBe('Zone autonome en cours sur cette compétition : pour une copie plus récente, utilisez « Recevoir une copie plus récente ».');
+  }
+  expect((await f.onLaptop('GET', `${f.base}/management`)).json()).toMatchObject({ copyOfMain: true });
+  expect((await f.onLaptop('PUT', `${f.base}/categories/${f.b61.id}/results/w1-0`, RESULT)).statusCode).toBe(409);
+});
+
 test('bandeau : GET /api/zone-link donne autonomous.since et pending = 3', async () => {
   await autonomous();
   for (const m of ['w1-0', 'w1-1']) await f.onLaptop('PUT', `${f.base}/categories/${f.a54.id}/results/${m}`, RESULT);

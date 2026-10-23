@@ -8,6 +8,7 @@ import { clearSyncServer, getSyncServer, rememberServerInstance, remote, setSync
 import { followStatus, getFollow, resetFollowStatus, setFollow } from '../sync/follow.js';
 import { getManagement } from '../sync/ownership.js';
 import { buildPackage, competitionFingerprint, importPackage, type SyncPackage } from '../sync/package.js';
+import { getZoneLink } from '../zone/link.js';
 import { myIdentity, pullCopy, SERVER_NAME, serverCopyName, SyncConflictError, whileReturning } from '../sync/pull.js';
 
 const exists = (db: AppDb, id: string) => !!db.$client.prepare('select 1 from competitions where id = ?').get(id);
@@ -138,6 +139,11 @@ export async function syncFileRoutes(app: FastifyInstance, { db, dbPath, role }:
     const pkg = req.body as Partial<SyncPackage> | null;
     const id = typeof pkg?.competitionId === 'string' ? pkg.competitionId : null;
     const present = id !== null && exists(db, id);
+    // Portable en zone autonome : la copie ne se remplace que par « Recevoir une copie plus récente » (les saisies y sont réappliquées).
+    const zone = getZoneLink(db);
+    if (present && zone?.autonomous && zone.competitionId === id) {
+      throw new SyncConflictError('Zone autonome en cours sur cette compétition : pour une copie plus récente, utilisez « Recevoir une copie plus récente ».');
+    }
     const plainServerCopy = pkg?.handOver === false && pkg.from?.role === 'serveur';
     if (present) {
       const m = getManagement(db, id!);
