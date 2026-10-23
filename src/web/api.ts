@@ -506,8 +506,8 @@ export function useSaveWaves(id: string) {
   });
 }
 
-export function useZones(id: string) {
-  return useQuery({ queryKey: ['zones', id], queryFn: () => api<Zone[]>('GET', `/api/competitions/${id}/zones`) });
+export function useZones(id: string, enabled = true) {
+  return useQuery({ queryKey: ['zones', id], enabled: enabled && !!id, queryFn: () => api<Zone[]>('GET', `/api/competitions/${id}/zones`) });
 }
 
 export function useSaveZones(id: string) {
@@ -583,8 +583,8 @@ export function usePodiums(id: string) {
     queryFn: () => api<{ categories: { id: string; label: string; podium: Podium; complete: boolean; status: string }[]; medals: MedalRow[] }>('GET', `/api/competitions/${id}/podiums`),
   });
 }
-export function useBackups() {
-  return useQuery({ queryKey: ['backups'], queryFn: () => api<{ name: string; size: number; createdAt: string }[]>('GET', '/api/backups') });
+export function useBackups(enabled = true) {
+  return useQuery({ queryKey: ['backups'], enabled, queryFn: () => api<{ name: string; size: number; createdAt: string }[]>('GET', '/api/backups') });
 }
 export function useBackupNow() {
   const qc = useQueryClient();
@@ -603,8 +603,8 @@ export function useRestore() {
     onSuccess: () => qc.invalidateQueries(),
   });
 }
-export function useGridTemplates() {
-  return useQuery({ queryKey: ['grid-templates'], queryFn: () => api<{ id: string; name: string; createdAt: string }[]>('GET', '/api/grid-templates') });
+export function useGridTemplates(enabled = true) {
+  return useQuery({ queryKey: ['grid-templates'], enabled, queryFn: () => api<{ id: string; name: string; createdAt: string }[]>('GET', '/api/grid-templates') });
 }
 export function useSaveTemplate(id: string) {
   const qc = useQueryClient();
@@ -703,10 +703,16 @@ export const useDeleteClubLine = (token: string) =>
     api<void>('DELETE', `/api/inscription/${token}/lines/${fighterId}?version=${encodeURIComponent(version)}`));
 
 // Connexion des organisateurs (rôle serveur) et comptes.
-export interface AuthMe { role: 'serveur' | 'local'; user: { email: string } | null }
-export interface UserRow { id: string; email: string; createdAt: string }
+export type UserRole = 'organisateur' | 'table' | 'zone';
+/** Rôle d'un compte ; un compte Zone est attaché à une zone d'une compétition. */
+export interface AccountRole { role: UserRole; competitionId: string | null; zoneId: string | null }
+export interface AuthMe { role: 'serveur' | 'local'; user: ({ email: string } & AccountRole) | null }
+export interface UserRow extends AccountRole { id: string; email: string; createdAt: string; competitionName: string | null; zoneName: string | null }
 
 export const useAuthMe = () => useQuery({ queryKey: ['auth'], queryFn: () => api<AuthMe>('GET', '/api/auth/me'), staleTime: 60_000 });
+/** Tout est permis : rôle local (pas de comptes), ou compte Organisateur. */
+export const isOrganiser = (me: AuthMe | undefined) => !me?.user || me.user.role === 'organisateur';
+export const useIsOrganiser = () => isOrganiser(useAuthMe().data);
 /** Vrai quand la session a été perdue en cours de route (la fenêtre de reconnexion s'affiche par-dessus l'écran). */
 export const useAuthExpired = () =>
   useQuery({ queryKey: ['auth-expired'], queryFn: async () => false, initialData: false, staleTime: Infinity }).data;
@@ -730,7 +736,8 @@ function useUsersMutation<V>(fn: (v: V) => Promise<unknown>) {
   const qc = useQueryClient();
   return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }) });
 }
-export const useCreateUser = () => useUsersMutation((v: { email: string; password: string }) => api('POST', '/api/users', v));
+export const useCreateUser = () => useUsersMutation((v: { email: string; password: string } & AccountRole) => api('POST', '/api/users', v));
+export const useUpdateUserRole = () => useUsersMutation(({ id, ...v }: { id: string } & AccountRole) => api('PATCH', `/api/users/${id}`, v));
 export const useDeleteUser = () => useUsersMutation((id: string) => api('DELETE', `/api/users/${id}`));
 export const useChangePassword = () => useMutation({ mutationFn: (v: { current: string; next: string }) => api<void>('PUT', '/api/users/me/password', v) });
 

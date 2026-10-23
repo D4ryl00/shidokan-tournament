@@ -97,6 +97,14 @@ test('routeAccess : chaque route enregistrée a la décision attendue pour la Ta
   for (const k of [...TABLE_WRITES, ...COMMON]) expect(keys.has(k), k).toBe(true);
 });
 
+test('pages et fichiers de l’application (hors /api) : toujours servis, quel que soit le rôle', () => {
+  for (const role of ['table', 'zone'] as const) {
+    expect(routeAccess(user(role), 'GET', '/*')).toBe('allow');
+    expect(routeAccess(user(role), 'GET', '/')).toBe('allow');
+    expect(routeAccess(user(role), 'GET', '')).toBe('allow');
+  }
+});
+
 test('table : saisit une inscription et un résultat ; les routes de l’organisateur → 403', async () => {
   const { table, base, a54 } = await setup();
   const rows = (await table('GET', `${base}/registrations`)).json() as { id: string; discipline: string; ruleset: string | null; weightClassId: string | null; source: string; fighter: { lastName: string; sex: string; ageBandCode: string } }[];

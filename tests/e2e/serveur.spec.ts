@@ -14,7 +14,8 @@ test('serveur : connexion obligatoire, puis les écrans habituels ; déconnexion
   await expect(page.getByTestId('new-competition')).toBeVisible();
   await expect(page.getByTestId('nav-accounts')).toBeVisible();
   await page.getByTestId('nav-accounts').click();
-  await expect(page.getByTestId('account-row')).toHaveText(/orga@e2e\.example \(vous\)/);
+  // D'autres comptes peuvent exister (rôles créés par un autre parcours sur ce serveur).
+  await expect(page.getByTestId('account-row').filter({ hasText: 'orga@e2e.example' })).toContainText('orga@e2e.example (vous)');
   await page.getByTestId('logout').click();
   await expect(page.getByTestId('login-submit')).toBeVisible();
   await page.goto('/inscription/inconnu');

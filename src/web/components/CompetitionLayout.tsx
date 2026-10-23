@@ -1,4 +1,4 @@
-import { Button, Group, Loader, Modal, Select, Stack, Tabs, Text, Title } from '@mantine/core';
+import { Alert, Button, Group, Loader, Modal, Select, Stack, Tabs, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -19,8 +19,10 @@ export function CompetitionLayout() {
   useCompetitionEvents(id);
   const navigate = useNavigate();
   const current = useLocation().pathname.split('/')[3] ?? 'reglages';
-  const [poste, setPoste] = usePoste(id);
-  const { data: zones = [] } = useZones(id);
+  const [poste, setPoste, imposed] = usePoste(id);
+  const { data: zones = [], isSuccess: zonesLoaded } = useZones(id);
+  // Compte Zone dont la zone a été supprimée (ou d'une autre compétition) : rien n'est permis.
+  const zoneMissing = imposed && poste.kind === 'zone' && zonesLoaded && !zones.some((z) => z.id === poste.zoneId);
   const allowed = posteTabs(poste);
   const unsaved = useHasUnsaved();
   const [pending, setPending] = useState<string | null>(null);
@@ -56,9 +58,14 @@ export function CompetitionLayout() {
         </Text>
         <Group justify="space-between" align="center" mt={4}>
           <ManagementBanner competitionId={id} />
-          <Select size="xs" w={220} label="Poste" data-testid="poste-select" allowDeselect={false} value={posteValue} onChange={choosePoste}
-            data={[{ value: 'organisation', label: 'Organisation (tout)' }, { value: 'table', label: 'Table centrale' }, ...zones.map((z) => ({ value: `zone:${z.id}`, label: `Zone : ${z.name}` }))]} />
+          {imposed ? (
+            <Text size="sm" data-testid="poste-account">Poste : {poste.kind === 'table' ? 'Table centrale' : `Zone : ${zones.find((z) => poste.kind === 'zone' && z.id === poste.zoneId)?.name ?? '?'}`}</Text>
+          ) : (
+            <Select size="xs" w={220} label="Poste" data-testid="poste-select" allowDeselect={false} value={posteValue} onChange={choosePoste}
+              data={[{ value: 'organisation', label: 'Organisation (tout)' }, { value: 'table', label: 'Table centrale' }, ...zones.map((z) => ({ value: `zone:${z.id}`, label: `Zone : ${z.name}` }))]} />
+          )}
         </Group>
+        {zoneMissing && <Alert color="orange" mt="xs" data-testid="account-zone-missing">La zone de ce compte n’existe plus : demandez à un organisateur.</Alert>}
       </div>
       <Tabs value={current} onChange={(v) => v && v !== current && go(v)}>
         <Tabs.List>

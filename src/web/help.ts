@@ -85,11 +85,17 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
   },
   comptes: {
     title: 'Comptes',
-    short: 'Les organisateurs qui peuvent se connecter à l’application en ligne.',
+    short: 'Les personnes qui peuvent se connecter à l’application en ligne, et ce que chacune peut faire.',
     details: [
-      'Sur le serveur en ligne, chaque organisateur se connecte avec son e-mail et son mot de passe. Le PC de la compétition, lui, ne demande pas de connexion.',
+      'Sur le serveur en ligne, chacun se connecte avec son e-mail et son mot de passe. Le PC de la compétition, lui, ne demande pas de connexion.',
       [
-        '« Ajouter un compte » : e-mail et mot de passe de 10 caractères au moins, à transmettre à la personne (elle pourra le changer).',
+        'Organisateur : tout.',
+        'Table centrale : inscriptions, clubs, pesée, réaffectations, tableaux, sessions à lancer et résultats de toutes les zones ; pas les réglages, la grille, les imports ni les invitations.',
+        'Zone : résultats, notes de kata et départages des combats de sa zone seulement. Un compte Zone est attaché à une zone d’une compétition : pour la compétition suivante, changez son rôle (« Changer le rôle ») ou créez-en un autre.',
+      ],
+      [
+        '« Ajouter un compte » : e-mail, mot de passe de 10 caractères au moins (à transmettre à la personne, elle pourra le changer) et rôle.',
+        '« Changer le rôle » vaut tout de suite, sans que la personne ait à se reconnecter. On ne change pas le rôle de son propre compte.',
         '« Changer mon mot de passe » : il faut le mot de passe actuel.',
         'Le premier compte d’un serveur se crée sur le serveur lui-même : docker compose exec -it app node dist/server/cli.js add-user <e-mail>.',
         'Les comptes ne sont jamais copiés dans les sauvegardes : après une restauration sur un nouveau serveur, recréez-les avec la même commande.',

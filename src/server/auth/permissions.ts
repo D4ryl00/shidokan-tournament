@@ -37,7 +37,8 @@ const isCompetitionRoute = (route: string) => route === C || route.startsWith(`$
 
 /** Décision sans base de données : la route est-elle permise à ce rôle ? ('zone-check' : permise si la saisie est sur sa zone). */
 export function routeAccess(user: SessionUser, method: string, route: string): 'allow' | 'deny' | 'zone-check' {
-  if (user.role === 'organisateur' || isPublicRoute(route)) return 'allow';
+  // Pages et fichiers de l'application (hors /api) : servis à tous ; les données passent toutes par /api.
+  if (user.role === 'organisateur' || isPublicRoute(route) || !route.startsWith('/api/')) return 'allow';
   const verb = method === 'HEAD' ? 'GET' : method;
   const key = `${verb} ${route}`;
   if (COMMON.has(key)) return 'allow';

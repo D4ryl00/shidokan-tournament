@@ -1,17 +1,19 @@
 import { Anchor, Button, Group, Modal, NumberInput, Select, Stack, Table, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
-import { Link } from 'react-router';
-import { useCompetitions, useCreateCompetition, useGridTemplates } from '../api.js';
+import { Link, Navigate } from 'react-router';
+import { useAuthMe, useCompetitions, useCreateCompetition, useGridTemplates, isOrganiser } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { SectionHeader } from '../components/Help.js';
 import { ImportCompetitionButton, ServerCompetitionsButton } from '../components/SyncPanel.js';
 
 export function CompetitionsPage() {
   const { data = [] } = useCompetitions();
+  const { data: me } = useAuthMe();
+  const organiser = isOrganiser(me);
   const create = useCreateCompetition();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: '', date: '2026-11-22', location: '', zoneCount: 2 });
-  const { data: templates = [] } = useGridTemplates();
+  const { data: templates = [] } = useGridTemplates(organiser);
   const [templateId, setTemplateId] = useState<string | null>(null);
 
   const submit = () =>
@@ -20,17 +22,22 @@ export function CompetitionsPage() {
       { onSuccess: () => { setOpen(false); setForm({ ...form, name: '', location: '' }); } },
     );
 
+  // Un compte Zone n'a qu'une compétition : il va directement à ses combats.
+  if (me?.user?.role === 'zone' && me.user.competitionId) return <Navigate to={`/competitions/${me.user.competitionId}/combats`} replace />;
+
   return (
     <Stack>
       <Group justify="space-between">
         <SectionHeader topic="competitions" order={2} />
-        <Group>
-          <ServerCompetitionsButton />
-          <ImportCompetitionButton />
-          <Button data-testid="new-competition" onClick={() => setOpen(true)}>
-            Nouvelle compétition
-          </Button>
-        </Group>
+        {organiser && (
+          <Group>
+            <ServerCompetitionsButton />
+            <ImportCompetitionButton />
+            <Button data-testid="new-competition" onClick={() => setOpen(true)}>
+              Nouvelle compétition
+            </Button>
+          </Group>
+        )}
       </Group>
       {data.length === 0 ? (
         <Text c="dimmed">Aucune compétition pour l'instant.</Text>
@@ -53,10 +60,12 @@ export function CompetitionsPage() {
                 <Table.Td>{new Date(`${c.date}T12:00:00`).toLocaleDateString('fr-FR')}</Table.Td>
                 <Table.Td>{c.location ?? '—'}</Table.Td>
                 <Table.Td>
-                  <Group gap="xs" justify="flex-end">
-                    <Anchor component={Link} to={`/competitions/${c.id}/reglages`}>Réglages</Anchor>
-                    <Anchor component={Link} to={`/competitions/${c.id}/grille`}>Grille</Anchor>
-                  </Group>
+                  {organiser && (
+                    <Group gap="xs" justify="flex-end">
+                      <Anchor component={Link} to={`/competitions/${c.id}/reglages`}>Réglages</Anchor>
+                      <Anchor component={Link} to={`/competitions/${c.id}/grille`}>Grille</Anchor>
+                    </Group>
+                  )}
                 </Table.Td>
               </Table.Tr>
             ))}

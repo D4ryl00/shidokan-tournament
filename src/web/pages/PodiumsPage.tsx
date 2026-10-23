@@ -2,7 +2,7 @@ import { Alert, Anchor, Badge, Button, Card, Group, Modal, SimpleGrid, Stack, Ta
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { useBackupNow, useBackups, usePodiums, useRestore } from '../api.js';
+import { useBackupNow, useBackups, useIsOrganiser, usePodiums, useRestore } from '../api.js';
 import { MirrorCopies } from '../components/MirrorPanels.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { SectionHeader } from '../components/Help.js';
@@ -12,7 +12,9 @@ export function PodiumsPage() {
   const { id = '' } = useParams();
   const { data } = usePodiums(id);
   const entrants = useEntrantInfo(id);
-  const { data: backups = [] } = useBackups();
+  // Sauvegardes : réservées à l'organisateur (un compte Table centrale ou Zone ne les voit pas).
+  const organiser = useIsOrganiser();
+  const { data: backups = [] } = useBackups(organiser);
   const backupNow = useBackupNow();
   const restore = useRestore();
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
@@ -62,6 +64,7 @@ export function PodiumsPage() {
         </Table.Tbody>
       </Table>
 
+      {organiser && (<>
       <SectionHeader topic="podiums.sauvegardes" />
       <Group>
         <Button variant="light" data-testid="backup-now" loading={backupNow.isPending}
@@ -86,6 +89,7 @@ export function PodiumsPage() {
         </Table.Tbody>
       </Table>
       <MirrorCopies />
+      </>)}
       <ApiErrorAlert error={restore.error ?? backupNow.error} />
       <Modal opened={restoreFile !== null} onClose={() => setRestoreFile(null)} title="Restaurer cette sauvegarde ?">
         <Stack>

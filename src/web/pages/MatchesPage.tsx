@@ -42,7 +42,7 @@ export function MatchesPage() {
   const [moving, setMoving] = useState<{ category: { id: string; label: string }; zoneId: string } | null>(null);
   // Avec une vague : ses catégories seulement.
   // Poste « Zone » : seulement sa zone (catégories qui s'y jouent, sa file), sans les réglages de zone et d'ordre.
-  const [poste] = usePoste(id);
+  const [poste, , imposed] = usePoste(id);
   const zoneOnly = poste.kind === 'zone' ? poste.zoneId : null;
   // Une catégorie dont un passage est dans la file de la zone (finales sur la zone des finales) en fait partie aussi.
   const inZoneQueue = new Set((schedule?.zones ?? []).filter((t) => t.zone.id === zoneOnly).flatMap((t) => t.queue.map((q) => q.categoryId)));
@@ -108,7 +108,7 @@ export function MatchesPage() {
               <SegmentedControl data-testid="matches-wave" value={waveId ?? ''} onChange={select} data={waves.map((w) => ({ value: w.id, label: w.name }))} />
             </Group>
           )}
-          {zoneOnly && zones.length > 0 && !zones.some((z) => z.id === zoneOnly) && (
+          {zoneOnly && !imposed && zones.length > 0 && !zones.some((z) => z.id === zoneOnly) && (
             <Alert color="orange">La zone de ce poste n’existe plus : choisissez un autre poste en haut de l’écran.</Alert>
           )}
           {!zoneOnly && ready && (waves.length === 0 || waveId) && <WaveLaunchPanel competitionId={id} waveId={waveId} />}

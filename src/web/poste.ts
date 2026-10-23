@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useAuthMe, type AuthMe } from './api.js';
 import { COMPETITION_TABS } from './tabs.js';
 
 /**
@@ -33,6 +34,17 @@ export function parsePoste(raw: string | null): Poste {
   return { kind: 'organisation' };
 }
 
+/**
+ * Poste imposé par le compte connecté (rôle serveur) : Table centrale, ou la zone d'un compte Zone (sans zone hors de sa compétition :
+ * rien n'y est permis). Null : organisateur, ou rôle local (le navigateur choisit son poste).
+ */
+export function accountPoste(me: AuthMe | undefined, competitionId: string): Poste | null {
+  const user = me?.user;
+  if (!user || user.role === 'organisateur') return null;
+  if (user.role === 'table') return { kind: 'table' };
+  return { kind: 'zone', zoneId: user.competitionId === competitionId ? (user.zoneId ?? '') : '' };
+}
+
 const key = (competitionId: string) => `poste:${competitionId}`;
 const read = (competitionId: string) => {
   try {
@@ -42,8 +54,12 @@ const read = (competitionId: string) => {
   }
 };
 
-/** Poste de ce navigateur pour la compétition, et son changement (partagé entre les onglets du navigateur). */
-export function usePoste(competitionId: string): [Poste, (p: Poste) => void] {
+/**
+ * Poste de ce navigateur pour la compétition, et son changement (partagé entre les onglets du navigateur) ; le troisième élément
+ * est vrai quand le poste est imposé par le compte connecté (il ne se change pas).
+ */
+export function usePoste(competitionId: string): [Poste, (p: Poste) => void, boolean] {
+  const imposed = accountPoste(useAuthMe().data, competitionId);
   const [poste, setPoste] = useState<Poste>(() => read(competitionId));
   useEffect(() => {
     setPoste(read(competitionId));
@@ -68,5 +84,5 @@ export function usePoste(competitionId: string): [Poste, (p: Poste) => void] {
     },
     [competitionId],
   );
-  return [poste, change];
+  return imposed ? [imposed, () => {}, true] : [poste, change, false];
 }
