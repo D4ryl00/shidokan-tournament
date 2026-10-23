@@ -14,10 +14,11 @@ import { weightClassesFor } from '../src/domain/grid.js';
 import type { CategoryGrid, DisciplineId, Ruleset, Sex } from '../src/domain/types.js';
 import { buildApp } from '../src/server/app.js';
 
+// Noms inventés, absents de l'export FFK : la base de dev ne doit jamais ressembler à de vraies personnes.
 const LAST_NAMES = [
-  'MARTIN', 'BERNARD', 'THOMAS', 'PETIT', 'ROBERT', 'RICHARD', 'DURAND', 'DUBOIS', 'MOREAU', 'LAURENT', 'SIMON', 'MICHEL',
-  'LEFEBVRE', 'LEROY', 'ROUX', 'DAVID', 'BERTRAND', 'MOREL', 'FOURNIER', 'GIRARD', 'BONNET', 'DUPONT', 'LAMBERT', 'FONTAINE',
-  'ROUSSEAU', 'VINCENT', 'MULLER', 'FAURE', 'ANDRE', 'MERCIER', 'BLANC', 'GUERIN', 'BOYER', 'GARNIER', 'CHEVALIER', 'LEGRAND',
+  'ORTALAN', 'BRUSSANDE', 'QUELVIRAN', 'MARZELOT', 'TRIVANEL', 'SOULAVIN', 'PELDORAN', 'VERMALOT', 'DOLVERAN', 'FAUNTREL', 'GRAVELOUX', 'JORVANNE',
+  'MORVANDEL', 'NAVERLIN', 'OSTRAVEL', 'PRUNELLAC', 'RAVENTOL', 'SALVERNE', 'TARVOLIN', 'URDAVEL', 'VALMORIN', 'ZELORAN', 'ABRIVAL', 'CORVELIN',
+  'DRAVENNE', 'ESCALVIN', 'FERMOLAN', 'GALVERAN', 'HASTELIN', 'IVORLAN', 'KERDAVEL', 'LOMBREVAL', 'MALTRAVEN', 'NORVELLE', 'QUINTRAVE', 'ROSVELIN',
 ];
 const FIRST_NAMES: Record<Sex, string[]> = {
   F: ['Léa', 'Emma', 'Chloé', 'Inès', 'Jade', 'Louise', 'Manon', 'Camille', 'Sarah', 'Zoé', 'Lina', 'Alice', 'Nina', 'Clara', 'Lola', 'Rose'],
