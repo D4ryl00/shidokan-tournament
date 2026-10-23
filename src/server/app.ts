@@ -65,7 +65,9 @@ const NOT_FOUND = { error: 'Compétition introuvable' };
 
 export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   const role = opts.role ?? 'local';
-  const app = Fastify({ logger: loggerOptions(opts.logger ?? false), bodyLimit: 20 * 1024 * 1024, trustProxy: role === 'serveur' });
+  // Rôle serveur : un seul intermédiaire de confiance (Caddy) ; l'adresse du client est la dernière qu'il ajoute à X-Forwarded-For.
+  const trustProxy = role === 'serveur' ? (_addr: string, hop: number) => hop < 1 : false;
+  const app = Fastify({ logger: loggerOptions(opts.logger ?? false), bodyLimit: 20 * 1024 * 1024, trustProxy });
   const db = openDb(opts.dbPath);
   registerGuard(app, db, role);
   ensureInstance(db, opts.instanceName ?? 'PC');

@@ -151,3 +151,35 @@ test('local : aucune connexion demandée ; /api/auth/me → { role: local, user:
   expect((await app.inject({ method: 'GET', url: '/api/competitions' })).statusCode).toBe(200);
   expect((await app.inject({ method: 'GET', url: '/api/auth/me' })).json()).toEqual({ role: 'local', user: null });
 });
+
+test('serveur : adresse encodée (%61pi), barre finale, doubles barres → toujours 401 sans session', async () => {
+  const { app: a } = await serverApp();
+  for (const [method, url] of [
+    ['GET', '/%61pi/competitions'],
+    ['GET', '/%61pi/backup.sqlite'],
+    ['GET', '/%61pi/app-settings'],
+    ['POST', '/%61pi/users'],
+    ['GET', '/api/competitions/'],
+    ['GET', '/a%70i/club-directory'],
+    ['GET', '/api/%63ompetitions'],
+  ] as const) {
+    const res = await a.inject({ method, url, payload: method === 'POST' ? { email: 'pirate@example.org', password: 'mot-de-passe-long' } : undefined });
+    expect([401, 404], `${method} ${url} → ${res.statusCode}`).toContain(res.statusCode);
+    expect(res.body, `${method} ${url}`).not.toContain('pirate@example.org');
+  }
+  // Aucun compte créé.
+  const cookie = cookieOf(await login(a));
+  expect((await a.inject({ method: 'GET', url: '/api/users', headers: { cookie } })).json().map((u: { email: string }) => u.email)).toEqual(['orga@example.org']);
+});
+
+test('serveur : la limite de connexion ne se contourne ni par une adresse encodée ni par X-Forwarded-For', async () => {
+  const { app: a } = await serverApp();
+  const tries = [];
+  for (let i = 0; i < 11; i++) {
+    tries.push(
+      (await a.inject({ method: 'POST', url: i % 2 ? '/%61pi/auth/login' : '/api/auth/login', headers: { 'x-forwarded-for': `10.0.0.${i}, 9.9.9.9` }, payload: { email: 'orga@example.org', password: 'mauvais-mot-de-passe' } }))
+        .statusCode,
+    );
+  }
+  expect(tries.at(-1)).toBe(429);
+});

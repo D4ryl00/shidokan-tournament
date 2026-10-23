@@ -41,20 +41,37 @@ export function cookieValue(req: FastifyRequest, name: string): string | null {
   return null;
 }
 
-const PUBLIC = [/^\/api\/health$/, /^\/api\/auth\/me$/, /^\/api\/auth\/login$/, /^\/api\/inscription(\/|$)/];
+/** Routes ouvertes sans connexion (motifs des routes de Fastify, pas les adresses brutes). */
+const PUBLIC_ROUTES = new Set(['/api/health', '/api/auth/me', '/api/auth/login']);
+const isPublicRoute = (route: string) => PUBLIC_ROUTES.has(route) || route === '/api/inscription/:token' || route.startsWith('/api/inscription/:token/');
 const TOO_MANY = { error: 'Trop de requêtes : réessayez dans quelques minutes.' };
+
+/** Chemin décodé (`/%61pi` → `/api`), barres répétées réduites ; null si l'encodage est invalide. */
+function decodedPath(url: string): string | null {
+  try {
+    return decodeURIComponent(url.split('?')[0]!).replace(/\/{2,}/g, '/');
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Rôle serveur : écritures d'une autre origine refusées, nombre de requêtes limité (pages des clubs, connexion),
- * et connexion obligatoire pour toute route /api qui n'est pas publique. Rôle local : aucun contrôle (comme avant).
+ * et connexion obligatoire pour toute route /api qui n'est pas publique. La décision porte sur la route réellement trouvée
+ * par Fastify (qui décode l'adresse) et, en plus, sur l'adresse décodée : `/%61pi/…` ne contourne rien.
+ * Rôle local : aucun contrôle (comme avant).
  */
 export function registerGuard(app: FastifyInstance, db: AppDb, role: InstanceRole): void {
   app.decorateRequest('user', null);
   if (role !== 'serveur') return;
   const clubPages = new RateLimiter(300, 10 * 60 * 1000);
   const logins = new RateLimiter(10, 15 * 60 * 1000);
+  const loginsPerAccount = new RateLimiter(30, 60 * 60 * 1000);
   app.addHook('onRequest', async (req, reply) => {
-    const path = req.url.split('?')[0]!;
+    const path = decodedPath(req.url);
+    if (path === null) return reply.status(400).send({ error: 'Adresse invalide.' });
+    const route = req.routeOptions.url ?? path;
+    const api = route.startsWith('/api/') || path.startsWith('/api/') || path === '/api';
     if (req.method !== 'GET' && req.method !== 'HEAD' && req.headers.origin) {
       let host: string | null = null;
       try {
@@ -64,10 +81,18 @@ export function registerGuard(app: FastifyInstance, db: AppDb, role: InstanceRol
       }
       if (host !== req.headers.host) return reply.status(403).send({ error: 'Origine refusée.' });
     }
-    if (path.startsWith('/api/inscription/') && !clubPages.hit(req.ip)) return reply.status(429).send(TOO_MANY);
-    if (path === '/api/auth/login' && req.method === 'POST' && !logins.hit(req.ip)) return reply.status(429).send(TOO_MANY);
+    if ((route.startsWith('/api/inscription/') || path.startsWith('/api/inscription/')) && !clubPages.hit(req.ip)) return reply.status(429).send(TOO_MANY);
+    if ((route === '/api/auth/login' || path === '/api/auth/login') && req.method === 'POST' && !logins.hit(req.ip)) return reply.status(429).send(TOO_MANY);
     const token = cookieValue(req, SESSION_COOKIE);
     req.user = token ? sessionUser(db, token) : null;
-    if (path.startsWith('/api/') && !PUBLIC.some((p) => p.test(path)) && !req.user) return reply.status(401).send({ error: 'Connexion requise.' });
+    if (api && !req.user && !isPublicRoute(route)) {
+      return reply.status(401).send({ error: 'Connexion requise.' });
+    }
+  });
+  // Essais par compte, en plus des essais par adresse : la cible d'une attaque répartie est aussi protégée.
+  app.addHook('preHandler', async (req, reply) => {
+    if (req.routeOptions.url !== '/api/auth/login' || req.method !== 'POST') return;
+    const email = (req.body as { email?: unknown } | undefined)?.email;
+    if (typeof email === 'string' && !loginsPerAccount.hit(email.trim().toLowerCase())) return reply.status(429).send(TOO_MANY);
   });
 }
