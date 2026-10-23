@@ -18,6 +18,8 @@ export class ApiError extends Error {
     readonly status: number,
     message: string,
     readonly issues: string[] = [],
+    /** Refus que l'écran traite à part (par exemple RESCUE_DIVERGED). */
+    readonly code?: string,
   ) {
     super(message);
   }
@@ -38,8 +40,8 @@ export async function api<T>(method: string, url: string, body?: unknown, opts: 
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { error?: string; issues?: string[] };
-    throw new ApiError(res.status, data.error ?? `Erreur ${res.status}`, data.issues ?? []);
+    const data = (await res.json().catch(() => ({}))) as { error?: string; issues?: string[]; code?: string };
+    throw new ApiError(res.status, data.error ?? `Erreur ${res.status}`, data.issues ?? [], data.code);
   }
   return (res.status === 204 ? undefined : await res.json()) as T;
 }
@@ -766,7 +768,7 @@ export const useInvitationPreview = (id: string, clubId: string | null, version:
   });
 
 // Passage de main entre le serveur et le PC.
-export interface Management { managedHere: boolean; ownerName: string | null; ownerSince: string | null; lastSyncAt: string | null; copyOfServer: boolean }
+export interface Management { managedHere: boolean; ownerName: string | null; ownerSince: string | null; lastSyncAt: string | null; copyOfServer: boolean; rescueSince: string | null }
 export interface ServerCompetition { id: string; name: string; date: string; managedHere: boolean; ownerName: string | null; clubEntryStatus: 'closed' | 'open' | 'frozen' }
 export const useManagement = (id: string) =>
   useQuery({ queryKey: ['management', id], queryFn: () => api<Management>('GET', `/api/competitions/${id}/management`) });
@@ -797,6 +799,8 @@ export function useSetSyncFollow() {
     onSuccess: (f) => qc.setQueryData(['sync-follow'], f),
   });
 }
+export const useRescue = (id: string) => useSyncMutation(() => api<void>('POST', `/api/competitions/${id}/sync/rescue`));
+export const useRescueNotify = (id: string) => useSyncMutation((replace: boolean) => api<void>('POST', `/api/competitions/${id}/sync/rescue/notify`, { replace }));
 export const useSyncCopy = (id: string) => useSyncMutation(() => api<{ sentAt: string }>('POST', `/api/competitions/${id}/sync/copy`));
 export const useSyncReturn = (id: string) => useSyncMutation(() => api<void>('POST', `/api/competitions/${id}/sync/return`));
 export const useTakeBack = (id: string) => useSyncMutation((source: 'server' | 'lastCopy') => api<void>('POST', `/api/competitions/${id}/take-back`, { source }));

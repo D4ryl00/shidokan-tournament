@@ -6,7 +6,7 @@ import { competitionChanged } from '../events.js';
 import { competitions, receivedCopies } from '../db/schema.js';
 import { NotFoundError } from '../repositories/registrations.js';
 import { getManagement } from '../sync/ownership.js';
-import { buildPackage, competitionFingerprint, importPackage, validatePackage } from '../sync/package.js';
+import { buildPackage, competitionFingerprint, importPackage, validatePackage, type SyncPackage } from '../sync/package.js';
 import { getInstance } from '../repositories/instance.js';
 import { checkSyncToken, createSyncToken, listSyncTokens, revokeSyncToken } from '../sync/tokens.js';
 
@@ -21,6 +21,15 @@ class SyncAuthError extends Error {
 }
 class SyncPackageError extends Error {
   readonly statusCode = 400;
+}
+
+/** Le serveur a changé depuis la copie que le PC a prise en secours : rien n'est remplacé sans confirmation. */
+class RescueDivergedError extends Error {
+  readonly statusCode = 409;
+  readonly reason = 'RESCUE_DIVERGED';
+  constructor() {
+    super('Des modifications ont été faites en ligne après la dernière copie de ce PC. Confirmez pour remplacer la version en ligne par celle de ce PC (la version en ligne est gardée dans une sauvegarde du serveur).');
+  }
 }
 
 const NOT_OWNER = 'Ce PC n’a pas la main sur cette compétition : exportez-la en fichier et demandez à un organisateur de l’importer en ligne.';
@@ -117,14 +126,42 @@ export async function syncRemoteRoutes(app: FastifyInstance, { db, dbPath }: { d
       competitionChanged(c.id);
       return buildPackage(db, c.id, { handOver: true, role: 'serveur' });
     });
+    /** Copie reçue d'un PC, gardée (les 5 dernières) pour une reprise forcée. */
+    const keepCopy = (competitionId: string, fromName: string, pkg: SyncPackage) => {
+      db.insert(receivedCopies).values({ id: crypto.randomUUID(), competitionId, fromInstanceId: pkg.from.instanceId, fromName, packageJson: JSON.stringify(pkg) }).run();
+      const old = db.select({ id: receivedCopies.id }).from(receivedCopies).where(eq(receivedCopies.competitionId, competitionId)).orderBy(desc(receivedCopies.receivedAt)).all().slice(KEPT_COPIES);
+      for (const o of old) db.delete(receivedCopies).where(eq(receivedCopies.id, o.id)).run();
+    };
     remote.post<{ Params: { cid: string } }>('/api/sync/remote/competitions/:cid/copy', async (req, reply) => {
       const c = competitionRow(req.params.cid);
       const pkg = checked(req.body, c.id);
       if (!holds(req, c, pkg.from?.instanceId)) throw new SyncConflictError(NOT_OWNER);
-      db.insert(receivedCopies).values({ id: crypto.randomUUID(), competitionId: c.id, fromInstanceId: pkg.from.instanceId, fromName: c.ownerName ?? pkg.from.instanceId, packageJson: JSON.stringify(pkg) }).run();
-      const old = db.select({ id: receivedCopies.id }).from(receivedCopies).where(eq(receivedCopies.competitionId, c.id)).orderBy(desc(receivedCopies.receivedAt)).all().slice(KEPT_COPIES);
-      for (const o of old) db.delete(receivedCopies).where(eq(receivedCopies.id, o.id)).run();
+      keepCopy(c.id, c.ownerName ?? pkg.from.instanceId, pkg);
       return reply.status(204).send();
+    });
+    /**
+     * Le PC a pris la main en secours (internet coupé) : sa version remplace celle du serveur si le serveur n'a pas changé depuis la
+     * copie du PC (même empreinte), si le PC a déjà la main, ou sur confirmation (`replace`). La main passe alors au PC.
+     */
+    remote.post<{ Params: { cid: string } }>('/api/sync/remote/competitions/:cid/rescue', async (req) => {
+      const body = z
+        .object({ instanceId: z.string().min(1).max(100), instanceName: z.string().min(1).max(100), baseFingerprint: z.string().max(100).nullable(), replace: z.boolean(), package: z.unknown() })
+        .parse(req.body);
+      const c = competitionRow(req.params.cid);
+      const pkg = checked(body.package, c.id);
+      if (pkg.from.instanceId !== body.instanceId) throw new SyncPackageError('Ce paquet vient d’une autre installation.');
+      const heldHere = holds(req, c, body.instanceId);
+      if (c.ownerInstanceId && !heldHere) throw new SyncConflictError(`Cette compétition est gérée par ${c.ownerName ?? 'une autre installation'} : demandez à un organisateur de reprendre la main en ligne.`);
+      if (!heldHere && !body.replace && competitionFingerprint(db, c.id) !== body.baseFingerprint) throw new RescueDivergedError();
+      await importPackage(db, dbPath, pkg, null);
+      const now = new Date().toISOString();
+      db.update(competitions)
+        .set({ ownerInstanceId: body.instanceId, ownerName: body.instanceName, ownerSince: now, ownerTokenId: tokenOf.get(req)!, lastSyncAt: now, clubEntryStatus: 'frozen' })
+        .where(eq(competitions.id, c.id))
+        .run();
+      keepCopy(c.id, body.instanceName, pkg);
+      competitionChanged(c.id);
+      return { instanceId: getInstance(db)?.id ?? 'serveur' };
     });
     remote.post<{ Params: { cid: string } }>('/api/sync/remote/competitions/:cid/return', async (req) => {
       const c = competitionRow(req.params.cid);

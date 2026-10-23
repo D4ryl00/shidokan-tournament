@@ -139,6 +139,11 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Sans internet : « Exporter la compétition (fichier) » sur une clé USB, puis « Importer une compétition (fichier) » de l’autre côté.',
         'Sur le serveur, « Reprendre la main » sert si le PC est perdu ou en panne : à partir de la version du serveur, ou de la dernière copie reçue.',
       ],
+      [
+        'Jour J en ligne : le PC de la salle garde une copie en lecture seule (« Garder cette copie à jour », toutes les quelques minutes).',
+        'Internet coupé : « Prendre la main en secours » rend cette copie modifiable tout de suite, sans le serveur ; les postes passent sur le réseau de la salle.',
+        'Internet revenu : « Prévenir le serveur ». Si rien n’a changé en ligne depuis la copie, la main passe simplement au PC. Sinon, le serveur refuse, et « Remplacer la version en ligne » met la version du PC en ligne (celle du serveur reste dans une sauvegarde). Ensuite, « Rendre la main au serveur » comme d’habitude.',
+      ],
     ],
   },
   'jour-j': {

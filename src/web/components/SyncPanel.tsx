@@ -12,6 +12,8 @@ import {
   useManagement,
   usePull,
   useReceivedCopies,
+  useRescue,
+  useRescueNotify,
   useRevokeSyncToken,
   useServerCompetitions,
   useSetSyncFollow,
@@ -31,6 +33,7 @@ const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('fr-
 
 /** Texte du bandeau : où est la main sur la compétition. */
 export function managementText(m: Management): string {
+  if (m.managedHere && m.rescueSince) return `Gérée ici en secours depuis le ${when(m.rescueSince)} — le serveur n’est pas encore prévenu`;
   if (m.managedHere) return m.lastSyncAt ? `Gérée ici — dernier échange avec le serveur le ${when(m.lastSyncAt)}` : 'Gérée ici';
   if (m.copyOfServer) {
     const held = m.ownerName?.match(/— la main est à (.+)$/)?.[1];
@@ -43,6 +46,7 @@ export function managementText(m: Management): string {
 export function ManagementBanner({ competitionId }: { competitionId: string }) {
   const { data } = useManagement(competitionId);
   if (!data) return null;
+  if (data.managedHere && data.rescueSince) return <Alert color="orange" data-testid="management-banner">{managementText(data)}</Alert>;
   if (data.managedHere) return <Badge variant="light" color="gray" tt="none" data-testid="management-banner">{managementText(data)}</Badge>;
   return <Alert color="yellow" data-testid="management-banner">{managementText(data)}</Alert>;
 }
@@ -75,6 +79,9 @@ export function SyncPanel({ competitionId }: { competitionId: string }) {
   const copy = useSyncCopy(competitionId);
   const back = useSyncReturn(competitionId);
   const takeBack = useTakeBack(competitionId);
+  const rescue = useRescue(competitionId);
+  const notify = useRescueNotify(competitionId);
+  const diverged = notify.error instanceof ApiError && notify.error.code === 'RESCUE_DIVERGED';
   const server = me?.role === 'serveur';
   const copies = useReceivedCopies(competitionId, server && !!m && !m.managedHere);
   const [source, setSource] = useState<'server' | 'lastCopy'>('server');
@@ -96,9 +103,32 @@ export function SyncPanel({ competitionId }: { competitionId: string }) {
           <Confirmed testId="sync-take" label="Prendre la main" loading={pull.isPending && !!pull.variables?.take}
             text="Ce PC devient le seul endroit où modifier la compétition. En ligne, elle passe en lecture seule et les inscriptions des clubs sont figées."
             onConfirm={() => pull.mutate({ competitionId, take: true }, { onSuccess: done('Ce PC a la main sur la compétition.') })} />
+          <Confirmed testId="sync-rescue" color="red" label="Prendre la main en secours" loading={rescue.isPending}
+            text="À utiliser seulement si le serveur est injoignable (internet coupé). Ce PC devient modifiable tout de suite, sans prévenir le serveur : faites passer toutes les saisies sur ce réseau. Quand internet revient, cliquez « Prévenir le serveur »."
+            onConfirm={() => rescue.mutate(undefined, { onSuccess: done('Ce PC a la main en secours : prévenez le serveur dès qu’internet revient.') })} />
         </Group>
       )}
-      {linked && m.managedHere && (
+      {linked && m.managedHere && m.rescueSince && (
+        <Stack gap="xs">
+          <Group>
+            <Button data-testid="sync-rescue-notify" loading={notify.isPending && notify.variables === false}
+              onClick={() => notify.mutate(false, { onSuccess: done('Le serveur est prévenu : ce PC a la main.') })}>Prévenir le serveur</Button>
+          </Group>
+          {diverged && (
+            <Alert color="orange">
+              <Stack gap="xs">
+                <Text size="sm">{notify.error!.message}</Text>
+                <Group>
+                  <Confirmed testId="sync-rescue-replace" color="red" label="Remplacer la version en ligne" loading={notify.isPending && notify.variables === true}
+                    text="La version de ce PC remplace celle du serveur, et la main passe à ce PC. Ce qui a été saisi en ligne depuis la dernière copie de ce PC n’est plus visible (il reste dans une sauvegarde du serveur)."
+                    onConfirm={() => notify.mutate(true, { onSuccess: done('La version de ce PC est en ligne : ce PC a la main.') })} />
+                </Group>
+              </Stack>
+            </Alert>
+          )}
+        </Stack>
+      )}
+      {linked && m.managedHere && !m.rescueSince && (
         <Group>
           <Button variant="light" data-testid="sync-copy" loading={copy.isPending} onClick={() => copy.mutate(undefined, { onSuccess: done('Copie envoyée au serveur.') })}>
             Envoyer une copie au serveur
@@ -137,7 +167,7 @@ export function SyncPanel({ competitionId }: { competitionId: string }) {
           <Checkbox label="et donner la main au PC qui l’importera (la compétition passe en lecture seule en ligne)" checked={handOver} onChange={(e) => setHandOver(e.currentTarget.checked)} />
         )}
       </Group>
-      <ApiErrorAlert error={pull.error ?? copy.error ?? back.error ?? takeBack.error ?? exportHandOver.error} />
+      <ApiErrorAlert error={pull.error ?? copy.error ?? back.error ?? takeBack.error ?? exportHandOver.error ?? rescue.error ?? (diverged ? null : notify.error)} />
     </Stack>
   );
 }

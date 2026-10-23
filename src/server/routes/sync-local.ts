@@ -2,12 +2,13 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { InstanceRole } from '../auth/guard.js';
 import type { AppDb } from '../db/client.js';
+import { competitionChanged } from '../events.js';
 import { NotFoundError } from '../repositories/registrations.js';
 import { clearSyncServer, getSyncServer, rememberServerInstance, remote, setSyncServer, syncUrlAllowed } from '../sync/client.js';
 import { followStatus, getFollow, resetFollowStatus, setFollow } from '../sync/follow.js';
 import { getManagement } from '../sync/ownership.js';
 import { buildPackage, importPackage, type SyncPackage } from '../sync/package.js';
-import { pullCopy, SERVER_NAME, serverCopyName, SyncConflictError } from '../sync/pull.js';
+import { myIdentity, pullCopy, SERVER_NAME, serverCopyName, SyncConflictError } from '../sync/pull.js';
 
 const exists = (db: AppDb, id: string) => !!db.$client.prepare('select 1 from competitions where id = ?').get(id);
 
@@ -58,6 +59,32 @@ export async function syncLocalRoutes(app: FastifyInstance, { db, dbPath }: { db
     setFollow(db, value);
     resetFollowStatus(dbPath);
     return followView();
+  });
+
+  /** Internet coupé : la copie du serveur devient modifiable ici, sans demander au serveur (il sera prévenu plus tard). */
+  app.post<{ Params: { id: string } }>('/api/competitions/:id/sync/rescue', async (req, reply) => {
+    if (!exists(db, req.params.id)) throw new NotFoundError('Compétition introuvable');
+    if (!getManagement(db, req.params.id).copyOfServer) throw new SyncConflictError('Seule une copie du serveur peut être prise en secours.');
+    db.$client
+      .prepare('update competitions set owner_instance_id = null, owner_name = null, owner_since = null, rescue_since = ? where id = ?')
+      .run(new Date().toISOString(), req.params.id);
+    competitionChanged(req.params.id);
+    return reply.status(204).send();
+  });
+
+  /** Internet revenu : le serveur reçoit la compétition et la main passe à ce PC (refus si elle a changé en ligne, sauf `replace`). */
+  app.post<{ Params: { id: string } }>('/api/competitions/:id/sync/rescue/notify', async (req, reply) => {
+    const { replace } = z.object({ replace: z.boolean() }).strict().parse(req.body);
+    mustManageHere(req.params.id);
+    const row = db.$client.prepare('select rescue_since as since, server_fingerprint as base from competitions where id = ?').get(req.params.id) as { since: string | null; base: string | null };
+    if (!row.since) throw new SyncConflictError('Cette compétition n’a pas été prise en secours.');
+    const res = await remote<{ instanceId?: string }>(db, 'POST', `/competitions/${encodeURIComponent(req.params.id)}/rescue`, {
+      ...myIdentity(db), baseFingerprint: row.base, replace, package: buildPackage(db, req.params.id, { handOver: false, role: 'local' }),
+    });
+    if (res?.instanceId) rememberServerInstance(db, res.instanceId);
+    db.$client.prepare('update competitions set rescue_since = null, last_sync_at = ? where id = ?').run(new Date().toISOString(), req.params.id);
+    competitionChanged(req.params.id);
+    return reply.status(204).send();
   });
 
   app.post<{ Params: { id: string } }>('/api/competitions/:id/sync/copy', async (req) => {

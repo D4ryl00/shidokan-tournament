@@ -52,3 +52,41 @@ test('passage de main : jeton en ligne → PC relié → prise de main (lecture 
   await expect(online.getByTestId('management-banner')).toContainText('Gérée ici');
   await expect(online.getByText('Gymnase du PC')).toBeVisible();
 });
+
+test('secours : copie du serveur tenue à jour → « Prendre la main en secours » → saisie sur le PC → « Prévenir le serveur »', async ({ browser, page }) => {
+  const name = `Coupe de secours ${Date.now()}`;
+  const online = await (await browser.newContext({ baseURL: SERVER })).newPage();
+  await online.goto('/');
+  await online.getByTestId('login-email').fill('orga@e2e.example');
+  await online.getByTestId('login-password').fill('mot-de-passe-e2e');
+  await online.getByTestId('login-submit').click();
+  await expect(online.getByTestId('nav-settings')).toBeVisible();
+  const token = (await (await online.request.post('/api/sync/tokens', { data: { name: 'PC de secours' } })).json()).token as string;
+  const id = (await (await online.request.post('/api/competitions', { data: { name, date: '2026-11-22', location: 'Nice' } })).json()).id as string;
+
+  // PC relié, copie récupérée et tenue à jour.
+  expect((await page.request.patch('/api/sync/settings', { data: { url: SERVER, token } })).ok()).toBe(true);
+  expect((await page.request.post('/api/sync/pull', { data: { competitionId: id, take: false } })).ok()).toBe(true);
+  await page.goto(`/competitions/${id}/reglages`);
+  await expect(page.getByTestId('management-banner')).toContainText('Copie du serveur');
+  await page.getByTestId('sync-follow').click();
+  await expect(page.getByTestId('sync-follow')).toBeChecked();
+  await expect(page.getByTestId('sync-follow-status')).toBeVisible();
+
+  // Internet coupé : le PC prend la main en secours et saisit.
+  await page.getByTestId('sync-rescue').click();
+  await page.getByTestId('sync-rescue-confirm').click();
+  await expect(page.getByTestId('management-banner')).toContainText('Gérée ici en secours depuis le');
+  await page.getByLabel('Lieu').fill('Gymnase de secours');
+  await page.getByTestId('settings-save').click();
+  await expect(page.getByText('Réglages enregistrés')).toBeVisible();
+
+  // Internet revenu : le serveur est prévenu, la main passe au PC.
+  await page.getByTestId('sync-rescue-notify').click();
+  await expect(page.getByText('Le serveur est prévenu : ce PC a la main.')).toBeVisible();
+  await expect(page.getByTestId('management-banner')).toContainText('Gérée ici');
+  await expect(page.getByTestId('management-banner')).not.toContainText('secours');
+  await online.goto(`/competitions/${id}/reglages`);
+  await expect(online.getByTestId('management-banner')).toContainText(/Gérée par .+ — lecture seule/);
+  await expect(online.getByLabel('Lieu')).toHaveValue('Gymnase de secours');
+});

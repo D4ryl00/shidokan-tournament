@@ -119,7 +119,9 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     if (status >= 500) app.log.error(error);
     // Une erreur d'au moins 500 garde son message seulement s'il est fait pour l'écran (`expose`, par exemple le serveur injoignable).
     const expose = (error as { expose?: boolean }).expose === true;
-    return reply.status(status).send({ error: status >= 500 && !expose ? 'Erreur interne du serveur' : (error as Error).message });
+    // `reason` : cas que l'écran traite à part (par exemple RESCUE_DIVERGED), renvoyé dans `code`.
+    const reason = (error as { reason?: string }).reason;
+    return reply.status(status).send({ error: status >= 500 && !expose ? 'Erreur interne du serveur' : (error as Error).message, ...(reason ? { code: reason } : {}) });
   });
 
   // Fichiers (fiches club, exports FFK) envoyés en corps brut.

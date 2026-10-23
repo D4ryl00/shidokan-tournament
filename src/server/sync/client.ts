@@ -13,6 +13,8 @@ class RemoteError extends Error {
   constructor(
     readonly statusCode: number,
     message: string,
+    /** Code d'un refus du serveur (par exemple RESCUE_DIVERGED), relayé à l'écran du PC. */
+    readonly reason?: string,
   ) {
     super(message);
   }
@@ -78,8 +80,8 @@ export async function remote<T>(db: AppDb, method: 'GET' | 'POST', path: string,
     throw new RemoteError(502, `Serveur injoignable : ${cause?.code ?? cause?.message ?? (e as Error).message}.`);
   }
   if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new RemoteError(res.status, data.error ?? `Erreur ${res.status} du serveur.`);
+    const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+    throw new RemoteError(res.status, data.error ?? `Erreur ${res.status} du serveur.`, data.code);
   }
   return (res.status === 204 ? undefined : await res.json()) as T;
 }
