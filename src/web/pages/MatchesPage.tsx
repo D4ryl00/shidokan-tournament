@@ -16,7 +16,15 @@ import { KataScoring } from '../components/KataScoring.js';
 import { HelpButton, HelpText, SectionHeader } from '../components/Help.js';
 import { ResultDialog } from '../components/ResultDialog.js';
 import { TieBreakDialog } from '../components/TieBreakDialog.js';
+import { ZoneCards } from '../components/ZoneCards.js';
 import { STATUS_LABELS, useEntrantInfo } from './BracketsPage.js';
+
+/** Passage d'une catégorie qui a une saisie de zone autonome à trancher : il ne se joue pas encore. */
+const HeldBadge = () => (
+  <Badge size="sm" color="orange" variant="light" tt="none" style={{ flexShrink: 0, whiteSpace: 'normal', height: 'auto' }} data-testid="queue-held">
+    En attente d’une décision à la table centrale
+  </Badge>
+);
 
 export function MatchesPage() {
   const { id = '' } = useParams();
@@ -113,6 +121,7 @@ export function MatchesPage() {
           )}
           {!zoneOnly && ready && (waves.length === 0 || waveId) && <WaveLaunchPanel competitionId={id} waveId={waveId} />}
           <ZonesImpossibleAlert impossible={schedule?.impossible} />
+          {!zoneOnly && <ZoneCards competitionId={id} />}
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
             {(schedule?.zones ?? []).filter((t) => !zoneOnly || t.zone.id === zoneOnly).map((t) => (
               <Card key={t.zone.id} withBorder data-testid="zone-card">
@@ -122,7 +131,7 @@ export function MatchesPage() {
                   q.matchId === null ? (
                     <Group key={`${q.categoryId}-kata`} justify="space-between" wrap="nowrap" mt={6} data-testid="next-kata">
                       <Text size="sm">n° {q.number} — {q.categoryLabel}{q.kataPart === 'tour1' ? ' (tour 1)' : q.kataPart === 'finale' ? ' (finale)' : ''}, {q.katakas} katakas</Text>
-                      <Button size="xs" variant="light" style={{ flexShrink: 0 }} onClick={() => setSelectedId(q.categoryId)}>Noter</Button>
+                      {q.held ? <HeldBadge /> : <Button size="xs" variant="light" style={{ flexShrink: 0 }} onClick={() => setSelectedId(q.categoryId)}>Noter</Button>}
                     </Group>
                   ) : (
                     <Group key={`${q.categoryId}-${q.matchId}`} justify="space-between" wrap="nowrap" mt={6} data-testid="next-match">
@@ -131,7 +140,7 @@ export function MatchesPage() {
                         <Text size="sm">{q.a} <Text span c="dimmed">contre</Text> {q.b}</Text>
                         {q.noRest && <Badge size="xs" color="orange" variant="light" data-testid="no-rest">pas de repos : prévoir une pause</Badge>}
                       </div>
-                      <Button size="xs" style={{ flexShrink: 0 }} onClick={() => { setSelectedId(q.categoryId); setDialogMatchId(q.matchId); }}>Saisir</Button>
+                      {q.held ? <HeldBadge /> : <Button size="xs" style={{ flexShrink: 0 }} onClick={() => { setSelectedId(q.categoryId); setDialogMatchId(q.matchId); }}>Saisir</Button>}
                     </Group>
                   ),
                 )}

@@ -415,6 +415,8 @@ export interface QueueItem {
   katakas: number | null;
   kataPart: 'tour1' | 'finale' | null;
   noRest: boolean;
+  /** Une saisie d'une zone autonome est à trancher dans cette catégorie. */
+  held: boolean;
 }
 export interface ScheduleData {
   zones: { zone: Zone; categories: ScheduleCategory[]; queue: QueueItem[] }[];
@@ -430,6 +432,33 @@ export function useSchedule(id: string, waveId?: string | null, enabled = true) 
     enabled,
   });
 }
+
+// --- Zones autonomes : journaux reçus et cartes « À trancher » (étape 21) ---
+
+export interface JournalReport { received: number; applied: number; present: number; conflicts: number; waiting: number; alreadyReceived: number }
+export interface ZoneCardData {
+  id: string;
+  zoneName: string;
+  at: string;
+  categoryId: string;
+  categoryLabel: string;
+  kind: 'result' | 'delete' | 'kata' | 'tie-break';
+  target: string;
+  zone: string;
+  pc: string;
+  status: 'conflict' | 'waiting';
+  reason: string | null;
+  canKeepZone: boolean;
+}
+export const useZoneCards = (id: string, enabled = true) =>
+  useQuery({ queryKey: ['zone-cards', id], queryFn: () => api<ZoneCardData[]>('GET', `/api/competitions/${id}/zone-cards`), enabled });
+/** Après une réception ou une décision : résultats, files et cartes relus. */
+function useZoneMutation<V, R>(fn: (v: V) => Promise<R>) {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries() });
+}
+export const useImportZoneJournal = (id: string) => useZoneMutation((journal: unknown) => api<JournalReport>('POST', `/api/competitions/${id}/zone-journal`, journal));
+export const useDecideZoneCard = (id: string) => useZoneMutation((v: { entryId: string; keep: 'zone' | 'pc' }) => api<void>('POST', `/api/competitions/${id}/zone-cards/${v.entryId}`, { keep: v.keep }));
 
 // --- Lancement des vagues (étape 13) ---
 

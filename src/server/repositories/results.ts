@@ -211,7 +211,7 @@ export async function putTieBreak(db: AppDb, competitionId: string, categoryId: 
   await refreshStatus(db, competitionId, categoryId);
 }
 
-function labels(db: AppDb, competitionId: string) {
+export function labels(db: AppDb, competitionId: string) {
   const fs = new Map(db.select().from(fighters).where(eq(fighters.competitionId, competitionId)).all().map((f) => [f.id, f]));
   const cs = new Map(db.select().from(clubs).where(eq(clubs.competitionId, competitionId)).all().map((c) => [c.id, c]));
   const map = new Map<string, { name: string; clubId: string | null; club: string }>();
@@ -234,6 +234,8 @@ export interface QueueItem {
   /** Bloc de kata séparé (finales de kata sur la zone des finales) : 'tour1' ou 'finale'. */
   kataPart: 'tour1' | 'finale' | null;
   noRest: boolean;
+  /** Une saisie d'une zone autonome est à trancher dans cette catégorie : en attente d'une décision à la table centrale. */
+  held: boolean;
 }
 
 /**
@@ -278,13 +280,16 @@ export async function schedule(db: AppDb, competitionId: string, waveId?: string
     else unassigned.push(d);
   }
   const labelOf = new Map(cats.map((c) => [c.id, c.label]));
+  const held = new Set(
+    (db.$client.prepare("select distinct category_id as c from zone_entries where competition_id = ? and status in ('conflict', 'waiting')").all(competitionId) as { c: string }[]).map((r) => r.c),
+  );
   const queue = (zoneId: string) =>
     (plan.zones.find((z) => z.zoneId === zoneId)?.passages ?? [])
       .filter((p) => !waveId || p.waveId === waveId)
       .flatMap((p): QueueItem[] => {
         const st = state.get(p.categoryId);
         if (!st) return [];
-        const base = { number: p.number, categoryId: p.categoryId, categoryLabel: labelOf.get(p.categoryId) ?? '', noRest: p.noRest };
+        const base = { number: p.number, categoryId: p.categoryId, categoryLabel: labelOf.get(p.categoryId) ?? '', noRest: p.noRest, held: held.has(p.categoryId) };
         if (p.matchId === null || p.matchId.startsWith('kata:')) {
           const c = cats.find((x) => x.id === p.categoryId)!;
           const kataPart = p.matchId === 'kata:tour1' ? ('tour1' as const) : p.matchId === 'kata:finale' ? ('finale' as const) : null;

@@ -1,7 +1,10 @@
-import type { FastifyInstance } from 'fastify';
+import { randomUUID } from 'node:crypto';
 import { expect, vi } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
 import { closeDb, openDb, type AppDb } from '../../src/server/db/client.js';
+import { matchEntrants } from '../../src/server/repositories/results.js';
+import { kataRev, resultRev, tieBreakRev } from '../../src/server/revisions.js';
+import type { ZoneEntry } from '../../src/server/zone/entry.js';
 import { copyFromMain } from '../../src/server/zone/link.js';
 import { tmpDbPath } from './tmp-db.js';
 
@@ -74,3 +77,30 @@ export function holdResponses() {
 }
 export const tick = (ms = 100) => new Promise((r) => setTimeout(r, ms));
 export const RESULT = { winner: 'a', method: 'points', score: null };
+
+type Result = { winner: 'a' | 'b'; method: string; score: string | null };
+/** Journaux de zone construits à la main : combattants et révisions lus sur `db` (comme la copie du portable juste avant la coupure). */
+export function journalBuilders(f: Awaited<ReturnType<typeof mainCompetition>>, db: AppDb, from = 'portable-t1') {
+  let seq = 0;
+  const journal = (entries: ZoneEntry[], over: Record<string, unknown> = {}) => ({
+    format: 'shidokan-zone-journal', formatVersion: 1, competitionId: f.id, zoneId: f.t1, zoneName: 'Tatami 1', from: { instanceId: from, instanceName: 'PORTABLE-T1' }, entries, ...over,
+  });
+  const send = (entries: ZoneEntry[]) => f.onMain('POST', `${f.base}/zone-journal`, journal(entries));
+  const common = (categoryId: string) => ({ id: randomUUID(), seq: ++seq, categoryId, categoryVersion: null, zoneId: f.t1, at: new Date().toISOString() });
+  const resultEntry = async (categoryId: string, matchId: string, data: Result = RESULT as Result, over: Partial<ZoneEntry> = {}): Promise<ZoneEntry> => ({
+    ...common(categoryId), kind: 'result', matchId, data, entrants: await matchEntrants(db, f.id, categoryId, matchId), baseRev: resultRev(db, categoryId, matchId) ?? 'none', ...over,
+  });
+  const deleteEntry = async (categoryId: string, matchId: string, over: Partial<ZoneEntry> = {}): Promise<ZoneEntry> => ({
+    ...(await resultEntry(categoryId, matchId)), kind: 'delete', data: null, ...over,
+  });
+  const kataEntry = (rid: string, notes: number[], over: Partial<ZoneEntry> = {}): ZoneEntry => ({
+    ...common(f.kata.id), kind: 'kata', registrationId: rid, round: 'round1', data: { notes }, entrants: null, baseRev: kataRev(db, f.kata.id, rid, 'round1') ?? 'none', ...over,
+  });
+  const tieBreakEntry = (order: string[], over: Partial<ZoneEntry> = {}): ZoneEntry => ({
+    ...common(f.kata.id), kind: 'tie-break', scope: 'kata', data: { order }, entrants: null, baseRev: tieBreakRev(db, f.kata.id, 'kata') ?? 'none', ...over,
+  });
+  const putOnMain = (cid: string, matchId: string, data: Result) => f.onMain('PUT', `${f.base}/categories/${cid}/results/${matchId}`, data);
+  const records = async (cid: string) =>
+    ((await f.onMain('GET', `${f.base}/categories/${cid}/results`)).json() as { records: { matchId: string; winner: string; method: string }[] }).records;
+  return { journal, send, resultEntry, deleteEntry, kataEntry, tieBreakEntry, putOnMain, records };
+}

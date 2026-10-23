@@ -124,3 +124,50 @@ export function receiveJournal(db: AppDb, journal: ZoneJournalFile) {
     return counts;
   });
 }
+
+export class CardError extends Error {
+  constructor(
+    readonly statusCode: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+type EntryRow = { id: string; from: string; status: string; e: string };
+const entryRow = (db: AppDb, competitionId: string, entryId: string) =>
+  db.$client.prepare('select id, from_instance_id as "from", status, entry_json as e from zone_entries where competition_id = ? and id = ?').get(competitionId, entryId) as EntryRow | undefined;
+
+/**
+ * Carte « À trancher » : `zone` applique la saisie sans contrôle de révision (mêmes combattants exigés), `pc` garde le PC principal.
+ * Ensuite, les entrées en attente de la catégorie (même portable) sont réexaminées dans l'ordre.
+ */
+export function decideCard(db: AppDb, competitionId: string, entryId: string, keep: 'zone' | 'pc'): Promise<void> {
+  return serialized(competitionId, async () => {
+    const row = entryRow(db, competitionId, entryId);
+    if (!row) throw new CardError(404, 'Carte introuvable.');
+    if (row.status !== 'conflict' && row.status !== 'waiting') throw new CardError(409, 'Cette carte a déjà été tranchée.');
+    const e = JSON.parse(row.e) as ZoneEntry;
+    const now = new Date().toISOString();
+    const lastAppliedRev = lastAppliedRevOf(db, competitionId, row.from);
+    if (keep === 'zone') {
+      const r = await evaluateEntry(db, competitionId, e, { blockedCategories: new Set(), lastAppliedRev, apply: true, ignoreRev: true });
+      if (r.status === 'conflict') {
+        throw new CardError(409, r.reason === CHANGED_ENTRANTS ? 'Les combattants de ce combat ont changé : impossible de garder la saisie de la zone.' : (r.reason ?? 'Saisie refusée.'));
+      }
+      db.$client.prepare("update zone_entries set status = 'kept-zone', reason = null, applied_rev = ?, decided_at = ? where id = ?").run(r.appliedRev, now, entryId);
+    } else {
+      db.$client.prepare("update zone_entries set status = 'kept-pc', decided_at = ? where id = ?").run(now, entryId);
+    }
+    // Réexamen des entrées en attente de la catégorie : elles s'appliquent jusqu'au prochain conflit.
+    const waiting = db.$client
+      .prepare("select id, from_instance_id as \"from\", status, entry_json as e, seq from zone_entries where competition_id = ? and from_instance_id = ? and category_id = ? and status in ('conflict', 'waiting') order by seq")
+      .all(competitionId, row.from, e.categoryId) as (EntryRow & { seq: number })[];
+    for (const w of waiting) {
+      if (w.status === 'conflict') break;
+      const r = await evaluateEntry(db, competitionId, JSON.parse(w.e) as ZoneEntry, { blockedCategories: new Set(), lastAppliedRev, apply: true });
+      db.$client.prepare('update zone_entries set status = ?, reason = ?, applied_rev = ? where id = ?').run(r.status, r.reason, r.appliedRev, w.id);
+      if (r.status === 'conflict') break;
+    }
+  });
+}

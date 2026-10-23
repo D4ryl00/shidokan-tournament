@@ -3,7 +3,8 @@ import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
 import { NotFoundError } from '../repositories/registrations.js';
 import type { ZoneJournalFile } from '../zone/entry.js';
-import { receiveJournal } from '../zone/replay.js';
+import { listCards } from '../zone/cards.js';
+import { decideCard, receiveJournal } from '../zone/replay.js';
 
 class JournalError extends Error {
   readonly statusCode = 400;
@@ -64,5 +65,11 @@ export async function zoneJournalRoutes(app: FastifyInstance, { db }: { db: AppD
   app.post<{ Params: { id: string } }>('/api/competitions/:id/zone-journal', async (req) => {
     if (!db.$client.prepare('select 1 from competitions where id = ?').get(req.params.id)) throw new NotFoundError('Compétition introuvable');
     return receiveJournal(db, parseJournal(req.params.id, req.body));
+  });
+  app.get<{ Params: { id: string } }>('/api/competitions/:id/zone-cards', async (req) => listCards(db, req.params.id));
+  app.post<{ Params: { id: string; entryId: string } }>('/api/competitions/:id/zone-cards/:entryId', async (req, reply) => {
+    const { keep } = z.object({ keep: z.enum(['zone', 'pc']) }).strict().parse(req.body);
+    await decideCard(db, req.params.id, req.params.entryId, keep);
+    return reply.status(204).send();
   });
 }
