@@ -1,7 +1,7 @@
 import { AppShell, Center, Loader } from '@mantine/core';
 import type { ReactNode } from 'react';
 import { useAuthExpired, useAuthMe } from './api.js';
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useMatch } from 'react-router';
 import { AppHeader } from './components/AppHeader.js';
 import { CompetitionLayout } from './components/CompetitionLayout.js';
 import { AccountsPage } from './pages/AccountsPage.js';
@@ -59,10 +59,12 @@ function RenamedTab({ to }: { to: string }) {
 }
 
 function MainShell() {
+  // Écrans d'une compétition : sa propre barre compacte remplace celle de l'application.
+  const inCompetition = !!useMatch('/competitions/:id/*');
   return (
-      <AppShell header={{ height: 64 }} padding="md">
+      <AppShell header={{ height: 60, collapsed: inCompetition }} padding="lg">
         <AppShell.Header>
-          <AppHeader />
+          {!inCompetition && <AppHeader />}
         </AppShell.Header>
         <AppShell.Main>
           <Routes>

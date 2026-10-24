@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createCompetition } from './helpers.js';
+import { createCompetition, openTab } from './helpers.js';
 
 test('figer et imprimer la session, finales sur le Ring, régénérer à la suite, rouvrir et refiger', async ({ page, request, context }) => {
   const id = await createCompetition(page, 'Coupe figeage');
@@ -24,7 +24,7 @@ test('figer et imprimer la session, finales sur le Ring, régénérer à la suit
   await expect(page.getByText('Réglages enregistrés')).toBeVisible();
 
   // Combats : figer est bloqué tant que les catégories ne sont pas prêtes.
-  await page.getByRole('tab', { name: 'Combats' }).click();
+  await openTab(page, 'Combats');
   await expect(page.getByTestId('wave-state')).toHaveText('En préparation');
   await page.getByTestId('launch-open').click();
   await expect(page.getByTestId('launch-blocking')).toContainText('2 catégories ne sont pas prêtes');
@@ -45,7 +45,7 @@ test('figer et imprimer la session, finales sur le Ring, régénérer à la suit
 
   // Absente tardive : rien ne bouge sans confirmation ; « Régénérer » renumérote à la suite.
   await request.put(`/api/competitions/${id}/weigh-in/${cadettes[0]!.fighterId}`, { data: { presence: 'absent' } });
-  await page.getByRole('tab', { name: 'Tableaux' }).click();
+  await openTab(page, 'Tableaux');
   await page.getByText(big.label).first().click();
   await expect(page.getByText('Les inscrits ont changé')).toBeVisible();
   // À l'écran aussi, la finale déplacée indique sa zone.

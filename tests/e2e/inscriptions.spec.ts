@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { fillClubForm } from '../helpers/club-form-fill.js';
-import { createCompetition } from './helpers.js';
+import { createCompetition, openTab } from './helpers.js';
 
 async function downloadTemplate(page: Page, id: string): Promise<Buffer> {
   await page.goto(`/competitions/${id}/fiche-club`);
@@ -143,12 +143,12 @@ test('relecture (mineurs) : saisie papier — confirmation avant de quitter, nom
   await page.goto(`/competitions/${id}/fiche-club`);
   await expect(page.getByRole('group', { name: 'Ligne 1 — Sexe' })).toBeVisible();
   await page.getByTestId('paper-entry-row').first().getByLabel('Nom', { exact: true }).fill('MARTIN');
-  await page.getByRole('tab', { name: 'Inscriptions' }).click();
+  await openTab(page, 'Inscriptions');
   await expect(page.getByTestId('leave-confirm')).toBeVisible();
   await page.getByTestId('leave-stay').click();
   await expect(page).toHaveURL(/\/fiche-club$/);
   await expect(page.getByTestId('paper-entry-row').first().getByLabel('Nom', { exact: true })).toHaveValue('MARTIN');
-  await page.getByRole('tab', { name: 'Inscriptions' }).click();
+  await openTab(page, 'Inscriptions');
   await page.getByTestId('leave-go').click();
   await expect(page).toHaveURL(/\/inscriptions$/);
 });

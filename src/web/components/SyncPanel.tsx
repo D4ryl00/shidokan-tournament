@@ -27,6 +27,7 @@ import {
   type Management,
 } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
+import { StatusBadge } from './ui/StatusBadge.js';
 
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—');
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('fr-FR') : '—');
@@ -43,13 +44,33 @@ export function managementText(m: Management): string {
   return `Gérée par ${m.ownerName ?? 'une autre installation'} depuis le ${day(m.ownerSince)} — lecture seule`;
 }
 
-/** Bandeau de chaque écran de compétition. */
-export function ManagementBanner({ competitionId }: { competitionId: string }) {
+/** Puce courte de la barre d'une compétition : où est la main (le texte complet au survol). */
+export function managementChipLabel(m: Management): { label: string; tone: 'ok' | 'warn' } {
+  if (m.managedHere) return m.rescueSince ? { label: 'En secours', tone: 'warn' } : { label: 'Gérée ici', tone: 'ok' };
+  if (m.copyOfMain) return { label: 'Copie du PC principal', tone: 'warn' };
+  if (m.copyOfServer) return { label: 'Copie du serveur', tone: 'warn' };
+  return { label: 'Lecture seule', tone: 'warn' };
+}
+
+export function ManagementChip({ competitionId }: { competitionId: string }) {
   const { data } = useManagement(competitionId);
   if (!data) return null;
-  if (data.managedHere && data.rescueSince) return <Alert color="orange" data-testid="management-banner">{managementText(data)}</Alert>;
-  if (data.managedHere) return <Badge variant="light" color="gray" tt="none" data-testid="management-banner">{managementText(data)}</Badge>;
-  return <Alert color="yellow" data-testid="management-banner">{managementText(data)}</Alert>;
+  const { label, tone } = managementChipLabel(data);
+  // Gérée ici sans rien à signaler : la puce est le seul bandeau.
+  const plain = data.managedHere && !data.rescueSince;
+  return (
+    <StatusBadge tone={tone} size="lg" title={managementText(data)} data-testid={plain ? 'management-banner' : 'management-chip'} style={{ flexShrink: 0 }}
+      leftSection={<span aria-hidden style={{ width: 7, height: 7, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />}>
+      {label}
+    </StatusBadge>
+  );
+}
+
+/** Bandeau sous les onglets, quand la main demande l'attention (lecture seule, secours). */
+export function ManagementBanner({ competitionId }: { competitionId: string }) {
+  const { data } = useManagement(competitionId);
+  if (!data || (data.managedHere && !data.rescueSince)) return null;
+  return <Alert color={data.managedHere ? 'orange' : 'yellow'} data-testid="management-banner">{managementText(data)}</Alert>;
 }
 
 /** Une action qui change la main : confirmation avec le texte de ce qui va se passer. */

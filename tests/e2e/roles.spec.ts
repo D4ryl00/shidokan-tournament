@@ -70,14 +70,21 @@ test('compte Table centrale : poste imposé, aucun menu de l’organisateur, cha
   await page.getByRole('link', { name: COMPETITION }).click();
   await expect(page.getByTestId('poste-account')).toHaveText('Poste : Table centrale');
   await expect(page.getByTestId('poste-select')).toHaveCount(0);
-  const tabs = ['Inscriptions', 'Clubs', 'Pesée', 'Réaffectation', 'Tableaux', 'Combats', 'Podiums'];
-  await expect(page.getByRole('tab')).toHaveText(tabs);
-  for (const tab of tabs) {
-    await page.getByRole('tab', { name: tab, exact: true }).click();
-    await expect(page.getByRole('tab', { name: tab, exact: true })).toHaveAttribute('aria-selected', 'true');
-    await page.waitForLoadState('networkidle');
+  // Ses onglets, rangés par étape : Préparer (inscriptions, clubs), Jour J, Après.
+  const stages: [string, string[]][] = [
+    ['preparer', ['Inscriptions', 'Clubs']], ['jour-j', ['Pesée', 'Réaffectation', 'Tableaux', 'Combats']], ['apres', ['Podiums']],
+  ];
+  for (const [stage, tabs] of stages) {
+    await page.getByTestId(`stage-${stage}`).click();
+    await expect(page.getByRole('tab')).toHaveText(tabs);
+    for (const tab of tabs) {
+      await page.getByRole('tab', { name: tab, exact: true }).click();
+      await expect(page.getByRole('tab', { name: tab, exact: true })).toHaveAttribute('aria-selected', 'true');
+      await page.waitForLoadState('networkidle');
+    }
   }
   // Son mot de passe : un écran à lui, sans la liste des comptes.
+  await page.getByTestId('user-menu').click();
   await page.getByTestId('nav-password').click();
   await expect(page.getByTestId('account-row')).toHaveCount(0);
   await page.getByLabel('Mot de passe actuel').fill(PASSWORD);

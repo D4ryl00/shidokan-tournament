@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createCompetition } from './helpers.js';
+import { chooseTheme, createCompetition } from './helpers.js';
 
 test('créer une compétition avec accents', async ({ page }) => {
   await createCompetition(page, "Coupe Shidokan – Côte d'Azur");
@@ -26,7 +26,7 @@ test('modifier une catégorie de poids', async ({ page }) => {
 
 test('thème sombre : logo sur disque blanc, choix mémorisé', async ({ page }) => {
   await page.goto('/');
-  await page.getByTestId('theme-toggle').getByText('Sombre').click();
+  await chooseTheme(page, 'Sombre');
   await expect(page.locator('html')).toHaveAttribute('data-mantine-color-scheme', 'dark');
   await expect(page.getByTestId('logo')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await page.screenshot({ path: 'test-results/theme-sombre.png', fullPage: true });
@@ -36,7 +36,7 @@ test('thème sombre : logo sur disque blanc, choix mémorisé', async ({ page })
 
 test('thème clair', async ({ page }) => {
   await page.goto('/');
-  await page.getByTestId('theme-toggle').getByText('Clair').click();
+  await chooseTheme(page, 'Clair');
   await expect(page.locator('html')).toHaveAttribute('data-mantine-color-scheme', 'light');
   await page.screenshot({ path: 'test-results/theme-clair.png', fullPage: true });
 });
@@ -55,7 +55,7 @@ test.describe('système en sombre, thème sur Auto', () => {
   test.use({ colorScheme: 'dark' });
   test('le logo est sur disque blanc dès le premier rendu', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('theme-toggle').getByText('Auto').click();
+    await chooseTheme(page, 'Auto');
     // Mémorise le fond du logo à l'instant où il est inséré, avant tout effet React.
     await page.addInitScript(() => {
       new MutationObserver((_, obs) => {

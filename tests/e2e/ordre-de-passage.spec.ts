@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { createCompetition } from './helpers.js';
+import { createCompetition, openTab } from './helpers.js';
 
 const zoneRow = (page: Page, name: string) => page.getByTestId('zone-row').filter({ has: page.locator(`input[value="${name}"]`) });
 const toggle = async (page: Page, zone: string, discipline: string) => zoneRow(page, zone).getByRole('checkbox', { name: discipline, exact: true }).click();
@@ -27,7 +27,7 @@ test('ordre de passage : zones par discipline, kata d’abord, numéros imprimé
   await expect(page.getByText('Réglages enregistrés')).toBeVisible();
 
   // Combats : Tatami 1 commence par le kata (n° 1), puis les combats à partir de 2 ; la boxe sur le Ring.
-  await page.getByRole('tab', { name: 'Combats' }).click();
+  await openTab(page, 'Combats');
   const tatami = page.getByTestId('zone-card').filter({ hasText: 'Tatami 1' });
   await expect(tatami.getByTestId('next-kata')).toContainText('n° 1 — Kata');
   await expect(tatami.getByTestId('next-kata')).toContainText('3 katakas');

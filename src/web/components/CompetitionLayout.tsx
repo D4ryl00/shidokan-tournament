@@ -1,18 +1,26 @@
-import { Alert, Button, Group, Loader, Modal, Select, Stack, Tabs, Text, Title } from '@mantine/core';
+import { Alert, Box, Button, Group, Loader, Modal, Select, Stack, Tabs, Text, Title, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useCompetition, useZones } from '../api.js';
 import { posteTabs, tabFor, usePoste, type Poste } from '../poste.js';
 import { HELP, type HelpTopicId } from '../help.js';
+import { lastTab, rememberTab, stageOf, visibleStages } from '../stages.js';
 import { COMPETITION_TABS } from '../tabs.js';
 import { useHasUnsaved } from '../unsaved.js';
 import { sessionParam } from '../useSelectedWave.js';
 import { HelpButton, HelpText } from './Help.js';
-import { ManagementBanner } from './SyncPanel.js';
+import { AppMenu, Brand } from './AppHeader.js';
+import { ManagementBanner, ManagementChip } from './SyncPanel.js';
+import { ThemeToggle } from './ThemeToggle.js';
+import { UserMenu } from './UserMenu.js';
 import { ZoneAutonomyBar } from './ZoneAutonomyBar.js';
 import { useCompetitionEvents } from '../liveUpdates.js';
 
+const labelOf = (tab: string) => COMPETITION_TABS.find((t) => t.path === tab)?.label ?? tab;
+
+/** Hauteur de la barre d'une compétition (la page défile dessous). */
+export const COMPETITION_BAR_HEIGHT = 56;
 
 export function CompetitionLayout() {
   const { id = '' } = useParams();
@@ -24,7 +32,7 @@ export function CompetitionLayout() {
   const { data: zones = [], isSuccess: zonesLoaded } = useZones(id);
   // Compte Zone dont la zone a été supprimée (ou d'une autre compétition) : rien n'est permis.
   const zoneMissing = imposed && poste.kind === 'zone' && zonesLoaded && !zones.some((z) => z.id === poste.zoneId);
-  const allowed = posteTabs(poste);
+  const stages = visibleStages(poste);
   const unsaved = useHasUnsaved();
   const [pending, setPending] = useState<string | null>(null);
   // La vague choisie (`?session=`) suit d'un onglet à l'autre : de la pesée d'une vague à son recasement.
@@ -37,6 +45,15 @@ export function CompetitionLayout() {
     // Pas pendant une saisie non enregistrée (poste changé dans un autre onglet) : la redirection attend.
     if (target !== current && !unsaved) navigate(path(target), { replace: true });
   }, [target, current, unsaved]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (posteTabs(poste).includes(current)) rememberTab(id, current);
+  }, [id, current, poste]);
+  const stage = stages.find((s) => s.id === stageOf(current)) ?? stages[0];
+  // Une étape ouvre son dernier onglet visité (s'il est encore permis), sinon son premier.
+  const openStage = (s: (typeof stages)[number]) => {
+    const last = lastTab(id, s.id);
+    go(last && s.tabs.includes(last) ? last : s.tabs[0]!);
+  };
   const posteValue = poste.kind === 'zone' ? `zone:${poste.zoneId}` : poste.kind;
   const choosePoste = (v: string | null) => {
     if (!v) return;
@@ -49,37 +66,61 @@ export function CompetitionLayout() {
   };
   if (isLoading) return <Loader />;
   if (!data) return <Text>Compétition introuvable.</Text>;
+  const when = new Date(`${data.date}T12:00:00`).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' });
   return (
-    <Stack>
-      <div>
-        <Title order={2}>{data.name}</Title>
-        <Text c="dimmed">
-          {new Date(`${data.date}T12:00:00`).toLocaleDateString('fr-FR', { dateStyle: 'full' })}
-          {data.location ? ` — ${data.location}` : ''}
-        </Text>
-        <Group justify="space-between" align="center" mt={4}>
-          <ManagementBanner competitionId={id} />
+    <Stack gap="md">
+      <Box
+        className="no-print"
+        style={{
+          position: 'sticky', top: 0, zIndex: 100, height: COMPETITION_BAR_HEIGHT, margin: 'calc(-1 * var(--app-shell-padding)) calc(-1 * var(--app-shell-padding)) 0',
+          padding: '0 var(--mantine-spacing-lg)', background: 'var(--sk-bar)', borderBottom: '1px solid var(--sk-line)', display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-md)',
+        }}
+      >
+        <Brand compact />
+        <Stack gap={0} style={{ minWidth: 0, flex: '1 1 0' }}>
+          <Title order={1} fz="md" fw={700} className="sk-ellipsis" title={data.name} data-testid="competition-title">{data.name}</Title>
+          <Text size="xs" c="dimmed" className="sk-ellipsis">{when}{data.location ? ` · ${data.location}` : ''}</Text>
+        </Stack>
+        {stages.length > 1 && (
+          <Group gap={4} wrap="nowrap" role="navigation" aria-label="Étapes" style={{ flexShrink: 0 }}>
+            {stages.map((s) => {
+              const active = s.id === stage?.id;
+              return (
+                <UnstyledButton key={s.id} data-testid={`stage-${s.id}`} aria-current={active ? 'page' : undefined} onClick={() => openStage(s)}
+                  style={{ padding: '6px 12px', borderRadius: 999, fontWeight: active ? 700 : 500, fontSize: 14, whiteSpace: 'nowrap', color: active ? 'var(--sk-chip-text)' : 'var(--sk-muted)', background: active ? 'var(--sk-chip)' : 'transparent' }}>
+                  {s.label}
+                </UnstyledButton>
+              );
+            })}
+          </Group>
+        )}
+        <Group gap="xs" wrap="nowrap" justify="flex-end" style={{ flex: '1 1 0', minWidth: 0 }}>
+          <ManagementChip competitionId={id} />
           {imposed ? (
-            <Text size="sm" data-testid="poste-account">Poste : {poste.kind === 'table' ? 'Table centrale' : `Zone : ${zones.find((z) => poste.kind === 'zone' && z.id === poste.zoneId)?.name ?? '?'}`}</Text>
+            <Text size="sm" fw={600} className="sk-ellipsis" data-testid="poste-account" title="Poste imposé par le compte">
+              Poste : {poste.kind === 'table' ? 'Table centrale' : `Zone : ${zones.find((z) => poste.kind === 'zone' && z.id === poste.zoneId)?.name ?? '?'}`}
+            </Text>
           ) : (
-            <Select size="xs" w={220} label="Poste" data-testid="poste-select" allowDeselect={false} value={posteValue} onChange={choosePoste}
-              data={[{ value: 'organisation', label: 'Organisation (tout)' }, { value: 'table', label: 'Table centrale' }, ...zones.map((z) => ({ value: `zone:${z.id}`, label: `Zone : ${z.name}` }))]} />
+            <Select size="xs" w={160} aria-label="Poste" title="Poste de ce navigateur" data-testid="poste-select" allowDeselect={false} value={posteValue} onChange={choosePoste} comboboxProps={{ width: 220 }}
+              data={[{ value: 'organisation', label: 'Organisation' }, { value: 'table', label: 'Table centrale' }, ...zones.map((z) => ({ value: `zone:${z.id}`, label: `Zone : ${z.name}` }))]} />
           )}
+          <ThemeToggle />
+          <AppMenu />
+          <UserMenu />
         </Group>
-        <ZoneAutonomyBar competitionId={id} />
-        {zoneMissing && <Alert color="orange" mt="xs" data-testid="account-zone-missing">La zone de ce compte n’existe plus : demandez à un organisateur.</Alert>}
-      </div>
-      <Tabs value={current} onChange={(v) => v && v !== current && go(v)}>
-        <Tabs.List>
-          {COMPETITION_TABS.filter((t) => allowed.includes(t.path)).map((t) => (
-            <Tabs.Tab key={t.path} value={t.path}>
-              {t.label}
-            </Tabs.Tab>
-          ))}
-        </Tabs.List>
-      </Tabs>
+      </Box>
+      {stage && stage.tabs.length > 0 && (
+        <Tabs value={current} onChange={(v) => v && v !== current && go(v)} className="no-print">
+          <Tabs.List>
+            {stage.tabs.map((t) => <Tabs.Tab key={t} value={t}>{labelOf(t)}</Tabs.Tab>)}
+          </Tabs.List>
+        </Tabs>
+      )}
+      <ManagementBanner competitionId={id} />
+      <ZoneAutonomyBar competitionId={id} />
+      {zoneMissing && <Alert color="orange" data-testid="account-zone-missing">La zone de ce compte n’existe plus : demandez à un organisateur.</Alert>}
       {current in HELP && (
-        <Group gap={4} wrap="nowrap">
+        <Group gap={4} wrap="nowrap" mt={-6}>
           <HelpText topic={current as HelpTopicId} />
           <HelpButton topic={current as HelpTopicId} />
         </Group>

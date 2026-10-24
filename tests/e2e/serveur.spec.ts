@@ -16,6 +16,7 @@ test('serveur : connexion obligatoire, puis les écrans habituels ; déconnexion
   await page.getByTestId('nav-accounts').click();
   // D'autres comptes peuvent exister (rôles créés par un autre parcours sur ce serveur).
   await expect(page.getByTestId('account-row').filter({ hasText: 'orga@e2e.example' })).toContainText('orga@e2e.example (vous)');
+  await page.getByTestId('user-menu').click();
   await page.getByTestId('logout').click();
   await expect(page.getByTestId('login-submit')).toBeVisible();
   await page.goto('/inscription/inconnu');

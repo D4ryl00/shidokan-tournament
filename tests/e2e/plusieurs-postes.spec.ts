@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { createCompetition } from './helpers.js';
+import { createCompetition, openTab } from './helpers.js';
 
 /** Quatre cadettes -54 (élimination directe, deux demi-finales), placées sur le Tatami 1. */
 async function seed(request: APIRequestContext, id: string) {
@@ -69,8 +69,9 @@ test('poste Zone : seulement Combats et Tableaux, sa zone seulement, même aprè
   await expect(page.getByRole('tab')).toHaveText(['Tableaux', 'Combats']);
   await page.goto(`/competitions/${id}/reglages`);
   await expect(page).toHaveURL(new RegExp(`/competitions/${id}/combats`));
-  await choosePoste(page, 'Organisation (tout)');
-  await expect(page.getByRole('tab', { name: 'Réglages' })).toBeVisible();
+  await choosePoste(page, 'Organisation');
+  await openTab(page, 'Réglages');
+  await expect(page.getByRole('tab', { name: 'Réglages' })).toHaveAttribute('aria-selected', 'true');
 });
 
 test('poste sur la zone des finales : la finale est dans sa file et se saisit', async ({ page, request }) => {

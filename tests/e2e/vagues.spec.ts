@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { createCompetition } from './helpers.js';
+import { createCompetition, openTab } from './helpers.js';
 
 async function seed(request: APIRequestContext, id: string) {
   let i = 0;
@@ -124,7 +124,8 @@ test('sessions (mineurs) : session par défaut non clôturée, feuilles sans ses
   await expect(page.getByTestId('waves-unsaved')).toHaveCount(0);
   await page.getByTestId('wave-name').first().fill('Kata du matin');
   await expect(page.getByTestId('waves-unsaved')).toBeVisible();
-  await page.getByRole('tab', { name: 'Pesée' }).click();
+  // Quitter l'écran (ici par l'étape Jour J) avec une saisie non enregistrée demande confirmation.
+  await page.getByTestId('stage-jour-j').click();
   await expect(page.getByTestId('leave-confirm')).toBeVisible();
   await page.getByTestId('leave-stay').click();
   await page.getByTestId('wave-save').click();
@@ -177,7 +178,7 @@ test('réaffectation par session : cas de la session, changement de session sign
   await expect(page.getByText('Réaffectation validée.')).toBeVisible();
   await expect(cases).toHaveCount(0);
 
-  await page.getByRole('tab', { name: 'Pesée' }).click();
+  await openTab(page, 'Pesée');
   await page.getByTestId('weighin-wave').getByText('Après-midi', { exact: true }).click();
   const row = page.getByTestId('weighin-row').filter({ hasText: 'MINI' });
   await expect(row.getByTestId('weighin-presence').locator('input[value="unknown"]')).toBeChecked();
@@ -202,7 +203,7 @@ test('réaffectation par session (relecture) : session gardée d’un onglet à 
   await request.post(`/api/competitions/${id}/weigh-in/close`, { data: { waveId: matin!.id } });
   await page.goto(`/competitions/${id}/pesee`);
   await page.getByTestId('weighin-wave').getByText('Matin', { exact: true }).click();
-  await page.getByRole('tab', { name: 'Réaffectation' }).click();
+  await openTab(page, 'Réaffectation');
   await expect(page.getByTestId('replacement-wave').locator(`input[value="${matin!.id}"]`)).toBeChecked();
   const cases = page.getByTestId('replacement-case');
   await expect(cases).toContainText('MINI');
