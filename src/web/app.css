@@ -1,0 +1,6 @@
+/* Règles globales du nouveau style (couleurs : jetons --sk-* de theme.ts). */
+.num { font-variant-numeric: tabular-nums; }
+/* Lignes alternées des tableaux, accordées au thème. */
+.mantine-Table-tbody .mantine-Table-tr:nth-of-type(even) { background-color: var(--sk-row); }
+/* Texte trop long : coupé proprement, le nom complet au survol (attribut title). */
+.sk-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }

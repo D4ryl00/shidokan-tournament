@@ -1,5 +1,8 @@
+import '@fontsource-variable/inter';
 import '@mantine/core/styles.css';
+import '@mantine/dates/styles.css';
 import '@mantine/notifications/styles.css';
+import './app.css';
 import { MantineProvider } from '@mantine/core';
 import { Notifications, notifications } from '@mantine/notifications';
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -7,7 +10,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
 import { ApiError } from './api.js';
-import { colorSchemeManager, theme } from './theme.js';
+import { colorSchemeManager, cssVariablesResolver, theme } from './theme.js';
 
 // Retour sur un onglet (impression, autre écran ouvert à côté) : ses données sont rechargées.
 // Session expirée ou supprimée (rôle serveur) : la fenêtre de reconnexion s'ouvre par-dessus l'écran, sans perdre la saisie en cours.
@@ -29,7 +32,7 @@ const queryClient: QueryClient = new QueryClient({
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <MantineProvider theme={theme} defaultColorScheme="auto" colorSchemeManager={colorSchemeManager}>
+    <MantineProvider theme={theme} defaultColorScheme="auto" colorSchemeManager={colorSchemeManager} cssVariablesResolver={cssVariablesResolver}>
       <Notifications position="top-right" />
       <QueryClientProvider client={queryClient}>
         <App />
