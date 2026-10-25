@@ -4,7 +4,8 @@ import type { RuleId } from '../settings.js';
 import { detectCases } from './detect.js';
 import { manualProposal } from './manual.js';
 import { applyAll } from './move.js';
-import { DEFAULT_NODE_BUDGET, aloneRegistrations, costRank, independentGroups, openCases, searchGroup, type SearchContext } from './plan-search.js';
+import { solveGroups } from './plan-groups.js';
+import { DEFAULT_NODE_BUDGET, aloneRegistrations, costRank, type SearchContext } from './plan-search.js';
 import { proposalsFor, rulesForMove } from './propose.js';
 import { allowedAt, costBand, isRuleOn, NO_VALIDATION_RULES, ruleRank, withAllRules, type CostBand } from './rules.js';
 import type { Proposal, State } from './types.js';
@@ -172,22 +173,14 @@ export function computePlan(state: State, opts: PlanOptions): PlanResult {
     cur = after;
   }
 
-  // 2. Les cas ouverts, en groupes indépendants ; chaque groupe cherche son meilleur plan.
+  // 2. Les cas ouverts, en groupes indépendants ; chaque groupe part du rejeu « carte par carte » et cherche mieux.
   const ctx: SearchContext = { waveId: opts.waveId, allowed, forApply, excluded };
-  const groups = independentGroups(cur, ctx, openCases(cur, ctx, new Set()));
-  const budget = opts.nodeBudget ?? DEFAULT_NODE_BUDGET;
-  let proven = true;
-  const onCards: string[] = [];
-  for (const sub of groups) {
-    const r = searchGroup(sub, ctx, budget);
-    if (!r.proven) proven = false;
-    onCards.push(...r.onCards);
-    // 3. Fusion : les déplacements du groupe, appliqués à l'état courant dans l'ordre trouvé.
-    for (const m of r.moves) {
-      const after = applyAll(cur, m.p);
-      moves.push(planMove(cur, after, m.p, { validated: false, outside: null, needsValidation: m.p.manual }));
-      cur = after;
-    }
+  const { moves: found, onCards, proven } = solveGroups(cur, ctx, opts.nodeBudget ?? DEFAULT_NODE_BUDGET);
+  // 3. Fusion : les déplacements des groupes, appliqués à l'état courant dans l'ordre trouvé.
+  for (const m of found) {
+    const after = applyAll(cur, m.p);
+    moves.push(planMove(cur, after, m.p, { validated: false, outside: null, needsValidation: m.p.manual }));
+    cur = after;
   }
 
   const cards = new Set(onCards);

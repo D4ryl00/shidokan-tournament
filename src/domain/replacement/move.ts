@@ -43,10 +43,13 @@ export function applyAll(state: State, p: Move): State {
 
 /** Applique le déplacement d'une inscription (`p.registrationId`, sans `alsoMoved`) à une copie de l'état (l'état reçu n'est pas modifié). */
 export function applyProposal(state: State, p: Move): State {
-  // Seuls les catégories et les inscrits changent : la grille et les réglages sont partagés (le plan applique des milliers de déplacements).
-  const next: State = { ...state, categories: structuredClone(state.categories), members: structuredClone(state.members) };
-  const m = next.members.find((x) => x.registrationId === p.registrationId);
-  if (!m) return next;
+  // Copie à l'écriture : seuls l'inscrit déplacé et ses deux catégories sont recopiés, le reste est partagé avec l'état
+  // reçu (jamais modifié). Le plan d'ensemble applique des milliers de déplacements.
+  const next: State = { ...state, categories: [...state.categories], members: [...state.members] };
+  const index = next.members.findIndex((x) => x.registrationId === p.registrationId);
+  if (index < 0) return next;
+  const m: Member = { ...next.members[index]! };
+  next.members[index] = m;
   const from = m.categoryId;
 
   let target: CategoryState;
@@ -79,9 +82,12 @@ export function applyProposal(state: State, p: Move): State {
   }
   m.categoryId = target.id;
 
-  for (const id of [from, target.id]) {
-    const cat = next.categories.find((c) => c.id === id);
-    if (cat) recompute(next, cat);
+  for (const id of new Set([from, target.id])) {
+    const i = next.categories.findIndex((c) => c.id === id);
+    if (i < 0) continue;
+    const cat: CategoryState = { ...next.categories[i]! };
+    next.categories[i] = cat;
+    recompute(next, cat);
   }
   next.categories = next.categories.filter(
     (c) => c.status === 'started' || c.status === 'finished' || next.members.some((x) => x.categoryId === c.id),

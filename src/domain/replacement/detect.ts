@@ -2,13 +2,28 @@ import { keyString, naturalKey, type CategoryKey } from '../categories.js';
 import { categoryKeyClosed, entryKey } from '../closed-categories.js';
 import { DISCIPLINES } from '../disciplines.js';
 import type { Case, CategoryState, Member, State } from './types.js';
-import { activeMembers, categoryWeightGap, effectiveWeight, gapThreshold, isOverweight } from './weights.js';
+import { categoryWeightGap, effectiveWeight, gapThreshold, isOverweight } from './weights.js';
 
 export const isLocked = (c: CategoryState | undefined) => c !== undefined && (c.status === 'started' || c.status === 'finished' || c.frozen === true);
 
 /** Catégorie qui accueille une clé naturelle (clé propre ou absorbée par une fusion). */
 export function categoryForKey(state: State, ks: string): CategoryState | undefined {
   return state.categories.find((c) => keyString(c.key) === ks || c.aliasKeys.includes(ks));
+}
+
+/**
+ * Index des clés d'un état : comme `categoryForKey`, la première catégorie (dans l'ordre) dont la clé propre ou une clé
+ * absorbée correspond, mais sans recalculer la clé de chaque catégorie à chaque recherche.
+ */
+export function keyLookup(state: State): (ks: string) => CategoryState | undefined {
+  const first = new Map<string, number>();
+  state.categories.forEach((c, i) => {
+    for (const k of [keyString(c.key), ...c.aliasKeys]) if (!first.has(k)) first.set(k, i);
+  });
+  return (ks) => {
+    const i = first.get(ks);
+    return i === undefined ? undefined : state.categories[i];
+  };
 }
 
 /** Catégorie naturelle d'origine d'un combattant recasé. */
@@ -28,6 +43,10 @@ const KIND_ORDER = ['closed', 'return', 'weight_out', 'alone', 'weight_gap'] as 
 
 export function detectCases(state: State): Case[] {
   const cases: Case[] = [];
+  // Actifs par catégorie (comme activeMembers, dans l'ordre des inscrits), en un seul passage.
+  const byCategory = new Map<string, Member[]>();
+  for (const m of state.members) if (m.categoryId && m.presence !== 'absent') byCategory.set(m.categoryId, [...(byCategory.get(m.categoryId) ?? []), m]);
+  const activeIn = (id: string) => byCategory.get(id) ?? [];
   const byId = new Map(state.categories.map((c) => [c.id, c]));
   const withWeightOut = new Set<string>();
   // Catégorie fermée : un seul cas, qui remplace les autres (seul, écart, poids hors catégorie).
@@ -53,7 +72,7 @@ export function detectCases(state: State): Case[] {
 
   for (const c of state.categories) {
     if (isLocked(c)) continue;
-    const active = activeMembers(state, c.id).filter((m) => !closed.has(m.registrationId));
+    const active = activeIn(c.id).filter((m) => !closed.has(m.registrationId));
     if (active.length === 1 && !withWeightOut.has(active[0]!.registrationId)) {
       cases.push({ id: `alone:${active[0]!.registrationId}`, kind: 'alone', registrationId: active[0]!.registrationId, categoryId: c.id, detail: active[0]!.sex === 'F' ? 'Seule dans sa catégorie' : 'Seul dans sa catégorie' });
     } else if (active.length >= 2 && DISCIPLINES[c.key.discipline].hasWeight) {
@@ -70,14 +89,16 @@ export function detectCases(state: State): Case[] {
     }
   }
 
+  let lookup: ReturnType<typeof keyLookup> | null = null;
   for (const m of state.members) {
     if (!m.placementLocked || !m.original || m.presence === 'absent') continue;
     const current = byId.get(m.categoryId ?? '');
     if (isLocked(current)) continue;
     // Seul un combattant déplacé parce qu'il était seul revient, et seulement si le retour respecte l'écart de poids.
     if (m.original.reason && m.original.reason !== 'alone') continue;
-    const home = originalCategory(state, m);
-    const homeMembers = home ? activeMembers(state, home.id).filter((x) => x.registrationId !== m.registrationId) : [];
+    lookup ??= keyLookup(state);
+    const home = lookup(keyString(naturalKey({ ...m.original }, m)));
+    const homeMembers = home ? activeIn(home.id).filter((x) => x.registrationId !== m.registrationId) : [];
     const back = { ...m, ...m.original };
     const viable = homeMembers.length > 0 && categoryWeightGap([...homeMembers, back], state.grid) <= gapThreshold([...homeMembers, back], state) + 1e-9;
     // Une catégorie d'origine fermée n'accueille personne : pas de retour (la proposition serait de toute façon écartée).

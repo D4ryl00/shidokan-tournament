@@ -2,11 +2,14 @@ import { expect, test } from 'vitest';
 import { detectCases } from '../../../src/domain/replacement/detect.js';
 import { manualProposal } from '../../../src/domain/replacement/manual.js';
 import { aloneRegistrations, computePlan, type PlanChoice, type PlanOptions } from '../../../src/domain/replacement/plan.js';
+import { cardByCardReplay, scoreOf } from '../../../src/domain/replacement/plan-search.js';
 import { rulesForMove } from '../../../src/domain/replacement/propose.js';
+import { allowedAt } from '../../../src/domain/replacement/rules.js';
 import type { Member, State } from '../../../src/domain/replacement/types.js';
 import type { RuleId } from '../../../src/domain/settings.js';
 import type { Wave } from '../../../src/domain/waves.js';
 import { makeState, member } from './fixtures.js';
+import { randomState } from './random-state.js';
 
 const kgM = (label: string, wc: string, kg: number) => member({ label, weightClassId: wc, approxWeightKg: kg });
 const plan = (s: State, over: Partial<PlanOptions> = {}) => computePlan(s, { waveId: null, level: 'minorsAdults', choices: [], ...over });
@@ -354,4 +357,16 @@ test('manualProposal du domaine : erreurs sans exception ; rulesForMove', () => 
   const far = kgM('FAR', 'cadet:F:+61', 70);
   const t = makeState([...s.members.map((m) => ({ ...m })), far], { categories: s.categories.map((c) => ({ ...c })) });
   expect(rulesForMove(t, mini.registrationId, far.categoryId!)).toBeNull();
+});
+
+test('jamais moins bon que le rejeu carte par carte', () => {
+  for (let seed = 1; seed <= 8; seed++) {
+    const s = randomState(seed, 60);
+    const ctx = { waveId: null, allowed: allowedAt(s.settings, 'minorsAdults'), forApply: false, excluded: new Set<string>() };
+    const replay = scoreOf(s, ctx, cardByCardReplay(s, ctx).moves);
+    const r = plan(s);
+    expect(r.aloneAfter.length).toBeLessThanOrEqual(replay.score.alone);
+    // Le même plan à chaque appel.
+    expect(plan(structuredClone(s)).hash).toBe(r.hash);
+  }
 });
