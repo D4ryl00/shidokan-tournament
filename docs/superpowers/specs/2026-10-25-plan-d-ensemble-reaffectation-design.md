@@ -4,7 +4,7 @@
 
 Légende : ✅ demandé ou validé par l'organisateur · 💡 choix du rédacteur (à vérifier en relisant) · 🔧 laissé au constructeur.
 
-Vocabulaire : dans l'app, « réaffectation » (code : `replacement`), « session » (code : `wave`). Maquettes de la discussion : `.superpowers/brainstorm/17415-1792954094/content/` (`pyramide-v2.html`, `plan.html`), non versionnées.
+Vocabulaire : dans l'app, « réaffectation » (code : `replacement`), « session » (code : `wave`). Maquettes de la discussion : `.superpowers/brainstorm/17415-1792954094/content/` (`pyramide-v2.html`, `plan.html`, `cout-v2.html` ; `plan.html` est dépassée sur les groupes et les boutons : le texte fait foi), non versionnées.
 
 ---
 
@@ -56,7 +56,7 @@ Une **règle** est une façon de trouver un adversaire. Chacune correspond à un
 - 💡 Le **retour** (règle 1) reste en tête et ne se désactive pas : le document principal le traite comme décidé (un combattant recasé revient quand sa catégorie d'origine a un adversaire). Il s'affiche dans la liste, sans poignée ni interrupteur. Dans le plan, un retour possible est **toujours inclus** (comme `bulkPlan` aujourd'hui, qui le fait en premier), même s'il ne change pas le nombre de seuls ; on peut le refuser comme tout déplacement.
 - 💡 La **correction d'un poids hors catégorie** (cas `weight_out`) n'est pas une règle : elle s'impose. Le plan l'inclut toujours : sans validation si l'écart reste dans le réglage, **à valider** sinon (✅ règle des deux sortes ci-dessous ; aujourd'hui elle est toujours de type A). Si elle est impossible dans le plan (catégorie du poids réel fermée, lancée, ou dans une autre session), le combattant n'entre pas dans le plan et garde sa carte ; il est listé à part (« À traiter sur sa carte »), pas compté parmi les seuls.
 - 💡 Pour un combattant shobu qui « accepte le jiyu en priorité », les règles 8 et 9 échangent leur **rang de préférence** pour lui seul (G préféré à H, critère 2 du §5.2), comme aujourd'hui. Les interrupteurs et la ligne de coupure, eux, restent ceux de la liste affichée : il a droit à H si la règle 8 est active et au-dessus de la ligne, à G si la règle 9 l'est.
-- 💡 Un déplacement qui relève de **plusieurs règles à la fois** (autre discipline et tranche au-dessus, mélange filles/garçons et tranche d'âge, autre discipline avec un écart au-dessus du réglage…) n'est permis que si **toutes** ces règles sont actives et au-dessus de la ligne ; il compte au rang de **la plus basse** d'entre elles. Le plan affiche la règle la plus basse, et les autres en petit. Les cartes appliquent la même exigence aux interrupteurs (pas à la ligne).
+- 💡 Un déplacement qui relève de **plusieurs règles à la fois** (autre discipline et tranche au-dessus, mélange filles/garçons et tranche d'âge, autre discipline avec un écart au-dessus du réglage…) n'est permis que si **toutes** ces règles sont actives et au-dessus de la ligne ; il compte au rang de **la plus basse** d'entre elles. ✅ Le plan affiche **toutes** les règles utilisées (§4.3), la plus basse en gras. Les cartes appliquent la même exigence aux interrupteurs (pas à la ligne).
 - Les **contraintes absolues** du §9.4 restent absolues, quelle que soit la liste : shobu pour un mineur, jiyu → shobu, plus d'une tranche d'âge d'écart, discipline non acceptée, catégorie lancée ou d'une session lancée, catégorie fermée.
 
 ### 2.2 Nouvelle règle : tranche d'âge au-dessous ✅
@@ -91,6 +91,7 @@ Dans l'onglet **Réaffectation**, en haut, pour la **session choisie** (comme le
 - Une première ligne « Sans rien changer » donne le nombre de seuls au départ.
 - ✅ Les barres sont **alignées à gauche** (un diagramme en barres, pas une pyramide centrée). La barre d'une ligne = le nombre de seuls du **meilleur plan** qui utilise cette règle et toutes les règles actives au-dessus.
 - Une règle désactivée est grisée, sans barre.
+- 💡 Chaque ligne porte une petite pastille de la **couleur de coût** de sa règle (§4.3), qui sert aussi de légende au plan.
 - La ligne de coupure se déplace (glisser, ou clic sur la ligne où l'on s'arrête). Le bouton dessous : « Voir le plan jusqu'à la règle 5 (17 déplacements, 7 seuls) ».
 - Sous le bouton, quand c'est prouvé : « Aucune combinaison dans ces règles ne laisse moins de 7 seuls. » (§5.4).
 - Tout changement (ordre, interrupteur, ligne) recalcule les barres.
@@ -98,7 +99,7 @@ Dans l'onglet **Réaffectation**, en haut, pour la **session choisie** (comme le
 ### 4.2 Le plan ✅
 « Voir le plan » affiche les déplacements (maquette `plan.html`) :
 - un résumé : restent seuls (et combien au départ), déplacements, déplacements validés / à valider ;
-- groupe **« À valider »**, puis groupe **« Sans validation »** ; chaque ligne : combattant et club, déplacement (catégorie de départ → catégorie telle qu'elle sera), règle utilisée, « pré-accord coach » le cas échéant ;
+- les déplacements **rangés par coût** (§4.3), du plus coûteux au moins coûteux ; chaque ligne : combattant et club, déplacement (catégorie de départ → catégorie telle qu'elle sera), **toutes les règles utilisées**, « pré-accord coach » le cas échéant, bouton « Valider » s'il est à valider ;
 - groupe **« Restent seuls »** avec les noms ; 💡 chacun garde sa carte dans la liste actuelle.
 
 Actions sur chaque déplacement ✅ :
@@ -117,7 +118,17 @@ Après un recalcul, un message dit **ce qui a changé** (« Inès M. passe en -4
 - 💡 Chaque déplacement appliqué entre dans l'historique comme aujourd'hui (« en masse », annulable un par un tant que la catégorie n'est pas lancée). Un déplacement validé à la main est noté comme tel dans l'historique (avec « pré-accord coach » le cas échéant).
 - 💡 Épingles et choix « Modifier » vivent dans la page jusqu'à l'application (gardés en `sessionStorage` du poste, protégés par try/catch), les refus sur le serveur.
 
-### 4.3 Ce qui disparaît ✅
+### 4.3 La couleur du coût ✅
+Maquette `cout-v2.html`. Aujourd'hui, la couleur des badges dit la **nature** du changement (`PROPOSAL_TYPES` dans `src/web/components/ReplacementBadge.tsx` : bleu poids, orange âge, violet discipline, rose mixité). Le plan ajoute une seconde information, le **coût** : à quel niveau de la liste se situe la règle utilisée. Les badges de nature ne changent pas ; dans le plan, le coût passe par les bandeaux et les pastilles de règle (pas par les badges), pour que les deux codes ne se mélangent pas.
+
+- **Groupes par coût**, chacun sous un bandeau coloré, du plus coûteux au moins coûteux : « Concessions très fortes » (rouge), « Concessions fortes » (orange), « Concessions moyennes » (jaune), « Concessions légères » (vert clair), « Sans validation » (vert). Chaque bandeau dit les règles qu'il couvre et le nombre de déplacements (« règles 8–9 · 2 déplacements ») ; un groupe vide n'est pas affiché.
+- « Sans validation » regroupe les déplacements qui n'utilisent que des règles sans validation (§2.1), où qu'elles soient dans la liste.
+- 💡 Les autres groupes se partagent les **règles à valider, dans l'ordre de la liste** : les règles à valider placées au-dessus de la ligne de coupure sont réparties en quatre tranches aussi égales que possible, de la plus haute (légères) à la plus basse (très fortes). La couleur suit donc l'ordre : déplacer une règle change sa couleur.
+- Chaque ligne montre **toutes les règles qu'elle utilise**, chacune en pastille avec son numéro dans la liste, sa couleur et son détail (« Minimes → Benjamines », « 6,5 kg (max 5) », « light → kumite ») ; la règle la plus coûteuse est en gras et décide du groupe.
+- La couleur n'est jamais seule : numéro, nom de la règle et nom du groupe l'accompagnent toujours ; les couleurs passent par les jetons du thème (`--sk-*`, `src/web/theme.ts`), en clair comme en sombre 🔧.
+- Une ligne validée est légèrement surlignée et porte « Annuler la validation » ; une ligne changée par le dernier recalcul garde son surlignage propre (§4.2).
+
+### 4.4 Ce qui disparaît ✅
 Le plan d'ensemble **remplace** les deux boutons « Classer automatiquement tous les cas simples » et « Tout classer automatiquement » (et la route `POST /replacement/bulk`, ou son contenu 🔧). Les cartes une par une, la validation unitaire, le déplacement manuel, « Ne combat pas » et « Mettre de côté » restent.
 
 ## 5. Le calcul
