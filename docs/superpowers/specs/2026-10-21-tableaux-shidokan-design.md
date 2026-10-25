@@ -1,6 +1,6 @@
 # App de tableaux pour compétitions Shidokan : document de conception
 
-> **Statut : conception validée le 2026-10-21, construite** (étapes 1 à 14, voir `docs/superpowers/plans/2026-10-21-00-feuille-de-route.md`). Complétée par `docs/superpowers/specs/2026-10-22-ordre-de-passage-et-aides-design.md` (vagues, zones de combat, ordre de passage, aides) : en cas de différence, ce second document fait foi.
+> **Statut : conception validée le 2026-10-21, construite** (étapes 1 à 14, voir `docs/superpowers/plans/2026-10-21-00-feuille-de-route.md`). Complétée par `docs/superpowers/specs/2026-10-22-ordre-de-passage-et-aides-design.md` (vagues, zones de combat, ordre de passage, aides) : en cas de différence, ce second document fait foi. Catégories fermées, « Ne combat pas » et cartes mises de côté : `docs/superpowers/specs/2026-10-25-categories-fermees-et-cartes-de-cote-design.md`.
 > Dernière mise à jour : 2026-10-23. Mainteneur : Remi.
 >
 > **Vocabulaire (2026-10-23)** : dans l'app, « vague » se dit désormais **« session »** et « recasement » **« réaffectation »** (verbe « réaffecter », badge « réaffecté »). Ce document garde les anciens termes, qui restent aussi dans le code (`wave`, `replacement`), la base et l'API. Onglets : `/sessions` et `/reaffectation` (les anciennes adresses `/vagues`, `/recasement` et `?vague=` sont redirigées).
