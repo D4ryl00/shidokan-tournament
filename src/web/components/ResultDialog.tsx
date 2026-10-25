@@ -30,6 +30,10 @@ interface Props {
   onClose: () => void;
 }
 
+/** « 2 combats suivants déjà joués seront à revoir… » (au singulier pour un seul). */
+const toReview = (n: number) =>
+  n === 1 ? '1 combat suivant déjà joué sera à revoir : son résultat sera ignoré.' : `${n} combats suivants déjà joués seront à revoir : leur résultat sera ignoré.`;
+
 export function ResultDialog({ competitionId, categoryId, bracket, ruleset, match, number, records, tieBreaks, entrants, onClose }: Props) {
   const put = usePutResult(competitionId);
   const del = useDeleteResult(competitionId);
@@ -89,7 +93,7 @@ export function ResultDialog({ competitionId, categoryId, bracket, ruleset, matc
         </Group>
         {(affected.length > 0 || (changing && poolTieBreak)) && (
           <Alert color="orange" data-testid="result-affected">
-            {affected.length > 0 ? `${affected.length} combat(s) suivant(s) déjà joué(s) seront à revoir : leur résultat sera ignoré.` : ''}
+            {affected.length > 0 ? toReview(affected.length) : ''}
             {poolTieBreak}
           </Alert>
         )}
@@ -98,7 +102,7 @@ export function ResultDialog({ competitionId, categoryId, bracket, ruleset, matc
           <Alert color="red" title="Effacer ce résultat ?" data-testid="result-delete-warning">
             <Text size="sm">
               {affectedByDelete.length > 0
-                ? `${affectedByDelete.length} combat(s) suivant(s) déjà joué(s) seront à revoir : leur résultat sera ignoré.`
+                ? toReview(affectedByDelete.length)
                 : 'Le combat redeviendra à disputer.'}
               {poolTieBreak}
             </Text>

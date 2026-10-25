@@ -28,6 +28,7 @@ import { PROPOSAL_TYPES, ReplacementBadge } from '../components/ReplacementBadge
 import { ageBandLabel, disciplineLabel, prefsLabel, rulesetShort, weightLabel } from '../labels.js';
 import { useSelectedWave } from '../useSelectedWave.js';
 import type { CategoryGrid } from '../../domain/types.js';
+import { plural } from '../../domain/plural.js';
 
 type Dialog =
   | { kind: 'proposal'; proposal: Proposal; confirm: boolean }
@@ -74,7 +75,8 @@ function WaveChangeWarning({ proposal, waves, name }: { proposal: Proposal | und
 /** Le combattant d'un cas en une ligne : tranche d'âge, sexe, discipline, règlement, catégorie de poids, poids, préférences. */
 function FighterDetail({ f, grid }: { f: CaseFighter | undefined; grid: CategoryGrid | undefined }) {
   if (!f) return null;
-  const weight = f.weighInKg !== null ? `pesé(e) ${kg(f.weighInKg)} kg` : f.approxWeightKg !== null ? `≈ ${kg(f.approxWeightKg)} kg (non pesé)` : 'non pesé(e)';
+  const e = f.sex === 'F' ? 'e' : '';
+  const weight = f.weighInKg !== null ? `pesé${e} ${kg(f.weighInKg)} kg` : f.approxWeightKg !== null ? `≈ ${kg(f.approxWeightKg)} kg (non pesé${e})` : `non pesé${e}`;
   const parts = [
     `${ageBandLabel(grid, f.ageBandCode)} ${f.sex === 'F' ? 'F' : 'M'}`,
     `${disciplineLabel(f.discipline)}${f.ruleset ? ` ${rulesetShort(f.ruleset)}` : ''}`,
@@ -156,7 +158,7 @@ export function ReplacementPage() {
       const otherBand = band !== undefined && !x.key.ageBandCodes.includes(band);
       return {
         value: x.id,
-        label: `${x.label} (${x.registrationIds.length - x.absentIds.length})${otherBand ? ' · autre tranche d’âge' : ''}${waveId && x.waveId !== waveId ? ` · session ${waveName(x.waveId)}` : ''}${t.warnings.length ? ` ⚠ ${t.warnings.length} règle(s) enfreinte(s)` : ''}`,
+        label: `${x.label} (${x.registrationIds.length - x.absentIds.length})${otherBand ? ' · autre tranche d’âge' : ''}${waveId && x.waveId !== waveId ? ` · session ${waveName(x.waveId)}` : ''}${t.warnings.length ? ` ⚠ ${plural(t.warnings.length, 'règle enfreinte', 'règles enfreintes')}` : ''}`,
       };
     };
     const targets = data.moveTargets[caseId] ?? [];
@@ -251,7 +253,7 @@ export function ReplacementPage() {
                       )}
                       {p.waveShifts.length > 0 && (
                         <StatusBadge tone="accent" size="sm" data-testid="wave-shift">
-                          ↪ Emmène {p.waveShifts.length} autre(s) combattant(s) dans une autre session
+                          ↪ Emmène {plural(p.waveShifts.length, 'autre combattant', 'autres combattants')} dans une autre session
                         </StatusBadge>
                       )}
                     </Group>
@@ -363,7 +365,7 @@ export function ReplacementPage() {
                 </Button>
               ) : (
                 <Button data-testid="bulk-confirm" loading={bulk.isPending} disabled={!preview.data || preview.data.steps.length === 0}
-                  onClick={() => bulk.mutate({ mode: dialog.mode, fingerprint: data.fingerprint, ...inWave }, { onSuccess: (r) => done(`${r.applied ?? 0} réaffectation(s) appliquée(s).`) })}>
+                  onClick={() => bulk.mutate({ mode: dialog.mode, fingerprint: data.fingerprint, ...inWave }, { onSuccess: (r) => done(`${plural(r.applied ?? 0, 'réaffectation appliquée', 'réaffectations appliquées')}.`) })}>
                   Confirmer ({preview.data?.steps.length ?? 0})
                 </Button>
               )}

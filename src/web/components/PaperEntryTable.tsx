@@ -7,6 +7,7 @@ import { useImportPaperEntry, usePreviewPaperEntry } from '../api.js';
 import { useUnsaved } from '../unsaved.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { ClubFormPreviewTable } from './ClubFormPreviewTable.js';
+import { plural } from '../../domain/plural.js';
 
 const emptyLine = (): ClubFormLine => ({
   lastName: '', firstName: '', sex: null, ageBandCode: null, weightKg: null, combat: null, kata: false, grade: null, ruleset: null, prefs: {}, shobuKeep: null,
@@ -61,7 +62,7 @@ export function PaperEntryTable({ competitionId, grid }: { competitionId: string
   const doSave = () =>
     save.mutate(entry(), {
       onSuccess: (r) => {
-        notifications.show({ color: 'green', message: `${r.club.name} : ${r.imported} inscription(s) enregistrée(s), ${r.replaced} remplacée(s).` });
+        notifications.show({ color: 'green', message: `${r.club.name} : ${plural(r.imported, 'inscription enregistrée', 'inscriptions enregistrées')}, ${plural(r.replaced, 'remplacée', 'remplacées')}.` });
         reset();
       },
     });
@@ -142,7 +143,7 @@ export function PaperEntryTable({ competitionId, grid }: { competitionId: string
           <ClubFormPreviewTable parse={preview.data} grid={grid} />
           <Group>
             <Button data-testid="paper-entry-save" onClick={doSave} loading={save.isPending} disabled={!preview.data.rows.some((r) => r.input)}>
-              Enregistrer la fiche ({preview.data.rows.filter((r) => r.input).length} inscription(s) valide(s))
+              Enregistrer la fiche ({plural(preview.data.rows.filter((r) => r.input).length, 'inscription valide', 'inscriptions valides')})
             </Button>
             <Text size="sm" c="dimmed">Chaque page saisie s’ajoute aux inscriptions déjà enregistrées pour ce club ; une ligne déjà saisie est mise à jour.</Text>
           </Group>

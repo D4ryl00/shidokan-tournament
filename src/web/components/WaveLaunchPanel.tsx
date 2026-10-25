@@ -4,6 +4,7 @@ import { Link } from 'react-router';
 import { useLaunch, useLaunchStatus, useNumberPending, useNumberPreview, useReopen, useZones, type RenumberMode, type WaveState } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { StatusBadge, type Tone } from './ui/StatusBadge.js';
+import { plural } from '../../domain/plural.js';
 
 const STATES: Record<WaveState, { label: string; tone: Tone }> = {
   preparation: { label: 'En préparation', tone: 'warn' },
@@ -60,7 +61,7 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
         {status.state === 'reopened' && <Button size="xs" data-testid="refreeze-open" onClick={openNumber}>Refiger la session…</Button>}
       </Group>
       {status.pending.length > 0 && status.state !== 'reopened' && (
-        <Alert color="orange" data-testid="pending-alert" title={`${status.pending.length} catégorie(s) à numéroter`}>
+        <Alert color="orange" data-testid="pending-alert" title={`${plural(status.pending.length, 'catégorie')} à numéroter`}>
           <Text size="sm" mb={6}>{status.pending.map((p) => p.label).join(', ')} : sans numéro de passage (catégorie nouvelle ou régénérée).</Text>
           <Button size="xs" data-testid="number-open" onClick={openNumber}>Numéroter à la suite…</Button>
         </Alert>

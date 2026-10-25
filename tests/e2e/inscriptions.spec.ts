@@ -30,7 +30,7 @@ test('fiche club : modèle, aperçu avec erreur, import, réimport corrigé', as
   await expect(page.getByTestId('club-form-preview-row')).toHaveCount(3);
   await expect(page.getByTestId('club-form-row-error')).toContainText('réservé aux adultes');
   await page.getByTestId('club-form-import').click();
-  await expect(page.getByText('2 inscription(s) importée(s)')).toBeVisible();
+  await expect(page.getByText('2 inscriptions importées')).toBeVisible();
   await page.goto(`/competitions/${id}/inscriptions`);
   await expect(page.getByTestId('registration-row')).toHaveCount(2);
 
@@ -41,7 +41,7 @@ test('fiche club : modèle, aperçu avec erreur, import, réimport corrigé', as
     ['DURAND', 'Hugo', 'Masculin', 'Seniors', '-75', 'Shido-boxing', 'Shobu', null, 'Oui', 74],
   ]));
   await page.getByTestId('club-form-import').click();
-  await expect(page.getByText('3 inscription(s) importée(s), 2 remplacée(s)')).toBeVisible();
+  await expect(page.getByText('3 inscriptions importées, 2 remplacées')).toBeVisible();
   await page.goto(`/competitions/${id}/inscriptions`);
   await expect(page.getByTestId('registration-row')).toHaveCount(3);
 });
@@ -125,7 +125,7 @@ test('saisie d’une fiche papier', async ({ page, request }) => {
   await page.getByTestId('paper-entry-check').click();
   await expect(page.getByTestId('paper-entry-preview').getByTestId('club-form-preview-row')).toHaveCount(2);
   await page.getByTestId('paper-entry-save').click();
-  await expect(page.getByText('Tani Dojo : 2 inscription(s)')).toBeVisible();
+  await expect(page.getByText('Tani Dojo : 2 inscriptions')).toBeVisible();
   const regs = (await (await request.get(`/api/competitions/${id}/registrations`)).json()) as { discipline: string; weightClassId: string | null }[];
   expect(regs.map((r) => r.discipline).sort()).toEqual(['karate', 'kata']);
   expect(regs.find((r) => r.discipline === 'karate')!.weightClassId).toBe('cadet:F:-54');

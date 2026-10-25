@@ -30,7 +30,8 @@ export function detectCases(state: State): Case[] {
       withWeightOut.add(m.registrationId);
       const current = state.grid.weightClasses.find((w) => w.id === m.weightClassId);
       const kg = (x: number) => String(x).replace('.', ',');
-      const detail = `Pesé(e) ${kg(m.weighInKg!)} kg : trop lourd pour ${current?.label ?? '?'} kg (tolérance ${kg(state.settings.weighInToleranceKg[m.sex])} kg) — sa catégorie de poids est ${wic.label} kg`;
+      const e = m.sex === 'F' ? 'e' : '';
+      const detail = `Pesé${e} ${kg(m.weighInKg!)} kg : trop lourd${e} pour ${current?.label ?? '?'} kg (tolérance ${kg(state.settings.weighInToleranceKg[m.sex])} kg) — sa catégorie de poids est ${wic.label} kg`;
       cases.push({ id: `weight_out:${m.registrationId}`, kind: 'weight_out', registrationId: m.registrationId, categoryId: m.categoryId, detail });
     }
   }
@@ -39,7 +40,7 @@ export function detectCases(state: State): Case[] {
     if (isLocked(c)) continue;
     const active = activeMembers(state, c.id);
     if (active.length === 1 && !withWeightOut.has(active[0]!.registrationId)) {
-      cases.push({ id: `alone:${active[0]!.registrationId}`, kind: 'alone', registrationId: active[0]!.registrationId, categoryId: c.id, detail: 'Seul(e) dans sa catégorie' });
+      cases.push({ id: `alone:${active[0]!.registrationId}`, kind: 'alone', registrationId: active[0]!.registrationId, categoryId: c.id, detail: active[0]!.sex === 'F' ? 'Seule dans sa catégorie' : 'Seul dans sa catégorie' });
     } else if (active.length >= 2 && DISCIPLINES[c.key.discipline].hasWeight) {
       const gap = categoryWeightGap(active, state.grid);
       const threshold = gapThreshold(active, state);

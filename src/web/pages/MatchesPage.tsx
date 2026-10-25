@@ -21,6 +21,7 @@ import { ResultDialog } from '../components/ResultDialog.js';
 import { TieBreakDialog } from '../components/TieBreakDialog.js';
 import { ZoneCards } from '../components/ZoneCards.js';
 import { STATUS_LABELS, STATUS_TONES, useEntrantInfo } from './BracketsPage.js';
+import { plural } from '../../domain/plural.js';
 
 export function MatchesPage() {
   const { id = '' } = useParams();
@@ -96,7 +97,7 @@ export function MatchesPage() {
       {!zoneOnly && (schedule?.unassigned.length ?? 0) > 0 && (
         <Card withBorder padding="md">
           <Title order={3} fz="lg">Sans zone</Title>
-          <Text size="sm" c="dimmed">{schedule!.unassigned.length} catégorie(s) sans zone possible ou sans session.</Text>
+          <Text size="sm" c="dimmed">{plural(schedule!.unassigned.length, 'catégorie')} sans zone possible ou sans session.</Text>
         </Card>
       )}
     </Box>
@@ -180,10 +181,10 @@ export function MatchesPage() {
               </Group>
               <Group gap="sm" wrap="nowrap">
                 <Progress value={res.progress.total ? (100 * res.progress.played) / res.progress.total : 0} style={{ flex: 1 }} />
-                <Text size="sm" c="dimmed" className="num" style={{ flexShrink: 0 }}>{res.progress.played} / {res.progress.total} {selected.bracket?.kind === 'kata' ? 'passage(s) noté(s)' : 'combat(s) joué(s)'}</Text>
+                <Text size="sm" c="dimmed" className="num" style={{ flexShrink: 0 }}>{res.progress.played} / {res.progress.total} {selected.bracket?.kind === 'kata' ? (res.progress.total > 1 ? 'passages notés' : 'passage noté') : res.progress.total > 1 ? 'combats joués' : 'combat joué'}</Text>
               </Group>
               {res.ignored.length > 0 && (
-                <Alert color="orange" data-testid="results-stale" title={`${res.ignored.length} résultat(s) à revoir`}>
+                <Alert color="orange" data-testid="results-stale" title={`${plural(res.ignored.length, 'résultat')} à revoir`}>
                   <Text size="sm" mb={6}>Les combattants de ces combats ont changé : cliquez le combat pour ressaisir, ou effacez l'ancien résultat.</Text>
                   <Stack gap={4}>
                     {res.ignored.map((r) => (

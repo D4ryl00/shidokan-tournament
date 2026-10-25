@@ -21,6 +21,7 @@ import { HELP } from '../help.js';
 import { DateField } from './ui/DateField.js';
 import { SectionCard } from './ui/SectionCard.js';
 import { StatusBadge } from './ui/StatusBadge.js';
+import { plural } from '../../domain/plural.js';
 
 const day = (iso: string | null) => (iso ? new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString('fr-FR') : '—');
 export const clubEntryUrl = (token: string) => `${window.location.origin}/inscription/${token}`;
@@ -183,7 +184,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
       <ApiErrorAlert error={send.error ?? mailto.error} />
       <Modal opened={confirmSend} onClose={() => setConfirmSend(false)} title="Envoyer le lien par mail">
         <Stack>
-          <Text>{selected.length} club(s) : {selected.map((i) => i.clubName).join(', ')}.</Text>
+          <Text>{plural(selected.length, 'club')} : {selected.map((i) => i.clubName).join(', ')}.</Text>
           <Alert color="yellow">{NEW_LINK_WARNING}</Alert>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setConfirmSend(false)}>Annuler</Button>

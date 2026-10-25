@@ -26,6 +26,7 @@ import { getCompetition, getGrid } from './competitions.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
 import { listWaves } from './waves.js';
 import { launchedCategoryIds } from './launch-state.js';
+import { plural } from '../../domain/plural.js';
 
 export class CategoryLockedError extends Error {
   constructor(message = "Catégorie lancée : déverrouillez-la d'abord") {
@@ -296,7 +297,7 @@ export async function updateCategory(
     const ctx = await loadContext(db, competitionId);
     const count = ctx.active.get(row.id)?.length ?? 0;
     if (!compatibleFormats(key.discipline, count).includes(patch.format)) {
-      throw new RegistrationValidationError([`Format incompatible avec ${count} inscrit(s).`]);
+      throw new RegistrationValidationError([`Format incompatible avec ${plural(count, 'inscrit')}.`]);
     }
   }
   const set: Partial<Row> = {};

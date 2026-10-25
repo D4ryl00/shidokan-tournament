@@ -350,7 +350,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         '« Aperçu » montre qui rencontrera qui avant de valider.',
         '« Refuser » écarte une proposition (elle reste en grisé, « Rétablir » la reprend).',
         '« Classer automatiquement tous les cas simples » valide d’un coup les propositions sans risque (poids voisin, retour dans la catégorie d’origine) ; « Tout classer automatiquement » valide aussi les autres, sous votre responsabilité.',
-        '« Déplacer manuellement vers… » ne liste que les catégories cohérentes avec les réglages (âge, poids, règlement, mixité). « Toutes les catégories » ajoute les autres, marquées « ⚠ règle(s) enfreinte(s) » : le détail s’affiche avant de confirmer.',
+        '« Déplacer manuellement vers… » ne liste que les catégories cohérentes avec les réglages (âge, poids, règlement, mixité). « Toutes les catégories » ajoute les autres, marquées « ⚠ N règles enfreintes » : le détail s’affiche avant de confirmer.',
       ],
       'Poids hors catégorie : la proposition « ⚖ Poids » l’envoie dans la catégorie de son poids réel. Si elle est vide, il y serait seul : elle passe alors en dernier, après les catégories où il aurait un adversaire (sa catégorie de poids est corrigée dans tous les cas).',
       'Sous le nom du combattant : sa tranche d’âge, sa discipline et son règlement, sa catégorie de poids, son poids (pesé ou approximatif) et les disciplines qu’il accepte.',
@@ -359,7 +359,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Certains déplacements demandent normalement l’accord des coachs ; en les validant vous en prenez la responsabilité.',
       'Avec des sessions : choisissez la session en haut de l’écran (la même que pour la pesée). Les cas, les compteurs et les validations automatiques ne portent que sur ses catégories.',
       'Le badge « ↪ change de session : Matin → Dimanche » signale une proposition qui ferait passer le combattant dans une catégorie d’une autre session. Elle n’est jamais validée automatiquement : validez-la une par une. Le combattant repasse alors « non pesé » dans sa nouvelle session, à pointer à sa pesée ; son poids déjà relevé est gardé.',
-      'Le badge « ↪ emmène N autre(s) combattant(s) dans une autre session » signale un déplacement qui fait changer de session une catégorie entière (ses derniers combattants d’origine la quittent, par exemple) : mêmes règles, validation une par une, les combattants emmenés repassent « non pesés ».',
+      'Le badge « ↪ Emmène N autres combattants dans une autre session » signale un déplacement qui fait changer de session une catégorie entière (ses derniers combattants d’origine la quittent, par exemple) : mêmes règles, validation une par une, les combattants emmenés repassent « non pesés ».',
     ],
   },
   'recasement.valides': {

@@ -156,11 +156,11 @@ export function WeighInPage() {
       )}
       <Modal opened={confirm} onClose={() => setConfirm(false)} title="Clôturer la pesée ?">
         <Stack>
-          <Text>{count('unknown')} combattant(s) non pesé(s) seront marqués absents et retirés des tableaux non lancés.</Text>
+          <Text>{count('unknown') === 1 ? '1 combattant non pesé sera marqué absent et retiré' : `${count('unknown')} combattants non pesés seront marqués absents et retirés`} des tableaux non lancés.</Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setConfirm(false)}>Annuler</Button>
             <Button data-testid="weighin-close-confirm"
-              onClick={() => close.mutate(waveId ?? undefined, { onSuccess: (r) => { setConfirm(false); notifications.show({ message: `${r.markedAbsent} combattant(s) marqué(s) absent(s).` }); } })}>
+              onClick={() => close.mutate(waveId ?? undefined, { onSuccess: (r) => { setConfirm(false); notifications.show({ message: `${plural(r.markedAbsent, 'combattant marqué absent', 'combattants marqués absents')}.` }); } })}>
               Clôturer
             </Button>
           </Group>

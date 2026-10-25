@@ -11,6 +11,7 @@ import { SectionHeader } from '../components/Help.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { ageBandLabel, disciplineLabel } from '../labels.js';
+import { plural } from '../../domain/plural.js';
 
 const rowLabel = (r: FfkRow) => `${r.lastName} ${r.firstName}`;
 
@@ -78,7 +79,7 @@ export function FfkImportPage() {
           resetFile.current?.();
           notifications.show({
             color: 'green',
-            message: `Import FFK : ${r.created} créée(s), ${r.updated} mise(s) à jour, ${r.removed} retirée(s), ${r.weightClassesCreated} catégorie(s) créée(s).`,
+            message: `Import FFK : ${plural(r.created, 'créée', 'créées')}, ${plural(r.updated, 'mise à jour', 'mises à jour')}, ${plural(r.removed, 'retirée', 'retirées')}, ${plural(r.weightClassesCreated, 'catégorie créée', 'catégories créées')}.`,
           });
           setUploadId(null);
           setSheets([]);
@@ -134,8 +135,8 @@ export function FfkImportPage() {
       {plan && (
         <SectionCard title="Aperçu de l’import" data-testid="ffk-preview">
           <Alert data-testid="ffk-summary" color={plan.summary.doubtful ? 'orange' : 'blue'} title="Résumé">
-            {plan.summary.create} création(s) · {plan.summary.update} mise(s) à jour · {plan.summary.doubtful} à trancher ·{' '}
-            {plan.summary.errors} erreur(s) · {plan.summary.removals} retrait(s) · {plan.summary.newWeightClasses} catégorie(s) créée(s)
+            {plural(plan.summary.create, 'création')} · {plural(plan.summary.update, 'mise à jour', 'mises à jour')} · {plan.summary.doubtful} à trancher ·{' '}
+            {plural(plan.summary.errors, 'erreur')} · {plural(plan.summary.removals, 'retrait')} · {plural(plan.summary.newWeightClasses, 'catégorie créée', 'catégories créées')}
           </Alert>
 
           {plan.clubs.length > 0 && (
@@ -253,8 +254,8 @@ export function FfkImportPage() {
       <Modal opened={confirming} onClose={() => setConfirming(false)} title="Confirmer l’import FFK">
         <Stack>
           <Text>
-            {plan?.summary.create} création(s), {plan?.summary.update} mise(s) à jour, {plan?.summary.removals} retrait(s),{' '}
-            {plan?.summary.newWeightClasses} catégorie(s) créée(s).
+            {plural(plan?.summary.create ?? 0, 'création')}, {plural(plan?.summary.update ?? 0, 'mise à jour', 'mises à jour')}, {plural(plan?.summary.removals ?? 0, 'retrait')},{' '}
+            {plural(plan?.summary.newWeightClasses ?? 0, 'catégorie créée', 'catégories créées')}.
           </Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setConfirming(false)}>Annuler</Button>

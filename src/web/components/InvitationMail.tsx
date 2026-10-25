@@ -3,6 +3,7 @@ import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { useAppSettings, useCompetition, useInvitationPreview, useUpdateCompetition, type SendResult } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
+import { plural } from '../../domain/plural.js';
 
 export const NEW_LINK_WARNING = 'Un nouveau lien est créé à chaque envoi ; les liens envoyés avant ne fonctionnent plus.';
 
@@ -59,7 +60,7 @@ export function SendResultsModal({ results, onClose }: { results: SendResult[]; 
     <Modal opened={results.length > 0} onClose={onClose} title="Envoi des liens" size="lg">
       <Stack data-testid="send-results">
         <Alert color={errors.length ? 'orange' : 'green'}>
-          {results.length - errors.length} mail(s) envoyé(s) : leur ancien lien ne fonctionne plus.{errors.length ? ` ${errors.length} en erreur : le lien de ces clubs n’a pas changé ; corrigez puis renvoyez.` : ''}
+          {plural(results.length - errors.length, 'mail envoyé', 'mails envoyés')} : leur ancien lien ne fonctionne plus.{errors.length ? ` ${errors.length} en erreur : le lien de ces clubs n’a pas changé ; corrigez puis renvoyez.` : ''}
         </Alert>
         {results.map((r) => (
           <Group key={r.clubId} justify="space-between" wrap="nowrap">

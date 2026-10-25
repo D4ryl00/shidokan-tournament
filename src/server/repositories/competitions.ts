@@ -8,6 +8,7 @@ import { defaultSettings, mergeSettings, readStoredSettings } from '../../domain
 import type { CategoryGrid } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
 import { ageBands, ageLinks, competitions, registrations, waves, weightClasses, zones } from '../db/schema.js';
+import { plural } from '../../domain/plural.js';
 
 export type { Competition, CompetitionInput };
 
@@ -97,7 +98,7 @@ export async function updateCompetition(
   if (patch.settings !== undefined) {
     const codes = new Set((await getGrid(db, id)).ageBands.map((b) => b.code));
     const unknown = settings.mixSexes.ageBandCodes.filter((c) => !codes.has(c));
-    if (unknown.length) throw new GridValidationError([`réglages › mixité : tranche(s) d'âge inconnue(s) : ${unknown.join(', ')}`]);
+    if (unknown.length) throw new GridValidationError([`réglages › mixité : ${unknown.length > 1 ? 'tranches d’âge inconnues' : 'tranche d’âge inconnue'} : ${unknown.join(', ')}`]);
   }
   db.update(competitions)
     .set({
@@ -187,7 +188,7 @@ function usedWeightClassesRemoved(db: AppDb, competitionId: string, grid: Catego
   return [...counts].map(([id, n]) => {
     const wc = current.find((w) => w.id === id);
     const name = wc ? `${bands.get(wc.ageBandCode) ?? wc.ageBandCode} ${wc.sex === 'F' ? 'féminines' : 'masculins'} ${wc.label}` : id;
-    return `La catégorie ${name} contient ${n} inscription(s) : elle ne peut pas être supprimée.`;
+    return `La catégorie ${name} contient ${plural(n, 'inscription')} : elle ne peut pas être supprimée.`;
   });
 }
 

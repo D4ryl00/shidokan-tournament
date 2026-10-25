@@ -85,7 +85,7 @@ test('pesée par session : présence indépendante, clôture limitée à la sess
   // Clôture de la vague Kata : seul KATA (non pesé) devient absent
   await page.getByTestId('weighin-close').click();
   await page.getByTestId('weighin-close-confirm').click();
-  await expect(page.getByText('1 combattant(s) marqué(s) absent(s).')).toBeVisible();
+  await expect(page.getByText('1 combattant marqué absent.')).toBeVisible();
   await expect(page.getByText('Pesée clôturée')).toBeVisible();
   await page.getByTestId('weighin-wave').getByText('Combats', { exact: true }).click();
   await expect(page.getByText('Pesée clôturée')).toHaveCount(0);
@@ -158,7 +158,7 @@ test('réaffectation par session : cas de la session, changement de session sign
   await expect(cases).toContainText('SEULE');
   await page.getByTestId('bulk-simple').click();
   await page.getByTestId('bulk-confirm').click();
-  await expect(page.getByText('1 réaffectation(s) appliquée(s).')).toBeVisible();
+  await expect(page.getByText('1 réaffectation appliquée.')).toBeVisible();
   await expect(page.getByText('Aucun cas à traiter')).toBeVisible();
 
   await page.getByTestId('replacement-wave').getByText('Matin', { exact: true }).click();
@@ -220,7 +220,7 @@ test('réaffectation par session (relecture) : session gardée d’un onglet à 
   await page.keyboard.press('Escape');
   await cases.getByTestId('manual-move-all').click();
   await select.click();
-  await page.getByRole('option', { name: /Juniors F.*session en attente.*règle\(s\) enfreinte\(s\)/ }).click();
+  await page.getByRole('option', { name: /Juniors F.*session en attente.*règles? enfreintes?/ }).click();
   await cases.getByTestId('manual-move').click();
   await expect(page.getByTestId('wave-change-warning')).toContainText('dans aucune session');
 });

@@ -10,6 +10,7 @@ import { BracketView, type EntrantInfo } from '../components/BracketView.js';
 import { HelpText } from '../components/Help.js';
 import { useEntrantInfo } from './BracketsPage.js';
 import { sessionParam } from '../useSelectedWave.js';
+import { plural } from '../../domain/plural.js';
 
 /** Zone utile d'une page A4 paysage (marges 10 mm) moins l'en-tête, en pixels CSS. */
 const PAGE_WIDTH = 1040;
@@ -95,7 +96,7 @@ export function PrintPage() {
       <Group className="no-print" mb="md">
         <Button onClick={() => window.print()}>Imprimer</Button>
         <Text size="sm">
-          {withResults ? 'Feuilles de résultats' : 'Tableaux'} : {list.length} catégorie(s) — une par page, format A4 paysage. Pour un PDF, choisir « Enregistrer au format PDF ».
+          {withResults ? 'Feuilles de résultats' : 'Tableaux'} : {plural(list.length, 'catégorie')} — une par page, format A4 paysage. Pour un PDF, choisir « Enregistrer au format PDF ».
         </Text>
         <HelpText topic="impression" />
       </Group>

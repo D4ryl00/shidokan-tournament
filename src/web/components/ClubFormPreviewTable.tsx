@@ -2,6 +2,7 @@ import { Alert, Badge, List, Stack, Table } from '@mantine/core';
 import type { ClubFormPreview } from '../api.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import { ageBandLabel, disciplineLabel, prefsLabel, rulesetShort, weightLabel } from '../labels.js';
+import { plural } from '../../domain/plural.js';
 
 /** Aperçu d'une fiche club (fichier importé ou fiche papier saisie) : une ligne par inscription, erreurs, remarques et retraits. */
 export function ClubFormPreviewTable({ parse, grid }: { parse: ClubFormPreview; grid: CategoryGrid | undefined }) {
@@ -43,7 +44,7 @@ export function ClubFormPreviewTable({ parse, grid }: { parse: ClubFormPreview; 
         </Table.Tbody>
       </Table>
       {parse.removals.length > 0 && (
-        <Alert color="orange" title={`Ce réimport retirera ${parse.removals.length} inscription(s) de la fiche précédente`} data-testid="club-form-removals">
+        <Alert color="orange" title={`Ce réimport retirera ${plural(parse.removals.length, 'inscription')} de la fiche précédente`} data-testid="club-form-removals">
           {parse.removals.map((r) => r.label).join(' · ')}
         </Alert>
       )}

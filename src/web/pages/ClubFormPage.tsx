@@ -9,6 +9,7 @@ import { HELP } from '../help.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
 import { OnlineEntryPanel } from '../components/OnlineEntryPanel.js';
 import { PaperEntryTable } from '../components/PaperEntryTable.js';
+import { plural } from '../../domain/plural.js';
 
 export function ClubFormPage() {
   const { id = '' } = useParams();
@@ -31,7 +32,7 @@ export function ClubFormPage() {
       onSuccess: (r) => {
         notifications.show({
           color: 'green',
-          message: `${r.club.name} : ${r.imported} inscription(s) importée(s), ${r.replaced} remplacée(s), ${r.skipped} ignorée(s).`,
+          message: `${r.club.name} : ${plural(r.imported, 'inscription importée', 'inscriptions importées')}, ${plural(r.replaced, 'remplacée', 'remplacées')}, ${plural(r.skipped, 'ignorée', 'ignorées')}.`,
         });
         preview.reset();
         setFile(null);
@@ -67,7 +68,7 @@ export function ClubFormPage() {
             <ClubFormPreviewTable parse={parse} grid={grid} />
             <Group>
               <Button data-testid="club-form-import" onClick={doImport} loading={importForm.isPending} disabled={valid === 0}>
-                Importer {valid} inscription(s) valide(s)
+                Importer {plural(valid, 'inscription valide', 'inscriptions valides')}
               </Button>
               <Text size="sm" c="dimmed">Réimporter la fiche d’un club remplace les inscriptions de sa fiche précédente.</Text>
             </Group>

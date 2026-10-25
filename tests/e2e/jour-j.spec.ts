@@ -56,7 +56,7 @@ test('journée complète : tatamis, résultats, correction, poule, kata, podiums
   // Effacer demande confirmation et annonce les combats touchés (ici on renonce)
   await page.locator('[data-testid="bracket-match"][data-match="w1-0"]').click();
   await page.getByTestId('result-delete').click();
-  await expect(page.getByTestId('result-delete-warning')).toContainText('1 combat(s) suivant(s)');
+  await expect(page.getByTestId('result-delete-warning')).toContainText('1 combat suivant');
   await page.getByTestId('result-delete-warning').getByRole('button', { name: 'Non' }).click();
   await expect(page.getByTestId('result-delete-warning')).toHaveCount(0);
 

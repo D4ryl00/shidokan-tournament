@@ -27,6 +27,13 @@ describe('détection', () => {
     s.categories.find((x) => x.id === a.categoryId)!.status = 'started';
     expect(detectCases(s).some((x) => x.registrationId === a.registrationId)).toBe(false);
   });
+  test('détail du cas « seul » accordé au sexe du combattant', () => {
+    const girl = member({ weightClassId: 'cadet:F:-47' });
+    const boy = member({ sex: 'M', ageBandCode: 'cadet', weightClassId: 'cadet:M:-63' });
+    const s = makeState([girl, boy]);
+    expect(caseOf(s, girl.registrationId).detail).toBe('Seule dans sa catégorie');
+    expect(caseOf(s, boy.registrationId).detail).toBe('Seul dans sa catégorie');
+  });
   test('poids hors catégorie → weight_out (prioritaire sur alone)', () => {
     const a = member({ weightClassId: 'cadet:F:-54', weighInKg: 58, presence: 'present' });
     const s = makeState([a]);
@@ -315,7 +322,7 @@ describe('poids hors catégorie : catégorie du poids réel vide', () => {
     const others = [boy({}), boy({}), boy({})];
     const rousseau = member({ sex: 'M', ageBandCode: 'minime', weightClassId: 'minime:M:-50', weighInKg: 45, presence: 'present' });
     const s = makeState([garnier, ...others, rousseau]);
-    expect(caseOf(s, garnier.registrationId).detail).toBe('Pesé(e) 41 kg : trop lourd pour -40 kg (tolérance 0,3 kg) — sa catégorie de poids est -45 kg');
+    expect(caseOf(s, garnier.registrationId).detail).toBe('Pesé 41 kg : trop lourd pour -40 kg (tolérance 0,3 kg) — sa catégorie de poids est -45 kg');
     const ps = props(s, garnier.registrationId);
     expect(ps.map((p) => p.type)).toEqual(['C', 'A']);
     expect(ps[0]).toMatchObject({ target: { categoryId: rousseau.categoryId }, changes: { weightClassId: 'benjamin:M:-45' }, manual: true });

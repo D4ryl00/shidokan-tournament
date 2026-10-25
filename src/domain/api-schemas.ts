@@ -85,7 +85,7 @@ export function zodIssuesFr(error: ZodError): string[] {
         msg = 'valeur non permise';
         break;
       case 'unrecognized_keys':
-        msg = `champ(s) inconnu(s) : ${issue.keys.join(', ')}`;
+        msg = `${issue.keys.length > 1 ? 'champs inconnus' : 'champ inconnu'} : ${issue.keys.join(', ')}`;
         break;
       case 'invalid_string':
         msg = issue.message.startsWith('La ') ? issue.message : 'format invalide';

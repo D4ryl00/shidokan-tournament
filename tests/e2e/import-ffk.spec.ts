@@ -26,7 +26,7 @@ async function importClubForm(page: Page, id: string) {
   ]);
   await page.getByTestId('club-form-file').setInputFiles({ name: 'fiche.ods', mimeType: 'application/octet-stream', buffer: filled });
   await page.getByTestId('club-form-import').click();
-  await expect(page.getByText('2 inscription(s) importée(s)')).toBeVisible();
+  await expect(page.getByText('2 inscriptions importées')).toBeVisible();
 }
 
 async function uploadFfk(page: Page, id: string) {
@@ -41,16 +41,16 @@ test('import FFK : rapprochement avec la fiche club, cas douteux, réimport', as
   await uploadFfk(page, id);
 
   await expect(page.getByTestId('ffk-sheet')).toHaveCount(1);
-  await expect(page.getByTestId('ffk-summary')).toContainText('2 création(s) · 1 mise(s) à jour · 1 à trancher · 1 erreur(s)');
+  await expect(page.getByTestId('ffk-summary')).toContainText('2 créations · 1 mise à jour · 1 à trancher · 1 erreur');
   await expect(page.getByTestId('ffk-errors')).toContainText('SANS AGE');
   await expect(page.getByTestId('ffk-unconfirmed')).toContainText('SHINSEN');
   await expect(page.getByTestId('ffk-commit')).toBeDisabled();
 
   await page.getByTestId('ffk-doubtful').getByLabel('Nouveau combattant').check();
-  await expect(page.getByTestId('ffk-summary')).toContainText('3 création(s) · 1 mise(s) à jour · 0 à trancher');
+  await expect(page.getByTestId('ffk-summary')).toContainText('3 créations · 1 mise à jour · 0 à trancher');
   await page.getByTestId('ffk-commit').click();
   await page.getByTestId('ffk-commit-confirm').click();
-  await expect(page.getByText('Import FFK : 3 créée(s), 1 mise(s) à jour')).toBeVisible();
+  await expect(page.getByText('Import FFK : 3 créées, 1 mise à jour')).toBeVisible();
 
   await page.goto(`/competitions/${id}/inscriptions`);
   await expect(page.getByTestId('registration-row')).toHaveCount(5);
@@ -62,5 +62,5 @@ test('import FFK : rapprochement avec la fiche club, cas douteux, réimport', as
   await expect(page.getByTestId('registration-row')).toContainText('SHINSEN');
 
   await uploadFfk(page, id);
-  await expect(page.getByTestId('ffk-summary')).toContainText('0 création(s) · 4 mise(s) à jour · 0 à trancher');
+  await expect(page.getByTestId('ffk-summary')).toContainText('0 création · 4 mises à jour · 0 à trancher');
 });
