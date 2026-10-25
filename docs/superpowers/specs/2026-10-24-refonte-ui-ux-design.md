@@ -2,6 +2,8 @@
 
 **Date :** 2026-10-24 · **Demande de l'organisateur :** « refaire une passe sur l'UI et l'UX, pour avoir une app à l'esthétique léchée, qui donne envie et qui soit simple d'utilisation ». Aujourd'hui, plein de petites erreurs donnent l'impression que l'app n'est pas finie.
 
+**Construit** le 2026-10-25 (feuille de route, étape 22 ; plan `docs/superpowers/plans/2026-10-24-22-refonte-ui-ux.md`). Les écarts et précisions du constructeur sont au §9.
+
 Légende : ✅ décidé par l'organisateur · 💡 choix du rédacteur (à vérifier en relisant) · 🔧 laissé au constructeur.
 
 Maquettes de référence (direction retenue, thèmes sombre et clair, écrans Combats et Inscriptions) : `.superpowers/brainstorm/5689-1792799861/content/direction-b-clair-sombre.html` (fichier local, non versionné) ; les jetons de couleur du §4.1 en sont tirés.
@@ -168,3 +170,20 @@ Pour chaque écran : nouveau style (§4), défauts corrigés, et ces changements
 - Choix exacts des composants (menus, édition en ligne ou fenêtre, squelettes), tant qu'ils respectent §4 et §5.
 - Recalcul de la palette Mantine, nuances intermédiaires, rouge de danger.
 - Détails de mise en page de chaque écran non précisés au §6.
+
+## 9. Écarts et précisions du constructeur (2026-10-25)
+
+- **Composants communs** (`src/web/components/ui/`) : `PageHeader`, `SectionCard` (un groupe dont le nom lu est le titre seul), `EmptyState`, `StatusBadge` (jamais rétréci sous son texte dans un tableau), `DateField` (`JJ/MM/AAAA`, valeur `AAAA-MM-JJ`), icônes au trait embarquées (pas de bibliothèque d'icônes).
+- **Barre d'une compétition** : la barre de l'application n'est pas affichée sur ces écrans (elle resterait dans la page, avec des menus en double) ; le poste « Organisation (tout) » s'appelle « Organisation ». La page « Compétition introuvable » a un état vide et un bouton de retour.
+- **Accueil** : la liste reçoit le nombre d'inscrits et l'état de la main (`GET /api/competitions`, lecture seule) ; un seul bouton « Nouvelle compétition » (pas de second dans l'état vide).
+- **Clubs** : modification dans une fenêtre (crayon sur la ligne) ; le pré-accord reste une case à cocher d'un clic. **Inscriptions** : nom et prénom réunis en une colonne « Combattant ». Lignes d'invitation : « Régénérer le lien » et « Révoquer » rangés dans un menu « … ».
+- **Grille** : les cases restent des champs (c'est un éditeur), mais elles se lisent comme du texte ; leur cadre n'apparaît qu'au survol et à la saisie.
+- **Réglages, Grille, Sessions** : une barre « Enregistrer » collée en bas de l'écran, avec « Modifications non enregistrées » ; sommaire des sections en haut des réglages (compétition et application).
+- **Pesée** : « Clôturer la pesée » devient le bouton principal (violet), la confirmation ne change pas ; feuilles de pesée « par club » / « par catégorie » groupées.
+- **Combats** : la zone d'une catégorie est une puce qui ouvre la liste des zones (même effet qu'avant) ; la liste des catégories est repliée d'office à partir de 3 zones (bouton « Catégories (N) ») pour garder la largeur des cartes ; pas de nombre de passages sur une carte (la file envoyée est tronquée) ; le poste Zone n'a pas de barre de session vide.
+- **Podiums** : exports en rangée de boutons homogène (« Résultats : .xlsx | .ods », « Podiums : .xlsx | .ods ») ; état « À disputer » / « En cours » / « Terminée » (`src/web/podiums.ts`).
+- **Page publique d'un club** : barre propre (logo, nom, choix du thème), état des inscriptions en badge.
+- **Impression** : les jetons `--sk-*` sont redéfinis en noir sur blanc dans `.print-root` (sinon les cases des tableaux imprimés depuis le thème sombre prenaient le fond sombre des cartes).
+- **Textes** : plus de « (s) » ni de « (e) » (« Seul / Seule », « Pesé / Pesée » selon le combattant) ; le test `tests/web/textes.test.ts` garde la règle (TypeScript 7 n'ayant plus d'API d'analyse en JavaScript, il lit les lignes et écarte les appels de fonction sur une variable `s`).
+- **Rôle serveur** : l'écran ne demande plus les réglages de liaison au serveur (`/api/sync/settings`, propres au PC), ce qui laissait une erreur 404 dans la console.
+
