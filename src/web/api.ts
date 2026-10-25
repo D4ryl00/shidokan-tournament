@@ -4,6 +4,7 @@ import type { BracketFormat, KataScores, MatchMethod, Podium } from '../domain/b
 import type { CategoryProgress, MedalRow, ResultRecord } from '../domain/results.js';
 import type { Category, CategoryStatus } from '../domain/categories.js';
 import type { ClubFormHeader, ClubFormLine, ClubFormParse } from '../domain/club-form.js';
+import type { ClosedCategoriesView } from '../domain/closed-categories.js';
 import type { ColumnMapping, FfkChoices, FfkImportPlan } from '../domain/ffk-import.js';
 import type { Club, DirectoryEntry, DirectoryInput, RegistrationInput, RegistrationRow } from '../domain/registration.js';
 import type { Case, Presence, Proposal, ProposalType } from '../domain/replacement/index.js';
@@ -83,9 +84,15 @@ export function useReplaceGrid(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (grid: CategoryGrid) => api<void>('PUT', `/api/competitions/${id}/grid`, grid),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['grid', id] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['grid', id] });
+      qc.invalidateQueries({ queryKey: ['closed-categories', id] });
+    },
   });
 }
+
+export const useClosedCategories = (id: string) =>
+  useQuery({ queryKey: ['closed-categories', id], queryFn: () => api<ClosedCategoriesView>('GET', `/api/competitions/${id}/closed-categories`) });
 
 // --- Clubs, inscriptions, fiche club (étape 2) ---
 

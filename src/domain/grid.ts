@@ -23,10 +23,6 @@ export function validateGrid(grid: CategoryGrid): string[] {
     }
   }
 
-  if (grid.ageBands.length && grid.ageBands.every((b) => b.onClubForm === false)) {
-    errors.push("Au moins une tranche d'âge doit être proposée sur la fiche club.");
-  }
-
   const ids = new Set<string>();
   const groups = new Map<string, WeightClass[]>();
   for (const wc of grid.weightClasses) {

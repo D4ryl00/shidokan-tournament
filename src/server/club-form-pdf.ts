@@ -2,6 +2,7 @@ import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from 'pdf
 import { ageBandAbbreviations } from '../domain/club-form.js';
 import type { Competition } from '../domain/competition.js';
 import type { CategoryGrid } from '../domain/types.js';
+import { offeredAgeBands } from '../domain/closed-categories.js';
 import { logoPng } from './club-form-template.js';
 
 /*
@@ -72,7 +73,7 @@ function centered(page: PDFPage, font: PDFFont, size: number, text: string, x: n
 }
 
 /** Fiche papier vierge (PDF) d'une compétition : tranches d'âge proposées aux clubs seulement. */
-export async function buildClubFormPdf(competition: Competition, grid: CategoryGrid): Promise<Buffer> {
+export async function buildClubFormPdf(competition: Competition, grid: CategoryGrid, closed: ReadonlySet<string>): Promise<Buffer> {
   const doc = await PDFDocument.create();
   doc.setTitle(`Fiche de pré-inscription — ${competition.name}`);
   const page = doc.addPage([PAGE.w, PAGE.h]);
@@ -151,7 +152,7 @@ export async function buildClubFormPdf(competition: Competition, grid: CategoryG
   }
   top -= h1 + h2;
 
-  const bands = grid.ageBands.filter((b) => b.onClubForm);
+  const bands = offeredAgeBands(grid, closed);
   const abbreviations = ageBandAbbreviations(bands);
   const ageRows = bands.length > 12 ? 3 : 2;
   const ageCols = Math.max(1, Math.ceil(bands.length / ageRows));

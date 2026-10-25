@@ -7,6 +7,7 @@ import { buildClubFormPdf } from '../club-form-pdf.js';
 import type { AppDb } from '../db/client.js';
 import { checkRev, registrationRev } from '../revisions.js';
 import { getCompetition, getGrid } from '../repositories/competitions.js';
+import { closedSet } from '../repositories/closed-categories.js';
 import {
   createRegistration,
   deleteRegistration,
@@ -147,7 +148,7 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
 
   app.get<P>('/api/competitions/:id/club-form.pdf', async (req, reply) => {
     const competition = (await getCompetition(db, req.params.id))!;
-    const pdf = await buildClubFormPdf(competition, await getGrid(db, req.params.id));
+    const pdf = await buildClubFormPdf(competition, await getGrid(db, req.params.id), closedSet(db, req.params.id));
     return reply
       .header('Content-Type', 'application/pdf')
       .header('Content-Disposition', `attachment; filename="fiche-club-${competition.date}.pdf"`)
@@ -156,7 +157,7 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
 
   app.get<P>('/api/competitions/:id/club-form.ods', async (req, reply) => {
     const competition = (await getCompetition(db, req.params.id))!;
-    const buf = await writeOds(buildClubFormTemplate(competition, await getGrid(db, req.params.id)));
+    const buf = await writeOds(buildClubFormTemplate(competition, await getGrid(db, req.params.id), closedSet(db, req.params.id)));
     return reply
       .header('Content-Type', 'application/vnd.oasis.opendocument.spreadsheet')
       .header('Content-Disposition', `attachment; filename="fiche-club-${competition.date}.ods"`)

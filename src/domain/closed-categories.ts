@@ -11,6 +11,15 @@ export interface EntryCell {
 }
 type Column = { discipline: DisciplineId; ruleset: Ruleset | null };
 
+/** Le tableau « Catégories ouvertes » d'une compétition, tel que l'API le donne. */
+export interface ClosedCategoriesView {
+  closed: EntryCell[];
+  /** Par case (`entryKey`) : inscriptions non déplacées dont c'est la catégorie naturelle. */
+  counts: Record<string, number>;
+  /** Cases couvertes par une catégorie lancée, commencée ou terminée : elles ne se ferment plus. */
+  locked: string[];
+}
+
 /** Colonnes du tableau, dans l'ordre affiché : chaque discipline de combat en jiyu puis shobu, puis le kata. */
 export const ENTRY_COLUMNS: readonly Column[] = [
   ...(['karate', 'shido-boxing', 'shido-mix', 'triathlon'] as const).flatMap((discipline) =>

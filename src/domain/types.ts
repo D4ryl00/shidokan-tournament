@@ -9,8 +9,6 @@ export interface AgeBand {
   maxAge: number | null;
   isMinor: boolean;
   sortOrder: number;
-  /** Proposée aux clubs sur la fiche de pré-inscription (une tranche non proposée reste dans la grille). */
-  onClubForm: boolean;
 }
 
 /** maxKg null = catégorie ouverte (« +X »). */

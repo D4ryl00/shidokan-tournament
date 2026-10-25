@@ -2,7 +2,7 @@ import type { AgeBand, AgeLink, CategoryGrid, Sex, WeightClass } from './types.j
 
 // Règlement des compétitions FFK 2026-2027, p. 17 (tableau des catégories de poids).
 
-const AGE_BANDS: Omit<AgeBand, 'sortOrder' | 'onClubForm'>[] = [
+const AGE_BANDS: Omit<AgeBand, 'sortOrder'>[] = [
   { code: 'mini-poussin', label: 'Mini-poussins', minAge: 4, maxAge: 5, isMinor: true },
   { code: 'poussin', label: 'Poussins', minAge: 6, maxAge: 7, isMinor: true },
   { code: 'pupille', label: 'Pupilles', minAge: 8, maxAge: 9, isMinor: true },
@@ -69,7 +69,7 @@ export function ffkDefaultGrid(): CategoryGrid {
     }
   }
   return {
-    ageBands: AGE_BANDS.map((b, i) => ({ ...b, sortOrder: i, onClubForm: true })),
+    ageBands: AGE_BANDS.map((b, i) => ({ ...b, sortOrder: i })),
     weightClasses,
     ageLinks: ageLinks(),
   };

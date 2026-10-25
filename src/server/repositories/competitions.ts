@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, notInArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, notInArray } from 'drizzle-orm';
 import { ZodError } from 'zod';
 import type { Competition, CompetitionInput } from '../../domain/competition.js';
 import { ffkDefaultGrid } from '../../domain/grid-ffk.js';
@@ -7,7 +7,7 @@ import { validateGrid } from '../../domain/grid.js';
 import { defaultSettings, mergeSettings, readStoredSettings } from '../../domain/settings.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
-import { ageBands, ageLinks, competitions, registrations, waves, weightClasses, zones } from '../db/schema.js';
+import { ageBands, ageLinks, closedCategories, competitions, registrations, waves, weightClasses, zones } from '../db/schema.js';
 import { plural } from '../../domain/plural.js';
 
 export type { Competition, CompetitionInput };
@@ -123,7 +123,7 @@ export async function getGrid(db: AppDb, competitionId: string): Promise<Categor
   const links = db.select().from(ageLinks).where(eq(ageLinks.competitionId, competitionId)).orderBy(asc(ageLinks.id)).all();
   const bandOrder = new Map(bands.map((b) => [b.code, b.sortOrder]));
   return {
-    ageBands: bands.map(({ code, label, minAge, maxAge, isMinor, sortOrder, onClubForm }) => ({ code, label, minAge, maxAge, isMinor, sortOrder, onClubForm })),
+    ageBands: bands.map(({ code, label, minAge, maxAge, isMinor, sortOrder }) => ({ code, label, minAge, maxAge, isMinor, sortOrder })),
     weightClasses: classes
       .sort((a, b) => (bandOrder.get(a.ageBandCode) ?? 0) - (bandOrder.get(b.ageBandCode) ?? 0) || a.sex.localeCompare(b.sex) || a.sortOrder - b.sortOrder)
       .map(({ id, ageBandCode, sex, label, maxKg, sortOrder }) => ({ id, ageBandCode, sex, label, maxKg, sortOrder })),
@@ -165,6 +165,12 @@ export async function replaceGrid(db: AppDb, competitionId: string, grid: Catego
         .where(eq(competitions.id, competitionId))
         .run();
     }
+    // … et du tableau des catégories ouvertes.
+    const closedRows = t.select().from(closedCategories).where(eq(closedCategories.competitionId, competitionId)).all();
+    const orphans = [...new Set(closedRows.map((r) => r.ageBandCode).filter((c) => !codes.has(c)))];
+    if (orphans.length) {
+      t.delete(closedCategories).where(and(eq(closedCategories.competitionId, competitionId), inArray(closedCategories.ageBandCode, orphans))).run();
+    }
     // … et des règles des vagues.
     for (const w of t.select().from(waves).where(eq(waves.competitionId, competitionId)).all()) {
       const rules = JSON.parse(w.rulesJson) as { ageBandCodes: string[]; disciplines: string[] };
@@ -200,7 +206,11 @@ function writeGrid(db: AppDb, competitionId: string, grid: CategoryGrid): void {
 }
 
 function writeBandsAndLinks(db: AppDb, competitionId: string, grid: CategoryGrid): void {
-  if (grid.ageBands.length) db.insert(ageBands).values(grid.ageBands.map((b) => ({ ...b, competitionId }))).run();
+  if (grid.ageBands.length) {
+    db.insert(ageBands)
+      .values(grid.ageBands.map(({ code, label, minAge, maxAge, isMinor, sortOrder }) => ({ code, label, minAge, maxAge, isMinor, sortOrder, competitionId })))
+      .run();
+  }
   if (grid.ageLinks.length) {
     db.insert(ageLinks)
       .values(grid.ageLinks.map((l) => ({ competitionId, fromCode: l.from, toCode: l.to, kind: l.kind })))

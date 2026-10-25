@@ -8,6 +8,7 @@ import { frenchDate, isSingleEmail, renderTemplate, type MailValues } from '../d
 import type { AppDb } from './db/client.js';
 import { clubs, mailLog } from './db/schema.js';
 import { getAppSettings } from './repositories/app-settings.js';
+import { closedSet } from './repositories/closed-categories.js';
 import { getCompetition, getGrid } from './repositories/competitions.js';
 import { addInvitationLink, keepOnlyLink, regenerateInvitation, revokeLink } from './repositories/invitations.js';
 import { NotFoundError } from './repositories/registrations.js';
@@ -93,9 +94,10 @@ export async function clubFormAttachments(db: AppDb, competitionId: string): Pro
   const competition = await getCompetition(db, competitionId);
   if (!competition) throw new NotFoundError('Compétition introuvable');
   const grid = await getGrid(db, competitionId);
+  const closed = closedSet(db, competitionId);
   return [
-    { filename: `fiche-club-${competition.date}.pdf`, content: await buildClubFormPdf(competition, grid), contentType: 'application/pdf' },
-    { filename: `fiche-club-${competition.date}.ods`, content: await writeOds(buildClubFormTemplate(competition, grid)), contentType: 'application/vnd.oasis.opendocument.spreadsheet' },
+    { filename: `fiche-club-${competition.date}.pdf`, content: await buildClubFormPdf(competition, grid, closed), contentType: 'application/pdf' },
+    { filename: `fiche-club-${competition.date}.ods`, content: await writeOds(buildClubFormTemplate(competition, grid, closed)), contentType: 'application/vnd.oasis.opendocument.spreadsheet' },
   ];
 }
 

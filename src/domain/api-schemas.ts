@@ -29,8 +29,9 @@ export const categoryGridSchema = z
         maxAge: z.number().int().min(0).nullable(),
         isMinor: z.boolean(),
         sortOrder: z.number().int(),
-        onClubForm: z.boolean().default(true),
-      }).strict(),
+        /** Ancienne case « Proposée sur la fiche club » (modèles enregistrés avant la migration 0021) : acceptée, ignorée. */
+        onClubForm: z.boolean().optional(),
+      }).strict().transform(({ onClubForm: _ignored, ...band }) => band),
     ),
     weightClasses: z.array(
       z.object({

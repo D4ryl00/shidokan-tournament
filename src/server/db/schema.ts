@@ -165,6 +165,7 @@ export const ageBands = sqliteTable(
     maxAge: integer('max_age'),
     isMinor: integer('is_minor', { mode: 'boolean' }).notNull(),
     sortOrder: integer('sort_order').notNull(),
+    /** Plus lue depuis la migration 0021 : remplacée par closed_categories. */
     onClubForm: integer('on_club_form', { mode: 'boolean' }).notNull().default(true),
     ...rowMeta(),
   },
@@ -186,6 +187,22 @@ export const weightClasses = sqliteTable(
     ...rowMeta(),
   },
   (t) => [primaryKey({ columns: [t.competitionId, t.id] })],
+);
+
+/** Cases fermées du tableau « Catégories ouvertes » (tranche × sexe × discipline × règlement) ; `ruleset` '' : kata. */
+export const closedCategories = sqliteTable(
+  'closed_categories',
+  {
+    competitionId: text('competition_id')
+      .notNull()
+      .references(() => competitions.id, { onDelete: 'cascade' }),
+    ageBandCode: text('age_band_code').notNull(),
+    sex: text('sex', { enum: ['M', 'F'] }).notNull(),
+    discipline: text('discipline', { enum: ['karate', 'shido-boxing', 'shido-mix', 'triathlon', 'kata'] }).notNull(),
+    ruleset: text('ruleset').notNull().default(''),
+    ...rowMeta(),
+  },
+  (t) => [primaryKey({ columns: [t.competitionId, t.ageBandCode, t.sex, t.discipline, t.ruleset] })],
 );
 
 export const ageLinks = sqliteTable('age_links', {

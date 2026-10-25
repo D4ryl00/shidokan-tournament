@@ -81,9 +81,3 @@ test('passage d’âge en double', () => {
   g.ageLinks.push({ ...g.ageLinks[0]! });
   expect(validateGrid(g).some((e) => e.includes('double'))).toBe(true);
 });
-
-test('relecture (mineurs) : au moins une tranche proposée sur la fiche club', () => {
-  const g = ffkDefaultGrid();
-  const errors = validateGrid({ ...g, ageBands: g.ageBands.map((b) => ({ ...b, onClubForm: false })) });
-  expect(errors).toContain("Au moins une tranche d'âge doit être proposée sur la fiche club.");
-});

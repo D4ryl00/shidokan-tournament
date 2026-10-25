@@ -1,5 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { lineToRows, type ClubFormLine } from '../../domain/club-form.js';
+import { offeredAgeBands } from '../../domain/closed-categories.js';
 import { registrationsToLine } from '../../domain/club-line.js';
 import { renderPrivacyNotice } from '../../domain/app-settings.js';
 import { getAppSettings } from './app-settings.js';
@@ -9,6 +10,7 @@ import { assignAffiliationNumber, linkClub } from '../db/club-directory.js';
 import type { AppDb } from '../db/client.js';
 import { categories, clubDirectory, clubs, competitions, fighters, registrations } from '../db/schema.js';
 import { getCompetition, getGrid } from './competitions.js';
+import { closedSet } from './closed-categories.js';
 import { NotFoundError, RegistrationValidationError, upsertFighterRegistration } from './registrations.js';
 
 /** Compétition et club d'un lien personnel. */
@@ -116,7 +118,7 @@ export async function getClubEntry(db: AppDb, access: ClubAccess): Promise<ClubE
     competition: { name: c.name, date: c.date, location: c.location, deadline: c.clubEntryDeadline, status: c.clubEntryStatus },
     editable: isEditable(c),
     club: headerOf(db, club),
-    ageBands: grid.ageBands.filter((b) => b.onClubForm).map((b) => ({ code: b.code, label: b.label })),
+    ageBands: offeredAgeBands(grid, closedSet(db, access.competitionId)).map((b) => ({ code: b.code, label: b.label })),
     lines,
     privacyNotice: renderPrivacyNotice(getAppSettings(db)),
   };

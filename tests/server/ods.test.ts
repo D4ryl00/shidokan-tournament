@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 import { describe, expect, test } from 'vitest';
 import { CLUB_FORM_COLUMNS, CLUB_FORM_HEADER_FIELDS, CLUB_FORM_TITLE, parseClubForm } from '../../src/domain/club-form.js';
 import type { Competition } from '../../src/domain/competition.js';
+import { entryCells, entryKey } from '../../src/domain/closed-categories.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 import { defaultSettings } from '../../src/domain/settings.js';
 import { buildClubFormTemplate } from '../../src/server/club-form-template.js';
@@ -14,7 +15,7 @@ const competition: Competition = {
   settings: defaultSettings(), createdAt: '2026-10-21T00:00:00Z',
 };
 const grid = ffkDefaultGrid();
-const template = () => writeOds(buildClubFormTemplate(competition, grid));
+const template = () => writeOds(buildClubFormTemplate(competition, grid, new Set()));
 const flat = (cells: unknown[][]) => cells.map((r) => r.filter((c) => c !== null).join(' ')).join('\n');
 
 describe('modèle de fiche club', () => {
@@ -68,8 +69,8 @@ describe('modèle de fiche club', () => {
 
 describe('modèle de fiche club : présentation et nouveau contenu', () => {
   test('tranches d’âge proposées seulement', async () => {
-    const g = { ...grid, ageBands: grid.ageBands.map((b) => ({ ...b, onClubForm: b.code !== 'mini-poussin' && b.code !== 'espoir' })) };
-    const zip = await JSZip.loadAsync(await writeOds(buildClubFormTemplate(competition, g)));
+    const closed = new Set(entryCells(grid).filter((c) => c.ageBandCode === 'mini-poussin' || c.ageBandCode === 'espoir').map(entryKey));
+    const zip = await JSZip.loadAsync(await writeOds(buildClubFormTemplate(competition, grid, closed)));
     const content = await zip.file('content.xml')!.async('string');
     const ages = /of:cell-content-is-in-list\(([^)]*Cadets[^)]*)\)/.exec(content.replace(/&quot;/g, '"'))![1]!;
     expect(ages).toContain('Poussins');
@@ -135,7 +136,7 @@ test('relecture (mineurs) : logo trouvé quel que soit le dossier courant', () =
   const cwd = process.cwd();
   try {
     process.chdir('/');
-    expect(buildClubFormTemplate(competition, grid)[0]!.image).toBeDefined();
+    expect(buildClubFormTemplate(competition, grid, new Set())[0]!.image).toBeDefined();
   } finally {
     process.chdir(cwd);
   }

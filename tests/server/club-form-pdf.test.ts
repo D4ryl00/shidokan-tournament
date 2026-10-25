@@ -2,6 +2,8 @@ import zlib from 'node:zlib';
 import type { FastifyInstance } from 'fastify';
 import { PDFDocument } from 'pdf-lib';
 import { afterEach, beforeEach, expect, test } from 'vitest';
+import { entryCells } from '../../src/domain/closed-categories.js';
+import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 import { buildApp } from '../../src/server/app.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
@@ -27,9 +29,8 @@ function pdfText(pdf: Buffer): string {
 const pages = async (pdf: Buffer) => (await PDFDocument.load(pdf)).getPageCount();
 
 async function offerAll(over: (code: string) => boolean) {
-  const grid = (await app.inject({ method: 'GET', url: `${base}/grid` })).json();
-  grid.ageBands = grid.ageBands.map((b: { code: string }) => ({ ...b, onClubForm: over(b.code) }));
-  expect((await app.inject({ method: 'PUT', url: `${base}/grid`, payload: grid })).statusCode).toBe(204);
+  const cells = entryCells(ffkDefaultGrid()).filter((c) => !over(c.ageBandCode));
+  expect((await app.inject({ method: 'PUT', url: `${base}/closed-categories`, payload: { cells, closed: true } })).statusCode).toBe(204);
 }
 
 test('fiche papier PDF : téléchargement, une page A4 paysage, logo, tranches proposées', async () => {
@@ -54,7 +55,7 @@ test('fiche papier PDF : téléchargement, une page A4 paysage, logo, tranches p
 test('fiche papier PDF : nom long, lieu, 15 tranches → toujours une page, lieu présent', async () => {
   await app.inject({ method: 'PATCH', url: base, payload: { name: 'Coupe Shidokan de la Côte d’Azur et des Alpes-Maritimes — édition spéciale 2026', location: 'Gymnase municipal Jean Médecin, Nice' } });
   const grid = (await app.inject({ method: 'GET', url: `${base}/grid` })).json();
-  grid.ageBands.push({ code: 'mini2', label: 'Minimes 2', minAge: 12, maxAge: 13, isMinor: true, sortOrder: 99, onClubForm: true });
+  grid.ageBands.push({ code: 'mini2', label: 'Minimes 2', minAge: 12, maxAge: 13, isMinor: true, sortOrder: 99 });
   await app.inject({ method: 'PUT', url: `${base}/grid`, payload: grid });
   const pdf = (await app.inject({ method: 'GET', url: `${base}/club-form.pdf` })).rawPayload;
   expect(await pages(pdf)).toBe(1);

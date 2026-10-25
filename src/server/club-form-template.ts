@@ -12,6 +12,7 @@ import {
 import type { Competition } from '../domain/competition.js';
 import { DISCIPLINES, RULESETS } from '../domain/disciplines.js';
 import type { CategoryGrid } from '../domain/types.js';
+import { offeredAgeBands } from '../domain/closed-categories.js';
 import type { OdsCell, OdsSheet } from './spreadsheet/ods.js';
 
 const c = (value: string | number | null, extra: Partial<OdsCell> = {}): OdsCell => ({ value, ...extra });
@@ -37,8 +38,8 @@ const WIDTHS = [3.2, 2.8, 1.9, 2.8, 1.7, 2.8, 1.6, 2.0, 1.8, 1.4, 1.4, 1.4, 3.0]
 const LAST = WIDTHS.length - 1;
 
 /** Feuilles « Fiche club » (à remplir, une ligne par combattant) et « Aide ». */
-export function buildClubFormTemplate(competition: Competition, grid: CategoryGrid): OdsSheet[] {
-  const offered = grid.ageBands.filter((b) => b.onClubForm);
+export function buildClubFormTemplate(competition: Competition, grid: CategoryGrid, closed: ReadonlySet<string>): OdsSheet[] {
+  const offered = offeredAgeBands(grid, closed);
   const validations = {
     sexe: ['Féminin', 'Masculin'],
     age: offered.map((b) => b.label),
