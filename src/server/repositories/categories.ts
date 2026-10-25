@@ -1,4 +1,5 @@
 import { and, eq } from 'drizzle-orm';
+import { entryKey } from '../../domain/closed-categories.js';
 import {
   compatibleFormats,
   defaultFormat,
@@ -149,10 +150,14 @@ export async function syncCategories(db: AppDb, competitionId: string, opts: { r
       if (r.placementLocked && r.categoryId && cats.some((c) => c.id === r.categoryId)) continue;
       // Une catégorie lancée garde ses inscrits, même si leur clé change (le tableau est figé).
       if (r.categoryId && lockedIds.has(r.categoryId)) continue;
-      // « Ne combat pas » : dans aucune catégorie.
+      // « Ne combat pas » : dans aucune catégorie, tant que l'inscription reste dans la case retirée (sinon il tombe).
       if (r.withdrawnReason) {
-        if (r.categoryId) t.update(registrations).set({ categoryId: null }).where(eq(registrations.id, r.id)).run();
-        continue;
+        const f = fs.get(r.fighterId)!;
+        if (entryKey({ ageBandCode: f.ageBandCode, sex: f.sex, discipline: r.discipline, ruleset: r.ruleset }) === r.withdrawnEntry) {
+          if (r.categoryId) t.update(registrations).set({ categoryId: null }).where(eq(registrations.id, r.id)).run();
+          continue;
+        }
+        t.update(registrations).set({ withdrawnReason: null, withdrawnEntry: null }).where(eq(registrations.id, r.id)).run();
       }
       const key = naturalKey(r, fs.get(r.fighterId)!);
       const ks = keyString(key);

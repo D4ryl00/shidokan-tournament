@@ -1,6 +1,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { defaultFormat, generateBracket, resolveBracket } from '../../domain/brackets/index.js';
 import { categoryLabel, compareKeys, keyString } from '../../domain/categories.js';
+import { entryKey } from '../../domain/closed-categories.js';
 import { DISCIPLINES } from '../../domain/disciplines.js';
 import {
   activeMembers,
@@ -12,6 +13,7 @@ import {
   proposalsFor,
   stateFingerprint,
   isOverweight,
+  isClosedTarget,
   overweightInCategory,
   recompute,
   type BulkMode,
@@ -249,17 +251,14 @@ export async function withdrawRegistration(db: AppDb, competitionId: string, reg
   if (stateFingerprint(state) !== fingerprint) throw new StaleProposalError();
   if (!detectCases(state).some((c) => c.id === `closed:${registrationId}`)) throw new StaleProposalError('Ce combattant n’est plus dans une catégorie fermée : rechargez.');
   const reg = db.select().from(registrations).where(eq(registrations.id, registrationId)).get()!;
+  const m = state.members.find((x) => x.registrationId === registrationId)!;
   const from = state.categories.find((c) => c.id === reg.categoryId);
-  const snapshot = {
-    registration: {
-      categoryId: reg.categoryId, placementLocked: reg.placementLocked, originalJson: reg.originalJson, recasementType: reg.recasementType,
-      discipline: reg.discipline, ruleset: reg.ruleset, weightClassId: reg.weightClassId, withdrawnReason: null,
-    },
-    categories: [],
-  };
+  // L'annulation ne rétablit que la catégorie et lève le retrait : une modification faite entre-temps (discipline…) est gardée.
+  const snapshot = { registration: { categoryId: reg.categoryId, withdrawnReason: null, withdrawnEntry: null }, categories: [] };
+  const withdrawnEntry = entryKey({ ageBandCode: m.ageBandCode, sex: m.sex, discipline: m.discipline, ruleset: m.ruleset });
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
-    t.update(registrations).set({ withdrawnReason: 'closed_category', categoryId: null }).where(eq(registrations.id, registrationId)).run();
+    t.update(registrations).set({ withdrawnReason: 'closed_category', withdrawnEntry, categoryId: null }).where(eq(registrations.id, registrationId)).run();
     t.insert(recasements)
       .values({
         id: crypto.randomUUID(), competitionId, registrationId, proposalId: `W:${registrationId}`, type: 'W',
@@ -340,6 +339,8 @@ export function manualProposal(state: State, registrationId: string, categoryId:
   // Catégorie lancée, ou d'une vague lancée (fermée au recasement).
   const locked = (c: { status: string; frozen?: boolean } | undefined) => c?.status === 'started' || c?.status === 'finished' || c?.frozen === true;
   if (locked(t) || locked(source)) throw new CategoryLockedError(t?.frozen || source?.frozen ? 'La session est lancée : rouvrez-la pour y déplacer quelqu’un.' : undefined);
+  // Liste affichée avant la fermeture, ou appel direct : une catégorie fermée n'accueille personne.
+  if (isClosedTarget(state, t.key)) throw new RegistrationValidationError(['Catégorie non ouverte à cette compétition : choisissez-en une autre.']);
   const warnings = moveViolations(state, m, t);
   const toKata = !DISCIPLINES[t.key.discipline].hasWeight && DISCIPLINES[m.discipline].hasWeight;
   if (toKata) warnings.push(`Passage en ${DISCIPLINES[t.key.discipline].label.toLowerCase()} : règlement et catégorie de poids retirés.`);
@@ -375,11 +376,11 @@ export async function undoRecasement(db: AppDb, competitionId: string, recasemen
   const entry = db.select().from(recasements).where(and(eq(recasements.id, recasementId), eq(recasements.competitionId, competitionId))).get();
   if (!entry || entry.status !== 'validated') throw new NotFoundError('Réaffectation introuvable');
   const snapshot = JSON.parse(entry.snapshotJson) as {
+    /** Instantané d'un « Ne combat pas » : la catégorie et le retrait seulement. */
     registration: {
-      categoryId: string | null; placementLocked: boolean; originalJson: string | null; recasementType: string | null;
-      discipline: Member['discipline']; ruleset: Member['ruleset']; weightClassId: string | null;
-      /** « Ne combat pas » (absent des instantanés d'avant l'étape 23) : null le lève. */
-      withdrawnReason?: null;
+      categoryId: string | null; placementLocked?: boolean; originalJson?: string | null; recasementType?: string | null;
+      discipline?: Member['discipline']; ruleset?: Member['ruleset']; weightClassId?: string | null;
+      withdrawnReason?: null; withdrawnEntry?: null;
     };
     categories: { id: string; keyString: string; keyJson: string; aliasKeys: string; label: string }[];
     /** Absente des instantanés d'avant les vagues. */

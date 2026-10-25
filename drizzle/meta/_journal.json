@@ -159,15 +159,8 @@
     {
       "idx": 22,
       "version": "6",
-      "when": 1792938598273,
-      "tag": "0022_ne_combat_pas",
-      "breakpoints": true
-    },
-    {
-      "idx": 23,
-      "version": "6",
-      "when": 1792938832861,
-      "tag": "0023_cartes_de_cote",
+      "when": 1792940004508,
+      "tag": "0022_ne_combat_pas_et_cartes",
       "breakpoints": true
     }
   ]

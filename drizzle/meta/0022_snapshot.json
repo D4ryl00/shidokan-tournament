@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "e96ad10f-f00a-4d8d-b9af-8e7e6b2b140a",
+  "id": "f69df0f7-1d3d-49ce-b49c-d7aecd72d916",
   "prevId": "b799a3d1-1bf5-4a87-a983-ce9653341d6a",
   "tables": {
     "age_bands": {
@@ -2041,6 +2041,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "withdrawn_entry": {
+          "name": "withdrawn_entry",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -2169,6 +2176,82 @@
         }
       },
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "set_aside_cases": {
+      "name": "set_aside_cases",
+      "columns": {
+        "competition_id": {
+          "name": "competition_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "case_id": {
+          "name": "case_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "set_aside_cases_competition_id_competitions_id_fk": {
+          "name": "set_aside_cases_competition_id_competitions_id_fk",
+          "tableFrom": "set_aside_cases",
+          "tableTo": "competitions",
+          "columnsFrom": [
+            "competition_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "set_aside_cases_competition_id_case_id_pk": {
+          "columns": [
+            "competition_id",
+            "case_id"
+          ],
+          "name": "set_aside_cases_competition_id_case_id_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },

@@ -61,3 +61,15 @@ test('classement automatique : déplace un combattant de catégorie fermée', ()
   const { s, a } = closedFixture();
   expect(bulkPlan(s, 'all').steps.some((step) => step.proposal.caseId === `closed:${a.registrationId}`)).toBe(true);
 });
+
+test("retour vers une catégorie d'origine fermée : pas de carte « Retour possible »", () => {
+  // X, déplacé parce qu'il était seul, vers les -61 ; sa catégorie d'origine (-54) est fermée et Z vient s'y inscrire.
+  const y1 = member({ weightClassId: 'cadet:F:-61', discipline: 'shido-boxing' });
+  const y2 = member({ weightClassId: 'cadet:F:-61', discipline: 'shido-boxing' });
+  const x = member({ discipline: 'shido-boxing', weightClassId: 'cadet:F:-61', placementLocked: true, original: { discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54', reason: 'alone' } });
+  const z = member({ weightClassId: 'cadet:F:-54' });
+  const s = makeState([y1, y2, z], { closedEntries: ['cadet|F|karate|jiyu'] });
+  x.categoryId = y1.categoryId;
+  const state = { ...s, members: [...s.members, x] };
+  expect(detectCases(state).map((c) => c.id)).toEqual([`closed:${z.registrationId}`]);
+});

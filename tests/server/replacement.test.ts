@@ -686,3 +686,36 @@ test("mise de côté d'une carte qui n'existe plus : 409", async () => {
   expect(res.statusCode).toBe(409);
   expect(res.body).toContain('Cette carte n’existe plus : rechargez.');
 });
+
+// --- Relecture finale de l'étape 23 ---
+
+const cadetInput = (over: object = {}) => ({
+  clubId: null, lastName: 'NOMX', firstName: 'x', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54', source: 'manual', ...over,
+});
+
+test("ne combat pas : tombe quand l'inscription passe dans une catégorie ouverte, et l'annuler ne défait pas la modification", async () => {
+  const a = await reg();
+  await reg();
+  await reg({ discipline: 'shido-boxing' });
+  await closeCadet();
+  await withdraw(a.id);
+  expect((await call('PUT', `/registrations/${a.id}`, cadetInput({ lastName: 'NOMA', discipline: 'shido-boxing' }))).statusCode).toBe(200);
+  const rows = (await call('GET', '/registrations')).json() as { id: string; withdrawn: boolean; discipline: string }[];
+  expect(rows.find((r) => r.id === a.id)!.withdrawn).toBe(false);
+  expect((await categories()).some((c) => c.registrationIds.includes(a.id))).toBe(true);
+  const entry = (await replacement()).recasements.find((r) => r.type === 'W')!;
+  await call('POST', '/replacement/undo', { recasementId: entry.id });
+  const after = (await call('GET', '/registrations')).json() as { id: string; discipline: string }[];
+  expect(after.find((r) => r.id === a.id)!.discipline).toBe('shido-boxing');
+});
+
+test('déplacement manuel vers une catégorie fermée : refusé', async () => {
+  const a = await reg({ ageBandCode: 'junior', weightClassId: 'junior:F:-53' });
+  await reg();
+  await reg();
+  await closeCadet();
+  const cadet = (await categories()).find((c) => c.label.includes('Cadets'))!;
+  const res = await call('POST', '/replacement/move', { registrationId: a.id, categoryId: cadet.id });
+  expect(res.statusCode).toBe(400);
+  expect(res.body).toContain('Catégorie non ouverte à cette compétition : choisissez-en une autre.');
+});

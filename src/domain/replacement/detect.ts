@@ -80,7 +80,8 @@ export function detectCases(state: State): Case[] {
     const homeMembers = home ? activeMembers(state, home.id).filter((x) => x.registrationId !== m.registrationId) : [];
     const back = { ...m, ...m.original };
     const viable = homeMembers.length > 0 && categoryWeightGap([...homeMembers, back], state.grid) <= gapThreshold([...homeMembers, back], state) + 1e-9;
-    if (home && home.id !== m.categoryId && !isLocked(home) && viable) {
+    // Une catégorie d'origine fermée n'accueille personne : pas de retour (la proposition serait de toute façon écartée).
+    if (home && home.id !== m.categoryId && !isLocked(home) && !isClosedTarget(state, home.key) && viable) {
       cases.push({ id: `return:${m.registrationId}`, kind: 'return', registrationId: m.registrationId, categoryId: m.categoryId, detail: 'Un adversaire est disponible dans la catégorie d’origine' });
     }
   }

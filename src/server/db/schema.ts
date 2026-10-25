@@ -301,6 +301,8 @@ export const registrations = sqliteTable('registrations', {
   recasementType: text('recasement_type'),
   /** « Ne combat pas » décidé par l'organisateur (catégorie non ouverte) : hors de toute catégorie. */
   withdrawnReason: text('withdrawn_reason', { enum: ['closed_category'] }),
+  /** Case (`entryKey`) de l'inscription au moment du retrait : si elle change, le « ne combat pas » tombe. */
+  withdrawnEntry: text('withdrawn_entry'),
   createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
   ...rowMeta(),
 });

@@ -8,3 +8,6 @@ CREATE TABLE `set_aside_cases` (
 	PRIMARY KEY(`competition_id`, `case_id`),
 	FOREIGN KEY (`competition_id`) REFERENCES `competitions`(`id`) ON UPDATE no action ON DELETE cascade
 );
+--> statement-breakpoint
+ALTER TABLE `registrations` ADD `withdrawn_reason` text;--> statement-breakpoint
+ALTER TABLE `registrations` ADD `withdrawn_entry` text;
