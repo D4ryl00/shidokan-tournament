@@ -13,7 +13,9 @@ const STYLE: Record<Exclude<Tone, 'danger'>, { bg: string; fg: string }> = {
 
 /** Badge d'état lisible (première lettre en capitale, couleur selon le sens). */
 export function StatusBadge({ tone, children, ...rest }: { tone: Tone; children: ReactNode } & Omit<BadgeProps, 'color' | 'children'> & { 'data-testid'?: string; title?: string }) {
-  if (tone === 'danger') return <Badge color="red" {...rest}>{children}</Badge>;
+  // Jamais coupé par une colonne étroite d'un tableau ; seul un badge à largeur maximale (`maw`) se coupe, le texte complet au survol.
+  const fit = rest.maw === undefined ? { minWidth: 'max-content' } : {};
+  if (tone === 'danger') return <Badge color="red" {...rest} style={{ ...fit, ...(rest.style as object) }}>{children}</Badge>;
   const s = STYLE[tone];
-  return <Badge {...rest} styles={{ root: { backgroundColor: s.bg, color: s.fg } }}>{children}</Badge>;
+  return <Badge {...rest} styles={{ root: { backgroundColor: s.bg, color: s.fg, ...fit } }}>{children}</Badge>;
 }

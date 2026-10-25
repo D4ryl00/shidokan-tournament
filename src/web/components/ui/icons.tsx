@@ -23,3 +23,12 @@ export const IconUser = ({ size }: { size?: number }) => (
 export const IconChevronDown = ({ size = 14 }: { size?: number }) => (
   <Svg size={size}><path d="m6 9 6 6 6-6" /></Svg>
 );
+export const IconEdit = ({ size = 16 }: { size?: number }) => (
+  <Svg size={size}><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z" /><path d="m13.5 6.5 4 4" /></Svg>
+);
+export const IconTrash = ({ size = 16 }: { size?: number }) => (
+  <Svg size={size}><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></Svg>
+);
+export const IconSearch = ({ size = 16 }: { size?: number }) => (
+  <Svg size={size}><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></Svg>
+);

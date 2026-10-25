@@ -1,13 +1,15 @@
 import {
-  Alert, Badge, Button, Card, Checkbox, Group, List, Modal, Radio, Select, SimpleGrid, Stack, Table, Text,
+  Alert, Button, Card, Checkbox, FileButton, Group, List, Modal, Radio, Select, SimpleGrid, Stack, Table, Text,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router';
 import { FFK_FIELDS, FFK_FIELD_LABELS, type FfkChoices, type FfkRow, type PlanItem } from '../../domain/ffk-import.js';
 import { type FfkSheetSetup, useClubs, useCommitFfk, useGrid, usePreviewFfk, useUploadFfk } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { SectionHeader } from '../components/Help.js';
+import { SectionCard } from '../components/ui/SectionCard.js';
+import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { ageBandLabel, disciplineLabel } from '../labels.js';
 
 const rowLabel = (r: FfkRow) => `${r.lastName} ${r.firstName}`;
@@ -23,6 +25,8 @@ export function FfkImportPage() {
   const [sheets, setSheets] = useState<FfkSheetSetup[]>([]);
   const [choices, setChoices] = useState<FfkChoices>({});
   const [confirming, setConfirming] = useState(false);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const resetFile = useRef<() => void>(null);
   /** Cas douteux déjà rencontrés : ils restent affichés (et modifiables) une fois tranchés. */
   const [seenDoubtful, setSeenDoubtful] = useState<Map<string, Extract<PlanItem, { kind: 'doubtful' }>>>(new Map());
   const plan = preview.data;
@@ -41,6 +45,7 @@ export function FfkImportPage() {
   }, [choices]);
 
   const onFile = (file: File | null) => {
+    setFileName(file?.name ?? null);
     preview.reset();
     commit.reset();
     setChoices({});
@@ -69,6 +74,8 @@ export function FfkImportPage() {
         },
         onSuccess: (r) => {
           setConfirming(false);
+          setFileName(null);
+          resetFile.current?.();
           notifications.show({
             color: 'green',
             message: `Import FFK : ${r.created} créée(s), ${r.updated} mise(s) à jour, ${r.removed} retirée(s), ${r.weightClassesCreated} catégorie(s) créée(s).`,
@@ -89,38 +96,43 @@ export function FfkImportPage() {
   const clubOptions = [{ value: 'new', label: '➕ Nouveau club' }, ...clubs.map((c) => ({ value: c.id, label: c.name }))];
 
   return (
-    <Stack maw={1300}>
-      <Text c="dimmed" size="sm">
-        Déposez l'export FFK (.xlsx, .ods ou .csv). Rien n'est enregistré avant « Importer ». L'export FFK fait foi pour l'âge, le poids et le club ;
-        un règlement vide ne remplace pas celui de la fiche club.
-      </Text>
-      <input data-testid="ffk-file" type="file" accept=".xlsx,.xls,.ods,.csv" onChange={(e) => onFile(e.currentTarget.files?.[0] ?? null)}
-        key={uploadId ?? 'vide'} />
-      <ApiErrorAlert error={upload.error ?? preview.error ?? commit.error} />
+    <Stack gap="lg">
+      <SectionCard title="Déposer l’export FFK"
+        description="Fichier .xlsx, .ods ou .csv. Rien n’est enregistré avant « Importer ». L’export FFK fait foi pour l’âge, le poids et le club ; un règlement vide ne remplace pas celui de la fiche club.">
+        <Group gap="sm">
+          <FileButton onChange={onFile} accept=".xlsx,.xls,.ods,.csv" resetRef={resetFile} inputProps={{ 'data-testid': 'ffk-file' } as object}>
+            {(props) => <Button variant={uploadId ? 'default' : 'filled'} loading={upload.isPending} {...props}>Choisir l’export FFK</Button>}
+          </FileButton>
+          {fileName && <Text size="sm" c="dimmed" className="sk-ellipsis" title={fileName}>{fileName}</Text>}
+        </Group>
+        <ApiErrorAlert error={upload.error ?? preview.error ?? commit.error} />
+      </SectionCard>
 
       {sheets.length > 0 && (
-        <SimpleGrid cols={{ base: 1, md: Math.min(sheets.length, 3) }}>
-          {sheets.map((s, i) => (
-            <Card key={s.name} withBorder data-testid="ffk-sheet">
-              <Checkbox data-testid="ffk-sheet-include" label={<b>{s.name}</b>} checked={s.include} onChange={(e) => setSheet(i, { include: e.currentTarget.checked })} />
-              {s.include && (
-                <Stack gap={4} mt="xs">
-                  {FFK_FIELDS.map((f) => (
-                    <Select key={f} data-testid={`ffk-map-${f}`} size="xs" label={FFK_FIELD_LABELS[f]} allowDeselect={false}
-                      data={[{ value: '-1', label: '(aucune)' }, ...s.headers.map((h, j) => ({ value: String(j), label: h || `Colonne ${j + 1}` }))]}
-                      value={String(s.mapping[f] ?? -1)}
-                      onChange={(v) => setSheet(i, { mapping: { ...s.mapping, [f]: v === null || v === '-1' ? null : Number(v) } })} />
-                  ))}
-                </Stack>
-              )}
-            </Card>
-          ))}
-        </SimpleGrid>
+        <SectionCard title="Onglets et colonnes" description="Les onglets à importer, et la colonne de l’export qui correspond à chaque information."
+          actions={<Button variant="default" onClick={() => refresh()} loading={preview.isPending}>Recalculer l’aperçu</Button>}>
+          <SimpleGrid cols={{ base: 1, md: Math.min(sheets.length, 3) }}>
+            {sheets.map((s, i) => (
+              <Card key={s.name} withBorder data-testid="ffk-sheet" style={{ backgroundColor: 'var(--sk-bg)' }}>
+                <Checkbox data-testid="ffk-sheet-include" label={<b>{s.name}</b>} checked={s.include} onChange={(e) => setSheet(i, { include: e.currentTarget.checked })} />
+                {s.include && (
+                  <SimpleGrid cols={2} spacing="xs" verticalSpacing={4} mt="xs">
+                    {FFK_FIELDS.map((f) => (
+                      <Select key={f} data-testid={`ffk-map-${f}`} size="xs" label={FFK_FIELD_LABELS[f]} allowDeselect={false}
+                        data={[{ value: '-1', label: '(aucune)' }, ...s.headers.map((h, j) => ({ value: String(j), label: h || `Colonne ${j + 1}` }))]}
+                        value={String(s.mapping[f] ?? -1)}
+                        onChange={(v) => setSheet(i, { mapping: { ...s.mapping, [f]: v === null || v === '-1' ? null : Number(v) } })} />
+                    ))}
+                  </SimpleGrid>
+                )}
+              </Card>
+            ))}
+          </SimpleGrid>
+        </SectionCard>
       )}
-      {sheets.length > 0 && <Group><Button variant="light" onClick={() => refresh()} loading={preview.isPending}>Recalculer l'aperçu</Button></Group>}
 
       {plan && (
-        <Stack data-testid="ffk-preview">
+        <SectionCard title="Aperçu de l’import" data-testid="ffk-preview">
           <Alert data-testid="ffk-summary" color={plan.summary.doubtful ? 'orange' : 'blue'} title="Résumé">
             {plan.summary.create} création(s) · {plan.summary.update} mise(s) à jour · {plan.summary.doubtful} à trancher ·{' '}
             {plan.summary.errors} erreur(s) · {plan.summary.removals} retrait(s) · {plan.summary.newWeightClasses} catégorie(s) créée(s)
@@ -138,9 +150,9 @@ export function FfkImportPage() {
                         {c.warning && <Text size="xs" c="orange">{c.warning}</Text>}
                       </Table.Td>
                       <Table.Td>
-                        <Badge color={c.certainty === 'sure' ? 'green' : c.certainty === 'doubtful' ? 'orange' : 'gray'}>
-                          {c.certainty === 'sure' ? 'sûr' : c.certainty === 'doubtful' ? 'à vérifier' : 'nouveau'}
-                        </Badge>
+                        <StatusBadge tone={c.certainty === 'sure' ? 'ok' : c.certainty === 'doubtful' ? 'warn' : 'neutral'}>
+                          {c.certainty === 'sure' ? 'Sûr' : c.certainty === 'doubtful' ? 'À vérifier' : 'Nouveau'}
+                        </StatusBadge>
                       </Table.Td>
                       <Table.Td w={320}>
                         <Select data-testid="ffk-club-link" allowDeselect={false} data={clubOptions}
@@ -233,12 +245,12 @@ export function FfkImportPage() {
             <Button data-testid="ffk-commit" disabled={plan.summary.doubtful > 0} onClick={() => setConfirming(true)}>
               Importer
             </Button>
-            {plan.summary.doubtful > 0 && <Text size="sm" c="orange">Tranchez d'abord les rapprochements douteux.</Text>}
+            {plan.summary.doubtful > 0 && <Text size="sm" c="orange">Tranchez d’abord les rapprochements douteux.</Text>}
           </Group>
-        </Stack>
+        </SectionCard>
       )}
 
-      <Modal opened={confirming} onClose={() => setConfirming(false)} title="Confirmer l'import FFK">
+      <Modal opened={confirming} onClose={() => setConfirming(false)} title="Confirmer l’import FFK">
         <Stack>
           <Text>
             {plan?.summary.create} création(s), {plan?.summary.update} mise(s) à jour, {plan?.summary.removals} retrait(s),{' '}

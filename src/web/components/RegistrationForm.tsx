@@ -168,7 +168,7 @@ export function RegistrationForm({ competitionId, edit, onDone }: { competitionI
         {warning && <Alert color="yellow" data-testid="registration-warning">{warning}</Alert>}
         {saved && <Text c="green" size="sm">{saved}</Text>}
         <ApiErrorAlert error={create.error ?? update.error ?? upsertClub.error} />
-        <Group>
+        <Group justify="flex-end">
           <Button data-testid="reg-submit" type="submit" loading={create.isPending || update.isPending}>
             {edit ? 'Enregistrer' : 'Ajouter (Entrée)'}
           </Button>

@@ -1,11 +1,16 @@
-import { ActionIcon, Badge, Button, Checkbox, Group, Modal, Select, Stack, Table, Text, TextInput } from '@mantine/core';
+import { ActionIcon, Button, Card, Checkbox, Group, Modal, Select, Stack, Table, Text, TextInput } from '@mantine/core';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { normalizeName } from '../../domain/names.js';
+import { plural } from '../../domain/plural.js';
 import { SOURCE_LABELS, type RegistrationRow } from '../../domain/registration.js';
-import { useDeleteRegistration, useGrid, useRegistrations } from '../api.js';
+import { useCategories, useDeleteRegistration, useGrid, useRegistrations } from '../api.js';
 import { RegistrationForm } from '../components/RegistrationForm.js';
 import { ReplacementBadge, useRecasementDetails } from '../components/ReplacementBadge.js';
+import { EmptyState } from '../components/ui/EmptyState.js';
+import { IconEdit, IconSearch, IconTrash } from '../components/ui/icons.js';
+import { PageHeader } from '../components/ui/PageHeader.js';
+import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { DISCIPLINE_OPTIONS, ageBandLabel, disciplineLabel, prefsLabel, rulesetShort, weightLabel } from '../labels.js';
 
 export function RegistrationsPage() {
@@ -13,6 +18,7 @@ export function RegistrationsPage() {
   const recasements = useRecasementDetails(id);
   const { data: rows = [] } = useRegistrations(id);
   const { data: grid } = useGrid(id);
+  const { data: categories = [] } = useCategories(id);
   const remove = useDeleteRegistration(id);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<RegistrationRow | null>(null);
@@ -36,65 +42,81 @@ export function RegistrationsPage() {
       (!onlyUnconfirmed || !r.ffkConfirmed),
   );
 
+  const clubCount = new Set(rows.map((r) => r.club?.id).filter(Boolean)).size;
+  const filteredOut = filtered.length !== rows.length;
+  const tone = (r: RegistrationRow) => (r.source === 'onsite' ? 'warn' : r.source === 'online' ? 'accent' : 'neutral');
+
   return (
-    <Stack>
-      <Group justify="space-between">
-        <Group>
-          <TextInput placeholder="Rechercher (nom, club)" value={search} onChange={(e) => setSearch(e.currentTarget.value)} />
-          <Select placeholder="Club" clearable data={clubOptions} value={club} onChange={setClub} />
-          <Select placeholder="Discipline" clearable data={DISCIPLINE_OPTIONS} value={discipline} onChange={setDiscipline} />
-          <Checkbox data-testid="registrations-filter-unconfirmed" label="Sans inscription FFK" checked={onlyUnconfirmed}
-            onChange={(e) => setOnlyUnconfirmed(e.currentTarget.checked)} />
-          <Select placeholder="Âge" clearable data={(grid?.ageBands ?? []).map((b) => ({ value: b.code, label: b.label }))} value={age} onChange={setAge} />
-        </Group>
-        <Button data-testid="registration-add" onClick={() => setAdding(true)}>Ajouter</Button>
+    <Stack gap="md">
+      <PageHeader title={plural(rows.length, 'inscription')}
+        summary={rows.length > 0 ? [plural(clubCount, 'club'), categories.length > 0 && plural(categories.length, 'catégorie')].filter(Boolean).join(' · ') : undefined}
+        actions={<Button data-testid="registration-add" onClick={() => setAdding(true)}>Ajouter</Button>} />
+      {rows.length === 0 ? (
+        <EmptyState title="Aucune inscription pour l’instant"
+          text="Elles arrivent par les inscriptions en ligne des clubs ou leurs fiches (onglet Fiche club), par l’import FFK, ou une à une avec « Ajouter »." />
+      ) : (
+      <>
+      <Group gap="sm" wrap="wrap">
+        <TextInput placeholder="Rechercher (nom, club)" leftSection={<IconSearch />} value={search} w={220} onChange={(e) => setSearch(e.currentTarget.value)} />
+        <Select placeholder="Club" clearable searchable data={clubOptions} value={club} onChange={setClub} w={200} />
+        <Select placeholder="Discipline" clearable data={DISCIPLINE_OPTIONS} value={discipline} onChange={setDiscipline} w={160} />
+        <Select placeholder="Âge" clearable data={(grid?.ageBands ?? []).map((b) => ({ value: b.code, label: b.label }))} value={age} onChange={setAge} w={140} />
+        <Checkbox data-testid="registrations-filter-unconfirmed" label="Sans inscription FFK" checked={onlyUnconfirmed}
+          onChange={(e) => setOnlyUnconfirmed(e.currentTarget.checked)} />
       </Group>
-      <Text c="dimmed" size="sm">{filtered.length} inscription(s) sur {rows.length}</Text>
-      <Table striped highlightOnHover>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Nom</Table.Th><Table.Th>Prénom</Table.Th><Table.Th>Club</Table.Th><Table.Th>Sexe</Table.Th>
-            <Table.Th>Âge</Table.Th><Table.Th>Discipline</Table.Th><Table.Th>Règlement</Table.Th><Table.Th>Poids</Table.Th>
-            <Table.Th>Préférences</Table.Th><Table.Th>Origine</Table.Th><Table.Th />
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {filtered.map((r) => (
-            <Table.Tr key={r.id} data-testid="registration-row">
-              <Table.Td>{r.fighter.lastName}</Table.Td>
-              <Table.Td>{r.fighter.firstName}</Table.Td>
-              <Table.Td>{r.club?.name ?? '—'}</Table.Td>
-              <Table.Td>{r.fighter.sex}</Table.Td>
-              <Table.Td>{ageBandLabel(grid, r.fighter.ageBandCode)}</Table.Td>
-              <Table.Td>{disciplineLabel(r.discipline)}</Table.Td>
-              <Table.Td>{rulesetShort(r.ruleset)}{r.acceptsJiyuFirst ? ' (jiyu ok)' : ''}</Table.Td>
-              <Table.Td>{weightLabel(grid, r.weightClassId)}</Table.Td>
-              <Table.Td>{prefsLabel(r.otherDisciplines)}</Table.Td>
-              <Table.Td>
-                <Group gap={4} wrap="nowrap">
-                  <Badge variant="light" color={r.source === 'onsite' ? 'orange' : 'gray'}>{SOURCE_LABELS[r.source]}</Badge>
-                  {r.ffkConfirmed && <Badge variant="light" color="green" data-testid="registration-ffk-badge">FFK ✓</Badge>}
-                  {r.recasementType && <ReplacementBadge type={r.recasementType} size="xs" detail={recasements.get(r.id)} />}
-                </Group>
-              </Table.Td>
-              <Table.Td>
-                <Group gap={4} wrap="nowrap">
-                  <ActionIcon variant="subtle" aria-label="Modifier" onClick={() => setEditing(r)}>✎</ActionIcon>
-                  <ActionIcon variant="subtle" color="red" aria-label="Supprimer" onClick={() => setDeleting(r)}>✕</ActionIcon>
-                </Group>
-              </Table.Td>
+      {filteredOut && <Text c="dimmed" size="sm" className="num">{filtered.length.toLocaleString('fr-FR')} sur {plural(rows.length, 'inscription')}</Text>}
+      {filtered.length === 0 ? (
+        <EmptyState title="Aucune inscription ne correspond" text="Changez la recherche ou retirez un filtre." />
+      ) : (
+      <Card padding={0}>
+        <Table>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Combattant</Table.Th><Table.Th>Club</Table.Th><Table.Th>Sexe</Table.Th>
+              <Table.Th>Âge</Table.Th><Table.Th>Discipline</Table.Th><Table.Th>Règlement</Table.Th><Table.Th>Poids</Table.Th>
+              <Table.Th>Préférences</Table.Th><Table.Th>Origine</Table.Th><Table.Th />
             </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
+          </Table.Thead>
+          <Table.Tbody>
+            {filtered.map((r) => (
+              <Table.Tr key={r.id} data-testid="registration-row">
+                <Table.Td style={{ whiteSpace: 'nowrap' }}><Text span fw={600} size="sm">{r.fighter.lastName}</Text> <Text span size="sm">{r.fighter.firstName}</Text></Table.Td>
+                <Table.Td maw={180}><Text size="sm" className="sk-ellipsis" title={r.club?.name}>{r.club?.name ?? '—'}</Text></Table.Td>
+                <Table.Td>{r.fighter.sex}</Table.Td>
+                <Table.Td style={{ whiteSpace: 'nowrap' }}>{ageBandLabel(grid, r.fighter.ageBandCode)}</Table.Td>
+                <Table.Td>{disciplineLabel(r.discipline)}</Table.Td>
+                <Table.Td>{rulesetShort(r.ruleset)}{r.acceptsJiyuFirst ? ' (jiyu ok)' : ''}</Table.Td>
+                <Table.Td className="num" style={{ whiteSpace: 'nowrap' }}>{weightLabel(grid, r.weightClassId)}</Table.Td>
+                <Table.Td c="dimmed">{prefsLabel(r.otherDisciplines)}</Table.Td>
+                <Table.Td>
+                  <Group gap={4} wrap="nowrap">
+                    <StatusBadge tone={tone(r)}>{SOURCE_LABELS[r.source]}</StatusBadge>
+                    {r.ffkConfirmed && <StatusBadge tone="ok" data-testid="registration-ffk-badge" title="Confirmée par l’export FFK">FFK ✓</StatusBadge>}
+                    {r.recasementType && <ReplacementBadge type={r.recasementType} size="xs" detail={recasements.get(r.id)} />}
+                  </Group>
+                </Table.Td>
+                <Table.Td>
+                  <Group gap={2} wrap="nowrap" justify="flex-end">
+                    <ActionIcon variant="subtle" color="gray" aria-label="Modifier" title="Modifier" onClick={() => setEditing(r)}><IconEdit /></ActionIcon>
+                    <ActionIcon variant="subtle" color="red" aria-label="Supprimer" title="Supprimer" onClick={() => setDeleting(r)}><IconTrash /></ActionIcon>
+                  </Group>
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </Card>
+      )}
+      </>
+      )}
 
       <Modal opened={adding} onClose={() => setAdding(false)} title="Nouvelle inscription" size="xl">
         <RegistrationForm competitionId={id} />
       </Modal>
-      <Modal opened={editing !== null} onClose={() => setEditing(null)} title="Modifier l'inscription" size="xl">
+      <Modal opened={editing !== null} onClose={() => setEditing(null)} title="Modifier l’inscription" size="xl">
         {editing && <RegistrationForm competitionId={id} edit={editing} onDone={() => setEditing(null)} />}
       </Modal>
-      <Modal opened={deleting !== null} onClose={() => setDeleting(null)} title="Supprimer l'inscription ?">
+      <Modal opened={deleting !== null} onClose={() => setDeleting(null)} title="Supprimer l’inscription ?">
         <Stack>
           <Text>{deleting && `${deleting.fighter.lastName} ${deleting.fighter.firstName} — ${disciplineLabel(deleting.discipline)}`}</Text>
           <Group justify="flex-end">

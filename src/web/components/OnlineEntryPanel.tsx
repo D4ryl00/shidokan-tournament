@@ -1,4 +1,4 @@
-import { Alert, Anchor, Button, Checkbox, Chip, CopyButton, Group, Modal, MultiSelect, Stack, Table, Text, TextInput } from '@mantine/core';
+import { Alert, Anchor, Button, Checkbox, Chip, CopyButton, Group, Menu, Modal, MultiSelect, Stack, Table, Text } from '@mantine/core';
 import { useState } from 'react';
 import {
   useClubEntrySettings,
@@ -17,7 +17,10 @@ import {
 } from '../api.js';
 import { CompetitionMessage, NEW_LINK_WARNING, SendResultsModal } from './InvitationMail.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
-import { SectionHeader } from './Help.js';
+import { HELP } from '../help.js';
+import { DateField } from './ui/DateField.js';
+import { SectionCard } from './ui/SectionCard.js';
+import { StatusBadge } from './ui/StatusBadge.js';
 
 const day = (iso: string | null) => (iso ? new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString('fr-FR') : '—');
 export const clubEntryUrl = (token: string) => `${window.location.origin}/inscription/${token}`;
@@ -92,13 +95,16 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
     settings.status === 'frozen' ? { label: 'Rouvrir les inscriptions', status: 'open' as const } : { label: 'Ouvrir les inscriptions', status: 'open' as const };
 
   return (
-    <Stack>
-      <SectionHeader topic="fiche-club.en-ligne" />
-      <Group align="end">
-        <Text fw={600} data-testid="club-entry-status">{settings.status === 'closed' ? 'Inscriptions en ligne pas encore ouvertes' : clubEntryStatusText(settings.status, settings.deadline)}</Text>
-        <TextInput type="date" label="Date limite (affichée aux clubs)" value={settings.deadline ?? ''} disabled={!settings.managedHere}
-          onChange={(e) => updateSettings.mutate({ deadline: e.currentTarget.value || null })} />
-        <Button data-testid="club-entry-toggle" disabled={!settings.managedHere} loading={updateSettings.isPending}
+    <SectionCard title={HELP['fiche-club.en-ligne'].title} help="fiche-club.en-ligne"
+      actions={
+        <StatusBadge tone={settings.status === 'open' ? 'ok' : settings.status === 'frozen' ? 'warn' : 'neutral'} size="lg" data-testid="club-entry-status">
+          {settings.status === 'closed' ? 'Inscriptions en ligne pas encore ouvertes' : clubEntryStatusText(settings.status, settings.deadline)}
+        </StatusBadge>
+      }>
+      <Group align="end" gap="sm">
+        <DateField label="Date limite (affichée aux clubs)" value={settings.deadline} disabled={!settings.managedHere} clearable w={220}
+          onChange={(v) => updateSettings.mutate({ deadline: v || null })} />
+        <Button data-testid="club-entry-toggle" variant={settings.status === 'open' ? 'default' : 'filled'} disabled={!settings.managedHere} loading={updateSettings.isPending}
           onClick={() => updateSettings.mutate({ status: action.status })}>{action.label}</Button>
       </Group>
       {!settings.managedHere && <Text size="sm" c="dimmed">Cette compétition est gérée par une autre installation : les inscriptions en ligne s’y règlent.</Text>}
@@ -127,18 +133,18 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
           <Table>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>
+                <Table.Th w={40}>
                   <Checkbox aria-label="Tout cocher" checked={shown.length > 0 && selected.length === shown.length}
                     onChange={(e) => setChecked(e.currentTarget.checked ? new Set(shown.map((i) => i.clubId)) : new Set())} />
                 </Table.Th>
-                <Table.Th>Club invité</Table.Th><Table.Th>E-mail</Table.Th><Table.Th>Dernier mail</Table.Th><Table.Th>Dernière visite</Table.Th><Table.Th>Combattants</Table.Th><Table.Th />
+                <Table.Th>Club invité</Table.Th><Table.Th>E-mail</Table.Th><Table.Th>Dernier mail</Table.Th><Table.Th>Dernière visite</Table.Th><Table.Th ta="right">Combattants</Table.Th><Table.Th />
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
               {shown.map((i) => (
                 <Table.Tr key={i.clubId} data-testid="invitation-row">
                   <Table.Td><Checkbox aria-label={`Choisir ${i.clubName}`} checked={checked.has(i.clubId)} onChange={(e) => toggle(i.clubId, e.currentTarget.checked)} /></Table.Td>
-                  <Table.Td>{i.clubName}</Table.Td>
+                  <Table.Td fw={600}>{i.clubName}</Table.Td>
                   <Table.Td>{i.coachEmail ?? '—'}</Table.Td>
                   <Table.Td>
                     {i.lastMail ? (
@@ -147,13 +153,18 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
                       </Text>
                     ) : '—'}
                   </Table.Td>
-                  <Table.Td>{day(i.lastUsedAt)}</Table.Td>
-                  <Table.Td>{i.fighters}</Table.Td>
+                  <Table.Td className="num">{day(i.lastUsedAt)}</Table.Td>
+                  <Table.Td ta="right" className="num">{i.fighters}</Table.Td>
                   <Table.Td>
-                    <Group gap="xs" justify="flex-end" wrap="nowrap">
-                      <Button size="xs" variant="light" loading={mailto.isPending && mailto.variables === i.clubId} onClick={() => setMailtoClub(i)}>Ouvrir dans ma messagerie</Button>
-                      <Button size="xs" variant="light" onClick={() => regenerate.mutate(i.clubId, { onSuccess: (l) => setLinks([l]) })}>Régénérer le lien</Button>
-                      <Button size="xs" variant="subtle" color="red" onClick={() => revoke.mutate(i.clubId)}>Révoquer</Button>
+                    <Group gap={4} justify="flex-end" wrap="nowrap">
+                      <Button size="compact-sm" variant="subtle" loading={mailto.isPending && mailto.variables === i.clubId} onClick={() => setMailtoClub(i)}>Ouvrir dans ma messagerie</Button>
+                      <Menu position="bottom-end">
+                        <Menu.Target><Button size="compact-sm" variant="subtle" color="gray" aria-label={`Autres actions pour ${i.clubName}`}>…</Button></Menu.Target>
+                        <Menu.Dropdown>
+                          <Menu.Item onClick={() => regenerate.mutate(i.clubId, { onSuccess: (l) => setLinks([l]) })}>Régénérer le lien</Menu.Item>
+                          <Menu.Item color="red" onClick={() => revoke.mutate(i.clubId)}>Révoquer</Menu.Item>
+                        </Menu.Dropdown>
+                      </Menu>
                     </Group>
                   </Table.Td>
                 </Table.Tr>
@@ -199,6 +210,6 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
         </Stack>
       </Modal>
       <LinksModal links={links} onClose={() => setLinks([])} />
-    </Stack>
+    </SectionCard>
   );
 }

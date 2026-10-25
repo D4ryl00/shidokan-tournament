@@ -75,7 +75,7 @@ export function PaperEntryTable({ competitionId, grid }: { competitionId: string
         <TextInput label="E-mail" value={header.coachEmail ?? ''} onChange={(e) => setH({ coachEmail: e.currentTarget.value || null })} />
         <Checkbox mt="lg" label="Le coach accepte d’avance les reclassements" checked={header.preApproval} onChange={(e) => setH({ preApproval: e.currentTarget.checked })} />
       </SimpleGrid>
-      <ScrollArea>
+      <ScrollArea type="auto" offsetScrollbars="x">
         <Table withTableBorder withColumnBorders miw={1350} verticalSpacing={4}>
           <Table.Thead>
             <Table.Tr>
