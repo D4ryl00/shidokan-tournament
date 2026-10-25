@@ -33,6 +33,8 @@ async function uploadFfk(page: Page, id: string) {
   await page.goto(`/competitions/${id}/import-ffk`);
   await page.getByTestId('ffk-file').setInputFiles({ name: 'export.xlsx', mimeType: 'application/octet-stream', buffer: ffk });
   await expect(page.getByTestId('ffk-summary')).toBeVisible();
+  // Le champ est vidé aussitôt lu : choisir de nouveau le même fichier le relit.
+  await expect(page.getByTestId('ffk-file')).toHaveValue('');
 }
 
 test('import FFK : rapprochement avec la fiche club, cas douteux, réimport', async ({ page }) => {

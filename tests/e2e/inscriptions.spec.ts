@@ -28,6 +28,8 @@ test('fiche club : modèle, aperçu avec erreur, import, réimport corrigé', as
     ['DURAND', 'Hugo', 'Masculin', 'Seniors', '-75', 'Shido-boxing', 'Shobu', null, 'Oui', 74],
   ]));
   await expect(page.getByTestId('club-form-preview-row')).toHaveCount(3);
+  // Le champ est vidé aussitôt lu : choisir de nouveau le même fichier (corrigé entre-temps) le relit.
+  await expect(page.getByTestId('club-form-file')).toHaveValue('');
   await expect(page.getByTestId('club-form-row-error')).toContainText('réservé aux adultes');
   await page.getByTestId('club-form-import').click();
   await expect(page.getByText('2 inscriptions importées')).toBeVisible();

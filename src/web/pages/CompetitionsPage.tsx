@@ -1,4 +1,4 @@
-import { Anchor, Button, Card, Group, Modal, NumberInput, Select, Stack, Table, TextInput } from '@mantine/core';
+import { Anchor, Button, Group, Modal, NumberInput, Select, Stack, Table, TextInput } from '@mantine/core';
 import { useState } from 'react';
 import { Link, Navigate } from 'react-router';
 import { useAuthMe, useCompetitions, useCreateCompetition, useGridTemplates, isOrganiser } from '../api.js';
@@ -9,6 +9,7 @@ import { EmptyState } from '../components/ui/EmptyState.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { ImportCompetitionButton, ServerCompetitionsButton } from '../components/SyncPanel.js';
+import { TableCard } from '../components/ui/TableCard.js';
 
 export function CompetitionsPage() {
   const { data = [], isLoading } = useCompetitions();
@@ -44,7 +45,7 @@ export function CompetitionsPage() {
         <EmptyState title="Aucune compétition pour l’instant"
           text={organiser ? 'Créez la première avec « Nouvelle compétition » : nom, date, lieu et nombre de zones de combat. Ou importez une compétition reçue d’une autre installation.' : 'Aucune compétition n’est encore ouverte à votre compte.'} />
       ) : (
-        <Card padding={0}>
+        <TableCard>
           <Table>
             <Table.Thead>
               <Table.Tr>
@@ -84,7 +85,7 @@ export function CompetitionsPage() {
               ))}
             </Table.Tbody>
           </Table>
-        </Card>
+        </TableCard>
       )}
       <Modal opened={open} onClose={() => setOpen(false)} title="Nouvelle compétition">
         <Stack>

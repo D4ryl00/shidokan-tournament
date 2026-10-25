@@ -1,4 +1,4 @@
-import { ActionIcon, Button, Card, Checkbox, Group, Modal, Stack, Table, Text, TextInput } from '@mantine/core';
+import { ActionIcon, Button, Checkbox, Group, Modal, Stack, Table, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
 import { useParams } from 'react-router';
 import { plural } from '../../domain/plural.js';
@@ -8,6 +8,7 @@ import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { IconEdit } from '../components/ui/icons.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
+import { TableCard } from '../components/ui/TableCard.js';
 
 type Field = 'name' | 'coachName' | 'coachPhone' | 'coachEmail';
 const FIELDS: { field: Field; label: string }[] = [
@@ -60,7 +61,7 @@ export function ClubsPage() {
       {clubs.length === 0 ? (
         <EmptyState title="Aucun club pour l’instant" text="Les clubs sont créés par les inscriptions : en ligne, par l’import des fiches ou de l’export FFK, ou à la saisie d’une inscription." />
       ) : (
-        <Card padding={0}>
+        <TableCard>
           <Table>
             <Table.Thead>
               <Table.Tr>
@@ -87,7 +88,7 @@ export function ClubsPage() {
               ))}
             </Table.Tbody>
           </Table>
-        </Card>
+        </TableCard>
       )}
       <ApiErrorAlert error={update.error} />
       <ClubModal key={editing?.id ?? 'closed'} competitionId={id} club={editing} onClose={() => setEditing(null)} />

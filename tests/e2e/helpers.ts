@@ -30,3 +30,28 @@ export async function chooseTheme(page: Page, label: 'Auto' | 'Clair' | 'Sombre'
   await page.getByTestId('theme-toggle').click();
   await page.getByRole('menuitem', { name: label }).click();
 }
+
+/**
+ * Contenu coupé par un conteneur qui cache ce qui dépasse (`overflow: hidden`, sans défilement) : texte ou bouton qui sort
+ * d'une carte ou d'un tableau, invisible et inatteignable. Un texte coupé exprès (points de suspension) n'est pas compté.
+ */
+export async function clipped(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const out: string[] = [];
+    for (const el of Array.from(document.querySelectorAll<HTMLElement>('body *'))) {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0 || !el.textContent?.trim()) continue;
+      for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+        const cs = getComputedStyle(a);
+        if (cs.textOverflow === 'ellipsis') break;
+        if (cs.overflowX === 'visible') continue;
+        if (cs.overflowX === 'hidden' || cs.overflowX === 'clip') {
+          const ar = a.getBoundingClientRect();
+          if (r.right > ar.right + 1) out.push(`${el.tagName.toLowerCase()} « ${el.textContent.trim().slice(0, 60)} » dépasse de ${Math.round(r.right - ar.right)} px`);
+        }
+        break;
+      }
+    }
+    return [...new Set(out)].slice(0, 10);
+  });
+}

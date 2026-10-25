@@ -1,5 +1,5 @@
 import '../print.css';
-import { Button, Card, Group, Loader, Modal, NumberInput, SegmentedControl, Stack, Table, Text, TextInput } from '@mantine/core';
+import { Button, Group, Loader, Modal, NumberInput, SegmentedControl, Stack, Table, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
@@ -14,6 +14,7 @@ import { IconSearch } from '../components/ui/icons.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { ageBandLabel, disciplineLabel } from '../labels.js';
 import { useSelectedWave } from '../useSelectedWave.js';
+import { TableCard } from '../components/ui/TableCard.js';
 
 function WeightCell({ fighter, index, onSave }: { fighter: WeighInFighter; index: number; onSave: (kg: number | null) => void }) {
   const [value, setValue] = useState<number | ''>(fighter.weighInKg ?? '');
@@ -100,7 +101,7 @@ export function WeighInPage() {
       </Group>
       <ApiErrorAlert error={set.error ?? close.error} />
       {fighters.length > 0 && (
-      <Card padding={0}>
+      <TableCard>
       <Table>
         <Table.Thead>
           <Table.Tr>
@@ -149,7 +150,7 @@ export function WeighInPage() {
           })}
         </Table.Tbody>
       </Table>
-      </Card>
+      </TableCard>
       )}
       {fighters.length === 0 && (
         all.length === 0

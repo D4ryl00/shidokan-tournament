@@ -25,6 +25,8 @@ export function ClubFormPage() {
     setFile(f);
     importForm.reset();
     if (f) preview.mutate(f);
+    // Fichier gardé en mémoire : le champ est vidé pour qu'un nouveau choix du même fichier (corrigé entre-temps) soit relu.
+    if (f) resetFile.current?.();
   };
   const doImport = () =>
     file &&

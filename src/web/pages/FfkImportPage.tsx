@@ -52,6 +52,8 @@ export function FfkImportPage() {
     setChoices({});
     setSeenDoubtful(new Map());
     if (!file) return;
+    // Fichier envoyé : le champ est vidé pour qu'un nouveau choix du même fichier soit relu.
+    resetFile.current?.();
     upload.mutate(file, {
       onSuccess: (r) => {
         setUploadId(r.uploadId);

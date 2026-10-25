@@ -25,7 +25,7 @@ export const TOKENS = {
   },
   light: {
     bg: '#f7f5f9', bar: '#ffffff', line: '#ebe6ef', card: '#ffffff', cardLine: '#e7e1ec', row: '#faf8fb',
-    text: '#1d1622', soft: '#4b4354', muted: '#7b7186', accent: '#722f82', onAccent: '#ffffff',
+    text: '#1d1622', soft: '#4b4354', muted: '#72687d', accent: '#722f82', onAccent: '#ffffff',
     hero: 'linear-gradient(135deg, #f3e6f7, #fbf6fd)', heroText: '#722f82', heroSub: '#6b5f75',
     chip: '#f1e4f6', chipText: '#722f82', ok: '#e6f5ec', okText: '#1f7a45', warn: '#fff3df', warnText: '#9a5a00',
   },
@@ -40,7 +40,7 @@ const shidokan: MantineColorsTuple = ['#f8eefb', '#efdcf4', '#e0bbe9', '#d09ade'
 // Surfaces du thème sombre (Mantine : 0 texte, 2 texte discret, 4 bordures, 6 cartes et champs, 7 fond).
 const dark: MantineColorsTuple = ['#f1edf5', '#d6cfdd', '#b9b1c2', '#8d8497', '#352e3d', '#2c2633', '#1d1922', '#141118', '#0f0d12', '#0a090c'];
 // Gris légèrement violets du thème clair (3 et 4 bordures, 6 texte discret).
-const gray: MantineColorsTuple = ['#faf8fb', '#f3f0f5', '#ebe6ef', '#e0d9e5', '#cdc4d4', '#a89eb2', '#7b7186', '#4b4354', '#2e2835', '#1d1622'];
+const gray: MantineColorsTuple = ['#faf8fb', '#f3f0f5', '#ebe6ef', '#e0d9e5', '#cdc4d4', '#a89eb2', '#72687d', '#4b4354', '#2e2835', '#1d1622'];
 
 export const cssVariablesResolver: CSSVariablesResolver = () => ({
   variables: {},

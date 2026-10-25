@@ -1,4 +1,4 @@
-import { ActionIcon, Button, Card, Checkbox, Group, Modal, Select, Stack, Table, Text, TextInput } from '@mantine/core';
+import { ActionIcon, Button, Checkbox, Group, Modal, Select, Stack, Table, Text, TextInput } from '@mantine/core';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { normalizeName } from '../../domain/names.js';
@@ -12,6 +12,7 @@ import { IconEdit, IconSearch, IconTrash } from '../components/ui/icons.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { DISCIPLINE_OPTIONS, ageBandLabel, disciplineLabel, prefsLabel, rulesetShort, weightLabel } from '../labels.js';
+import { TableCard } from '../components/ui/TableCard.js';
 
 export function RegistrationsPage() {
   const { id = '' } = useParams();
@@ -68,7 +69,7 @@ export function RegistrationsPage() {
       {filtered.length === 0 ? (
         <EmptyState title="Aucune inscription ne correspond" text="Changez la recherche ou retirez un filtre." />
       ) : (
-      <Card padding={0}>
+      <TableCard>
         <Table>
           <Table.Thead>
             <Table.Tr>
@@ -105,7 +106,7 @@ export function RegistrationsPage() {
             ))}
           </Table.Tbody>
         </Table>
-      </Card>
+      </TableCard>
       )}
       </>
       )}

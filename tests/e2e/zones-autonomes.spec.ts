@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { createCompetition } from './helpers.js';
+import { createCompetition, clipped } from './helpers.js';
 
 const LAPTOP = 'http://localhost:3102';
 const openMatch = async (page: Page, label: string, matchId: string) => {
@@ -59,6 +59,11 @@ test('relier le portable, zone autonome, saisir deux combats ; la table centrale
   // PC principal : deux cartes (le conflit, et le combat suivant de la catégorie en attente), file de la zone en attente.
   await expect(page.getByTestId('zone-card-item')).toHaveCount(2);
   await expect(page.getByTestId('queue-held').first()).toBeVisible();
+  // Le message d'attente, seul signe qu'un passage est bloqué, se lit en entier même sur un petit portable (rien ne sort de la carte).
+  const size = page.viewportSize()!;
+  await page.setViewportSize({ width: 1024, height: size.height });
+  expect(await clipped(page)).toEqual([]);
+  await page.setViewportSize(size);
   await page.getByTestId('zone-card-item').first().getByTestId('zone-keep-zone').click();
   await expect(page.getByTestId('zone-card-item')).toHaveCount(0);
   await expect(page.getByTestId('queue-held')).toHaveCount(0);

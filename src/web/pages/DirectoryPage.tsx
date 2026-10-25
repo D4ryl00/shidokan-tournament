@@ -1,4 +1,4 @@
-import { Button, Card, Checkbox, Group, Menu, Modal, Select, Stack, Table, Text, Textarea, TextInput } from '@mantine/core';
+import { Button, Checkbox, Group, Menu, Modal, Select, Stack, Table, Text, Textarea, TextInput } from '@mantine/core';
 import { useState } from 'react';
 import { normalizeName } from '../../domain/names.js';
 import { plural } from '../../domain/plural.js';
@@ -8,6 +8,7 @@ import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
+import { TableCard } from '../components/ui/TableCard.js';
 
 const EMPTY: DirectoryInput = { name: '', affiliationNumber: null, coachName: null, coachPhone: null, coachEmail: null, notes: null };
 const orNull = (v: string) => v.trim() || null;
@@ -104,7 +105,7 @@ export function DirectoryPage() {
           ? <EmptyState title="L’annuaire est vide" text="Les clubs s’y ajoutent à l’import FFK, ou à la main avec « Ajouter un club ». Il garde leurs coordonnées d’une compétition à l’autre." />
           : <EmptyState title="Aucun club ne correspond" text="Changez la recherche, ou affichez les clubs archivés." />
       ) : (
-        <Card padding={0}>
+        <TableCard>
           <Table>
             <Table.Thead>
               <Table.Tr>
@@ -139,7 +140,7 @@ export function DirectoryPage() {
               ))}
             </Table.Tbody>
           </Table>
-        </Card>
+        </TableCard>
       )}
       <EntryModal key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.id} entry={editing} onClose={() => setEditing(null)} />
       <MergeModal merged={merging} entries={entries} onClose={() => setMerging(null)} />

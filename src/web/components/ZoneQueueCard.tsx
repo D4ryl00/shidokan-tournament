@@ -7,7 +7,7 @@ import { StatusBadge } from './ui/StatusBadge.js';
 
 /** Passage d'une catégorie qui a une saisie de zone autonome à trancher : il ne se joue pas encore (et n'a pas de bouton). */
 const HeldBadge = () => (
-  <StatusBadge tone="warn" size="md" data-testid="queue-held" style={{ whiteSpace: 'normal', height: 'auto', textAlign: 'center' }}>
+  <StatusBadge tone="warn" size="md" wrap data-testid="queue-held">
     En attente d’une décision à la table centrale
   </StatusBadge>
 );
@@ -100,7 +100,7 @@ export function ZoneQueueCard({ zone, queue, waitingOtherZones, autonomous, onEn
           </Group>
         </Group>
         {autonomous && waitingOtherZones > 0 && (
-          <StatusBadge tone="warn" data-testid="waiting-other-zones" style={{ whiteSpace: 'normal', height: 'auto' }}>
+          <StatusBadge tone="warn" wrap data-testid="waiting-other-zones">
             {plural(waitingOtherZones, 'combat')} en attente des résultats des autres zones
           </StatusBadge>
         )}

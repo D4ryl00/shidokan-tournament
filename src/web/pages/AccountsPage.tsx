@@ -1,4 +1,4 @@
-import { Button, Card, Group, Modal, PasswordInput, Select, Stack, Table, TextInput } from '@mantine/core';
+import { Button, Group, Modal, PasswordInput, Select, Stack, Table, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { isOrganiser, useAuthMe, useChangePassword, useCompetitions, useCreateUser, useDeleteUser, useUpdateUserRole, useUsers, useZones, type AccountRole, type UserRole, type UserRow } from '../api.js';
@@ -6,6 +6,7 @@ import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
 import { plural } from '../../domain/plural.js';
+import { TableCard } from '../components/ui/TableCard.js';
 
 const ROLE_LABELS: Record<UserRole, string> = { organisateur: 'Organisateur', table: 'Table centrale', zone: 'Zone' };
 const NO_ROLE: AccountRole = { role: 'organisateur', competitionId: null, zoneId: null };
@@ -64,7 +65,7 @@ export function AccountsPage() {
         <PageHeader title="Mon mot de passe" />
       )}
       {organiser && (<>
-      <Card padding={0}>
+      <TableCard>
         <Table>
           <Table.Thead><Table.Tr><Table.Th>E-mail</Table.Th><Table.Th>Rôle</Table.Th><Table.Th>Créé le</Table.Th><Table.Th /></Table.Tr></Table.Thead>
           <Table.Tbody>
@@ -91,7 +92,7 @@ export function AccountsPage() {
             ))}
           </Table.Tbody>
         </Table>
-      </Card>
+      </TableCard>
       <ApiErrorAlert error={remove.error} />
 
       <SectionCard title="Ajouter un compte" description="Le rôle décide de ce que le compte voit : Organisateur (tout), Table centrale, ou Zone (les combats d’une zone d’une compétition).">

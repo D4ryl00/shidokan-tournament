@@ -98,7 +98,7 @@ export function ClubEntryPage() {
         {view && (
           <>
             <Group>
-              <StatusBadge tone={view.editable ? 'ok' : 'neutral'} size="lg" data-testid="club-entry-state" style={{ whiteSpace: 'normal', height: 'auto' }}>
+              <StatusBadge tone={view.editable ? 'ok' : 'neutral'} size="lg" wrap data-testid="club-entry-state">
                 {view.editable ? clubEntryStatusText('open', view.competition.deadline) : 'Inscriptions closes : contactez l’organisateur.'}
               </StatusBadge>
             </Group>

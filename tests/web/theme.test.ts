@@ -27,6 +27,8 @@ test('contraste lisible (≥ 4,5:1) dans les deux thèmes', () => {
   for (const [name, t] of Object.entries(TOKENS)) {
     const pairs: [string, string, string][] = [
       ['text/bg', t.text, t.bg], ['text/card', t.text, t.card], ['soft/bg', t.soft, t.bg], ['soft/card', t.soft, t.card],
+      // Texte discret (--mantine-color-dimmed) : phrases d'aide, résumés, indications.
+      ['muted/bg', t.muted, t.bg], ['muted/card', t.muted, t.card], ['muted/row', t.muted, t.row],
       ['onAccent/accent', t.onAccent, t.accent], ['okText/ok', t.okText, t.ok], ['warnText/warn', t.warnText, t.warn], ['chipText/chip', t.chipText, t.chip],
     ];
     for (const [pair, fg, bg] of pairs) expect(contrast(fg, bg), `${name} ${pair}`).toBeGreaterThanOrEqual(4.5);

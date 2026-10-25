@@ -94,7 +94,7 @@ test('pesée puis réaffectation : aperçu, validation, refus, masse, retour, an
     await page.getByTestId('bulk-all').click();
     await expect(page.getByTestId('preview-content')).toBeVisible();
     await page.getByTestId('bulk-confirm').click();
-    await expect(page.getByText(/réaffectation\(s\) appliquée\(s\)/)).toBeVisible();
+    await expect(page.getByText(/réaffectations? appliquées?/)).toBeVisible();
   }
   // Tout ce qui respecte les règles est classé. Une proposition hors de l'écart de poids autorisé peut rester (selon celle que le
   // refus de l'étape 3 a écartée) : « Tout classer automatiquement » ne l'applique jamais.
