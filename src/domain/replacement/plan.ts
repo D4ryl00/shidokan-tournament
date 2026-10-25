@@ -195,3 +195,39 @@ export function computePlan(state: State, opts: PlanOptions): PlanResult {
     hash: moves.map((m) => m.id).join('|'),
   };
 }
+
+export interface LadderRow {
+  /** `null` : la ligne de départ (aucune règle). */
+  rule: RuleId | null;
+  on: boolean;
+  /** Combattants seuls une fois les règles jusqu'à celle-ci permises ; `null` : règle désactivée, rien n'est calculé. */
+  alone: number | null;
+  moves: number;
+  /** Déplacements à valider à la main. */
+  toValidate: number;
+  proven: boolean;
+}
+
+/**
+ * Diagramme de la liste : un calcul du plan par règle active, chacune étant la dernière permise.
+ * Le plan retenu est celui de la ligne de coupure, calculé une seule fois.
+ */
+export function planLadder(state: State, opts: { waveId: string | null; choices: PlanChoice[] }): { rows: LadderRow[]; plan: PlanResult } {
+  const { order, cutAfter } = state.settings.replacementRules;
+  const run = (level: RuleId) => computePlan(state, { waveId: opts.waveId, level, choices: opts.choices });
+  const rows: LadderRow[] = [
+    { rule: null, on: true, alone: aloneRegistrations(state, opts.waveId).length, moves: 0, toValidate: 0, proven: true },
+  ];
+  let plan: PlanResult | null = null;
+  for (const rule of order) {
+    const on = isRuleOn(state.settings, rule);
+    if (!on) {
+      rows.push({ rule, on, alone: null, moves: 0, toValidate: 0, proven: true });
+      continue;
+    }
+    const r = run(rule);
+    if (rule === cutAfter) plan = r;
+    rows.push({ rule, on, alone: r.aloneAfter.length, moves: r.moves.length, toValidate: r.moves.filter((m) => m.manual && !m.validated).length, proven: r.proven });
+  }
+  return { rows, plan: plan ?? run(cutAfter) };
+}
