@@ -155,14 +155,20 @@ export function ruleProfile(state: State, p: ProfileInput): { rules: RuleId[]; f
 }
 
 /** Drapeaux dérivés des règles d'une proposition ; `null` si une règle utilisée est désactivée (sauf si elle s'impose). */
-function withRules<T extends ProfileInput>(state: State, m: Member, p: T): (T & Pick<Proposal, 'rules' | 'manual' | 'preApproved'>) | null {
+function withRules<T extends ProfileInput>(state: State, movers: Member[], p: T): (T & Pick<Proposal, 'rules' | 'manual' | 'preApproved'>) | null {
   const { rules, forced } = ruleProfile(state, p);
   if (!forced && rules.some((r) => !isRuleOn(state.settings, r))) return null;
   return {
     ...p,
     rules,
     manual: rules.some((r) => !NO_VALIDATION_RULES.has(r)),
-    preApproved: m.clubPreApproval && !p.waveChange && p.waveShifts.length === 0 && rules.some((r) => PRE_APPROVAL_RULES.has(r)),
+    // Le pré-accord ne couvre que l'âge et le poids : toute règle à valider hors de ces deux-là l'exclut (§2.1).
+    preApproved:
+      movers.every((x) => x.clubPreApproval) &&
+      !p.waveChange &&
+      p.waveShifts.length === 0 &&
+      rules.some((r) => !NO_VALIDATION_RULES.has(r)) &&
+      rules.every((r) => NO_VALIDATION_RULES.has(r) || PRE_APPROVAL_RULES.has(r)),
   };
 }
 
@@ -183,7 +189,7 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
     const id = `${type}:${m.registrationId}>${targetId}`;
     const opponents = 'categoryId' in target ? activeMembers(state, target.categoryId).filter((x) => x.registrationId !== m.registrationId) : [];
     const waves = waveEffects(state, { caseId: c.id, type, registrationId: m.registrationId, target, changes: ev.changes });
-    const built = withRules(state, m, {
+    const built = withRules(state, [m], {
       id,
       caseId: c.id,
       type,
@@ -251,7 +257,7 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
       const waves = waveEffects(state, { caseId: c.id, type: pull.type, registrationId: pull.moved[0]!.registrationId, target: pull.target, changes: {} });
       const names = pull.moved.map((x) => x.label).join(' et ');
       const k = pull.moved.length;
-      const built = withRules(state, m, {
+      const built = withRules(state, pull.moved, {
         id: `${pull.type}:${pull.moved.map((x) => x.registrationId).join('+')}>${pull.target.categoryId}`,
         caseId: c.id,
         type: pull.type,

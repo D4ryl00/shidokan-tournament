@@ -413,4 +413,30 @@ describe('règles des propositions', () => {
     const p = toCategory(props(makeState([d, ...sb]), d.registrationId), sb[0]!.categoryId)!;
     expect(p).toMatchObject({ rules: ['discipline'], preApproved: false });
   });
+  test('pré-accord : exclu dès qu’une règle à valider n’est ni d’âge ni de poids', () => {
+    const mk = (pre: boolean, sex: 'F' | 'M') => {
+      const mini = member({ ageBandCode: 'minime', sex, weightClassId: `minime:${sex}:-40`, approxWeightKg: 39, otherDisciplines: ['shido-boxing'], clubPreApproval: pre });
+      const cad = [40, 41].map((kg) => member({ discipline: 'shido-boxing', ageBandCode: 'cadet', weightClassId: 'cadet:F:-47', approxWeightKg: kg }));
+      return props(makeState([mini, ...cad]), mini.registrationId).find((x) => 'categoryId' in x.target && x.target.categoryId === cad[0]!.categoryId);
+    };
+    expect(mk(true, 'F')).toMatchObject({ rules: ['discipline', 'ageUp'], preApproved: false });
+    const mini = member({ ageBandCode: 'minime', sex: 'M', weightClassId: 'minime:M:-40', approxWeightKg: 39, clubPreApproval: true });
+    const settings = defaultSettings();
+    settings.mixSexes = { enabled: true, ageBandCodes: ['minime'] };
+    const cad = [40, 41].map((kg) => member({ ageBandCode: 'cadet', weightClassId: 'cadet:F:-47', approxWeightKg: kg }));
+    const p = props(makeState([mini, ...cad], { settings }), mini.registrationId).find((x) => x.checks.mixedSex)!;
+    expect(p.rules).toEqual(['mixSexes', 'ageUp']);
+    expect(p.preApproved).toBe(false);
+  });
+  test('pré-accord d’un split : tous les combattants déplacés doivent l’avoir', () => {
+    const run = (aloneOk: boolean, movedOk: boolean) => {
+      const sen = (kg: number, wc: string, pre: boolean) => member({ ageBandCode: 'senior', sex: 'M', weightClassId: wc, approxWeightKg: kg, clubPreApproval: pre });
+      const alone = sen(100, 'senior:M:+84', aloneOk);
+      const s = makeState([alone, sen(72, 'senior:M:-84', false), sen(78, 'senior:M:-84', false), sen(83, 'senior:M:-84', movedOk), sen(84, 'senior:M:-84', movedOk)]);
+      const pull = props(s, alone.registrationId).find((p) => p.registrationId !== alone.registrationId)!;
+      return pull;
+    };
+    expect(run(true, false)).toMatchObject({ rules: ['split', 'weightGap'], preApproved: false });
+    expect(run(true, true)).toMatchObject({ rules: ['split', 'weightGap'], preApproved: true });
+  });
 });
