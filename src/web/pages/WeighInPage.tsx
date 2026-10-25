@@ -99,6 +99,7 @@ export function WeighInPage() {
         </Group>
       </Group>
       <ApiErrorAlert error={set.error ?? close.error} />
+      {fighters.length > 0 && (
       <Card padding={0}>
       <Table>
         <Table.Thead>
@@ -149,6 +150,7 @@ export function WeighInPage() {
         </Table.Tbody>
       </Table>
       </Card>
+      )}
       {fighters.length === 0 && (
         all.length === 0
           ? <EmptyState title="Personne à peser" text={waves.length > 0 ? 'Aucun combattant inscrit dans cette session.' : 'Aucune inscription pour l’instant : elles se font dans l’étape Préparer.'} />

@@ -76,6 +76,7 @@ export function CompetitionLayout() {
       </Center>
     );
   }
+  const posteOptions = [{ value: 'organisation', label: 'Organisation' }, { value: 'table', label: 'Table centrale' }, ...zones.map((z) => ({ value: `zone:${z.id}`, label: `Zone : ${z.name}` }))];
   const when = new Date(`${data.date}T12:00:00`).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' });
   return (
     <Stack gap="md">
@@ -111,8 +112,9 @@ export function CompetitionLayout() {
               Poste : {poste.kind === 'table' ? 'Table centrale' : `Zone : ${zones.find((z) => poste.kind === 'zone' && z.id === poste.zoneId)?.name ?? '?'}`}
             </Text>
           ) : (
-            <Select size="xs" w={160} aria-label="Poste" title="Poste de ce navigateur" data-testid="poste-select" allowDeselect={false} value={posteValue} onChange={choosePoste} comboboxProps={{ width: 220 }}
-              data={[{ value: 'organisation', label: 'Organisation' }, { value: 'table', label: 'Table centrale' }, ...zones.map((z) => ({ value: `zone:${z.id}`, label: `Zone : ${z.name}` }))]} />
+            <Select size="xs" w={160} aria-label="Poste" data-testid="poste-select" allowDeselect={false} value={posteValue} onChange={choosePoste} comboboxProps={{ width: 260 }}
+              title={`Poste de ce navigateur : ${posteOptions.find((o) => o.value === posteValue)?.label ?? ''}`} styles={{ input: { textOverflow: 'ellipsis' } }}
+              data={posteOptions} />
           )}
           <ThemeToggle />
           <AppMenu />

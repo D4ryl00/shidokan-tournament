@@ -133,8 +133,8 @@ export function CompetitionSettingsPage() {
         ))}
       </Group>
       <SectionCard id="competition" title={HELP['reglages.competition'].title} help="reglages.competition">
-        <SimpleGrid cols={{ base: 1, sm: 3 }}>
-          <TextInput label="Nom" value={info.name} onChange={(e) => setInfo({ ...info, name: e.currentTarget.value })} />
+        <SimpleGrid cols={{ base: 1, sm: 2 }}>
+          <TextInput label="Nom" style={{ gridColumn: '1 / -1' }} value={info.name} onChange={(e) => setInfo({ ...info, name: e.currentTarget.value })} />
           <DateField label="Date" value={info.date} onChange={(v) => v && setInfo({ ...info, date: v })} />
           <TextInput label="Lieu" value={info.location} onChange={(e) => setInfo({ ...info, location: e.currentTarget.value })} />
         </SimpleGrid>

@@ -805,7 +805,8 @@ export interface Management { managedHere: boolean; ownerName: string | null; ow
 export interface ServerCompetition { id: string; name: string; date: string; managedHere: boolean; ownerName: string | null; clubEntryStatus: 'closed' | 'open' | 'frozen' }
 export const useManagement = (id: string) =>
   useQuery({ queryKey: ['management', id], queryFn: () => api<Management>('GET', `/api/competitions/${id}/management`) });
-export const useSyncSettings = () => useQuery({ queryKey: ['sync-settings'], queryFn: () => api<{ url: string | null; hasToken: boolean }>('GET', '/api/sync/settings') });
+/** Liaison du PC au serveur (rôle local seulement : la route n'existe pas en ligne). */
+export const useSyncSettings = (enabled = true) => useQuery({ queryKey: ['sync-settings'], enabled, queryFn: () => api<{ url: string | null; hasToken: boolean }>('GET', '/api/sync/settings') });
 export function useUpdateSyncSettings() {
   const qc = useQueryClient();
   return useMutation({

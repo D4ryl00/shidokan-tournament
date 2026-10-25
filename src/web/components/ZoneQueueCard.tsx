@@ -64,7 +64,7 @@ function Next({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem) =
         <Text fw={700} className="num" w={32} ta="right" style={{ flexShrink: 0 }}>{q.number}</Text>
         <Stack gap={0} style={{ minWidth: 0 }}>
           {kata ? (
-            <Text size="sm" fw={600}>{kataTitle(q)} <Text span size="sm" c="dimmed" fw={400}>· {plural(q.katakas ?? 0, 'kataka')}</Text></Text>
+            <Text size="sm" fw={600}>{kataTitle(q)} <Text span size="sm" c="dimmed" fw={400} style={{ whiteSpace: 'nowrap' }}>· {plural(q.katakas ?? 0, 'kataka')}</Text></Text>
           ) : (
             <Text size="sm" fw={600}>{q.a} <Text span c="dimmed" fw={400}>contre</Text> {q.b}</Text>
           )}

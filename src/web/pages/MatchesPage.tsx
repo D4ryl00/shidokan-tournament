@@ -16,6 +16,7 @@ import { KataScoring } from '../components/KataScoring.js';
 import { HelpText, SectionHeader } from '../components/Help.js';
 import { CategoryZoneBadge } from '../components/CategoryZoneBadge.js';
 import { ZoneQueueCard } from '../components/ZoneQueueCard.js';
+import { EmptyState } from '../components/ui/EmptyState.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { ResultDialog } from '../components/ResultDialog.js';
 import { TieBreakDialog } from '../components/TieBreakDialog.js';
@@ -105,6 +106,7 @@ export function MatchesPage() {
 
   return (
     <Stack gap="md">
+      {(!zoneOnly || waves.length > 0) && (
       <Card withBorder padding="sm" data-testid="session-bar">
         <Group justify="space-between" gap="sm">
           <Group gap="md">
@@ -116,11 +118,14 @@ export function MatchesPage() {
             )}
             {!zoneOnly && ready && (waves.length === 0 || waveId) && <WaveLaunchPanel competitionId={id} waveId={waveId} />}
           </Group>
-          <Button variant="default" size="xs" data-testid="categories-toggle" aria-expanded={listOpen} onClick={() => setCategoriesOpen(!listOpen)}>
-            {listOpen ? 'Masquer les catégories' : `Catégories (${playable.length})`}
-          </Button>
+          {!zoneOnly && (
+            <Button variant="default" size="xs" data-testid="categories-toggle" aria-expanded={listOpen} onClick={() => setCategoriesOpen(!listOpen)}>
+              {listOpen ? 'Masquer les catégories' : `Catégories (${playable.length})`}
+            </Button>
+          )}
         </Group>
       </Card>
+      )}
       {zoneOnly && !imposed && zones.length > 0 && !zones.some((z) => z.id === zoneOnly) && (
         <Alert color="orange">La zone de ce poste n’existe plus : choisissez un autre poste en haut de l’écran.</Alert>
       )}
@@ -160,7 +165,10 @@ export function MatchesPage() {
         <Grid.Col span={listOpen ? { base: 12, md: 8, xl: 9 } : 12}>
         <Stack gap="md">
           <HelpText topic="combats.zone" />
-          {zoneGrid}
+          {shownZones.length === 0 && (schedule?.unassigned.length ?? 0) === 0 ? (
+            <EmptyState title="Aucun combat à appeler"
+              text={playable.length === 0 ? 'Les combats apparaissent ici dès que des catégories ont au moins deux combattants (onglet Tableaux).' : 'Aucune zone de combat : ajoutez-en dans les Réglages.'} />
+          ) : zoneGrid}
 
           {selected && res && (
             <Card withBorder padding="md" data-testid="selected-category">

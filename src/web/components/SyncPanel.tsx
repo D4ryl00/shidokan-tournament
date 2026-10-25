@@ -96,7 +96,7 @@ function Confirmed({ label, text, onConfirm, loading, testId, color }: { label: 
 export function SyncPanel({ competitionId }: { competitionId: string }) {
   const { data: me } = useAuthMe();
   const { data: m } = useManagement(competitionId);
-  const { data: settings } = useSyncSettings();
+  const { data: settings } = useSyncSettings(me?.role === 'local');
   const pull = usePull();
   const copy = useSyncCopy(competitionId);
   const back = useSyncReturn(competitionId);
@@ -270,7 +270,8 @@ export function ImportCompetitionButton() {
 
 /** « Récupérer depuis le serveur » (PC relié) : la liste des compétitions en ligne. */
 export function ServerCompetitionsButton() {
-  const { data: settings } = useSyncSettings();
+  const { data: me } = useAuthMe();
+  const { data: settings } = useSyncSettings(me?.role === 'local');
   const [open, setOpen] = useState(false);
   const list = useServerCompetitions(open);
   const pull = usePull();
@@ -313,7 +314,7 @@ export function ServerCompetitionsButton() {
 
 /** Réglages de l'application → Synchronisation : sur le PC, le serveur relié ; sur le serveur, les jetons. */
 export function SyncSettingsCard({ role }: { role: 'serveur' | 'local' }) {
-  const settings = useSyncSettings();
+  const settings = useSyncSettings(role === 'local');
   const update = useUpdateSyncSettings();
   const unlink = useUnlinkSync();
   const tokens = useSyncTokens(role === 'serveur');
