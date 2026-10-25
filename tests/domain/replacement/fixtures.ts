@@ -28,5 +28,5 @@ export function makeState(members: Member[], over: Partial<State> = {}): State {
     }
     m.categoryId = cat.id;
   }
-  return { grid: ffkDefaultGrid(), settings: defaultSettings(), refused: [], waves: [], closedEntries: [], ...over, categories, members };
+  return { grid: ffkDefaultGrid(), settings: defaultSettings(), refused: [], waves: [], closedEntries: [], setAside: [], ...over, categories, members };
 }

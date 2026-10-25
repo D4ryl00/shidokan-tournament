@@ -41,7 +41,7 @@ const insertResult = (d: AppDb) =>
 test('versionedTables : liste exacte', () => {
   expect(versionedTables(freshDb())).toEqual([
     'age_bands', 'age_links', 'categories', 'closed_categories', 'club_directory', 'club_invitations', 'clubs', 'competitions', 'fighters', 'frozen_passages', 'kata_scores',
-    'mail_log', 'match_results', 'recasements', 'received_copies', 'refusals', 'registrations', 'tie_breaks', 'wave_launches', 'waves', 'weight_classes', 'zone_entries', 'zone_journal', 'zones',
+    'mail_log', 'match_results', 'recasements', 'received_copies', 'refusals', 'registrations', 'set_aside_cases', 'tie_breaks', 'wave_launches', 'waves', 'weight_classes', 'zone_entries', 'zone_journal', 'zones',
   ]);
 });
 

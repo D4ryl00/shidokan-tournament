@@ -422,6 +422,21 @@ export const refusals = sqliteTable(
   (t) => [primaryKey({ columns: [t.competitionId, t.proposalId] })],
 );
 
+/** Cartes de Réaffectation mises de côté (`case_id` = identifiant du cas), avec une note facultative. */
+export const setAsideCases = sqliteTable(
+  'set_aside_cases',
+  {
+    competitionId: text('competition_id')
+      .notNull()
+      .references(() => competitions.id, { onDelete: 'cascade' }),
+    caseId: text('case_id').notNull(),
+    note: text('note').notNull().default(''),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+    ...rowMeta(),
+  },
+  (t) => [primaryKey({ columns: [t.competitionId, t.caseId] })],
+);
+
 /** Résultats saisis (avec les deux combattants du combat au moment de la saisie). */
 export const matchResults = sqliteTable(
   'match_results',

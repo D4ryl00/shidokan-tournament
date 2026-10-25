@@ -73,6 +73,12 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
     for (const c of replacement?.cases ?? []) if (c.categoryId) out.set(c.categoryId, (out.get(c.categoryId) ?? 0) + 1);
     return out;
   }, [replacement]);
+  // Dont mises de côté.
+  const asideByCategory = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const c of replacement?.cases ?? []) if (c.categoryId && replacement?.setAside[c.id]) out.set(c.categoryId, (out.get(c.categoryId) ?? 0) + 1);
+    return out;
+  }, [replacement]);
   const activeCount = (c: Category) => activeEntrantCount(c);
   const allAbsent = (c: Category) => c.registrationIds.length > 0 && activeCount(c) === 0;
   const inScope = (c: Category) => waves.length === 0 || scope === 'all' || (scope === 'waiting' ? c.waveId === null : c.waveId === waveId);
@@ -144,7 +150,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
                         {casesByCategory.get(c.id) && (
                           <Badge size="sm" variant="outline" color="orange" data-testid="category-cases" component={Link} to={`/competitions/${id}/reaffectation`}
                             onClick={(e: React.MouseEvent) => e.stopPropagation()} style={{ cursor: 'pointer' }} title="Ouvrir la réaffectation">
-                            {casesByCategory.get(c.id)} cas à traiter
+                            {casesByCategory.get(c.id)} cas à traiter{asideByCategory.get(c.id) ? ` (dont ${asideByCategory.get(c.id)} de côté)` : ''}
                           </Badge>
                         )}
                         {c.stale && <StatusBadge tone="warn" size="sm">Inscrits modifiés</StatusBadge>}

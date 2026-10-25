@@ -60,6 +60,8 @@ export interface State {
   refused: string[];
   /** Cases fermées du tableau « Catégories ouvertes » (`entryKey`) : leurs inscrits sont des cas, et jamais des cibles. */
   closedEntries: string[];
+  /** Cartes mises de côté (identifiants de cas) : hors des cas à traiter et du classement automatique. */
+  setAside: string[];
 }
 
 export type CaseKind = 'closed' | 'alone' | 'weight_out' | 'weight_gap' | 'return';

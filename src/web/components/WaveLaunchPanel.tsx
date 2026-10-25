@@ -1,7 +1,7 @@
 import { Alert, Button, Checkbox, Group, List, Modal, SegmentedControl, Stack, Table, Text } from '@mantine/core';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { useLaunch, useLaunchStatus, useNumberPending, useNumberPreview, useReopen, useZones, type RenumberMode, type WaveState } from '../api.js';
+import { useLaunch, useLaunchStatus, useNumberPending, useNumberPreview, useReopen, useReplacement, useZones, type RenumberMode, type WaveState } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { StatusBadge, type Tone } from './ui/StatusBadge.js';
 import { plural } from '../../domain/plural.js';
@@ -24,6 +24,8 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
   const { data: status } = useLaunchStatus(competitionId, waveId);
   const { data: preview } = useLaunchStatus(competitionId, waveId, restart, dialog === 'launch');
   const { data: zones = [] } = useZones(competitionId);
+  const { data: replacement } = useReplacement(competitionId, waveId, dialog === 'launch');
+  const asideCount = replacement?.summary.setAside ?? 0;
   const launch = useLaunch(competitionId);
   const reopen = useReopen(competitionId);
   const number = useNumberPending(competitionId);
@@ -81,6 +83,9 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
                 <Alert color="red" title="Impossible de figer" data-testid="launch-blocking">
                   <List size="sm">{preview.blocking.map((b) => <List.Item key={b}>{b}</List.Item>)}</List>
                 </Alert>
+              )}
+              {asideCount > 0 && (
+                <Alert color="orange" data-testid="launch-set-aside">{plural(asideCount, 'carte mise de côté', 'cartes mises de côté')} en Réaffectation pour cette session.</Alert>
               )}
               <Checkbox label="Reprendre les numéros à 1 (nouveau jour)" checked={restart} onChange={(e) => setRestart(e.currentTarget.checked)} data-testid="launch-restart" />
               {preview && (

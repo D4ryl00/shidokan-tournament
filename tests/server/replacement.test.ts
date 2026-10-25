@@ -660,3 +660,29 @@ test('ne combat pas refusé hors catégorie fermée', async () => {
   expect(res.statusCode).toBe(409);
   expect(res.body).toContain('Ce combattant n’est plus dans une catégorie fermée : rechargez.');
 });
+
+test('mise de côté : compteurs, reprise, disparition quand le cas est réglé', async () => {
+  const a = await reg();
+  const caseId = `alone:${a.id}`;
+  expect((await call('POST', '/replacement/set-aside', { caseId, note: 'on attend le coach' })).statusCode).toBe(200);
+  let r = (await call('GET', '/replacement')).json() as Replacement & { setAside: Record<string, { note: string }> };
+  expect(r.summary.cases).toBe(0);
+  expect(r.summary.setAside).toBe(1);
+  expect(r.setAside[caseId]!.note).toBe('on attend le coach');
+  expect((await call('POST', '/replacement/resume', { caseId })).statusCode).toBe(200);
+  expect((await replacement()).summary.cases).toBe(1);
+  // Remise de côté, puis le cas disparaît (un adversaire arrive) et revient : il revient dans la liste principale.
+  await call('POST', '/replacement/set-aside', { caseId });
+  const b = await reg();
+  expect((await replacement()).cases).toEqual([]);
+  expect((await app.inject({ method: 'DELETE', url: `${base}/registrations/${b.id}` })).statusCode).toBe(204);
+  r = (await call('GET', '/replacement')).json() as Replacement & { setAside: Record<string, { note: string }> };
+  expect(r.summary.cases).toBe(1);
+  expect(r.summary.setAside).toBe(0);
+});
+
+test("mise de côté d'une carte qui n'existe plus : 409", async () => {
+  const res = await call('POST', '/replacement/set-aside', { caseId: 'alone:inconnu' });
+  expect(res.statusCode).toBe(409);
+  expect(res.body).toContain('Cette carte n’existe plus : rechargez.');
+});

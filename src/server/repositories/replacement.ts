@@ -25,7 +25,7 @@ import {
 } from '../../domain/replacement/index.js';
 import type { AppDb } from '../db/client.js';
 import { withoutRowMeta } from '../db/row-versions.js';
-import { categories, clubs, competitions, fighters, recasements, refusals, registrations, waves } from '../db/schema.js';
+import { categories, clubs, competitions, fighters, recasements, refusals, registrations, setAsideCases, waves } from '../db/schema.js';
 import { listWaves } from './waves.js';
 import { launchedWaveKeys } from './launch-state.js';
 import type { Wave } from '../../domain/waves.js';
@@ -93,6 +93,7 @@ export async function loadState(db: AppDb, competitionId: string): Promise<State
     waves: await listWaves(db, competitionId),
     refused: db.select().from(refusals).where(eq(refusals.competitionId, competitionId)).all().map((r) => r.proposalId),
     closedEntries: [...closedSet(db, competitionId)],
+    setAside: [],
   };
   // Vague lancée : fermée au recasement (vague implicite '' quand il n'y a pas de vague).
   const launched = launchedWaveKeys(db, competitionId);
@@ -103,7 +104,37 @@ export async function loadState(db: AppDb, competitionId: string): Promise<State
       c.frozen = key !== null && key !== undefined && launched.has(key);
     }
   }
+  // Cartes mises de côté : seulement celles dont le cas existe encore ; les autres sont oubliées (un cas qui revient revient en tête).
+  const marks = db.select().from(setAsideCases).where(eq(setAsideCases.competitionId, competitionId)).all();
+  if (marks.length) {
+    const existing = new Set(detectCases(state).map((c) => c.id));
+    const gone = marks.filter((m) => !existing.has(m.caseId)).map((m) => m.caseId);
+    if (gone.length) db.delete(setAsideCases).where(and(eq(setAsideCases.competitionId, competitionId), inArray(setAsideCases.caseId, gone))).run();
+    state.setAside = marks.filter((m) => existing.has(m.caseId)).map((m) => m.caseId);
+  }
   return state;
+}
+
+/** Cartes mises de côté de la compétition (encore existantes), avec leur note. */
+export function setAsideNotes(db: AppDb, competitionId: string, caseIds: string[]): Record<string, { note: string; createdAt: string }> {
+  const wanted = new Set(caseIds);
+  return Object.fromEntries(
+    db.select().from(setAsideCases).where(eq(setAsideCases.competitionId, competitionId)).all()
+      .filter((m) => wanted.has(m.caseId))
+      .map((m) => [m.caseId, { note: m.note, createdAt: m.createdAt }]),
+  );
+}
+
+/** Met une carte de côté (avec une note facultative) : elle ne compte plus dans les cas à traiter. */
+export async function setAsideCase(db: AppDb, competitionId: string, caseId: string, note: string): Promise<void> {
+  const state = await loadState(db, competitionId);
+  if (!detectCases(state).some((c) => c.id === caseId)) throw new StaleProposalError('Cette carte n’existe plus : rechargez.');
+  db.insert(setAsideCases).values({ competitionId, caseId, note: note.trim() }).onConflictDoUpdate({ target: [setAsideCases.competitionId, setAsideCases.caseId], set: { note: note.trim() } }).run();
+}
+
+/** Reprend une carte mise de côté. */
+export async function resumeCase(db: AppDb, competitionId: string, caseId: string): Promise<void> {
+  db.delete(setAsideCases).where(and(eq(setAsideCases.competitionId, competitionId), eq(setAsideCases.caseId, caseId))).run();
 }
 
 export function allProposals(state: State, cases = detectCases(state)): Map<string, Proposal[]> {

@@ -58,3 +58,22 @@ test('réaffectation : une catégorie fermée, « Ne combat pas », puis annuler
   await page.getByTestId('recasement-undo-confirm').click();
   await expect(cards).toHaveCount(2);
 });
+
+test('réaffectation : mettre une carte de côté puis la reprendre', async ({ page }) => {
+  const id = await createCompetition(page, 'Coupe de côté');
+  await register(page, id);
+  await page.goto(`/competitions/${id}/reaffectation`);
+  const cards = page.getByTestId('replacement-case');
+  await expect(cards).toHaveCount(1);
+  await cards.first().getByTestId('case-set-aside').click();
+  await page.getByTestId('case-set-aside-note').fill('on attend le coach');
+  await page.getByTestId('case-set-aside-confirm').click();
+  await expect(cards).toHaveCount(0);
+  const section = page.getByTestId('set-aside-section');
+  await expect(section).toContainText('Mises de côté (1)');
+  await page.getByTestId('set-aside-toggle').click();
+  await expect(page.getByTestId('set-aside-row')).toContainText('on attend le coach');
+  await page.getByTestId('case-resume').click();
+  await expect(cards).toHaveCount(1);
+  await expect(section).toHaveCount(0);
+});

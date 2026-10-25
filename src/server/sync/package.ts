@@ -30,7 +30,7 @@ export interface SyncPackage {
 /** Tables d'une compétition qui voyagent, dans un ordre compatible avec les clés étrangères (la compétition d'abord). */
 export const PACKAGE_TABLES = [
   'competitions', 'age_bands', 'weight_classes', 'age_links', 'closed_categories', 'waves', 'zones', 'clubs', 'fighters', 'registrations', 'categories',
-  'wave_launches', 'frozen_passages', 'recasements', 'refusals', 'match_results', 'kata_scores', 'tie_breaks',
+  'wave_launches', 'frozen_passages', 'recasements', 'refusals', 'set_aside_cases', 'match_results', 'kata_scores', 'tie_breaks',
 ];
 /** Tables d'une compétition qui restent sur l'installation (liens et mails envoyés, fichiers importés, copies reçues, journaux de zone). */
 export const LOCAL_ONLY_TABLES = ['uploads', 'club_invitations', 'mail_log', 'received_copies', 'zone_journal', 'zone_entries'];

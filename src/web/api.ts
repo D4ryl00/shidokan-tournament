@@ -358,7 +358,9 @@ export interface ReplacementData {
   moveTargets: Record<string, { categoryId: string; warnings: string[] }[]>;
   /** Les propositions refusées suivent les autres, marquées `refused`. */
   proposals: Record<string, (Proposal & { refused?: true })[]>;
-  summary: { present: number; absent: number; unknown: number; cases: number; closed: number; alone: number; withoutProposal: number; readyCategories: number; startedCategories: number };
+  /** Cartes mises de côté (de la session affichée), avec leur note. */
+  setAside: Record<string, { note: string; createdAt: string }>;
+  summary: { present: number; absent: number; unknown: number; cases: number; setAside: number; closed: number; alone: number; withoutProposal: number; readyCategories: number; startedCategories: number };
   fingerprint: string;
   recasements: RecasementEntry[];
 }
@@ -395,6 +397,8 @@ export const useUnrefuseProposal = (id: string) => useReplacementAction<{ propos
 export const useBulkReplacement = (id: string) => useReplacementAction<{ mode: 'simple' | 'all'; fingerprint: string; waveId?: string }>(id, 'bulk');
 export const useUndoRecasement = (id: string) => useReplacementAction<{ recasementId: string }>(id, 'undo');
 export const useManualMove = (id: string) => useReplacementAction<{ registrationId: string; categoryId: string }>(id, 'move');
+export const useSetAsideCase = (id: string) => useReplacementAction<{ caseId: string; note?: string }>(id, 'set-aside');
+export const useResumeCase = (id: string) => useReplacementAction<{ caseId: string }>(id, 'resume');
 export const useWithdrawRegistration = (id: string) => useReplacementAction<{ registrationId: string; fingerprint: string }>(id, 'withdraw');
 
 // --- Jour J (étape 6) ---

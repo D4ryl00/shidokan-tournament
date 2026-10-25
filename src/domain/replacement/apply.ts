@@ -15,11 +15,11 @@ export interface BulkStep {
 
 /**
  * Prochaine étape d'un recasement en masse : meilleure proposition sans changement de vague (ni du combattant, ni entraîné), ni « split », du premier cas traitable
- * de la vague (`null` : toutes), hors inscriptions déjà déplacées. Un changement de vague se valide un par un.
+ * de la vague (`null` : toutes), hors inscriptions déjà déplacées et cartes mises de côté. Un changement de vague se valide un par un.
  */
 export function nextBulkStep(state: State, mode: BulkMode, moved: Set<string>, waveId: string | null = null): Proposal | null {
   for (const c of casesOfWave(state, detectCases(state), waveId)) {
-    if (moved.has(c.registrationId)) continue;
+    if (moved.has(c.registrationId) || state.setAside.includes(c.id)) continue;
     // Un « split » déplace des combattants qui n'étaient pas des cas : jamais en masse.
     const p = proposalsFor(state, c).find((x) => !x.waveChange && x.waveShifts.length === 0 && x.registrationId === c.registrationId && (mode === 'all' || !x.manual));
     if (p) return p;
@@ -54,6 +54,7 @@ export function stateFingerprint(state: State): string {
     w: [...state.waves].sort((a, b) => a.id.localeCompare(b.id)).map((w) => [w.id, w.order, w.rules]),
     r: [...state.refused].sort(),
     x: [...state.closedEntries].sort(),
+    a: [...state.setAside].sort(),
     s: state.settings,
     g: state.grid,
   });

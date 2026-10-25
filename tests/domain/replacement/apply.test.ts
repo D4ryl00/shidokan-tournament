@@ -113,3 +113,10 @@ test('clé d’une catégorie recalculée sur les membres présents', () => {
   recompute(s, host);
   expect(host.key.weightClassIds).toEqual(['cadet:F:-47']);
 });
+
+test('classement automatique : ignore les cartes mises de côté', () => {
+  const a = member({ weightClassId: 'cadet:F:-47' });
+  const s = makeState([a, member({ weightClassId: 'cadet:F:-54' }), member({ weightClassId: 'cadet:F:-54' })]);
+  expect(bulkPlan(s, 'all').steps.map((x) => x.proposal.caseId)).toEqual([`alone:${a.registrationId}`]);
+  expect(bulkPlan({ ...s, setAside: [`alone:${a.registrationId}`] }, 'all').steps).toEqual([]);
+});

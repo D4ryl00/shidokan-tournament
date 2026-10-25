@@ -31,6 +31,7 @@ export type HelpTopicId =
   | 'import-ffk.mises-a-jour'
   | 'import-ffk.creations'
   | 'recasement.valides'
+  | 'recasement.de-cote'
   | 'combats.categories'
   | 'combats.zone'
   | 'combats.resultat'
@@ -362,6 +363,15 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Avec des sessions : choisissez la session en haut de l’écran (la même que pour la pesée). Les cas, les compteurs et les validations automatiques ne portent que sur ses catégories.',
       'Le badge « ↪ change de session : Matin → Dimanche » signale une proposition qui ferait passer le combattant dans une catégorie d’une autre session. Elle n’est jamais validée automatiquement : validez-la une par une. Le combattant repasse alors « non pesé » dans sa nouvelle session, à pointer à sa pesée ; son poids déjà relevé est gardé.',
       'Le badge « ↪ Emmène N autres combattants dans une autre session » signale un déplacement qui fait changer de session une catégorie entière (ses derniers combattants d’origine la quittent, par exemple) : mêmes règles, validation une par une, les combattants emmenés repassent « non pesés ».',
+    ],
+  },
+  'recasement.de-cote': {
+    title: 'Mises de côté',
+    short: 'Une carte mise de côté ne compte plus dans les cas à traiter ni dans le classement automatique : reprenez-la quand vous pouvez trancher.',
+    details: [
+      'Cliquez une ligne pour voir la carte complète : vous pouvez la traiter sans la reprendre.',
+      'Si son problème disparaît (adversaire arrivé, poids corrigé), la carte disparaît aussi ; s’il revient, elle revient dans la liste principale.',
+      'Le lancement de la session rappelle les cartes mises de côté.',
     ],
   },
   'recasement.valides': {

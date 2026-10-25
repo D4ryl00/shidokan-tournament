@@ -22,6 +22,9 @@ import {
   setWeighIn,
   undoRecasement,
   withdrawRegistration,
+  setAsideCase,
+  resumeCase,
+  setAsideNotes,
   weighInList, fighterPresence } from '../repositories/replacement.js';
 
 type P = { Params: { id: string } };
@@ -81,19 +84,24 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
         return [c.id, targets];
       }),
     );
+    // Les compteurs ne comptent que les cartes à traiter (pas celles mises de côté).
+    const aside = new Set(state.setAside);
+    const active = cases.filter((c) => !aside.has(c.id));
     return {
       cases,
       fighters,
       moveTargets,
       proposals: Object.fromEntries(shown),
+      setAside: setAsideNotes(db, req.params.id, cases.filter((c) => aside.has(c.id)).map((c) => c.id)),
       summary: {
         present: presence.filter((p) => p === 'present').length,
         absent: presence.filter((p) => p === 'absent').length,
         unknown: presence.filter((p) => p === 'unknown').length,
-        cases: cases.length,
-        closed: cases.filter((c) => c.kind === 'closed').length,
-        alone: cases.filter((c) => c.kind === 'alone').length,
-        withoutProposal: cases.filter((c) => (proposals.get(c.id) ?? []).length === 0).length,
+        cases: active.length,
+        setAside: cases.length - active.length,
+        closed: active.filter((c) => c.kind === 'closed').length,
+        alone: active.filter((c) => c.kind === 'alone').length,
+        withoutProposal: active.filter((c) => (proposals.get(c.id) ?? []).length === 0).length,
         readyCategories: waveCategories.filter((c) => c.status === 'ready').length,
         startedCategories: waveCategories.filter((c) => c.status === 'started' || c.status === 'finished').length,
       },
@@ -139,6 +147,18 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
   app.post<P>('/api/competitions/:id/replacement/unrefuse', async (req) => {
     const { proposalId } = z.object({ proposalId: z.string() }).parse(req.body);
     await unrefuseProposal(db, req.params.id, proposalId);
+    return { ok: true };
+  });
+
+  app.post<P>('/api/competitions/:id/replacement/set-aside', async (req) => {
+    const { caseId, note } = z.object({ caseId: z.string(), note: z.string().max(80).optional() }).strict().parse(req.body);
+    await setAsideCase(db, req.params.id, caseId, note ?? '');
+    return { ok: true };
+  });
+
+  app.post<P>('/api/competitions/:id/replacement/resume', async (req) => {
+    const { caseId } = z.object({ caseId: z.string() }).strict().parse(req.body);
+    await resumeCase(db, req.params.id, caseId);
     return { ok: true };
   });
 

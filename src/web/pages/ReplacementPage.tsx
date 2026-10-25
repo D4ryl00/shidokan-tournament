@@ -1,8 +1,8 @@
-import { Alert, Box, Button, Card, Chip, Group, Loader, Modal, SegmentedControl, Select, SimpleGrid, Stack, Switch, Table, Text } from '@mantine/core';
+import { Alert, Box, Button, Card, Chip, Collapse, Group, Loader, Modal, SegmentedControl, Select, SimpleGrid, Stack, Switch, Table, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router';
-import type { CaseKind, Proposal, ProposalType } from '../../domain/replacement/index.js';
+import type { Case, CaseKind, Proposal, ProposalType } from '../../domain/replacement/index.js';
 import type { Wave } from '../../domain/waves.js';
 import {
   useApplyProposal,
@@ -17,6 +17,8 @@ import {
   useReplacement,
   useUndoRecasement,
   useWithdrawRegistration,
+  useSetAsideCase,
+  useResumeCase,
   type CaseFighter,
 } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
@@ -24,6 +26,7 @@ import { EmptyState } from '../components/ui/EmptyState.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { HELP } from '../help.js';
+import { HelpButton } from '../components/Help.js';
 import { ProposalPreview } from '../components/ProposalPreview.js';
 import { PROPOSAL_TYPES, ReplacementBadge } from '../components/ReplacementBadge.js';
 import { ageBandLabel, disciplineLabel, prefsLabel, rulesetShort, weightLabel } from '../labels.js';
@@ -37,6 +40,7 @@ type Dialog =
   | { kind: 'undo'; recasementId: string; label: string }
   | { kind: 'move'; registrationId: string; categoryId: string }
   | { kind: 'withdraw'; registrationId: string; categoryLabel: string }
+  | { kind: 'set-aside'; caseId: string }
   | null;
 
 const CASE_KINDS: Record<CaseKind, string> = { closed: 'Catégorie fermée', alone: 'Sans adversaire', weight_out: 'Poids hors catégorie', weight_gap: 'Écart de poids', return: 'Retour possible' };
@@ -117,6 +121,11 @@ export function ReplacementPage() {
   const undo = useUndoRecasement(id);
   const move = useManualMove(id);
   const withdraw = useWithdrawRegistration(id);
+  const setAside = useSetAsideCase(id);
+  const resume = useResumeCase(id);
+  const [note, setNote] = useState('');
+  const [asideOpen, setAsideOpen] = useState(false);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [dialog, setDialog] = useState<Dialog>(null);
   const [moveTarget, setMoveTarget] = useState<Record<string, string | null>>({});
   const [allTargets, setAllTargets] = useState<Record<string, boolean>>({});
@@ -170,14 +179,129 @@ export function ReplacementPage() {
     const others = targets.filter((t) => t.warnings.length > 0).map(option).filter((o) => o !== null);
     return [{ group: 'Cohérentes avec les réglages', items: ok }, { group: 'Règles enfreintes (avertissement)', items: others }].filter((g) => g.items.length > 0);
   };
+  const activeCases = data.cases.filter((c) => !data.setAside[c.id]);
+  const asideCases = data.cases.filter((c) => data.setAside[c.id]);
+  /** Une carte de cas : le combattant, ses propositions, le déplacement manuel (et « Ne combat pas » pour une catégorie fermée). */
+  const caseCard = (c: Case) => {
+    const proposals = data.proposals[c.id] ?? [];
+    const open = proposals.filter((p) => !p.refused);
+    return (
+      <Card key={c.id} withBorder data-testid="replacement-case" padding="md">
+        <Group justify="space-between" align="flex-start" mb="sm" wrap="nowrap">
+          <div style={{ minWidth: 0 }}>
+            <Text fw={700} size="lg" data-testid="case-name">{name(c.registrationId)}</Text>
+            <FighterDetail f={data.fighters[c.registrationId]} grid={grid} />
+            <Text size="sm" c="dimmed">
+              {c.detail}
+              {c.categoryId && categories.find((x) => x.id === c.categoryId) ? ` · catégorie actuelle : ${categories.find((x) => x.id === c.categoryId)!.label}` : ''}
+            </Text>
+          </div>
+          <Stack gap={4} align="flex-end">
+            <StatusBadge tone={c.kind === 'return' ? 'neutral' : 'warn'} size="lg">{CASE_KINDS[c.kind]}</StatusBadge>
+            {!data.setAside[c.id] && (
+              <Button size="compact-xs" variant="subtle" color="gray" data-testid="case-set-aside" onClick={() => { setNote(''); setDialog({ kind: 'set-aside', caseId: c.id }); }}>
+                Mettre de côté
+              </Button>
+            )}
+          </Stack>
+        </Group>
+        <Stack gap="xs">
+          {open.length === 0 && <Text size="sm" c="red.6" fw={500}>{c.kind === 'closed' ? 'Aucune solution automatique : déplacer manuellement ou choisir « Ne combat pas ».' : 'Aucune solution automatique : déplacer manuellement ou laisser sans adversaire.'}</Text>}
+          {proposals.map((p) => {
+            if (p.refused) {
+              return (
+                <Group key={p.id} justify="space-between" wrap="nowrap" data-testid="replacement-proposal-refused" style={{ opacity: 0.55 }}>
+                  <Group gap="xs" wrap="nowrap">
+                    <ReplacementBadge type={p.type} state="refused" gapKg={p.checks.weightGapKg} />
+                    <Text size="sm" td="line-through">{p.reason}</Text>
+                    <Text size="xs" c="dimmed">refusée</Text>
+                  </Group>
+                  <Button size="xs" variant="subtle" data-testid="proposal-unrefuse" onClick={() => unrefuse.mutate({ proposalId: p.id })}>Rétablir</Button>
+                </Group>
+              );
+            }
+            return (
+              <Group key={p.id} justify="space-between" wrap="nowrap" data-testid="replacement-proposal" p="xs"
+                style={{ border: '1px solid var(--sk-line)', borderRadius: 'var(--mantine-radius-md)', background: 'var(--sk-bg)' }}>
+                <Group gap="xs" wrap="nowrap">
+                  <Box style={{ flexShrink: 0 }}><ReplacementBadge type={p.type} state="proposed" gapKg={'newKey' in p.target ? undefined : p.checks.weightGapKg} /></Box>
+                  <div>
+                    <Text size="sm">{p.reason}</Text>
+                    <Text size="xs" c="dimmed">
+                      {'newKey' in p.target ? 'Catégorie de son poids réel (encore vide)' : PROPOSAL_TYPES[p.type].title}
+                      {!('newKey' in p.target) && (p.type === 'A' || p.type === 'B' || p.checks.weightGapKg > 0)
+                        ? ` · écart de poids ${kg(p.checks.weightGapKg)} kg entre le plus léger et le plus lourd (max ${kg(p.checks.threshold)} kg)`
+                        : ''}
+                      {p.checks.ageMove !== 'same' ? ' · âge : une tranche au-dessus' : ''}
+                      {p.checks.mixedSex ? ' · mixte' : ''}
+                      {p.manual ? ' · validation manuelle' : ' · cas simple'}
+                    </Text>
+                  </div>
+                  {p.preApproved && <StatusBadge tone="ok" size="sm">Pré-accord coach</StatusBadge>}
+                  {p.waveChange && (
+                    <StatusBadge tone="accent" size="sm" data-testid="wave-change">
+                      ↪ Change de session : {waveName(p.waveChange.from)} → {waveName(p.waveChange.to)}
+                    </StatusBadge>
+                  )}
+                  {p.waveShifts.length > 0 && (
+                    <StatusBadge tone="accent" size="sm" data-testid="wave-shift">
+                      ↪ Emmène {plural(p.waveShifts.length, 'autre combattant', 'autres combattants')} dans une autre session
+                    </StatusBadge>
+                  )}
+                </Group>
+                <Group gap={4} wrap="nowrap">
+                  <Button size="xs" variant="default" data-testid="proposal-preview" onClick={() => openProposal(p, false)}>Aperçu</Button>
+                  <Button size="xs" data-testid="proposal-apply" onClick={() => openProposal(p, true)}>Valider</Button>
+                  <Button size="xs" variant="subtle" color="red" data-testid="proposal-refuse" onClick={() => refuse.mutate({ proposalId: p.id })}>Refuser</Button>
+                </Group>
+              </Group>
+            );
+          })}
+          <Group gap="xs">
+            <Select size="xs" w={420} placeholder="Déplacer manuellement vers…" searchable clearable data-testid="manual-move-select"
+              nothingFoundMessage={allTargets[c.id] ? 'Aucune catégorie' : 'Aucune catégorie compatible : cochez « Toutes les catégories »'}
+              data={moveOptions(c.id)}
+              value={moveTarget[c.id] ?? null} onChange={(v) => setMoveTarget({ ...moveTarget, [c.id]: v })} />
+            <Switch size="xs" label="Toutes les catégories (règles enfreintes)" data-testid="manual-move-all" checked={allTargets[c.id] ?? false}
+              onChange={(e) => {
+                const on = e.currentTarget.checked;
+                setAllTargets({ ...allTargets, [c.id]: on });
+                if (!on && moveTarget[c.id] && !data.moveTargets[c.id]?.some((t) => t.categoryId === moveTarget[c.id] && t.warnings.length === 0)) setMoveTarget({ ...moveTarget, [c.id]: null });
+              }} />
+            <Button size="xs" variant="default" disabled={!moveTarget[c.id]} data-testid="manual-move"
+              onClick={() => {
+                setDialog({ kind: 'move', registrationId: c.registrationId, categoryId: moveTarget[c.id]! });
+                preview.mutate({ move: { registrationId: c.registrationId, categoryId: moveTarget[c.id]! } });
+              }}>
+              Déplacer…
+            </Button>
+          </Group>
+          {c.kind === 'closed' && (
+            <Group gap="xs">
+              <Button size="xs" variant="default" data-testid="case-withdraw"
+                onClick={() => setDialog({ kind: 'withdraw', registrationId: c.registrationId, categoryLabel: categories.find((x) => x.id === c.categoryId)?.label ?? 'sa catégorie' })}>
+                Ne combat pas
+              </Button>
+            </Group>
+          )}
+          {open.some((p) => 'newKey' in p.target) && (
+            <Text size="xs" c="dimmed" data-testid="manual-move-new-hint">
+              Le déplacement manuel ne liste que les catégories qui existent déjà : pour l’envoyer dans une catégorie encore vide, utilisez la proposition ci-dessus.
+            </Text>
+          )}
+        </Stack>
+      </Card>
+    );
+  };
   return (
     <Stack gap="md">
       {waveSelector}
-      <SimpleGrid cols={{ base: 2, sm: 4, md: 8 }} spacing="sm" data-testid="replacement-summary">
+      <SimpleGrid cols={{ base: 2, sm: 3, md: 5, xl: 9 }} spacing="sm" data-testid="replacement-summary">
         <Stat label="Présents" value={s.present} />
         <Stat label="Absents" value={s.absent} />
         <Stat label="Non pesés" value={s.unknown} />
         <Stat label="Cas à traiter" value={s.cases} tone={s.cases ? 'warn' : 'ok'} />
+        <Stat label="Mises de côté" value={s.setAside} tone={s.setAside ? 'warn' : undefined} />
         <Stat label="Catégorie fermée" value={s.closed} />
         <Stat label="Sans adversaire" value={s.alone} />
         <Stat label="Sans solution automatique" value={s.withoutProposal} tone={s.withoutProposal ? 'danger' : undefined} />
@@ -188,123 +312,58 @@ export function ReplacementPage() {
         <Button data-testid="bulk-all" variant="default" onClick={() => openBulk('all')} disabled={s.cases === 0}>Tout classer automatiquement</Button>
         {waves.length > 0 && <Text size="sm" c="dimmed">Les changements de session se valident un par un.</Text>}
       </Group>
-      <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error ?? bulk.error ?? undo.error ?? move.error ?? withdraw.error} />
+      <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error ?? bulk.error ?? undo.error ?? move.error ?? withdraw.error ?? setAside.error ?? resume.error} />
 
-      {data.cases.length === 0 && <EmptyState icon="✓" title="Aucun cas à traiter" text="Toutes les catégories ont au moins deux combattants et aucun poids n’est hors catégorie." />}
-      {data.cases.length > 0 && (
+      {activeCases.length === 0 && (
+        <EmptyState icon="✓" title="Aucun cas à traiter"
+          text={asideCases.length > 0 ? `${plural(asideCases.length, 'carte mise de côté', 'cartes mises de côté')}, à retrouver plus bas.` : 'Toutes les catégories ont au moins deux combattants et aucun poids n’est hors catégorie.'} />
+      )}
+      {activeCases.length > 0 && (
         <Chip.Group multiple value={kinds} onChange={setKinds}>
           <Group gap="xs" data-testid="case-filters">
             <Text size="sm" c="dimmed">Afficher :</Text>
-            {(Object.keys(CASE_KINDS) as CaseKind[]).filter((k) => data.cases.some((c) => c.kind === k)).map((k) => (
-              <Chip key={k} value={k} size="xs">{CASE_KINDS[k]} ({data.cases.filter((c) => c.kind === k).length})</Chip>
+            {(Object.keys(CASE_KINDS) as CaseKind[]).filter((k) => activeCases.some((c) => c.kind === k)).map((k) => (
+              <Chip key={k} value={k} size="xs">{CASE_KINDS[k]} ({activeCases.filter((c) => c.kind === k).length})</Chip>
             ))}
           </Group>
         </Chip.Group>
       )}
-      {data.cases.filter((c) => kinds.length === 0 || kinds.includes(c.kind)).map((c) => {
-        const proposals = data.proposals[c.id] ?? [];
-        const open = proposals.filter((p) => !p.refused);
-        return (
-          <Card key={c.id} withBorder data-testid="replacement-case" padding="md">
-            <Group justify="space-between" align="flex-start" mb="sm" wrap="nowrap">
-              <div style={{ minWidth: 0 }}>
-                <Text fw={700} size="lg" data-testid="case-name">{name(c.registrationId)}</Text>
-                <FighterDetail f={data.fighters[c.registrationId]} grid={grid} />
-                <Text size="sm" c="dimmed">
-                  {c.detail}
-                  {c.categoryId && categories.find((x) => x.id === c.categoryId) ? ` · catégorie actuelle : ${categories.find((x) => x.id === c.categoryId)!.label}` : ''}
-                </Text>
-              </div>
-              <StatusBadge tone={c.kind === 'return' ? 'neutral' : 'warn'} size="lg">{CASE_KINDS[c.kind]}</StatusBadge>
+      {activeCases.filter((c) => kinds.length === 0 || kinds.includes(c.kind)).map(caseCard)}
+
+      {asideCases.length > 0 && (
+        <Card withBorder padding="md" data-testid="set-aside-section">
+          <Group justify="space-between" wrap="nowrap">
+            <Group gap={4}>
+              <Button variant="subtle" color="gray" size="compact-md" data-testid="set-aside-toggle" onClick={() => setAsideOpen((o) => !o)}>
+                {asideOpen ? '▾' : '▸'} Mises de côté ({asideCases.length})
+              </Button>
+              <HelpButton topic="recasement.de-cote" />
             </Group>
-            <Stack gap="xs">
-              {open.length === 0 && <Text size="sm" c="red.6" fw={500}>Aucune solution automatique : déplacer manuellement ou laisser sans adversaire.</Text>}
-              {proposals.map((p) => {
-                if (p.refused) {
-                  return (
-                    <Group key={p.id} justify="space-between" wrap="nowrap" data-testid="replacement-proposal-refused" style={{ opacity: 0.55 }}>
-                      <Group gap="xs" wrap="nowrap">
-                        <ReplacementBadge type={p.type} state="refused" gapKg={p.checks.weightGapKg} />
-                        <Text size="sm" td="line-through">{p.reason}</Text>
-                        <Text size="xs" c="dimmed">refusée</Text>
-                      </Group>
-                      <Button size="xs" variant="subtle" data-testid="proposal-unrefuse" onClick={() => unrefuse.mutate({ proposalId: p.id })}>Rétablir</Button>
-                    </Group>
-                  );
-                }
+          </Group>
+          <Collapse in={asideOpen}>
+            <Stack gap="xs" mt="sm">
+              {asideCases.map((c) => {
+                const mark = data.setAside[c.id]!;
                 return (
-                  <Group key={p.id} justify="space-between" wrap="nowrap" data-testid="replacement-proposal" p="xs"
-                    style={{ border: '1px solid var(--sk-line)', borderRadius: 'var(--mantine-radius-md)', background: 'var(--sk-bg)' }}>
-                    <Group gap="xs" wrap="nowrap">
-                      <Box style={{ flexShrink: 0 }}><ReplacementBadge type={p.type} state="proposed" gapKg={'newKey' in p.target ? undefined : p.checks.weightGapKg} /></Box>
-                      <div>
-                        <Text size="sm">{p.reason}</Text>
-                        <Text size="xs" c="dimmed">
-                          {'newKey' in p.target ? 'Catégorie de son poids réel (encore vide)' : PROPOSAL_TYPES[p.type].title}
-                          {!('newKey' in p.target) && (p.type === 'A' || p.type === 'B' || p.checks.weightGapKg > 0)
-                            ? ` · écart de poids ${kg(p.checks.weightGapKg)} kg entre le plus léger et le plus lourd (max ${kg(p.checks.threshold)} kg)`
-                            : ''}
-                          {p.checks.ageMove !== 'same' ? ' · âge : une tranche au-dessus' : ''}
-                          {p.checks.mixedSex ? ' · mixte' : ''}
-                          {p.manual ? ' · validation manuelle' : ' · cas simple'}
-                        </Text>
-                      </div>
-                      {p.preApproved && <StatusBadge tone="ok" size="sm">Pré-accord coach</StatusBadge>}
-                      {p.waveChange && (
-                        <StatusBadge tone="accent" size="sm" data-testid="wave-change">
-                          ↪ Change de session : {waveName(p.waveChange.from)} → {waveName(p.waveChange.to)}
-                        </StatusBadge>
-                      )}
-                      {p.waveShifts.length > 0 && (
-                        <StatusBadge tone="accent" size="sm" data-testid="wave-shift">
-                          ↪ Emmène {plural(p.waveShifts.length, 'autre combattant', 'autres combattants')} dans une autre session
-                        </StatusBadge>
-                      )}
+                  <Stack key={c.id} gap="xs">
+                    <Group justify="space-between" wrap="nowrap" data-testid="set-aside-row" p="xs" style={{ border: '1px solid var(--sk-line)', borderRadius: 'var(--mantine-radius-md)', cursor: 'pointer' }}
+                      onClick={() => setExpanded((e) => ({ ...e, [c.id]: !e[c.id] }))}>
+                      <Group gap="xs" wrap="wrap" style={{ minWidth: 0 }}>
+                        <Text fw={600} size="sm">{name(c.registrationId)}</Text>
+                        <StatusBadge tone="warn" size="sm">{CASE_KINDS[c.kind]}</StatusBadge>
+                        {mark.note && <Text size="sm" c="dimmed">« {mark.note} »</Text>}
+                        <Text size="xs" c="dimmed" className="num">{new Date(mark.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</Text>
+                      </Group>
+                      <Button size="xs" variant="default" data-testid="case-resume" onClick={(e) => { e.stopPropagation(); resume.mutate({ caseId: c.id }); }}>Reprendre</Button>
                     </Group>
-                    <Group gap={4} wrap="nowrap">
-                      <Button size="xs" variant="default" data-testid="proposal-preview" onClick={() => openProposal(p, false)}>Aperçu</Button>
-                      <Button size="xs" data-testid="proposal-apply" onClick={() => openProposal(p, true)}>Valider</Button>
-                      <Button size="xs" variant="subtle" color="red" data-testid="proposal-refuse" onClick={() => refuse.mutate({ proposalId: p.id })}>Refuser</Button>
-                    </Group>
-                  </Group>
+                    {expanded[c.id] && caseCard(c)}
+                  </Stack>
                 );
               })}
-              <Group gap="xs">
-                <Select size="xs" w={420} placeholder="Déplacer manuellement vers…" searchable clearable data-testid="manual-move-select"
-                  nothingFoundMessage={allTargets[c.id] ? 'Aucune catégorie' : 'Aucune catégorie compatible : cochez « Toutes les catégories »'}
-                  data={moveOptions(c.id)}
-                  value={moveTarget[c.id] ?? null} onChange={(v) => setMoveTarget({ ...moveTarget, [c.id]: v })} />
-                <Switch size="xs" label="Toutes les catégories (règles enfreintes)" data-testid="manual-move-all" checked={allTargets[c.id] ?? false}
-                  onChange={(e) => {
-                    const on = e.currentTarget.checked;
-                    setAllTargets({ ...allTargets, [c.id]: on });
-                    if (!on && moveTarget[c.id] && !data.moveTargets[c.id]?.some((t) => t.categoryId === moveTarget[c.id] && t.warnings.length === 0)) setMoveTarget({ ...moveTarget, [c.id]: null });
-                  }} />
-                <Button size="xs" variant="default" disabled={!moveTarget[c.id]} data-testid="manual-move"
-                  onClick={() => {
-                    setDialog({ kind: 'move', registrationId: c.registrationId, categoryId: moveTarget[c.id]! });
-                    preview.mutate({ move: { registrationId: c.registrationId, categoryId: moveTarget[c.id]! } });
-                  }}>
-                  Déplacer…
-                </Button>
-              </Group>
-              {c.kind === 'closed' && (
-                <Group gap="xs">
-                  <Button size="xs" variant="default" data-testid="case-withdraw"
-                    onClick={() => setDialog({ kind: 'withdraw', registrationId: c.registrationId, categoryLabel: categories.find((x) => x.id === c.categoryId)?.label ?? 'sa catégorie' })}>
-                    Ne combat pas
-                  </Button>
-                </Group>
-              )}
-              {open.some((p) => 'newKey' in p.target) && (
-                <Text size="xs" c="dimmed" data-testid="manual-move-new-hint">
-                  Le déplacement manuel ne liste que les catégories qui existent déjà : pour l’envoyer dans une catégorie encore vide, utilisez la proposition ci-dessus.
-                </Text>
-              )}
             </Stack>
-          </Card>
-        );
-      })}
+          </Collapse>
+        </Card>
+      )}
 
       <SectionCard title={HELP['recasement.valides'].title} help="recasement.valides"
         actions={data.recasements.length > 0 && (
@@ -383,6 +442,19 @@ export function ReplacementPage() {
               )}
             </Group>
           )}
+        </Stack>
+      </Modal>
+      <Modal opened={dialog?.kind === 'set-aside'} onClose={() => setDialog(null)} title="Mettre cette carte de côté ?">
+        <Stack>
+          <Text size="sm">Elle ne comptera plus dans les cas à traiter ni dans le classement automatique ; vous la retrouverez dans « Mises de côté ».</Text>
+          <TextInput label="Note (facultative)" placeholder="ex. on attend le coach" maxLength={80} value={note} onChange={(e) => setNote(e.currentTarget.value)} data-testid="case-set-aside-note" />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setDialog(null)}>Annuler</Button>
+            <Button data-testid="case-set-aside-confirm" loading={setAside.isPending}
+              onClick={() => dialog?.kind === 'set-aside' && setAside.mutate({ caseId: dialog.caseId, note }, { onSuccess: () => done('Carte mise de côté.') })}>
+              Mettre de côté
+            </Button>
+          </Group>
         </Stack>
       </Modal>
       <Modal opened={dialog?.kind === 'withdraw'} onClose={() => setDialog(null)} title="Ne combat pas ?">
