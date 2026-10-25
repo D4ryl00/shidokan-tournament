@@ -43,7 +43,8 @@ export function applyAll(state: State, p: Move): State {
 
 /** Applique le déplacement d'une inscription (`p.registrationId`, sans `alsoMoved`) à une copie de l'état (l'état reçu n'est pas modifié). */
 export function applyProposal(state: State, p: Move): State {
-  const next = structuredClone(state);
+  // Seuls les catégories et les inscrits changent : la grille et les réglages sont partagés (le plan applique des milliers de déplacements).
+  const next: State = { ...state, categories: structuredClone(state.categories), members: structuredClone(state.members) };
   const m = next.members.find((x) => x.registrationId === p.registrationId);
   if (!m) return next;
   const from = m.categoryId;

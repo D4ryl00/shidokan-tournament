@@ -6,3 +6,5 @@ export * from './apply.js';
 export * from './waves.js';
 export * from './move.js';
 export * from './rules.js';
+export * from './manual.js';
+export * from './plan.js';

@@ -154,6 +154,19 @@ export function ruleProfile(state: State, p: ProfileInput): { rules: RuleId[]; f
   return { rules, forced: false };
 }
 
+/** Règles d'un déplacement de l'inscription vers une catégorie existante (comme une proposition) ; `null` si interdit. */
+export function rulesForMove(state: State, registrationId: string, categoryId: string): RuleId[] | null {
+  const m = state.members.find((x) => x.registrationId === registrationId);
+  const t = state.categories.find((c) => c.id === categoryId);
+  if (!m || !t) return null;
+  const ev = evaluate(state, m, t);
+  if (!ev) return null;
+  return ruleProfile(state, {
+    id: `M:${registrationId}>${categoryId}`, caseId: 'manual', type: ev.type, registrationId, target: { categoryId },
+    changes: ev.changes, checks: ev.checks, waveChange: null, waveShifts: [], reason: '',
+  }).rules;
+}
+
 /** Drapeaux dérivés des règles d'une proposition ; `null` si une règle utilisée est désactivée (sauf si elle s'impose). */
 function withRules<T extends ProfileInput>(state: State, movers: Member[], p: T): (T & Pick<Proposal, 'rules' | 'manual' | 'preApproved'>) | null {
   const { rules, forced } = ruleProfile(state, p);
