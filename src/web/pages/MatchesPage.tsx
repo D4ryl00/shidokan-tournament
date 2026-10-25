@@ -1,5 +1,5 @@
 import { Alert, Box, Button, Card, Grid, Group, NumberInput, Progress, ScrollArea, SegmentedControl, Stack, Text, Title, UnstyledButton } from '@mantine/core';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router';
 import { resolveBracket, type ResolvedMatch } from '../../domain/brackets/index.js';
 import { activeEntrantCount } from '../../domain/categories.js';
@@ -45,6 +45,8 @@ export function MatchesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialogMatchId, setDialogMatchId] = useState<string | null>(null);
   const [tieOpen, setTieOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [scrollRequest, setScrollRequest] = useState(0);
   // Liste des catégories ouverte ou repliée, retenue dans ce navigateur (null : selon le nombre de zones).
   const [listChoice, setListChoice] = useState<boolean | null>(() => categoriesOpen(id));
   const setCategoriesOpen = (open: boolean) => { setListChoice(open); rememberCategoriesOpen(id, open); };
@@ -82,6 +84,15 @@ export function MatchesPage() {
     const numbers = new Map([...local.keys()].map((mid) => [mid, combatLabel(mid, passages?.numbers, local)]));
     return { results, stale: new Set(ignored.map((r) => r.matchId)), matches, numbers };
   }, [selected, res, passages]);
+  // Le panneau n'existe qu'une fois les résultats de la catégorie chargés : le défilement attend son affichage.
+  const panelShown = !!(selected && res);
+  const scrolled = useRef(0);
+  useEffect(() => {
+    if (scrollRequest > scrolled.current && panelShown) {
+      scrolled.current = scrollRequest;
+      panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [scrollRequest, panelShown]);
   const dialogMatch: ResolvedMatch | null = (dialogMatchId && view?.matches.find((m) => m.id === dialogMatchId)) || null;
   const ties = res?.progress.podium.ties ?? [];
   const tieScope = res?.progress.podium.tieScopes?.[0] ?? null;
@@ -90,7 +101,9 @@ export function MatchesPage() {
   // Liste des catégories : repliée d'office à partir de 3 zones (les cartes des zones gardent leur largeur).
   const listOpen = listChoice ?? shownZones.length <= 2;
   const enter = (q: QueueItem) => { setSelectedId(q.categoryId); setDialogMatchId(q.matchId); };
-  const score = (q: QueueItem) => setSelectedId(q.categoryId);
+  // Choisir une catégorie (« Noter », liste) amène son panneau à l'écran, sous les cartes des zones.
+  const openCategory = (cid: string) => { setSelectedId(cid); setScrollRequest((n) => n + 1); };
+  const score = (q: QueueItem) => openCategory(q.categoryId);
   const zoneGrid = (
     <Box data-testid="zone-grid"
       style={{ display: 'grid', gap: 'var(--mantine-spacing-md)', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', maxWidth: shownZones.length === 1 ? 640 : undefined }}>
@@ -146,7 +159,7 @@ export function MatchesPage() {
                     return (
                       <Card key={c.id} withBorder padding="xs" px="sm" data-testid="schedule-category"
                         style={active ? { borderColor: 'var(--sk-accent)', backgroundColor: 'var(--sk-chip)', boxShadow: 'inset 3px 0 0 var(--sk-accent)' } : undefined}>
-                        <UnstyledButton onClick={() => setSelectedId(c.id)} aria-current={active || undefined} style={{ display: 'block', width: '100%' }}>
+                        <UnstyledButton onClick={() => openCategory(c.id)} aria-current={active || undefined} style={{ display: 'block', width: '100%' }}>
                           <Text size="sm" fw={600}>{c.label}</Text>
                         </UnstyledButton>
                         <Group gap={6} mt={6} wrap="nowrap">
@@ -173,7 +186,7 @@ export function MatchesPage() {
           ) : zoneGrid}
 
           {selected && res && (
-            <Card withBorder padding="md" data-testid="selected-category">
+            <Card withBorder padding="md" data-testid="selected-category" ref={panelRef} style={{ scrollMarginTop: 72 }}>
             <Stack gap="sm">
               <Group justify="space-between" align="flex-start" wrap="nowrap">
                 <Stack gap={4} style={{ minWidth: 0 }}>
