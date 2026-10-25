@@ -23,6 +23,7 @@ const TABLE_WRITES = new Set([
     'POST /registrations', 'PUT /registrations/:rid', 'DELETE /registrations/:rid', 'POST /clubs', 'PATCH /clubs/:clubId',
     'PUT /weigh-in/:fighterId', 'POST /weigh-in/close',
     'POST /replacement/preview', 'POST /replacement/apply', 'POST /replacement/bulk', 'POST /replacement/refuse', 'POST /replacement/unrefuse', 'POST /replacement/undo', 'POST /replacement/move', 'POST /replacement/withdraw', 'POST /replacement/set-aside', 'POST /replacement/resume',
+    'PUT /replacement/rules', 'POST /replacement/rules/reset',
     'PATCH /categories/:cid', 'POST /categories/:cid/redraw', 'POST /categories/:cid/swap', 'POST /categories/:cid/move', 'POST /categories/:cid/move/preview', 'POST /categories/:cid/regenerate',
     'POST /launch', 'POST /launch/reopen', 'POST /launch/number', 'POST /launch/number/preview',
   ].map((r) => r.replace(' ', ` ${C}`)),

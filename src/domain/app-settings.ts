@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import { mailTemplateSchema, type MailTemplate } from './mail-template-schema.js';
+import { rulesView, rulesViewSchema, type RulesView } from './replacement/rules.js';
+import { defaultSettings } from './settings.js';
+
+export { mailTemplateSchema, type MailTemplate };
 
 /** Réglages de l'application (pas d'une compétition) : envoi des mails, mention sur les données, conservation, message aux clubs. */
 export interface SmtpSettings {
@@ -10,10 +15,6 @@ export interface SmtpSettings {
   fromName: string;
   fromEmail: string;
 }
-export interface MailTemplate {
-  subject: string;
-  body: string;
-}
 export interface AppSettings {
   smtp: SmtpSettings | null;
   /** Mention affichée sur la page du club ; `{contact}` est remplacé par l'adresse de contact. */
@@ -22,6 +23,8 @@ export interface AppSettings {
   retentionMonths: number;
   directoryInactiveYears: number;
   invitationMail: MailTemplate;
+  /** Liste des règles de réaffectation copiée dans chaque nouvelle compétition. */
+  defaultReplacementRules: RulesView;
 }
 export type PublicSmtpSettings = Omit<SmtpSettings, 'password'> & { hasPassword: boolean };
 export type PublicAppSettings = Omit<AppSettings, 'smtp'> & { smtp: PublicSmtpSettings | null };
@@ -73,10 +76,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   retentionMonths: 13,
   directoryInactiveYears: 3,
   invitationMail: DEFAULT_INVITATION_MAIL,
+  defaultReplacementRules: rulesView(defaultSettings()),
 };
 
-const template = z.object({ subject: z.string().trim().min(1).max(200), body: z.string().min(1).max(5000) }).strict();
-export const mailTemplateSchema = template;
+const template = mailTemplateSchema;
 
 /** Modification des réglages : `smtp.password` null = inchangé, '' = effacé. */
 export const appSettingsPatchSchema = z
@@ -98,6 +101,7 @@ export const appSettingsPatchSchema = z
     retentionMonths: z.number().int().min(1).max(240),
     directoryInactiveYears: z.number().int().min(1).max(50),
     invitationMail: template,
+    defaultReplacementRules: rulesViewSchema,
   })
   .partial()
   .strict();

@@ -2,7 +2,9 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { applyAll, applyProposal, bulkPlan, casesOfWave, categoryWave, detectCases, isClosedTarget, isLocked, memberWave, stateFingerprint } from '../../domain/replacement/index.js';
 import type { AppDb } from '../db/client.js';
-import { getCompetition } from '../repositories/competitions.js';
+import { applyRulesView, rulesView, rulesViewSchema } from '../../domain/replacement/rules.js';
+import { getAppSettings } from '../repositories/app-settings.js';
+import { getCompetition, updateCompetition } from '../repositories/competitions.js';
 import {
   allProposals,
   displayedProposals,
@@ -34,6 +36,21 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
   app.addHook('preHandler', async (req, reply) => {
     const id = (req.params as { id?: string }).id;
     if (id && !(await getCompetition(db, id))) return reply.status(404).send({ error: 'Compétition introuvable' });
+  });
+
+  /** Liste des règles du plan d'ensemble : rangée, coupée et activée par la Table centrale. */
+  app.put<P>('/api/competitions/:id/replacement/rules', async (req) => {
+    const view = rulesViewSchema.parse(req.body);
+    const current = (await getCompetition(db, req.params.id))!;
+    const updated = await updateCompetition(db, req.params.id, { settings: applyRulesView(current.settings, view) });
+    return rulesView(updated.settings);
+  });
+
+  /** Remet la liste de cette compétition à celle des réglages de l'application. */
+  app.post<P>('/api/competitions/:id/replacement/rules/reset', async (req) => {
+    const current = (await getCompetition(db, req.params.id))!;
+    const updated = await updateCompetition(db, req.params.id, { settings: applyRulesView(current.settings, getAppSettings(db).defaultReplacementRules) });
+    return rulesView(updated.settings);
   });
 
   app.get<P & { Querystring: { vague?: string } }>('/api/competitions/:id/weigh-in', async (req) => weighInList(db, req.params.id, req.query.vague || undefined));

@@ -5,9 +5,11 @@ import { entryCells, entryKey, type EntryCell } from '../../domain/closed-catego
 import { ffkDefaultGrid } from '../../domain/grid-ffk.js';
 import { defaultZoneNames } from '../../domain/zones.js';
 import { validateGrid } from '../../domain/grid.js';
+import { applyRulesView } from '../../domain/replacement/rules.js';
 import { defaultSettings, mergeSettings, readStoredSettings } from '../../domain/settings.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
+import { getAppSettings } from './app-settings.js';
 import { ageBands, ageLinks, closedCategories, competitions, registrations, waves, weightClasses, zones } from '../db/schema.js';
 import { plural } from '../../domain/plural.js';
 
@@ -48,6 +50,7 @@ function getCompetitionSync(db: AppDb, id: string): Competition | null {
 
 export async function createCompetition(db: AppDb, input: CompetitionInput): Promise<Competition> {
   const id = crypto.randomUUID();
+  const settings = applyRulesView(defaultSettings(), getAppSettings(db).defaultReplacementRules);
   db.transaction((tx) => {
     tx.insert(competitions)
       .values({
@@ -55,7 +58,7 @@ export async function createCompetition(db: AppDb, input: CompetitionInput): Pro
         name: input.name,
         date: input.date,
         location: input.location ?? null,
-        settingsJson: JSON.stringify(defaultSettings()),
+        settingsJson: JSON.stringify(settings),
       })
       .run();
     writeGrid(tx as unknown as AppDb, id, ffkDefaultGrid());

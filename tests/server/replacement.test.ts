@@ -2,6 +2,8 @@ import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
+import { rulesView } from '../../src/domain/replacement/rules.js';
+import { defaultSettings } from '../../src/domain/settings.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
@@ -747,4 +749,42 @@ test('clôture de la pesée : une inscription « ne combat pas » reste non pes�
   await call('POST', '/weigh-in/close', {});
   const rows = (await call('GET', '/registrations')).json() as { id: string; presence: string }[];
   expect(rows.find((r) => r.id === a.id)!.presence).toBe('unknown');
+});
+
+describe('liste des règles', () => {
+  const view = async () => (await call('GET', '')).json().settings as { mixMinorsAdults: boolean; replacementRules: { cutAfter: string } };
+  const def = rulesView(defaultSettings());
+
+  test('Table centrale : range, coupe et active les règles, mélange mineurs/adultes compris', async () => {
+    const body = { order: ['return', ...def.order.filter((r) => r !== 'return').reverse()], on: { ...def.on, minorsAdults: true }, cutAfter: 'weight' };
+    const res = await call('PUT', '/replacement/rules', body);
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual(body);
+    const s = await view();
+    expect(s.mixMinorsAdults).toBe(true);
+    expect(s.replacementRules.cutAfter).toBe('weight');
+    const reset = await call('POST', '/replacement/rules/reset');
+    expect(reset.statusCode).toBe(200);
+    expect(reset.json()).toEqual(def);
+    expect((await view()).mixMinorsAdults).toBe(false);
+  });
+
+  test('réinitialisation : recopie les règles par défaut de l’application', async () => {
+    const mine = { ...def, cutAfter: 'ageUp', on: { ...def.on, mixSexes: true } };
+    expect((await app.inject({ method: 'PATCH', url: '/api/app-settings', payload: { defaultReplacementRules: mine } })).statusCode).toBe(200);
+    const reset = await call('POST', '/replacement/rules/reset');
+    expect(reset.json()).toEqual(mine);
+  });
+
+  test('liste invalide : 400', async () => {
+    const noReturnFirst = await call('PUT', '/replacement/rules', { ...def, order: [...def.order.slice(1), 'return'] });
+    expect(noReturnFirst.statusCode).toBe(400);
+    const missing = await call('PUT', '/replacement/rules', { ...def, order: def.order.slice(0, -1) });
+    expect(missing.statusCode).toBe(400);
+    expect((await call('PUT', '/replacement/rules', { ...def, extra: 1 })).statusCode).toBe(400);
+  });
+
+  test('compétition inconnue : 404', async () => {
+    expect((await app.inject({ method: 'PUT', url: '/api/competitions/nope/replacement/rules', payload: def })).statusCode).toBe(404);
+  });
 });

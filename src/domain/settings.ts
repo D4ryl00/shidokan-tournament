@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { mailTemplateSchema } from './app-settings.js';
+import { mailTemplateSchema } from './mail-template-schema.js';
 
 export const COMBAT_FORMATS = [
   'single_match',

@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { DEFAULT_APP_SETTINGS } from '../../src/domain/app-settings.js';
+import { rulesView } from '../../src/domain/replacement/rules.js';
+import { defaultSettings } from '../../src/domain/settings.js';
 import { buildApp } from '../../src/server/app.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
@@ -45,4 +47,15 @@ test('bornes : délais ≥ 1, port 1..65535', async () => {
   expect((await patch({ retentionMonths: 0 })).statusCode).toBe(400);
   expect((await patch({ directoryInactiveYears: 0 })).statusCode).toBe(400);
   expect((await patch({ smtp: { ...SMTP, port: 70000 } })).statusCode).toBe(400);
+});
+
+test('règles de réaffectation par défaut : celles d’une compétition neuve, modifiables, sans toucher aux autres réglages', async () => {
+  const def = rulesView(defaultSettings());
+  expect((await get()).defaultReplacementRules).toEqual(def);
+  const next = { ...def, cutAfter: 'ageUp', on: { ...def.on, mixSexes: true } };
+  expect((await patch({ defaultReplacementRules: next })).statusCode).toBe(200);
+  expect((await get()).defaultReplacementRules).toEqual(next);
+  expect((await get()).retentionMonths).toBe(13);
+  expect((await patch({ defaultReplacementRules: { ...def, order: [...def.order].reverse() } })).statusCode).toBe(400);
+  expect((await patch({ defaultReplacementRules: { ...def, on: { ...def.on, return: false } } })).statusCode).toBe(400);
 });

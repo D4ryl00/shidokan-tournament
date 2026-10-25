@@ -1,5 +1,8 @@
 import { expect, test } from 'vitest';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
+import { rulesView } from '../../src/domain/replacement/rules.js';
+import { defaultSettings } from '../../src/domain/settings.js';
+import { updateAppSettings } from '../../src/server/repositories/app-settings.js';
 import { closeDb, openDb } from '../../src/server/db/client.js';
 import {
   GridValidationError,
@@ -100,4 +103,22 @@ test('des réglages stockés obsolètes ne cassent pas la lecture', async () => 
   const [read] = await listCompetitions(db);
   expect(read!.settings.repechage).toBe(true);
   expect(read!.settings.kataBronzeCount).toBe(2);
+});
+
+test('nouvelle compétition : copie des règles par défaut de l’application', async () => {
+  const db = openDb(tmpDbPath());
+  const def = rulesView(defaultSettings());
+  updateAppSettings(db, { defaultReplacementRules: { ...def, cutAfter: 'ageUp', on: { ...def.on, return: true, mixSexes: true } } });
+  const c = await createCompetition(db, { name: 'X', date: '2026-11-22' });
+  expect([c.settings.replacementRules.cutAfter, c.settings.mixSexes.enabled]).toEqual(['ageUp', true]);
+});
+
+test('changer les règles par défaut ne touche pas les compétitions déjà créées', async () => {
+  const db = openDb(tmpDbPath());
+  const def = rulesView(defaultSettings());
+  const before = await createCompetition(db, { name: 'A', date: '2026-11-22' });
+  updateAppSettings(db, { defaultReplacementRules: { ...def, cutAfter: 'ageUp', on: { ...def.on, return: true, minorsAdults: true } } });
+  const after = (await getCompetition(db, before.id))!;
+  expect(after.settings).toEqual(before.settings);
+  expect(rulesView(after.settings)).toEqual(def);
 });
