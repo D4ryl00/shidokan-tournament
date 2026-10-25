@@ -370,3 +370,29 @@ test('jamais moins bon que le rejeu carte par carte', () => {
     expect(plan(structuredClone(s)).hash).toBe(r.hash);
   }
 });
+
+test('laissé puis repris : 0 seul', () => {
+  // A est essayée en premier ; la laisser puis faire passer B chez W lui ouvre la catégorie de W (élargie à -54).
+  const a = member({ label: 'A', weightClassId: 'cadet:F:-47', approxWeightKg: 47, otherDisciplines: ['shido-boxing'] });
+  const b = member({ label: 'B', weightClassId: 'cadet:F:-54', approxWeightKg: 52, otherDisciplines: ['shido-boxing'] });
+  const w = member({ label: 'W', discipline: 'shido-boxing', weightClassId: 'cadet:F:-61', approxWeightKg: 55 });
+  const s = makeState([a, b, w]);
+  s.settings.weightGapMaxKg = { ...s.settings.weightGapMaxKg, children: 10 };
+  const r = plan(s);
+  expect([r.aloneAfter, r.proven]).toEqual([[], true]);
+  expect(r.moves.map((m) => [m.registrationId, m.target])).toEqual(expect.arrayContaining([
+    [b.registrationId, { categoryId: w.categoryId }],
+    [a.registrationId, { categoryId: w.categoryId }],
+  ]));
+});
+
+test('budget épuisé : pas prouvé', () => {
+  const [a, b, c, f] = [kgM('A', 'cadet:F:-54', 52), kgM('B', 'cadet:F:-47', 47), kgM('C', 'cadet:F:-61', 56), kgM('F', 'cadet:F:+61', 60)];
+  const s = makeState([a, b, c, f]);
+  s.settings.replacementRules.off = ['weightGap'];
+  const r = plan(s, { nodeBudget: 1 });
+  expect(r.proven).toBe(false);
+  // Toujours un plan valable, jamais moins bon que le rejeu carte par carte.
+  expect(r.aloneAfter.length).toBeLessThanOrEqual(r.aloneBefore.length);
+  expect(plan(s).proven).toBe(true);
+});

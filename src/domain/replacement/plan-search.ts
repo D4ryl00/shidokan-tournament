@@ -205,7 +205,8 @@ interface Mover {
  *     s'élargit, ou la source s'allège) ;
  * plus les liens de déplacements réels : une correction de poids et la clé de sa catégorie de poids réel, un recasé et sa
  * catégorie d'origine. Le calcul n'est prouvé que pour ces élargissements en un pas : une chaîne de plusieurs
- * déplacements qui ouvrirait une option ailleurs n'est pas explorée (le point fixe de `computePlan` en rattrape la fin).
+ * déplacements qui ouvrirait une option ailleurs n'est pas explorée. Le point fixe de `solveGroups` ne vérifie, dans
+ * l'état final du plan, que les cas ouverts que le plan n'a pas déplacés.
  * `link` ajoute des liens (le déplacement d'un plan déjà connu).
  */
 export function relate(
@@ -213,7 +214,7 @@ export function relate(
   ctx: SearchContext,
   decided: ReadonlySet<string>,
   cases: Case[],
-  opts: { link?: (union: (a: string, b: string) => void) => void; known?: Map<string, SearchMove[]> } = {},
+  opts: { link?: (union: (a: string, b: string) => void) => void; known?: Map<string, SearchMove[]>; deferred?: Deferral } = {},
 ): Relation {
   const uf = new UnionFind();
   const byId = new Map(s.members.map((m) => [m.registrationId, m]));
@@ -234,7 +235,14 @@ export function relate(
     ...moversOf(p).map((r) => `c:${byId.get(r)?.categoryId ?? ''}`),
   ];
 
-  const movers: Mover[] = cases.map((c) => ({ c, real: true, options: opts.known?.get(c.registrationId) ?? optionsOf(s, c, ctx, decided) }));
+  const all = new Map(cases.map((c) => [c.registrationId, opts.known?.get(c.registrationId) ?? optionsOf(s, c, ctx, decided)]));
+  // Un cas laissé ne relie que ses options nouvelles (aucune tant qu'il n'est pas revenu) : sa catégorie, et
+  // l'élargissement (d), suffisent à le rattacher au déplacement qui le ferait revenir.
+  const movers: Mover[] = cases.map((c) => {
+    const e = opts.deferred?.get(c.registrationId);
+    const options = all.get(c.registrationId)!;
+    return { c, real: true, options: !e ? options : e.back ? options.filter((o) => touchesAny(s, o.p, e.since)) : [] };
+  });
   const isMover = new Set(cases.map((c) => c.registrationId));
   // Qui peut partir de sa catégorie : ceux qui se déplacent dans une option (`strong` : d'eux-mêmes, pas emmenés par un
   // « split », qui laisse toujours au moins deux actifs), et les recasés qui peuvent revenir.
@@ -319,7 +327,7 @@ export function relate(
     const g = groups.get(uf.find(key));
     if (g) for (const id of ids) g.categories.add(id);
   }
-  const options = new Map(movers.filter((mv) => mv.real).map((mv) => [mv.c.registrationId, mv.options]));
+  const options = all;
   const first = (g: Component) => sorted(g.cases.map((c) => c.registrationId))[0]!;
   return { components: [...groups.values()].sort((a, b) => cmp(first(a), first(b))), options };
 }
@@ -436,11 +444,12 @@ function returnersLeft(s: State, ctx: SearchContext, decided: ReadonlySet<string
 }
 
 /**
- * Empreinte d'un sous-problème : ses catégories, leurs inscrits tels qu'ils sont, et les inscriptions déjà décidées.
+ * Empreinte d'un sous-problème : ses catégories, leurs inscrits tels qu'ils sont, les inscriptions déjà décidées et les
+ * cas laissés pour l'instant.
  * La part d'une catégorie est gardée par objet : un déplacement recopie les catégories qu'il change (`applyProposal`),
  * et rien ne les modifie pendant un calcul.
  */
-function signature(s: State, decided: ReadonlySet<string>, parts: WeakMap<object, string>): string {
+function signature(s: State, decided: ReadonlySet<string>, deferred: Deferral, parts: WeakMap<object, string>): string {
   let members: Map<string, Member[]> | null = null;
   const out: string[] = [];
   for (const c of [...s.categories].sort((a, b) => cmp(a.id, b.id))) {
@@ -458,27 +467,72 @@ function signature(s: State, decided: ReadonlySet<string>, parts: WeakMap<object
     }
     out.push(part);
   }
-  const done = s.members.filter((m) => decided.has(m.registrationId)).map((m) => m.registrationId).sort(cmp);
-  return `${out.join('#')}|${done.join(',')}`;
+  const listed = (set: ReadonlySet<string>) => s.members.filter((m) => set.has(m.registrationId)).map((m) => m.registrationId).sort(cmp).join(',');
+  const left = s.members
+    .filter((m) => deferred.has(m.registrationId))
+    .map((m) => m.registrationId)
+    .sort(cmp)
+    .map((r) => `${r}${deferred.get(r)!.back ? '+' : '-'}${[...deferred.get(r)!.since].sort(cmp).join(',')}`);
+  return `${out.join('#')}|${listed(decided)}|${left.join(';')}`;
 }
 
 /**
- * Options encore valables après le déplacement `p` (de `before` à `after`) : celles des cas dont ni la catégorie, ni
- * aucune catégorie qu'ils pourraient atteindre (`makeNear`) n'a été touchée ; les autres sont recalculées.
+ * Inscriptions dont les propositions peuvent avoir changé avec le déplacement `p` (de `before` à `after`) : celles dont
+ * la catégorie, ou une catégorie qu'elles pourraient atteindre (`makeNear`), a été touchée. Pour les autres, rien n'a
+ * changé : ni la cible, ni la source, ni la catégorie d'un « split » de leurs propositions.
  */
-function keptOptions(before: State, after: State, p: Proposal, options: Map<string, SearchMove[]>, decided: ReadonlySet<string>): Map<string, SearchMove[]> {
+function affectedBy(before: State, after: State, p: Proposal): ((registrationId: string) => boolean) & { ids: Set<string> } {
   const near = makeNear(after);
   const ids = new Set(moversOf(p).flatMap((r) => [before, after].map((x) => x.members.find((m) => m.registrationId === r)?.categoryId ?? '')));
   ids.delete('');
   const keys = [before, after].flatMap((x) => x.categories.filter((c) => ids.has(c.id)).map((c) => c.key));
-  const out = new Map<string, SearchMove[]>();
-  for (const [r, os] of options) {
-    if (decided.has(r)) continue;
+  const affected = (r: string) => {
     const m = after.members.find((x) => x.registrationId === r);
-    if (!m || ids.has(m.categoryId ?? '') || keys.some((k) => near(m, k))) continue;
-    out.set(r, os);
-  }
-  return out;
+    return !m || ids.has(m.categoryId ?? '') || keys.some((k) => near(m, k));
+  };
+  return Object.assign(affected, { ids });
+}
+
+/**
+ * Un cas laissé revient-il après ce déplacement ? Oui si le déplacement a touché sa catégorie, ou s'il a maintenant une
+ * option permise vers une catégorie touchée (`opensOption`). Sinon, toutes ses options visent des catégories que le
+ * déplacement n'a pas touchées : elles existaient déjà et s'échangent avec lui, la branche « tout de suite » les couvre.
+ */
+function revives(after: State, affected: ReturnType<typeof affectedBy>, c: Case, ctx: SearchContext): boolean {
+  const m = after.members.find((x) => x.registrationId === c.registrationId);
+  if (!m || affected.ids.has(m.categoryId ?? '')) return true;
+  if (!affected(c.registrationId)) return false;
+  return opensOption(subState(after, affected.ids), m, c, ctx, makeNear(after));
+}
+
+/** Options encore valables après un déplacement : celles des cas qu'il ne touche pas ; les autres sont recalculées. */
+function keptOptions(options: Map<string, SearchMove[]>, affected: (r: string) => boolean, decided: ReadonlySet<string>): Map<string, SearchMove[]> {
+  return new Map([...options].filter(([r]) => !decided.has(r) && !affected(r)));
+}
+
+/**
+ * Cas laissés : depuis quand rien ne les concerne. `since` = catégories touchées par les déplacements qui les concernent
+ * depuis qu'on les a laissés ; `back` = un de ces déplacements a pu leur ouvrir une option (ils reviennent).
+ */
+export type Deferral = ReadonlyMap<string, { since: ReadonlySet<string>; back: boolean }>;
+
+/** L'option touche-t-elle l'une de ces catégories (cible, ou catégorie d'un combattant qui part) ? */
+function touchesAny(s: State, p: Proposal, ids: ReadonlySet<string>): boolean {
+  const target = 'categoryId' in p.target ? p.target.categoryId : `new:${keyString(p.target.newKey)}`;
+  return ids.has(target) || moversOf(p).some((r) => ids.has(s.members.find((m) => m.registrationId === r)?.categoryId ?? ''));
+}
+
+/**
+ * Options à essayer maintenant pour un cas. Un cas laissé n'en a pas, tant qu'il n'est pas revenu. Revenu, il n'essaie que
+ * les options qui touchent une catégorie touchée depuis qu'on l'a laissé : les autres visent des catégories restées
+ * telles quelles, s'échangent avec les déplacements faits entre-temps, et la branche où il les prenait tout de suite
+ * mène aux mêmes états.
+ */
+function optionsNow(s: State, c: Case, rel: Relation, deferred: Deferral): SearchMove[] {
+  const options = rel.options.get(c.registrationId) ?? [];
+  const e = deferred.get(c.registrationId);
+  if (!e) return options;
+  return e.back ? options.filter((o) => touchesAny(s, o.p, e.since)) : [];
 }
 
 /** Borne d'une recherche : le score (sans les identifiants) à ne pas dépasser ; ses termes peuvent être négatifs. */
@@ -518,6 +572,10 @@ const moveBound = (m: SearchMove): Bound => {
  * indépendants (résolus séparément : le score s'additionne), et chaque sous-problème résolu est mémorisé par son
  * empreinte. Chaque appel reçoit une borne (le meilleur score connu, moins ce qui est déjà engagé) : une branche dont
  * le minimum possible (seuls − 2 × cas restants, puis zéro pour les autres termes) la dépasse est abandonnée.
+ * « Le laisser » n'est pas définitif : le cas laissé (`deferred`) reste en attente (il compte pour la borne et le
+ * découpage), et revient dans la recherche dès qu'un déplacement suivant touche sa catégorie ou lui ouvre une option vers
+ * une catégorie touchée (`revives`) ; il n'essaie alors que ses options nouvelles (`optionsNow`). Chaque déplacement
+ * décide au moins une inscription pour de bon : la recherche se termine.
  * Le budget de nœuds est partagé par tout le groupe ; s'il est atteint, la recherche rend la meilleure solution trouvée
  * (ou la solution « carte par carte » à partir de là) et `exhausted` devient vrai.
  */
@@ -539,8 +597,8 @@ export class GroupSolver {
   }
 
   /** La meilleure solution si son score ne dépasse pas `cut` (exacte, et mémorisée) ; `null` sinon. */
-  solve(s: State, decided: ReadonlySet<string>, cut: Bound, known?: Map<string, SearchMove[]>): Solution | null {
-    const sig = signature(s, decided, this.parts);
+  solve(s: State, decided: ReadonlySet<string>, deferred: Deferral, cut: Bound, known?: Map<string, SearchMove[]>): Solution | null {
+    const sig = signature(s, decided, deferred, this.parts);
     const solved = this.memo.get(sig);
     if (solved) return compareBounds(solved.score, cut) <= 0 ? solved : null;
     const failed = this.failed.get(sig);
@@ -560,13 +618,14 @@ export class GroupSolver {
       if (!this.exhausted) this.memo.set(sig, sol);
       return compareBounds(sol.score, cut) <= 0 ? sol : null;
     };
+    // Les cas laissés restent en attente : ils comptent pour la borne et pour le découpage, sans être essayés maintenant.
     const remaining = openCases(s, ctx, decided);
     const alone = aloneRegistrations(s, ctx.waveId);
     // Chaque cas restant (et chaque recasé qui pourrait revenir) retire au plus deux seuls ; jamais moins de zéro.
     const lowest = Math.max(0, alone.length - 2 * (remaining.length + returnersLeft(s, ctx, decided, remaining)));
     if (compareBounds({ alone: lowest, counts: [], moved: 0, preference: 0, gap: 0 }, cut) > 0) return fail();
-    const rel = relate(s, ctx, decided, remaining, { known });
-    if (remaining.every((c) => (rel.options.get(c.registrationId) ?? []).length === 0)) return keep(leaf(alone, remaining));
+    const rel = relate(s, ctx, decided, remaining, { known, deferred });
+    if (remaining.every((c) => optionsNow(s, c, rel, deferred).length === 0)) return keep(leaf(alone, remaining));
 
     // Catégories qu'aucun cas ne touche : leurs seuls ne changeront plus.
     const touchedCats = new Set(rel.components.flatMap((g) => [...g.categories]));
@@ -575,37 +634,46 @@ export class GroupSolver {
     if (rel.components.length > 1) {
       // Les sous-problèmes suivants valent au moins zéro : chacun a pour borne ce qui reste après les précédents.
       for (const g of rel.components) {
-        const part = this.solve(subState(s, g.categories), decided, minus(cut, total.score));
+        const part = this.solve(subState(s, g.categories), decided, deferred, minus(cut, total.score), rel.options);
         if (!part) return this.exhausted ? null : fail();
         total = combine(total, part);
       }
       return keep(total);
     }
-    const part = this.branch(untouched.size > 0 ? subState(s, touchedCats) : s, decided, remaining, rel, minus(cut, total.score));
+    const part = this.branch(untouched.size > 0 ? subState(s, touchedCats) : s, decided, deferred, remaining, rel, minus(cut, total.score));
     return keep(part ? combine(total, part) : null);
   }
 
-  /** Un seul sous-problème : on essaie chaque option du premier cas qui en a, puis (si permis) de le laisser. */
-  private branch(s: State, decided: ReadonlySet<string>, remaining: Case[], rel: Relation, cut: Bound): Solution | null {
+  /** Un seul sous-problème : on essaie chaque option du premier cas (non laissé) qui en a, puis (si permis) de le laisser. */
+  private branch(s: State, decided: ReadonlySet<string>, deferred: Deferral, remaining: Case[], rel: Relation, cut: Bound): Solution | null {
     // Un cas sans option reste en attente : un déplacement suivant peut lui en donner une.
-    const c = remaining.find((x) => (rel.options.get(x.registrationId) ?? []).length > 0)!;
+    const c = remaining.find((x) => optionsNow(s, x, rel, deferred).length > 0)!;
     let best: Solution | null = null;
     const bound = (): Bound => (best && compareBounds(best.score, cut) < 0 ? best.score : cut);
     const consider = (sol: Solution | null) => {
       if (sol && (!best || compareScores(sol.score, best.score) < 0)) best = sol;
     };
-    for (const m of rel.options.get(c.registrationId)!) {
+    for (const m of optionsNow(s, c, rel, deferred)) {
       const next = applyAll(s, m.p);
       const d = new Set([...decided, c.registrationId, ...moversOf(m.p)]);
-      const child = this.solve(next, d, minus(bound(), moveBound(m)), keptOptions(s, next, m.p, rel.options, d));
+      const affected = affectedBy(s, next, m.p);
+      // Les cas laissés que ce déplacement concerne notent ce qu'il a touché ; s'il a pu leur ouvrir une option, ils reviennent.
+      const still = new Map<string, { since: ReadonlySet<string>; back: boolean }>();
+      for (const [r, e] of deferred) {
+        const dc = remaining.find((x) => x.registrationId === r);
+        if (d.has(r) || !dc) continue;
+        if (!affected(r)) still.set(r, e);
+        else still.set(r, { since: new Set([...e.since, ...affected.ids]), back: e.back || revives(next, affected, dc, this.ctx) });
+      }
+      const child = this.solve(next, d, still, minus(bound(), moveBound(m)), keptOptions(rel.options, affected, d));
       consider(child ? prefix(m, child) : null);
       if (this.exhausted) break;
     }
-    // Le laisser : jamais pour un retour ou une correction de poids possibles. L'état ne change pas : les options restent.
+    // Le laisser (pour l'instant) : jamais pour un retour ou une correction de poids possibles. L'état ne change pas.
     if (!this.exhausted && c.kind !== 'return' && c.kind !== 'weight_out') {
-      const d = new Set([...decided, c.registrationId]);
-      const known = new Map([...rel.options].filter(([r, os]) => r !== c.registrationId && os.every((o) => !moversOf(o.p).includes(c.registrationId))));
-      consider(this.solve(s, d, bound(), known));
+      const left = new Map(deferred);
+      left.set(c.registrationId, { since: new Set(), back: false });
+      consider(this.solve(s, decided, left, bound(), rel.options));
     }
     if (this.exhausted && !best) return this.greedy(s, decided);
     return best;

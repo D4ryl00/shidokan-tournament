@@ -79,7 +79,7 @@ export function solveGroups(cur: State, ctx: SearchContext, budget: number): Gro
       const sub = subState(cur, g.categories);
       const incumbent = scoreOf(sub, ctx, share[i]!);
       const solver = new GroupSolver(ctx, budget, memo);
-      const found = solver.solve(sub, new Set(), incumbent.score);
+      const found = solver.solve(sub, new Set(), new Map(), incumbent.score);
       const sol = found && compareScores(found.score, incumbent.score) < 0 ? found : incumbent;
       solved.set(key, { sol, exhausted: solver.exhausted });
       nodes += solver.visited;
