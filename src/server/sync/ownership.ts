@@ -1,3 +1,4 @@
+import type { InstanceRole } from '../auth/guard.js';
 import type { FastifyInstance } from 'fastify';
 import { frenchDate } from '../../domain/mail-template.js';
 import type { AppDb } from '../db/client.js';
@@ -50,11 +51,15 @@ export function readOnlyMessage(m: Pick<Management, 'ownerName' | 'ownerSince'>)
 /** Routes d'une compétition qui restent possibles quand la main est ailleurs : les échanges eux-mêmes, et l'export. */
 const EXEMPT = [/\/sync\//, /\/take-back$/, /\/export\.json$/];
 
-/** Une compétition dont la main est ailleurs refuse toute écriture d'organisateur. */
-export function registerReadOnlyGuard(app: FastifyInstance, db: AppDb): void {
+/**
+ * Une compétition dont la main est ailleurs refuse toute écriture d'organisateur. Sauf la supprimer, sur un PC ou un portable : ce n'y est
+ * qu'une copie (la source la garde). Le serveur, lui, refuse : un PC a la main sur sa version et doit pouvoir la lui rendre.
+ */
+export function registerReadOnlyGuard(app: FastifyInstance, db: AppDb, role: InstanceRole = 'local'): void {
   app.addHook('preHandler', async (req) => {
     const route = req.routeOptions.url ?? '';
     if (req.method === 'GET' || req.method === 'HEAD' || !route.startsWith('/api/competitions/:id') || EXEMPT.some((e) => e.test(route))) return;
+    if (req.method === 'DELETE' && route === '/api/competitions/:id' && role !== 'serveur') return;
     const id = (req.params as { id?: string }).id;
     const r = id ? row(db, id) : undefined;
     if (!r?.ownerId) return;

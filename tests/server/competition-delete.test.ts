@@ -49,13 +49,12 @@ test('compétition inconnue : 404', async () => {
   expect((await remove('inconnue', 'x')).statusCode).toBe(404);
 });
 
-test('gérée ailleurs : suppression refusée', async () => {
+test('copie gérée ailleurs, sur un PC : supprimable (la source la garde)', async () => {
   const a = await competition('Coupe du PC');
   const raw = new Database(dbPath);
   raw.prepare("update competitions set owner_instance_id = 'pc', owner_name = 'PC de la table' where id = ?").run(a);
   raw.close();
-  const res = await remove(a, 'Coupe du PC');
-  expect(res.statusCode).toBe(409);
-  expect(res.body).toContain('lecture seule ici');
-  expect((await app.inject({ method: 'GET', url: `/api/competitions/${a}` })).statusCode).toBe(200);
+  expect((await app.inject({ method: 'PATCH', url: `/api/competitions/${a}`, payload: { location: 'Ailleurs' } })).statusCode).toBe(409);
+  expect((await remove(a, 'Coupe du PC')).statusCode).toBe(204);
+  expect((await app.inject({ method: 'GET', url: `/api/competitions/${a}` })).statusCode).toBe(404);
 });

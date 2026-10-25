@@ -26,7 +26,9 @@ test('compétition gérée ailleurs : toutes les routes d’écriture → 409 av
   setOwner('pc-1', 'PC-SALLE', '2026-11-21T08:00:00.000Z');
   await app.ready();
   const writes = registeredRoutes(app).filter(
-    (r) => !['GET', 'HEAD'].includes(r.method) && r.pattern.startsWith('/api/competitions/:id') && !EXEMPT.some((e) => e.test(r.pattern)),
+    (r) => !['GET', 'HEAD'].includes(r.method) && r.pattern.startsWith('/api/competitions/:id') && !EXEMPT.some((e) => e.test(r.pattern))
+      // Seule exception, sur un PC : supprimer la copie (le nom est redemandé).
+      && !(r.method === 'DELETE' && r.pattern === '/api/competitions/:id'),
   );
   expect(writes.length).toBeGreaterThan(30);
   for (const r of writes) {
@@ -36,6 +38,7 @@ test('compétition gérée ailleurs : toutes les routes d’écriture → 409 av
     expect(res.json().error, `${r.method} ${r.pattern}`).toBe('Compétition gérée par PC-SALLE depuis le 21/11/2026 : lecture seule ici.');
   }
   expect((await app.inject({ method: 'GET', url: `/api/competitions/${id}/registrations` })).statusCode).toBe(200);
+  expect((await app.inject({ method: 'DELETE', url: `/api/competitions/${id}`, payload: { name: 'pas le nom' } })).statusCode).toBe(400);
 });
 
 test('gérée ici : écritures acceptées', async () => {

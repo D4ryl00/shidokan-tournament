@@ -124,3 +124,27 @@ test('règle de garde : zone_journal et zone_entries classées (unclassifiedTabl
   expect(unclassifiedTables(laptopDb)).toEqual([]);
   expect(versionedTables(laptopDb)).toEqual(expect.arrayContaining(['zone_journal', 'zone_entries']));
 });
+
+// --- Suppression d'une compétition ---
+
+const MAIN_DELETED = 'La compétition a été supprimée sur le PC principal : cette copie n’est plus mise à jour ; vous pouvez la supprimer.';
+const removeOn = (app: FastifyInstance) => app.inject({ method: 'DELETE', url: `/api/competitions/${id}`, payload: { name: 'Coupe' } });
+
+test('supprimée sur le PC principal : message clair sur le portable, qui peut supprimer sa copie (il est alors délié)', async () => {
+  await link();
+  expect(await copyFromMain(laptopDb, laptopPath)).toEqual({ ok: true });
+  expect((await removeOn(main)).statusCode).toBe(204);
+  expect(await copyFromMain(laptopDb, laptopPath)).toEqual({ error: MAIN_DELETED });
+  expect((await removeOn(laptop)).statusCode).toBe(204);
+  expect((await onLaptop('GET', `/api/competitions/${id}`)).statusCode).toBe(404);
+  expect((await onLaptop('GET', '/api/zone-link')).json().link).toBeNull();
+});
+
+test('zone autonome : le portable refuse de supprimer sa copie', async () => {
+  await link();
+  expect(await copyFromMain(laptopDb, laptopPath)).toEqual({ ok: true });
+  expect((await onLaptop('POST', '/api/zone-link/autonomous')).statusCode).toBeLessThan(300);
+  const res = await removeOn(laptop);
+  expect(res.statusCode).toBe(409);
+  expect(res.body).toContain('Zone autonome : repassez en ligne (ou exportez le journal) avant de supprimer cette copie.');
+});

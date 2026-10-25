@@ -9,6 +9,7 @@ export interface SyncFollow {
 }
 
 const HELD_HERE = 'Ce PC a la main : la copie n’est plus mise à jour.';
+const DELETED = 'La compétition a été supprimée sur le serveur : cette copie n’est plus mise à jour ; vous pouvez la supprimer.';
 const status = new Map<string, { lastSuccessAt: string | null; lastError: string | null; lastAttemptMs: number; running: boolean }>();
 
 export function getFollow(db: AppDb): SyncFollow | null {
@@ -52,7 +53,8 @@ export async function followOnce(db: AppDb, dbPath: string, now = new Date()): P
   try {
     await pullCopy(db, dbPath, follow.competitionId, false);
   } catch (e) {
-    const error = getManagement(db, follow.competitionId).managedHere ? HELD_HERE : (e as Error).message;
+    const gone = (e as { statusCode?: number }).statusCode === 404;
+    const error = getManagement(db, follow.competitionId).managedHere ? HELD_HERE : gone ? DELETED : (e as Error).message;
     done({ lastError: error });
     return { error };
   }

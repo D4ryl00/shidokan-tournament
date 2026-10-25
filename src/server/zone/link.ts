@@ -111,6 +111,7 @@ async function copyNow(db: AppDb, dbPath: string, fetchImpl: typeof fetch): Prom
   try {
     pkg = await fromMain<SyncPackage>(link.mainUrl, `/api/competitions/${encodeURIComponent(link.competitionId)}/export.json`, {}, fetchImpl);
   } catch (e) {
+    if ((e as { statusCode?: number }).statusCode === 404) return fail('La compétition a été supprimée sur le PC principal : cette copie n’est plus mise à jour ; vous pouvez la supprimer.');
     return fail((e as Error).message);
   }
   if (pkg?.competitionId !== link.competitionId) return fail('Le PC principal a renvoyé une autre compétition : vérifiez son adresse.');

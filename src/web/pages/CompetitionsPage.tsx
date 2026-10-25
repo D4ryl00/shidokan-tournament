@@ -24,7 +24,7 @@ export function CompetitionsPage() {
   const { data: templates = [] } = useGridTemplates(organiser);
   const [templateId, setTemplateId] = useState<string | null>(null);
   const remove = useDeleteCompetition();
-  const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null);
+  const [deleting, setDeleting] = useState<{ id: string; name: string; copyOf: string | null } | null>(null);
   const [typed, setTyped] = useState('');
   const closeDelete = () => {
     setDeleting(null);
@@ -89,9 +89,9 @@ export function CompetitionsPage() {
                       <Group gap="xs" justify="flex-end" wrap="nowrap">
                         <Button component={Link} to={`/competitions/${c.id}/reglages`} size="compact-sm" variant="subtle">Réglages</Button>
                         <Button component={Link} to={`/competitions/${c.id}/grille`} size="compact-sm" variant="subtle">Grille</Button>
-                        <Button size="compact-sm" variant="subtle" color="red" data-testid="competition-delete" disabled={!c.management.managedHere}
-                          title={c.management.managedHere ? undefined : 'Gérée ailleurs : elle ne peut pas être supprimée ici.'}
-                          onClick={() => setDeleting({ id: c.id, name: c.name })}>
+                        <Button size="compact-sm" variant="subtle" color="red" data-testid="competition-delete" disabled={!c.management.deletable}
+                          title={c.management.deletable ? undefined : 'Un PC a la main sur cette compétition : rendez ou reprenez d’abord la main.'}
+                          onClick={() => setDeleting({ id: c.id, name: c.name, copyOf: c.management.managedHere ? null : (c.management.ownerName ?? 'une autre installation') })}>
                           Supprimer
                         </Button>
                       </Group>
@@ -107,8 +107,10 @@ export function CompetitionsPage() {
         {deleting && (
           <Stack>
             <Text size="sm">
-              « {deleting.name} » et tout ce qu’elle contient (inscriptions, tableaux, résultats, liens d’inscription des clubs) seront supprimés de cette installation.
-              Une sauvegarde est faite juste avant. La version d’une autre installation (serveur ou PC) n’est pas touchée.
+              {deleting.copyOf
+                ? <>« {deleting.name} » n’est ici qu’une copie : elle est supprimée de cette installation, et sa mise à jour s’arrête. La version de {deleting.copyOf} n’est pas touchée.</>
+                : <>« {deleting.name} » et tout ce qu’elle contient (inscriptions, tableaux, résultats, liens d’inscription des clubs) seront supprimés de cette installation. La version d’une autre installation (serveur ou PC) n’est pas touchée.</>}
+              {' '}Une sauvegarde est faite juste avant.
             </Text>
             <TextInput data-testid="competition-delete-name" label="Pour confirmer, tapez le nom de la compétition" placeholder={deleting.name}
               value={typed} onChange={(e) => setTyped(e.currentTarget.value)} />

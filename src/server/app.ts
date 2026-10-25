@@ -43,10 +43,10 @@ import { syncRemoteRoutes } from './routes/sync-remote.js';
 import { syncFileRoutes, syncLocalRoutes } from './routes/sync-local.js';
 import { mirrorRoutes } from './routes/mirror.js';
 import { startMirror } from './mirror.js';
-import { startFollow } from './sync/follow.js';
+import { getFollow, resetFollowStatus, setFollow, startFollow } from './sync/follow.js';
 import { zoneLinkRoutes } from './routes/zone-link.js';
 import { zoneJournalRoutes } from './routes/zone-journal.js';
-import { startZoneFollow } from './zone/link.js';
+import { getZoneLink, resetZoneLinkStatus, restartZoneFollow, setZoneLink, startZoneFollow } from './zone/link.js';
 import { registerZoneJournal } from './zone/autonomous.js';
 import { authRoutes } from './routes/auth.js';
 import { appSettingsRoutes } from './routes/app-settings.js';
@@ -86,7 +86,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   const db = openDb(opts.dbPath);
   registerGuard(app, db, role);
   registerPermissions(app, db, role);
-  registerReadOnlyGuard(app, db);
+  registerReadOnlyGuard(app, db, role);
   registerZoneJournal(app, db);
   registerCategoryRevGuard(app, db);
   registerCompetitionEvents(app);
@@ -148,7 +148,8 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
       .filter((c) => req.user?.role !== 'zone' || c.id === req.user.competitionId)
       .map((c) => {
         const { managedHere, ownerName } = getManagement(db, c.id);
-        return { ...c, registrationCount: counts.get(c.id) ?? 0, management: { managedHere, ownerName } };
+        // Ailleurs que sur le serveur, une compétition gérée ailleurs n'est qu'une copie : on peut la supprimer.
+        return { ...c, registrationCount: counts.get(c.id) ?? 0, management: { managedHere, ownerName, deletable: managedHere || role !== 'serveur' } };
       });
   });
 
@@ -169,8 +170,24 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     if (!c) return reply.status(404).send(NOT_FOUND);
     const { name } = z.object({ name: z.string() }).strict().parse(req.body ?? {});
     if (name.trim() !== c.name.trim()) return reply.status(400).send({ error: 'Le nom saisi ne correspond pas à la compétition.' });
+    // Portable de zone : ses saisies hors réseau n'existent qu'ici tant qu'elles ne sont pas parvenues au PC principal.
+    const zone = getZoneLink(db);
+    const pending = db.$client.prepare('select 1 from zone_journal where competition_id = ? and sent_at is null limit 1').get(c.id);
+    if (zone?.competitionId === c.id && (zone.autonomous || pending)) {
+      return reply.status(409).send({ error: 'Zone autonome : repassez en ligne (ou exportez le journal) avant de supprimer cette copie.' });
+    }
     await backupNow(db, opts.dbPath);
     await deleteCompetition(db, req.params.id);
+    // La copie suivie (serveur ou PC principal) ne revient pas : le suivi s'arrête.
+    if (getFollow(db)?.competitionId === c.id) {
+      setFollow(db, null);
+      resetFollowStatus(opts.dbPath);
+    }
+    if (zone?.competitionId === c.id) {
+      setZoneLink(db, null);
+      resetZoneLinkStatus(opts.dbPath);
+      restartZoneFollow(opts.dbPath);
+    }
     return reply.status(204).send();
   });
 

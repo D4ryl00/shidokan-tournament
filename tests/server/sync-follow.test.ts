@@ -188,3 +188,29 @@ test('compétition absente de ce PC : message clair', async () => {
   await local('PUT', '/api/sync/follow', { competitionId: id, intervalMin: 5 });
   expect(await followOnce(pcDb, pcPath)).toEqual({ error: 'Cette compétition n’est pas sur ce PC : récupérez-en d’abord une copie.' });
 });
+
+// --- Suppression d'une compétition ---
+
+const SERVER_DELETED = 'La compétition a été supprimée sur le serveur : cette copie n’est plus mise à jour ; vous pouvez la supprimer.';
+
+test('supprimée sur le serveur : message clair sur le PC, qui peut supprimer sa copie (le suivi s’arrête)', async () => {
+  await register('DURAND');
+  expect((await local('POST', '/api/sync/pull', { competitionId: id, take: false })).statusCode).toBe(200);
+  await local('PUT', '/api/sync/follow', { competitionId: id, intervalMin: 5 });
+  expect((await server.inject({ method: 'DELETE', url: `/api/competitions/${id}`, headers: { cookie }, payload: { name: 'Coupe en ligne' } })).statusCode).toBe(204);
+  expect(await followOnce(pcDb, pcPath)).toEqual({ error: SERVER_DELETED });
+  expect((await local('GET', `/api/competitions/${id}`)).statusCode).toBe(200);
+  const list = (await local('GET', '/api/competitions')).json() as { id: string; management: { deletable: boolean } }[];
+  expect(list.find((c) => c.id === id)!.management.deletable).toBe(true);
+  expect((await pc.inject({ method: 'DELETE', url: `/api/competitions/${id}`, payload: { name: 'Coupe en ligne' } })).statusCode).toBe(204);
+  expect((await local('GET', `/api/competitions/${id}`)).statusCode).toBe(404);
+  expect((await local('GET', '/api/sync/follow')).json().competitionId).toBeNull();
+});
+
+test('la main est au PC : le serveur refuse de supprimer sa version', async () => {
+  expect((await local('POST', '/api/sync/pull', { competitionId: id, take: true })).statusCode).toBe(200);
+  const list = (await orga('GET', '/api/competitions')).json() as { id: string; management: { deletable: boolean } }[];
+  expect(list.find((c) => c.id === id)!.management.deletable).toBe(false);
+  const res = await server.inject({ method: 'DELETE', url: `/api/competitions/${id}`, headers: { cookie }, payload: { name: 'Coupe en ligne' } });
+  expect(res.statusCode).toBe(409);
+});

@@ -113,7 +113,7 @@ Sans internet : « Exporter la compétition (fichier) » sur le PC, puis sur le 
 
 **PC perdu ou en panne** : sur le serveur, « Échanges avec le serveur » → « Reprendre la main » (à partir de la version du serveur, ou de la dernière copie reçue pendant la journée), et révoquez le jeton du PC. Si un autre PC a continué la compétition, exportez-la en fichier depuis ce PC, puis importez-la en ligne.
 
-**Supprimer une compétition** (une démo, une erreur) : liste des compétitions → « Supprimer », puis retapez son nom. Tout ce qu’elle contient est effacé de cette installation seulement, et une sauvegarde est faite juste avant. Pour revenir en arrière : onglet Podiums d’une autre compétition → Sauvegardes ; la restauration remet toutes les compétitions dans l’état de ce moment-là. Une compétition gérée ailleurs ne peut pas être supprimée : rendez ou reprenez d’abord la main.
+**Supprimer une compétition** (une démo, une erreur) : liste des compétitions → « Supprimer », puis retapez son nom. Tout ce qu’elle contient est effacé de cette installation seulement, et une sauvegarde est faite juste avant. Pour revenir en arrière : onglet Podiums d’une autre compétition → Sauvegardes ; la restauration remet toutes les compétitions dans l’état de ce moment-là. La suppression ne se propage jamais : supprimée sur le serveur, la compétition reste sur les PC qui en ont une copie ; supprimée sur le PC principal, elle reste sur les portables de zone. Ces copies ne sont plus mises à jour (« La compétition a été supprimée… ») et se suppriment de la même façon, sauf un portable en zone autonome (repassez d’abord en ligne). Sur le serveur, une compétition dont un PC a la main ne peut pas être supprimée.
 
 ## Variante : le jour J tout en ligne, avec le PC en secours
 
