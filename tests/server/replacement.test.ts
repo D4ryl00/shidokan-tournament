@@ -589,7 +589,7 @@ test('split : le seul en +84 reçoit les deux plus lourds de -84 (une réaffecta
   const r = await replacement();
   const c = r.cases.find((x) => x.registrationId === alone.id)!;
   const pull = r.proposals[c.id]!.find((p) => p.reason.includes('pour donner une poule'))!;
-  expect(pull.manual).toBe(true);
+  expect(pull.manual).toBe(false);
   const preview = (await call('POST', '/replacement/preview', { proposalId: pull.id })).json() as { categories: { label: string; after: string[][] }[] };
   expect(preview.categories.find((x) => x.label.includes('+84'))!.after.flat()).toHaveLength(3);
   expect((await call('POST', '/replacement/apply', { proposalId: pull.id, fingerprint: r.fingerprint })).statusCode).toBe(200);

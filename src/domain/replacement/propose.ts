@@ -1,9 +1,11 @@
 import { ageMove } from '../ages.js';
+import type { RuleId } from '../settings.js';
 import { categoryLabel, keyString, naturalKey, type CategoryKey } from '../categories.js';
 import { DISCIPLINES } from '../disciplines.js';
 import { neighborWeightClasses } from '../weights.js';
 import { categoryForKey, isClosedTarget, isLocked, originalCategory } from './detect.js';
 import type { Case, CategoryState, Member, Proposal, ProposalType, State } from './types.js';
+import { isRuleOn, NO_VALIDATION_RULES, PRE_APPROVAL_RULES } from './rules.js';
 import { waveEffects } from './waves.js';
 import { applyProposal } from './move.js';
 import { activeMembers, categoryWeightGap, effectiveWeight, gapThreshold, weighInClass } from './weights.js';
@@ -18,23 +20,28 @@ export function ageCompatibility(
   targetBands: string[],
   /** Déplacement manuel : deux tranches voisines dans les deux sens (un benjamin parmi des pupilles). */
   opts: { bothWays?: boolean } = {},
-): { ok: boolean; kind: 'same' | 'C' | 'D'; crossesMinorAdult: boolean } {
+): { ok: boolean; kind: 'same' | 'C' | 'D'; crossesMinorAdult: boolean; directions: ('up' | 'down')[] } {
   const { grid, settings } = state;
   const allowed = (x: ReturnType<typeof ageMove>) =>
     (x.kind === 'C' || x.kind === 'D') && (x.kind !== 'D' || settings.mixSeniorsVeterans) && (!x.crossesMinorAdult || settings.mixMinorsAdults);
   let kind: 'same' | 'C' | 'D' = 'same';
   let crossesMinorAdult = false;
+  const dirs = new Set<'up' | 'down'>();
   for (const b of targetBands) {
     if (b === band) continue;
     const up = ageMove(grid, band, b);
     const down = ageMove(grid, b, band);
     // On monte d'une tranche ; une tranche plus jeune n'est admise que si la sienne est déjà dans la catégorie.
-    const link = allowed(up) ? up : (opts.bothWays || targetBands.includes(band)) && allowed(down) ? down : null;
-    if (!link || (link.kind !== 'C' && link.kind !== 'D')) return { ok: false, kind, crossesMinorAdult };
+    const goesUp = allowed(up);
+    const link = goesUp ? up : (opts.bothWays || targetBands.includes(band)) && allowed(down) ? down : null;
+    if (!link || (link.kind !== 'C' && link.kind !== 'D')) return { ok: false, kind, crossesMinorAdult, directions: [] };
     if (link.crossesMinorAdult) crossesMinorAdult = true;
-    if (!targetBands.includes(band)) kind = kind === 'D' ? 'D' : link.kind;
+    if (!targetBands.includes(band)) {
+      kind = kind === 'D' ? 'D' : link.kind;
+      dirs.add(goesUp ? 'up' : 'down');
+    }
   }
-  return { ok: true, kind, crossesMinorAdult };
+  return { ok: true, kind, crossesMinorAdult, directions: (['up', 'down'] as const).filter((d) => dirs.has(d)) };
 }
 
 const isMinor = (state: State, code: string) => state.grid.ageBands.find((b) => b.code === code)?.isMinor ?? false;
@@ -89,10 +96,11 @@ function evaluate(state: State, m: Member, t: CategoryState): Evaluation | null 
     if (!settings.mixSexes.enabled || !settings.mixSexes.ageBandCodes.includes(m.ageBandCode)) return null;
     F = true;
   }
-  const ages = ageCompatibility(state, m.ageBandCode, tk.ageBandCodes);
+  const ages = ageCompatibility(state, m.ageBandCode, tk.ageBandCodes, { bothWays: true });
   if (!ages.ok) return null;
   age = ages.kind;
   crossesMinorAdult = ages.crossesMinorAdult;
+  const ageDirections = ages.directions;
 
   const merged = [...activeMembers(state, t.id).filter((x) => x.registrationId !== m.registrationId), m];
   const hasWeight = DISCIPLINES[tk.discipline].hasWeight;
@@ -111,7 +119,51 @@ function evaluate(state: State, m: Member, t: CategoryState): Evaluation | null 
   }
 
   const type: ProposalType = F ? 'F' : crossesMinorAdult ? 'E' : H ? 'H' : G ? 'G' : age !== 'same' ? age : B ? 'B' : 'A';
-  return { type, changes, checks: { weightGapKg: Math.round(gap * 100) / 100, threshold, ageMove: age, crossesMinorAdult, mixedSex: F } };
+  return { type, changes, checks: { weightGapKg: Math.round(gap * 100) / 100, threshold, ageMove: age, crossesMinorAdult, mixedSex: F, ageDirections } };
+}
+
+type ProfileInput = Omit<Proposal, 'rules' | 'manual' | 'preApproved' | 'rank'>;
+
+/**
+ * Règles qu'une proposition utilise, et si elle s'impose (retour, correction d'un poids hors catégorie : jamais
+ * retirée même si une règle est désactivée).
+ */
+export function ruleProfile(state: State, p: ProfileInput): { rules: RuleId[]; forced: boolean } {
+  const over = p.checks.weightGapKg > p.checks.threshold + 1e-9;
+  if (p.type === 'R') return { rules: ['return'], forced: true };
+  const m = state.members.find((x) => x.registrationId === p.registrationId);
+  const caseReg = p.caseId.slice(p.caseId.indexOf(':') + 1);
+  if (p.caseId.startsWith('alone:') && p.registrationId !== caseReg) return { rules: over ? ['split', 'weightGap'] : ['split'], forced: false };
+  if (m && p.caseId.startsWith('weight_out:') && p.changes.weightClassId !== undefined) {
+    const wic = weighInClass(m, state);
+    if (wic) {
+      const ks = keyString(naturalKey({ ...m, weightClassId: wic.id }, m));
+      const own = 'newKey' in p.target ? keyString(p.target.newKey) === ks : categoryForKey(state, ks)?.id === p.target.categoryId;
+      if (own) return { rules: over ? ['weightGap'] : [], forced: true };
+    }
+  }
+  const rules: RuleId[] = [];
+  if (p.changes.discipline) rules.push('discipline');
+  if (p.changes.ruleset === 'jiyu') rules.push('shobuToJiyu');
+  if (p.checks.mixedSex) rules.push('mixSexes');
+  if (p.checks.crossesMinorAdult) rules.push('minorsAdults');
+  else if (p.checks.ageMove === 'D') rules.push('seniorsVeterans');
+  else for (const d of p.checks.ageDirections) rules.push(d === 'up' ? 'ageUp' : 'ageDown');
+  if (over) rules.push('weightGap');
+  if (rules.length === 0) rules.push('weight');
+  return { rules, forced: false };
+}
+
+/** Drapeaux dérivés des règles d'une proposition ; `null` si une règle utilisée est désactivée (sauf si elle s'impose). */
+function withRules<T extends ProfileInput>(state: State, m: Member, p: T): (T & Pick<Proposal, 'rules' | 'manual' | 'preApproved'>) | null {
+  const { rules, forced } = ruleProfile(state, p);
+  if (!forced && rules.some((r) => !isRuleOn(state.settings, r))) return null;
+  return {
+    ...p,
+    rules,
+    manual: rules.some((r) => !NO_VALIDATION_RULES.has(r)),
+    preApproved: m.clubPreApproval && !p.waveChange && p.waveShifts.length === 0 && rules.some((r) => PRE_APPROVAL_RULES.has(r)),
+  };
 }
 
 function order(m: Member): ProposalType[] {
@@ -131,7 +183,7 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
     const id = `${type}:${m.registrationId}>${targetId}`;
     const opponents = 'categoryId' in target ? activeMembers(state, target.categoryId).filter((x) => x.registrationId !== m.registrationId) : [];
     const waves = waveEffects(state, { caseId: c.id, type, registrationId: m.registrationId, target, changes: ev.changes });
-    out.push({
+    const built = withRules(state, m, {
       id,
       caseId: c.id,
       type,
@@ -139,13 +191,11 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
       target,
       changes: ev.changes,
       checks: ev.checks,
-      manual: type !== 'A' && type !== 'R',
       ...waves,
-      preApproved: !waves.waveChange && waves.waveShifts.length === 0 && m.clubPreApproval && ['B', 'C', 'D', 'E'].includes(type),
       // La catégorie telle qu'elle sera après le déplacement (« Benjamins / Minimes M · -45 / -50 kg »), et combien d'adversaires il y aura.
       reason: `${m.label} : ${from} → ${labelOf(arrivalKey(state, m, toKey, ev.changes))}${withWhom(opponents)}`,
-      sortKey: [order(m).indexOf(type), ...extra, members === 1 ? 0 : 1, ev.checks.weightGapKg, labelOf(toKey)],
     });
+    if (built) out.push({ ...built, sortKey: [order(m).indexOf(type), ...extra, members === 1 ? 0 : 1, ev.checks.weightGapKg, labelOf(toKey)] });
   };
 
   if (c.kind === 'weight_out') {
@@ -155,11 +205,12 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
     const existing = categoryForKey(state, keyString(key));
     if (isLocked(existing)) return [];
     const merged = [...(existing ? activeMembers(state, existing.id) : []), m];
-    const checks = { weightGapKg: Math.round(categoryWeightGap(merged, state.grid) * 100) / 100, threshold: gapThreshold(merged, state), ageMove: 'same' as const, crossesMinorAdult: false, mixedSex: false };
+    const checks = { weightGapKg: Math.round(categoryWeightGap(merged, state.grid) * 100) / 100, threshold: gapThreshold(merged, state), ageMove: 'same' as const, crossesMinorAdult: false, mixedSex: false, ageDirections: [] };
     make('A', existing ? { categoryId: existing.id } : { newKey: key }, existing?.key ?? key, { changes: { weightClassId: wic.id }, checks }, merged.length - 1);
     if (merged.length === 1) {
       // Catégorie du poids réel vide : il y serait seul. Proposée en dernier, après les catégories où il aurait un adversaire.
-      const alone = out.at(-1)!;
+      const alone = out.at(-1);
+      if (!alone) return [];
       alone.reason += ' — il y sera seul (sans adversaire), à réaffecter ensuite';
       alone.sortKey[0] = Number.MAX_SAFE_INTEGER;
       const corrected = { ...m, weightClassId: wic.id };
@@ -171,15 +222,16 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
         const ev = evaluate(hypothetical, corrected, t);
         if (!ev) continue;
         const prefIndex = ev.changes.discipline ? m.otherDisciplines.indexOf(ev.changes.discipline) : 0;
+        const before = out.length;
         make(ev.type, { categoryId: t.id }, t.key, { changes: { ...ev.changes, weightClassId: wic.id }, checks: ev.checks }, others.length, [prefIndex]);
-        out.at(-1)!.reason += ` — lui en ${wic.label} kg, la catégorie de son poids réel`;
+        if (out.length > before) out.at(-1)!.reason += ` — lui en ${wic.label} kg, la catégorie de son poids réel`;
       }
     }
   } else if (c.kind === 'return') {
     const home = originalCategory(state, m);
     if (!home || !m.original) return [];
     const merged = [...activeMembers(state, home.id), m];
-    const checks = { weightGapKg: Math.round(categoryWeightGap(merged, state.grid) * 100) / 100, threshold: gapThreshold(merged, state), ageMove: 'same' as const, crossesMinorAdult: false, mixedSex: false };
+    const checks = { weightGapKg: Math.round(categoryWeightGap(merged, state.grid) * 100) / 100, threshold: gapThreshold(merged, state), ageMove: 'same' as const, crossesMinorAdult: false, mixedSex: false, ageDirections: [] };
     const changes: Proposal['changes'] = { discipline: m.original.discipline, ...(m.original.ruleset ? { ruleset: m.original.ruleset } : {}), ...(m.original.weightClassId ? { weightClassId: m.original.weightClassId } : {}) };
     make('R', { categoryId: home.id }, home.key, { changes, checks }, merged.length - 1);
   } else {
@@ -199,7 +251,7 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
       const waves = waveEffects(state, { caseId: c.id, type: pull.type, registrationId: pull.moved[0]!.registrationId, target: pull.target, changes: {} });
       const names = pull.moved.map((x) => x.label).join(' et ');
       const k = pull.moved.length;
-      out.push({
+      const built = withRules(state, m, {
         id: `${pull.type}:${pull.moved.map((x) => x.registrationId).join('+')}>${pull.target.categoryId}`,
         caseId: c.id,
         type: pull.type,
@@ -208,13 +260,11 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
         target: pull.target,
         changes: {},
         checks: pull.checks,
-        manual: true,
         ...waves,
-        preApproved: false,
         reason: `${names} : ${labelOf(pull.from)} → ${labelOf(pull.to)}, pour donner ${k > 1 ? 'une poule' : 'un adversaire'} à ${m.label}`,
-        // Après les déplacements du combattant lui-même (de même type) : la poule de 3 d'abord.
-        sortKey: [order(m).indexOf(pull.type), 0, k > 1 ? 2 : 3, pull.checks.weightGapKg, labelOf(pull.to)],
       });
+      // Après les déplacements du combattant lui-même (de même type) : la poule de 3 d'abord.
+      if (built) out.push({ ...built, sortKey: [order(m).indexOf(pull.type), 0, k > 1 ? 2 : 3, pull.checks.weightGapKg, labelOf(pull.to)] });
     }
   }
 
@@ -301,7 +351,7 @@ function pullProposals(state: State, m: Member): { type: 'A' | 'B'; moved: Membe
       });
       if (!ok) continue;
       const merged = activeMembers(current, t.id);
-      const checks = { weightGapKg: Math.round(categoryWeightGap(merged, state.grid) * 100) / 100, threshold: gapThreshold(merged, state), ageMove: 'same' as const, crossesMinorAdult: false, mixedSex: false };
+      const checks = { weightGapKg: Math.round(categoryWeightGap(merged, state.grid) * 100) / 100, threshold: gapThreshold(merged, state), ageMove: 'same' as const, crossesMinorAdult: false, mixedSex: false, ageDirections: [] };
       out.push({ type, moved, target: { categoryId: t.id }, from: source.key, to: current.categories.find((x) => x.id === t.id)!.key, checks });
     }
   }

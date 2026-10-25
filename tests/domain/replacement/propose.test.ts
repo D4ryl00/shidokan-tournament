@@ -193,7 +193,7 @@ test('contraintes absolues sur un état aléatoire', () => {
       if (minor) expect(ruleset).not.toBe('shobu');
       if (m.ruleset === 'jiyu') expect(key.ruleset).not.toBe('shobu');
       if (!key.ageBandCodes.includes(m.ageBandCode)) {
-        expect(key.ageBandCodes.some((b) => ['C', 'D'].includes(ageMove(s.grid, m.ageBandCode, b).kind))).toBe(true);
+        expect(key.ageBandCodes.some((b) => [ageMove(s.grid, m.ageBandCode, b).kind, ageMove(s.grid, b, m.ageBandCode).kind].some((k) => k === 'C' || k === 'D'))).toBe(true);
       }
       if (key.discipline !== m.discipline) {
         expect(m.otherDisciplines).toContain(key.discipline);
@@ -257,14 +257,14 @@ test('catégorie d’une session lancée (frozen) : ni cas ni cible', () => {
 
 
 describe('déplacement manuel : âge', () => {
-  test('deux tranches voisines dans les deux sens sans avertissement ; propositions toujours vers le haut seulement', () => {
+  test('deux tranches voisines dans les deux sens sans avertissement ; la tranche au-dessous est aussi proposée', () => {
     const benj = member({ ageBandCode: 'benjamin', weightClassId: 'benjamin:F:-30', approxWeightKg: 29 });
     const p1 = member({ ageBandCode: 'pupille', weightClassId: 'pupille:F:-30', approxWeightKg: 28 });
     const p2 = member({ ageBandCode: 'pupille', weightClassId: 'pupille:F:-30', approxWeightKg: 28 });
     const s = makeState([benj, p1, p2]);
     const pupilles = s.categories.find((c) => c.id === p1.categoryId)!;
     expect(moveViolations(s, benj, pupilles)).toEqual([]);
-    expect(props(s, benj.registrationId).some((p) => 'categoryId' in p.target && p.target.categoryId === pupilles.id)).toBe(false);
+    expect(props(s, benj.registrationId).some((p) => 'categoryId' in p.target && p.target.categoryId === pupilles.id)).toBe(true);
   });
   test('messages : plus d’une tranche, mineurs / adultes', () => {
     const mini = member({ ageBandCode: 'minime', weightClassId: 'minime:F:-35', approxWeightKg: 30 });
@@ -290,7 +290,7 @@ describe('split : le combattant seul reçoit les plus lourds de la catégorie du
       ['A', [below[3]!.registrationId, below[2]!.registrationId]],
       ['A', [below[3]!.registrationId]],
     ]);
-    expect(pulls.every((p) => p.manual && p.target && 'categoryId' in p.target && p.target.categoryId === alone.categoryId)).toBe(true);
+    expect(pulls.every((p) => !p.manual && p.rules.join() === 'split' && p.target && 'categoryId' in p.target && p.target.categoryId === alone.categoryId)).toBe(true);
     expect(pulls[0]!.reason).toContain('pour donner une poule');
     // Le déplacement du combattant seul lui-même (écart 13 kg, B) passe après.
     expect(props(s, alone.registrationId).at(-1)).toMatchObject({ type: 'B', registrationId: alone.registrationId });
@@ -339,5 +339,78 @@ describe('poids hors catégorie : catégorie du poids réel vide', () => {
     const light = member({ sex: 'M', ageBandCode: 'minime', weightClassId: 'minime:M:-40', weighInKg: 39, presence: 'present' });
     const ps = props(makeState([garnier, light]), garnier.registrationId);
     expect(ps.some((p) => 'categoryId' in p.target && p.target.categoryId === light.categoryId)).toBe(false);
+  });
+});
+
+describe('règles des propositions', () => {
+  const withOff = (off: ('ageDown' | 'weight' | 'weightGap')[]): Partial<State> => {
+    const settings = defaultSettings();
+    settings.replacementRules = { ...settings.replacementRules, off };
+    return { settings };
+  };
+  const minimeAndBenjamines = () => {
+    const mini = member({ ageBandCode: 'minime', weightClassId: 'minime:F:-40', approxWeightKg: 39 });
+    const benj = [
+      member({ ageBandCode: 'benjamin', weightClassId: 'benjamin:F:-40', approxWeightKg: 37 }),
+      member({ ageBandCode: 'benjamin', weightClassId: 'benjamin:F:-40', approxWeightKg: 38 }),
+    ];
+    return { mini, benj };
+  };
+  const toCategory = (ps: Proposal[], id: string | null) => ps.find((x) => 'categoryId' in x.target && x.target.categoryId === id);
+
+  test('tranche d’âge au-dessous : minime seule vers des benjamines dans l’écart', () => {
+    const { mini, benj } = minimeAndBenjamines();
+    const p = toCategory(props(makeState([mini, ...benj]), mini.registrationId), benj[0]!.categoryId)!;
+    expect(p).toMatchObject({ type: 'C', manual: true, rules: ['ageDown'], checks: { ageDirections: ['down'] } });
+  });
+  test('interrupteur coupé : la règle n’est plus proposée sur les cartes', () => {
+    const { mini, benj } = minimeAndBenjamines();
+    const s = makeState([mini, ...benj], withOff(['ageDown']));
+    expect(toCategory(props(s, mini.registrationId), benj[0]!.categoryId)).toBeUndefined();
+    const fresh = (over: Partial<State>) => {
+      const a = member({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+      const b = member({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
+      return props(makeState([a, b], over), a.registrationId);
+    };
+    expect(fresh({}).some((p) => p.type === 'A')).toBe(true);
+    expect(fresh(withOff(['weight'])).some((p) => p.type === 'A')).toBe(false);
+  });
+  test('split dans l’écart réglé : cas simple', () => {
+    const sen = (kg: number, wc = 'senior:M:-84') => member({ ageBandCode: 'senior', sex: 'M', weightClassId: wc, approxWeightKg: kg });
+    const alone = sen(85, 'senior:M:+84');
+    const s = makeState([alone, sen(72), sen(78), sen(83), sen(84)]);
+    const pulls = props(s, alone.registrationId).filter((p) => p.registrationId !== alone.registrationId);
+    expect(pulls).toHaveLength(2);
+    for (const p of pulls) expect(p).toMatchObject({ manual: false, rules: ['split'] });
+  });
+  test('correction de poids au-dessus de l’écart : à valider, jamais retirée', () => {
+    for (const over of [[], ['weightGap' as const]]) {
+      const a = member({ weightClassId: 'cadet:F:-54', approxWeightKg: 53, weighInKg: 70, presence: 'present' });
+      const b = member({ weightClassId: 'cadet:F:+61', approxWeightKg: 62 });
+      const c = member({ weightClassId: 'cadet:F:+61', approxWeightKg: 62 });
+      const lonely = member({ weightClassId: 'cadet:F:-47', approxWeightKg: 40 });
+      const s = makeState([a, b, c, lonely], withOff(over));
+      expect(props(s, a.registrationId)[0]).toMatchObject({ type: 'A', rules: ['weightGap'], manual: true, target: { categoryId: b.categoryId } });
+    }
+  });
+  test('plusieurs règles : autre discipline et tranche au-dessus', () => {
+    const mini = member({ ageBandCode: 'minime', weightClassId: 'minime:F:-40', approxWeightKg: 39, otherDisciplines: ['shido-boxing'] });
+    const cad = [
+      member({ discipline: 'shido-boxing', ageBandCode: 'cadet', weightClassId: 'cadet:F:-47', approxWeightKg: 40 }),
+      member({ discipline: 'shido-boxing', ageBandCode: 'cadet', weightClassId: 'cadet:F:-47', approxWeightKg: 41 }),
+    ];
+    const s = makeState([mini, ...cad]);
+    const p = toCategory(props(s, mini.registrationId), cad[0]!.categoryId)!;
+    expect(p.rules).toEqual(['discipline', 'ageUp']);
+    expect(p.manual).toBe(true);
+  });
+  test('pré-accord : aussi pour la tranche au-dessous, jamais pour une discipline', () => {
+    const { mini, benj } = minimeAndBenjamines();
+    mini.clubPreApproval = true;
+    expect(toCategory(props(makeState([mini, ...benj]), mini.registrationId), benj[0]!.categoryId)).toMatchObject({ preApproved: true });
+    const d = member({ ageBandCode: 'cadet', weightClassId: 'cadet:F:-47', approxWeightKg: 40, otherDisciplines: ['shido-boxing'], clubPreApproval: true });
+    const sb = [member({ discipline: 'shido-boxing', ageBandCode: 'cadet', weightClassId: 'cadet:F:-47', approxWeightKg: 40 }), member({ discipline: 'shido-boxing', ageBandCode: 'cadet', weightClassId: 'cadet:F:-47', approxWeightKg: 41 })];
+    const p = toCategory(props(makeState([d, ...sb]), d.registrationId), sb[0]!.categoryId)!;
+    expect(p).toMatchObject({ rules: ['discipline'], preApproved: false });
   });
 });

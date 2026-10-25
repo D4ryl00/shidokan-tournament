@@ -1,5 +1,5 @@
 import type { CategoryKey, CategoryStatus } from '../categories.js';
-import type { CompetitionSettings } from '../settings.js';
+import type { CompetitionSettings, RuleId } from '../settings.js';
 import type { CategoryGrid, DisciplineId, Ruleset, Sex } from '../types.js';
 import type { Wave } from '../waves.js';
 
@@ -85,7 +85,9 @@ export interface Proposal {
   target: { categoryId: string } | { newKey: CategoryKey };
   /** `null` retire la valeur (passage au kata : ni règlement ni poids). */
   changes: { discipline?: DisciplineId; ruleset?: Ruleset | null; weightClassId?: string | null };
-  checks: { weightGapKg: number; threshold: number; ageMove: 'same' | 'C' | 'D'; crossesMinorAdult: boolean; mixedSex: boolean };
+  checks: { weightGapKg: number; threshold: number; ageMove: 'same' | 'C' | 'D'; crossesMinorAdult: boolean; mixedSex: boolean; ageDirections: ('up' | 'down')[] };
+  /** Règles utilisées par le déplacement (§2.1 : « autre discipline » + « tranche au-dessus »…). */
+  rules: RuleId[];
   manual: boolean;
   /** Vague de départ et d'arrivée quand elles diffèrent (`null` = en attente) : jamais pré-approuvée ni validée en masse. */
   waveChange: { from: string | null; to: string | null } | null;
