@@ -204,3 +204,14 @@ test('ajout manuel dans une catégorie fermée : avertissement', async () => {
   expect(res.statusCode).toBe(201);
   expect(res.json().warning).toBe('Catégorie non ouverte à cette compétition : l’inscription ira en Réaffectation.');
 });
+
+test('modifier une inscription vers une catégorie fermée : avertissement', async () => {
+  const input = { clubId: null, lastName: 'MARTIN', firstName: 'Léa', sex: 'F', ageBandCode: 'senior', discipline: 'kata', ruleset: null, weightClassId: null, source: 'manual' };
+  const row = (await app.inject({ method: 'POST', url: `${base}/registrations`, payload: input })).json().row as { id: string };
+  await app.inject({ method: 'PUT', url: `${base}/closed-categories`, payload: { cells: [{ ageBandCode: 'senior', sex: 'F', discipline: 'karate', ruleset: 'jiyu' }], closed: true } });
+  const res = await app.inject({ method: 'PUT', url: `${base}/registrations/${row.id}`, payload: { ...input, discipline: 'karate', ruleset: 'jiyu', weightClassId: 'senior:F:-61' } });
+  expect(res.statusCode).toBe(200);
+  expect(res.json().warning).toBe('Catégorie non ouverte à cette compétition : l’inscription ira en Réaffectation.');
+  const again = await app.inject({ method: 'PUT', url: `${base}/registrations/${row.id}`, payload: { ...input, firstName: 'Lou', discipline: 'karate', ruleset: 'jiyu', weightClassId: 'senior:F:-61' } });
+  expect(again.json().warning ?? null).toBeNull();
+});

@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, inArray, notInArray } from 'drizzle-orm';
+import { and, asc, desc, eq, notInArray } from 'drizzle-orm';
 import { ZodError } from 'zod';
 import type { Competition, CompetitionInput } from '../../domain/competition.js';
+import { entryCells, entryKey, type EntryCell } from '../../domain/closed-categories.js';
 import { ffkDefaultGrid } from '../../domain/grid-ffk.js';
 import { defaultZoneNames } from '../../domain/zones.js';
 import { validateGrid } from '../../domain/grid.js';
@@ -137,6 +138,13 @@ export async function replaceGrid(db: AppDb, competitionId: string, grid: Catego
   if (errors.length > 0) throw new GridValidationError(errors);
   const inUse = usedWeightClassesRemoved(db, competitionId, grid);
   if (inUse.length > 0) throw new GridValidationError(inUse);
+  // Tableau « Catégories ouvertes » : ses cases qui n'existent plus dans la nouvelle grille (tranche retirée, shobu d'une tranche
+  // devenue « Mineurs ») sont oubliées, et il doit rester au moins une case ouverte.
+  const cellKey = (r: typeof closedCategories.$inferSelect) => entryKey({ ageBandCode: r.ageBandCode, sex: r.sex, discipline: r.discipline, ruleset: (r.ruleset || null) as EntryCell['ruleset'] });
+  const valid = new Set(entryCells(grid).map(entryKey));
+  const closedRows = db.select().from(closedCategories).where(eq(closedCategories.competitionId, competitionId)).all();
+  const stillClosed = new Set(closedRows.map(cellKey).filter((k) => valid.has(k)));
+  if (valid.size > 0 && stillClosed.size === valid.size) throw new GridValidationError(['Au moins une catégorie doit rester ouverte.']);
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     const ids = grid.weightClasses.map((w) => w.id);
@@ -166,10 +174,10 @@ export async function replaceGrid(db: AppDb, competitionId: string, grid: Catego
         .run();
     }
     // … et du tableau des catégories ouvertes.
-    const closedRows = t.select().from(closedCategories).where(eq(closedCategories.competitionId, competitionId)).all();
-    const orphans = [...new Set(closedRows.map((r) => r.ageBandCode).filter((c) => !codes.has(c)))];
-    if (orphans.length) {
-      t.delete(closedCategories).where(and(eq(closedCategories.competitionId, competitionId), inArray(closedCategories.ageBandCode, orphans))).run();
+    for (const r of closedRows.filter((x) => !valid.has(cellKey(x)))) {
+      t.delete(closedCategories)
+        .where(and(eq(closedCategories.competitionId, competitionId), eq(closedCategories.ageBandCode, r.ageBandCode), eq(closedCategories.sex, r.sex), eq(closedCategories.discipline, r.discipline), eq(closedCategories.ruleset, r.ruleset)))
+        .run();
     }
     // … et des règles des vagues.
     for (const w of t.select().from(waves).where(eq(waves.competitionId, competitionId)).all()) {

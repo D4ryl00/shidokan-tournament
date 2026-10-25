@@ -89,7 +89,7 @@ export function OpenCategoriesMatrix({ competitionId, grid }: { competitionId: s
                         <Group gap={4} justify="center" wrap="nowrap" title={isLocked ? LOCKED_TITLE : undefined}>
                           <Checkbox size="xs" data-testid={`open-cell-${k}`} aria-label={`${band.label} ${sex} ${DISCIPLINES[col.discipline].label}${col.ruleset ? ` ${col.ruleset}` : ''}`}
                             checked={!closed.has(k)} disabled={isLocked} onChange={() => toggle([cell])} />
-                          {n > 0 && <Text size="xs" c="dimmed" className="num" title={plural(n, 'inscrit')}>{n}</Text>}
+                          {n > 0 && <Text size="xs" c="dimmed" className="num" style={{ whiteSpace: 'nowrap' }} data-testid={`open-count-${k}`}>{plural(n, 'inscrit')}</Text>}
                         </Group>
                       </Table.Td>
                     );

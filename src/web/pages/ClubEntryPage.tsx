@@ -108,6 +108,11 @@ export function ClubEntryPage() {
               <Title order={2} fz="lg">{view.lines.length === 0 ? 'Vos combattants' : `Vos combattants (${view.lines.length})`}</Title>
               {view.editable && <Button data-testid="add-fighter" onClick={() => setEditing('new')}>Ajouter un combattant</Button>}
             </Group>
+            {view.closedSummary.length > 0 && (
+              <Alert color="gray" title="Non ouvert à cette compétition" data-testid="club-entry-closed">
+                <Stack gap={2}>{view.closedSummary.map((l) => <Text key={l} size="sm">{l}</Text>)}</Stack>
+              </Alert>
+            )}
             {view.lines.length === 0 && (
               <EmptyState title="Aucun combattant pour l’instant" text={view.editable ? 'Ajoutez-les un par un avec « Ajouter un combattant ».' : undefined} />
             )}

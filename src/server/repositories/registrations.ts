@@ -1,6 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import type { ClubFormParse } from '../../domain/club-form.js';
-import { isEntryClosed } from '../../domain/closed-categories.js';
+import { entryKey, isEntryClosed } from '../../domain/closed-categories.js';
 import { DISCIPLINES } from '../../domain/disciplines.js';
 import { normalizeName } from '../../domain/names.js';
 import {
@@ -189,7 +189,7 @@ export async function createRegistration(
     const t = tx as unknown as AppDb;
     const fighter = findOrCreateFighter(t, competitionId, input);
     const existing = t.select().from(registrations).where(eq(registrations.fighterId, fighter.id)).all();
-    const closedWarning = isEntryClosed(closedSet(t, competitionId), input) ? 'Catégorie non ouverte à cette compétition : l’inscription ira en Réaffectation.' : null;
+    const closedWarning = isEntryClosed(closedSet(t, competitionId), input) ? CLOSED_REGISTRATION : null;
     warning = [combatConflictWarning(existing, input, competition.settings.multipleCombatDisciplinesPerDay), closedWarning].filter(Boolean).join(' ') || null;
     const newId = crypto.randomUUID();
     t.insert(registrations).values({ id: newId, competitionId, fighterId: fighter.id, ...registrationValues(input) }).run();
@@ -210,7 +210,7 @@ export async function updateRegistration(
   competitionId: string,
   registrationId: string,
   input: RegistrationInput,
-): Promise<RegistrationRow> {
+): Promise<RegistrationRow & { warning: string | null }> {
   const current = db
     .select()
     .from(registrations)
@@ -219,6 +219,8 @@ export async function updateRegistration(
   if (!current) throw new NotFoundError('Inscription introuvable');
   const errors = validateRegistration(input, await getGrid(db, competitionId));
   if (errors.length) throw new RegistrationValidationError(errors);
+  const fighter = db.select().from(fighters).where(eq(fighters.id, current.fighterId)).get()!;
+  const before = entryKey({ ageBandCode: fighter.ageBandCode, sex: fighter.sex, discipline: current.discipline, ruleset: current.ruleset });
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     // Les données du combattant (nom, sexe, âge, club) suivent la saisie.
@@ -238,7 +240,15 @@ export async function updateRegistration(
       .run();
     t.update(registrations).set(registrationValues(input)).where(eq(registrations.id, registrationId)).run();
   });
-  return rowById(db, registrationId);
+  return { ...rowById(db, registrationId), warning: closedEditWarning(db, competitionId, before, input) };
+}
+
+const CLOSED_REGISTRATION = 'Catégorie non ouverte à cette compétition : l’inscription ira en Réaffectation.';
+
+/** Avertissement d'une modification qui fait entrer l'inscription dans une catégorie fermée (rien si elle y était déjà). */
+function closedEditWarning(db: AppDb, competitionId: string, before: string, input: RegistrationInput): string | null {
+  const after = { ageBandCode: input.ageBandCode, sex: input.sex, discipline: input.discipline, ruleset: input.ruleset };
+  return entryKey(after) !== before && isEntryClosed(closedSet(db, competitionId), after) ? CLOSED_REGISTRATION : null;
 }
 
 export async function deleteRegistration(db: AppDb, competitionId: string, registrationId: string): Promise<void> {

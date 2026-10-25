@@ -719,3 +719,32 @@ test('déplacement manuel vers une catégorie fermée : refusé', async () => {
   expect(res.statusCode).toBe(400);
   expect(res.body).toContain('Catégorie non ouverte à cette compétition : choisissez-en une autre.');
 });
+
+test("mise de côté : une copie en lecture seule n'efface rien en lisant", async () => {
+  const a = await reg();
+  await call('POST', '/replacement/set-aside', { caseId: `alone:${a.id}` });
+  await reg(); // le cas disparaît
+  const sql = (q: string) => {
+    const raw = new Database(dbPath);
+    const out = raw.prepare(q).all();
+    raw.close();
+    return out;
+  };
+  const id = base.split('/').pop()!;
+  sql(`update competitions set owner_instance_id = 'autre', owner_name = 'PC' where id = '${id}' returning id`);
+  expect((await replacement()).summary.setAside).toBe(0);
+  expect(sql('select case_id from set_aside_cases')).toHaveLength(1);
+  sql(`update competitions set owner_instance_id = null, owner_name = null where id = '${id}' returning id`);
+  await replacement();
+  expect(sql('select case_id from set_aside_cases')).toHaveLength(0);
+});
+
+test('clôture de la pesée : une inscription « ne combat pas » reste non pesée', async () => {
+  const a = await reg();
+  await reg();
+  await closeCadet();
+  await withdraw(a.id);
+  await call('POST', '/weigh-in/close', {});
+  const rows = (await call('GET', '/registrations')).json() as { id: string; presence: string }[];
+  expect(rows.find((r) => r.id === a.id)!.presence).toBe('unknown');
+});

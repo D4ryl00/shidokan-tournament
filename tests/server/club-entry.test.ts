@@ -316,3 +316,9 @@ test('réenregistrer la ligne garde « ne combat pas »', async () => {
   const after = (await app.inject({ method: 'GET', url: `${base}/registrations` })).json() as { discipline: string; withdrawn: boolean }[];
   expect(after.find((r) => r.discipline === 'kata')!.withdrawn).toBe(true);
 });
+
+test('page du club : résumé des catégories non ouvertes', async () => {
+  expect(((await view()) as View & { closedSummary: string[] }).closedSummary).toEqual([]);
+  await closeCells([{ ageBandCode: 'senior', sex: 'F', discipline: 'kata', ruleset: null }]);
+  expect(((await view()) as View & { closedSummary: string[] }).closedSummary).toEqual(['Seniors (F) : pas de Kata']);
+});

@@ -16,6 +16,7 @@ test("grille : fermer une catégorie, avec confirmation s'il y a des inscrits", 
   await page.goto(`/competitions/${id}/grille`);
   const cadet = page.getByTestId('open-cell-cadet|F|karate|jiyu');
   await expect(cadet).toBeChecked();
+  await expect(page.getByTestId('open-count-cadet|F|karate|jiyu')).toHaveText('1 inscrit');
   await cadet.click();
   await expect(page.getByText('1 combattant déjà inscrit : il apparaîtra en Réaffectation.')).toBeVisible();
   await page.getByTestId('open-cells-confirm').click();

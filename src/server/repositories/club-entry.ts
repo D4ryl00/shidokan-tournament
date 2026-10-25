@@ -1,6 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { lineToRows, type ClubFormLine } from '../../domain/club-form.js';
-import { columnLabel, entryKey, isEntryClosed, offeredAgeBands } from '../../domain/closed-categories.js';
+import { closedSummary, columnLabel, entryKey, isEntryClosed, offeredAgeBands } from '../../domain/closed-categories.js';
 import { enteredValues, registrationsToLine } from '../../domain/club-line.js';
 import { renderPrivacyNotice } from '../../domain/app-settings.js';
 import { getAppSettings } from './app-settings.js';
@@ -43,6 +43,8 @@ export interface ClubEntryView {
   ageBands: { code: string; label: string; isMinor: boolean }[];
   /** Cases fermées (`entryKey`) : le formulaire ne propose pas ces choix. */
   closed: string[];
+  /** Ce qui n'est pas ouvert, en phrases (comme sur les fiches). */
+  closedSummary: string[];
   lines: ClubLine[];
   /** Mention sur les données personnelles, rendue (réglages de l'application). */
   privacyNotice: string;
@@ -137,6 +139,7 @@ export async function getClubEntry(db: AppDb, access: ClubAccess): Promise<ClubE
       .filter((b) => offeredAgeBands(grid, closed).includes(b) || lines.some((l) => l.line.ageBandCode === b.code))
       .map((b) => ({ code: b.code, label: b.label, isMinor: b.isMinor })),
     closed: [...closed],
+    closedSummary: closedSummary(grid, closed),
     lines,
     privacyNotice: renderPrivacyNotice(getAppSettings(db)),
   };

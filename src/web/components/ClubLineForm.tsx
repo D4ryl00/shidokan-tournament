@@ -32,12 +32,25 @@ export function ClubLineForm({ token, line, ageBands, closed, opened, onClose }:
   const [weight, setWeight] = useState(line?.line.weightKg != null ? String(line.line.weightKg).replace('.', ',') : '');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const set = (patch: Partial<ClubFormLine>) => setForm((f) => ({ ...f, ...patch }));
-  // Choix ouverts pour la tranche et le sexe choisis (tout est proposé tant qu'ils ne le sont pas).
+  // Choix ouverts pour une tranche et un sexe (tout est proposé tant qu'ils ne sont pas choisis).
   const shut = new Set(closed);
+  const openFor = (f: ClubFormLine) => (discipline: DisciplineId, ruleset: Ruleset | null) => {
+    const b = ageBands.find((x) => x.code === f.ageBandCode);
+    return !b || !f.sex || (!shut.has(entryKey({ ageBandCode: b.code, sex: f.sex, discipline, ruleset })) && !(ruleset === 'shobu' && b.isMinor));
+  };
+  const set = (patch: Partial<ClubFormLine>) =>
+    setForm((f) => {
+      const next = { ...f, ...patch };
+      if (patch.ageBandCode === undefined && patch.sex === undefined) return next;
+      // Tranche ou sexe changé : un choix devenu fermé est retiré (le coach le voit, au lieu d'un refus à l'enregistrement).
+      const open = openFor(next);
+      if (next.combat && !open(next.combat, 'jiyu') && !open(next.combat, 'shobu')) Object.assign(next, { combat: null, ruleset: null });
+      if (next.combat && next.ruleset && !open(next.combat, next.ruleset)) next.ruleset = null;
+      if (next.kata && !open('kata', null)) next.kata = false;
+      return next;
+    });
   const band = ageBands.find((b) => b.code === form.ageBandCode);
-  const isOpen = (discipline: DisciplineId, ruleset: Ruleset | null) =>
-    !band || !form.sex || (!shut.has(entryKey({ ageBandCode: band.code, sex: form.sex, discipline, ruleset })) && !(ruleset === 'shobu' && band.isMinor));
+  const isOpen = openFor(form);
   const saved = line?.line;
   const NOT_OPEN = ' (non ouverte)';
   const combats = COMBATS.flatMap(([d, label]): [CombatDiscipline, string][] => {

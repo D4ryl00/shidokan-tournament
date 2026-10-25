@@ -80,3 +80,20 @@ test('un modèle de grille avec onClubForm se charge encore', async () => {
   const old = { ...grid, ageBands: grid.ageBands.map((b) => ({ ...b, onClubForm: false })) };
   expect((await call('PUT', '/grid', old)).statusCode).toBe(204);
 });
+
+test('grille : une tranche passée « Mineurs » perd ses cases shobu fermées', async () => {
+  await close([{ ageBandCode: 'senior', sex: 'F', discipline: 'karate', ruleset: 'shobu' }, seniorKataF]);
+  const grid = ffkDefaultGrid();
+  const minors = { ...grid, ageBands: grid.ageBands.map((b) => (b.code === 'senior' ? { ...b, isMinor: true } : b)) };
+  expect((await call('PUT', '/grid', minors)).statusCode).toBe(204);
+  expect(keys(await view())).toEqual(['senior|F|kata|']);
+});
+
+test('grille : retirer les seules tranches ouvertes est refusé', async () => {
+  const grid = ffkDefaultGrid();
+  await close(entryCells(grid).filter((c) => c.ageBandCode !== 'v5'));
+  const without = { ...grid, ageBands: grid.ageBands.filter((b) => b.code !== 'v5'), weightClasses: grid.weightClasses.filter((w) => w.ageBandCode !== 'v5'), ageLinks: grid.ageLinks.filter((l) => l.from !== 'v5' && l.to !== 'v5') };
+  const res = await call('PUT', '/grid', without);
+  expect(res.statusCode).toBe(400);
+  expect(res.body).toContain('Au moins une catégorie doit rester ouverte.');
+});

@@ -1,3 +1,4 @@
+import { notifications } from '@mantine/notifications';
 import {
   Alert, Autocomplete, Button, Checkbox, Group, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput,
 } from '@mantine/core';
@@ -97,7 +98,9 @@ export function RegistrationForm({ competitionId, edit, onDone }: { competitionI
     };
     if (edit) {
       try {
-        await update.mutateAsync({ rid: edit.id, input, rev: openRev });
+        const res = await update.mutateAsync({ rid: edit.id, input, rev: openRev });
+        // Le formulaire se ferme : l'avertissement (catégorie non ouverte) passe par une notification.
+        if (res.warning) notifications.show({ color: 'yellow', message: res.warning });
       } catch (e) {
         // Modifiée entre-temps sur un autre poste : le formulaire se ferme (la liste est rechargée, le message affiché).
         if (e instanceof ApiError && e.status === 409) onDone?.();

@@ -33,6 +33,7 @@ import { launchedWaveKeys } from './launch-state.js';
 import type { Wave } from '../../domain/waves.js';
 import { CategoryLockedError, listCategories, syncCategories } from './categories.js';
 import { closedSet } from './closed-categories.js';
+import { getManagement } from '../sync/ownership.js';
 import { getCompetition, getGrid } from './competitions.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
 
@@ -111,7 +112,8 @@ export async function loadState(db: AppDb, competitionId: string): Promise<State
   if (marks.length) {
     const existing = new Set(detectCases(state).map((c) => c.id));
     const gone = marks.filter((m) => !existing.has(m.caseId)).map((m) => m.caseId);
-    if (gone.length) db.delete(setAsideCases).where(and(eq(setAsideCases.competitionId, competitionId), inArray(setAsideCases.caseId, gone))).run();
+    // Copie en lecture seule (main ailleurs) : on ne fait que filtrer, sa version doit rester celle reçue.
+    if (gone.length && getManagement(db, competitionId).managedHere) db.delete(setAsideCases).where(and(eq(setAsideCases.competitionId, competitionId), inArray(setAsideCases.caseId, gone))).run();
     state.setAside = marks.filter((m) => existing.has(m.caseId)).map((m) => m.caseId);
   }
   return state;
@@ -503,7 +505,8 @@ export async function setWeighIn(db: AppDb, competitionId: string, fighterId: st
 export async function closeWeighIn(db: AppDb, competitionId: string, waveId?: string): Promise<{ markedAbsent: number }> {
   await requireWave(db, competitionId, waveId);
   const scope = waveId ? await registrationsOfWave(db, competitionId, waveId) : null;
-  const regs = db.select().from(registrations).where(eq(registrations.competitionId, competitionId)).all().filter((r) => !scope || scope.has(r.id));
+  // « Ne combat pas » : pas concerné par la pesée.
+  const regs = db.select().from(registrations).where(eq(registrations.competitionId, competitionId)).all().filter((r) => !r.withdrawnReason && (!scope || scope.has(r.id)));
   const present = new Set(regs.filter((r) => r.presence === 'present').map((r) => r.fighterId));
   const unknown = regs.filter((r) => r.presence === 'unknown');
   const promote = unknown.filter((r) => present.has(r.fighterId)).map((r) => r.id);

@@ -1,6 +1,7 @@
 import {
   Alert, Button, Card, Checkbox, FileButton, Group, List, Modal, Radio, Select, SimpleGrid, Stack, Table, Text,
 } from '@mantine/core';
+import { CLOSED_WARNING_START } from '../../domain/club-form.js';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router';
@@ -96,6 +97,8 @@ export function FfkImportPage() {
   const updates = items.filter((i) => i.kind === 'update');
   const creates = items.filter((i) => i.kind === 'create');
   const errors = items.filter((i) => i.kind === 'error');
+  // Lignes importées dans une catégorie que l'organisateur n'a pas ouverte : elles iront en Réaffectation.
+  const closedItems = items.filter((i) => i.kind !== 'error' && i.row.warnings.some((w) => w.startsWith(CLOSED_WARNING_START)));
   const clubOptions = [{ value: 'new', label: '➕ Nouveau club' }, ...clubs.map((c) => ({ value: c.id, label: c.name }))];
 
   return (
@@ -216,6 +219,14 @@ export function FfkImportPage() {
             </>
           )}
 
+          {closedItems.length > 0 && (
+            <Alert color="orange" data-testid="ffk-closed-summary"
+              title={`${plural(closedItems.length, 'ligne', 'lignes')} dans une catégorie non ouverte : ${closedItems.length > 1 ? 'elles iront' : 'elle ira'} en Réaffectation`}>
+              <List size="sm">
+                {closedItems.map((i) => <List.Item key={i.row.key}>{i.row.sheet}, ligne {i.row.line} — {rowLabel(i.row)}</List.Item>)}
+              </List>
+            </Alert>
+          )}
           {errors.length > 0 && (
             <Alert color="red" title={`Lignes en erreur (${errors.length}) — elles ne seront pas importées`} data-testid="ffk-errors">
               <List size="sm">

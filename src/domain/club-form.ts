@@ -120,10 +120,13 @@ export function ageBandAbbreviations(bands: { code: string; label: string }[]): 
   return out;
 }
 
+/** Début de l'avertissement d'une ligne dans une catégorie fermée (résumé des aperçus d'import). */
+export const CLOSED_WARNING_START = 'Catégorie non ouverte à cette compétition';
+
 /** Avertissement d'une inscription dans une catégorie fermée (null si elle est ouverte). */
 export function closedEntryWarning(input: Pick<RegistrationInput, 'ageBandCode' | 'sex' | 'discipline' | 'ruleset'>, closed: ReadonlySet<string>): string | null {
   const cell = { ageBandCode: input.ageBandCode, sex: input.sex, discipline: input.discipline, ruleset: input.ruleset };
-  return isEntryClosed(closed, cell) ? `Catégorie non ouverte à cette compétition (${columnLabel(cell)}) : la ligne ira en Réaffectation.` : null;
+  return isEntryClosed(closed, cell) ? `${CLOSED_WARNING_START} (${columnLabel(cell)}) : la ligne ira en Réaffectation.` : null;
 }
 
 /** Ajoute aux lignes valides l'avertissement des catégories fermées. */

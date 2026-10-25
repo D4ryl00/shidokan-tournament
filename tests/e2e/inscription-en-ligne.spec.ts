@@ -112,6 +112,15 @@ test('catégorie fermée : non proposée au club', async ({ page, request }) => 
   await expect(combats.getByText('Karaté', { exact: true })).toBeVisible();
   await expect(combats.getByText('Mix', { exact: true })).toHaveCount(0);
   // Les cadets (garçons) gardent le shido-mix.
-  await page.getByTestId('club-line-form').getByRole('group', { name: 'Sexe' }).getByText('Masculin', { exact: true }).click();
+  const sex = page.getByTestId('club-line-form').getByRole('group', { name: 'Sexe' });
+  await sex.getByText('Masculin', { exact: true }).click();
   await expect(combats.getByText('Mix', { exact: true })).toBeVisible();
+  // Mix choisi pour un garçon, puis le sexe repasse à Féminin : le choix fermé est retiré (pas de refus du serveur à la clé).
+  await combats.getByText('Mix', { exact: true }).click();
+  await sex.getByText('Féminin', { exact: true }).click();
+  await page.getByTestId('line-save').click();
+  await expect(page.getByText('Aucune discipline cochée.')).toBeVisible();
+  await expect(page.getByText('catégorie non ouverte à cette compétition')).toHaveCount(0);
+  // Page du club : le résumé de ce qui n'est pas ouvert.
+  await expect(page.getByTestId('club-entry-closed')).toContainText('Cadets (F) : pas de Shido-mix-martial');
 });

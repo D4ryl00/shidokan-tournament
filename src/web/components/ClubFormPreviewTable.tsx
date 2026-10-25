@@ -3,15 +3,22 @@ import type { ClubFormPreview } from '../api.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import { ageBandLabel, disciplineLabel, prefsLabel, rulesetShort, weightLabel } from '../labels.js';
 import { plural } from '../../domain/plural.js';
+import { CLOSED_WARNING_START } from '../../domain/club-form.js';
 
 /** Aperçu d'une fiche club (fichier importé ou fiche papier saisie) : une ligne par inscription, erreurs, remarques et retraits. */
 export function ClubFormPreviewTable({ parse, grid }: { parse: ClubFormPreview; grid: CategoryGrid | undefined }) {
+  const closedRows = parse.rows.filter((r) => r.warnings.some((w) => w.startsWith(CLOSED_WARNING_START))).length;
   return (
     <Stack>
       <Alert title={`Club : ${parse.header.club}`} color="blue">
         Coach : {parse.header.coachName ?? '—'} · {parse.header.coachPhone ?? '—'} · {parse.header.coachEmail ?? '—'} · Pré-accord :{' '}
         {parse.header.preApproval ? 'oui' : 'non'}
       </Alert>
+      {closedRows > 0 && (
+        <Alert color="orange" data-testid="club-form-closed-summary">
+          {plural(closedRows, 'ligne', 'lignes')} dans une catégorie non ouverte : {closedRows > 1 ? 'elles iront' : 'elle ira'} en Réaffectation.
+        </Alert>
+      )}
       <Table>
         <Table.Thead>
           <Table.Tr>

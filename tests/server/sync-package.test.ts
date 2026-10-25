@@ -30,6 +30,8 @@ async function seeded(): Promise<{ db: AppDb; dbPath: string; id: string }> {
     INSERT INTO tie_breaks (competition_id, category_id, scope, order_json) VALUES ('${id}', '${reg.category_id}', 'kata', '[]');
     INSERT INTO recasements (id, competition_id, registration_id, proposal_id, type, from_label, to_label, manual, pre_approved, bulk, snapshot_json) VALUES ('rec-${id}', '${id}', '${reg.id}', 'p1', 'A', 'x', 'y', 0, 0, 0, '{}');
     INSERT INTO refusals (competition_id, proposal_id) VALUES ('${id}', 'p2');
+    INSERT INTO closed_categories (competition_id, age_band_code, sex, discipline, ruleset) VALUES ('${id}', 'senior', 'F', 'kata', '');
+    INSERT INTO set_aside_cases (competition_id, case_id, note) VALUES ('${id}', 'alone:x', 'on attend');
   `);
   return { db, dbPath, id };
 }
@@ -185,4 +187,16 @@ test('le paquet ne contient jamais l’état de la main ; seules les fiches d’
   await importPackage(b.db, b.dbPath, withExtra, null);
   expect(b.db.$client.prepare("select count(*) as n from club_directory where id = 'orpheline'").get()).toEqual({ n: 0 });
   expect((b.db.$client.prepare('select count(*) as n from club_directory').get() as { n: number }).n).toBeLessThanOrEqual(before + linked.size);
+});
+
+test('paquet d’une version d’avant les catégories fermées : les tranches non proposées deviennent fermées', async () => {
+  const a = await seeded();
+  const b = await seeded();
+  const pkg = buildPackage(a.db, a.id, { handOver: false, role: 'local' });
+  const { closed_categories: _gone, ...tables } = pkg.tables;
+  tables.age_bands = tables.age_bands!.map((r) => (r.code === 'senior' ? { ...r, on_club_form: 0 } : r));
+  await importPackage(b.db, b.dbPath, { ...pkg, tables, migrations: 21 }, null);
+  const rows = b.db.$client.prepare('select age_band_code from closed_categories where competition_id = ?').all(a.id) as { age_band_code: string }[];
+  expect(rows).toHaveLength(18);
+  expect(rows.every((r) => r.age_band_code === 'senior')).toBe(true);
 });

@@ -150,7 +150,7 @@ export function useUpdateRegistration(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ rid, input, rev }: { rid: string; input: RegistrationInput; rev?: string }) =>
-      api<RegistrationRow>('PUT', `/api/competitions/${id}/registrations/${rid}`, input, { rev: rev ?? registrationRevOf(qc, id, rid) }),
+      api<RegistrationRow & { warning: string | null }>('PUT', `/api/competitions/${id}/registrations/${rid}`, input, { rev: rev ?? registrationRevOf(qc, id, rid) }),
     onSuccess: invalidate,
   });
 }
@@ -733,6 +733,7 @@ export interface ClubEntryView {
   ageBands: { code: string; label: string; isMinor: boolean }[];
   /** Cases fermées (`entryKey`). */
   closed: string[];
+  closedSummary: string[];
   lines: ClubLine[];
   privacyNotice: string;
 }

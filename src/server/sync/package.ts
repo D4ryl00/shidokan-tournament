@@ -32,6 +32,21 @@ export const PACKAGE_TABLES = [
   'competitions', 'age_bands', 'weight_classes', 'age_links', 'closed_categories', 'waves', 'zones', 'clubs', 'fighters', 'registrations', 'categories',
   'wave_launches', 'frozen_passages', 'recasements', 'refusals', 'set_aside_cases', 'match_results', 'kata_scores', 'tie_breaks',
 ];
+/** Cases fermées tirées de l'ancienne case « Proposée sur la fiche club » d'une compétition (même règle que la migration 0021). */
+const CLOSED_FROM_CLUB_FORM = `
+  INSERT OR IGNORE INTO closed_categories (competition_id, age_band_code, sex, discipline, ruleset)
+  SELECT b.competition_id, b.code, s.sex, c.discipline, c.ruleset
+  FROM age_bands b
+  CROSS JOIN (SELECT 'F' AS sex UNION ALL SELECT 'M') s
+  CROSS JOIN (
+    SELECT 'karate' AS discipline, 'jiyu' AS ruleset UNION ALL SELECT 'karate', 'shobu'
+    UNION ALL SELECT 'shido-boxing', 'jiyu' UNION ALL SELECT 'shido-boxing', 'shobu'
+    UNION ALL SELECT 'shido-mix', 'jiyu' UNION ALL SELECT 'shido-mix', 'shobu'
+    UNION ALL SELECT 'triathlon', 'jiyu' UNION ALL SELECT 'triathlon', 'shobu'
+    UNION ALL SELECT 'kata', ''
+  ) c
+  WHERE b.competition_id = ? AND b.on_club_form = 0 AND NOT (b.is_minor = 1 AND c.ruleset = 'shobu')`;
+
 /** Tables d'une compétition qui restent sur l'installation (liens et mails envoyés, fichiers importés, copies reçues, journaux de zone). */
 export const LOCAL_ONLY_TABLES = ['uploads', 'club_invitations', 'mail_log', 'received_copies', 'zone_journal', 'zone_entries'];
 
@@ -242,6 +257,9 @@ export async function importPackage(
           del.run(...pk.map((k) => r[k]));
         }
       }
+
+      // Paquet d'une version d'avant les catégories fermées : ses tranches « non proposées sur la fiche club » deviennent fermées (comme la migration 0021).
+      if (!('closed_categories' in pkg.tables)) client.prepare(CLOSED_FROM_CLUB_FORM).run(id);
 
       const stamp = now.toISOString();
       client
