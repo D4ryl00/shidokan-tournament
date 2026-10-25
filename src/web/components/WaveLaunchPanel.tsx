@@ -1,14 +1,15 @@
-import { Alert, Badge, Button, Checkbox, Group, List, Modal, SegmentedControl, Stack, Table, Text } from '@mantine/core';
+import { Alert, Button, Checkbox, Group, List, Modal, SegmentedControl, Stack, Table, Text } from '@mantine/core';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useLaunch, useLaunchStatus, useNumberPending, useNumberPreview, useReopen, useZones, type RenumberMode, type WaveState } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
+import { StatusBadge, type Tone } from './ui/StatusBadge.js';
 
-const STATES: Record<WaveState, { label: string; color: string }> = {
-  preparation: { label: 'En préparation', color: 'gray' },
-  launched: { label: 'Lancée', color: 'green' },
-  reopened: { label: 'Rouverte', color: 'orange' },
-  finished: { label: 'Terminée', color: 'blue' },
+const STATES: Record<WaveState, { label: string; tone: Tone }> = {
+  preparation: { label: 'En préparation', tone: 'warn' },
+  launched: { label: 'Lancée', tone: 'ok' },
+  reopened: { label: 'Rouverte', tone: 'warn' },
+  finished: { label: 'Terminée', tone: 'accent' },
 };
 
 /**
@@ -48,11 +49,11 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
   return (
     <Stack gap="xs" data-testid="wave-launch">
       <Group gap="xs">
-        <Badge color={STATES[status.state].color} data-testid="wave-state">{STATES[status.state].label}</Badge>
+        <StatusBadge tone={STATES[status.state].tone} size="lg" data-testid="wave-state">{STATES[status.state].label}</StatusBadge>
         {status.state === 'preparation' && <Button size="xs" data-testid="launch-open" onClick={() => { setRestart(false); setDialog('launch'); }}>Figer et imprimer la session…</Button>}
         {(status.state === 'launched' || status.state === 'finished') && (
           <>
-            <Button size="xs" variant="light" component={Link} to={printUrl} target="_blank" data-testid="wave-print">Imprimer la session</Button>
+            <Button size="xs" variant="default" component={Link} to={printUrl} target="_blank" data-testid="wave-print">Imprimer la session</Button>
             <Button size="xs" variant="subtle" color="orange" data-testid="reopen-open" onClick={() => setDialog('reopen')}>Rouvrir la session</Button>
           </>
         )}

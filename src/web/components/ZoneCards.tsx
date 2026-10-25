@@ -1,7 +1,8 @@
-import { Alert, Badge, Button, Card, FileButton, Group, SimpleGrid, Stack, Text, Title } from '@mantine/core';
+import { Alert, Button, Card, FileButton, Group, SimpleGrid, Stack, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useAuthMe, useDecideZoneCard, useImportZoneJournal, useManagement, useZoneCards, type AuthMe, type JournalReport } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
+import { StatusBadge } from './ui/StatusBadge.js';
 
 /** Les journaux de zone ne se reçoivent que sur un PC (rôle local) qui gère la compétition : le PC principal. */
 export const zoneCardsVisible = (role: AuthMe['role'] | undefined, managedHere: boolean | undefined) => role === 'local' && managedHere === true;
@@ -49,17 +50,17 @@ export function ZoneCards({ competitionId }: { competitionId: string }) {
   return (
     <Stack gap="xs">
       <Group justify="space-between">
-        {cards.length > 0 ? <Title order={5}>À trancher ({cards.length})</Title> : <span />}
+        {cards.length > 0 ? <Title order={3} fz="lg">À trancher ({cards.length})</Title> : <span />}
         <ImportJournalButton competitionId={competitionId} />
       </Group>
       {cards.length > 0 && (
         <SimpleGrid cols={{ base: 1, lg: 2 }}>
           {cards.map((c) => (
-            <Card key={c.id} withBorder data-testid="zone-card-item" style={{ borderColor: 'var(--mantine-color-orange-5)' }}>
+            <Card key={c.id} withBorder data-testid="zone-card-item" style={{ borderColor: 'var(--sk-warn-text)', boxShadow: 'inset 3px 0 0 var(--sk-warn-text)' }}>
               <Stack gap={6}>
                 <Group justify="space-between" wrap="nowrap">
                   <Text size="sm" fw={600}>{c.categoryLabel} — {c.target}</Text>
-                  <Badge size="xs" color={c.status === 'conflict' ? 'orange' : 'gray'}>{c.status === 'conflict' ? 'conflit' : 'en attente'}</Badge>
+                  <StatusBadge tone={c.status === 'conflict' ? 'warn' : 'neutral'} size="sm">{c.status === 'conflict' ? 'Conflit' : 'En attente'}</StatusBadge>
                 </Group>
                 {c.status === 'waiting' ? (
                   <Text size="xs" c="dimmed">Saisie de {c.zoneName} faite après une saisie à trancher de la même catégorie : elle s’appliquera toute seule si elle ne dépend plus d’un conflit.</Text>

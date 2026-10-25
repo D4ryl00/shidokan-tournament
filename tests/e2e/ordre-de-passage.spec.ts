@@ -29,10 +29,12 @@ test('ordre de passage : zones par discipline, kata d’abord, numéros imprimé
   // Combats : Tatami 1 commence par le kata (n° 1), puis les combats à partir de 2 ; la boxe sur le Ring.
   await openTab(page, 'Combats');
   const tatami = page.getByTestId('zone-card').filter({ hasText: 'Tatami 1' });
-  await expect(tatami.getByTestId('next-kata')).toContainText('n° 1 — Kata');
+  // Le numéro de passage est porté par data-number (affiché en grand pour le passage à l'appel).
+  await expect(tatami.getByTestId('next-kata')).toHaveAttribute('data-number', '1');
+  await expect(tatami.getByTestId('next-kata')).toContainText('Kata');
   await expect(tatami.getByTestId('next-kata')).toContainText('3 katakas');
-  await expect(tatami.getByTestId('next-match').first()).toContainText('combat 2');
-  await expect(page.getByTestId('zone-card').filter({ hasText: 'Ring' }).getByTestId('next-match')).toContainText('combat 1');
+  await expect(tatami.getByTestId('next-match').first()).toHaveAttribute('data-number', '2');
+  await expect(page.getByTestId('zone-card').filter({ hasText: 'Ring' }).getByTestId('next-match')).toHaveAttribute('data-number', '1');
   await expect(page.getByTestId('schedule-category').filter({ hasText: cadettes.label }).getByTestId('schedule-zone')).toHaveValue('Automatique (Tatami 1)');
 
   // Impression des cadettes : zone et numéros de passage.
@@ -56,14 +58,14 @@ test('ordre de passage : zones par discipline, kata d’abord, numéros imprimé
   await expect(page.getByTestId('print-section')).toContainText('Combat c1');
   await page.goto(`/competitions/${id}/combats`);
   await expect(page.getByTestId('zones-impossible')).toBeVisible();
-  await expect(tatami.getByTestId('next-match').first()).toContainText('combat 2');
+  await expect(tatami.getByTestId('next-match').first()).toHaveAttribute('data-number', '2');
 
   // Épingler les cadettes sur le Ring.
   const card = page.getByTestId('schedule-category').filter({ hasText: cadettes.label });
   await card.getByTestId('schedule-zone').click();
   await page.getByRole('option', { name: 'Ring', exact: true }).click();
   await expect(card.getByTestId('schedule-zone')).toHaveValue('Ring');
-  await expect(page.getByTestId('zone-card').filter({ hasText: 'Ring' }).getByTestId('next-match').first()).toContainText('combat 1');
+  await expect(page.getByTestId('zone-card').filter({ hasText: 'Ring' }).getByTestId('next-match').first()).toHaveAttribute('data-number', '1');
 });
 
 test('ordre de passage (relecture) : session par défaut = la première qui a encore des combats, catégories de la session seulement', async ({ page, request }) => {

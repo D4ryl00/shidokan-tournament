@@ -1,4 +1,5 @@
-import { ActionIcon, Badge, Group, NumberInput, Select, Stack, Table, Text, Title } from '@mantine/core';
+import { ActionIcon, Group, NumberInput, Select, Stack, Table, Text, Title } from '@mantine/core';
+import { StatusBadge } from './ui/StatusBadge.js';
 import { useEffect, useState } from 'react';
 import { kataScore, resolveKata, type KataBracket, type KataScores } from '../../domain/brackets/kata.js';
 import { usePutKataNotes } from '../api.js';
@@ -15,7 +16,7 @@ function NotesRow({ label, club, grade, judges, notes, onSave, finalist }: { lab
   return (
     <Table.Tr data-testid="kata-row">
       <Table.Td>
-        <Text fw={500}>{label} {finalist && <Badge size="xs" color="shidokan">finale</Badge>}</Text>
+        <Text fw={500}>{label} {finalist && <StatusBadge tone="accent" size="sm">Finale</StatusBadge>}</Text>
         <Text size="xs" c="dimmed">{club}{grade ? ` · Grade : ${grade}` : ''}</Text>
       </Table.Td>
       {values.map((v, i) => (
@@ -62,7 +63,7 @@ export function KataScoring({ competitionId, categoryId, bracket, scores, tieBre
       </Group>
       {bracket.order.length > 2 && (
         <>
-          <Title order={5}>Tour 1 (ordre de passage)</Title>
+          <Title order={4} fz="md">Tour 1 (ordre de passage)</Title>
           <Table>
             {header}
             <Table.Tbody>
@@ -74,7 +75,7 @@ export function KataScoring({ competitionId, categoryId, bracket, scores, tieBre
           </Table>
         </>
       )}
-      <Title order={5}>Finale</Title>
+      <Title order={4} fz="md">Finale</Title>
       {round1Complete ? (
         <Table>
           {header}

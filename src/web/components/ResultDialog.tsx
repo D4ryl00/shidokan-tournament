@@ -66,10 +66,10 @@ export function ResultDialog({ competitionId, categoryId, bracket, ruleset, matc
     const chosen = winner === s;
     return (
       <UnstyledButton data-testid={`result-winner-${s}`} onClick={() => setWinner(s)} style={{ flex: 1 }}>
-        <Paper withBorder p="md" style={{ borderColor: chosen ? 'var(--mantine-color-shidokan-5)' : undefined, borderWidth: chosen ? 3 : 1 }}>
-          <Text fw={700} size="lg">{info?.name}</Text>
+        <Paper withBorder p="md" h="100%" style={chosen ? { borderColor: 'var(--sk-accent)', borderWidth: 2, backgroundColor: 'var(--sk-chip)' } : { borderWidth: 2 }}>
+          <Text fw={700} fz={22} lh={1.2}>{info?.name}</Text>
           <Text size="sm" c="dimmed">{info?.club}</Text>
-          {chosen && <Text size="sm" c="shidokan" fw={700}>Vainqueur</Text>}
+          <Text size="sm" fw={700} mt={4} c="var(--sk-accent)" style={{ visibility: chosen ? 'visible' : 'hidden' }}>✓ Vainqueur</Text>
         </Paper>
       </UnstyledButton>
     );
