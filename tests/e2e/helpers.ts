@@ -36,6 +36,19 @@ export async function chooseTheme(page: Page, label: 'Auto' | 'Clair' | 'Sombre'
 }
 
 /**
+ * Texte coupé par des points de suspension (le reste n'est lisible qu'au survol). Le nom de la compétition, dans sa barre,
+ * n'est pas compté : il se coupe exprès quand la place manque.
+ */
+export async function ellipsized(page: Page): Promise<string[]> {
+  return page.evaluate(() =>
+    Array.from(document.querySelectorAll<HTMLElement>('body *'))
+      .filter((el) => getComputedStyle(el).textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth + 1)
+      .filter((el) => !el.closest('[data-testid="competition-title"]') && el.dataset.testid !== 'competition-title')
+      .map((el) => `« ${el.textContent?.trim().slice(0, 60)} »`),
+  );
+}
+
+/**
  * Contenu coupé par un conteneur qui cache ce qui dépasse (`overflow: hidden`, sans défilement) : texte ou bouton qui sort
  * d'une carte ou d'un tableau, invisible et inatteignable. Un texte coupé exprès (points de suspension) n'est pas compté.
  */

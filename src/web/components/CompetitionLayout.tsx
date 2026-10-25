@@ -3,6 +3,7 @@ import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useCompetition, useZones } from '../api.js';
+import { useDocumentTitle } from '../documentTitle.js';
 import { posteTabs, tabFor, usePoste, type Poste } from '../poste.js';
 import { HELP, type HelpTopicId } from '../help.js';
 import { rememberTab, showsTabBar, stageOf, stageTarget, visibleStages } from '../stages.js';
@@ -50,6 +51,7 @@ export function CompetitionLayout() {
     if (posteTabs(poste).includes(current)) rememberTab(id, current);
   }, [id, current, poste]);
   const stage = stages.find((s) => s.id === stageOf(current)) ?? stages[0];
+  useDocumentTitle(data ? `${labelOf(current)} · ${data.name}` : undefined);
   // Une étape ouvre son dernier onglet visité (s'il est encore permis), sinon son premier ; l'étape en cours ne fait rien.
   const openStage = (s: (typeof stages)[number]) => {
     const tab = stageTarget(id, s, current);

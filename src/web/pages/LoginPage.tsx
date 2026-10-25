@@ -1,6 +1,7 @@
 import { Button, Card, Center, Modal, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core';
 import { useState } from 'react';
 import { useLogin } from '../api.js';
+import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { Logo } from '../components/Logo.js';
 
@@ -23,6 +24,7 @@ function LoginForm() {
 
 /** Connexion des organisateurs (application en ligne). */
 export function LoginPage() {
+  useDocumentTitle('Connexion');
   return (
     <Center mih="100vh" p="md" style={{ background: 'var(--sk-bg)' }}>
       <Stack align="center" gap="lg" w={400} maw="100%">

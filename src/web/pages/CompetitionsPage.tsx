@@ -2,6 +2,7 @@ import { Anchor, Button, Group, Modal, NumberInput, Select, Stack, Table, TextIn
 import { useState } from 'react';
 import { Link, Navigate } from 'react-router';
 import { useAuthMe, useCompetitions, useCreateCompetition, useGridTemplates, isOrganiser } from '../api.js';
+import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { plural } from '../../domain/plural.js';
 import { DateField } from '../components/ui/DateField.js';
@@ -12,6 +13,7 @@ import { ImportCompetitionButton, ServerCompetitionsButton } from '../components
 import { TableCard } from '../components/ui/TableCard.js';
 
 export function CompetitionsPage() {
+  useDocumentTitle('Compétitions');
   const { data = [], isLoading } = useCompetitions();
   const { data: me } = useAuthMe();
   const organiser = isOrganiser(me);

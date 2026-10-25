@@ -1,7 +1,8 @@
-import { Button, Group, Modal, PasswordInput, Select, Stack, Table, TextInput } from '@mantine/core';
+import { Button, Group, Modal, PasswordInput, Select, Stack, Table, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { isOrganiser, useAuthMe, useChangePassword, useCompetitions, useCreateUser, useDeleteUser, useUpdateUserRole, useUsers, useZones, type AccountRole, type UserRole, type UserRow } from '../api.js';
+import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
@@ -45,6 +46,7 @@ export function AccountsPage() {
   const { data: me } = useAuthMe();
   // Table centrale et Zone : seulement leur mot de passe (la liste des comptes est à l'organisateur).
   const organiser = isOrganiser(me);
+  useDocumentTitle(organiser ? 'Comptes' : 'Mon mot de passe');
   const { data: users = [] } = useUsers(organiser);
   const create = useCreateUser();
   const remove = useDeleteUser();
@@ -98,13 +100,14 @@ export function AccountsPage() {
       <SectionCard title="Ajouter un compte" description="Le rôle décide de ce que le compte voit : Organisateur (tout), Table centrale, ou Zone (les combats d’une zone d’une compétition).">
         <Group align="end" gap="sm">
           <TextInput label="E-mail" type="email" value={form.email} w={240} onChange={(e) => setForm({ ...form, email: e.currentTarget.value })} />
-          <PasswordInput label="Mot de passe" description="10 caractères au moins" value={form.password} w={250} onChange={(e) => setForm({ ...form, password: e.currentTarget.value })} />
+          <PasswordInput label="Mot de passe" value={form.password} w={250} onChange={(e) => setForm({ ...form, password: e.currentTarget.value })} />
           <RoleFields value={access} onChange={setAccess} />
           <Button loading={create.isPending} disabled={!form.email || !form.password || zoneIncomplete(access)} data-testid="account-create"
             onClick={() => create.mutate({ ...form, ...access }, { onSuccess: () => { notifications.show({ color: 'green', message: `Compte créé : ${form.email}` }); setForm({ email: '', password: '' }); setAccess(NO_ROLE); } })}>
             Ajouter le compte
           </Button>
         </Group>
+        <Text size="xs" c="dimmed">Mot de passe : 10 caractères au moins.</Text>
         <ApiErrorAlert error={create.error} />
       </SectionCard>
       </>)}
@@ -112,12 +115,13 @@ export function AccountsPage() {
       <SectionCard title="Changer mon mot de passe" description={organiser ? 'Le premier compte d’un serveur se crée en ligne de commande (voir l’aide).' : undefined}>
         <Group align="end" gap="sm">
           <PasswordInput label="Mot de passe actuel" value={pw.current} w={220} onChange={(e) => setPw({ ...pw, current: e.currentTarget.value })} />
-          <PasswordInput label="Nouveau mot de passe" description="10 caractères au moins" value={pw.next} w={250} onChange={(e) => setPw({ ...pw, next: e.currentTarget.value })} />
+          <PasswordInput label="Nouveau mot de passe" value={pw.next} w={250} onChange={(e) => setPw({ ...pw, next: e.currentTarget.value })} />
           <Button loading={change.isPending} disabled={!pw.current || !pw.next}
             onClick={() => change.mutate(pw, { onSuccess: () => { notifications.show({ color: 'green', message: 'Mot de passe changé.' }); setPw({ current: '', next: '' }); } })}>
             Changer
           </Button>
         </Group>
+        <Text size="xs" c="dimmed">Nouveau mot de passe : 10 caractères au moins.</Text>
         <ApiErrorAlert error={change.error} />
       </SectionCard>
 

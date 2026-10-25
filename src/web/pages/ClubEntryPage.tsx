@@ -4,23 +4,23 @@ import { useState } from 'react';
 import { useParams } from 'react-router';
 import type { ClubFormLine } from '../../domain/club-form.js';
 import { useClubEntry, useSaveClubHeader, type ClubEntryHeader, type ClubEntryView, type ClubLine } from '../api.js';
+import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { ClubLineForm } from '../components/ClubLineForm.js';
 import { Logo } from '../components/Logo.js';
 import { clubEntryStatusText } from '../components/OnlineEntryPanel.js';
-import { COMBATS } from '../components/PaperEntryTable.js';
 import { ThemeToggle } from '../components/ThemeToggle.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
+import { disciplineLabel } from '../labels.js';
 
-const COMBAT_LABEL = new Map(COMBATS);
 const RULESET_LABEL = { jiyu: 'jiyu', shobu: 'shobu' } as const;
 
-/** « F · Cadets · 54 kg » et « Karaté (jiyu) + Kata ». */
+/** « F · Cadets · 54 kg » et « Shido-boxing (jiyu) + Kata » (nom complet de la discipline, comme chez l'organisateur). */
 function summary(line: ClubFormLine, ageBands: ClubEntryView['ageBands']): [string, string] {
   const age = ageBands.find((b) => b.code === line.ageBandCode)?.label ?? line.ageBandCode ?? '';
   const who = [line.sex ?? '', age, line.weightKg !== null ? `${String(line.weightKg).replace('.', ',')} kg` : ''].filter(Boolean).join(' · ');
-  const combat = line.combat ? `${COMBAT_LABEL.get(line.combat)}${line.ruleset ? ` (${RULESET_LABEL[line.ruleset]})` : ''}` : '';
+  const combat = line.combat ? `${disciplineLabel(line.combat)}${line.ruleset ? ` (${RULESET_LABEL[line.ruleset]})` : ''}` : '';
   return [who, [combat, line.kata ? 'Kata' : ''].filter(Boolean).join(' + ')];
 }
 
@@ -62,6 +62,7 @@ function HeaderForm({ token, view }: { token: string; view: ClubEntryView }) {
 export function ClubEntryPage() {
   const { token = '' } = useParams();
   const { data: view, error, isLoading } = useClubEntry(token);
+  useDocumentTitle(view ? `Inscriptions · ${view.competition.name}` : 'Inscriptions');
   const [editing, setEditing] = useState<ClubLine | 'new' | null>(null);
 
   const close = (message?: string) => {

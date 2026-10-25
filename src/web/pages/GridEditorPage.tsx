@@ -10,6 +10,7 @@ import { ApiError, useGrid, useGridTemplates, useLoadTemplate, useReplaceGrid, u
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { IconTrash } from '../components/ui/icons.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
+import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { useUnsaved } from '../unsaved.js';
 import { HELP } from '../help.js';
 
@@ -202,7 +203,7 @@ export function GridEditorPage() {
       {/* Barre d'enregistrement collée en bas, comme dans les réglages. */}
       <Group justify="space-between" className="no-print"
         style={{ position: 'sticky', bottom: 0, zIndex: 50, padding: 'var(--mantine-spacing-sm) var(--mantine-spacing-md)', background: 'var(--sk-bar)', border: '1px solid var(--sk-card-line)', borderRadius: 'var(--mantine-radius-lg)' }}>
-        <Text size="sm" c={dirty ? undefined : 'dimmed'}>{dirty ? 'Modifications non enregistrées' : 'Aucune modification en cours'}</Text>
+        {dirty ? <StatusBadge tone="warn" data-testid="grid-unsaved">Modifications non enregistrées</StatusBadge> : <Text size="sm" c="dimmed">Aucune modification en cours</Text>}
         <Button data-testid="grid-save" onClick={save} loading={replace.isPending}>Enregistrer la grille</Button>
       </Group>
       <SectionCard title={HELP['grille.modeles'].title} help="grille.modeles">

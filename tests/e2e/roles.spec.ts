@@ -46,7 +46,15 @@ test('l’organisateur crée la compétition, un compte Table centrale et un com
   label61 = cats.find((c) => c.label.includes('-61'))!.label;
 
   await page.getByTestId('nav-accounts').click();
-  const add = async (email: string, role: string, zone?: string) => {
+  // Formulaire aligné : libellés sur une même ligne, cases sur une autre (l'aide « 10 caractères » ne décale rien).
+  const top = async (label: string) => (await page.locator('label').filter({ hasText: new RegExp(`^${label}$`) }).boundingBox())!.y;
+  const inputTop = async (label: string) => (await page.getByLabel(label, { exact: true }).boundingBox())!.y;
+  // À l'arrondi près (champ texte et champ mot de passe) ; décalés, ils l'étaient de 20 px.
+  const aligned = (a: number, b: number) => expect(Math.abs(a - b)).toBeLessThanOrEqual(2);
+  aligned(await top('E-mail'), await top('Mot de passe'));
+  aligned(await inputTop('E-mail'), await inputTop('Mot de passe'));
+  aligned(await top('Mot de passe actuel'), await top('Nouveau mot de passe'));
+  const add =async (email: string, role: string, zone?: string) => {
     await page.getByLabel('E-mail', { exact: true }).fill(email);
     await page.getByLabel('Mot de passe', { exact: true }).fill(PASSWORD);
     await choose(page, 'account-role', role);

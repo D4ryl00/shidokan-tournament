@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { clipped, createCompetition } from './helpers.js';
+import { clipped, createCompetition, ellipsized } from './helpers.js';
 
 test('petit portable (1024 px) : inscriptions et pesée aux noms longs entièrement visibles (défilement si besoin)', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe mise en page');
@@ -15,7 +15,19 @@ test('petit portable (1024 px) : inscriptions et pesée aux noms longs entièrem
     await page.goto(`/competitions/${id}/${tab}`);
     await expect(page.getByText('DE LA FONTAINE-MARTIN').first()).toBeVisible();
     expect(await clipped(page), tab).toEqual([]);
+    // Le nom du club se lit en entier (il passe à la ligne au lieu d'être coupé).
+    expect(await ellipsized(page), tab).toEqual([]);
   }
+});
+
+test('titre de l’onglet du navigateur : l’écran, et la compétition ouverte', async ({ page }) => {
+  const id = await createCompetition(page, 'Coupe titre');
+  await page.goto(`/competitions/${id}/pesee`);
+  await expect(page).toHaveTitle('Pesée · Coupe titre — Shidokan France');
+  await page.goto('/annuaire');
+  await expect(page).toHaveTitle('Annuaire — Shidokan France');
+  await page.goto('/');
+  await expect(page).toHaveTitle('Compétitions — Shidokan France');
 });
 
 test('téléphone (320 px) : l’état des inscriptions d’un club se lit en entier', async ({ page }) => {

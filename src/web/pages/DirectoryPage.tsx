@@ -4,6 +4,7 @@ import { normalizeName } from '../../domain/names.js';
 import { plural } from '../../domain/plural.js';
 import type { DirectoryEntry, DirectoryInput } from '../../domain/registration.js';
 import { useCreateDirectoryEntry, useDirectory, useMergeDirectoryEntries, useUpdateDirectoryEntry } from '../api.js';
+import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
@@ -80,6 +81,7 @@ function MergeModal({ merged, entries, onClose }: { merged: DirectoryEntry | nul
 }
 
 export function DirectoryPage() {
+  useDocumentTitle('Annuaire');
   const { data: entries = [], isLoading } = useDirectory();
   const update = useUpdateDirectoryEntry();
   const [search, setSearch] = useState('');

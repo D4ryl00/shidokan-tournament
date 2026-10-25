@@ -3,6 +3,7 @@ import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import type { PublicAppSettings, SmtpSettings } from '../../domain/app-settings.js';
 import { useAppSettings, useAuthMe, useSendTestMail, useUpdateAppSettings } from '../api.js';
+import { useDocumentTitle } from '../documentTitle.js';
 import { SyncSettingsCard } from '../components/SyncPanel.js';
 import { MirrorCopies, MirrorSettingsCard } from '../components/MirrorPanels.js';
 import { DayChecklist } from '../components/DayChecklist.js';
@@ -96,6 +97,7 @@ function TextsCard({ settings }: { settings: PublicAppSettings }) {
 }
 
 export function AppSettingsPage() {
+  useDocumentTitle('Réglages');
   const { data } = useAppSettings();
   const { data: me } = useAuthMe();
   const local = me?.role === 'local';

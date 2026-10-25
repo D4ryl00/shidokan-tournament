@@ -14,6 +14,7 @@ import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { DateField } from '../components/ui/DateField.js';
 import { IconArrowDown, IconArrowUp, IconTrash } from '../components/ui/icons.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
+import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { useUnsaved } from '../unsaved.js';
 import { SyncPanel } from '../components/SyncPanel.js';
 import { HELP } from '../help.js';
@@ -269,7 +270,7 @@ export function CompetitionSettingsPage() {
       {/* Barre d'enregistrement collée en bas : un seul « Enregistrer » pour toutes les sections au-dessus. */}
       <Group justify="space-between" className="no-print" data-testid="settings-save-bar"
         style={{ position: 'sticky', bottom: 0, zIndex: 50, padding: 'var(--mantine-spacing-sm) var(--mantine-spacing-md)', background: 'var(--sk-bar)', border: '1px solid var(--sk-card-line)', borderRadius: 'var(--mantine-radius-lg)' }}>
-        <Text size="sm" c={dirty ? undefined : 'dimmed'}>{dirty ? 'Modifications non enregistrées' : 'Aucune modification en cours'}</Text>
+        {dirty ? <StatusBadge tone="warn" data-testid="settings-unsaved">Modifications non enregistrées</StatusBadge> : <Text size="sm" c="dimmed">Aucune modification en cours</Text>}
         <Button data-testid="settings-save" onClick={save} loading={saveZones.isPending || update.isPending}>
           Enregistrer
         </Button>

@@ -21,7 +21,7 @@ import { EmptyState } from '../components/ui/EmptyState.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { ResultDialog } from '../components/ResultDialog.js';
 import { TieBreakDialog } from '../components/TieBreakDialog.js';
-import { ZoneCards } from '../components/ZoneCards.js';
+import { ZoneCards, ZoneJournalImport } from '../components/ZoneCards.js';
 import { STATUS_LABELS, STATUS_TONES, useEntrantInfo } from './BracketsPage.js';
 import { plural } from '../../domain/plural.js';
 
@@ -134,9 +134,12 @@ export function MatchesPage() {
             {!zoneOnly && ready && (waves.length === 0 || waveId) && <WaveLaunchPanel competitionId={id} waveId={waveId} />}
           </Group>
           {!zoneOnly && (
-            <Button variant="default" size="xs" data-testid="categories-toggle" aria-expanded={listOpen} onClick={() => setCategoriesOpen(!listOpen)}>
-              {listOpen ? 'Masquer les catégories' : `Catégories (${playable.length})`}
-            </Button>
+            <Group gap="xs">
+              <ZoneJournalImport competitionId={id} />
+              <Button variant="default" size="xs" data-testid="categories-toggle" aria-expanded={listOpen} onClick={() => setCategoriesOpen(!listOpen)}>
+                {listOpen ? 'Masquer les catégories' : `Catégories (${playable.length})`}
+              </Button>
+            </Group>
           )}
         </Group>
       </Card>

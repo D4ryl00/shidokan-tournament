@@ -66,7 +66,7 @@ test('inscription en ligne : annuaire → invitation → le coach inscrit, modif
   await coach.getByTestId('club-line').getByRole('button', { name: 'Modifier' }).click();
   await coach.getByTestId('club-line-form').getByRole('group', { name: 'Discipline de combat' }).getByText('Boxing', { exact: true }).click();
   await coach.getByTestId('line-save').click();
-  await expect(coach.getByTestId('club-line-disciplines')).toHaveText('Boxing (jiyu) + Kata');
+  await expect(coach.getByTestId('club-line-disciplines')).toHaveText('Shido-boxing (jiyu) + Kata');
   await coach.getByTestId('add-fighter').click();
   await fillFighter(coach, { last: 'DURAND', first: 'Hugo', sex: 'Masculin', age: 'Seniors', kg: '75', kata: true });
   await coach.getByTestId('line-save').click();

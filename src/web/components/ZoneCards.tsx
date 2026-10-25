@@ -15,8 +15,10 @@ export function journalReportText(zoneName: string, r: JournalReport): string {
   return `${plural(r.received, 'saisie reçue', 'saisies reçues')} de ${zoneName} : ${parts.join(', ')}`;
 }
 
-/** « Importer un journal de zone (fichier) » : clé USB venue d'un portable de zone. */
-function ImportJournalButton({ competitionId }: { competitionId: string }) {
+/** « Importer un journal de zone (fichier) » : clé USB venue d'un portable de zone. Rangé dans la barre de session de Combats. */
+export function ZoneJournalImport({ competitionId }: { competitionId: string }) {
+  const { data: me } = useAuthMe();
+  const { data: m } = useManagement(competitionId);
   const imp = useImportZoneJournal(competitionId);
   const onFile = async (file: File | null) => {
     if (!file) return;
@@ -29,6 +31,7 @@ function ImportJournalButton({ competitionId }: { competitionId: string }) {
     }
     imp.mutate(journal, { onSuccess: (r) => notifications.show({ color: r.conflicts + r.waiting > 0 ? 'orange' : 'green', message: journalReportText(journal.zoneName ?? 'la zone', r), autoClose: false }) });
   };
+  if (!zoneCardsVisible(me?.role, m?.managedHere)) return null;
   return (
     <Stack gap={4}>
       <FileButton onChange={onFile} accept="application/json,.json">
@@ -46,45 +49,40 @@ export function ZoneCards({ competitionId }: { competitionId: string }) {
   const visible = zoneCardsVisible(me?.role, m?.managedHere);
   const { data: cards = [] } = useZoneCards(competitionId, visible);
   const decide = useDecideZoneCard(competitionId);
-  if (!visible) return null;
+  if (!visible || cards.length === 0) return null;
   return (
     <Stack gap="xs">
-      <Group justify="space-between">
-        {cards.length > 0 ? <Title order={3} fz="lg">À trancher ({cards.length})</Title> : <span />}
-        <ImportJournalButton competitionId={competitionId} />
-      </Group>
-      {cards.length > 0 && (
-        <SimpleGrid cols={{ base: 1, lg: 2 }}>
-          {cards.map((c) => (
-            <Card key={c.id} withBorder data-testid="zone-card-item" style={{ borderColor: 'var(--sk-warn-text)', boxShadow: 'inset 3px 0 0 var(--sk-warn-text)' }}>
-              <Stack gap={6}>
-                <Group justify="space-between" wrap="nowrap">
-                  <Text size="sm" fw={600}>{c.categoryLabel} — {c.target}</Text>
-                  <StatusBadge tone={c.status === 'conflict' ? 'warn' : 'neutral'} size="sm">{c.status === 'conflict' ? 'Conflit' : 'En attente'}</StatusBadge>
-                </Group>
-                {c.status === 'waiting' ? (
-                  <Text size="xs" c="dimmed">Saisie de {c.zoneName} faite après une saisie à trancher de la même catégorie : elle s’appliquera toute seule si elle ne dépend plus d’un conflit.</Text>
-                ) : (
-                  c.reason && <Text size="xs" c="dimmed">{c.reason}</Text>
+      <Title order={3} fz="lg">À trancher ({cards.length})</Title>
+      <SimpleGrid cols={{ base: 1, lg: 2 }}>
+        {cards.map((c) => (
+          <Card key={c.id} withBorder data-testid="zone-card-item" style={{ borderColor: 'var(--sk-warn-text)', boxShadow: 'inset 3px 0 0 var(--sk-warn-text)' }}>
+            <Stack gap={6}>
+              <Group justify="space-between" wrap="nowrap">
+                <Text size="sm" fw={600}>{c.categoryLabel} — {c.target}</Text>
+                <StatusBadge tone={c.status === 'conflict' ? 'warn' : 'neutral'} size="sm">{c.status === 'conflict' ? 'Conflit' : 'En attente'}</StatusBadge>
+              </Group>
+              {c.status === 'waiting' ? (
+                <Text size="xs" c="dimmed">Saisie de {c.zoneName} faite après une saisie à trancher de la même catégorie : elle s’appliquera toute seule si elle ne dépend plus d’un conflit.</Text>
+              ) : (
+                c.reason && <Text size="xs" c="dimmed">{c.reason}</Text>
+              )}
+              <SimpleGrid cols={2} spacing="xs">
+                <Alert p="xs" color="blue" title={`Saisi par ${c.zoneName}`}><Text size="sm" data-testid="zone-card-zone">{c.zone}</Text></Alert>
+                <Alert p="xs" color="gray" title="Sur le PC principal"><Text size="sm" data-testid="zone-card-pc">{c.pc}</Text></Alert>
+              </SimpleGrid>
+              {c.status === 'conflict' && !c.canKeepZone && <Text size="xs" c="orange">Les combattants de ce combat ont changé : la saisie de la zone ne peut plus être gardée.</Text>}
+              <Group justify="flex-end">
+                {c.status === 'conflict' && c.canKeepZone && (
+                  <Button size="xs" variant="light" data-testid="zone-keep-zone" loading={decide.isPending && decide.variables?.entryId === c.id && decide.variables.keep === 'zone'}
+                    onClick={() => decide.mutate({ entryId: c.id, keep: 'zone' })}>Garder celui de la zone</Button>
                 )}
-                <SimpleGrid cols={2} spacing="xs">
-                  <Alert p="xs" color="blue" title={`Saisi par ${c.zoneName}`}><Text size="sm" data-testid="zone-card-zone">{c.zone}</Text></Alert>
-                  <Alert p="xs" color="gray" title="Sur le PC principal"><Text size="sm" data-testid="zone-card-pc">{c.pc}</Text></Alert>
-                </SimpleGrid>
-                {c.status === 'conflict' && !c.canKeepZone && <Text size="xs" c="orange">Les combattants de ce combat ont changé : la saisie de la zone ne peut plus être gardée.</Text>}
-                <Group justify="flex-end">
-                  {c.status === 'conflict' && c.canKeepZone && (
-                    <Button size="xs" variant="light" data-testid="zone-keep-zone" loading={decide.isPending && decide.variables?.entryId === c.id && decide.variables.keep === 'zone'}
-                      onClick={() => decide.mutate({ entryId: c.id, keep: 'zone' })}>Garder celui de la zone</Button>
-                  )}
-                  <Button size="xs" variant="default" data-testid="zone-keep-pc" loading={decide.isPending && decide.variables?.entryId === c.id && decide.variables.keep === 'pc'}
-                    onClick={() => decide.mutate({ entryId: c.id, keep: 'pc' })}>Garder celui du PC</Button>
-                </Group>
-              </Stack>
-            </Card>
-          ))}
-        </SimpleGrid>
-      )}
+                <Button size="xs" variant="default" data-testid="zone-keep-pc" loading={decide.isPending && decide.variables?.entryId === c.id && decide.variables.keep === 'pc'}
+                  onClick={() => decide.mutate({ entryId: c.id, keep: 'pc' })}>Garder celui du PC</Button>
+              </Group>
+            </Stack>
+          </Card>
+        ))}
+      </SimpleGrid>
       <ApiErrorAlert error={decide.error} />
     </Stack>
   );

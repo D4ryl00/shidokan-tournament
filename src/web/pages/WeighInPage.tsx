@@ -116,7 +116,7 @@ export function WeighInPage() {
             return (
               <Table.Tr key={f.fighterId} data-testid="weighin-row">
                 <Table.Td fw={600} style={{ whiteSpace: 'nowrap' }}>{f.label}</Table.Td>
-                <Table.Td maw={200}><Text size="sm" className="sk-ellipsis" title={f.club || undefined}>{f.club || '—'}</Text></Table.Td>
+                <Table.Td><Text size="sm" miw={120} maw={220}>{f.club || '—'}</Text></Table.Td>
                 <Table.Td style={{ whiteSpace: 'nowrap' }}>{ageBandLabel(grid, f.ageBandCode)} {f.sex}</Table.Td>
                 <Table.Td>
                   {f.registrations.map((r) => (
