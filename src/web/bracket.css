@@ -6,7 +6,7 @@
   --bracket-gap: 28px;
   --bracket-col: 210px;
   --bracket-slot: 124px;
-  --bracket-line: var(--mantine-color-gray-6);
+  --bracket-line: var(--sk-card-line);
   display: flex;
   gap: var(--bracket-gap);
   overflow-x: auto;
@@ -86,15 +86,17 @@
   justify-content: space-between;
   gap: 4px;
   padding: 2px 6px;
-  background: var(--mantine-color-default-hover);
-  border-bottom: 1px solid var(--mantine-color-default-border);
+  background: var(--sk-row);
+  border-bottom: 1px solid var(--sk-card-line);
+  color: var(--sk-soft);
 }
 .print-root .bracket-card-head {
   background: #eeeeee;
   border-bottom-color: #000000;
+  color: #000000;
 }
 .bracket-card-row + .bracket-card-row {
-  border-top: 1px solid var(--mantine-color-default-border);
+  border-top: 1px solid var(--sk-line);
 }
 .print-root .bracket-card {
   border-color: #000000;
@@ -107,4 +109,13 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Poule en grille croisée : couleurs du thème à l'écran, noir sur blanc à l'impression. */
+.pool-grid {
+  --pool-line: var(--sk-card-line);
+  --pool-self: var(--sk-line);
+}
+.print-root .pool-grid {
+  --pool-line: #000000;
+  --pool-self: #bbbbbb;
 }

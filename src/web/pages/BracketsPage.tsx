@@ -6,6 +6,7 @@ import { Link, useParams } from 'react-router';
 import { compatibleFormats, type BracketFormat } from '../../domain/brackets/index.js';
 import { activeEntrantCount, type Category, type CategoryStatus } from '../../domain/categories.js';
 import { normalizeName } from '../../domain/names.js';
+import { plural } from '../../domain/plural.js';
 import { useCategories, usePassages, useRedraw, useRegenerate, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
 import { categoryPassages, kataPassageText, movedMatchZones } from '../passages.js';
 import { useSelectedWave } from '../useSelectedWave.js';
@@ -13,11 +14,15 @@ import { usePoste } from '../poste.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { BracketView, type EntrantInfo } from '../components/BracketView.js';
 import { useRecasementDetails } from '../components/ReplacementBadge.js';
+import { EmptyState } from '../components/ui/EmptyState.js';
+import { IconSearch } from '../components/ui/icons.js';
+import { StatusBadge, type Tone } from '../components/ui/StatusBadge.js';
 import { FORMAT_LABELS } from './CompetitionSettingsPage.js';
 
 export const ALL_FORMAT_LABELS: Record<BracketFormat, string> = { ...FORMAT_LABELS, kata_two_rounds: 'Kata : tour 1 puis finale à deux' };
 export const STATUS_LABELS: Record<CategoryStatus, string> = { provisional: 'Provisoire', ready: 'Prête', started: 'Lancée', finished: 'Terminée' };
-const STATUS_COLORS: Record<CategoryStatus, string> = { provisional: 'gray', ready: 'blue', started: 'orange', finished: 'green' };
+/** Sens de l'état d'une catégorie : provisoire (neutre), prête (action), lancée (en cours), terminée (succès). */
+export const STATUS_TONES: Record<CategoryStatus, Tone> = { provisional: 'neutral', ready: 'accent', started: 'warn', finished: 'ok' };
 
 export function useEntrantInfo(competitionId: string): Map<string, EntrantInfo> {
   const { data: rows = [] } = useRegistrations(competitionId);
@@ -29,7 +34,7 @@ export function useEntrantInfo(competitionId: string): Map<string, EntrantInfo> 
 
 function OptionToggle({ label, value, inherited, onChange, disabled }: { label: string; value: boolean | null; inherited: boolean; onChange: (v: boolean | null) => void; disabled: boolean }) {
   return (
-    <Select size="xs" w={260} label={label} disabled={disabled} allowDeselect={false}
+    <Select size="sm" w={260} label={label} disabled={disabled} allowDeselect={false}
       data={[{ value: 'inherit', label: `Comme la compétition (${inherited ? 'oui' : 'non'})` }, { value: 'yes', label: 'Oui' }, { value: 'no', label: 'Non' }]}
       value={value === null ? 'inherit' : value ? 'yes' : 'no'}
       onChange={(v) => onChange(v === 'inherit' ? null : v === 'yes')} />
@@ -111,69 +116,80 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
               }}
               data={[...waves.map((w) => ({ value: w.id, label: w.name })), ...(waiting ? [{ value: 'waiting', label: `En attente (${waiting})` }] : []), { value: 'all', label: 'Toutes' }]} />
           )}
-          <Group justify="space-between">
-            <Text size="sm" c="dimmed">
-              {shown.length} catégorie(s) · {alone} sans adversaire{absentOnly ? ` · ${absentOnly} sans présent (non imprimée${absentOnly > 1 ? 's' : ''})` : ''}
+          <Group justify="space-between" wrap="nowrap" gap="xs">
+            <Text size="sm" c="dimmed" className="num">
+              {plural(shown.length, 'catégorie')} · {alone} sans adversaire{absentOnly ? ` · ${absentOnly} sans présent (non imprimée${absentOnly > 1 ? 's' : ''})` : ''}
             </Text>
-            <Button size="xs" variant="light" component={Link} to={printUrl} target="_blank" data-testid="print-all">
+            <Button size="compact-sm" variant="default" component={Link} to={printUrl} target="_blank" data-testid="print-all" style={{ flexShrink: 0 }}>
               {waves.length === 0 || scope === 'all' ? 'Imprimer tout' : scope === 'waiting' ? 'Imprimer celles en attente' : 'Imprimer la session'}
             </Button>
           </Group>
-          <TextInput size="xs" placeholder="Filtrer (ex. cadets, -54, kata)" value={search} onChange={(e) => setSearch(e.currentTarget.value)} />
-          <Checkbox size="xs" label="Seulement les catégories sans adversaire" checked={onlyAlone} onChange={(e) => setOnlyAlone(e.currentTarget.checked)} />
-          <ScrollArea.Autosize mah="70vh">
-            <Stack gap={4}>
-              {filtered.map((c) => (
-                <UnstyledButton key={c.id} data-testid="category-row" onClick={() => { setSelectedId(c.id); setSwapFrom(null); }}>
-                  <Card withBorder padding="xs" style={{ borderColor: selected?.id === c.id ? 'var(--mantine-color-shidokan-5)' : undefined }}>
-                    <Text size="sm" fw={500}>{c.label}</Text>
-                    <Group gap={4} mt={2}>
-                      <Badge size="xs" variant="light">{activeCount(c)} inscrit(s){c.absentIds.length ? ` + ${c.absentIds.length} absent(s)` : ''}</Badge>
-                      <Badge size="xs" variant="light" color={STATUS_COLORS[c.status]} data-testid="category-status">{STATUS_LABELS[c.status]}</Badge>
-                      {activeCount(c) === 1 && <Badge size="xs" color="red" data-testid="category-alone">Sans adversaire</Badge>}
-                      {allAbsent(c) && <Badge size="xs" color="gray" variant="light" data-testid="category-all-absent" title="Non imprimée">Tous absents</Badge>}
-                      {casesByCategory.get(c.id) && (
-                        <Badge size="xs" color="orange" variant="outline" data-testid="category-cases" component={Link} to={`/competitions/${id}/reaffectation`}
-                          onClick={(e: React.MouseEvent) => e.stopPropagation()} style={{ cursor: 'pointer' }}>
-                          {casesByCategory.get(c.id)} cas à traiter
-                        </Badge>
-                      )}
-                      {c.stale && <Badge size="xs" color="orange">Inscrits modifiés</Badge>}
-                    </Group>
-                  </Card>
-                </UnstyledButton>
-              ))}
+          <TextInput placeholder="Filtrer (ex. cadets, -54, kata)" leftSection={<IconSearch />} value={search} onChange={(e) => setSearch(e.currentTarget.value)} />
+          <Checkbox size="sm" label="Seulement les catégories sans adversaire" checked={onlyAlone} onChange={(e) => setOnlyAlone(e.currentTarget.checked)} />
+          <ScrollArea.Autosize mah="calc(100vh - 300px)" type="auto" offsetScrollbars>
+            <Stack gap={6}>
+              {filtered.length === 0 && <Text size="sm" c="dimmed" ta="center" py="md">{shown.length === 0 ? 'Aucune catégorie.' : 'Aucune catégorie ne correspond.'}</Text>}
+              {filtered.map((c) => {
+                const active = selected?.id === c.id;
+                return (
+                  <UnstyledButton key={c.id} data-testid="category-row" aria-current={active || undefined} onClick={() => { setSelectedId(c.id); setSwapFrom(null); }}>
+                    <Card withBorder padding="xs" px="sm"
+                      style={active ? { borderColor: 'var(--sk-accent)', backgroundColor: 'var(--sk-chip)', boxShadow: 'inset 3px 0 0 var(--sk-accent)' } : undefined}>
+                      <Text size="sm" fw={600}>{c.label}</Text>
+                      <Group gap={4} mt={4}>
+                        <StatusBadge tone="neutral" size="sm" className="num">{plural(activeCount(c), 'inscrit')}{c.absentIds.length ? ` + ${plural(c.absentIds.length, 'absent')}` : ''}</StatusBadge>
+                        <StatusBadge tone={STATUS_TONES[c.status]} size="sm" data-testid="category-status">{STATUS_LABELS[c.status]}</StatusBadge>
+                        {activeCount(c) === 1 && <StatusBadge tone="danger" size="sm" data-testid="category-alone">Sans adversaire</StatusBadge>}
+                        {allAbsent(c) && <StatusBadge tone="neutral" size="sm" data-testid="category-all-absent" title="Non imprimée">Tous absents</StatusBadge>}
+                        {casesByCategory.get(c.id) && (
+                          <Badge size="sm" variant="outline" color="orange" data-testid="category-cases" component={Link} to={`/competitions/${id}/reaffectation`}
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()} style={{ cursor: 'pointer' }} title="Ouvrir la réaffectation">
+                            {casesByCategory.get(c.id)} cas à traiter
+                          </Badge>
+                        )}
+                        {c.stale && <StatusBadge tone="warn" size="sm">Inscrits modifiés</StatusBadge>}
+                      </Group>
+                    </Card>
+                  </UnstyledButton>
+                );
+              })}
             </Stack>
           </ScrollArea.Autosize>
         </Stack>
       </Grid.Col>
       <Grid.Col span={{ base: 12, md: 8 }}>
+        {!selected && (
+          <EmptyState title="Aucun tableau à afficher"
+            text={categories.length === 0 ? 'Les catégories se forment avec les inscriptions (étape Préparer).' : 'Choisissez une catégorie dans la liste.'} />
+        )}
         {selected && (
-          <Stack>
-            <Group justify="space-between" align="flex-start">
-              <div>
-                <Title order={4}>{selected.label}</Title>
-                <Group gap={4}>
-                  <Badge color={STATUS_COLORS[selected.status]}>{STATUS_LABELS[selected.status]}</Badge>
+          <Stack gap="md">
+            <Group justify="space-between" align="flex-start" wrap="nowrap">
+              <Stack gap={6} style={{ minWidth: 0 }}>
+                <Title order={3} fz="h3">{selected.label}</Title>
+                <Group gap={6}>
+                  <StatusBadge tone={STATUS_TONES[selected.status]} size="lg">{STATUS_LABELS[selected.status]}</StatusBadge>
                   {zones.find((z) => z.id === passages?.zoneId) && (
-                    <Badge variant="outline" data-testid="category-zone">{zones.find((z) => z.id === passages?.zoneId)!.name}{passages?.auto ? ' (auto)' : ''}</Badge>
+                    <StatusBadge tone="accent" size="lg" data-testid="category-zone">{zones.find((z) => z.id === passages?.zoneId)!.name}{passages?.auto ? ' (auto)' : ''}</StatusBadge>
                   )}
                   {passages && kataPassageText(passages, zones) && (
-                    <Badge variant="outline" tt="none" data-testid="category-kata-passage">{kataPassageText(passages, zones)}</Badge>
+                    <StatusBadge tone="neutral" size="lg" data-testid="category-kata-passage">{kataPassageText(passages, zones)}</StatusBadge>
                   )}
-                  {selected.stale && <Badge color="orange">Les inscrits ont changé depuis le lancement</Badge>}
+                  {selected.stale && <StatusBadge tone="warn" size="lg">Les inscrits ont changé depuis le lancement</StatusBadge>}
                   {selected.stale && selected.launchLocked && !locked && (
                     <Button size="xs" color="orange" data-testid="category-regenerate" onClick={() => setConfirmRegenerate(true)}>Régénérer (renuméroté à la suite)</Button>
                   )}
                 </Group>
-              </div>
-              <Button size="xs" variant="light" component={Link} to={`/competitions/${id}/impression?categories=${selected.id}`} target="_blank" data-testid="print-category">
+              </Stack>
+              <Button variant="default" component={Link} to={`/competitions/${id}/impression?categories=${selected.id}`} target="_blank" data-testid="print-category" style={{ flexShrink: 0 }}>
                 Imprimer
               </Button>
             </Group>
-            {!readOnlyPoste && (<>
-            <Group align="flex-end">
-              <Select data-testid="category-format" size="xs" w={260} label="Format" disabled={locked} allowDeselect={false}
+            {!readOnlyPoste && (
+            <Card withBorder padding="sm" data-testid="category-actions">
+            <Stack gap="sm">
+            <Group align="flex-end" gap="sm">
+              <Select data-testid="category-format" size="sm" w={260} label="Format" disabled={locked} allowDeselect={false}
                 data={[{ value: 'auto', label: `Automatique (${selected.effectiveFormat ? ALL_FORMAT_LABELS[selected.effectiveFormat] : '—'})` },
                   ...compatibleFormats(selected.key.discipline, activeCount(selected)).map((f) => ({ value: f, label: ALL_FORMAT_LABELS[f] }))]}
                 value={selected.format && compatibleFormats(selected.key.discipline, activeCount(selected)).includes(selected.format) ? selected.format : 'auto'}
@@ -188,28 +204,30 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
               )}
             </Group>
             {selected.format && !compatibleFormats(selected.key.discipline, activeCount(selected)).includes(selected.format) && (
-              <Text size="xs" c="orange">Le format imposé ({ALL_FORMAT_LABELS[selected.format]}) ne convient plus au nombre d'inscrits : format automatique utilisé.</Text>
+              <Text size="xs" c="orange">Le format imposé ({ALL_FORMAT_LABELS[selected.format]}) ne convient plus au nombre d’inscrits : format automatique utilisé.</Text>
             )}
-            <Group>
-              <Button size="xs" variant="default" data-testid="category-redraw" disabled={locked} onClick={() => redraw.mutate(selected.id)}>
+            <Group gap="sm">
+              <Button variant="default" data-testid="category-redraw" disabled={locked} onClick={() => redraw.mutate(selected.id)}>
                 Nouveau tirage
               </Button>
               {selected.status === 'provisional' && (
-                <Button size="xs" data-testid="category-ready" onClick={() => update.mutate({ cid: selected.id, status: 'ready' })}>Marquer prête</Button>
+                <Button data-testid="category-ready" onClick={() => update.mutate({ cid: selected.id, status: 'ready' })}>Marquer prête</Button>
               )}
               {selected.status === 'ready' && (
-                <Button size="xs" variant="default" onClick={() => update.mutate({ cid: selected.id, status: 'provisional' })}>Repasser en provisoire</Button>
+                <Button variant="default" onClick={() => update.mutate({ cid: selected.id, status: 'provisional' })}>Repasser en provisoire</Button>
               )}
               {locked && (
-                <Button size="xs" color="orange" data-testid="category-unlock" onClick={() => setConfirmUnlock(true)}>Déverrouiller</Button>
+                <Button color="orange" variant="light" data-testid="category-unlock" onClick={() => setConfirmUnlock(true)}>Déverrouiller</Button>
               )}
               {!locked && selected.bracket && (
-                <Text size="xs" c="dimmed" data-testid="swap-select">
-                  {swapFrom ? `Cliquez sur l'inscrit à échanger avec ${entrants.get(swapFrom)?.name}` : 'Échange manuel : cliquez sur deux inscrits.'}
+                <Text size="sm" c={swapFrom ? undefined : 'dimmed'} fw={swapFrom ? 600 : undefined} data-testid="swap-select">
+                  {swapFrom ? `Cliquez sur l’inscrit à échanger avec ${entrants.get(swapFrom)?.name}` : 'Échange manuel : cliquez sur deux inscrits.'}
                 </Text>
               )}
             </Group>
-            </>)}
+            </Stack>
+            </Card>
+            )}
             <ApiErrorAlert error={update.error ?? redraw.error ?? swap.error ?? regenerate.error} />
             <BracketView category={selected} entrants={entrants} numbers={passages?.numbers} noRest={passages?.noRest} matchZones={movedMatchZones(passages, zones, selected.bracket)} selected={swapFrom} onSelect={locked || readOnlyPoste ? undefined : onSelectEntrant} badges={badges} badgeDetails={badgeDetails} />
           </Stack>

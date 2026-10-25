@@ -1,4 +1,4 @@
-import { Alert, Badge, Box, Button, Card, Chip, Group, Loader, Modal, SegmentedControl, Select, SimpleGrid, Stack, Switch, Table, Text } from '@mantine/core';
+import { Alert, Box, Button, Card, Chip, Group, Loader, Modal, SegmentedControl, Select, SimpleGrid, Stack, Switch, Table, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router';
@@ -19,7 +19,10 @@ import {
   type CaseFighter,
 } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
-import { SectionHeader } from '../components/Help.js';
+import { EmptyState } from '../components/ui/EmptyState.js';
+import { SectionCard } from '../components/ui/SectionCard.js';
+import { StatusBadge } from '../components/ui/StatusBadge.js';
+import { HELP } from '../help.js';
 import { ProposalPreview } from '../components/ProposalPreview.js';
 import { PROPOSAL_TYPES, ReplacementBadge } from '../components/ReplacementBadge.js';
 import { ageBandLabel, disciplineLabel, prefsLabel, rulesetShort, weightLabel } from '../labels.js';
@@ -82,11 +85,13 @@ function FighterDetail({ f, grid }: { f: CaseFighter | undefined; grid: Category
   return <Text size="sm" data-testid="case-fighter">{parts.join(' · ')}</Text>;
 }
 
-function Stat({ label, value, color }: { label: string; value: number; color?: string }) {
+/** Compteur du tableau de bord ; `tone` : à traiter (attention), réglé (succès) ou bloquant (erreur). */
+function Stat({ label, value, tone }: { label: string; value: number; tone?: 'ok' | 'warn' | 'danger' }) {
+  const color = tone === 'ok' ? 'var(--sk-ok-text)' : tone === 'warn' ? 'var(--sk-warn-text)' : tone === 'danger' ? 'var(--mantine-color-red-text)' : undefined;
   return (
-    <Card withBorder padding="xs">
-      <Text size="xl" fw={700} c={color}>{value}</Text>
-      <Text size="xs" c="dimmed">{label}</Text>
+    <Card withBorder padding="sm">
+      <Text fz={28} fw={700} lh={1.1} c={color} className="num">{value}</Text>
+      <Text size="sm" c="dimmed">{label}</Text>
     </Card>
   );
 }
@@ -161,25 +166,25 @@ export function ReplacementPage() {
     return [{ group: 'Cohérentes avec les réglages', items: ok }, { group: 'Règles enfreintes (avertissement)', items: others }].filter((g) => g.items.length > 0);
   };
   return (
-    <Stack>
+    <Stack gap="md">
       {waveSelector}
-      <SimpleGrid cols={{ base: 2, sm: 4, md: 7 }} data-testid="replacement-summary">
+      <SimpleGrid cols={{ base: 2, sm: 4, md: 7 }} spacing="sm" data-testid="replacement-summary">
         <Stat label="Présents" value={s.present} />
         <Stat label="Absents" value={s.absent} />
         <Stat label="Non pesés" value={s.unknown} />
-        <Stat label="Cas à traiter" value={s.cases} color={s.cases ? 'orange' : 'green'} />
+        <Stat label="Cas à traiter" value={s.cases} tone={s.cases ? 'warn' : 'ok'} />
         <Stat label="Sans adversaire" value={s.alone} />
-        <Stat label="Sans solution automatique" value={s.withoutProposal} color={s.withoutProposal ? 'red' : undefined} />
+        <Stat label="Sans solution automatique" value={s.withoutProposal} tone={s.withoutProposal ? 'danger' : undefined} />
         <Stat label="Catégories lancées" value={s.startedCategories} />
       </SimpleGrid>
       <Group>
         <Button data-testid="bulk-simple" onClick={() => openBulk('simple')} disabled={s.cases === 0}>Classer automatiquement tous les cas simples</Button>
-        <Button data-testid="bulk-all" color="orange" variant="light" onClick={() => openBulk('all')} disabled={s.cases === 0}>Tout classer automatiquement</Button>
+        <Button data-testid="bulk-all" variant="default" onClick={() => openBulk('all')} disabled={s.cases === 0}>Tout classer automatiquement</Button>
         {waves.length > 0 && <Text size="sm" c="dimmed">Les changements de session se valident un par un.</Text>}
       </Group>
       <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error ?? bulk.error ?? undo.error ?? move.error} />
 
-      {data.cases.length === 0 && <Alert color="green" title="Aucun cas à traiter">Toutes les catégories ont au moins deux combattants et aucun poids n'est hors catégorie.</Alert>}
+      {data.cases.length === 0 && <EmptyState icon="✓" title="Aucun cas à traiter" text="Toutes les catégories ont au moins deux combattants et aucun poids n’est hors catégorie." />}
       {data.cases.length > 0 && (
         <Chip.Group multiple value={kinds} onChange={setKinds}>
           <Group gap="xs" data-testid="case-filters">
@@ -194,22 +199,20 @@ export function ReplacementPage() {
         const proposals = data.proposals[c.id] ?? [];
         const open = proposals.filter((p) => !p.refused);
         return (
-          <Card key={c.id} withBorder data-testid="replacement-case">
-            <Group justify="space-between" mb="xs">
-              <div>
-                <Text fw={600} data-testid="case-name">{name(c.registrationId)}</Text>
+          <Card key={c.id} withBorder data-testid="replacement-case" padding="md">
+            <Group justify="space-between" align="flex-start" mb="sm" wrap="nowrap">
+              <div style={{ minWidth: 0 }}>
+                <Text fw={700} size="lg" data-testid="case-name">{name(c.registrationId)}</Text>
                 <FighterDetail f={data.fighters[c.registrationId]} grid={grid} />
                 <Text size="sm" c="dimmed">
                   {c.detail}
                   {c.categoryId && categories.find((x) => x.id === c.categoryId) ? ` · catégorie actuelle : ${categories.find((x) => x.id === c.categoryId)!.label}` : ''}
                 </Text>
               </div>
-              <Badge variant="light" color={c.kind === 'return' ? 'gray' : 'orange'}>
-                {CASE_KINDS[c.kind]}
-              </Badge>
+              <StatusBadge tone={c.kind === 'return' ? 'neutral' : 'warn'} size="lg">{CASE_KINDS[c.kind]}</StatusBadge>
             </Group>
             <Stack gap="xs">
-              {open.length === 0 && <Text size="sm" c="red">Aucune solution automatique : déplacer manuellement ou laisser sans adversaire.</Text>}
+              {open.length === 0 && <Text size="sm" c="red.6" fw={500}>Aucune solution automatique : déplacer manuellement ou laisser sans adversaire.</Text>}
               {proposals.map((p) => {
                 if (p.refused) {
                   return (
@@ -224,7 +227,8 @@ export function ReplacementPage() {
                   );
                 }
                 return (
-                  <Group key={p.id} justify="space-between" wrap="nowrap" data-testid="replacement-proposal">
+                  <Group key={p.id} justify="space-between" wrap="nowrap" data-testid="replacement-proposal" p="xs"
+                    style={{ border: '1px solid var(--sk-line)', borderRadius: 'var(--mantine-radius-md)', background: 'var(--sk-bg)' }}>
                     <Group gap="xs" wrap="nowrap">
                       <Box style={{ flexShrink: 0 }}><ReplacementBadge type={p.type} state="proposed" gapKg={'newKey' in p.target ? undefined : p.checks.weightGapKg} /></Box>
                       <div>
@@ -239,16 +243,16 @@ export function ReplacementPage() {
                           {p.manual ? ' · validation manuelle' : ' · cas simple'}
                         </Text>
                       </div>
-                      {p.preApproved && <Badge color="green" variant="light" size="sm">pré-accord coach</Badge>}
+                      {p.preApproved && <StatusBadge tone="ok" size="sm">Pré-accord coach</StatusBadge>}
                       {p.waveChange && (
-                        <Badge color="grape" variant="light" size="sm" tt="none" data-testid="wave-change">
-                          ↪ change de session : {waveName(p.waveChange.from)} → {waveName(p.waveChange.to)}
-                        </Badge>
+                        <StatusBadge tone="accent" size="sm" data-testid="wave-change">
+                          ↪ Change de session : {waveName(p.waveChange.from)} → {waveName(p.waveChange.to)}
+                        </StatusBadge>
                       )}
                       {p.waveShifts.length > 0 && (
-                        <Badge color="grape" variant="light" size="sm" tt="none" data-testid="wave-shift">
-                          ↪ emmène {p.waveShifts.length} autre(s) combattant(s) dans une autre session
-                        </Badge>
+                        <StatusBadge tone="accent" size="sm" data-testid="wave-shift">
+                          ↪ Emmène {p.waveShifts.length} autre(s) combattant(s) dans une autre session
+                        </StatusBadge>
                       )}
                     </Group>
                     <Group gap={4} wrap="nowrap">
@@ -288,34 +292,32 @@ export function ReplacementPage() {
         );
       })}
 
-      <Group justify="space-between" mt="md">
-        <SectionHeader topic="recasement.valides" />
-        {data.recasements.length > 0 && (
+      <SectionCard title={HELP['recasement.valides'].title} help="recasement.valides"
+        actions={data.recasements.length > 0 && (
           <Group gap="xs" data-testid="recasement-filters">
             <SegmentedControl size="xs" value={logState} onChange={(v) => setLogState(v as typeof logState)}
               data={[{ value: 'all', label: 'Toutes' }, { value: 'validated', label: 'Validées' }, { value: 'undone', label: 'Annulées' }]} />
             <Select size="xs" w={200} placeholder="Tous les types" clearable value={logType} onChange={setLogType}
               data={[...new Set(data.recasements.map((r) => r.type))].map((t) => ({ value: t, label: `${PROPOSAL_TYPES[t as ProposalType].label} — ${PROPOSAL_TYPES[t as ProposalType].title}` }))} />
           </Group>
-        )}
-      </Group>
+        )}>
       {data.recasements.length === 0 ? (
-        <Text size="sm" c="dimmed">Aucun pour l'instant.</Text>
+        <Text size="sm" c="dimmed">Aucune pour l’instant.</Text>
       ) : (
         <Table>
           <Table.Tbody>
             {data.recasements.filter((r) => (logState === 'all' || r.status === logState) && (!logType || r.type === logType)).map((r) => (
               <Table.Tr key={r.id} data-testid="recasement-row">
                 <Table.Td style={{ whiteSpace: 'nowrap' }}><ReplacementBadge type={r.type} state={r.status === 'undone' ? 'refused' : 'validated'} detail={r} /></Table.Td>
-                <Table.Td>{name(r.registrationId)}</Table.Td>
+                <Table.Td fw={500}>{name(r.registrationId)}</Table.Td>
                 <Table.Td>{r.fromLabel} → {r.toLabel}{r.reason && <Text size="xs" c="dimmed">{r.reason}</Text>}</Table.Td>
                 <Table.Td>
                   {r.bulk ? 'en masse' : 'unitaire'}{r.preApproved ? ' · pré-accord coach' : ''}{r.status === 'undone' ? ' · annulée' : ''}
-                  <Text size="xs" c="dimmed">{new Date(r.createdAt).toLocaleTimeString('fr-FR')}</Text>
+                  <Text size="xs" c="dimmed" className="num">{new Date(r.createdAt).toLocaleTimeString('fr-FR')}</Text>
                 </Table.Td>
-                <Table.Td>
+                <Table.Td ta="right">
                   {r.status === 'validated' && (
-                    <Button size="xs" variant="subtle" color="red" data-testid="recasement-undo" onClick={() => setDialog({ kind: 'undo', recasementId: r.id, label: name(r.registrationId) })}>
+                    <Button size="compact-sm" variant="subtle" color="red" data-testid="recasement-undo" onClick={() => setDialog({ kind: 'undo', recasementId: r.id, label: name(r.registrationId) })}>
                       Annuler
                     </Button>
                   )}
@@ -325,11 +327,12 @@ export function ReplacementPage() {
           </Table.Tbody>
         </Table>
       )}
+      </SectionCard>
 
       <Modal opened={dialog?.kind === 'proposal' || dialog?.kind === 'bulk' || dialog?.kind === 'move'} onClose={() => setDialog(null)} size="xl"
         title={dialog?.kind === 'bulk' ? (dialog.mode === 'simple' ? 'Classer automatiquement tous les cas simples' : 'Tout classer automatiquement') : dialog?.kind === 'move' ? 'Déplacement manuel' : 'Aperçu de la réaffectation'}>
         <Stack>
-          {preview.isPending && <Text size="sm">Calcul de l'aperçu…</Text>}
+          {preview.isPending && <Text size="sm">Calcul de l’aperçu…</Text>}
           <ApiErrorAlert error={preview.error} />
           {preview.data?.warnings && preview.data.warnings.length > 0 && (
             <Alert color="orange" title="Règles enfreintes" data-testid="move-warnings">{preview.data.warnings.join(' ')}</Alert>
@@ -344,7 +347,7 @@ export function ReplacementPage() {
           {dialog?.kind === 'move' && (
             <Group justify="flex-end">
               <Button variant="default" onClick={() => setDialog(null)}>Annuler</Button>
-              <Button color="orange" data-testid="manual-move-confirm" loading={move.isPending} disabled={!preview.data}
+              <Button data-testid="manual-move-confirm" loading={move.isPending} disabled={!preview.data}
                 onClick={() => move.mutate({ registrationId: dialog.registrationId, categoryId: dialog.categoryId }, { onSuccess: () => { setMoveTarget({}); done('Déplacement manuel effectué.'); } })}>
                 Confirmer le déplacement
               </Button>
@@ -370,7 +373,7 @@ export function ReplacementPage() {
       </Modal>
       <Modal opened={dialog?.kind === 'undo'} onClose={() => setDialog(null)} title="Annuler cette réaffectation ?">
         <Stack>
-          <Text>{dialog?.kind === 'undo' && dialog.label} retrouvera sa place d'avant.</Text>
+          <Text>{dialog?.kind === 'undo' && dialog.label} retrouvera sa place d’avant.</Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setDialog(null)}>Non</Button>
             <Button color="red" data-testid="recasement-undo-confirm"

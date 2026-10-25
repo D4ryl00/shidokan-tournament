@@ -95,7 +95,7 @@ function EntrantLine({ id, fallback, info, props, winner, inline }: { id: string
   const selected = id !== null && props.selected === id;
   const style: CSSProperties = {
     cursor: props.onSelect && id ? 'pointer' : undefined,
-    outline: selected ? '2px solid var(--mantine-color-shidokan-5)' : undefined,
+    outline: selected ? '2px solid var(--sk-accent)' : undefined,
     borderRadius: 4,
     padding: '2px 4px',
     fontWeight: winner ? 700 : undefined,
@@ -302,11 +302,12 @@ function PoolOrder({ matches, entrants, numbers }: { matches: ResolvedMatch[]; e
 
 /** Poule imprimée en grille croisée : V = victoire de la ligne, D = défaite, n° du combat sinon. */
 function PoolGrid({ title, pool, matches, entrants, numbers }: { title: string; pool: string[]; matches: ResolvedMatch[]; entrants: Map<string, EntrantInfo>; numbers: Map<string, string> }) {
-  const cell = { border: '1px solid #000', padding: 6, textAlign: 'center' as const, minWidth: 48 };
+  // Écran : traits et case grisée aux couleurs du thème ; impression (print.css, .print-root) : noir sur blanc comme avant.
+  const cell = { border: '1px solid var(--pool-line)', padding: 6, textAlign: 'center' as const, minWidth: 48 };
   const between = (x: string, y: string) => matches.find((m) => (m.entrantA === x && m.entrantB === y) || (m.entrantA === y && m.entrantB === x));
   const wins = (x: string) => matches.filter((m) => m.result && (m.result.winner === 'a' ? m.entrantA : m.entrantB) === x).length;
   return (
-    <Box data-testid="pool-grid">
+    <Box data-testid="pool-grid" className="pool-grid">
       <Title order={5} mb={4}>{title}</Title>
       <table style={{ borderCollapse: 'collapse' }}>
         <thead>
@@ -323,7 +324,7 @@ function PoolGrid({ title, pool, matches, entrants, numbers }: { title: string; 
                 <b>{i + 1}. {entrants.get(x)?.name}</b> <span style={{ fontSize: 12 }}>{entrants.get(x)?.club}</span>
               </td>
               {pool.map((y) => {
-                if (x === y) return <td key={y} style={{ ...cell, background: '#bbb' }} />;
+                if (x === y) return <td key={y} style={{ ...cell, background: 'var(--pool-self)' }} />;
                 const m = between(x, y);
                 const won = m?.result ? (m.result.winner === 'a' ? m.entrantA : m.entrantB) === x : null;
                 return <td key={y} style={cell}>{won === null ? <span style={{ fontSize: 11 }}>n° {m ? numbers.get(m.id) : ''}</span> : won ? <b>V</b> : 'D'}</td>;

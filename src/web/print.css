@@ -4,6 +4,15 @@
   --mantine-color-text: #000000;
   --mantine-color-dimmed: #333333;
   --mantine-color-default-border: #888888;
+  /* Jetons du nouveau style : noir sur blanc quel que soit le thème de l'écran. */
+  --sk-bg: #ffffff;
+  --sk-card: #ffffff;
+  --sk-card-line: #888888;
+  --sk-line: #888888;
+  --sk-row: #ffffff;
+  --sk-text: #000000;
+  --sk-soft: #333333;
+  --sk-muted: #333333;
   background: #ffffff;
   color: #000000;
   color-scheme: light;
@@ -46,4 +55,9 @@
   .print-root {
     padding: 0;
   }
+}
+/* Cases des tableaux : même arrondi qu'avant la refonte (les cartes de l'écran sont plus arrondies). */
+.print-root .mantine-Card-root,
+.print-root .mantine-Paper-root {
+  border-radius: var(--mantine-radius-md);
 }

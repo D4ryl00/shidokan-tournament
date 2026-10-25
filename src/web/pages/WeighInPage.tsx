@@ -1,13 +1,17 @@
 import '../print.css';
-import { Badge, Button, Group, Loader, Modal, NumberInput, SegmentedControl, Stack, Table, Text, TextInput } from '@mantine/core';
+import { Button, Card, Group, Loader, Modal, NumberInput, SegmentedControl, Stack, Table, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { normalizeName } from '../../domain/names.js';
+import { plural } from '../../domain/plural.js';
 import type { Presence } from '../../domain/replacement/index.js';
 import { useCloseWeighIn, useGrid, useSetWeighIn, useWeighIn, type WeighInFighter } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { HelpText } from '../components/Help.js';
+import { EmptyState } from '../components/ui/EmptyState.js';
+import { IconSearch } from '../components/ui/icons.js';
+import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { ageBandLabel, disciplineLabel } from '../labels.js';
 import { useSelectedWave } from '../useSelectedWave.js';
 
@@ -21,8 +25,9 @@ function WeightCell({ fighter, index, onSave }: { fighter: WeighInFighter; index
     <NumberInput
       data-testid="weighin-weight"
       data-weight-index={index}
-      w={110}
-      size="xs"
+      w={130}
+      size="md"
+      styles={{ input: { fontWeight: 700, fontSize: 'var(--mantine-font-size-lg)', fontVariantNumeric: 'tabular-nums' } }}
       suffix=" kg"
       decimalScale={2}
       decimalSeparator=","
@@ -41,6 +46,12 @@ function WeightCell({ fighter, index, onSave }: { fighter: WeighInFighter; index
   );
 }
 
+/** Présence en contrôle segmenté : présent en vert, absent en orangé, « ? » neutre. */
+const presenceStyles = (p: Presence) => ({
+  indicator: { backgroundColor: p === 'present' ? 'var(--sk-ok)' : p === 'absent' ? 'var(--sk-warn)' : 'var(--sk-chip)' },
+  label: { fontWeight: 600, ...(p === 'present' ? { '--sc-label-color': 'var(--sk-ok-text)' } : p === 'absent' ? { '--sc-label-color': 'var(--sk-warn-text)' } : {}) },
+});
+
 export function WeighInPage() {
   const { id = '' } = useParams();
   const { waves, waveId, select, ready } = useSelectedWave(id);
@@ -58,7 +69,7 @@ export function WeighInPage() {
   // Tant que les vagues ne sont pas chargées, on ne sait pas quelle pesée afficher (jamais « toute la compétition » par erreur).
   if (!ready) return <Loader />;
   return (
-    <Stack>
+    <Stack gap="md">
       {waves.length > 0 && (
         <Group gap="xs">
           <Text size="sm" fw={600}>Session :</Text>
@@ -66,24 +77,30 @@ export function WeighInPage() {
             data={waves.map((w) => ({ value: w.id, label: w.name }))} />
         </Group>
       )}
-      <Group justify="space-between">
-        <Group>
-          <TextInput placeholder="Rechercher (nom, club)" value={search} onChange={(e) => setSearch(e.currentTarget.value)} />
-          <Text size="sm" data-testid="weighin-counters">
-            {count('present')} présent(s) · {count('absent')} absent(s) · {count('unknown')} non pesé(s)
-          </Text>
-          {data?.closed && <Badge color="gray">Pesée clôturée</Badge>}
+      <Group justify="space-between" gap="sm">
+        <Group gap="sm">
+          <TextInput placeholder="Rechercher (nom, club)" leftSection={<IconSearch />} value={search} w={240} onChange={(e) => setSearch(e.currentTarget.value)} />
+          <Group gap={6} data-testid="weighin-counters">
+            <StatusBadge tone="ok" size="lg" className="num">{plural(count('present'), 'présent')}</StatusBadge>
+            <StatusBadge tone="neutral" size="lg" className="num">{plural(count('absent'), 'absent')}</StatusBadge>
+            <StatusBadge tone={count('unknown') > 0 ? 'warn' : 'neutral'} size="lg" className="num">{plural(count('unknown'), 'non pesé', 'non pesés')}</StatusBadge>
+          </Group>
+          {data?.closed && <StatusBadge tone="accent" size="lg">Pesée clôturée</StatusBadge>}
         </Group>
-        <Group>
-          <Button variant="light" component={Link} to={`/competitions/${id}/impression/pesee${sheetQuery ? `?${sheetQuery}` : ''}`} target="_blank" data-testid="weighin-sheets-club">Feuilles de pesée par club</Button>
-          <Button variant="light" component={Link} to={`/competitions/${id}/impression/pesee?par=categorie${sheetQuery ? `&${sheetQuery}` : ''}`} target="_blank" data-testid="weighin-sheets-category">
-            … par catégorie
-          </Button>
-          <Button color="orange" data-testid="weighin-close" onClick={() => setConfirm(true)} disabled={count('unknown') === 0}>Clôturer la pesée</Button>
+        <Group gap="sm">
+          <Text size="sm" c="dimmed">Feuilles de pesée :</Text>
+          <Button.Group>
+            <Button variant="default" component={Link} to={`/competitions/${id}/impression/pesee${sheetQuery ? `?${sheetQuery}` : ''}`} target="_blank" data-testid="weighin-sheets-club">par club</Button>
+            <Button variant="default" component={Link} to={`/competitions/${id}/impression/pesee?par=categorie${sheetQuery ? `&${sheetQuery}` : ''}`} target="_blank" data-testid="weighin-sheets-category">
+              par catégorie
+            </Button>
+          </Button.Group>
+          <Button data-testid="weighin-close" onClick={() => setConfirm(true)} disabled={count('unknown') === 0}>Clôturer la pesée</Button>
         </Group>
       </Group>
       <ApiErrorAlert error={set.error ?? close.error} />
-      <Table striped>
+      <Card padding={0}>
+      <Table>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Combattant</Table.Th><Table.Th>Club</Table.Th><Table.Th>Âge</Table.Th><Table.Th>Inscriptions</Table.Th>
@@ -96,19 +113,19 @@ export function WeighInPage() {
             const out = combat.find((r) => r.outOfClass);
             return (
               <Table.Tr key={f.fighterId} data-testid="weighin-row">
-                <Table.Td>{f.label}</Table.Td>
-                <Table.Td>{f.club || '—'}</Table.Td>
-                <Table.Td>{ageBandLabel(grid, f.ageBandCode)} {f.sex}</Table.Td>
+                <Table.Td fw={600} style={{ whiteSpace: 'nowrap' }}>{f.label}</Table.Td>
+                <Table.Td maw={200}><Text size="sm" className="sk-ellipsis" title={f.club || undefined}>{f.club || '—'}</Text></Table.Td>
+                <Table.Td style={{ whiteSpace: 'nowrap' }}>{ageBandLabel(grid, f.ageBandCode)} {f.sex}</Table.Td>
                 <Table.Td>
                   {f.registrations.map((r) => (
-                    <Text key={r.id} size="xs">
-                      {disciplineLabel(r.discipline)}{r.weightClassLabel ? ` ${r.weightClassLabel}` : ''}
-                      {r.recased && <Badge ml={4} size="xs" variant="light" color="gray" data-testid="weighin-recased" title={r.categoryLabel ?? undefined}>réaffecté</Badge>}
-                    </Text>
+                    <Group key={r.id} gap={4} wrap="nowrap">
+                      <Text size="sm" style={{ whiteSpace: 'nowrap' }}>{disciplineLabel(r.discipline)}{r.weightClassLabel ? ` ${r.weightClassLabel}` : ''}</Text>
+                      {r.recased && <StatusBadge tone="neutral" size="sm" data-testid="weighin-recased" title={r.categoryLabel ?? undefined}>Réaffecté</StatusBadge>}
+                    </Group>
                   ))}
                 </Table.Td>
                 <Table.Td>
-                  <SegmentedControl data-testid="weighin-presence" size="xs" value={f.presence}
+                  <SegmentedControl data-testid="weighin-presence" size="sm" value={f.presence} styles={presenceStyles(f.presence)}
                     onChange={(v) => set.mutate({ fighterId: f.fighterId, presence: v as Presence, ...(waveId ? { waveId } : {}) })}
                     data={[{ value: 'unknown', label: '?' }, { value: 'present', label: 'Présent' }, { value: 'absent', label: 'Absent' }]} />
                 </Table.Td>
@@ -116,12 +133,12 @@ export function WeighInPage() {
                   {combat.length > 0 ? (
                     <WeightCell key={`${f.fighterId}-${f.weighInKg ?? ''}`} fighter={f} index={i} onSave={(kg) => set.mutate({ fighterId: f.fighterId, weighInKg: kg, ...(waveId ? { waveId } : {}) })} />
                   ) : (
-                    <Text size="xs" c="dimmed">kata : pas de pesée</Text>
+                    <Text size="sm" c="dimmed">Kata : pas de pesée</Text>
                   )}
                 </Table.Td>
                 <Table.Td>
                   {out ? (
-                    <Badge color="blue" variant="outline" data-testid="weighin-out">⚖ hors catégorie → {out.weighInClassLabel}</Badge>
+                    <StatusBadge tone="warn" data-testid="weighin-out">⚖ Hors catégorie → {out.weighInClassLabel}</StatusBadge>
                   ) : combat[0]?.weighInClassLabel ? (
                     <Text size="sm">{combat[0].weighInClassLabel}</Text>
                   ) : null}
@@ -131,12 +148,18 @@ export function WeighInPage() {
           })}
         </Table.Tbody>
       </Table>
+      </Card>
+      {fighters.length === 0 && (
+        all.length === 0
+          ? <EmptyState title="Personne à peser" text={waves.length > 0 ? 'Aucun combattant inscrit dans cette session.' : 'Aucune inscription pour l’instant : elles se font dans l’étape Préparer.'} />
+          : <EmptyState title="Aucun combattant ne correspond" text="Changez la recherche." />
+      )}
       <Modal opened={confirm} onClose={() => setConfirm(false)} title="Clôturer la pesée ?">
         <Stack>
           <Text>{count('unknown')} combattant(s) non pesé(s) seront marqués absents et retirés des tableaux non lancés.</Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setConfirm(false)}>Annuler</Button>
-            <Button color="orange" data-testid="weighin-close-confirm"
+            <Button data-testid="weighin-close-confirm"
               onClick={() => close.mutate(waveId ?? undefined, { onSuccess: (r) => { setConfirm(false); notifications.show({ message: `${r.markedAbsent} combattant(s) marqué(s) absent(s).` }); } })}>
               Clôturer
             </Button>

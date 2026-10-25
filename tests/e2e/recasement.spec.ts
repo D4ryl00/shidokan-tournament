@@ -28,9 +28,9 @@ test('pesée puis réaffectation : aperçu, validation, refus, masse, retour, an
   await bernard.getByTestId('weighin-weight').press('Enter');
   await expect(bernard.getByTestId('weighin-presence').locator('input[value="present"]')).toBeChecked();
   await page.getByTestId('weighin-row').filter({ hasText: 'THOMAS' }).getByTestId('weighin-presence').getByText('Absent').click();
-  await expect(page.getByTestId('weighin-counters')).toContainText('1 absent(s)');
+  await expect(page.getByTestId('weighin-counters')).toContainText('1 absent');
   await page.getByTestId('weighin-row').filter({ hasText: 'ROBERT' }).getByTestId('weighin-presence').getByText('Absent').click();
-  await expect(page.getByTestId('weighin-counters')).toContainText('2 absent(s)');
+  await expect(page.getByTestId('weighin-counters')).toContainText('2 absents');
   await page.goto(`/competitions/${id}/impression/pesee?par=categorie`);
   await expect(page.getByTestId('weighin-sheet').filter({ hasText: 'Pesée — Karaté · Jiyu · Cadets F · -61 kg' })).toContainText('DUBOIS');
   // Ordre de la grille (Minimes avant Cadets ; -47 avant -54 avant -61), pas l'ordre alphabétique.

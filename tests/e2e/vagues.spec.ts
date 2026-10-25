@@ -165,7 +165,7 @@ test('réaffectation par session : cas de la session, changement de session sign
   await expect(cases).toHaveCount(1);
   await expect(cases).toContainText('MINI');
   const proposal = cases.getByTestId('replacement-proposal');
-  await expect(proposal.getByTestId('wave-change')).toHaveText('↪ change de session : Matin → Après-midi');
+  await expect(proposal.getByTestId('wave-change')).toHaveText('↪ Change de session : Matin → Après-midi');
   await expect(page.getByText('Les changements de session se valident un par un.')).toBeVisible();
   // « Tout classer automatiquement » ne la prend pas.
   await page.getByTestId('bulk-all').click();
