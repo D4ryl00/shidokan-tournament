@@ -47,7 +47,10 @@ export async function api<T>(method: string, url: string, body?: unknown, opts: 
 }
 
 export const useCompetitions = () =>
-  useQuery({ queryKey: ['competitions'], queryFn: () => api<Competition[]>('GET', '/api/competitions') });
+  useQuery({ queryKey: ['competitions'], queryFn: () => api<CompetitionListItem[]>('GET', '/api/competitions') });
+
+/** Une compétition de la liste de l'accueil : en plus, le nombre d'inscrits et l'état de la main. */
+export type CompetitionListItem = Competition & { registrationCount: number; management: { managedHere: boolean; ownerName: string | null } };
 
 export const useCompetition = (id: string) =>
   useQuery({ queryKey: ['competitions', id], queryFn: () => api<Competition>('GET', `/api/competitions/${id}`) });

@@ -1,3 +1,4 @@
+import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
@@ -6,9 +7,11 @@ import { tmpDbPath } from '../helpers/tmp-db.js';
 
 const NAME = "Coupe Shidokan – Côte d'Azur";
 let app: FastifyInstance;
+let dbPath: string;
 
 beforeEach(async () => {
-  app = await buildApp({ dbPath: tmpDbPath() });
+  dbPath = tmpDbPath();
+  app = await buildApp({ dbPath });
 });
 afterEach(async () => {
   await app.close();
@@ -32,6 +35,22 @@ test('créer, lister, lire : les accents restent intacts', async () => {
   const one = await app.inject({ method: 'GET', url: `/api/competitions/${id}` });
   expect(one.json().name).toBe(NAME);
   expect(one.json().settings.weightGapMaxKg).toEqual({ children: 5, adults: 5 });
+});
+
+test('liste des compétitions : nombre d’inscrits et état de la main', async () => {
+  const id = (await create()).json().id;
+  const club = (await app.inject({ method: 'POST', url: `/api/competitions/${id}/clubs`, payload: { name: 'Tani Dojo' } })).json();
+  const payload = { clubId: club.id, lastName: 'X', firstName: 'y', sex: 'M', ageBandCode: 'senior', discipline: 'karate', ruleset: 'jiyu', weightClassId: 'senior:M:-75', source: 'onsite' };
+  for (const lastName of ['A', 'B']) {
+    expect((await app.inject({ method: 'POST', url: `/api/competitions/${id}/registrations`, payload: { ...payload, lastName } })).statusCode).toBe(201);
+  }
+  const list = async () => (await app.inject({ method: 'GET', url: '/api/competitions' })).json()[0];
+  expect(await list()).toMatchObject({ registrationCount: 2, management: { managedHere: true, ownerName: null } });
+  // Copie en lecture seule : la compétition est gérée par une autre installation.
+  const r = new Database(dbPath);
+  r.prepare('update competitions set owner_instance_id = ?, owner_name = ?, owner_since = ? where id = ?').run('pc-1', 'PC-SALLE', '2026-11-21T08:00:00.000Z', id);
+  r.close();
+  expect(await list()).toMatchObject({ registrationCount: 2, management: { managedHere: false, ownerName: 'PC-SALLE' } });
 });
 
 test('création invalide : date mal formée → 400 en français', async () => {

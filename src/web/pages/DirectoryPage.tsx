@@ -1,10 +1,13 @@
-import { Button, Checkbox, Group, Menu, Modal, Select, Stack, Table, Text, Textarea, TextInput } from '@mantine/core';
+import { Button, Card, Checkbox, Group, Menu, Modal, Select, Stack, Table, Text, Textarea, TextInput } from '@mantine/core';
 import { useState } from 'react';
 import { normalizeName } from '../../domain/names.js';
+import { plural } from '../../domain/plural.js';
 import type { DirectoryEntry, DirectoryInput } from '../../domain/registration.js';
 import { useCreateDirectoryEntry, useDirectory, useMergeDirectoryEntries, useUpdateDirectoryEntry } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
-import { SectionHeader } from '../components/Help.js';
+import { EmptyState } from '../components/ui/EmptyState.js';
+import { PageHeader } from '../components/ui/PageHeader.js';
+import { StatusBadge } from '../components/ui/StatusBadge.js';
 
 const EMPTY: DirectoryInput = { name: '', affiliationNumber: null, coachName: null, coachPhone: null, coachEmail: null, notes: null };
 const orNull = (v: string) => v.trim() || null;
@@ -34,9 +37,12 @@ function EntryModal({ entry, onClose }: { entry: DirectoryEntry | 'new' | null; 
         <TextInput data-testid="directory-email" label="E-mail" value={form.coachEmail ?? ''} onChange={(e) => set({ coachEmail: orNull(e.currentTarget.value) })} />
         <Textarea label="Notes" autosize minRows={2} value={form.notes ?? ''} onChange={(e) => set({ notes: orNull(e.currentTarget.value) })} />
         <ApiErrorAlert error={create.error ?? update.error} />
-        <Button data-testid="directory-save" onClick={save} loading={create.isPending || update.isPending} disabled={!form.name.trim()}>
-          Enregistrer
-        </Button>
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>Annuler</Button>
+          <Button data-testid="directory-save" onClick={save} loading={create.isPending || update.isPending} disabled={!form.name.trim()}>
+            Enregistrer
+          </Button>
+        </Group>
       </Stack>
     </Modal>
   );
@@ -60,9 +66,12 @@ function MergeModal({ merged, entries, onClose }: { merged: DirectoryEntry | nul
             value={keepId} onChange={setKeepId} />
           {keep && <Text size="sm">Les compétitions de « {merged.name} » passeront à « {keep.name} », puis « {merged.name} » sera supprimé.</Text>}
           <ApiErrorAlert error={merge.error} />
-          <Button disabled={!keep} loading={merge.isPending} onClick={() => keep && merge.mutate({ keepId: keep.id, mergeId: merged.id }, { onSuccess: close })}>
-            Fusionner
-          </Button>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={close}>Annuler</Button>
+            <Button disabled={!keep} loading={merge.isPending} onClick={() => keep && merge.mutate({ keepId: keep.id, mergeId: merged.id }, { onSuccess: close })}>
+              Fusionner
+            </Button>
+          </Group>
         </Stack>
       )}
     </Modal>
@@ -79,52 +88,58 @@ export function DirectoryPage() {
   const key = normalizeName(search);
   const shown = entries.filter((e) => (showArchived || !e.archived) && (!key || normalizeName(e.name).includes(key) || (e.affiliationNumber ?? '').includes(search.trim())));
 
+  const active = entries.filter((e) => !e.archived).length;
   return (
-    <Stack>
-      <Group justify="space-between">
-        <SectionHeader topic="annuaire" order={2} />
-        <Button data-testid="directory-new" onClick={() => setEditing('new')}>Ajouter un club</Button>
-      </Group>
-      <Group>
-        <TextInput placeholder="Rechercher un nom ou un numéro" value={search} onChange={(e) => setSearch(e.currentTarget.value)} w={280} />
+    <Stack gap="lg">
+      <PageHeader title="Annuaire des clubs" help="annuaire"
+        summary={entries.length > 0 ? `${plural(active, 'club')}${entries.length > active ? ` · ${plural(entries.length - active, 'archivé')}` : ''}` : undefined}
+        actions={<Button data-testid="directory-new" onClick={() => setEditing('new')}>Ajouter un club</Button>} />
+      <Group gap="md">
+        <TextInput placeholder="Rechercher un nom ou un numéro" value={search} onChange={(e) => setSearch(e.currentTarget.value)} w={300} />
         <Checkbox label="Afficher les clubs archivés" checked={showArchived} onChange={(e) => setShowArchived(e.currentTarget.checked)} />
       </Group>
       <ApiErrorAlert error={update.error} />
       {shown.length === 0 ? (
-        <Text c="dimmed">Aucun club.</Text>
+        entries.length === 0
+          ? <EmptyState title="L’annuaire est vide" text="Les clubs s’y ajoutent à l’import FFK, ou à la main avec « Ajouter un club ». Il garde leurs coordonnées d’une compétition à l’autre." />
+          : <EmptyState title="Aucun club ne correspond" text="Changez la recherche, ou affichez les clubs archivés." />
       ) : (
-        <Table striped>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Club</Table.Th><Table.Th>N° d’affiliation</Table.Th><Table.Th>Coach</Table.Th><Table.Th>Téléphone</Table.Th>
-              <Table.Th>E-mail</Table.Th><Table.Th>Compétitions</Table.Th><Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {shown.map((e) => (
-              <Table.Tr key={e.id} data-testid="directory-row" c={e.archived ? 'dimmed' : undefined}>
-                <Table.Td>{e.name}{e.archived ? ' (archivé)' : ''}</Table.Td>
-                <Table.Td>{e.affiliationNumber ?? '—'}</Table.Td>
-                <Table.Td>{e.coachName ?? '—'}</Table.Td>
-                <Table.Td>{e.coachPhone ?? '—'}</Table.Td>
-                <Table.Td>{e.coachEmail ?? '—'}</Table.Td>
-                <Table.Td>{e.competitions}</Table.Td>
-                <Table.Td>
-                  <Group gap="xs" justify="flex-end" wrap="nowrap">
-                    <Button size="xs" variant="light" onClick={() => setEditing(e)}>Modifier</Button>
-                    <Menu position="bottom-end">
-                      <Menu.Target><Button size="xs" variant="subtle">…</Button></Menu.Target>
-                      <Menu.Dropdown>
-                        <Menu.Item onClick={() => update.mutate({ id: e.id, archived: !e.archived })}>{e.archived ? 'Désarchiver' : 'Archiver'}</Menu.Item>
-                        <Menu.Item onClick={() => setMerging(e)}>Fusionner avec…</Menu.Item>
-                      </Menu.Dropdown>
-                    </Menu>
-                  </Group>
-                </Table.Td>
+        <Card padding={0}>
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Club</Table.Th><Table.Th>N° d’affiliation</Table.Th><Table.Th>Coach</Table.Th><Table.Th>Téléphone</Table.Th>
+                <Table.Th>E-mail</Table.Th><Table.Th ta="right">Compétitions</Table.Th><Table.Th />
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {shown.map((e) => (
+                <Table.Tr key={e.id} data-testid="directory-row" c={e.archived ? 'dimmed' : undefined}>
+                  <Table.Td fw={500}>
+                    <Group gap="xs" wrap="nowrap">{e.name}{e.archived && <StatusBadge tone="neutral" size="sm">Archivé</StatusBadge>}</Group>
+                  </Table.Td>
+                  <Table.Td className="num">{e.affiliationNumber ?? '—'}</Table.Td>
+                  <Table.Td>{e.coachName ?? '—'}</Table.Td>
+                  <Table.Td className="num" style={{ whiteSpace: 'nowrap' }}>{e.coachPhone ?? '—'}</Table.Td>
+                  <Table.Td>{e.coachEmail ?? '—'}</Table.Td>
+                  <Table.Td ta="right" className="num">{e.competitions}</Table.Td>
+                  <Table.Td>
+                    <Group gap={4} justify="flex-end" wrap="nowrap">
+                      <Button size="compact-sm" variant="subtle" onClick={() => setEditing(e)}>Modifier</Button>
+                      <Menu position="bottom-end">
+                        <Menu.Target><Button size="compact-sm" variant="subtle" color="gray" aria-label="Autres actions">…</Button></Menu.Target>
+                        <Menu.Dropdown>
+                          <Menu.Item onClick={() => update.mutate({ id: e.id, archived: !e.archived })}>{e.archived ? 'Désarchiver' : 'Archiver'}</Menu.Item>
+                          <Menu.Item onClick={() => setMerging(e)}>Fusionner avec…</Menu.Item>
+                        </Menu.Dropdown>
+                      </Menu>
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Card>
       )}
       <EntryModal key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.id} entry={editing} onClose={() => setEditing(null)} />
       <MergeModal merged={merging} entries={entries} onClose={() => setMerging(null)} />

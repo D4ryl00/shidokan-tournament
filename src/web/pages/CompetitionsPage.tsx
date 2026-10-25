@@ -1,13 +1,17 @@
-import { Anchor, Button, Group, Modal, NumberInput, Select, Stack, Table, Text, TextInput } from '@mantine/core';
+import { Anchor, Button, Card, Group, Modal, NumberInput, Select, Stack, Table, TextInput } from '@mantine/core';
 import { useState } from 'react';
 import { Link, Navigate } from 'react-router';
 import { useAuthMe, useCompetitions, useCreateCompetition, useGridTemplates, isOrganiser } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
-import { SectionHeader } from '../components/Help.js';
+import { plural } from '../../domain/plural.js';
+import { DateField } from '../components/ui/DateField.js';
+import { EmptyState } from '../components/ui/EmptyState.js';
+import { PageHeader } from '../components/ui/PageHeader.js';
+import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { ImportCompetitionButton, ServerCompetitionsButton } from '../components/SyncPanel.js';
 
 export function CompetitionsPage() {
-  const { data = [] } = useCompetitions();
+  const { data = [], isLoading } = useCompetitions();
   const { data: me } = useAuthMe();
   const organiser = isOrganiser(me);
   const create = useCreateCompetition();
@@ -25,59 +29,69 @@ export function CompetitionsPage() {
   // Un compte Zone n'a qu'une compétition : il va directement à ses combats.
   if (me?.user?.role === 'zone' && me.user.competitionId) return <Navigate to={`/competitions/${me.user.competitionId}/combats`} replace />;
 
+  const actions = organiser && (
+    <>
+      <ServerCompetitionsButton />
+      <ImportCompetitionButton />
+      <Button data-testid="new-competition" onClick={() => setOpen(true)}>Nouvelle compétition</Button>
+    </>
+  );
+
   return (
-    <Stack>
-      <Group justify="space-between">
-        <SectionHeader topic="competitions" order={2} />
-        {organiser && (
-          <Group>
-            <ServerCompetitionsButton />
-            <ImportCompetitionButton />
-            <Button data-testid="new-competition" onClick={() => setOpen(true)}>
-              Nouvelle compétition
-            </Button>
-          </Group>
-        )}
-      </Group>
-      {data.length === 0 ? (
-        <Text c="dimmed">Aucune compétition pour l'instant.</Text>
+    <Stack gap="lg">
+      <PageHeader title="Compétitions" help="competitions" summary={data.length > 0 ? plural(data.length, 'compétition') : undefined} actions={actions} />
+      {isLoading ? null : data.length === 0 ? (
+        <EmptyState title="Aucune compétition pour l’instant"
+          text={organiser ? 'Créez la première avec « Nouvelle compétition » : nom, date, lieu et nombre de zones de combat. Ou importez une compétition reçue d’une autre installation.' : 'Aucune compétition n’est encore ouverte à votre compte.'} />
       ) : (
-        <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Nom</Table.Th>
-              <Table.Th>Date</Table.Th>
-              <Table.Th>Lieu</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {data.map((c) => (
-              <Table.Tr key={c.id} data-testid="competition-row">
-                <Table.Td>
-                  <Anchor component={Link} to={`/competitions/${c.id}/reglages`}>{c.name}</Anchor>
-                </Table.Td>
-                <Table.Td>{new Date(`${c.date}T12:00:00`).toLocaleDateString('fr-FR')}</Table.Td>
-                <Table.Td>{c.location ?? '—'}</Table.Td>
-                <Table.Td>
-                  {organiser && (
-                    <Group gap="xs" justify="flex-end">
-                      <Anchor component={Link} to={`/competitions/${c.id}/reglages`}>Réglages</Anchor>
-                      <Anchor component={Link} to={`/competitions/${c.id}/grille`}>Grille</Anchor>
-                    </Group>
-                  )}
-                </Table.Td>
+        <Card padding={0}>
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Nom</Table.Th>
+                <Table.Th>Date</Table.Th>
+                <Table.Th>Lieu</Table.Th>
+                <Table.Th ta="right">Inscrits</Table.Th>
+                <Table.Th>Main</Table.Th>
+                {organiser && <Table.Th />}
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {data.map((c) => (
+                <Table.Tr key={c.id} data-testid="competition-row">
+                  <Table.Td maw={420}>
+                    <Anchor component={Link} to={`/competitions/${c.id}/reglages`} fw={600} className="sk-ellipsis" display="block" title={c.name}>{c.name}</Anchor>
+                  </Table.Td>
+                  <Table.Td className="num" style={{ whiteSpace: 'nowrap' }}>{new Date(`${c.date}T12:00:00`).toLocaleDateString('fr-FR')}</Table.Td>
+                  <Table.Td c={c.location ? undefined : 'dimmed'}>{c.location ?? '—'}</Table.Td>
+                  <Table.Td ta="right" className="num">{c.registrationCount.toLocaleString('fr-FR')}</Table.Td>
+                  <Table.Td>
+                    {c.management.managedHere
+                      ? <StatusBadge tone="ok">Gérée ici</StatusBadge>
+                      : <StatusBadge tone="warn" title={`Gérée par ${c.management.ownerName ?? 'une autre installation'} : lecture seule ici`} maw={220}>
+                          Gérée par {c.management.ownerName ?? 'une autre installation'}
+                        </StatusBadge>}
+                  </Table.Td>
+                  {organiser && (
+                    <Table.Td>
+                      <Group gap="xs" justify="flex-end" wrap="nowrap">
+                        <Button component={Link} to={`/competitions/${c.id}/reglages`} size="compact-sm" variant="subtle">Réglages</Button>
+                        <Button component={Link} to={`/competitions/${c.id}/grille`} size="compact-sm" variant="subtle">Grille</Button>
+                      </Group>
+                    </Table.Td>
+                  )}
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Card>
       )}
       <Modal opened={open} onClose={() => setOpen(false)} title="Nouvelle compétition">
         <Stack>
           <TextInput data-testid="competition-name" label="Nom" required value={form.name}
             onChange={(e) => setForm({ ...form, name: e.currentTarget.value })} />
-          <TextInput data-testid="competition-date" label="Date" type="date" required value={form.date}
-            onChange={(e) => setForm({ ...form, date: e.currentTarget.value })} />
+          <DateField data-testid="competition-date" label="Date" required value={form.date}
+            onChange={(v) => setForm({ ...form, date: v ?? '' })} />
           <TextInput label="Lieu" value={form.location}
             onChange={(e) => setForm({ ...form, location: e.currentTarget.value })} />
           <NumberInput label="Nombre de zones de combat" description="Créées sous les noms « Tatami 1 », « Tatami 2 »… ; renommables dans les Réglages." min={1} max={20} value={form.zoneCount}
@@ -87,9 +101,10 @@ export function CompetitionsPage() {
               value={templateId} onChange={setTemplateId} />
           )}
           <ApiErrorAlert error={create.error} />
-          <Button data-testid="competition-submit" onClick={submit} loading={create.isPending}>
-            Créer
-          </Button>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setOpen(false)}>Annuler</Button>
+            <Button data-testid="competition-submit" onClick={submit} loading={create.isPending}>Créer</Button>
+          </Group>
         </Stack>
       </Modal>
     </Stack>

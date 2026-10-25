@@ -1,4 +1,4 @@
-import { Button, Card, Group, NativeSelect, NumberInput, PasswordInput, SimpleGrid, Stack, Text, Textarea, TextInput, Title } from '@mantine/core';
+import { Button, Divider, Group, NativeSelect, NumberInput, PasswordInput, SimpleGrid, Stack, Text, Textarea, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import type { PublicAppSettings, SmtpSettings } from '../../domain/app-settings.js';
@@ -8,7 +8,9 @@ import { MirrorCopies, MirrorSettingsCard } from '../components/MirrorPanels.js'
 import { DayChecklist } from '../components/DayChecklist.js';
 import { ZoneLinkCard } from '../components/ZoneLinkCard.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
-import { SectionHeader } from '../components/Help.js';
+import { HELP } from '../help.js';
+import { PageHeader } from '../components/ui/PageHeader.js';
+import { SectionCard } from '../components/ui/SectionCard.js';
 
 const saved = () => notifications.show({ color: 'green', message: 'Réglages enregistrés.' });
 
@@ -23,9 +25,7 @@ function SmtpCard({ settings }: { settings: PublicAppSettings }) {
   const [to, setTo] = useState('');
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
   return (
-    <Card withBorder>
-      <Stack>
-        <Title order={4}>Envoi des mails</Title>
+    <SectionCard id="mails" title="Envoi des mails" description="Le serveur d’envoi (SMTP) des invitations aux clubs et des mails d’essai.">
         <SimpleGrid cols={{ base: 1, sm: 3 }}>
           <TextInput label="Serveur SMTP" value={form.host} onChange={(e) => set({ host: e.currentTarget.value })} />
           <NumberInput label="Port" min={1} max={65535} value={form.port} onChange={(v) => set({ port: Number(v) || 465 })} />
@@ -37,20 +37,19 @@ function SmtpCard({ settings }: { settings: PublicAppSettings }) {
           <TextInput label="Nom de l’expéditeur" value={form.fromName} onChange={(e) => set({ fromName: e.currentTarget.value })} />
           <TextInput label="Adresse de l’expéditeur" value={form.fromEmail} onChange={(e) => set({ fromEmail: e.currentTarget.value })} />
         </SimpleGrid>
-        <Group>
+        <ApiErrorAlert error={update.error} />
+        <Group justify="space-between" align="end" wrap="wrap">
+          <Group align="end" gap="sm">
+            <TextInput label="Envoyer un mail d’essai à" value={to} w={260} onChange={(e) => setTo(e.currentTarget.value)} />
+            <Button variant="default" disabled={!to || !s} loading={test.isPending}
+              onClick={() => test.mutate(to, { onSuccess: () => notifications.show({ color: 'green', message: `Mail d’essai envoyé à ${to}.` }) })}>
+              Envoyer un mail d’essai
+            </Button>
+          </Group>
           <Button loading={update.isPending} onClick={() => update.mutate({ smtp: { ...form, password: password || null } }, { onSuccess: () => { setPassword(''); saved(); } })}>Enregistrer</Button>
         </Group>
-        <ApiErrorAlert error={update.error} />
-        <Group align="end">
-          <TextInput label="Envoyer un mail d’essai à" value={to} onChange={(e) => setTo(e.currentTarget.value)} />
-          <Button variant="light" disabled={!to || !s} loading={test.isPending}
-            onClick={() => test.mutate(to, { onSuccess: () => notifications.show({ color: 'green', message: `Mail d’essai envoyé à ${to}.` }) })}>
-            Envoyer un mail d’essai
-          </Button>
-        </Group>
         <ApiErrorAlert error={test.error} />
-      </Stack>
-    </Card>
+    </SectionCard>
   );
 }
 
@@ -67,34 +66,51 @@ function TextsCard({ settings }: { settings: PublicAppSettings }) {
       { onSuccess: saved },
     );
   return (
-    <Card withBorder>
-      <Stack>
-        <Title order={4}>Message aux clubs</Title>
+    <SectionCard id="clubs" title="Message aux clubs et données personnelles"
+      description="Le message des invitations, la mention de la page des clubs et la durée de conservation des données.">
+      <Stack gap="xs">
+        <Title order={4} fz="md">Message aux clubs</Title>
         <Text size="sm" c="dimmed">Variables : {'{club} {coach} {competition} {date} {lieu} {date_limite} {lien}'}. Chaque compétition peut avoir son propre message (onglet Fiche club).</Text>
         <TextInput label="Objet" value={form.subject} onChange={(e) => set({ subject: e.currentTarget.value })} />
         <Textarea label="Texte" autosize minRows={8} value={form.body} onChange={(e) => set({ body: e.currentTarget.value })} />
-        <Title order={4}>Données personnelles</Title>
+      </Stack>
+      <Divider color="var(--sk-line)" />
+      <Stack gap="xs">
+        <Title order={4} fz="md">Données personnelles</Title>
         <Textarea label="Mention affichée sur la page des clubs" description="{contact} est remplacé par l’adresse de contact." autosize minRows={3} value={form.privacyNotice}
           onChange={(e) => set({ privacyNotice: e.currentTarget.value })} />
-        <TextInput data-testid="privacy-contact" label="Adresse de contact" placeholder="par exemple rgpd@shidokanfrance.com" value={form.privacyContact} onChange={(e) => set({ privacyContact: e.currentTarget.value })} />
-        <Title order={4}>Conservation</Title>
-        <Group>
+        <TextInput data-testid="privacy-contact" label="Adresse de contact" placeholder="par exemple rgpd@shidokanfrance.com" value={form.privacyContact} maw={420} onChange={(e) => set({ privacyContact: e.currentTarget.value })} />
+      </Stack>
+      <Divider color="var(--sk-line)" />
+      <Stack gap="xs">
+        <Title order={4} fz="md">Conservation</Title>
+        <Group align="end">
           <NumberInput label="Données d’organisation effacées après (mois)" min={1} max={240} value={form.retentionMonths} onChange={(v) => set({ retentionMonths: Number(v) || 13 })} />
           <NumberInput label="Club de l’annuaire archivé sans compétition depuis (ans)" min={1} max={50} value={form.directoryInactiveYears} onChange={(v) => set({ directoryInactiveYears: Number(v) || 3 })} />
         </Group>
-        <Group><Button loading={update.isPending} onClick={save}>Enregistrer</Button></Group>
-        <ApiErrorAlert error={update.error} />
       </Stack>
-    </Card>
+      <ApiErrorAlert error={update.error} />
+      <Group justify="flex-end"><Button loading={update.isPending} onClick={save}>Enregistrer</Button></Group>
+    </SectionCard>
   );
 }
 
 export function AppSettingsPage() {
   const { data } = useAppSettings();
   const { data: me } = useAuthMe();
+  const local = me?.role === 'local';
+  const sections = [
+    ...(data ? [{ id: 'mails', label: 'Envoi des mails' }, { id: 'clubs', label: 'Message aux clubs' }] : []),
+    ...(me ? [{ id: 'synchronisation', label: HELP.synchronisation.title }] : []),
+    { id: 'jour-j', label: 'Préparer le jour J' },
+    ...(local ? [{ id: 'secours', label: 'Copie de secours' }, { id: 'zones-autonomes', label: 'Portable de zone' }] : []),
+  ];
   return (
-    <Stack maw={960}>
-      <SectionHeader topic="parametres" order={2} />
+    <Stack gap="lg">
+      <PageHeader title={HELP.parametres.title} help="parametres" />
+      <Group gap="xs" data-testid="settings-summary">
+        {sections.map((x) => <Button key={x.id} component="a" href={`#${x.id}`} size="compact-sm" variant="subtle">{x.label}</Button>)}
+      </Group>
       {data && (
         <>
           <SmtpCard settings={data} />
@@ -102,35 +118,23 @@ export function AppSettingsPage() {
         </>
       )}
       {me && (
-        <Card withBorder>
-          <Stack>
-            <SectionHeader topic="synchronisation" />
-            <SyncSettingsCard role={me.role} />
-          </Stack>
-        </Card>
+        <SectionCard id="synchronisation" title={HELP.synchronisation.title} help="synchronisation">
+          <SyncSettingsCard role={me.role} />
+        </SectionCard>
       )}
-      <Card withBorder>
-        <Stack>
-          <SectionHeader topic="jour-j" />
-          <DayChecklist />
-        </Stack>
-      </Card>
-      {me?.role === 'local' && (
-        <Card withBorder>
-          <Stack>
-            <Title order={4}>Copie de secours d’un autre PC</Title>
-            <MirrorSettingsCard />
-            <MirrorCopies />
-          </Stack>
-        </Card>
+      <SectionCard id="jour-j" title={HELP['jour-j'].title} help="jour-j">
+        <DayChecklist />
+      </SectionCard>
+      {local && (
+        <SectionCard id="secours" title="Copie de secours d’un autre PC">
+          <MirrorSettingsCard />
+          <MirrorCopies />
+        </SectionCard>
       )}
-      {me?.role === 'local' && (
-        <Card withBorder>
-          <Stack>
-            <SectionHeader topic="zones-autonomes" />
-            <ZoneLinkCard />
-          </Stack>
-        </Card>
+      {local && (
+        <SectionCard id="zones-autonomes" title={HELP['zones-autonomes'].title} help="zones-autonomes">
+          <ZoneLinkCard />
+        </SectionCard>
       )}
     </Stack>
   );

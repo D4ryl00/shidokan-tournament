@@ -1,7 +1,7 @@
-import { Alert, Box, Button, Group, Loader, Modal, Select, Stack, Tabs, Text, Title, UnstyledButton } from '@mantine/core';
+import { Alert, Box, Button, Center, Group, Loader, Modal, Select, Stack, Tabs, Text, Title, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
-import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
+import { Link, Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useCompetition, useZones } from '../api.js';
 import { posteTabs, tabFor, usePoste, type Poste } from '../poste.js';
 import { HELP, type HelpTopicId } from '../help.js';
@@ -15,6 +15,7 @@ import { ManagementBanner, ManagementChip } from './SyncPanel.js';
 import { ThemeToggle } from './ThemeToggle.js';
 import { UserMenu } from './UserMenu.js';
 import { ZoneAutonomyBar } from './ZoneAutonomyBar.js';
+import { EmptyState } from './ui/EmptyState.js';
 import { useCompetitionEvents } from '../liveUpdates.js';
 
 const labelOf = (tab: string) => COMPETITION_TABS.find((t) => t.path === tab)?.label ?? tab;
@@ -64,8 +65,17 @@ export function CompetitionLayout() {
     const p: Poste = v.startsWith('zone:') ? { kind: 'zone', zoneId: v.slice(5) } : v === 'table' ? { kind: 'table' } : { kind: 'organisation' };
     setPoste(p);
   };
-  if (isLoading) return <Loader />;
-  if (!data) return <Text>Compétition introuvable.</Text>;
+  if (isLoading) return <Center mih="50vh"><Loader /></Center>;
+  if (!data) {
+    // Ni barre de l'application ni barre de compétition ici : le bouton ramène à la liste.
+    return (
+      <Center mih="60vh">
+        <EmptyState data-testid="competition-not-found" title="Compétition introuvable"
+          text="Elle a peut-être été supprimée, ou son adresse est incomplète."
+          action={<Button component={Link} to="/">Retour aux compétitions</Button>} />
+      </Center>
+    );
+  }
   const when = new Date(`${data.date}T12:00:00`).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' });
   return (
     <Stack gap="md">

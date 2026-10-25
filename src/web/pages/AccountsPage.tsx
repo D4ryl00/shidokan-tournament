@@ -1,9 +1,11 @@
-import { Button, Group, Modal, PasswordInput, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import { Button, Card, Group, Modal, PasswordInput, Select, Stack, Table, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { isOrganiser, useAuthMe, useChangePassword, useCompetitions, useCreateUser, useDeleteUser, useUpdateUserRole, useUsers, useZones, type AccountRole, type UserRole, type UserRow } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
-import { SectionHeader } from '../components/Help.js';
+import { PageHeader } from '../components/ui/PageHeader.js';
+import { SectionCard } from '../components/ui/SectionCard.js';
+import { plural } from '../../domain/plural.js';
 
 const ROLE_LABELS: Record<UserRole, string> = { organisateur: 'Organisateur', table: 'Table centrale', zone: 'Zone' };
 const NO_ROLE: AccountRole = { role: 'organisateur', competitionId: null, zoneId: null };
@@ -55,61 +57,68 @@ export function AccountsPage() {
   const zoneIncomplete = (a: AccountRole) => a.role === 'zone' && (!a.competitionId || !a.zoneId);
 
   return (
-    <Stack maw={900}>
+    <Stack gap="lg">
+      {organiser ? (
+        <PageHeader title="Comptes" help="comptes" summary={users.length > 0 ? plural(users.length, 'compte') : undefined} />
+      ) : (
+        <PageHeader title="Mon mot de passe" />
+      )}
       {organiser && (<>
-      <SectionHeader topic="comptes" order={2} />
-      <Table>
-        <Table.Thead><Table.Tr><Table.Th>E-mail</Table.Th><Table.Th>Rôle</Table.Th><Table.Th>Créé le</Table.Th><Table.Th /></Table.Tr></Table.Thead>
-        <Table.Tbody>
-          {users.map((u) => (
-            <Table.Tr key={u.id} data-testid="account-row">
-              <Table.Td>{u.email}{u.email === me?.user?.email ? ' (vous)' : ''}</Table.Td>
-              <Table.Td data-testid="account-row-role">{roleText(u)}</Table.Td>
-              <Table.Td>{new Date(u.createdAt).toLocaleDateString('fr-FR')}</Table.Td>
-              <Table.Td>
-                {u.email !== me?.user?.email && (confirm === u.id ? (
-                  <Group gap="xs" justify="flex-end">
-                    <Button size="xs" color="red" loading={remove.isPending} onClick={() => remove.mutate(u.id, { onSuccess: () => setConfirm(null) })}>Confirmer la suppression</Button>
-                    <Button size="xs" variant="subtle" onClick={() => setConfirm(null)}>Garder</Button>
-                  </Group>
-                ) : (
-                  <Group gap="xs" justify="flex-end" wrap="nowrap">
-                    <Button size="xs" variant="subtle" data-testid="account-change-role"
-                      onClick={() => setEditing({ user: u, access: { role: u.role, competitionId: u.competitionId, zoneId: u.zoneId } })}>Changer le rôle</Button>
-                    <Button size="xs" variant="subtle" color="red" onClick={() => setConfirm(u.id)}>Supprimer</Button>
-                  </Group>
-                ))}
-              </Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
+      <Card padding={0}>
+        <Table>
+          <Table.Thead><Table.Tr><Table.Th>E-mail</Table.Th><Table.Th>Rôle</Table.Th><Table.Th>Créé le</Table.Th><Table.Th /></Table.Tr></Table.Thead>
+          <Table.Tbody>
+            {users.map((u) => (
+              <Table.Tr key={u.id} data-testid="account-row">
+                <Table.Td fw={500}>{u.email}{u.email === me?.user?.email ? ' (vous)' : ''}</Table.Td>
+                <Table.Td data-testid="account-row-role">{roleText(u)}</Table.Td>
+                <Table.Td className="num">{new Date(u.createdAt).toLocaleDateString('fr-FR')}</Table.Td>
+                <Table.Td>
+                  {u.email !== me?.user?.email && (confirm === u.id ? (
+                    <Group gap="xs" justify="flex-end" wrap="nowrap">
+                      <Button size="compact-sm" variant="subtle" onClick={() => setConfirm(null)}>Garder</Button>
+                      <Button size="compact-sm" color="red" loading={remove.isPending} onClick={() => remove.mutate(u.id, { onSuccess: () => setConfirm(null) })}>Confirmer la suppression</Button>
+                    </Group>
+                  ) : (
+                    <Group gap={4} justify="flex-end" wrap="nowrap">
+                      <Button size="compact-sm" variant="subtle" data-testid="account-change-role"
+                        onClick={() => setEditing({ user: u, access: { role: u.role, competitionId: u.competitionId, zoneId: u.zoneId } })}>Changer le rôle</Button>
+                      <Button size="compact-sm" variant="subtle" color="red" onClick={() => setConfirm(u.id)}>Supprimer</Button>
+                    </Group>
+                  ))}
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </Card>
       <ApiErrorAlert error={remove.error} />
 
-      <Title order={4}>Ajouter un compte</Title>
-      <Group align="end">
-        <TextInput label="E-mail" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.currentTarget.value })} />
-        <PasswordInput label="Mot de passe" description="10 caractères au moins" value={form.password} onChange={(e) => setForm({ ...form, password: e.currentTarget.value })} />
-        <RoleFields value={access} onChange={setAccess} />
-        <Button loading={create.isPending} disabled={!form.email || !form.password || zoneIncomplete(access)} data-testid="account-create"
-          onClick={() => create.mutate({ ...form, ...access }, { onSuccess: () => { notifications.show({ color: 'green', message: `Compte créé : ${form.email}` }); setForm({ email: '', password: '' }); setAccess(NO_ROLE); } })}>
-          Ajouter le compte
-        </Button>
-      </Group>
-      <ApiErrorAlert error={create.error} />
+      <SectionCard title="Ajouter un compte" description="Le rôle décide de ce que le compte voit : Organisateur (tout), Table centrale, ou Zone (les combats d’une zone d’une compétition).">
+        <Group align="end" gap="sm">
+          <TextInput label="E-mail" type="email" value={form.email} w={240} onChange={(e) => setForm({ ...form, email: e.currentTarget.value })} />
+          <PasswordInput label="Mot de passe" placeholder="10 caractères au moins" value={form.password} w={250} onChange={(e) => setForm({ ...form, password: e.currentTarget.value })} />
+          <RoleFields value={access} onChange={setAccess} />
+          <Button loading={create.isPending} disabled={!form.email || !form.password || zoneIncomplete(access)} data-testid="account-create"
+            onClick={() => create.mutate({ ...form, ...access }, { onSuccess: () => { notifications.show({ color: 'green', message: `Compte créé : ${form.email}` }); setForm({ email: '', password: '' }); setAccess(NO_ROLE); } })}>
+            Ajouter le compte
+          </Button>
+        </Group>
+        <ApiErrorAlert error={create.error} />
+      </SectionCard>
       </>)}
 
-      <Title order={4}>Changer mon mot de passe</Title>
-      <Group align="end">
-        <PasswordInput label="Mot de passe actuel" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.currentTarget.value })} />
-        <PasswordInput label="Nouveau mot de passe" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.currentTarget.value })} />
-        <Button loading={change.isPending} disabled={!pw.current || !pw.next}
-          onClick={() => change.mutate(pw, { onSuccess: () => { notifications.show({ color: 'green', message: 'Mot de passe changé.' }); setPw({ current: '', next: '' }); } })}>
-          Changer
-        </Button>
-      </Group>
-      <ApiErrorAlert error={change.error} />
-      {organiser && <Text size="sm" c="dimmed">Le premier compte d’un serveur se crée en ligne de commande (voir l’aide).</Text>}
+      <SectionCard title="Changer mon mot de passe" description={organiser ? 'Le premier compte d’un serveur se crée en ligne de commande (voir l’aide).' : undefined}>
+        <Group align="end" gap="sm">
+          <PasswordInput label="Mot de passe actuel" value={pw.current} w={220} onChange={(e) => setPw({ ...pw, current: e.currentTarget.value })} />
+          <PasswordInput label="Nouveau mot de passe" placeholder="10 caractères au moins" value={pw.next} w={250} onChange={(e) => setPw({ ...pw, next: e.currentTarget.value })} />
+          <Button loading={change.isPending} disabled={!pw.current || !pw.next}
+            onClick={() => change.mutate(pw, { onSuccess: () => { notifications.show({ color: 'green', message: 'Mot de passe changé.' }); setPw({ current: '', next: '' }); } })}>
+            Changer
+          </Button>
+        </Group>
+        <ApiErrorAlert error={change.error} />
+      </SectionCard>
 
       <Modal opened={editing !== null} onClose={() => setEditing(null)} title={`Rôle de ${editing?.user.email ?? ''}`}>
         {editing && (

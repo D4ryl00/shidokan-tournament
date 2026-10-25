@@ -1,4 +1,4 @@
-import { Alert, Anchor, Badge, Button, Checkbox, CopyButton, FileButton, Group, Modal, NumberInput, Radio, Stack, Table, Text, TextInput } from '@mantine/core';
+import { Alert, Anchor, Button, Checkbox, CopyButton, FileButton, Group, Modal, NumberInput, Radio, Stack, Table, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -327,7 +327,7 @@ export function SyncSettingsCard({ role }: { role: 'serveur' | 'local' }) {
     return (
       <Stack>
         <Group align="end">
-          <TextInput label="Nom du jeton" value={name} onChange={(e) => setName(e.currentTarget.value)} />
+          <TextInput label="Nom du jeton" value={name} w={260} onChange={(e) => setName(e.currentTarget.value)} />
           <Button data-testid="create-sync-token" loading={create.isPending} onClick={() => create.mutate(name, { onSuccess: (t) => setCreated(t.token) })}>Créer un jeton</Button>
         </Group>
         {created && (
@@ -341,24 +341,28 @@ export function SyncSettingsCard({ role }: { role: 'serveur' | 'local' }) {
             </Stack>
           </Alert>
         )}
-        <Table>
-          <Table.Tbody>
-            {(tokens.data ?? []).map((t) => (
-              <Table.Tr key={t.id}>
-                <Table.Td>{t.name}</Table.Td>
-                <Table.Td>créé le {day(t.createdAt)} · utilisé le {when(t.lastUsedAt)}</Table.Td>
-                <Table.Td>{t.revoked ? <Badge color="gray">révoqué</Badge> : <Button size="xs" variant="subtle" color="red" onClick={() => revoke.mutate(t.id)}>Révoquer</Button>}</Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+        {(tokens.data ?? []).length > 0 && (
+          <Table>
+            <Table.Thead><Table.Tr><Table.Th>Jeton</Table.Th><Table.Th>Créé le</Table.Th><Table.Th>Dernière utilisation</Table.Th><Table.Th /></Table.Tr></Table.Thead>
+            <Table.Tbody>
+              {(tokens.data ?? []).map((t) => (
+                <Table.Tr key={t.id} c={t.revoked ? 'dimmed' : undefined}>
+                  <Table.Td fw={500}>{t.name}</Table.Td>
+                  <Table.Td className="num">{day(t.createdAt)}</Table.Td>
+                  <Table.Td className="num">{when(t.lastUsedAt)}</Table.Td>
+                  <Table.Td ta="right">{t.revoked ? <StatusBadge tone="neutral">Révoqué</StatusBadge> : <Button size="compact-sm" variant="subtle" color="red" onClick={() => revoke.mutate(t.id)}>Révoquer</Button>}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        )}
         <ApiErrorAlert error={create.error ?? revoke.error} />
       </Stack>
     );
   }
   const shownUrl = url ?? settings.data?.url ?? '';
   return (
-    <Stack>
+    <Stack maw={560}>
       <TextInput data-testid="sync-url" label="Adresse du serveur" placeholder="https://competitions.shidokanfrance.com" value={shownUrl} onChange={(e) => setUrl(e.currentTarget.value)} />
       <TextInput data-testid="sync-token" label="Jeton de synchronisation" placeholder={settings.data?.hasToken ? 'laisser vide pour garder le jeton enregistré' : 'créé dans les réglages du serveur en ligne'}
         value={token} onChange={(e) => setToken(e.currentTarget.value)} />

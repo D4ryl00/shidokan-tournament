@@ -34,7 +34,7 @@ import { clubEntryRoutes } from './routes/club-entry.js';
 import { loggerOptions } from './log.js';
 import { registerGuard, type InstanceRole } from './auth/guard.js';
 import { registerPermissions } from './auth/permissions.js';
-import { registerReadOnlyGuard } from './sync/ownership.js';
+import { getManagement, registerReadOnlyGuard } from './sync/ownership.js';
 import { registerCategoryRevGuard } from './revisions.js';
 import { registerCompetitionEvents } from './events.js';
 import { syncRemoteRoutes } from './routes/sync-remote.js';
@@ -137,7 +137,18 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   app.get('/api/health', async () => ({ ok: true }));
 
   // Un compte Zone ne voit que la compétition de sa zone.
-  app.get('/api/competitions', async (req) => (await listCompetitions(db)).filter((c) => req.user?.role !== 'zone' || c.id === req.user.competitionId));
+  // Liste de l'accueil : en plus, le nombre d'inscrits et l'état de la main (lecture seule).
+  app.get('/api/competitions', async (req) => {
+    const counts = new Map(
+      (db.$client.prepare('select competition_id as id, count(*) as n from registrations group by competition_id').all() as { id: string; n: number }[]).map((r) => [r.id, r.n]),
+    );
+    return (await listCompetitions(db))
+      .filter((c) => req.user?.role !== 'zone' || c.id === req.user.competitionId)
+      .map((c) => {
+        const { managedHere, ownerName } = getManagement(db, c.id);
+        return { ...c, registrationCount: counts.get(c.id) ?? 0, management: { managedHere, ownerName } };
+      });
+  });
 
   app.get<{ Params: { id: string } }>('/api/competitions/:id', async (req, reply) => {
     const c = await getCompetition(db, req.params.id);

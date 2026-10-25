@@ -1,4 +1,4 @@
-import { Alert, Anchor, Button, Group, Modal, NumberInput, Stack, Table, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Group, Modal, NumberInput, Stack, Table, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { useAuthMe, useMirror, useMirrorCopies, useRestoreMirrorCopy, useSetMirror } from '../api.js';
@@ -51,17 +51,19 @@ export function MirrorCopies() {
     <Stack gap="xs">
       <Text fw={600}>Copies du PC principal{mirror?.url ? ` (${mirror.url})` : ''}</Text>
       {copies.length === 0 && <Text size="sm" c="dimmed">Aucune copie pour l’instant.</Text>}
-      <Table>
-        <Table.Tbody>
-          {copies.slice(0, 10).map((c) => (
-            <Table.Tr key={c.name} data-testid="mirror-copy">
-              <Table.Td>{when(c.createdAt)}</Table.Td>
-              <Table.Td>{Math.round(c.size / 1024)} Ko</Table.Td>
-              <Table.Td><Anchor component="button" c="red" onClick={() => setConfirm(c.name)}>Restaurer</Anchor></Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
+      {copies.length > 0 && (
+        <Table maw={560}>
+          <Table.Tbody>
+            {copies.slice(0, 10).map((c) => (
+              <Table.Tr key={c.name} data-testid="mirror-copy">
+                <Table.Td className="num">{when(c.createdAt)}</Table.Td>
+                <Table.Td className="num" ta="right">{Math.round(c.size / 1024).toLocaleString('fr-FR')} Ko</Table.Td>
+                <Table.Td ta="right"><Button size="compact-sm" variant="subtle" color="red" onClick={() => setConfirm(c.name)}>Restaurer</Button></Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      )}
       <ApiErrorAlert error={restore.error} />
       <Modal opened={confirm !== null} onClose={() => setConfirm(null)} title="Restaurer la copie du PC principal ?">
         <Stack>

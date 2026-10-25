@@ -1,4 +1,4 @@
-import { Button, Card, Center, Group, Modal, PasswordInput, Stack, TextInput, Title } from '@mantine/core';
+import { Button, Card, Center, Modal, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core';
 import { useState } from 'react';
 import { useLogin } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
@@ -24,16 +24,17 @@ function LoginForm() {
 /** Connexion des organisateurs (application en ligne). */
 export function LoginPage() {
   return (
-    <Center mih="100vh" p="md">
-      <Card withBorder w={380} maw="100%">
-        <Stack>
-          <Group wrap="nowrap">
-            <Logo size={48} />
-            <Title order={3}>Shidokan France — Compétitions</Title>
-          </Group>
-          <LoginForm />
+    <Center mih="100vh" p="md" style={{ background: 'var(--sk-bg)' }}>
+      <Stack align="center" gap="lg" w={400} maw="100%">
+        <Stack align="center" gap="xs">
+          <Logo size={96} />
+          <Title order={1} fz={28} ta="center">Shidokan France</Title>
+          <Text c="dimmed" size="sm">Compétitions — connexion des organisateurs</Text>
         </Stack>
-      </Card>
+        <Card withBorder padding="xl" w="100%">
+          <LoginForm />
+        </Card>
+      </Stack>
     </Center>
   );
 }
