@@ -221,7 +221,7 @@ git commit -m "feat(grille): cases fermées en base, la tranche « proposée sur
 - Modify : `src/web/pages/GridEditorPage.tsx` (une `SectionCard` pleine largeur, juste après la `SimpleGrid` poids / tranches)
 - Modify : `src/web/api.ts` (`useSetClosedCategories`)
 - Modify : `src/web/help.ts` (clé `'grille.ouvertes'` ajoutée à l'union et à `HELP` ; retirer de `'grille.tranches'` toute mention de la case « fiche club »)
-- Modify : `docs/guide-utilisateur.md` (paragraphe « Fermer une catégorie » dans la partie Grille)
+- Modify : `docs/guide-utilisateur.md`, §4, point 2 : à la suite de « (la grille FFK est déjà remplie). », ajouter mot pour mot : `Dans la grille, la section **Catégories ouvertes** ferme ce que vous n’ouvrez pas à cette compétition (par exemple pas de shido-mix chez les benjamins) : ces catégories disparaissent de la fiche club et de l’inscription en ligne. Un combattant déjà inscrit dans une catégorie fermée apparaît en Réaffectation.`
 - Test : `tests/e2e/categories-fermees.spec.ts` (nouveau)
 
 **Interfaces :**
@@ -339,6 +339,7 @@ git commit -m "feat(inscription): catégories fermées non proposées aux clubs"
 - Modify : `src/server/club-form-template.ts` (onglet « Aide »), `src/server/club-form-pdf.ts` (encadré)
 - Modify : `src/domain/club-form.ts` (`lineToRows`, `parseClubForm`, `parseClubFormLines`), `src/domain/ffk-import.ts` (`parseFfkRows`), plus leurs appelants (`src/server/routes/registrations.ts`, le dépôt ou la route FFK, à trouver avec `grep -rn "parseFfkRows(" src`)
 - Modify : `src/server/repositories/registrations.ts` (`createRegistration`)
+- Modify : `docs/guide-utilisateur.md`, §4, point 4, puce « par fichier » : ajouter à la fin, mot pour mot : ` Les fiches indiquent les catégories non ouvertes ; une fiche renvoyée qui en contient quand même est acceptée avec un avertissement, et ces combattants passent en Réaffectation.`
 - Test : `tests/domain/club-form.test.ts`, `tests/domain/ffk-import.test.ts`, `tests/server/ods.test.ts` (ou le test du modèle .ods qui existe déjà), `tests/server/club-form-pdf.test.ts`, `tests/server/registrations-api.test.ts`
 
 **Interfaces :**
@@ -373,7 +374,7 @@ Expected : PASS. Ouvrir à la main le .ods produit avec LibreOffice (`/Applicati
 - [ ] **Step 5 : Commit**
 
 ```bash
-git add src tests
+git add src tests docs/guide-utilisateur.md
 git commit -m "feat(fiche-club): catégories non ouvertes sur les fiches et avertissement aux imports"
 ```
 
@@ -452,7 +453,7 @@ git commit -m "feat(reaffectation): carte « Catégorie fermée »"
 - Modify : `src/server/repositories/club-entry.ts` (mention du retrait, à la place de « n’est plus ouverte »)
 - Modify : `src/server/routes/replacement.ts` (`POST /replacement/withdraw`) ; `src/server/auth/permissions.ts` (`'POST /replacement/withdraw'` dans `TABLE_WRITES`)
 - Modify : `src/web/api.ts` (`useWithdrawRegistration`), `src/web/components/ReplacementBadge.tsx` (`PROPOSAL_TYPES.W`), `src/web/pages/ReplacementPage.tsx`, `src/web/pages/RegistrationsPage.tsx`
-- Modify : `docs/guide-utilisateur.md` (paragraphe « Combattants d’une catégorie fermée » dans la partie Réaffectation) ; `src/web/help.ts` (dans le détail de l'aide de la page Réaffectation, une ligne : `Catégorie fermée : le combattant est inscrit dans une catégorie que vous n’avez pas ouverte ; déplacez-le ou choisissez « Ne combat pas ».`)
+- Modify : `docs/guide-utilisateur.md`, §6 « Le déroulé », point 2 : le remplacer mot pour mot par `**Réaffectation** : une carte pour chaque combattant seul, hors de sa catégorie, ou inscrit dans une catégorie fermée (propositions, aperçu, validation). Pour une catégorie fermée, vous pouvez aussi choisir « Ne combat pas » : le coach le voit sur sa page d’inscription, et « Annuler » dans l’historique le remet en place.` ; `src/web/help.ts` (dans le détail de l'aide de la page Réaffectation, une ligne : `Catégorie fermée : le combattant est inscrit dans une catégorie que vous n’avez pas ouverte ; déplacez-le ou choisissez « Ne combat pas ».`)
 - Test : `tests/server/replacement.test.ts`, `tests/server/club-entry.test.ts`, `tests/e2e/categories-fermees.spec.ts`
 
 **Interfaces :**
@@ -528,7 +529,7 @@ git commit -m "feat(reaffectation): « Ne combat pas » pour une catégorie ferm
 - Modify : `src/server/routes/replacement.ts` (deux routes ; `setAside` dans la réponse ; compteurs) ; `src/server/auth/permissions.ts`
 - Modify : `src/web/api.ts`, `src/web/pages/ReplacementPage.tsx`, `src/web/pages/BracketsPage.tsx`, `src/web/components/WaveLaunchPanel.tsx`, `src/web/help.ts` (`'recasement.de-cote'`)
 - Modify : `tests/domain/replacement/fixtures.ts` (`setAside: []` par défaut)
-- Modify : `docs/guide-utilisateur.md` (paragraphe « Mettre une carte de côté »)
+- Modify : `docs/guide-utilisateur.md`, §6 « Le déroulé », point 2 : ajouter à la fin, mot pour mot : ` « Mettre de côté » écarte une carte que vous ne pouvez pas trancher tout de suite (une note facultative rappelle pourquoi) : elle ne compte plus dans les cas à traiter, se retrouve dans « Mises de côté », et le lancement de la session vous la rappelle.`
 - Test : `tests/domain/replacement/apply.test.ts`, `tests/server/replacement.test.ts`, `tests/e2e/categories-fermees.spec.ts`
 
 **Interfaces :**
@@ -597,6 +598,9 @@ git commit -m "feat(reaffectation): mettre une carte de côté"
 - Modify : `docs/superpowers/plans/2026-10-21-00-feuille-de-route.md` (ligne 23 avant « Répétition générale » : `| 23 ✅ | **Catégories fermées** | Conception 2026-10-25-categories-fermees-et-cartes-de-cote-design.md : cases ouvertes / fermées par compétition (fiche club, inscription en ligne), carte « Catégorie fermée » et « Ne combat pas » en Réaffectation, cartes mises de côté (plan 2026-10-25-23-categories-fermees.md) | 22 | avant le 29 oct. |`)
 - Modify : `docs/superpowers/plans/2026-10-21-99-bilan.md` (section « Étape 23 » : choix faits, écarts éventuels, points mineurs reportés)
 - Modify : la conception, §2.2 et §5.4, si la réalisation s'en est écartée
+- Modify : `docs/superpowers/specs/2026-10-22-fiche-club-papier-design.md`, puce « Tranches d'âge proposées » : ajouter à la fin `Remplacé le 2026-10-25 par le tableau « Catégories ouvertes » : voir 2026-10-25-categories-fermees-et-cartes-de-cote-design.md §2.2.`
+- Modify : `docs/superpowers/specs/2026-10-21-tableaux-shidokan-design.md` : dans l'en-tête, à côté des renvois vers les autres conceptions, ajouter `Catégories fermées, « Ne combat pas » et cartes mises de côté : 2026-10-25-categories-fermees-et-cartes-de-cote-design.md.`
+- Vérifier par une relecture que `docs/guide-utilisateur.md` ne parle plus nulle part de la case « Proposée sur la fiche club », et que les aides à l'écran (`src/web/help.ts`) non plus.
 
 - [ ] **Step 1 : Lancer la vérification complète**
 
