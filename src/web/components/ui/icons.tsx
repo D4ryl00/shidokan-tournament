@@ -32,3 +32,9 @@ export const IconTrash = ({ size = 16 }: { size?: number }) => (
 export const IconSearch = ({ size = 16 }: { size?: number }) => (
   <Svg size={size}><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></Svg>
 );
+export const IconArrowUp = ({ size = 16 }: { size?: number }) => (
+  <Svg size={size}><path d="M12 19V5M6 11l6-6 6 6" /></Svg>
+);
+export const IconArrowDown = ({ size = 16 }: { size?: number }) => (
+  <Svg size={size}><path d="M12 5v14M6 13l6 6 6-6" /></Svg>
+);

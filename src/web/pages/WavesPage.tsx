@@ -1,4 +1,4 @@
-import { ActionIcon, Alert, Badge, Button, Card, Chip, Group, List, Modal, NativeSelect, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core';
+import { ActionIcon, Alert, Button, Card, Chip, Group, List, Modal, NativeSelect, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
@@ -8,7 +8,11 @@ import type { DisciplineId } from '../../domain/types.js';
 import { validateWaves, WAVE_MAX, WAVE_NONE, waveConflicts, waveOfCategory, type Wave, type WaveRules } from '../../domain/waves.js';
 import { useCategories, useGrid, useSaveWaves, useUpdateCategory, useWaves } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
-import { HelpButton, HelpText } from '../components/Help.js';
+import { IconArrowDown, IconArrowUp, IconTrash } from '../components/ui/icons.js';
+import { SectionCard } from '../components/ui/SectionCard.js';
+import { StatusBadge } from '../components/ui/StatusBadge.js';
+import { HELP } from '../help.js';
+import { plural } from '../../domain/plural.js';
 import { useUnsaved } from '../unsaved.js';
 
 /** Vague en cours d'édition ; `key` identifie aussi une vague pas encore enregistrée. */
@@ -83,17 +87,18 @@ export function WavesPage() {
   };
 
   const categoryRow = (c: Category, actions: React.ReactNode, testid: string) => (
-    <Group key={c.id} justify="space-between" wrap="nowrap" data-testid={testid}>
-      <Text size="sm">
-        {c.label} <Text span size="xs" c="dimmed">· {activeEntrantCount(c)} inscrit(s)</Text>
-        {c.waveOverride && c.waveOverride !== WAVE_NONE && <Badge size="xs" variant="light" ml={6}>ajoutée à la main</Badge>}
-      </Text>
+    <Group key={c.id} justify="space-between" wrap="nowrap" data-testid={testid} py={6} style={{ borderTop: '1px solid var(--sk-line)' }}>
+      <Group gap={6} wrap="wrap" style={{ minWidth: 0 }}>
+        <Text size="sm" fw={500}>{c.label}</Text>
+        <Text span size="xs" c="dimmed" className="num">{plural(activeEntrantCount(c), 'inscrit')}</Text>
+        {c.waveOverride && c.waveOverride !== WAVE_NONE && <StatusBadge tone="accent" size="sm">Ajoutée à la main</StatusBadge>}
+      </Group>
       <Group gap={4} wrap="nowrap">{actions}</Group>
     </Group>
   );
 
   return (
-    <Stack>
+    <Stack gap="lg">
       {drafts.length === 0 && (
         <Alert color="blue" data-testid="waves-none">
           Aucune session : toutes les catégories forment une seule session (une seule pesée, une seule réaffectation). Créez des sessions pour peser et lancer les catégories par groupes.
@@ -109,20 +114,21 @@ export function WavesPage() {
           </List>
         </Alert>
       )}
-      <SimpleGrid cols={{ base: 1, lg: 2 }}>
+      <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="lg">
         {drafts.map((d, i) => {
           const waveId = d.id ?? d.key;
           const cats = listed.filter((c) => waveOf(c) === waveId);
           return (
-            <Card key={d.key} withBorder data-testid="wave-card">
-              <Stack gap="xs">
+            <Card key={d.key} withBorder data-testid="wave-card" padding="lg">
+              <Stack gap="sm">
                 <Group gap="xs" wrap="nowrap">
-                  <TextInput data-testid="wave-name" aria-label={`Nom de la session ${i + 1}`} value={d.name} maxLength={40} style={{ flex: 1 }}
+                  <TextInput data-testid="wave-name" aria-label={`Nom de la session ${i + 1}`} value={d.name} maxLength={40} style={{ flex: 1 }} className="sk-cell"
+                    styles={{ input: { fontWeight: 700, fontSize: 'var(--mantine-font-size-lg)' } }}
                     onChange={(e) => setDraft(d.key, { name: e.currentTarget.value })} />
-                  <ActionIcon variant="subtle" aria-label={`Monter la session « ${d.name} »`} disabled={i === 0} onClick={() => move(i, -1)}>↑</ActionIcon>
-                  <ActionIcon variant="subtle" aria-label={`Descendre la session « ${d.name} »`} disabled={i === drafts.length - 1} onClick={() => move(i, 1)}>↓</ActionIcon>
+                  <ActionIcon variant="subtle" color="gray" aria-label={`Monter la session « ${d.name} »`} disabled={i === 0} onClick={() => move(i, -1)}><IconArrowUp /></ActionIcon>
+                  <ActionIcon variant="subtle" color="gray" aria-label={`Descendre la session « ${d.name} »`} disabled={i === drafts.length - 1} onClick={() => move(i, 1)}><IconArrowDown /></ActionIcon>
                   <ActionIcon variant="subtle" color="red" aria-label={`Supprimer la session « ${d.name} »`}
-                    onClick={() => (cats.length ? setDeleting(d.key) : remove(d.key))}>✕</ActionIcon>
+                    onClick={() => (cats.length ? setDeleting(d.key) : remove(d.key))}><IconTrash /></ActionIcon>
                 </Group>
                 <Group gap="xs">
                   <Text size="xs" fw={600}>Tranches d’âge</Text>
@@ -146,8 +152,8 @@ export function WavesPage() {
                       onChange={() => setDraft(d.key, { rules: { ...d.rules, disciplines: toggle(d.rules.disciplines, code) } })}>{dsc.label}</Chip>
                   ))}
                 </Group>
-                <Text size="xs" fw={600}>Catégories ({cats.length})</Text>
-                {cats.length === 0 && <Text size="sm" c="dimmed">Aucune catégorie.</Text>}
+                <Text size="xs" fw={600} mt="xs">{cats.length === 0 ? 'Aucune catégorie : cochez des tranches d’âge.' : plural(cats.length, 'catégorie')}</Text>
+                <Stack gap={0}>
                 {cats.map((c) =>
                   categoryRow(
                     c,
@@ -160,18 +166,23 @@ export function WavesPage() {
                     'wave-category',
                   ),
                 )}
+                </Stack>
               </Stack>
             </Card>
           );
         })}
       </SimpleGrid>
       <Group>
-        <Button variant="light" data-testid="wave-add" disabled={drafts.length >= WAVE_MAX}
+        <Button variant="default" data-testid="wave-add" disabled={drafts.length >= WAVE_MAX}
           onClick={() => setDrafts((ds) => [...ds, { key: crypto.randomUUID(), name: `Session ${ds.length + 1}`, rules: { ageBandCodes: [], disciplines: [] } }])}>
           Ajouter une session
         </Button>
+      </Group>
+      {/* Barre d'enregistrement collée en bas, comme dans les réglages. */}
+      <Group justify="space-between" className="no-print"
+        style={{ position: 'sticky', bottom: 0, zIndex: 50, padding: 'var(--mantine-spacing-sm) var(--mantine-spacing-md)', background: 'var(--sk-bar)', border: '1px solid var(--sk-card-line)', borderRadius: 'var(--mantine-radius-lg)' }}>
+        {dirty ? <StatusBadge tone="warn" data-testid="waves-unsaved">Modifications non enregistrées</StatusBadge> : <Text size="sm" c="dimmed">Aucune modification en cours</Text>}
         <Button data-testid="wave-save" onClick={doSave} loading={save.isPending}>Enregistrer les sessions</Button>
-        {dirty && <Badge color="orange" variant="light" data-testid="waves-unsaved">Modifications non enregistrées</Badge>}
       </Group>
       {errors.length > 0 && (
         <Alert color="red" title="Sessions" data-testid="wave-errors">
@@ -180,26 +191,28 @@ export function WavesPage() {
       )}
       <ApiErrorAlert error={save.error ?? updateCategory.error} />
 
-      <Card withBorder data-testid="waves-waiting">
-        <Group gap={4}><Title order={5}>En attente ({waiting.length})</Title><HelpButton topic="vagues.en-attente" /></Group>
-        <HelpText topic="vagues.en-attente" />
-        <Stack gap={4}>
-          {waiting.map((c) =>
-            categoryRow(
-              c,
-              <>
-                {c.waveOverride === WAVE_NONE && (
-                  <Button size="compact-xs" variant="subtle" onClick={() => override(c, null)}>Revenir aux règles</Button>
-                )}
-                <NativeSelect size="xs" aria-label={`Ajouter ${c.label} à une session`} value=""
-                  data={[{ value: '', label: 'Ajouter à…' }, ...savedWaves.map((w) => ({ value: w.id, label: w.name }))]}
-                  onChange={(e) => e.currentTarget.value && override(c, e.currentTarget.value)} />
-              </>,
-              'waiting-category',
-            ),
-          )}
-        </Stack>
-      </Card>
+      <SectionCard data-testid="waves-waiting" title={`${HELP['vagues.en-attente'].title} (${waiting.length})`} help="vagues.en-attente">
+        {waiting.length === 0 ? (
+          <Text size="sm" c="dimmed">Aucune catégorie en attente.</Text>
+        ) : (
+          <Stack gap={0}>
+            {waiting.map((c) =>
+              categoryRow(
+                c,
+                <>
+                  {c.waveOverride === WAVE_NONE && (
+                    <Button size="compact-xs" variant="subtle" onClick={() => override(c, null)}>Revenir aux règles</Button>
+                  )}
+                  <NativeSelect size="xs" aria-label={`Ajouter ${c.label} à une session`} value=""
+                    data={[{ value: '', label: 'Ajouter à…' }, ...savedWaves.map((w) => ({ value: w.id, label: w.name }))]}
+                    onChange={(e) => e.currentTarget.value && override(c, e.currentTarget.value)} />
+                </>,
+                'waiting-category',
+              ),
+            )}
+          </Stack>
+        )}
+      </SectionCard>
 
       <Modal opened={deleting !== null} onClose={() => setDeleting(null)} title={`Supprimer la session « ${deletingDraft?.name ?? ''} » ?`}>
         <Stack data-testid="wave-delete-confirm">

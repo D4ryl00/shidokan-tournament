@@ -1,5 +1,5 @@
 import {
-  ActionIcon, Alert, Button, Checkbox, List, Modal, Fieldset, Group, MultiSelect, NumberInput, Select, SimpleGrid, Stack, Switch, Text, TextInput,
+  ActionIcon, Alert, Button, Checkbox, List, Modal, Group, MultiSelect, NumberInput, Select, SimpleGrid, Stack, Switch, Text, TextInput,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
@@ -11,7 +11,9 @@ import { useCategories, useCompetition, useGrid, usePassages, useSaveZones, useU
 import { ZonesImpossibleAlert } from '../components/ZonesImpossibleAlert.js';
 import { nextZoneName, validateZones, ZONE_MAX } from '../../domain/zones.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
-import { HelpLine } from '../components/Help.js';
+import { DateField } from '../components/ui/DateField.js';
+import { IconArrowDown, IconArrowUp, IconTrash } from '../components/ui/icons.js';
+import { SectionCard } from '../components/ui/SectionCard.js';
 import { useUnsaved } from '../unsaved.js';
 import { SyncPanel } from '../components/SyncPanel.js';
 import { HELP } from '../help.js';
@@ -33,6 +35,12 @@ const PASSAGE_ORDER_OPTIONS: { value: PassageOrderMode; label: string }[] = [
 ];
 
 /** NumberInput sans bornage côté client : le serveur valide et explique. */
+/** Sommaire : section → ancre. */
+const SECTIONS = {
+  'reglages.competition': 'competition', 'reglages.zones': 'zones', 'reglages.ordre': 'ordre', 'reglages.recasement': 'reaffectation',
+  'reglages.pesee': 'pesee', 'reglages.tableaux': 'tableaux', 'reglages.kata': 'kata', 'reglages.echanges': 'echanges',
+} as const;
+
 function Kg(props: { label: string; value: number; onChange: (v: number) => void; testId?: string }) {
   return (
     <NumberInput data-testid={props.testId} label={props.label} suffix=" kg" decimalScale={2} clampBehavior="none"
@@ -118,29 +126,32 @@ export function CompetitionSettingsPage() {
   };
 
   return (
-    <Stack data-testid="settings-form" maw={900}>
-      <Fieldset legend={HELP['reglages.competition'].title}>
-        <HelpLine topic="reglages.competition" />
-        <SimpleGrid cols={{ base: 1, sm: 2 }}>
+    <Stack data-testid="settings-form" gap="lg">
+      <Group gap="xs" data-testid="settings-summary">
+        {Object.entries(SECTIONS).map(([topic, aid]) => (
+          <Button key={aid} component="a" href={`#${aid}`} size="compact-sm" variant="subtle">{HELP[topic as keyof typeof SECTIONS].title}</Button>
+        ))}
+      </Group>
+      <SectionCard id="competition" title={HELP['reglages.competition'].title} help="reglages.competition">
+        <SimpleGrid cols={{ base: 1, sm: 3 }}>
           <TextInput label="Nom" value={info.name} onChange={(e) => setInfo({ ...info, name: e.currentTarget.value })} />
-          <TextInput label="Date" type="date" value={info.date} onChange={(e) => setInfo({ ...info, date: e.currentTarget.value })} />
+          <DateField label="Date" value={info.date} onChange={(v) => v && setInfo({ ...info, date: v })} />
           <TextInput label="Lieu" value={info.location} onChange={(e) => setInfo({ ...info, location: e.currentTarget.value })} />
         </SimpleGrid>
-      </Fieldset>
+      </SectionCard>
 
-      <Fieldset legend={HELP['reglages.zones'].title}>
-        <HelpLine topic="reglages.zones" />
+      <SectionCard id="zones" title={HELP['reglages.zones'].title} help="reglages.zones">
         <Stack gap="xs">
           {zones.map((z, i) => (
-            <Stack key={z.key} gap={4} data-testid="zone-row">
+            <Stack key={z.key} gap={6} data-testid="zone-row" p="sm" style={{ border: '1px solid var(--sk-line)', borderRadius: 'var(--mantine-radius-md)' }}>
             <Group gap="xs" wrap="nowrap">
               <TextInput data-testid="zone-name" aria-label={`Nom de la zone ${i + 1}`} w={260} maxLength={40} value={z.name}
                 onChange={(e) => { const name = e.currentTarget.value; setZones((zs) => zs.map((x) => (x.key === z.key ? { ...x, name } : x))); }} />
-              <ActionIcon variant="subtle" aria-label={`Monter la zone « ${z.name} »`} disabled={i === 0} onClick={() => moveZone(i, -1)}>↑</ActionIcon>
-              <ActionIcon variant="subtle" aria-label={`Descendre la zone « ${z.name} »`} disabled={i === zones.length - 1} onClick={() => moveZone(i, 1)}>↓</ActionIcon>
+              <ActionIcon variant="subtle" color="gray" aria-label={`Monter la zone « ${z.name} »`} disabled={i === 0} onClick={() => moveZone(i, -1)}><IconArrowUp /></ActionIcon>
+              <ActionIcon variant="subtle" color="gray" aria-label={`Descendre la zone « ${z.name} »`} disabled={i === zones.length - 1} onClick={() => moveZone(i, 1)}><IconArrowDown /></ActionIcon>
               <ActionIcon variant="subtle" color="red" aria-label={`Supprimer la zone « ${z.name} »`} disabled={zones.length === 1 || zoneLocked(z.id)}
                 title={zoneLocked(z.id) ? 'Une catégorie lancée s’y déroule' : undefined}
-                onClick={() => (zoneCategories(z.id).length ? setDeleting(z.key) : removeZone(z.key))}>✕</ActionIcon>
+                onClick={() => (zoneCategories(z.id).length ? setDeleting(z.key) : removeZone(z.key))}><IconTrash /></ActionIcon>
             </Group>
             <Group gap="sm" data-testid="zone-disciplines">
               <Text size="xs" c="dimmed">Disciplines accueillies :</Text>
@@ -152,7 +163,7 @@ export function CompetitionSettingsPage() {
             </Stack>
           ))}
           <Group>
-            <Button variant="light" size="xs" data-testid="zone-add" disabled={zones.length >= ZONE_MAX}
+            <Button variant="default" size="xs" data-testid="zone-add" disabled={zones.length >= ZONE_MAX}
               onClick={() => setZones((zs) => [...zs, { key: crypto.randomUUID(), name: nextZoneName(zs.map((x) => x.name)), disciplines: null }])}>Ajouter une zone</Button>
           </Group>
           {zoneErrors.length > 0 && (
@@ -172,10 +183,9 @@ export function CompetitionSettingsPage() {
             </Stack>
           </Modal>
         </Stack>
-      </Fieldset>
+      </SectionCard>
 
-      <Fieldset legend={HELP['reglages.ordre'].title}>
-        <HelpLine topic="reglages.ordre" />
+      <SectionCard id="ordre" title={HELP['reglages.ordre'].title} help="reglages.ordre">
         <Stack>
           <Select data-testid="passage-order" w={320} label="Ordre de passage des combats" data={PASSAGE_ORDER_OPTIONS} value={s.passageOrder} allowDeselect={false}
             onChange={(v) => v && set({ passageOrder: v as PassageOrderMode })} />
@@ -188,10 +198,9 @@ export function CompetitionSettingsPage() {
           </Group>
           <ZonesImpossibleAlert impossible={passages?.impossible} />
         </Stack>
-      </Fieldset>
+      </SectionCard>
 
-      <Fieldset legend={HELP['reglages.recasement'].title}>
-        <HelpLine topic="reglages.recasement" />
+      <SectionCard id="reaffectation" title={HELP['reglages.recasement'].title} help="reglages.recasement">
         <Stack>
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <Kg testId="gap-children" label="Écart de poids max entre deux combattants — enfants" value={s.weightGapMaxKg.children}
@@ -199,35 +208,26 @@ export function CompetitionSettingsPage() {
             <Kg testId="gap-adults" label="Écart de poids max entre deux combattants — adultes" value={s.weightGapMaxKg.adults}
               onChange={(adults) => set({ weightGapMaxKg: { ...s.weightGapMaxKg, adults } })} />
           </SimpleGrid>
+          <SimpleGrid cols={{ base: 1, md: 2 }} spacing="sm">
           <Switch label="Autoriser le mélange mineurs / adultes (validation manuelle)" checked={s.mixMinorsAdults}
             onChange={(e) => set({ mixMinorsAdults: e.currentTarget.checked })} />
           <Switch label="Autoriser le mélange seniors / vétérans (validation manuelle)" checked={s.mixSeniorsVeterans}
             onChange={(e) => set({ mixSeniorsVeterans: e.currentTarget.checked })} />
           <Switch label="Autoriser le mélange filles / garçons (validation manuelle)" checked={s.mixSexes.enabled}
             onChange={(e) => set({ mixSexes: { ...s.mixSexes, enabled: e.currentTarget.checked } })} />
-          {s.mixSexes.enabled && (
-            <MultiSelect label="Tranches d'âge où le mélange filles / garçons est possible" data={bandOptions}
-              value={s.mixSexes.ageBandCodes} onChange={(ageBandCodes) => set({ mixSexes: { ...s.mixSexes, ageBandCodes } })} />
-          )}
           <Switch label="Autoriser le passage de shobu à jiyu (validation manuelle)" checked={s.shobuToJiyu} data-testid="shobu-to-jiyu"
             onChange={(e) => set({ shobuToJiyu: e.currentTarget.checked })} />
           <Switch label="Autoriser plusieurs disciplines de combat le même jour" checked={s.multipleCombatDisciplinesPerDay}
             onChange={(e) => set({ multipleCombatDisciplinesPerDay: e.currentTarget.checked })} />
+          </SimpleGrid>
+          {s.mixSexes.enabled && (
+            <MultiSelect label="Tranches d’âge où le mélange filles / garçons est possible" data={bandOptions}
+              value={s.mixSexes.ageBandCodes} onChange={(ageBandCodes) => set({ mixSexes: { ...s.mixSexes, ageBandCodes } })} />
+          )}
         </Stack>
-      </Fieldset>
+      </SectionCard>
 
-      <Fieldset legend={HELP['reglages.pesee'].title}>
-        <HelpLine topic="reglages.pesee" />
-        <SimpleGrid cols={{ base: 1, sm: 2 }}>
-          <Kg label="Tolérance — hommes" value={s.weighInToleranceKg.M}
-            onChange={(M) => set({ weighInToleranceKg: { ...s.weighInToleranceKg, M } })} />
-          <Kg label="Tolérance — femmes" value={s.weighInToleranceKg.F}
-            onChange={(F) => set({ weighInToleranceKg: { ...s.weighInToleranceKg, F } })} />
-        </SimpleGrid>
-      </Fieldset>
-
-      <Fieldset legend={HELP['reglages.tableaux'].title}>
-        <HelpLine topic="reglages.tableaux" />
+      <SectionCard id="tableaux" title={HELP['reglages.tableaux'].title} help="reglages.tableaux">
         <Stack>
           <SimpleGrid cols={{ base: 1, sm: 3 }}>
             <Select label="Format pour 2 combattants" data={FORMAT_OPTIONS} value={s.formats.two} allowDeselect={false}
@@ -241,31 +241,43 @@ export function CompetitionSettingsPage() {
           <Checkbox label="Combat pour la 3e place" checked={s.thirdPlaceMatch}
             onChange={(e) => set({ thirdPlaceMatch: e.currentTarget.checked })} />
         </Stack>
-      </Fieldset>
+      </SectionCard>
 
-      <Fieldset legend={HELP['reglages.kata'].title}>
-        <HelpLine topic="reglages.kata" />
-        <SimpleGrid cols={{ base: 1, sm: 2 }}>
-          <Select label="Médailles de bronze en kata" data={[{ value: '1', label: '1' }, { value: '2', label: '2' }]}
-            value={String(s.kataBronzeCount)} allowDeselect={false}
-            onChange={(v) => v && set({ kataBronzeCount: Number(v) as 1 | 2 })} />
-          <Select label="Rounds de triathlon" data={[{ value: '3', label: '3 (1 par discipline)' }, { value: '6', label: '6 (2 par discipline)' }]}
-            value={String(s.triathlonRounds)} allowDeselect={false}
-            onChange={(v) => v && set({ triathlonRounds: Number(v) as 3 | 6 })} />
-        </SimpleGrid>
-      </Fieldset>
+      <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="lg">
+        <SectionCard id="pesee" title={HELP['reglages.pesee'].title} help="reglages.pesee">
+          <SimpleGrid cols={{ base: 1, sm: 2 }}>
+            <Kg label="Tolérance — hommes" value={s.weighInToleranceKg.M}
+              onChange={(M) => set({ weighInToleranceKg: { ...s.weighInToleranceKg, M } })} />
+            <Kg label="Tolérance — femmes" value={s.weighInToleranceKg.F}
+              onChange={(F) => set({ weighInToleranceKg: { ...s.weighInToleranceKg, F } })} />
+          </SimpleGrid>
+        </SectionCard>
 
+        <SectionCard id="kata" title={HELP['reglages.kata'].title} help="reglages.kata">
+          <SimpleGrid cols={{ base: 1, sm: 2 }}>
+            <Select label="Médailles de bronze en kata" data={[{ value: '1', label: '1' }, { value: '2', label: '2' }]}
+              value={String(s.kataBronzeCount)} allowDeselect={false}
+              onChange={(v) => v && set({ kataBronzeCount: Number(v) as 1 | 2 })} />
+            <Select label="Rounds de triathlon" data={[{ value: '3', label: '3 (1 par discipline)' }, { value: '6', label: '6 (2 par discipline)' }]}
+              value={String(s.triathlonRounds)} allowDeselect={false}
+              onChange={(v) => v && set({ triathlonRounds: Number(v) as 3 | 6 })} />
+          </SimpleGrid>
+        </SectionCard>
+
+      </SimpleGrid>
       <ApiErrorAlert error={saveZones.error ?? update.error} />
-      <Group>
+      {/* Barre d'enregistrement collée en bas : un seul « Enregistrer » pour toutes les sections au-dessus. */}
+      <Group justify="space-between" className="no-print" data-testid="settings-save-bar"
+        style={{ position: 'sticky', bottom: 0, zIndex: 50, padding: 'var(--mantine-spacing-sm) var(--mantine-spacing-md)', background: 'var(--sk-bar)', border: '1px solid var(--sk-card-line)', borderRadius: 'var(--mantine-radius-lg)' }}>
+        <Text size="sm" c={dirty ? undefined : 'dimmed'}>{dirty ? 'Modifications non enregistrées' : 'Aucune modification en cours'}</Text>
         <Button data-testid="settings-save" onClick={save} loading={saveZones.isPending || update.isPending}>
           Enregistrer
         </Button>
       </Group>
 
-      <Fieldset legend={HELP['reglages.echanges'].title}>
-        <HelpLine topic="reglages.echanges" />
+      <SectionCard id="echanges" title={HELP['reglages.echanges'].title} help="reglages.echanges">
         <SyncPanel competitionId={id} />
-      </Fieldset>
+      </SectionCard>
     </Stack>
   );
 }

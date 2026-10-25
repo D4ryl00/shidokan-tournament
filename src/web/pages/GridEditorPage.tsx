@@ -1,5 +1,5 @@
 import {
-  ActionIcon, Button, Checkbox, Fieldset, Group, NumberInput, SegmentedControl, Select, Stack, Table, Text, TextInput,
+  ActionIcon, Button, Checkbox, Group, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Table, Text, TextInput,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useMemo, useState } from 'react';
@@ -8,7 +8,8 @@ import type { AgeLinkKind, CategoryGrid, Sex, WeightClass } from '../../domain/t
 import { parseWeightLabel } from '../../domain/weights.js';
 import { ApiError, useGrid, useGridTemplates, useLoadTemplate, useReplaceGrid, useSaveTemplate } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
-import { HelpLine } from '../components/Help.js';
+import { IconTrash } from '../components/ui/icons.js';
+import { SectionCard } from '../components/ui/SectionCard.js';
 import { useUnsaved } from '../unsaved.js';
 import { HELP } from '../help.js';
 
@@ -57,7 +58,8 @@ export function GridEditorPage() {
     }
   }, [data]);
   // Saisie en cours : la mise à jour automatique (autre poste) attend, et quitter l'onglet demande confirmation.
-  useUnsaved('grille', !!data && !!grid && JSON.stringify(grid) !== JSON.stringify(data));
+  const dirty = !!data && !!grid && JSON.stringify(grid) !== JSON.stringify(data);
+  useUnsaved('grille', dirty);
 
   const rows = useMemo(
     () =>
@@ -100,23 +102,23 @@ export function GridEditorPage() {
   };
 
   return (
-    <Stack maw={900}>
-      <Fieldset legend={HELP['grille.poids'].title}>
-        <HelpLine topic="grille.poids" />
+    <Stack gap="lg">
+      <SimpleGrid cols={{ base: 1, xl: 2 }} spacing="lg">
+      <SectionCard title={HELP['grille.poids'].title} help="grille.poids">
         <Stack>
           <Group>
-            <Select data-testid="grid-age-select" label="Tranche d'âge" data={bandOptions} value={band} allowDeselect={false} onChange={setBand} />
+            <Select data-testid="grid-age-select" label="Tranche d’âge" data={bandOptions} value={band} allowDeselect={false} onChange={setBand} />
             <div>
               <Text size="sm" fw={500} mb={4}>Sexe</Text>
               <SegmentedControl data-testid="grid-sex-select" value={sex} onChange={(v) => setSex(v as Sex)}
                 data={[{ value: 'F', label: 'Féminines' }, { value: 'M', label: 'Masculins' }]} />
             </div>
           </Group>
-          <Table>
+          <Table className="sk-cell">
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Libellé (ex. -35 ou +65)</Table.Th>
-                <Table.Th>Poids max</Table.Th>
+                <Table.Th ta="right">Poids max</Table.Th>
                 <Table.Th />
               </Table.Tr>
             </Table.Thead>
@@ -128,23 +130,22 @@ export function GridEditorPage() {
                       onChange={(e) => setLabel(index, e.currentTarget.value)}
                       error={parseWeightLabel(w.label) ? undefined : 'Libellé incompréhensible'} />
                   </Table.Td>
-                  <Table.Td>{w.maxKg === null ? 'ouverte' : `${w.maxKg} kg`}</Table.Td>
-                  <Table.Td>
-                    <ActionIcon variant="subtle" color="red" aria-label="Supprimer" onClick={() => removeClass(index)}>✕</ActionIcon>
+                  <Table.Td ta="right" className="num" c={w.maxKg === null ? 'dimmed' : undefined}>{w.maxKg === null ? 'ouverte' : `${w.maxKg} kg`}</Table.Td>
+                  <Table.Td ta="right">
+                    <ActionIcon variant="subtle" color="red" aria-label="Supprimer" title="Supprimer" onClick={() => removeClass(index)}><IconTrash /></ActionIcon>
                   </Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
           </Table>
           <Group>
-            <Button variant="light" onClick={addClass}>Ajouter une catégorie</Button>
+            <Button variant="default" onClick={addClass}>Ajouter une catégorie</Button>
           </Group>
         </Stack>
-      </Fieldset>
+      </SectionCard>
 
-      <Fieldset legend={HELP['grille.tranches'].title}>
-        <HelpLine topic="grille.tranches" />
-        <Table>
+      <SectionCard title={HELP['grille.tranches'].title} help="grille.tranches">
+        <Table className="sk-cell">
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Libellé</Table.Th>
@@ -169,10 +170,11 @@ export function GridEditorPage() {
             ))}
           </Table.Tbody>
         </Table>
-      </Fieldset>
+      </SectionCard>
 
-      <Fieldset legend={HELP['grille.passages'].title}>
-        <HelpLine topic="grille.passages" />
+      </SimpleGrid>
+
+      <SectionCard title={HELP['grille.passages'].title} help="grille.passages">
         <Stack>
           {grid.ageLinks.map((l, i) => (
             <Group key={i} wrap="wrap">
@@ -184,27 +186,29 @@ export function GridEditorPage() {
               <Select aria-label="Type de passage" w={420} data={AGE_LINK_KINDS} value={l.kind} allowDeselect={false}
                 onChange={(v) => v && setGrid({ ...grid, ageLinks: grid.ageLinks.map((x, j) => (j === i ? { ...x, kind: v as AgeLinkKind } : x)) })} />
               <ActionIcon variant="subtle" color="red" aria-label="Supprimer"
-                onClick={() => setGrid({ ...grid, ageLinks: grid.ageLinks.filter((_, j) => j !== i) })}>✕</ActionIcon>
+                title="Supprimer" onClick={() => setGrid({ ...grid, ageLinks: grid.ageLinks.filter((_, j) => j !== i) })}><IconTrash /></ActionIcon>
             </Group>
           ))}
           <Group>
-            <Button variant="light"
+            <Button variant="default"
               onClick={() => setGrid({ ...grid, ageLinks: [...grid.ageLinks, { from: grid.ageBands[0]!.code, to: grid.ageBands[1]!.code, kind: 'C' }] })}>
               Ajouter un passage
             </Button>
           </Group>
         </Stack>
-      </Fieldset>
+      </SectionCard>
 
       <ApiErrorAlert error={localError ?? replace.error ?? saveTemplate.error ?? loadTemplate.error} />
-      <Group>
+      {/* Barre d'enregistrement collée en bas, comme dans les réglages. */}
+      <Group justify="space-between" className="no-print"
+        style={{ position: 'sticky', bottom: 0, zIndex: 50, padding: 'var(--mantine-spacing-sm) var(--mantine-spacing-md)', background: 'var(--sk-bar)', border: '1px solid var(--sk-card-line)', borderRadius: 'var(--mantine-radius-lg)' }}>
+        <Text size="sm" c={dirty ? undefined : 'dimmed'}>{dirty ? 'Modifications non enregistrées' : 'Aucune modification en cours'}</Text>
         <Button data-testid="grid-save" onClick={save} loading={replace.isPending}>Enregistrer la grille</Button>
       </Group>
-      <Fieldset legend={HELP['grille.modeles'].title}>
-        <HelpLine topic="grille.modeles" />
+      <SectionCard title={HELP['grille.modeles'].title} help="grille.modeles">
         <Group align="flex-end">
           <TextInput label="Nom du modèle" placeholder="ex. Grille shidokan 2026" value={templateName} onChange={(e) => setTemplateName(e.currentTarget.value)} />
-          <Button variant="light" data-testid="template-save" disabled={!templateName.trim()}
+          <Button variant="default" data-testid="template-save" disabled={!templateName.trim()}
             onClick={() => saveTemplate.mutate(templateName.trim(), { onSuccess: () => { setTemplateName(''); notifications.show({ color: 'green', message: 'Modèle enregistré (grille déjà enregistrée).' }); } })}>
             Enregistrer comme modèle
           </Button>
@@ -214,7 +218,7 @@ export function GridEditorPage() {
             Charger
           </Button>
         </Group>
-      </Fieldset>
+      </SectionCard>
     </Stack>
   );
 }

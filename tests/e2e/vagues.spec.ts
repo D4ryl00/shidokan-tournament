@@ -38,7 +38,7 @@ test('sessions : règles, retrait, ajout à la main, conflit, suppression', asyn
   const waiting = page.getByTestId('waves-waiting');
   await expect(waiting.getByTestId('waiting-category')).toHaveText([/Minimes F/]);
   await waiting.getByTestId('waiting-category').filter({ hasText: 'Minimes F' }).getByRole('combobox').selectOption({ label: 'Après-midi' });
-  await expect(card(page, 'Après-midi').getByTestId('wave-category').filter({ hasText: 'Minimes F' })).toContainText('ajoutée à la main');
+  await expect(card(page, 'Après-midi').getByTestId('wave-category').filter({ hasText: 'Minimes F' })).toContainText('Ajoutée à la main');
 
   // Conflit : Cadets cochés dans les deux vagues
   await card(page, 'Matin').getByText('Cadets', { exact: true }).click();

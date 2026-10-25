@@ -4,3 +4,10 @@
 .mantine-Table-tbody .mantine-Table-tr:nth-of-type(even) { background-color: var(--sk-row); }
 /* Texte trop long : coupé proprement, le nom complet au survol (attribut title). */
 .sk-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* Tableau éditable : les champs se lisent comme du texte, leur cadre n'apparaît qu'au survol et à la saisie. */
+.sk-cell .mantine-Input-input:not([data-error]) { background: transparent; border-color: transparent; }
+.sk-cell .mantine-Input-input:not([data-error]):hover { border-color: var(--sk-card-line); }
+.sk-cell .mantine-Input-input:not([data-error]):focus { border-color: var(--sk-accent); background: var(--sk-card); }
+.sk-cell .mantine-NumberInput-controls { opacity: 0; }
+.sk-cell .mantine-NumberInput-root:hover .mantine-NumberInput-controls,
+.sk-cell .mantine-NumberInput-root:focus-within .mantine-NumberInput-controls { opacity: 1; }
