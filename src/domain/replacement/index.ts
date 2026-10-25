@@ -5,3 +5,4 @@ export * from './propose.js';
 export * from './apply.js';
 export * from './waves.js';
 export * from './move.js';
+export * from './rules.js';

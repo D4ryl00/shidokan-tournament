@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { ZodError } from 'zod';
-import { defaultSettings, mergeSettings } from '../../src/domain/settings.js';
+import { RULE_IDS, defaultSettings, mergeSettings, readStoredSettings } from '../../src/domain/settings.js';
 
 test('réglages par défaut (spec §9.2, §8, §11.1, §12, §4.1)', () => {
   expect(defaultSettings()).toEqual({
@@ -20,6 +20,7 @@ test('réglages par défaut (spec §9.2, §8, §11.1, §12, §4.1)', () => {
     finalsZoneId: null,
     kataFinalsOnFinalsZone: false,
     invitationMail: null,
+    replacementRules: { order: [...RULE_IDS], off: [], cutAfter: 'discipline' },
   });
 });
 
@@ -38,4 +39,10 @@ test.each([
   [{ formats: { two: 'inconnu' } }],
 ])('réglage invalide refusé : %j', (partial) => {
   expect(() => mergeSettings(partial)).toThrow(ZodError);
+});
+
+test('réglages : liste par défaut, et lecture tolérante d’une compétition existante', () => {
+  expect(defaultSettings().replacementRules).toEqual({ order: [...RULE_IDS], off: [], cutAfter: 'discipline' });
+  expect(readStoredSettings({ mixSexes: { enabled: true, ageBandCodes: [] } }).replacementRules.cutAfter).toBe('discipline');
+  expect(readStoredSettings({ replacementRules: { order: ['weight'], off: [], cutAfter: 'weight' } }).replacementRules).toEqual(defaultSettings().replacementRules);
 });

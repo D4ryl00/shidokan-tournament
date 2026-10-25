@@ -15,6 +15,25 @@ export type CombatFormat = (typeof COMBAT_FORMATS)[number];
 export const PASSAGE_ORDER_MODES = ['rounds', 'categories'] as const;
 export type PassageOrderMode = (typeof PASSAGE_ORDER_MODES)[number];
 
+/** Règles du plan d'ensemble de la réaffectation, dans l'ordre par défaut (du moins au plus coûteux). */
+export const RULE_IDS = [
+  'return', 'weight', 'split', 'weightGap', 'ageUp', 'ageDown', 'seniorsVeterans', 'discipline',
+  'shobuToJiyu', 'mixSexes', 'minorsAdults',
+] as const;
+export type RuleId = (typeof RULE_IDS)[number];
+/** Règles dont l'interrupteur est dans `replacementRules.off` (les quatre autres ont leur propre réglage). */
+export const OWN_SWITCH_RULES = ['weight', 'split', 'weightGap', 'ageUp', 'ageDown', 'discipline'] as const;
+
+/** `order` doit être une permutation de RULE_IDS qui commence par `return`. */
+export function isValidRuleOrder(order: readonly string[]): boolean {
+  return (
+    order.length === RULE_IDS.length &&
+    order[0] === 'return' &&
+    RULE_IDS.every((r) => order.includes(r))
+  );
+}
+export const ruleOrderSchema = z.array(z.enum(RULE_IDS)).refine(isValidRuleOrder, 'ordre des règles invalide');
+
 const kg = (max: number) => z.number().min(0).max(max);
 
 export const competitionSettingsSchema = z
@@ -40,6 +59,14 @@ export const competitionSettingsSchema = z
     kataFinalsOnFinalsZone: z.boolean(),
     /** Message envoyé aux clubs pour cette compétition (null : celui des réglages de l'application). */
     invitationMail: mailTemplateSchema.nullable(),
+    /** Liste ordonnée des règles du plan d'ensemble, interrupteurs propres et ligne de coupure. */
+    replacementRules: z
+      .object({
+        order: ruleOrderSchema,
+        off: z.array(z.enum(OWN_SWITCH_RULES)),
+        cutAfter: z.enum(RULE_IDS),
+      })
+      .strict(),
   })
   .strict();
 
@@ -63,6 +90,7 @@ export function defaultSettings(): CompetitionSettings {
     finalsZoneId: null,
     kataFinalsOnFinalsZone: false,
     invitationMail: null,
+    replacementRules: { order: [...RULE_IDS], off: [], cutAfter: 'discipline' },
   };
 }
 
