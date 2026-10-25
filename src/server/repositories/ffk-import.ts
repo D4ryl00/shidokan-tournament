@@ -18,6 +18,7 @@ import type { AppDb } from '../db/client.js';
 import { linkClub } from '../db/club-directory.js';
 import { clubAliases, clubs, fighters, importMappings, registrations, uploads, weightClasses } from '../db/schema.js';
 import { readWorkbook } from '../spreadsheet/read.js';
+import { closedSet } from './closed-categories.js';
 import { GridValidationError, getGrid } from './competitions.js';
 import { NotFoundError, RegistrationValidationError, listClubs } from './registrations.js';
 
@@ -112,7 +113,7 @@ export async function buildFfkPlan(
   const rows: FfkRow[] = [];
   for (const s of sheets.filter((x) => x.include)) {
     const sheet = book.sheets.find((x) => x.name === s.name);
-    if (sheet) rows.push(...parseFfkRows(sheet.cells, s.headerRow, s.mapping, s.name, grid));
+    if (sheet) rows.push(...parseFfkRows(sheet.cells, s.headerRow, s.mapping, s.name, grid, closedSet(db, competitionId)));
   }
   return { plan: planFfkImport(rows, grid, await loadExisting(db, competitionId), choices), rows };
 }

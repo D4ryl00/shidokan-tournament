@@ -12,6 +12,7 @@ import {
   disciplineFromLabel,
   parseClubForm,
   rulesetFromLabel,
+  lineToRows,
 } from '../../src/domain/club-form.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 
@@ -303,4 +304,12 @@ test('relecture (mineurs) : abréviations sans doublon dans une grille', () => {
   expect(m.get('minime')).toBe('Mi');
   expect(m.get('cadet')).toBe('C');
   expect(new Set(m.values()).size).toBe(3);
+});
+
+test("ligne dans une catégorie fermée : avertissement, pas d'erreur", () => {
+  const line = { lastName: 'PETIT', firstName: 'Zoé', sex: 'F' as const, ageBandCode: 'cadet', weightKg: 50, combat: 'shido-mix' as const, kata: false, grade: null, ruleset: 'jiyu' as const, prefs: {}, shobuKeep: null };
+  const [row] = lineToRows(line, 1, grid, { M: 0, F: 0 }, new Set(['cadet|F|shido-mix|jiyu']));
+  expect(row!.errors).toEqual([]);
+  expect(row!.input).not.toBeNull();
+  expect(row!.warnings).toContain('Catégorie non ouverte à cette compétition (Shido-mix-martial jiyu) : la ligne ira en Réaffectation.');
 });

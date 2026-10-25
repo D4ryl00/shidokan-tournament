@@ -29,6 +29,16 @@ describe('modèle de fiche club', () => {
     expect(fiche.cells[10]!.slice(0, CLUB_FORM_COLUMNS.length)).toEqual([...CLUB_FORM_COLUMNS]);
   });
 
+  test('aide : catégories non ouvertes', async () => {
+    const aide = (closed: Set<string>) => (async () => flat(readWorkbook(await writeOds(buildClubFormTemplate(competition, grid, closed))).sheets.find((s) => s.name === 'Aide')!.cells))();
+    const with_ = await aide(new Set(['senior|F|kata|']));
+    expect(with_).toContain('Catégories non ouvertes à cette compétition');
+    expect(with_).toContain('Seniors (F) : pas de Kata');
+    const without = await aide(new Set());
+    expect(without).not.toContain('Catégories non ouvertes à cette compétition');
+    expect(without).not.toContain('Seniors (F) : pas de Kata');
+  });
+
   test('feuille « Aide » : remplissage, reclassement, âges', async () => {
     const { sheets } = readWorkbook(await template());
     const aide = flat(sheets.find((s) => s.name === 'Aide')!.cells);

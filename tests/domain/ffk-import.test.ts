@@ -42,6 +42,11 @@ describe('parseFfkRows', () => {
       discipline: 'karate', ruleset: null, weightLabel: '-20', errors: [],
     });
   });
+  test('catégorie fermée : avertissement', () => {
+    const [r] = parseFfkRows(cells([['MOREAU LINA', null, '99999999Z', '0060808 ISSA', 'Feminine', 'Karate', 'Poussin', -20, null]]), 0, STD, 'Coupe Shidokan Karate', grid, new Set(['poussin|F|karate|jiyu']));
+    expect(r!.errors).toEqual([]);
+    expect(r!.warnings).toContain('Catégorie non ouverte à cette compétition (Karaté jiyu) : la ligne ira en Réaffectation.');
+  });
   test('lignes vides ignorées, numéros conservés', () => {
     const rows = parse([['A B', null, '1', '1 C', 'Masculin', 'Karate', 'Senior', -75, null], BLANK, BLANK, ['C D', 'x', '2', '1 C', 'Masculin', 'Karate', 'Senior', '+84', null]]);
     expect(rows.map((r) => r.line)).toEqual([2, 5]);

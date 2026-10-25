@@ -12,7 +12,7 @@ import {
 import type { Competition } from '../domain/competition.js';
 import { DISCIPLINES, RULESETS } from '../domain/disciplines.js';
 import type { CategoryGrid } from '../domain/types.js';
-import { offeredAgeBands } from '../domain/closed-categories.js';
+import { closedSummary, offeredAgeBands } from '../domain/closed-categories.js';
 import type { OdsCell, OdsSheet } from './spreadsheet/ods.js';
 
 const c = (value: string | number | null, extra: Partial<OdsCell> = {}): OdsCell => ({ value, ...extra });
@@ -40,6 +40,7 @@ const LAST = WIDTHS.length - 1;
 /** Feuilles « Fiche club » (à remplir, une ligne par combattant) et « Aide ». */
 export function buildClubFormTemplate(competition: Competition, grid: CategoryGrid, closed: ReadonlySet<string>): OdsSheet[] {
   const offered = offeredAgeBands(grid, closed);
+  const summary = closedSummary(grid, closed);
   const validations = {
     sexe: ['Féminin', 'Masculin'],
     age: offered.map((b) => b.label),
@@ -90,6 +91,7 @@ export function buildClubFormTemplate(competition: Competition, grid: CategoryGr
     [],
     [c("Catégories d'âge", { bold: true })],
     ...offered.map((b) => [c(b.label), c(b.maxAge === null ? `${b.minAge} ans et plus` : `${b.minAge} à ${b.maxAge} ans`)]),
+    ...(summary.length ? [[], [c('Catégories non ouvertes à cette compétition', { bold: true })], ...summary.map((phrase) => [c(phrase)])] : []),
   ];
   const logo = logoPng();
   return [

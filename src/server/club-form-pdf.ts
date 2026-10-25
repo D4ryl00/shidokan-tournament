@@ -2,7 +2,7 @@ import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from 'pdf
 import { ageBandAbbreviations } from '../domain/club-form.js';
 import type { Competition } from '../domain/competition.js';
 import type { CategoryGrid } from '../domain/types.js';
-import { offeredAgeBands } from '../domain/closed-categories.js';
+import { closedSummary, offeredAgeBands } from '../domain/closed-categories.js';
 import { logoPng } from './club-form-template.js';
 
 /*
@@ -130,6 +130,27 @@ export async function buildClubFormPdf(competition: Competition, grid: CategoryG
   checks(page, f, colX[1]! + 2 * MM + f.bold.widthOfTextAtSize(accept, 9.5) + 2 * MM, top - boxH / 2 - 3, ['Oui', 'Non'], 9.5);
   top -= boxH + 3 * MM;
 
+  // Catégories non ouvertes : un encadré sous l'en-tête du club (rien si tout est ouvert).
+  const summary = closedSummary(grid, closed);
+  if (summary.length) {
+    const lead = 'Non ouvert à cette compétition : ';
+    // Coupé en police normale : on retire la largeur gagnée par le début en gras.
+    const boldExtra = f.bold.widthOfTextAtSize(lead, 8.5) - f.regular.widthOfTextAtSize(lead, 8.5);
+    const lines = wrap(f.regular, 8.5, safe(f.regular, `${lead}${summary.join(' · ')}`), width - 4 * MM - boldExtra);
+    const h = lines.length * 10.5 + 2.5 * MM;
+    rect(page, left, top - h, width, h, { border: 1.2 });
+    let ly = top - 1.25 * MM - 8;
+    lines.forEach((l, i) => {
+      // Le début (« Non ouvert à cette compétition : ») en gras, le reste normal.
+      if (i === 0 && l.startsWith(lead)) {
+        page.drawText(lead, { x: left + 2 * MM, y: ly, size: 8.5, font: f.bold });
+        page.drawText(l.slice(lead.length), { x: left + 2 * MM + f.bold.widthOfTextAtSize(lead, 8.5), y: ly, size: 8.5, font: f.regular });
+      } else page.drawText(l, { x: left + 2 * MM, y: ly, size: 8.5, font: f.regular });
+      ly -= 10.5;
+    });
+    top -= h + 2 * MM;
+  }
+
   // Tableau : en-tête sur deux rangées, 10 lignes
   const xs: number[] = [left];
   for (const p of COLUMNS) xs.push(xs[xs.length - 1]! + (width * p) / 100);
@@ -156,7 +177,23 @@ export async function buildClubFormPdf(competition: Competition, grid: CategoryG
   const abbreviations = ageBandAbbreviations(bands);
   const ageRows = bands.length > 12 ? 3 : 2;
   const ageCols = Math.max(1, Math.ceil(bands.length / ageRows));
-  const rowH = 11.5 * MM;
+
+  // Bas de page : légende, priorité shobu, numéro de page à remplir (calculé d'abord : les lignes prennent la place qui reste).
+  const legend = bands
+    .map((b) => {
+      const abbr = abbreviations.get(b.code)!;
+      const ages = b.maxAge === null ? `${b.minAge}+` : `${b.minAge}-${b.maxAge}`;
+      return /^V\d$/.test(abbr) ? `${abbr} (${ages})` : `${abbr} ${b.label.toLowerCase()} (${ages})`;
+    })
+    .join(' · ');
+  const pageLabel = 'Page …… / ……';
+  const footW = width - f.bold.widthOfTextAtSize(pageLabel, 8) - 6 * MM;
+  const foot = [
+    ...wrap(f.regular, 8, safe(f.regular, `Âges : ${legend}.`), footW),
+    ...wrap(f.regular, 8, 'Shobu, garder en priorité : « les règles shobu » = changer de discipline plutôt que passer en jiyu ; « la discipline » = passer en jiyu plutôt que changer de discipline. Boxing = shido-boxing, Mix = shido-mix martial.', footW),
+  ];
+  // Toujours une seule page : les lignes rapetissent si l'encadré des catégories non ouvertes prend de la place.
+  const rowH = Math.min(11.5 * MM, (top - MARGIN - 1.5 * MM - foot.length * 9.6) / ROWS);
   for (let r = 0; r < ROWS; r++) {
     const y = top - rowH;
     for (let i = 0; i < COLUMNS.length; i++) rect(page, xs[i]!, y, cw(i), rowH);
@@ -187,20 +224,6 @@ export async function buildClubFormPdf(competition: Competition, grid: CategoryG
     top = y;
   }
 
-  // Bas de page : légende, priorité shobu, numéro de page à remplir
-  const legend = bands
-    .map((b) => {
-      const abbr = abbreviations.get(b.code)!;
-      const ages = b.maxAge === null ? `${b.minAge}+` : `${b.minAge}-${b.maxAge}`;
-      return /^V\d$/.test(abbr) ? `${abbr} (${ages})` : `${abbr} ${b.label.toLowerCase()} (${ages})`;
-    })
-    .join(' · ');
-  const pageLabel = 'Page …… / ……';
-  const footW = width - f.bold.widthOfTextAtSize(pageLabel, 8) - 6 * MM;
-  const foot = [
-    ...wrap(f.regular, 8, safe(f.regular, `Âges : ${legend}.`), footW),
-    ...wrap(f.regular, 8, 'Shobu, garder en priorité : « les règles shobu » = changer de discipline plutôt que passer en jiyu ; « la discipline » = passer en jiyu plutôt que changer de discipline. Boxing = shido-boxing, Mix = shido-mix martial.', footW),
-  ];
   let fy = top - 1.5 * MM - 8;
   for (const l of foot) {
     page.drawText(l, { x: left, y: fy, size: 8, font: f.regular });

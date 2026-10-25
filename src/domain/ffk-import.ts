@@ -1,4 +1,4 @@
-import { ageBandFromLabel, rulesetFromLabel } from './club-form.js';
+import { ageBandFromLabel, closedEntryWarning, rulesetFromLabel } from './club-form.js';
 import { DISCIPLINES, disciplineFromLabel } from './disciplines.js';
 import { normalizeName, parseSex, splitFullName } from './names.js';
 import { weightClassesFor } from './grid.js';
@@ -97,6 +97,7 @@ export function parseFfkRows(
   mapping: ColumnMapping,
   sheetName: string,
   grid: CategoryGrid,
+  closed: ReadonlySet<string> = new Set(),
 ): FfkRow[] {
   const sheetDiscipline = disciplineFromSheetName(sheetName);
   const get = (row: unknown[], f: FfkField) => (mapping[f] === null ? null : (row[mapping[f]!] ?? null));
@@ -150,6 +151,11 @@ export function parseFfkRows(
       } else errors.push(res.message);
     }
 
+    // Règlement absent : jiyu à l'import (comme le fait l'import lui-même).
+    if (sex && ageBandCode && discipline) {
+      const w = closedEntryWarning({ ageBandCode, sex, discipline, ruleset: discipline === 'kata' ? null : (ruleset ?? 'jiyu') }, closed);
+      if (w) warnings.push(w);
+    }
     rows.push({
       key: `${sheetName}#${r + 1}`,
       sheet: sheetName,

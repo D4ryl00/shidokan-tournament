@@ -61,3 +61,13 @@ test('fiche papier PDF : nom long, lieu, 15 tranches → toujours une page, lieu
   expect(await pages(pdf)).toBe(1);
   expect(pdfText(pdf)).toContain('Jean Médecin, Nice');
 });
+
+test('encadré des catégories non ouvertes, une seule page', async () => {
+  await app.inject({ method: 'PUT', url: `${base}/closed-categories`, payload: { cells: [{ ageBandCode: 'senior', sex: 'F', discipline: 'kata', ruleset: null }], closed: true } });
+  let pdf = (await app.inject({ method: 'GET', url: `${base}/club-form.pdf` })).rawPayload;
+  expect(pdfText(pdf).replace(/\s+/g, ' ')).toContain('Non ouvert à cette compétition : Seniors (F) : pas de Kata');
+  expect(await pages(pdf)).toBe(1);
+  await offerAll((c) => !['mini-poussin', 'poussin', 'pupille', 'v3', 'v4', 'v5'].includes(c));
+  pdf = (await app.inject({ method: 'GET', url: `${base}/club-form.pdf` })).rawPayload;
+  expect(await pages(pdf)).toBe(1);
+});

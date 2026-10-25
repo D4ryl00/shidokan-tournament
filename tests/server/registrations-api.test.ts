@@ -197,3 +197,10 @@ test("saisie d'une fiche papier : les catégories sont à jour dès l'enregistre
     expect(categories.map((c) => c.id)).toContain(r.categoryId);
   }
 });
+
+test('ajout manuel dans une catégorie fermée : avertissement', async () => {
+  await app.inject({ method: 'PUT', url: `${base}/closed-categories`, payload: { cells: [{ ageBandCode: 'senior', sex: 'F', discipline: 'kata', ruleset: null }], closed: true } });
+  const res = await app.inject({ method: 'POST', url: `${base}/registrations`, payload: { clubId: null, lastName: 'MARTIN', firstName: 'Léa', sex: 'F', ageBandCode: 'senior', discipline: 'kata', ruleset: null, weightClassId: null, source: 'manual' } });
+  expect(res.statusCode).toBe(201);
+  expect(res.json().warning).toBe('Catégorie non ouverte à cette compétition : l’inscription ira en Réaffectation.');
+});

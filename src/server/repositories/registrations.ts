@@ -1,5 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import type { ClubFormParse } from '../../domain/club-form.js';
+import { isEntryClosed } from '../../domain/closed-categories.js';
 import { DISCIPLINES } from '../../domain/disciplines.js';
 import { normalizeName } from '../../domain/names.js';
 import {
@@ -18,6 +19,7 @@ import { withoutRowMeta } from '../db/row-versions.js';
 import { rowRev } from '../revisions.js';
 import { linkClub } from '../db/club-directory.js';
 import { categories, clubs, fighters, registrations } from '../db/schema.js';
+import { closedSet } from './closed-categories.js';
 import { getCompetition, getGrid } from './competitions.js';
 
 export class RegistrationValidationError extends Error {
@@ -187,7 +189,8 @@ export async function createRegistration(
     const t = tx as unknown as AppDb;
     const fighter = findOrCreateFighter(t, competitionId, input);
     const existing = t.select().from(registrations).where(eq(registrations.fighterId, fighter.id)).all();
-    warning = combatConflictWarning(existing, input, competition.settings.multipleCombatDisciplinesPerDay);
+    const closedWarning = isEntryClosed(closedSet(t, competitionId), input) ? 'Catégorie non ouverte à cette compétition : l’inscription ira en Réaffectation.' : null;
+    warning = [combatConflictWarning(existing, input, competition.settings.multipleCombatDisciplinesPerDay), closedWarning].filter(Boolean).join(' ') || null;
     const newId = crypto.randomUUID();
     t.insert(registrations).values({ id: newId, competitionId, fighterId: fighter.id, ...registrationValues(input) }).run();
     return newId;

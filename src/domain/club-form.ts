@@ -1,3 +1,4 @@
+import { columnLabel, isEntryClosed } from './closed-categories.js';
 import { DISCIPLINES, disciplineFromLabel } from './disciplines.js';
 
 export { disciplineFromLabel };
@@ -119,8 +120,23 @@ export function ageBandAbbreviations(bands: { code: string; label: string }[]): 
   return out;
 }
 
+/** Avertissement d'une inscription dans une catégorie fermée (null si elle est ouverte). */
+export function closedEntryWarning(input: Pick<RegistrationInput, 'ageBandCode' | 'sex' | 'discipline' | 'ruleset'>, closed: ReadonlySet<string>): string | null {
+  const cell = { ageBandCode: input.ageBandCode, sex: input.sex, discipline: input.discipline, ruleset: input.ruleset };
+  return isEntryClosed(closed, cell) ? `Catégorie non ouverte à cette compétition (${columnLabel(cell)}) : la ligne ira en Réaffectation.` : null;
+}
+
+/** Ajoute aux lignes valides l'avertissement des catégories fermées. */
+function warnClosed(rows: ClubFormRow[], closed: ReadonlySet<string>): ClubFormRow[] {
+  for (const r of rows) {
+    const w = r.input ? closedEntryWarning(r.input, closed) : null;
+    if (w) r.warnings.push(w);
+  }
+  return rows;
+}
+
 /** Une ligne → une ou deux lignes d'inscription (combat puis kata), avec le même numéro de ligne. */
-export function lineToRows(line: ClubFormLine, lineNumber: number, grid: CategoryGrid, tolerance: WeighInTolerance): ClubFormRow[] {
+export function lineToRows(line: ClubFormLine, lineNumber: number, grid: CategoryGrid, tolerance: WeighInTolerance, closed: ReadonlySet<string> = new Set()): ClubFormRow[] {
   const label = `${line.lastName.trim()} ${line.firstName.trim()}`.trim();
   const common: string[] = [];
   if (!line.sex) common.push('Sexe manquant.');
@@ -168,7 +184,7 @@ export function lineToRows(line: ClubFormLine, lineNumber: number, grid: Categor
     const invalid = validateRegistration(input, grid);
     rows.push(invalid.length ? { line: lineNumber, label, input: null, errors: invalid, warnings: [] } : { line: lineNumber, label, input, errors: [], warnings: [] });
   }
-  return rows;
+  return warnClosed(rows, closed);
 }
 
 const COMBAT_LABELS = new Set<DisciplineId>(['karate', 'shido-boxing', 'shido-mix', 'triathlon']);
@@ -335,7 +351,7 @@ function parseRow(row: unknown[], line: number, grid: CategoryGrid): ClubFormRow
 }
 
 /** Lit une fiche club à partir des cellules du tableur (cells[ligne 0-based][colonne 0-based]). */
-export function parseClubForm(cells: unknown[][], grid: CategoryGrid, tolerance: WeighInTolerance = { M: 0, F: 0 }): ClubFormParse {
+export function parseClubForm(cells: unknown[][], grid: CategoryGrid, tolerance: WeighInTolerance = { M: 0, F: 0 }, closed: ReadonlySet<string> = new Set()): ClubFormParse {
   const { headerRows, columnsRow } = locate(cells);
   const header = parseHeader(cells, headerRows);
   // Nouveau format reconnu à sa 5e colonne (« Poids actuel ») ; sinon, ancien format.
@@ -352,11 +368,11 @@ export function parseClubForm(cells: unknown[][], grid: CategoryGrid, tolerance:
           const { line, warnings, errors } = cellsToLine(row, grid);
           // Une valeur illisible prime sur « manquant » (même ligne, un seul message par case).
           if (errors.length) return [{ line: r + 1, label: `${line.lastName} ${line.firstName}`.trim(), input: null, errors, warnings }];
-          const out = lineToRows(line, r + 1, grid, tolerance);
+          const out = lineToRows(line, r + 1, grid, tolerance, closed);
           out[0]!.warnings.unshift(...warnings);
           return out;
         })()
-      : [parseRow(row, r + 1, grid)];
+      : warnClosed([parseRow(row, r + 1, grid)], closed);
     const who = normalizeName(`${text(row[0])} ${text(row[1])}`);
     if (/^VETERANS?$/.test(normalizeName(text(row[3])))) parsedRows[0]!.warnings.push('« Vétéran » sans numéro : placé en V1 (à corriger si besoin).');
     rows.push(...checkRows(parsedRows, who, r + 1, seen, combatByFighter));
@@ -365,13 +381,13 @@ export function parseClubForm(cells: unknown[][], grid: CategoryGrid, tolerance:
 }
 
 /** Fiche saisie à l'écran (fiche papier) : mêmes inscriptions et mêmes contrôles qu'un import, ligne n = n-ième ligne saisie. */
-export function parseClubFormLines(header: ClubFormHeader, lines: ClubFormLine[], grid: CategoryGrid, tolerance: WeighInTolerance): ClubFormParse {
+export function parseClubFormLines(header: ClubFormHeader, lines: ClubFormLine[], grid: CategoryGrid, tolerance: WeighInTolerance, closed: ReadonlySet<string> = new Set()): ClubFormParse {
   const seen = new Map<string, number>();
   const combatByFighter = new Map<string, Set<DisciplineId>>();
   const rows = lines.flatMap((line, i) => {
     if (!line.lastName.trim() && !line.firstName.trim() && !line.combat && !line.kata) return [];
     const who = normalizeName(`${line.lastName} ${line.firstName}`);
-    return checkRows(lineToRows(line, i + 1, grid, tolerance), who, i + 1, seen, combatByFighter);
+    return checkRows(lineToRows(line, i + 1, grid, tolerance, closed), who, i + 1, seen, combatByFighter);
   });
   return { header, rows };
 }

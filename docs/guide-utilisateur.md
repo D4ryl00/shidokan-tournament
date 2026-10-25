@@ -62,7 +62,7 @@ Les onglets de l'étape **Préparer**, dans l'ordre habituel :
 3. **Sessions**, si la compétition se pèse et se lance en plusieurs fois (« Samedi matin », « Dimanche »…).
 4. **Fiche club** — les clubs inscrivent leurs combattants de l'une de ces façons :
    - **en ligne** (section « Inscriptions en ligne ») : date limite, « Ouvrir les inscriptions », inviter les clubs, puis « Envoyer le lien par mail ». **Chaque envoi crée un nouveau lien** et désactive le précédent. À la date limite, « Figer les inscriptions » ;
-   - **par fichier** : envoyer le modèle (.ods) ou la fiche papier (PDF), puis importer ou saisir les fiches renvoyées.
+   - **par fichier** : envoyer le modèle (.ods) ou la fiche papier (PDF), puis importer ou saisir les fiches renvoyées. Les fiches indiquent les catégories non ouvertes ; une fiche renvoyée qui en contient quand même est acceptée avec un avertissement, et ces combattants passent en Réaffectation.
 5. **Import FFK**, à la clôture : aperçu, rapprochement avec les fiches des clubs, import.
 6. **Inscriptions** et **Clubs** : vérifier, corriger, ajouter sur place.
 

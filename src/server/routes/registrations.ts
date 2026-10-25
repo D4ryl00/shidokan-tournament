@@ -102,7 +102,7 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
     const GENERIC = "Ce fichier n'est pas une fiche club.";
     for (const sheet of sheets) {
       try {
-        return parseClubForm(sheet.cells, grid, tolerance);
+        return parseClubForm(sheet.cells, grid, tolerance, closedSet(db, competitionId));
       } catch (e) {
         if (!(e instanceof NotAClubFormError) || e.message !== GENERIC) throw e;
       }
@@ -167,7 +167,7 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
   async function parseEntry(competitionId: string, body: unknown) {
     const { header, lines } = paperEntrySchema.parse(body);
     const tolerance = (await getCompetition(db, competitionId))!.settings.weighInToleranceKg;
-    return parseClubFormLines(header, lines, await getGrid(db, competitionId), tolerance);
+    return parseClubFormLines(header, lines, await getGrid(db, competitionId), tolerance, closedSet(db, competitionId));
   }
 
   // Une fiche papier se saisit page par page : chaque saisie s'ajoute (une ligne déjà saisie est mise à jour), rien n'est retiré.
