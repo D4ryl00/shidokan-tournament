@@ -58,7 +58,7 @@ Un PC perdu ou volé permet de lire toutes les compétitions du serveur : **rév
 Les onglets de l'étape **Préparer**, dans l'ordre habituel :
 
 1. **Annuaire des clubs** (menu de l'application) : clubs, e-mail du coach, et si possible le numéro d'affiliation FFK.
-2. Créez la compétition, puis **Réglages** (zones de combat, formats, ordre de passage…) et **Grille âge / poids** (la grille FFK est déjà remplie).
+2. Créez la compétition, puis **Réglages** (zones de combat, formats, ordre de passage…) et **Grille âge / poids** (la grille FFK est déjà remplie). Dans la grille, la section **Catégories ouvertes** ferme ce que vous n’ouvrez pas à cette compétition (par exemple pas de shido-mix chez les benjamins) : ces catégories disparaissent de la fiche club et de l’inscription en ligne. Un combattant déjà inscrit dans une catégorie fermée apparaît en Réaffectation.
 3. **Sessions**, si la compétition se pèse et se lance en plusieurs fois (« Samedi matin », « Dimanche »…).
 4. **Fiche club** — les clubs inscrivent leurs combattants de l'une de ces façons :
    - **en ligne** (section « Inscriptions en ligne ») : date limite, « Ouvrir les inscriptions », inviter les clubs, puis « Envoyer le lien par mail ». **Chaque envoi crée un nouveau lien** et désactive le précédent. À la date limite, « Figer les inscriptions » ;

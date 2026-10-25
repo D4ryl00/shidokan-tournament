@@ -8,6 +8,7 @@ import type { AgeLinkKind, CategoryGrid, Sex, WeightClass } from '../../domain/t
 import { parseWeightLabel } from '../../domain/weights.js';
 import { ApiError, useGrid, useGridTemplates, useLoadTemplate, useReplaceGrid, useSaveTemplate } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { OpenCategoriesMatrix } from '../components/OpenCategoriesMatrix.js';
 import { IconTrash } from '../components/ui/icons.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
@@ -172,6 +173,12 @@ export function GridEditorPage() {
       </SectionCard>
 
       </SimpleGrid>
+
+      {data && (
+        <SectionCard title={HELP['grille.ouvertes'].title} help="grille.ouvertes">
+          <OpenCategoriesMatrix competitionId={id} grid={data} />
+        </SectionCard>
+      )}
 
       <SectionCard title={HELP['grille.passages'].title} help="grille.passages">
         <Stack>

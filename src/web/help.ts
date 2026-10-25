@@ -50,6 +50,7 @@ export type HelpTopicId =
   | 'reglages.kata'
   | 'grille.poids'
   | 'grille.tranches'
+  | 'grille.ouvertes'
   | 'grille.passages'
   | 'grille.modeles';
 
@@ -577,7 +578,15 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Les tranches d’âge, avec leurs âges et la limite mineurs / adultes.',
     details: [
       'La case « Mineurs » sépare mineurs et adultes : ils ne sont jamais mélangés, sauf si le réglage le permet.',
-      'La case « Fiche club » dit si la tranche est proposée aux clubs sur la fiche de pré-inscription (papier et tableur). Une tranche décochée reste dans la grille.',
+    ],
+  },
+  'grille.ouvertes': {
+    title: 'Catégories ouvertes',
+    short: 'Décochez une case pour ne pas ouvrir cette catégorie : elle disparaît de la fiche club et de l’inscription en ligne.',
+    details: [
+      'Une case = une tranche d’âge, un sexe, une discipline et son règlement. Le réglage vaut pour cette compétition seulement ; tout est ouvert au départ.',
+      'Les combattants déjà inscrits dans une catégorie que vous fermez apparaissent en Réaffectation : vous les déplacez ou choisissez « Ne combat pas ».',
+      'Une catégorie déjà lancée ne se ferme plus. La case d’une ligne (ou d’une colonne) ferme ou rouvre toute la ligne.',
     ],
   },
   'grille.passages': {
