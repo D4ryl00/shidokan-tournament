@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { applyAll, applyProposal, bulkPlan, casesOfWave, categoryWave, detectCases, isLocked, memberWave, stateFingerprint } from '../../domain/replacement/index.js';
+import { applyAll, applyProposal, bulkPlan, casesOfWave, categoryWave, detectCases, isClosedTarget, isLocked, memberWave, stateFingerprint } from '../../domain/replacement/index.js';
 import type { AppDb } from '../db/client.js';
 import { getCompetition } from '../repositories/competitions.js';
 import {
@@ -75,7 +75,7 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
       cases.map((c) => {
         const m = byRegistration.get(c.registrationId)!;
         const targets = state.categories
-          .filter((t) => t.id !== m.categoryId && !isLocked(t))
+          .filter((t) => t.id !== m.categoryId && !isLocked(t) && !isClosedTarget(state, t.key))
           .map((t) => ({ categoryId: t.id, warnings: manualProposal(state, m.registrationId, t.id).warnings }));
         return [c.id, targets];
       }),
@@ -90,6 +90,7 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
         absent: presence.filter((p) => p === 'absent').length,
         unknown: presence.filter((p) => p === 'unknown').length,
         cases: cases.length,
+        closed: cases.filter((c) => c.kind === 'closed').length,
         alone: cases.filter((c) => c.kind === 'alone').length,
         withoutProposal: cases.filter((c) => (proposals.get(c.id) ?? []).length === 0).length,
         readyCategories: waveCategories.filter((c) => c.status === 'ready').length,

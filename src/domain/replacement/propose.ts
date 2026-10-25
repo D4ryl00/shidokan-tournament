@@ -2,7 +2,7 @@ import { ageMove } from '../ages.js';
 import { categoryLabel, keyString, naturalKey, type CategoryKey } from '../categories.js';
 import { DISCIPLINES } from '../disciplines.js';
 import { neighborWeightClasses } from '../weights.js';
-import { categoryForKey, isLocked, originalCategory } from './detect.js';
+import { categoryForKey, isClosedTarget, isLocked, originalCategory } from './detect.js';
 import type { Case, CategoryState, Member, Proposal, ProposalType, State } from './types.js';
 import { waveEffects } from './waves.js';
 import { applyProposal } from './move.js';
@@ -229,8 +229,15 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
   };
   // Les tris G/H n'ont pas d'indice de préférence : on aligne les clés sur la même longueur.
   for (const p of out) if (p.sortKey.length === 4) p.sortKey.splice(1, 0, 0);
+  // Une catégorie fermée n'est jamais une cible (existante ou à créer).
+  const closedTarget = (p: (typeof out)[number]) => {
+    if ('newKey' in p.target) return isClosedTarget(state, p.target.newKey);
+    const id = p.target.categoryId;
+    const t = state.categories.find((x) => x.id === id);
+    return t !== undefined && isClosedTarget(state, t.key);
+  };
   return out
-    .filter((p) => !state.refused.includes(p.id))
+    .filter((p) => !state.refused.includes(p.id) && !closedTarget(p))
     .sort((a, b) => cmp(a.sortKey, b.sortKey))
     .map(({ sortKey: _s, ...p }, rank) => ({ ...p, rank }));
 }

@@ -30,6 +30,7 @@ import { listWaves } from './waves.js';
 import { launchedWaveKeys } from './launch-state.js';
 import type { Wave } from '../../domain/waves.js';
 import { CategoryLockedError, listCategories, syncCategories } from './categories.js';
+import { closedSet } from './closed-categories.js';
 import { getCompetition, getGrid } from './competitions.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
 
@@ -89,6 +90,7 @@ export async function loadState(db: AppDb, competitionId: string): Promise<State
     members,
     waves: await listWaves(db, competitionId),
     refused: db.select().from(refusals).where(eq(refusals.competitionId, competitionId)).all().map((r) => r.proposalId),
+    closedEntries: [...closedSet(db, competitionId)],
   };
   // Vague lancée : fermée au recasement (vague implicite '' quand il n'y a pas de vague).
   const launched = launchedWaveKeys(db, competitionId);

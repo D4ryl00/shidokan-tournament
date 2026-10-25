@@ -1,4 +1,5 @@
-import { keyString, naturalKey } from '../categories.js';
+import { keyString, naturalKey, type CategoryKey } from '../categories.js';
+import { categoryKeyClosed, entryKey } from '../closed-categories.js';
 import { DISCIPLINES } from '../disciplines.js';
 import type { Case, CategoryState, Member, State } from './types.js';
 import { activeMembers, categoryWeightGap, effectiveWeight, gapThreshold, isOverweight } from './weights.js';
@@ -16,15 +17,29 @@ export function originalCategory(state: State, m: Member): CategoryState | undef
   return categoryForKey(state, keyString(naturalKey({ ...m.original }, m)));
 }
 
-const KIND_ORDER = ['return', 'weight_out', 'alone', 'weight_gap'] as const;
+/** Inscrit (non déplacé, non absent) d'une catégorie que l'organisateur n'a pas ouverte. */
+export const isClosedMember = (state: State, m: Member): boolean =>
+  !m.placementLocked && m.presence !== 'absent' && state.closedEntries.includes(entryKey({ ageBandCode: m.ageBandCode, sex: m.sex, discipline: m.discipline, ruleset: m.ruleset }));
+
+/** Catégorie fermée : jamais une cible de réaffectation. */
+export const isClosedTarget = (state: State, key: CategoryKey): boolean => categoryKeyClosed(new Set(state.closedEntries), key);
+
+const KIND_ORDER = ['closed', 'return', 'weight_out', 'alone', 'weight_gap'] as const;
 
 export function detectCases(state: State): Case[] {
   const cases: Case[] = [];
   const byId = new Map(state.categories.map((c) => [c.id, c]));
   const withWeightOut = new Set<string>();
+  // Catégorie fermée : un seul cas, qui remplace les autres (seul, écart, poids hors catégorie).
+  const closed = new Set<string>();
+  for (const m of state.members) {
+    if (!isClosedMember(state, m) || isLocked(byId.get(m.categoryId ?? ''))) continue;
+    closed.add(m.registrationId);
+    cases.push({ id: `closed:${m.registrationId}`, kind: 'closed', registrationId: m.registrationId, categoryId: m.categoryId, detail: 'Catégorie non ouverte à cette compétition' });
+  }
 
   for (const m of state.members) {
-    if (m.presence === 'absent' || m.placementLocked) continue;
+    if (m.presence === 'absent' || m.placementLocked || closed.has(m.registrationId)) continue;
     const wic = isOverweight(m, state);
     if (wic && !isLocked(byId.get(m.categoryId ?? ''))) {
       withWeightOut.add(m.registrationId);
@@ -38,7 +53,7 @@ export function detectCases(state: State): Case[] {
 
   for (const c of state.categories) {
     if (isLocked(c)) continue;
-    const active = activeMembers(state, c.id);
+    const active = activeMembers(state, c.id).filter((m) => !closed.has(m.registrationId));
     if (active.length === 1 && !withWeightOut.has(active[0]!.registrationId)) {
       cases.push({ id: `alone:${active[0]!.registrationId}`, kind: 'alone', registrationId: active[0]!.registrationId, categoryId: c.id, detail: active[0]!.sex === 'F' ? 'Seule dans sa catégorie' : 'Seul dans sa catégorie' });
     } else if (active.length >= 2 && DISCIPLINES[c.key.discipline].hasWeight) {

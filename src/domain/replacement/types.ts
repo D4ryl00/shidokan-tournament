@@ -58,9 +58,11 @@ export interface State {
   waves: Wave[];
   /** Identifiants de propositions refusées. */
   refused: string[];
+  /** Cases fermées du tableau « Catégories ouvertes » (`entryKey`) : leurs inscrits sont des cas, et jamais des cibles. */
+  closedEntries: string[];
 }
 
-export type CaseKind = 'alone' | 'weight_out' | 'weight_gap' | 'return';
+export type CaseKind = 'closed' | 'alone' | 'weight_out' | 'weight_gap' | 'return';
 
 export interface Case {
   /** `${kind}:${registrationId}` */

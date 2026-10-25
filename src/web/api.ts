@@ -358,7 +358,7 @@ export interface ReplacementData {
   moveTargets: Record<string, { categoryId: string; warnings: string[] }[]>;
   /** Les propositions refusées suivent les autres, marquées `refused`. */
   proposals: Record<string, (Proposal & { refused?: true })[]>;
-  summary: { present: number; absent: number; unknown: number; cases: number; alone: number; withoutProposal: number; readyCategories: number; startedCategories: number };
+  summary: { present: number; absent: number; unknown: number; cases: number; closed: number; alone: number; withoutProposal: number; readyCategories: number; startedCategories: number };
   fingerprint: string;
   recasements: RecasementEntry[];
 }

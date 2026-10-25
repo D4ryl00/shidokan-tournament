@@ -53,6 +53,7 @@ export function stateFingerprint(state: State): string {
     c: [...state.categories].sort((a, b) => a.id.localeCompare(b.id)).map((c) => [c.id, keyString(c.key), c.status, c.aliasKeys, c.waveOverride]),
     w: [...state.waves].sort((a, b) => a.id.localeCompare(b.id)).map((w) => [w.id, w.order, w.rules]),
     r: [...state.refused].sort(),
+    x: [...state.closedEntries].sort(),
     s: state.settings,
     g: state.grid,
   });

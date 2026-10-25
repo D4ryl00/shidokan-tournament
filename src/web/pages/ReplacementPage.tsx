@@ -37,7 +37,7 @@ type Dialog =
   | { kind: 'move'; registrationId: string; categoryId: string }
   | null;
 
-const CASE_KINDS: Record<CaseKind, string> = { alone: 'Sans adversaire', weight_out: 'Poids hors catégorie', weight_gap: 'Écart de poids', return: 'Retour possible' };
+const CASE_KINDS: Record<CaseKind, string> = { closed: 'Catégorie fermée', alone: 'Sans adversaire', weight_out: 'Poids hors catégorie', weight_gap: 'Écart de poids', return: 'Retour possible' };
 const kg = (x: number) => Number(x.toFixed(1)).toString().replace('.', ',');
 
 /**
@@ -170,11 +170,12 @@ export function ReplacementPage() {
   return (
     <Stack gap="md">
       {waveSelector}
-      <SimpleGrid cols={{ base: 2, sm: 4, md: 7 }} spacing="sm" data-testid="replacement-summary">
+      <SimpleGrid cols={{ base: 2, sm: 4, md: 8 }} spacing="sm" data-testid="replacement-summary">
         <Stat label="Présents" value={s.present} />
         <Stat label="Absents" value={s.absent} />
         <Stat label="Non pesés" value={s.unknown} />
         <Stat label="Cas à traiter" value={s.cases} tone={s.cases ? 'warn' : 'ok'} />
+        <Stat label="Catégorie fermée" value={s.closed} />
         <Stat label="Sans adversaire" value={s.alone} />
         <Stat label="Sans solution automatique" value={s.withoutProposal} tone={s.withoutProposal ? 'danger' : undefined} />
         <Stat label="Catégories lancées" value={s.startedCategories} />

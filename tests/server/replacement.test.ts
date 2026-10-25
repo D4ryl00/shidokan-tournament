@@ -599,3 +599,23 @@ test('split : le seul en +84 reçoit les deux plus lourds de -84 (une réaffecta
   expect(after.recasements.map((x) => x.registrationId).sort()).toEqual([below[2]!.id, below[3]!.id].sort());
   expect(after.cases.some((x) => x.kind === 'alone' || x.kind === 'return')).toBe(false);
 });
+
+test('catégorie fermée : carte, compteur et cibles manuelles', async () => {
+  await reg();
+  await reg();
+  await reg({ weightClassId: 'cadet:F:-61' });
+  await reg({ weightClassId: 'cadet:F:-61' });
+  const junior = await reg({ ageBandCode: 'junior', weightClassId: 'junior:F:-53' });
+  await reg({ ageBandCode: 'junior', weightClassId: 'junior:F:-48' });
+  const cell = (ageBandCode: string) => ({ ageBandCode, sex: 'F', discipline: 'karate', ruleset: 'jiyu' });
+  await call('PUT', '/closed-categories', { cells: [cell('cadet')], closed: true });
+  expect((await replacement()).summary.closed).toBe(4);
+  await call('PUT', '/closed-categories', { cells: [cell('cadet')], closed: false });
+  await call('PUT', '/closed-categories', { cells: [cell('junior')], closed: true });
+  const r = (await call('GET', '/replacement')).json() as Replacement & { moveTargets: Record<string, { categoryId: string }[]> };
+  expect(r.cases.find((c) => c.id === `closed:${junior.id}`)).toBeDefined();
+  const juniorCats = (await categories()).filter((c) => c.label.includes('Juniors')).map((c) => c.id);
+  expect(r.moveTargets[`closed:${junior.id}`]!.some((t) => juniorCats.includes(t.categoryId))).toBe(false);
+  expect(juniorCats).toHaveLength(2);
+  expect(r.summary.closed).toBe(2);
+});
