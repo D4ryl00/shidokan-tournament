@@ -299,6 +299,8 @@ export const registrations = sqliteTable('registrations', {
   /** Discipline, règlement et catégorie de poids d'avant le premier recasement (pour le retour). */
   originalJson: text('original_json'),
   recasementType: text('recasement_type'),
+  /** « Ne combat pas » décidé par l'organisateur (catégorie non ouverte) : hors de toute catégorie. */
+  withdrawnReason: text('withdrawn_reason', { enum: ['closed_category'] }),
   createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
   ...rowMeta(),
 });

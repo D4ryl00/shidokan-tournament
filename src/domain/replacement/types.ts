@@ -4,8 +4,8 @@ import type { CategoryGrid, DisciplineId, Ruleset, Sex } from '../types.js';
 import type { Wave } from '../waves.js';
 
 export type Presence = 'unknown' | 'present' | 'absent';
-/** M = déplacement manuel décidé par l'organisateur (jamais proposé). */
-export type ProposalType = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'R' | 'M';
+/** M = déplacement manuel décidé par l'organisateur (jamais proposé) ; W = « Ne combat pas » (catégorie fermée, journal seulement). */
+export type ProposalType = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'R' | 'M' | 'W';
 
 /** Une inscription, avec tout ce qu'il faut pour décider d'un recasement. */
 export interface Member {

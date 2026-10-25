@@ -1,0 +1,1 @@
+ALTER TABLE `registrations` ADD `withdrawn_reason` text;

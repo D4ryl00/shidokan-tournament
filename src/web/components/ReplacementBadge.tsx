@@ -15,6 +15,7 @@ export const PROPOSAL_TYPES: Record<ProposalType, { color: string; label: string
   H: { color: 'grape', label: '⇄ Discipline', simple: false, title: 'Autre discipline (préférences du combattant)' },
   R: { color: 'gray', label: '↩ Retour', simple: true, title: 'Retour dans la catégorie d’origine' },
   M: { color: 'gray', label: '✋ Manuel', simple: false, title: 'Déplacement manuel de l’organisateur' },
+  W: { color: 'gray', label: '⊘ Ne combat pas', simple: false, title: 'Ne combat pas (catégorie non ouverte)' },
 };
 
 const kg = (x: number) => `${Number(x.toFixed(1)).toString().replace('.', ',')} kg`;

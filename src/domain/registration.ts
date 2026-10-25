@@ -55,6 +55,8 @@ export interface Registration {
   ffkConfirmed: boolean;
   /** Type du recasement validé (badge), null sinon. */
   recasementType?: ProposalType | null;
+  /** « Ne combat pas » (catégorie non ouverte), décidé en Réaffectation. */
+  withdrawn: boolean;
   createdAt: string;
 }
 

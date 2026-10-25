@@ -33,7 +33,7 @@ export async function getClosedCategories(db: AppDb, competitionId: string): Pro
   const fs = new Map(db.select().from(fighters).where(eq(fighters.competitionId, competitionId)).all().map((f) => [f.id, f]));
   const counts: Record<string, number> = {};
   for (const r of db.select().from(registrations).where(eq(registrations.competitionId, competitionId)).all()) {
-    if (r.placementLocked) continue;
+    if (r.placementLocked || r.withdrawnReason) continue;
     const f = fs.get(r.fighterId)!;
     const k = entryKey({ ageBandCode: f.ageBandCode, sex: f.sex, discipline: r.discipline, ruleset: r.ruleset });
     counts[k] = (counts[k] ?? 0) + 1;

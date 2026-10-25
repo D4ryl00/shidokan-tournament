@@ -302,3 +302,17 @@ test('tranches offertes', async () => {
   expect(v.ageBands.map((b) => b.code)).not.toContain('mini-poussin');
   expect(v.closed).toContain('mini-poussin|F|kata|');
 });
+
+test('réenregistrer la ligne garde « ne combat pas »', async () => {
+  expect((await add({ ...LINE, prefs: {} })).statusCode).toBe(201);
+  await closeCells([{ ageBandCode: 'senior', sex: 'F', discipline: 'kata', ruleset: null }]);
+  const kata = (await registrations()).find((r) => r.discipline === 'kata')!;
+  const fingerprint = ((await app.inject({ method: 'GET', url: `${base}/replacement` })).json() as { fingerprint: string }).fingerprint;
+  expect((await app.inject({ method: 'POST', url: `${base}/replacement/withdraw`, payload: { registrationId: kata.id, fingerprint } })).statusCode).toBe(200);
+  const before = (await view()).lines[0]!;
+  const res = await put(before.fighterId, { ...LINE, prefs: {} }, before.version);
+  expect(res.statusCode).toBe(200);
+  expect(res.json().notices).toEqual(['Ne combattra pas en Kata : catégorie non ouverte.']);
+  const after = (await app.inject({ method: 'GET', url: `${base}/registrations` })).json() as { discipline: string; withdrawn: boolean }[];
+  expect(after.find((r) => r.discipline === 'kata')!.withdrawn).toBe(true);
+});

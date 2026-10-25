@@ -16,6 +16,7 @@ import {
   useRegistrations,
   useReplacement,
   useUndoRecasement,
+  useWithdrawRegistration,
   type CaseFighter,
 } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
@@ -35,6 +36,7 @@ type Dialog =
   | { kind: 'bulk'; mode: 'simple' | 'all' }
   | { kind: 'undo'; recasementId: string; label: string }
   | { kind: 'move'; registrationId: string; categoryId: string }
+  | { kind: 'withdraw'; registrationId: string; categoryLabel: string }
   | null;
 
 const CASE_KINDS: Record<CaseKind, string> = { closed: 'Catégorie fermée', alone: 'Sans adversaire', weight_out: 'Poids hors catégorie', weight_gap: 'Écart de poids', return: 'Retour possible' };
@@ -114,6 +116,7 @@ export function ReplacementPage() {
   const bulk = useBulkReplacement(id);
   const undo = useUndoRecasement(id);
   const move = useManualMove(id);
+  const withdraw = useWithdrawRegistration(id);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [moveTarget, setMoveTarget] = useState<Record<string, string | null>>({});
   const [allTargets, setAllTargets] = useState<Record<string, boolean>>({});
@@ -185,7 +188,7 @@ export function ReplacementPage() {
         <Button data-testid="bulk-all" variant="default" onClick={() => openBulk('all')} disabled={s.cases === 0}>Tout classer automatiquement</Button>
         {waves.length > 0 && <Text size="sm" c="dimmed">Les changements de session se valident un par un.</Text>}
       </Group>
-      <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error ?? bulk.error ?? undo.error ?? move.error} />
+      <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error ?? bulk.error ?? undo.error ?? move.error ?? withdraw.error} />
 
       {data.cases.length === 0 && <EmptyState icon="✓" title="Aucun cas à traiter" text="Toutes les catégories ont au moins deux combattants et aucun poids n’est hors catégorie." />}
       {data.cases.length > 0 && (
@@ -285,6 +288,14 @@ export function ReplacementPage() {
                   Déplacer…
                 </Button>
               </Group>
+              {c.kind === 'closed' && (
+                <Group gap="xs">
+                  <Button size="xs" variant="default" data-testid="case-withdraw"
+                    onClick={() => setDialog({ kind: 'withdraw', registrationId: c.registrationId, categoryLabel: categories.find((x) => x.id === c.categoryId)?.label ?? 'sa catégorie' })}>
+                    Ne combat pas
+                  </Button>
+                </Group>
+              )}
               {open.some((p) => 'newKey' in p.target) && (
                 <Text size="xs" c="dimmed" data-testid="manual-move-new-hint">
                   Le déplacement manuel ne liste que les catégories qui existent déjà : pour l’envoyer dans une catégorie encore vide, utilisez la proposition ci-dessus.
@@ -372,6 +383,18 @@ export function ReplacementPage() {
               )}
             </Group>
           )}
+        </Stack>
+      </Modal>
+      <Modal opened={dialog?.kind === 'withdraw'} onClose={() => setDialog(null)} title="Ne combat pas ?">
+        <Stack>
+          {dialog?.kind === 'withdraw' && <Text>{name(dialog.registrationId)} ne combattra pas en {dialog.categoryLabel}. Le coach le verra sur sa page d’inscription.</Text>}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setDialog(null)}>Annuler</Button>
+            <Button color="red" data-testid="case-withdraw-confirm" loading={withdraw.isPending}
+              onClick={() => dialog?.kind === 'withdraw' && withdraw.mutate({ registrationId: dialog.registrationId, fingerprint: data.fingerprint }, { onSuccess: () => done('Inscription retirée : ne combat pas.') })}>
+              Confirmer
+            </Button>
+          </Group>
         </Stack>
       </Modal>
       <Modal opened={dialog?.kind === 'undo'} onClose={() => setDialog(null)} title="Annuler cette réaffectation ?">

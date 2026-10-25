@@ -67,6 +67,7 @@ export class LineReadOnlyError extends Error {
 export const LOCKED_REASON = 'Ses combats ont commencé : contactez l’organisateur.';
 export const CLOSED_ENTRY = (label: string) => `${label} : catégorie non ouverte à cette compétition.`;
 const CLOSED_NOTICE = (label: string) => `${label} : cette catégorie n’est plus ouverte, l’organisateur vous contactera.`;
+const WITHDRAWN_NOTICE = (label: string) => `Ne combattra pas en ${label} : catégorie non ouverte.`;
 export const FFK_IDENTITY = 'Le sexe et la catégorie d’âge viennent de l’export FFK : contactez l’organisateur pour les changer.';
 
 function competitionRow(db: AppDb, access: ClubAccess) {
@@ -99,11 +100,11 @@ function lineOf(db: AppDb, fighter: typeof fighters.$inferSelect): ClubLine {
   );
   const version = [String(fighter.version ?? 0), ...regs.map((r) => `${r.id}:${r.version ?? 0}`).sort()].join('|');
   const closed = closedSet(db, fighter.competitionId);
-  const notices = regs
-    .filter((r) => !r.placementLocked)
-    .map((r) => ({ ageBandCode: fighter.ageBandCode, sex: fighter.sex, discipline: r.discipline, ruleset: r.ruleset }))
-    .filter((cell) => isEntryClosed(closed, cell))
-    .map((cell) => CLOSED_NOTICE(columnLabel(cell)));
+  const notices = regs.flatMap((r) => {
+    const cell = { ageBandCode: fighter.ageBandCode, sex: fighter.sex, discipline: r.discipline, ruleset: r.ruleset };
+    if (r.withdrawnReason) return [WITHDRAWN_NOTICE(columnLabel(cell))];
+    return !r.placementLocked && isEntryClosed(closed, cell) ? [CLOSED_NOTICE(columnLabel(cell))] : [];
+  });
   return locked ? { fighterId: fighter.id, version, line, editable: false, reason: LOCKED_REASON, notices } : { fighterId: fighter.id, version, line, editable, reason, notices };
 }
 

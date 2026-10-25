@@ -89,8 +89,9 @@ export async function loadExisting(db: AppDb, competitionId: string): Promise<Ex
       .where(eq(fighters.competitionId, competitionId))
       .all()
       .map(({ nameKey: _k, ...f }) => f),
-    registrations: regs.map(({ otherDisciplinesJson, originalJson, ...r }) => ({
+    registrations: regs.map(({ otherDisciplinesJson, originalJson, withdrawnReason, ...r }) => ({
       ...r,
+      withdrawn: withdrawnReason !== null,
       recasementType: r.recasementType as ProposalType | null,
       otherDisciplines: JSON.parse(otherDisciplinesJson),
       original: originalJson ? JSON.parse(originalJson) : null,

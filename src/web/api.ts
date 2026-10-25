@@ -395,6 +395,7 @@ export const useUnrefuseProposal = (id: string) => useReplacementAction<{ propos
 export const useBulkReplacement = (id: string) => useReplacementAction<{ mode: 'simple' | 'all'; fingerprint: string; waveId?: string }>(id, 'bulk');
 export const useUndoRecasement = (id: string) => useReplacementAction<{ recasementId: string }>(id, 'undo');
 export const useManualMove = (id: string) => useReplacementAction<{ registrationId: string; categoryId: string }>(id, 'move');
+export const useWithdrawRegistration = (id: string) => useReplacementAction<{ registrationId: string; fingerprint: string }>(id, 'withdraw');
 
 // --- Jour J (étape 6) ---
 

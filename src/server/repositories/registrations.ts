@@ -56,8 +56,8 @@ function toFighter(row: typeof fighters.$inferSelect): Fighter {
   return fighter;
 }
 function toRegistration(row: typeof registrations.$inferSelect): Registration {
-  const { otherDisciplinesJson, ...rest } = withoutRowMeta(row);
-  return { ...rest, recasementType: rest.recasementType as ProposalType | null, otherDisciplines: JSON.parse(otherDisciplinesJson) as DisciplineId[] };
+  const { otherDisciplinesJson, withdrawnReason, ...rest } = withoutRowMeta(row);
+  return { ...rest, recasementType: rest.recasementType as ProposalType | null, otherDisciplines: JSON.parse(otherDisciplinesJson) as DisciplineId[], withdrawn: withdrawnReason !== null };
 }
 
 export async function listClubs(db: AppDb, competitionId: string): Promise<Club[]> {

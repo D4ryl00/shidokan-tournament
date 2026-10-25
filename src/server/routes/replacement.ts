@@ -21,6 +21,7 @@ import {
   unrefuseProposal,
   setWeighIn,
   undoRecasement,
+  withdrawRegistration,
   weighInList, fighterPresence } from '../repositories/replacement.js';
 
 type P = { Params: { id: string } };
@@ -138,6 +139,12 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
   app.post<P>('/api/competitions/:id/replacement/unrefuse', async (req) => {
     const { proposalId } = z.object({ proposalId: z.string() }).parse(req.body);
     await unrefuseProposal(db, req.params.id, proposalId);
+    return { ok: true };
+  });
+
+  app.post<P>('/api/competitions/:id/replacement/withdraw', async (req) => {
+    const { registrationId, fingerprint } = z.object({ registrationId: z.string(), fingerprint: z.string() }).strict().parse(req.body);
+    await withdrawRegistration(db, req.params.id, registrationId, fingerprint);
     return { ok: true };
   });
 

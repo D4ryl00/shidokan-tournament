@@ -92,7 +92,7 @@ Sur chaque portable, avant le début : Réglages de l'application → **Portable
 
 Les onglets de l'étape **Jour J** :
 1. **Pesée** : poids et présence ; « Clôturer la pesée » marque absents les non-pesés.
-2. **Réaffectation** : une place pour chaque combattant seul ou hors de sa catégorie (propositions, aperçu, validation).
+2. **Réaffectation** : une carte pour chaque combattant seul, hors de sa catégorie, ou inscrit dans une catégorie fermée (propositions, aperçu, validation). Pour une catégorie fermée, vous pouvez aussi choisir « Ne combat pas » : le coach le voit sur sa page d’inscription, et « Annuler » dans l’historique le remet en place.
 3. **Tableaux** : vérifier, « Marquer prête », imprimer.
 4. **Combats** : quand les catégories d'une session sont prêtes, « Figer et imprimer la session » fixe les numéros de passage et imprime ses tableaux. Les résultats se saisissent zone par zone, le combat « à l'appel » en tête de chaque zone.
 

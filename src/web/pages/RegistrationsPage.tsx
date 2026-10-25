@@ -94,6 +94,7 @@ export function RegistrationsPage() {
                     <StatusBadge tone={tone(r)}>{SOURCE_LABELS[r.source]}</StatusBadge>
                     {r.ffkConfirmed && <StatusBadge tone="ok" data-testid="registration-ffk-badge" title="Confirmée par l’export FFK">FFK ✓</StatusBadge>}
                     {r.recasementType && <ReplacementBadge type={r.recasementType} size="xs" detail={recasements.get(r.id)} />}
+                    {r.withdrawn && <StatusBadge tone="neutral" data-testid="registration-withdrawn" title="Catégorie non ouverte : décidé en Réaffectation">Ne combat pas</StatusBadge>}
                   </Group>
                 </Table.Td>
                 <Table.Td>

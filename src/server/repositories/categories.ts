@@ -149,6 +149,11 @@ export async function syncCategories(db: AppDb, competitionId: string, opts: { r
       if (r.placementLocked && r.categoryId && cats.some((c) => c.id === r.categoryId)) continue;
       // Une catégorie lancée garde ses inscrits, même si leur clé change (le tableau est figé).
       if (r.categoryId && lockedIds.has(r.categoryId)) continue;
+      // « Ne combat pas » : dans aucune catégorie.
+      if (r.withdrawnReason) {
+        if (r.categoryId) t.update(registrations).set({ categoryId: null }).where(eq(registrations.id, r.id)).run();
+        continue;
+      }
       const key = naturalKey(r, fs.get(r.fighterId)!);
       const ks = keyString(key);
       let cat = byKey.get(ks);

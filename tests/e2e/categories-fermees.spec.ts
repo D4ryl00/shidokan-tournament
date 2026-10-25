@@ -31,3 +31,30 @@ test("grille : fermer une catégorie, avec confirmation s'il y a des inscrits", 
   await page.getByTestId('open-categories').scrollIntoViewIfNeeded();
   expect(await clipped(page)).toEqual([]);
 });
+
+test('réaffectation : une catégorie fermée, « Ne combat pas », puis annuler', async ({ page }) => {
+  const id = await createCompetition(page, 'Coupe ne combat pas');
+  await register(page, id);
+  await register(page, id);
+  await page.goto(`/competitions/${id}/grille`);
+  await page.getByTestId('open-cell-cadet|F|karate|jiyu').click();
+  await page.getByTestId('open-cells-confirm').click();
+  await expect(page.getByTestId('open-cell-cadet|F|karate|jiyu')).not.toBeChecked();
+
+  await page.goto(`/competitions/${id}/reaffectation`);
+  const cards = page.getByTestId('replacement-case');
+  await expect(cards).toHaveCount(2);
+  await expect(cards.first()).toContainText('Catégorie fermée');
+  await cards.first().getByTestId('case-withdraw').click();
+  await page.getByTestId('case-withdraw-confirm').click();
+  await expect(cards).toHaveCount(1);
+  await expect(page.getByTestId('recasement-row').first()).toContainText('⊘ Ne combat pas');
+
+  await page.goto(`/competitions/${id}/inscriptions`);
+  await expect(page.getByTestId('registration-withdrawn')).toHaveCount(1);
+
+  await page.goto(`/competitions/${id}/reaffectation`);
+  await page.getByTestId('recasement-undo').first().click();
+  await page.getByTestId('recasement-undo-confirm').click();
+  await expect(cards).toHaveCount(2);
+});

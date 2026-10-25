@@ -619,3 +619,44 @@ test('catégorie fermée : carte, compteur et cibles manuelles', async () => {
   expect(juniorCats).toHaveLength(2);
   expect(r.summary.closed).toBe(2);
 });
+
+const closeCadet = (closed = true) => call('PUT', '/closed-categories', { cells: [{ ageBandCode: 'cadet', sex: 'F', discipline: 'karate', ruleset: 'jiyu' }], closed });
+const withdraw = async (registrationId: string) => call('POST', '/replacement/withdraw', { registrationId, fingerprint: (await replacement()).fingerprint });
+
+test("ne combat pas : hors tableau, hors pesée, dans l'historique", async () => {
+  const a = await reg();
+  await reg();
+  await reg();
+  await closeCadet();
+  expect((await withdraw(a.id)).statusCode).toBe(200);
+  expect((await categories()).some((c) => c.registrationIds.includes(a.id))).toBe(false);
+  const w = (await call('GET', '/weigh-in')).json() as { fighters: { fighterId: string }[] };
+  expect(w.fighters.some((f) => f.fighterId === a.fighterId)).toBe(false);
+  const rows = (await call('GET', '/registrations')).json() as { id: string; withdrawn: boolean }[];
+  expect(rows.find((r) => r.id === a.id)!.withdrawn).toBe(true);
+  const r = await replacement();
+  expect(r.cases.some((c) => c.registrationId === a.id)).toBe(false);
+  expect(r.recasements[0]).toMatchObject({ registrationId: a.id, type: 'W', toLabel: 'Ne combat pas', status: 'validated' });
+});
+
+test('annuler « ne combat pas » après réouverture : catégorie normale, pas de carte', async () => {
+  const a = await reg();
+  await reg();
+  await closeCadet();
+  await withdraw(a.id);
+  await closeCadet(false);
+  const entry = (await replacement()).recasements[0]!;
+  expect((await call('POST', '/replacement/undo', { recasementId: entry.id })).statusCode).toBe(200);
+  expect((await categories()).some((c) => c.registrationIds.includes(a.id))).toBe(true);
+  const rows = (await call('GET', '/registrations')).json() as { id: string; withdrawn: boolean }[];
+  expect(rows.find((r) => r.id === a.id)!.withdrawn).toBe(false);
+  expect((await replacement()).cases).toEqual([]);
+});
+
+test('ne combat pas refusé hors catégorie fermée', async () => {
+  const a = await reg();
+  await reg();
+  const res = await withdraw(a.id);
+  expect(res.statusCode).toBe(409);
+  expect(res.body).toContain('Ce combattant n’est plus dans une catégorie fermée : rechargez.');
+});

@@ -53,6 +53,8 @@ export async function loadState(db: AppDb, competitionId: string): Promise<State
     .from(registrations)
     .where(eq(registrations.competitionId, competitionId))
     .all()
+    // « Ne combat pas » : hors de la réaffectation.
+    .filter((r) => !r.withdrawnReason)
     .map((r) => {
       const f = fs.get(r.fighterId)!;
       const club = f.clubId ? cs.get(f.clubId) : undefined;
@@ -210,6 +212,34 @@ function persist(db: AppDb, competitionId: string, before: State, after: State, 
   });
 }
 
+/** « Ne combat pas » pour un inscrit d'une catégorie fermée : hors de toute catégorie, inscrit au journal (annulable). */
+export async function withdrawRegistration(db: AppDb, competitionId: string, registrationId: string, fingerprint: string): Promise<void> {
+  const state = await loadState(db, competitionId);
+  if (stateFingerprint(state) !== fingerprint) throw new StaleProposalError();
+  if (!detectCases(state).some((c) => c.id === `closed:${registrationId}`)) throw new StaleProposalError('Ce combattant n’est plus dans une catégorie fermée : rechargez.');
+  const reg = db.select().from(registrations).where(eq(registrations.id, registrationId)).get()!;
+  const from = state.categories.find((c) => c.id === reg.categoryId);
+  const snapshot = {
+    registration: {
+      categoryId: reg.categoryId, placementLocked: reg.placementLocked, originalJson: reg.originalJson, recasementType: reg.recasementType,
+      discipline: reg.discipline, ruleset: reg.ruleset, weightClassId: reg.weightClassId, withdrawnReason: null,
+    },
+    categories: [],
+  };
+  db.transaction((tx) => {
+    const t = tx as unknown as AppDb;
+    t.update(registrations).set({ withdrawnReason: 'closed_category', categoryId: null }).where(eq(registrations.id, registrationId)).run();
+    t.insert(recasements)
+      .values({
+        id: crypto.randomUUID(), competitionId, registrationId, proposalId: `W:${registrationId}`, type: 'W',
+        fromLabel: from ? categoryLabel(from.key, state.grid) : '—', toLabel: 'Ne combat pas', reason: 'Catégorie non ouverte à cette compétition',
+        manual: true, preApproved: false, bulk: false, snapshotJson: JSON.stringify(snapshot),
+      })
+      .run();
+  });
+  await syncCategories(db, competitionId);
+}
+
 export async function applyProposalById(db: AppDb, competitionId: string, proposalId: string, opts: { bulk?: boolean; fingerprint?: string } = {}): Promise<void> {
   const state = await loadState(db, competitionId);
   if (opts.fingerprint !== undefined && stateFingerprint(state) !== opts.fingerprint) throw new StaleProposalError();
@@ -317,6 +347,8 @@ export async function undoRecasement(db: AppDb, competitionId: string, recasemen
     registration: {
       categoryId: string | null; placementLocked: boolean; originalJson: string | null; recasementType: string | null;
       discipline: Member['discipline']; ruleset: Member['ruleset']; weightClassId: string | null;
+      /** « Ne combat pas » (absent des instantanés d'avant l'étape 23) : null le lève. */
+      withdrawnReason?: null;
     };
     categories: { id: string; keyString: string; keyJson: string; aliasKeys: string; label: string }[];
     /** Absente des instantanés d'avant les vagues. */
@@ -472,10 +504,16 @@ export async function weighInList(db: AppDb, competitionId: string, waveId?: str
   const label = (id: string | null) => (id ? (state.grid.weightClasses.find((w) => w.id === id)?.label ?? '?') : null);
   // Rang de chaque catégorie dans l'ordre de la grille (feuilles de pesée par catégorie).
   const categoryOrder = new Map([...state.categories].sort((a, b) => compareKeys(a.key, b.key, state.grid)).map((c, i) => [c.id, i]));
+  // Un combattant dont toutes les inscriptions sont « ne combat pas » n'a rien à peser.
+  const active = new Set(state.members.map((m) => m.fighterId));
+  const withdrawnOnly = new Set(
+    db.select({ fighterId: registrations.fighterId, withdrawn: registrations.withdrawnReason }).from(registrations).where(eq(registrations.competitionId, competitionId)).all()
+      .filter((r) => r.withdrawn && !active.has(r.fighterId)).map((r) => r.fighterId),
+  );
   return {
     closed,
     fighters: fs
-      .filter((f) => !scope || state.members.some((m) => m.fighterId === f.id && inScope(m)))
+      .filter((f) => !withdrawnOnly.has(f.id) && (!scope || state.members.some((m) => m.fighterId === f.id && inScope(m))))
       .map((f) => ({
         fighterId: f.id,
         label: `${f.lastName} ${f.firstName}`.trim(),
