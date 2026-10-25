@@ -52,7 +52,7 @@ export function CompetitionsPage() {
                 <Table.Th>Nom</Table.Th>
                 <Table.Th>Date</Table.Th>
                 <Table.Th>Lieu</Table.Th>
-                <Table.Th ta="right">Inscrits</Table.Th>
+                <Table.Th ta="right">Inscriptions</Table.Th>
                 <Table.Th>Main</Table.Th>
                 {organiser && <Table.Th />}
               </Table.Tr>

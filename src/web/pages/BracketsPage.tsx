@@ -46,7 +46,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   // Poste « Zone » : tableaux en lecture (pas de format, de tirage ni d'échange depuis l'écran d'une zone).
   const [poste] = usePoste(id);
   const readOnlyPoste = poste.kind === 'zone';
-  const { data: categories = [] } = useCategories(id);
+  const { data: categories = [], isLoading: loadingCategories } = useCategories(id);
   const { data: zones = [] } = useZones(id);
   const { data: plan } = usePassages(id);
   const entrants = useEntrantInfo(id);
@@ -158,7 +158,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
         </Stack>
       </Grid.Col>
       <Grid.Col span={{ base: 12, md: 8 }}>
-        {!selected && (
+        {!selected && !loadingCategories && (
           <EmptyState title="Aucun tableau à afficher"
             text={categories.length === 0 ? 'Les catégories se forment avec les inscriptions (étape Préparer).' : 'Choisissez une catégorie dans la liste.'} />
         )}

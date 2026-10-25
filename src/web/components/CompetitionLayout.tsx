@@ -5,7 +5,7 @@ import { Link, Outlet, useLocation, useNavigate, useParams, useSearchParams } fr
 import { useCompetition, useZones } from '../api.js';
 import { posteTabs, tabFor, usePoste, type Poste } from '../poste.js';
 import { HELP, type HelpTopicId } from '../help.js';
-import { lastTab, rememberTab, stageOf, visibleStages } from '../stages.js';
+import { rememberTab, showsTabBar, stageOf, stageTarget, visibleStages } from '../stages.js';
 import { COMPETITION_TABS } from '../tabs.js';
 import { useHasUnsaved } from '../unsaved.js';
 import { sessionParam } from '../useSelectedWave.js';
@@ -50,10 +50,10 @@ export function CompetitionLayout() {
     if (posteTabs(poste).includes(current)) rememberTab(id, current);
   }, [id, current, poste]);
   const stage = stages.find((s) => s.id === stageOf(current)) ?? stages[0];
-  // Une étape ouvre son dernier onglet visité (s'il est encore permis), sinon son premier.
+  // Une étape ouvre son dernier onglet visité (s'il est encore permis), sinon son premier ; l'étape en cours ne fait rien.
   const openStage = (s: (typeof stages)[number]) => {
-    const last = lastTab(id, s.id);
-    go(last && s.tabs.includes(last) ? last : s.tabs[0]!);
+    const tab = stageTarget(id, s, current);
+    if (tab) go(tab);
   };
   const posteValue = poste.kind === 'zone' ? `zone:${poste.zoneId}` : poste.kind;
   const choosePoste = (v: string | null) => {
@@ -105,14 +105,15 @@ export function CompetitionLayout() {
             })}
           </Group>
         )}
-        <Group gap="xs" wrap="nowrap" justify="flex-end" style={{ flex: '1 1 0', minWidth: 0 }}>
+        {/* À droite, rien ne rétrécit : c'est le nom de la compétition qui se coupe (points de suspension) quand la place manque. */}
+        <Group gap="xs" wrap="nowrap" justify="flex-end" style={{ flex: '0 0 auto', marginLeft: 'auto' }}>
           <ManagementChip competitionId={id} />
           {imposed ? (
             <Text size="sm" fw={600} className="sk-ellipsis" data-testid="poste-account" title="Poste imposé par le compte">
               Poste : {poste.kind === 'table' ? 'Table centrale' : `Zone : ${zones.find((z) => poste.kind === 'zone' && z.id === poste.zoneId)?.name ?? '?'}`}
             </Text>
           ) : (
-            <Select size="xs" w={160} aria-label="Poste" data-testid="poste-select" allowDeselect={false} value={posteValue} onChange={choosePoste} comboboxProps={{ width: 260 }}
+            <Select size="xs" w={160} style={{ flexShrink: 0 }} aria-label="Poste" data-testid="poste-select" allowDeselect={false} value={posteValue} onChange={choosePoste} comboboxProps={{ width: 260 }}
               title={`Poste de ce navigateur : ${posteOptions.find((o) => o.value === posteValue)?.label ?? ''}`} styles={{ input: { textOverflow: 'ellipsis' } }}
               data={posteOptions} />
           )}
@@ -121,7 +122,7 @@ export function CompetitionLayout() {
           <UserMenu />
         </Group>
       </Box>
-      {stage && stage.tabs.length > 0 && (
+      {stage && showsTabBar(stage) && (
         <Tabs value={current} onChange={(v) => v && v !== current && go(v)} className="no-print">
           <Tabs.List>
             {stage.tabs.map((t) => <Tabs.Tab key={t} value={t}>{labelOf(t)}</Tabs.Tab>)}

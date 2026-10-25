@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { lastTab, rememberTab, stageOf, STAGES, visibleStages } from '../../src/web/stages.js';
+import { lastTab, rememberTab, showsTabBar, stageOf, stageTarget, STAGES, visibleStages } from '../../src/web/stages.js';
 import { COMPETITION_TABS } from '../../src/web/tabs.js';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -35,4 +35,23 @@ test('dernier onglet d’une étape : retenu par compétition ; stockage indispo
   vi.stubGlobal('localStorage', { getItem: () => { throw new Error('bloqué'); }, setItem: () => { throw new Error('bloqué'); } });
   expect(() => rememberTab('c1', 'combats')).not.toThrow();
   expect(lastTab('c1', 'jour-j')).toBeNull();
+});
+
+test('cliquer une étape : rien si l’onglet ouvert en fait partie ; sinon son dernier onglet permis, ou le premier', () => {
+  const store = new Map<string, string>();
+  vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v) });
+  const [preparer, jourJ] = STAGES;
+  expect(stageTarget('c1', jourJ!, 'combats')).toBeNull();
+  expect(stageTarget('c1', jourJ!, 'inscriptions')).toBe('pesee');
+  rememberTab('c1', 'tableaux');
+  expect(stageTarget('c1', jourJ!, 'inscriptions')).toBe('tableaux');
+  // Dernier onglet retenu mais plus permis à ce poste : le premier onglet permis.
+  expect(stageTarget('c1', { ...jourJ!, tabs: ['combats'] }, 'inscriptions')).toBe('combats');
+  expect(stageTarget('c1', preparer!, 'combats')).toBe('inscriptions');
+});
+
+test('une étape à un seul onglet n’affiche pas de barre d’onglets', () => {
+  expect(showsTabBar(STAGES[2]!)).toBe(false);
+  expect(showsTabBar(STAGES[1]!)).toBe(true);
+  expect(showsTabBar(visibleStages({ kind: 'zone', zoneId: 'z1' })[0]!)).toBe(true);
 });

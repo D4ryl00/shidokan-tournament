@@ -11,6 +11,7 @@ import { MoveDialog } from '../components/MoveDialog.js';
 import { categoryPassages, movedMatchZones } from '../passages.js';
 import { useSelectedWave } from '../useSelectedWave.js';
 import { usePoste } from '../poste.js';
+import { categoriesOpen, rememberCategoriesOpen } from '../combatsView.js';
 import { BracketView, combatLabel } from '../components/BracketView.js';
 import { KataScoring } from '../components/KataScoring.js';
 import { HelpText, SectionHeader } from '../components/Help.js';
@@ -44,8 +45,9 @@ export function MatchesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialogMatchId, setDialogMatchId] = useState<string | null>(null);
   const [tieOpen, setTieOpen] = useState(false);
-  // Liste des catégories ouverte ou repliée (null : selon le nombre de zones).
-  const [categoriesOpen, setCategoriesOpen] = useState<boolean | null>(null);
+  // Liste des catégories ouverte ou repliée, retenue dans ce navigateur (null : selon le nombre de zones).
+  const [listChoice, setListChoice] = useState<boolean | null>(() => categoriesOpen(id));
+  const setCategoriesOpen = (open: boolean) => { setListChoice(open); rememberCategoriesOpen(id, open); };
   // Vague lancée : changer la zone d'une catégorie numérotée = « Déplacer vers… » (aperçu, renumérotation).
   const [moving, setMoving] = useState<{ category: { id: string; label: string }; zoneId: string } | null>(null);
   // Avec une vague : ses catégories seulement.
@@ -86,7 +88,7 @@ export function MatchesPage() {
 
   const shownZones = (schedule?.zones ?? []).filter((t) => !zoneOnly || t.zone.id === zoneOnly);
   // Liste des catégories : repliée d'office à partir de 3 zones (les cartes des zones gardent leur largeur).
-  const listOpen = categoriesOpen ?? shownZones.length <= 2;
+  const listOpen = listChoice ?? shownZones.length <= 2;
   const enter = (q: QueueItem) => { setSelectedId(q.categoryId); setDialogMatchId(q.matchId); };
   const score = (q: QueueItem) => setSelectedId(q.categoryId);
   const zoneGrid = (
@@ -165,7 +167,7 @@ export function MatchesPage() {
         <Grid.Col span={listOpen ? { base: 12, md: 8, xl: 9 } : 12}>
         <Stack gap="md">
           <HelpText topic="combats.zone" />
-          {shownZones.length === 0 && (schedule?.unassigned.length ?? 0) === 0 ? (
+          {!schedule ? null : shownZones.length === 0 && schedule.unassigned.length === 0 ? (
             <EmptyState title="Aucun combat à appeler"
               text={playable.length === 0 ? 'Les combats apparaissent ici dès que des catégories ont au moins deux combattants (onglet Tableaux).' : 'Aucune zone de combat : ajoutez-en dans les Réglages.'} />
           ) : zoneGrid}

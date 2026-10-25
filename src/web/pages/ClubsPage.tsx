@@ -48,7 +48,7 @@ function ClubModal({ competitionId, club, onClose }: { competitionId: string; cl
 
 export function ClubsPage() {
   const { id = '' } = useParams();
-  const { data: clubs = [] } = useClubs(id);
+  const { data: clubs = [], isLoading } = useClubs(id);
   const { data: rows = [] } = useRegistrations(id);
   const update = useUpdateClub(id);
   const [editing, setEditing] = useState<Club | null>(null);
@@ -58,7 +58,7 @@ export function ClubsPage() {
   return (
     <Stack gap="md">
       <PageHeader title={plural(clubs.length, 'club')} summary={clubs.length > 0 ? `${plural(preApproved, 'club')} avec pré-accord du coach` : undefined} />
-      {clubs.length === 0 ? (
+      {isLoading ? null : clubs.length === 0 ? (
         <EmptyState title="Aucun club pour l’instant" text="Les clubs sont créés par les inscriptions : en ligne, par l’import des fiches ou de l’export FFK, ou à la saisie d’une inscription." />
       ) : (
         <TableCard>

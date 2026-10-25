@@ -38,3 +38,13 @@ export function lastTab(competitionId: string, stage: StageId): string | null {
     return null;
   }
 }
+
+/** Onglet à ouvrir en cliquant une étape : rien si l'onglet ouvert en fait partie, sinon son dernier onglet visité (s'il est encore permis), ou le premier. */
+export function stageTarget(competitionId: string, stage: Stage, current: string): string | null {
+  if (stage.tabs.includes(current)) return null;
+  const last = lastTab(competitionId, stage.id);
+  return last && stage.tabs.includes(last) ? last : (stage.tabs[0] ?? null);
+}
+
+/** Une étape à un seul onglet n'a pas de barre d'onglets (le titre de la page suffit). */
+export const showsTabBar = (stage: Stage): boolean => stage.tabs.length > 1;

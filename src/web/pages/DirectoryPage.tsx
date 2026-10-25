@@ -80,7 +80,7 @@ function MergeModal({ merged, entries, onClose }: { merged: DirectoryEntry | nul
 }
 
 export function DirectoryPage() {
-  const { data: entries = [] } = useDirectory();
+  const { data: entries = [], isLoading } = useDirectory();
   const update = useUpdateDirectoryEntry();
   const [search, setSearch] = useState('');
   const [showArchived, setShowArchived] = useState(false);
@@ -100,7 +100,7 @@ export function DirectoryPage() {
         <Checkbox label="Afficher les clubs archivés" checked={showArchived} onChange={(e) => setShowArchived(e.currentTarget.checked)} />
       </Group>
       <ApiErrorAlert error={update.error} />
-      {shown.length === 0 ? (
+      {isLoading ? null : shown.length === 0 ? (
         entries.length === 0
           ? <EmptyState title="L’annuaire est vide" text="Les clubs s’y ajoutent à l’import FFK, ou à la main avec « Ajouter un club ». Il garde leurs coordonnées d’une compétition à l’autre." />
           : <EmptyState title="Aucun club ne correspond" text="Changez la recherche, ou affichez les clubs archivés." />

@@ -76,6 +76,12 @@ test('compte Table centrale : poste imposé, aucun menu de l’organisateur, cha
   ];
   for (const [stage, tabs] of stages) {
     await page.getByTestId(`stage-${stage}`).click();
+    // Étape à un seul onglet : pas de barre d'onglets, l'onglet est ouvert directement.
+    if (tabs.length === 1) {
+      await expect(page.getByRole('tab')).toHaveCount(0);
+      await expect(page).toHaveURL(new RegExp(`/${tabs[0]!.toLowerCase()}$`));
+      continue;
+    }
     await expect(page.getByRole('tab')).toHaveText(tabs);
     for (const tab of tabs) {
       await page.getByRole('tab', { name: tab, exact: true }).click();

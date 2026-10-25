@@ -48,7 +48,7 @@ export function PodiumsPage() {
           <Button.Group>{exportButton('podiums.xlsx', '.xlsx', 'export-podiums-xlsx')}{exportButton('podiums.ods', '.ods')}</Button.Group>
         </Group>
       </Group>
-      {total === 0 ? (
+      {!data ? null : total === 0 ? (
         <EmptyState title="Aucune catégorie à disputer" text="Les podiums apparaissent ici au fil des combats, catégorie par catégorie." />
       ) : (
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 3, xl: 4 }}>

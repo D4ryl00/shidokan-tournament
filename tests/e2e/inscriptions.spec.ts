@@ -65,7 +65,7 @@ test('saisie rapide au clavier, sur place, avertissement, kata', async ({ page }
   await pick(page, 'reg-weight', '-54');
   await page.getByTestId('reg-prefs').fill('32');
   await page.getByTestId('reg-firstname').press('Enter');
-  await expect(page.getByText('ALPHA Anna enregistré(e).')).toBeVisible();
+  await expect(page.getByText('ALPHA Anna : inscription enregistrée.')).toBeVisible();
 
   // Deuxième saisie : club, âge, sexe et discipline sont conservés.
   await expect(page.getByTestId('reg-club')).toHaveValue('Shinsengumi');
@@ -75,7 +75,7 @@ test('saisie rapide au clavier, sur place, avertissement, kata', async ({ page }
   await pick(page, 'reg-weight', '-61');
   await page.getByTestId('reg-onsite').check();
   await page.getByTestId('reg-firstname').press('Enter');
-  await expect(page.getByText('BRAVO Bea enregistré(e).')).toBeVisible();
+  await expect(page.getByText('BRAVO Bea : inscription enregistrée.')).toBeVisible();
 
   // Même combattante dans une 2e discipline de combat : avertissement.
   await page.getByTestId('reg-lastname').fill('ALPHA');

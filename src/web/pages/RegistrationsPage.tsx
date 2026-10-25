@@ -17,7 +17,7 @@ import { TableCard } from '../components/ui/TableCard.js';
 export function RegistrationsPage() {
   const { id = '' } = useParams();
   const recasements = useRecasementDetails(id);
-  const { data: rows = [] } = useRegistrations(id);
+  const { data: rows = [], isLoading } = useRegistrations(id);
   const { data: grid } = useGrid(id);
   const { data: categories = [] } = useCategories(id);
   const remove = useDeleteRegistration(id);
@@ -52,7 +52,7 @@ export function RegistrationsPage() {
       <PageHeader title={plural(rows.length, 'inscription')}
         summary={rows.length > 0 ? [plural(clubCount, 'club'), categories.length > 0 && plural(categories.length, 'catégorie')].filter(Boolean).join(' · ') : undefined}
         actions={<Button data-testid="registration-add" onClick={() => setAdding(true)}>Ajouter</Button>} />
-      {rows.length === 0 ? (
+      {isLoading ? null : rows.length === 0 ? (
         <EmptyState title="Aucune inscription pour l’instant"
           text="Elles arrivent par les inscriptions en ligne des clubs ou leurs fiches (onglet Fiche club), par l’import FFK, ou une à une avec « Ajouter »." />
       ) : (

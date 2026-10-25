@@ -11,13 +11,14 @@ const files = (dir: string): string[] =>
   });
 
 /**
- * Un mot suivi de « (s) » ; sont écartés les appels de fonction sur une variable `s` : méthode (`.includes(s)`), argument
- * (`get(pool(s))`), nom en camelCase (`setWinner(s)`) ou appel suivi d'une comparaison (`pool(s) >= 0`).
+ * Un mot suivi de « (s) », « (e) » ou « (es) » ; sont écartés les appels de fonction sur une variable `s` : méthode (`.includes(s)`), argument
+ * (`get(pool(s))`), nom en camelCase (`setWinner(s)`), appel suivi d'une comparaison (`pool(s) >= 0`), d'une méthode
+ * (`submit(e).catch`) ou d'une parenthèse fermante (`String(e))`).
  */
-const PLURAL = /(?<![.(\p{L}])(\p{L}+)\(s\)(?!\s*(?:===|!==|>=|<=|=>))/gu;
+const PLURAL = /(?<![.(\p{L}])(\p{L}+)\((?:s|e|es)\)(?!\s*(?:===|!==|>=|<=|=>)|\.\p{L}|\))/gu;
 const isText = (word: string) => !/[A-Z]/.test(word.slice(1));
 
-test('aucun « (s) » dans un texte', () => {
+test('aucun « (s) », « (e) » ni « (es) » dans un texte', () => {
   const found: string[] = [];
   for (const file of ROOTS.flatMap(files)) {
     readFileSync(file, 'utf8').split('\n').forEach((line, i) => {

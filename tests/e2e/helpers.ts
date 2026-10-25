@@ -21,7 +21,11 @@ const STAGE_OF: Record<string, string> = {
 /** Ouvre un onglet d'une compétition, en passant par son étape s'il n'est pas affiché. */
 export async function openTab(page: Page, label: string): Promise<void> {
   const tab = page.getByRole('tab', { name: label, exact: true });
-  if (!(await tab.isVisible())) await page.getByTestId(`stage-${STAGE_OF[label]}`).click();
+  if (!(await tab.isVisible())) {
+    await page.getByTestId(`stage-${STAGE_OF[label]}`).click();
+    // Étape à un seul onglet (Après → Podiums) : pas de barre d'onglets, l'étape ouvre directement l'onglet.
+    if (label === 'Podiums') return;
+  }
   await tab.click();
 }
 

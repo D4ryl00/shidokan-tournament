@@ -152,7 +152,7 @@ export function WeighInPage() {
       </Table>
       </TableCard>
       )}
-      {fighters.length === 0 && (
+      {data && fighters.length === 0 && (
         all.length === 0
           ? <EmptyState title="Personne à peser" text={waves.length > 0 ? 'Aucun combattant inscrit dans cette session.' : 'Aucune inscription pour l’instant : elles se font dans l’étape Préparer.'} />
           : <EmptyState title="Aucun combattant ne correspond" text="Changez la recherche." />

@@ -13,6 +13,10 @@
   --sk-text: #000000;
   --sk-soft: #333333;
   --sk-muted: #333333;
+  /* Police et interlignes d'avant la refonte : les feuilles imprimées gardent leur allure. */
+  --mantine-font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --mantine-font-family-headings: var(--mantine-font-family);
+  font-family: var(--mantine-font-family);
   background: #ffffff;
   color: #000000;
   color-scheme: light;
@@ -60,4 +64,9 @@
 .print-root .mantine-Card-root,
 .print-root .mantine-Paper-root {
   border-radius: var(--mantine-radius-md);
+}
+
+.print-root .mantine-Table-table {
+  /* Mantine pose l'espacement sur le tableau même (style en ligne) : seule une règle prioritaire le remplace. */
+  --table-vertical-spacing: var(--mantine-spacing-xs) !important;
 }

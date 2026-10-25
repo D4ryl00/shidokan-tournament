@@ -108,7 +108,7 @@ export function RegistrationForm({ competitionId, edit, onDone }: { competitionI
     }
     const res = await create.mutateAsync(input);
     setWarning(res.warning);
-    setSaved(`${res.row.fighter.lastName} ${res.row.fighter.firstName} enregistré(e).`);
+    setSaved(`${res.row.fighter.lastName} ${res.row.fighter.firstName} : inscription enregistrée.`);
     setF((s) => ({ ...s, lastName: '', firstName: '', prefs: '', approxWeightKg: '', acceptsJiyuFirst: false, grade: '' }));
     lastNameRef.current?.focus();
   };
