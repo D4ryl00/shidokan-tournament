@@ -64,6 +64,14 @@ export function useCreateCompetition() {
   });
 }
 
+export function useDeleteCompetition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => api<void>('DELETE', `/api/competitions/${id}`, { name }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['competitions'] }),
+  });
+}
+
 export function useUpdateCompetition(id: string) {
   const qc = useQueryClient();
   return useMutation({

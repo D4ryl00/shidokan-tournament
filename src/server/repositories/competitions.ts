@@ -113,6 +113,11 @@ export async function updateCompetition(
   return getCompetitionSync(db, id)!;
 }
 
+/** Supprime la compétition et tout ce qu'elle contient (clés étrangères en cascade). L'annuaire des clubs et les comptes restent. */
+export async function deleteCompetition(db: AppDb, id: string): Promise<void> {
+  db.delete(competitions).where(eq(competitions.id, id)).run();
+}
+
 export async function getGrid(db: AppDb, competitionId: string): Promise<CategoryGrid> {
   const bands = db.select().from(ageBands).where(eq(ageBands.competitionId, competitionId)).orderBy(asc(ageBands.sortOrder)).all();
   const classes = db

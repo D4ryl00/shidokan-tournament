@@ -70,6 +70,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       [
         '« Nouvelle compétition » : nom, date, lieu, nombre de zones de combat (renommables ensuite). Une grille enregistrée comme modèle peut servir de point de départ.',
         'Cliquez le nom d’une compétition pour l’ouvrir.',
+        '« Supprimer » efface la compétition de cette installation, après avoir retapé son nom ; une sauvegarde est faite juste avant. Impossible quand elle est gérée ailleurs.',
       ],
       'Ordre habituel : réglages et grille, fiche club envoyée aux clubs, inscriptions, import FFK, pesée, réaffectation, tableaux, combats, podiums.',
     ],

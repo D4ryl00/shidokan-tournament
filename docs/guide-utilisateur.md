@@ -113,6 +113,8 @@ Sans internet : « Exporter la compétition (fichier) » sur le PC, puis sur le 
 
 **PC perdu ou en panne** : sur le serveur, « Échanges avec le serveur » → « Reprendre la main » (à partir de la version du serveur, ou de la dernière copie reçue pendant la journée), et révoquez le jeton du PC. Si un autre PC a continué la compétition, exportez-la en fichier depuis ce PC, puis importez-la en ligne.
 
+**Supprimer une compétition** (une démo, une erreur) : liste des compétitions → « Supprimer », puis retapez son nom. Tout ce qu’elle contient est effacé de cette installation seulement, et une sauvegarde est faite juste avant. Pour revenir en arrière : onglet Podiums d’une autre compétition → Sauvegardes ; la restauration remet toutes les compétitions dans l’état de ce moment-là. Une compétition gérée ailleurs ne peut pas être supprimée : rendez ou reprenez d’abord la main.
+
 ## Variante : le jour J tout en ligne, avec le PC en secours
 
 S'il y a internet dans la salle, la compétition peut se dérouler directement sur le serveur : la table centrale et chaque zone ouvrent `https://competitions.shidokanfrance.com` et se connectent avec leur compte.

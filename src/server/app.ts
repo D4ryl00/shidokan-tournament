@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
 import {
   categoryGridSchema,
   competitionPatchSchema,
@@ -14,6 +14,7 @@ import {
   GridValidationError,
   getCompetition,
   getGrid,
+  deleteCompetition,
   listCompetitions,
   replaceGrid,
   updateCompetition,
@@ -50,7 +51,7 @@ import { registerZoneJournal } from './zone/autonomous.js';
 import { authRoutes } from './routes/auth.js';
 import { appSettingsRoutes } from './routes/app-settings.js';
 import { nodemailerTransport, type MailTransport } from './mail.js';
-import { RestoreError, startAutoBackup } from './repositories/backups.js';
+import { RestoreError, backupNow, startAutoBackup } from './repositories/backups.js';
 import { ensureInstance } from './repositories/instance.js';
 import { startRetention } from './repositories/retention.js';
 import { ffkImportRoutes } from './routes/ffk-import.js';
@@ -160,6 +161,17 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     if (!(await getCompetition(db, req.params.id))) return reply.status(404).send(NOT_FOUND);
     const patch = competitionPatchSchema.parse(req.body);
     return await updateCompetition(db, req.params.id, patch);
+  });
+
+  /** Suppression définitive (organisateur) : le nom exact est redemandé, une sauvegarde est faite juste avant. Gérée ailleurs : refusée par la garde. */
+  app.delete<{ Params: { id: string } }>('/api/competitions/:id', async (req, reply) => {
+    const c = await getCompetition(db, req.params.id);
+    if (!c) return reply.status(404).send(NOT_FOUND);
+    const { name } = z.object({ name: z.string() }).strict().parse(req.body ?? {});
+    if (name.trim() !== c.name.trim()) return reply.status(400).send({ error: 'Le nom saisi ne correspond pas à la compétition.' });
+    await backupNow(db, opts.dbPath);
+    await deleteCompetition(db, req.params.id);
+    return reply.status(204).send();
   });
 
   app.get<{ Params: { id: string } }>('/api/competitions/:id/grid', async (req, reply) => {

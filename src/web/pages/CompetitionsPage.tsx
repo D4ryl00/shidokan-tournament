@@ -1,7 +1,8 @@
-import { Anchor, Button, Group, Modal, NumberInput, Select, Stack, Table, TextInput } from '@mantine/core';
+import { Anchor, Button, Group, Modal, NumberInput, Select, Stack, Table, Text, TextInput } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { Link, Navigate } from 'react-router';
-import { useAuthMe, useCompetitions, useCreateCompetition, useGridTemplates, isOrganiser } from '../api.js';
+import { useAuthMe, useCompetitions, useCreateCompetition, useDeleteCompetition, useGridTemplates, isOrganiser } from '../api.js';
 import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { plural } from '../../domain/plural.js';
@@ -22,6 +23,14 @@ export function CompetitionsPage() {
   const [form, setForm] = useState({ name: '', date: '2026-11-22', location: '', zoneCount: 2 });
   const { data: templates = [] } = useGridTemplates(organiser);
   const [templateId, setTemplateId] = useState<string | null>(null);
+  const remove = useDeleteCompetition();
+  const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null);
+  const [typed, setTyped] = useState('');
+  const closeDelete = () => {
+    setDeleting(null);
+    setTyped('');
+    remove.reset();
+  };
 
   const submit = () =>
     create.mutate(
@@ -80,6 +89,11 @@ export function CompetitionsPage() {
                       <Group gap="xs" justify="flex-end" wrap="nowrap">
                         <Button component={Link} to={`/competitions/${c.id}/reglages`} size="compact-sm" variant="subtle">Réglages</Button>
                         <Button component={Link} to={`/competitions/${c.id}/grille`} size="compact-sm" variant="subtle">Grille</Button>
+                        <Button size="compact-sm" variant="subtle" color="red" data-testid="competition-delete" disabled={!c.management.managedHere}
+                          title={c.management.managedHere ? undefined : 'Gérée ailleurs : elle ne peut pas être supprimée ici.'}
+                          onClick={() => setDeleting({ id: c.id, name: c.name })}>
+                          Supprimer
+                        </Button>
                       </Group>
                     </Table.Td>
                   )}
@@ -89,6 +103,31 @@ export function CompetitionsPage() {
           </Table>
         </TableCard>
       )}
+      <Modal opened={deleting !== null} onClose={closeDelete} title="Supprimer la compétition ?">
+        {deleting && (
+          <Stack>
+            <Text size="sm">
+              « {deleting.name} » et tout ce qu’elle contient (inscriptions, tableaux, résultats, liens d’inscription des clubs) seront supprimés de cette installation.
+              Une sauvegarde est faite juste avant. La version d’une autre installation (serveur ou PC) n’est pas touchée.
+            </Text>
+            <TextInput data-testid="competition-delete-name" label="Pour confirmer, tapez le nom de la compétition" placeholder={deleting.name}
+              value={typed} onChange={(e) => setTyped(e.currentTarget.value)} />
+            <ApiErrorAlert error={remove.error} />
+            <Group justify="flex-end">
+              <Button variant="default" onClick={closeDelete}>Annuler</Button>
+              <Button color="red" data-testid="competition-delete-confirm" loading={remove.isPending} disabled={typed.trim() !== deleting.name.trim()}
+                onClick={() => remove.mutate({ id: deleting.id, name: typed }, {
+                  onSuccess: () => {
+                    closeDelete();
+                    notifications.show({ color: 'green', message: 'Compétition supprimée (une sauvegarde a été faite juste avant).' });
+                  },
+                })}>
+                Supprimer définitivement
+              </Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
       <Modal opened={open} onClose={() => setOpen(false)} title="Nouvelle compétition">
         <Stack>
           <TextInput data-testid="competition-name" label="Nom" required value={form.name}
