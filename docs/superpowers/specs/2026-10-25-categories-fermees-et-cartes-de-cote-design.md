@@ -25,7 +25,7 @@ Le jour J, la page Réaffectation affiche toutes les cartes à traiter. Certaine
 ## 2. Fermer des catégories
 
 ### 2.1 Ce qu'on ferme 💡
-On ferme des **catégories d'inscription** : une **tranche d'âge × sexe × discipline**, avec le règlement pour le karaté. Les colonnes sont : Karaté jiyu, Karaté shobu, Shido-boxing, Shido-mix-martial, Triathlon, Kata.
+On ferme des **catégories d'inscription** : une **tranche d'âge × sexe × discipline × règlement**. Le règlement (jiyu ou shobu) existe pour toutes les disciplines de combat (la fiche club le demande pour chacune) ; le kata n'en a pas. Les colonnes sont donc : Karaté jiyu, Karaté shobu, Shido-boxing jiyu, Shido-boxing shobu, Shido-mix-martial jiyu, Shido-mix-martial shobu, Triathlon jiyu, Triathlon shobu, Kata (en-tête sur deux niveaux : discipline, puis règlement).
 
 On ne ferme **pas une catégorie de poids** : le coach indique un poids en kg, pas une catégorie, et la catégorie de poids est déduite. Pour supprimer ou regrouper des poids, on modifie la grille, comme aujourd'hui.
 
@@ -34,7 +34,7 @@ Une case fermée vaut pour **cette compétition seulement**. Toutes les cases so
 ### 2.2 Où 💡
 L'écran **Grille** de la compétition reçoit une section **« Catégories ouvertes »** : un tableau à cocher.
 - **Lignes :** les tranches d'âge, chacune dédoublée en F et M.
-- **Colonnes :** les disciplines du §2.1.
+- **Colonnes :** les neuf colonnes du §2.1.
 - La case d'une ligne coche ou décoche la ligne entière, celle d'une colonne la colonne entière.
 - Les cases qui n'existent pas sont grisées : le shobu pour les mineurs (`RULESETS.shobu.adultsOnly`).
 - À côté de chaque case, le **nombre d'inscrits actuels** (ex. « 3 inscrits »). Fermer une case qui a des inscrits demande une confirmation : « 3 combattants sont déjà inscrits : ils apparaîtront en Réaffectation ».
