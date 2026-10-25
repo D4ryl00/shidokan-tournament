@@ -615,7 +615,7 @@ export function usePutTieBreak(id: string) {
 export function usePodiums(id: string) {
   return useQuery({
     queryKey: ['podiums', id],
-    queryFn: () => api<{ categories: { id: string; label: string; podium: Podium; complete: boolean; status: string }[]; medals: MedalRow[] }>('GET', `/api/competitions/${id}/podiums`),
+    queryFn: () => api<{ categories: { id: string; label: string; podium: Podium; complete: boolean; status: 'not_started' | 'started' | 'finished' }[]; medals: MedalRow[] }>('GET', `/api/competitions/${id}/podiums`),
   });
 }
 export function useBackups(enabled = true) {

@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Card, Checkbox, Container, Group, Loader, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core';
+import { Alert, Box, Button, Card, Checkbox, Container, Group, Loader, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { useParams } from 'react-router';
@@ -9,6 +9,9 @@ import { ClubLineForm } from '../components/ClubLineForm.js';
 import { Logo } from '../components/Logo.js';
 import { clubEntryStatusText } from '../components/OnlineEntryPanel.js';
 import { COMBATS } from '../components/PaperEntryTable.js';
+import { ThemeToggle } from '../components/ThemeToggle.js';
+import { EmptyState } from '../components/ui/EmptyState.js';
+import { StatusBadge } from '../components/ui/StatusBadge.js';
 
 const COMBAT_LABEL = new Map(COMBATS);
 const RULESET_LABEL = { jiyu: 'jiyu', shobu: 'shobu' } as const;
@@ -30,9 +33,9 @@ function HeaderForm({ token, view }: { token: string; view: ClubEntryView }) {
   const orNull = (v: string) => v.trim() || null;
   const ro = !view.editable;
   return (
-    <Card withBorder>
+    <Card withBorder padding="lg">
       <Stack>
-        <Title order={4}>Votre club : {view.club.name}</Title>
+        <Title order={2} fz="lg">Votre club : {view.club.name}</Title>
         <SimpleGrid cols={{ base: 1, xs: 2 }}>
           <TextInput label="Coach" readOnly={ro} value={form.coachName ?? ''} onChange={(e) => set({ coachName: orNull(e.currentTarget.value) })} />
           <TextInput label="Téléphone" readOnly={ro} inputMode="tel" value={form.coachPhone ?? ''} onChange={(e) => set({ coachPhone: orNull(e.currentTarget.value) })} />
@@ -44,8 +47,8 @@ function HeaderForm({ token, view }: { token: string; view: ClubEntryView }) {
           onChange={(e) => set({ preApproval: e.currentTarget.checked })} />
         <ApiErrorAlert error={save.error} />
         {!ro && (
-          <Group>
-            <Button variant="light" loading={save.isPending}
+          <Group justify="flex-end">
+            <Button variant="default" loading={save.isPending}
               onClick={() => save.mutate(form, { onSuccess: () => notifications.show({ color: 'green', message: 'Coordonnées enregistrées.' }) })}>
               Enregistrer les coordonnées
             </Button>
@@ -67,55 +70,67 @@ export function ClubEntryPage() {
   };
 
   return (
-    <Container size="sm" py="md">
-      <Stack>
-        <Group wrap="nowrap">
-          <Logo size={48} />
-          <Stack gap={0}>
-            <Title order={3}>{view?.competition.name ?? 'Inscription des combattants'}</Title>
-            {view && (
-              <Text c="dimmed">
-                {new Date(`${view.competition.date}T12:00:00`).toLocaleDateString('fr-FR')}{view.competition.location ? ` · ${view.competition.location}` : ''}
-              </Text>
-            )}
-          </Stack>
-        </Group>
+    <Box mih="100vh" style={{ background: 'var(--sk-bg)' }}>
+      <Box component="header" style={{ background: 'var(--sk-bar)', borderBottom: '1px solid var(--sk-line)' }}>
+        <Container size="sm" py="sm">
+          <Group justify="space-between" wrap="nowrap">
+            <Group gap="sm" wrap="nowrap">
+              <Logo size={36} />
+              <Text fw={700}>Shidokan France</Text>
+            </Group>
+            <ThemeToggle />
+          </Group>
+        </Container>
+      </Box>
+    <Container size="sm" py="lg">
+      <Stack gap="md">
+        <Stack gap={4}>
+          <Title order={1} fz={26} lh={1.2}>{view?.competition.name ?? 'Inscription des combattants'}</Title>
+          {view && (
+            <Text c="dimmed">
+              {new Date(`${view.competition.date}T12:00:00`).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+              {view.competition.location ? ` · ${view.competition.location}` : ''}
+            </Text>
+          )}
+        </Stack>
         {isLoading && <Loader />}
         {error && <Alert color="red" data-testid="club-entry-error">{error.message}</Alert>}
         {view && (
           <>
-            <Alert color={view.editable ? 'green' : 'gray'} data-testid="club-entry-state">
-              {view.editable ? clubEntryStatusText('open', view.competition.deadline) : 'Inscriptions closes : contactez l’organisateur.'}
-            </Alert>
+            <Group>
+              <StatusBadge tone={view.editable ? 'ok' : 'neutral'} size="lg" data-testid="club-entry-state" style={{ whiteSpace: 'normal', height: 'auto' }}>
+                {view.editable ? clubEntryStatusText('open', view.competition.deadline) : 'Inscriptions closes : contactez l’organisateur.'}
+              </StatusBadge>
+            </Group>
             <HeaderForm key={JSON.stringify(view.club)} token={token} view={view} />
-            <Title order={4}>Vos combattants ({view.lines.length})</Title>
-            {view.lines.length === 0 && <Text c="dimmed">Aucun combattant pour l’instant.</Text>}
+            <Group justify="space-between" mt="sm">
+              <Title order={2} fz="lg">{view.lines.length === 0 ? 'Vos combattants' : `Vos combattants (${view.lines.length})`}</Title>
+              {view.editable && <Button data-testid="add-fighter" onClick={() => setEditing('new')}>Ajouter un combattant</Button>}
+            </Group>
+            {view.lines.length === 0 && (
+              <EmptyState title="Aucun combattant pour l’instant" text={view.editable ? 'Ajoutez-les un par un avec « Ajouter un combattant ».' : undefined} />
+            )}
             {view.lines.map((l) => {
               const [who, what] = summary(l.line, view.ageBands);
               return (
-                <Card key={l.fighterId} withBorder padding="sm" data-testid="club-line">
+                <Card key={l.fighterId} withBorder padding="md" data-testid="club-line">
                   <Group justify="space-between" wrap="nowrap" align="start">
-                    <Stack gap={2}>
-                      <Text fw={600}>{l.line.lastName} {l.line.firstName}</Text>
-                      <Text size="sm">{who}</Text>
+                    <Stack gap={2} style={{ minWidth: 0 }}>
+                      <Text fw={700}>{l.line.lastName} {l.line.firstName}</Text>
+                      <Text size="sm" c="dimmed">{who}</Text>
                       <Text size="sm" data-testid="club-line-disciplines">{what}</Text>
                       {!l.editable && (
-                        <Group gap={6}>
-                          <Badge color="gray" variant="light">Verrouillé</Badge>
+                        <Group gap={6} mt={4}>
+                          <StatusBadge tone="neutral" size="sm">Verrouillé</StatusBadge>
                           <Text size="xs" c="dimmed">{l.reason}</Text>
                         </Group>
                       )}
                     </Stack>
-                    {view.editable && l.editable && <Button size="xs" variant="light" onClick={() => setEditing(l)}>Modifier</Button>}
+                    {view.editable && l.editable && <Button size="xs" variant="default" onClick={() => setEditing(l)}>Modifier</Button>}
                   </Group>
                 </Card>
               );
             })}
-            {view.editable && (
-              <Group>
-                <Button data-testid="add-fighter" onClick={() => setEditing('new')}>Ajouter un combattant</Button>
-              </Group>
-            )}
             <Text size="xs" c="dimmed" mt="lg" data-testid="privacy-notice">{view.privacyNotice}</Text>
             <ClubLineForm key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.fighterId} token={token} line={editing === 'new' ? null : editing}
               ageBands={view.ageBands} opened={editing !== null} onClose={close} />
@@ -123,5 +138,6 @@ export function ClubEntryPage() {
         )}
       </Stack>
     </Container>
+    </Box>
   );
 }
