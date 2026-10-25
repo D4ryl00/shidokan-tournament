@@ -92,3 +92,26 @@ test('inscription en ligne : annuaire → invitation → le coach inscrit, modif
   await expect(coach.getByRole('button', { name: 'Modifier' })).toHaveCount(0);
   await shot(coach, '5-fige');
 });
+
+test('catégorie fermée : non proposée au club', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe fermée en ligne');
+  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmail: null, notes: null };
+  const entry = (await (await request.post('/api/club-directory', { data: { ...EMPTY, name: `Dojo fermé ${Date.now()}` } })).json()) as { id: string };
+  const [link] = (await (await request.post(`/api/competitions/${id}/invitations`, { data: { directoryIds: [entry.id] } })).json()) as { token: string }[];
+  await request.patch(`/api/competitions/${id}/club-entry`, { data: { status: 'open', deadline: '2026-11-15' } });
+
+  // L'organisateur ferme le shido-mix des cadettes (jiyu seul : pas de shobu chez les mineurs).
+  await page.goto(`/competitions/${id}/grille`);
+  await page.getByTestId('open-cell-cadet|F|shido-mix|jiyu').click();
+  await expect(page.getByTestId('open-cell-cadet|F|shido-mix|jiyu')).not.toBeChecked();
+
+  await page.goto(`/inscription/${link!.token}`);
+  await page.getByTestId('add-fighter').click();
+  await fillFighter(page, { last: 'PETIT', first: 'Zoé', sex: 'Féminin', age: 'Cadets', kg: '50' });
+  const combats = page.getByTestId('club-line-form').getByRole('group', { name: 'Discipline de combat' });
+  await expect(combats.getByText('Karaté', { exact: true })).toBeVisible();
+  await expect(combats.getByText('Mix', { exact: true })).toHaveCount(0);
+  // Les cadets (garçons) gardent le shido-mix.
+  await page.getByTestId('club-line-form').getByRole('group', { name: 'Sexe' }).getByText('Masculin', { exact: true }).click();
+  await expect(combats.getByText('Mix', { exact: true })).toBeVisible();
+});

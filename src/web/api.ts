@@ -719,13 +719,15 @@ export const useUpdateClubEntrySettings = (id: string) =>
 // Page d'inscription d'un club (lien personnel, sans compte).
 /** Refus après lesquels la page du club est rechargée et le formulaire fermé. */
 export const RELOAD_STATUSES = new Set([403, 404, 409]);
-export interface ClubLine { fighterId: string; version: string; line: ClubFormLine; editable: boolean; reason: string | null }
+export interface ClubLine { fighterId: string; version: string; line: ClubFormLine; editable: boolean; reason: string | null; notices: string[] }
 export interface ClubEntryHeader { coachName: string | null; coachPhone: string | null; coachEmail: string | null; preApproval: boolean; affiliationNumber: string | null }
 export interface ClubEntryView {
   competition: { name: string; date: string; location: string | null; deadline: string | null; status: 'closed' | 'open' | 'frozen' };
   editable: boolean;
   club: ClubEntryHeader & { name: string };
-  ageBands: { code: string; label: string }[];
+  ageBands: { code: string; label: string; isMinor: boolean }[];
+  /** Cases fermées (`entryKey`). */
+  closed: string[];
   lines: ClubLine[];
   privacyNotice: string;
 }

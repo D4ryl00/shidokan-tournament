@@ -1,20 +1,26 @@
 import { Button, Checkbox, Group, Modal, NativeSelect, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { useState } from 'react';
-import type { ClubFormLine } from '../../domain/club-form.js';
+import type { ClubFormLine, CombatDiscipline } from '../../domain/club-form.js';
+import { entryKey } from '../../domain/closed-categories.js';
+import type { DisciplineId, Ruleset } from '../../domain/types.js';
 import { ApiError, RELOAD_STATUSES, useDeleteClubLine, useSaveClubLine, type ClubLine } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { COMBATS, OneOf, PREFS } from './PaperEntryTable.js';
+
+const RULESETS: [Ruleset, string][] = [['jiyu', 'Jiyu'], ['shobu', 'Shobu']];
 
 export const EMPTY_LINE: ClubFormLine = {
   lastName: '', firstName: '', sex: null, ageBandCode: null, weightKg: null, combat: null, kata: false, grade: null, ruleset: null, prefs: {}, shobuKeep: null,
 };
 
 /** Formulaire d'un seul combattant de la page du club (création : `line` null). */
-export function ClubLineForm({ token, line, ageBands, opened, onClose }: {
+export function ClubLineForm({ token, line, ageBands, closed, opened, onClose }: {
   token: string;
   line: ClubLine | null;
-  ageBands: { code: string; label: string }[];
+  ageBands: { code: string; label: string; isMinor: boolean }[];
+  /** Cases fermées (`entryKey`) : ces choix ne sont pas proposés, sauf la valeur déjà enregistrée. */
+  closed: string[];
   opened: boolean;
   onClose: (message?: string) => void;
 }) {
@@ -27,6 +33,23 @@ export function ClubLineForm({ token, line, ageBands, opened, onClose }: {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const set = (patch: Partial<ClubFormLine>) => setForm((f) => ({ ...f, ...patch }));
+  // Choix ouverts pour la tranche et le sexe choisis (tout est proposé tant qu'ils ne le sont pas).
+  const shut = new Set(closed);
+  const band = ageBands.find((b) => b.code === form.ageBandCode);
+  const isOpen = (discipline: DisciplineId, ruleset: Ruleset | null) =>
+    !band || !form.sex || (!shut.has(entryKey({ ageBandCode: band.code, sex: form.sex, discipline, ruleset })) && !(ruleset === 'shobu' && band.isMinor));
+  const saved = line?.line;
+  const NOT_OPEN = ' (non ouverte)';
+  const combats = COMBATS.flatMap(([d, label]): [CombatDiscipline, string][] => {
+    if (isOpen(d, 'jiyu') || isOpen(d, 'shobu')) return [[d, label]];
+    return saved?.combat === d ? [[d, label + NOT_OPEN]] : [];
+  });
+  const rulesets = RULESETS.flatMap(([r, label]): [Ruleset, string][] => {
+    if (!form.combat || isOpen(form.combat, r)) return [[r, label]];
+    return saved?.combat === form.combat && saved.ruleset === r ? [[r, label + NOT_OPEN]] : [];
+  });
+  const kataOpen = isOpen('kata', null);
+  const nothingOpen = !!band && !!form.sex && combats.length === 0 && !kataOpen && !saved?.kata;
   // Un refus parce que la ligne a changé ou disparu entre-temps (ou que les inscriptions sont closes) ferme le formulaire : la liste est rechargée.
   const onError = (e: Error) => {
     if (e instanceof ApiError && RELOAD_STATUSES.has(e.status)) onClose(e.message);
@@ -59,13 +82,16 @@ export function ClubLineForm({ token, line, ageBands, opened, onClose }: {
         </SimpleGrid>
         <Stack gap={4} role="group" aria-label="Discipline de combat">
           <Text size="sm" fw={500}>Discipline de combat</Text>
-          <OneOf value={form.combat} options={COMBATS} onChange={(combat) => set({ combat })} />
+          <OneOf value={form.combat} options={combats} onChange={(combat) => set({ combat })} />
         </Stack>
-        <Checkbox data-testid="line-kata" label="Kata" checked={form.kata} onChange={(e) => set({ kata: e.currentTarget.checked })} />
+        {(kataOpen || saved?.kata) && (
+          <Checkbox data-testid="line-kata" label={kataOpen ? 'Kata' : `Kata${NOT_OPEN}`} checked={form.kata} onChange={(e) => set({ kata: e.currentTarget.checked })} />
+        )}
+        {nothingOpen && <Text size="sm" c="var(--sk-warn-text)" data-testid="line-nothing-open">Aucune catégorie ouverte pour cette tranche d’âge à cette compétition.</Text>}
         {form.combat && (
           <Stack gap={4} role="group" aria-label="Règlement">
             <Text size="sm" fw={500}>Règlement</Text>
-            <OneOf value={form.ruleset} options={[['jiyu', 'Jiyu'], ['shobu', 'Shobu']]} onChange={(ruleset) => set({ ruleset })} />
+            <OneOf value={form.ruleset} options={rulesets} onChange={(ruleset) => set({ ruleset })} />
           </Stack>
         )}
         {form.kata && <TextInput data-testid="line-grade" label="Grade (pour le kata)" value={form.grade ?? ''} onChange={(e) => set({ grade: e.currentTarget.value || null })} />}

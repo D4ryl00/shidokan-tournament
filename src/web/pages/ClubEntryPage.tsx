@@ -120,6 +120,7 @@ export function ClubEntryPage() {
                       <Text fw={700}>{l.line.lastName} {l.line.firstName}</Text>
                       <Text size="sm" c="dimmed">{who}</Text>
                       <Text size="sm" data-testid="club-line-disciplines">{what}</Text>
+                      {l.notices.map((n) => <Text key={n} size="xs" c="var(--sk-warn-text)" data-testid="line-notice">{n}</Text>)}
                       {!l.editable && (
                         <Group gap={6} mt={4}>
                           <StatusBadge tone="neutral" size="sm">Verrouillé</StatusBadge>
@@ -134,7 +135,7 @@ export function ClubEntryPage() {
             })}
             <Text size="xs" c="dimmed" mt="lg" data-testid="privacy-notice">{view.privacyNotice}</Text>
             <ClubLineForm key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.fighterId} token={token} line={editing === 'new' ? null : editing}
-              ageBands={view.ageBands} opened={editing !== null} onClose={close} />
+              ageBands={view.ageBands} closed={view.closed} opened={editing !== null} onClose={close} />
           </>
         )}
       </Stack>

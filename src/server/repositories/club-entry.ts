@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { lineToRows, type ClubFormLine } from '../../domain/club-form.js';
-import { offeredAgeBands } from '../../domain/closed-categories.js';
-import { registrationsToLine } from '../../domain/club-line.js';
+import { columnLabel, entryKey, isEntryClosed, offeredAgeBands } from '../../domain/closed-categories.js';
+import { enteredValues, registrationsToLine } from '../../domain/club-line.js';
 import { renderPrivacyNotice } from '../../domain/app-settings.js';
 import { getAppSettings } from './app-settings.js';
 import { normalizeName } from '../../domain/names.js';
@@ -26,6 +26,8 @@ export interface ClubLine {
   line: ClubFormLine;
   editable: boolean;
   reason: string | null;
+  /** Mentions pour le coach (catégorie qui n'est plus ouverte…). */
+  notices: string[];
 }
 export interface ClubEntryHeader {
   coachName: string | null;
@@ -38,7 +40,9 @@ export interface ClubEntryView {
   competition: { name: string; date: string; location: string | null; deadline: string | null; status: 'closed' | 'open' | 'frozen' };
   editable: boolean;
   club: ClubEntryHeader & { name: string };
-  ageBands: { code: string; label: string }[];
+  ageBands: { code: string; label: string; isMinor: boolean }[];
+  /** Cases fermées (`entryKey`) : le formulaire ne propose pas ces choix. */
+  closed: string[];
   lines: ClubLine[];
   /** Mention sur les données personnelles, rendue (réglages de l'application). */
   privacyNotice: string;
@@ -61,6 +65,8 @@ export class LineReadOnlyError extends Error {
 }
 
 export const LOCKED_REASON = 'Ses combats ont commencé : contactez l’organisateur.';
+export const CLOSED_ENTRY = (label: string) => `${label} : catégorie non ouverte à cette compétition.`;
+const CLOSED_NOTICE = (label: string) => `${label} : cette catégorie n’est plus ouverte, l’organisateur vous contactera.`;
 export const FFK_IDENTITY = 'Le sexe et la catégorie d’âge viennent de l’export FFK : contactez l’organisateur pour les changer.';
 
 function competitionRow(db: AppDb, access: ClubAccess) {
@@ -92,7 +98,13 @@ function lineOf(db: AppDb, fighter: typeof fighters.$inferSelect): ClubLine {
     })),
   );
   const version = [String(fighter.version ?? 0), ...regs.map((r) => `${r.id}:${r.version ?? 0}`).sort()].join('|');
-  return locked ? { fighterId: fighter.id, version, line, editable: false, reason: LOCKED_REASON } : { fighterId: fighter.id, version, line, editable, reason };
+  const closed = closedSet(db, fighter.competitionId);
+  const notices = regs
+    .filter((r) => !r.placementLocked)
+    .map((r) => ({ ageBandCode: fighter.ageBandCode, sex: fighter.sex, discipline: r.discipline, ruleset: r.ruleset }))
+    .filter((cell) => isEntryClosed(closed, cell))
+    .map((cell) => CLOSED_NOTICE(columnLabel(cell)));
+  return locked ? { fighterId: fighter.id, version, line, editable: false, reason: LOCKED_REASON, notices } : { fighterId: fighter.id, version, line, editable, reason, notices };
 }
 
 function headerOf(db: AppDb, club: typeof clubs.$inferSelect): ClubEntryView['club'] {
@@ -107,6 +119,7 @@ export async function getClubEntry(db: AppDb, access: ClubAccess): Promise<ClubE
   const c = competitionRow(db, access);
   const club = clubRow(db, access);
   const grid = await getGrid(db, access.competitionId);
+  const closed = closedSet(db, access.competitionId);
   const lines = db
     .select()
     .from(fighters)
@@ -118,7 +131,11 @@ export async function getClubEntry(db: AppDb, access: ClubAccess): Promise<ClubE
     competition: { name: c.name, date: c.date, location: c.location, deadline: c.clubEntryDeadline, status: c.clubEntryStatus },
     editable: isEditable(c),
     club: headerOf(db, club),
-    ageBands: offeredAgeBands(grid, closedSet(db, access.competitionId)).map((b) => ({ code: b.code, label: b.label })),
+    // Tranches proposées, plus celle d'une ligne déjà enregistrée qui ne l'est plus (sa liste montre la valeur enregistrée).
+    ageBands: grid.ageBands
+      .filter((b) => offeredAgeBands(grid, closed).includes(b) || lines.some((l) => l.line.ageBandCode === b.code))
+      .map((b) => ({ code: b.code, label: b.label, isMinor: b.isMinor })),
+    closed: [...closed],
     lines,
     privacyNotice: renderPrivacyNotice(getAppSettings(db)),
   };
@@ -170,6 +187,19 @@ export async function saveClubLine(db: AppDb, access: ClubAccess, fighterId: str
   const errors = rows.flatMap((r) => r.errors);
   if (errors.length || rows.some((r) => !r.input)) throw new RegistrationValidationError(errors);
   const inputs = rows.map((r) => ({ ...r.input!, clubId: club.id, source: 'online' as const }));
+  // Une catégorie fermée ne s'ouvre pas en ligne, sauf pour une inscription déjà enregistrée qui y était.
+  const closed = closedSet(db, access.competitionId);
+  const known = new Set<string>();
+  const existing = fighterId ? db.select().from(fighters).where(and(eq(fighters.id, fighterId), eq(fighters.clubId, club.id))).get() : undefined;
+  if (existing) {
+    for (const r of db.select().from(registrations).where(eq(registrations.fighterId, existing.id)).all()) {
+      known.add(entryKey({ ageBandCode: existing.ageBandCode, sex: existing.sex, ...enteredValues({ ...r, otherDisciplines: [] }) }));
+    }
+  }
+  const refused = inputs
+    .map((i) => ({ ageBandCode: i.ageBandCode, sex: i.sex, discipline: i.discipline, ruleset: i.ruleset }))
+    .filter((cell) => isEntryClosed(closed, cell) && !known.has(entryKey(cell)));
+  if (refused.length) throw new RegistrationValidationError(refused.map((cell) => CLOSED_ENTRY(columnLabel(cell))));
   const savedId = db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     const duplicate = duplicateOf(t, club.id, line, fighterId);

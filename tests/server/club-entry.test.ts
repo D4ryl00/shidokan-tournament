@@ -265,3 +265,40 @@ test('pages publiques : corps de requête limité à 64 Ko (413 au-delà)', asyn
   const res = await app.inject({ method: 'POST', url: url('/lines'), payload: { line: { ...LINE, lastName: 'X'.repeat(70 * 1024) } } });
   expect(res.statusCode).toBe(413);
 });
+
+// --- Catégories fermées (étape 23) ---
+
+const CADET_MIX: ClubFormLine = { ...LINE, ageBandCode: 'cadet', weightKg: 50, combat: 'shido-mix', kata: false, grade: null, prefs: {} };
+const closeCells = (cells: object[]) => app.inject({ method: 'PUT', url: `${base}/closed-categories`, payload: { cells, closed: true } });
+const cadetMixF = { ageBandCode: 'cadet', sex: 'F', discipline: 'shido-mix', ruleset: 'jiyu' };
+
+test('catégorie fermée : refusée en ligne', async () => {
+  await closeCells([cadetMixF]);
+  const res = await add(CADET_MIX);
+  expect(res.statusCode).toBe(400);
+  expect(res.body).toContain('Shido-mix-martial jiyu : catégorie non ouverte à cette compétition.');
+});
+
+test('ligne déjà enregistrée dans une catégorie fermée : reste modifiable', async () => {
+  expect((await add(CADET_MIX)).statusCode).toBe(201);
+  await closeCells([cadetMixF]);
+  const before = (await view()).lines[0]!;
+  const res = await put(before.fighterId, { ...CADET_MIX, weightKg: 51 }, before.version);
+  expect(res.statusCode).toBe(200);
+  expect(res.json().notices).toEqual(['Shido-mix-martial jiyu : cette catégorie n’est plus ouverte, l’organisateur vous contactera.']);
+});
+
+test('passer une ligne vers une catégorie fermée : refusé', async () => {
+  expect((await add({ ...CADET_MIX, combat: 'karate' })).statusCode).toBe(201);
+  await closeCells([cadetMixF]);
+  const before = (await view()).lines[0]!;
+  expect((await put(before.fighterId, CADET_MIX, before.version)).statusCode).toBe(400);
+});
+
+test('tranches offertes', async () => {
+  const cells = ['F', 'M'].flatMap((sex) => ['karate', 'shido-boxing', 'shido-mix', 'triathlon'].map((discipline) => ({ ageBandCode: 'mini-poussin', sex, discipline, ruleset: 'jiyu' })).concat([{ ageBandCode: 'mini-poussin', sex, discipline: 'kata', ruleset: null as unknown as string }]));
+  expect((await closeCells(cells)).statusCode).toBe(204);
+  const v = (await view()) as View & { closed: string[] };
+  expect(v.ageBands.map((b) => b.code)).not.toContain('mini-poussin');
+  expect(v.closed).toContain('mini-poussin|F|kata|');
+});
