@@ -82,7 +82,7 @@ Tirés des maquettes ; même sens dans les deux thèmes.
 | Carte / panneau | `#1d1922`, bord `#2c2633` | `#ffffff`, bord `#e7e1ec` |
 | Texte | `#f1edf5` | `#1d1622` |
 | Texte secondaire | `#b9b1c2` | `#4b4354` |
-| Texte discret | `#8d8497` | `#7b7186` |
+| Texte discret | `#8d8497` | `#72687d` (au lieu de `#7b7186`, trop pâle : 4,26:1 sur le fond) |
 | Violet d'action (boutons principaux, onglet actif) | `#c17ad3`, texte dessus `#1a0f1f` | `#722f82` (violet du logo), texte dessus `#ffffff` |
 | Mise en avant (« à l'appel ») | dégradé `#3b1f47 → #2a1833` | dégradé `#f3e6f7 → #fbf6fd` |
 | Puce neutre / étape active | `#2a2131`, texte `#e3c6ec` | `#f1e4f6`, texte `#722f82` |
@@ -186,4 +186,5 @@ Pour chaque écran : nouveau style (§4), défauts corrigés, et ces changements
 - **Impression** : les jetons `--sk-*` sont redéfinis en noir sur blanc dans `.print-root` (sinon les cases des tableaux imprimés depuis le thème sombre prenaient le fond sombre des cartes).
 - **Textes** : plus de « (s) » ni de « (e) » (« Seul / Seule », « Pesé / Pesée » selon le combattant) ; le test `tests/web/textes.test.ts` garde la règle (TypeScript 7 n'ayant plus d'API d'analyse en JavaScript, il lit les lignes et écarte les appels de fonction sur une variable `s`).
 - **Rôle serveur** : l'écran ne demande plus les réglages de liaison au serveur (`/api/sync/settings`, propres au PC), ce qui laissait une erreur 404 dans la console.
+- **Après la relecture finale** : les tableaux larges défilent de côté au lieu d'être coupés par leur carte (1024 px) ; les messages longs en badge (« En attente d'une décision à la table centrale », état des inscriptions d'un club) passent à la ligne ; un fichier choisi de nouveau (fiche club, export FFK) est relu ; l'étape « Après » n'a pas de barre d'onglets (un seul onglet) et cliquer l'étape en cours ne fait rien ; la liste des catégories de Combats, ouverte ou repliée, est retenue par le navigateur ; les feuilles imprimées gardent la police et les interlignes d'avant ; à droite de la barre d'une compétition rien ne rétrécit (le nom se coupe).
 
