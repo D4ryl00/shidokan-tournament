@@ -4,7 +4,7 @@ Cette procédure met l'application en ligne, à l'adresse `https://competitions.
 
 - L'image est publiée sur Docker Hub (`d4ryl00/shidokan-tournament`) : il n'y a rien à compiler sur le serveur.
 - En ligne, l'application tourne en **rôle serveur** : les organisateurs se connectent avec un compte (e-mail et mot de passe). Les pages des clubs (`/inscription/…`) s'ouvrent seulement avec leur lien personnel.
-- Le PC de la compétition, lui, ne demande pas de connexion.
+- Le PC de la compétition, lui, ne demande pas de connexion : voir la [vue d'ensemble](guide-utilisateur.md#1-vue-densemble).
 
 ## Ce qu'il faut
 
@@ -78,60 +78,9 @@ Dans l'application, menu **Réglages de l'application** :
 3. **Message aux clubs** : le modèle de mail par défaut, modifiable. Chaque compétition peut aussi avoir le sien.
 4. **Conservation** : 13 mois et 3 ans par défaut (voir plus bas).
 
-## Préparer une compétition en ligne
+## Ensuite
 
-1. **Annuaire des clubs** : créez ou complétez les clubs, avec l'e-mail du coach et si possible le numéro d'affiliation FFK (7 chiffres).
-2. Créez la compétition, puis réglez sa grille et ses réglages comme d'habitude.
-3. Onglet **Fiche club**, section « Inscriptions en ligne » :
-   - indiquez la date limite, puis cliquez « Ouvrir les inscriptions » ;
-   - choisissez les clubs dans « Clubs à inviter », puis cliquez « Inviter les clubs choisis » ;
-   - cochez les clubs invités, puis cliquez « Envoyer le lien par mail ». **Chaque envoi crée un nouveau lien** et désactive le précédent : un coach qui ouvre un ancien mail voit « Ce lien a été remplacé : utilisez celui du dernier mail reçu. » Les filtres « Jamais envoyé », « Sans combattant » et « Avec e-mail » aident pour les relances ;
-   - sans réglage d'envoi, « Ouvrir dans ma messagerie » prépare le mail dans votre propre messagerie, avec un nouveau lien.
-4. Suivez les inscriptions dans l'onglet Inscriptions. Leur origine s'affiche « En ligne ».
-5. À la date limite, cliquez « Figer les inscriptions » : les pages des clubs passent en lecture seule.
-
-## Le jour J : passer la compétition au PC, puis la rendre au serveur
-
-La compétition se déroule sur le PC de la salle, sans internet. Une compétition n'est modifiable qu'à un seul endroit à la fois, **là où est la main**. Ailleurs, elle est en lecture seule, et un bandeau le dit.
-
-**Une fois : relier le PC au serveur.**
-1. En ligne, menu **Réglages de l'application**, section **Synchronisation** : cliquez « Créer un jeton », puis copiez-le (il ne s'affiche qu'une fois).
-2. Sur le PC, même menu et même section : indiquez l'adresse `https://competitions.shidokanfrance.com` et le jeton, puis cliquez « Enregistrer ».
-
-**Avant la compétition** (internet nécessaire) : sur le PC, liste des compétitions, « Récupérer depuis le serveur », puis cliquez « Prendre la main » sur la compétition.
-- Le PC devient le seul endroit où la modifier.
-- En ligne, elle passe en lecture seule, et les inscriptions des clubs sont figées.
-- « Récupérer une copie » permet aussi de la regarder avant, en lecture seule.
-
-**Pendant la journée**, s'il y a internet : onglet Réglages de la compétition, section « Échanges avec le serveur », « Envoyer une copie au serveur ». C'est une copie de secours ; le PC garde la main.
-
-**Après la compétition** : même section, « Rendre la main au serveur ». Le serveur reprend la compétition entière, avec ses résultats. Les autres compétitions en ligne, les liens des clubs et les mails envoyés ne sont pas touchés.
-
-**Sans internet** : « Exporter la compétition (fichier) » d'un côté, sur une clé USB, puis « Importer une compétition (fichier) » de l'autre.
-- Sur le serveur, cochez « et donner la main au PC qui l'importera ».
-- Au retour, importez le fichier du PC en ligne, et confirmez « Reprendre la main ».
-
-**PC perdu ou en panne** : en ligne, section « Échanges avec le serveur », « Reprendre la main ». **Révoquez aussi le jeton de ce PC** (Réglages de l'application → Synchronisation) : il permet de lire toutes les compétitions du serveur.
-- Elle repart de la version du serveur, ou de la dernière copie reçue pendant la journée.
-- Si un second PC a continué la compétition, exportez-la en fichier depuis ce PC, puis importez-la en ligne.
-
-Les comptes, les sessions, les jetons, les réglages d'envoi des mails et la mention ne voyagent jamais : chaque installation garde les siens.
-
-## Variante : le jour J tout en ligne, avec le PC en secours
-
-S'il y a internet dans la salle, la compétition peut se dérouler directement sur le serveur : chaque zone et la table centrale ouvrent `https://competitions.shidokanfrance.com` et se connectent avec leur compte.
-
-**La veille** :
-1. Créez un compte **Zone** par zone de la compétition, et un compte **Table centrale** (menu Comptes).
-2. Sur le PC de la salle, relié au serveur : « Récupérer une copie » de la compétition, puis cochez **« Garder cette copie à jour »** (onglet Réglages de la compétition, section « Échanges avec le serveur »). Le PC la récupère de nouveau toutes les quelques minutes, en lecture seule.
-
-**Si internet tombe** :
-1. Sur le PC : « **Prendre la main en secours** ». La copie devient modifiable tout de suite, sans le serveur.
-2. Les postes ouvrent l'adresse du PC sur le Wi-Fi de la salle (voir la fiche « Préparer le jour J »), et reprennent les saisies faites depuis la dernière copie.
-
-**Quand internet revient** : sur le PC, « **Prévenir le serveur** ».
-- Si rien n'a changé en ligne depuis la copie du PC, la main passe au PC, et la compétition est en lecture seule en ligne. La suite est la même que d'habitude : « Rendre la main au serveur » à la fin.
-- Sinon, le serveur refuse et l'explique. « **Remplacer la version en ligne** » met alors la version du PC en ligne ; celle du serveur reste dans la sauvegarde qu'il fait juste avant.
+L'utilisation (préparer une compétition en ligne, relier le PC de la salle au serveur, le jour J, la variante « tout en ligne ») est dans le [guide de l'organisateur](guide-utilisateur.md).
 
 ## Conservation des données
 
