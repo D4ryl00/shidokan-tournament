@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Competition, CompetitionInput } from '../domain/competition.js';
 import type { BracketFormat, KataScores, MatchMethod, Podium } from '../domain/brackets/index.js';
 import type { CategoryProgress, MedalRow, ResultRecord } from '../domain/results.js';
@@ -9,6 +9,8 @@ import type { ColumnMapping, FfkChoices, FfkImportPlan } from '../domain/ffk-imp
 import type { Club, DirectoryEntry, DirectoryInput, RegistrationInput, RegistrationRow } from '../domain/registration.js';
 import type { Case, Presence, Proposal, ProposalType } from '../domain/replacement/index.js';
 import type { CategoryGrid, DisciplineId } from '../domain/types.js';
+import type { LadderRow, PlanChoice, PlanMove } from '../domain/replacement/plan.js';
+import type { RulesView } from '../domain/replacement/rules.js';
 import type { Wave, WaveInput } from '../domain/waves.js';
 import type { AppSettingsPatch, PublicAppSettings } from '../domain/app-settings.js';
 import type { Zone, ZoneInput } from '../domain/zones.js';
@@ -408,6 +410,57 @@ export const useManualMove = (id: string) => useReplacementAction<{ registration
 export const useSetAsideCase = (id: string) => useReplacementAction<{ caseId: string; note?: string }>(id, 'set-aside');
 export const useResumeCase = (id: string) => useReplacementAction<{ caseId: string }>(id, 'resume');
 export const useWithdrawRegistration = (id: string) => useReplacementAction<{ registrationId: string; fingerprint: string }>(id, 'withdraw');
+
+export type { LadderRow, PlanChoice, PlanMove, RulesView };
+/** Réponse de `POST /replacement/plan` (voir `planResponse`, côté serveur). */
+export interface PlanResponse {
+  view: RulesView;
+  rows: LadderRow[];
+  plan: {
+    moves: PlanMove[];
+    aloneBefore: number;
+    alone: string[];
+    onCards: string[];
+    dropped: PlanChoice[];
+    proven: boolean;
+    hash: string;
+    refused: { proposalId: string; registrationId: string; reason: string }[];
+  };
+  categories?: PreviewData['categories'];
+  fingerprint: string;
+}
+const planBody = (waveId: string | null, choices: PlanChoice[]) => ({ ...(waveId ? { waveId } : {}), choices });
+/** Le diagramme des règles et le plan de la ligne de coupure ; rafraîchi par toute action de réaffectation (`queryKey[1]` = compétition). */
+export function usePlan(id: string, waveId: string | null, choices: PlanChoice[], enabled: boolean) {
+  return useQuery({
+    queryKey: ['replacement-plan', id, waveId, choices],
+    queryFn: () => api<PlanResponse>('POST', `/api/competitions/${id}/replacement/plan`, planBody(waveId, choices)),
+    enabled,
+    placeholderData: keepPreviousData,
+  });
+}
+/** Le plan à appliquer (sans validation) et son aperçu. */
+export function usePlanForApply(id: string) {
+  return useMutation({
+    mutationFn: ({ waveId, choices }: { waveId?: string | null; choices: PlanChoice[] }) =>
+      api<PlanResponse>('POST', `/api/competitions/${id}/replacement/plan`, { ...planBody(waveId ?? null, choices), forApply: true }),
+  });
+}
+export const useApplyPlan = (id: string) => useReplacementAction<{ waveId?: string; choices: PlanChoice[]; fingerprint: string; hash: string }>(id, 'plan/apply');
+export function useSetRules(id: string) {
+  const invalidate = useInvalidateDay(id);
+  return useMutation({
+    mutationFn: (view: RulesView) => api<RulesView>('PUT', `/api/competitions/${id}/replacement/rules`, view),
+    onSuccess: invalidate,
+  });
+}
+export function useResetRules(id: string) {
+  const invalidate = useInvalidateDay(id);
+  return useMutation({
+    mutationFn: () => api<RulesView>('POST', `/api/competitions/${id}/replacement/rules/reset`),
+    onSuccess: invalidate,
+  });
+}
 
 // --- Jour J (étape 6) ---
 

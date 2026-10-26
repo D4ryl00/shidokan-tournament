@@ -11,6 +11,10 @@ import {
   useGrid,
   useManualMove,
   usePreviewReplacement,
+  usePlan,
+  useResetRules,
+  useSetRules,
+  type PlanChoice,
   useRefuseProposal,
   useUnrefuseProposal,
   useRegistrations,
@@ -30,6 +34,7 @@ import { HelpButton } from '../components/Help.js';
 import { ProposalPreview } from '../components/ProposalPreview.js';
 import { PROPOSAL_TYPES, ReplacementBadge } from '../components/ReplacementBadge.js';
 import { ageBandLabel, disciplineLabel, prefsLabel, rulesetShort, weightLabel } from '../labels.js';
+import { RuleLadder } from '../components/replacement/RuleLadder.js';
 import { useSelectedWave } from '../useSelectedWave.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import { plural } from '../../domain/plural.js';
@@ -101,6 +106,26 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: 'ok
       <Text fz={28} fw={700} lh={1.1} c={color} className="num">{value}</Text>
       <Text size="sm" c="dimmed">{label}</Text>
     </Card>
+  );
+}
+
+const NO_CHOICES: PlanChoice[] = [];
+
+/** La liste des règles de la compétition, avec ses barres (le plan de la session choisie). */
+function RulesPanel({ id, waveId, ready }: { id: string; waveId: string | null; ready: boolean }) {
+  // Avec des sessions, le plan n'existe que pour la session choisie.
+  const { data: plan } = usePlan(id, waveId, NO_CHOICES, ready);
+  const setRules = useSetRules(id);
+  const reset = useResetRules(id);
+  if (!plan) return null;
+  return (
+    <SectionCard title="Règles de réaffectation" description="L’ordre est la priorité ; la ligne pointillée marque où les règles s’arrêtent.">
+      <RuleLadder view={plan.view} rows={plan.rows} busy={setRules.isPending || reset.isPending} onChange={(v) => setRules.mutate(v)} />
+      <ApiErrorAlert error={setRules.error ?? reset.error} />
+      <Group>
+        <Button variant="subtle" size="compact-sm" loading={reset.isPending} onClick={() => reset.mutate()}>Revenir aux réglages par défaut</Button>
+      </Group>
+    </SectionCard>
   );
 }
 
@@ -296,6 +321,7 @@ export function ReplacementPage() {
   return (
     <Stack gap="md">
       {waveSelector}
+      <RulesPanel id={id} waveId={waveId} ready={ready && (waves.length === 0 || waveId !== null)} />
       <SimpleGrid cols={{ base: 2, sm: 3, md: 5, xl: 9 }} spacing="sm" data-testid="replacement-summary">
         <Stat label="Présents" value={s.present} />
         <Stat label="Absents" value={s.absent} />

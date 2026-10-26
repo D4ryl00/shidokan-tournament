@@ -12,6 +12,8 @@ import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { HELP } from '../help.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
+import { RuleLadder } from '../components/replacement/RuleLadder.js';
+import type { RulesView } from '../../domain/replacement/rules.js';
 
 const saved = () => notifications.show({ color: 'green', message: 'Réglages enregistrés.' });
 
@@ -96,13 +98,27 @@ function TextsCard({ settings }: { settings: PublicAppSettings }) {
   );
 }
 
+function ReplacementRulesCard({ settings }: { settings: PublicAppSettings }) {
+  const update = useUpdateAppSettings();
+  const [view, setView] = useState<RulesView>(settings.defaultReplacementRules);
+  return (
+    <SectionCard id="regles" title="Règles de réaffectation par défaut" description="Copiées dans chaque nouvelle compétition. Les compétitions déjà créées ne changent pas.">
+      <RuleLadder view={view} onChange={setView} busy={update.isPending} />
+      <ApiErrorAlert error={update.error} />
+      <Group justify="flex-end">
+        <Button loading={update.isPending} onClick={() => update.mutate({ defaultReplacementRules: { ...view, on: { ...view.on, return: true } } }, { onSuccess: saved })}>Enregistrer</Button>
+      </Group>
+    </SectionCard>
+  );
+}
+
 export function AppSettingsPage() {
   useDocumentTitle('Réglages');
   const { data } = useAppSettings();
   const { data: me } = useAuthMe();
   const local = me?.role === 'local';
   const sections = [
-    ...(data ? [{ id: 'mails', label: 'Envoi des mails' }, { id: 'clubs', label: 'Message aux clubs' }] : []),
+    ...(data ? [{ id: 'mails', label: 'Envoi des mails' }, { id: 'clubs', label: 'Message aux clubs' }, { id: 'regles', label: 'Règles de réaffectation' }] : []),
     ...(me ? [{ id: 'synchronisation', label: HELP.synchronisation.title }] : []),
     { id: 'jour-j', label: 'Préparer le jour J' },
     ...(local ? [{ id: 'secours', label: 'Copie de secours' }, { id: 'zones-autonomes', label: 'Portable de zone' }] : []),
@@ -117,6 +133,7 @@ export function AppSettingsPage() {
         <>
           <SmtpCard settings={data} />
           <TextsCard settings={data} />
+          <ReplacementRulesCard settings={data} />
         </>
       )}
       {me && (
