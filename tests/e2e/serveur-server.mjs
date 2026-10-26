@@ -3,7 +3,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 
-const env = { ...process.env, PORT: '3101', DATABASE_PATH: 'tmp/e2e-serveur/shidokan.sqlite', WEB_DIST_DIR: 'dist/web', LOG: 'off', INSTANCE_ROLE: 'serveur' };
+const env = { ...process.env, PORT: '3101', DATABASE_PATH: 'tmp/e2e-serveur/shidokan.sqlite', WEB_DIST_DIR: 'dist/web', LOG: 'off', INSTANCE_ROLE: 'serveur', PUBLIC_URL: 'http://localhost:3101', GOOGLE_CLIENT_ID: 'e2e-client', GOOGLE_CLIENT_SECRET: 'e2e-secret' };
 for (let i = 0; i < 240; i++) {
   try {
     if ((await fetch('http://localhost:3100/api/health')).ok) break;

@@ -1,9 +1,10 @@
-import { Accordion, Alert, Button, Group, Modal, Stack, Text, Textarea, TextInput } from '@mantine/core';
+import { Accordion, Alert, Anchor, Button, Group, Modal, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { useAppSettings, useCompetition, useInvitationPreview, useUpdateCompetition, type SendResult } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { plural } from '../../domain/plural.js';
+import { GOOGLE_NOT_SENT } from '../../domain/app-settings.js';
 
 export const NEW_LINK_WARNING = 'Un nouveau lien est créé à chaque envoi ; les liens envoyés avant ne fonctionnent plus.';
 
@@ -56,9 +57,15 @@ export function CompetitionMessage({ competitionId, previewClubId }: { competiti
 /** Résultat d'un envoi groupé, club par club. */
 export function SendResultsModal({ results, onClose }: { results: SendResult[]; onClose: () => void }) {
   const errors = results.filter((r) => r.status === 'error');
+  const googleRevoked = results.some((r) => r.error === GOOGLE_NOT_SENT);
   return (
     <Modal opened={results.length > 0} onClose={onClose} title="Envoi des liens" size="lg">
       <Stack data-testid="send-results">
+        {googleRevoked && (
+          <Alert color="red">
+            L’accès au compte Google a été retiré pendant l’envoi : reconnectez-vous dans les <Anchor href="/parametres#mails">Réglages de l’application</Anchor>, puis renvoyez aux clubs restants.
+          </Alert>
+        )}
         <Alert color={errors.length ? 'orange' : 'green'}>
           {plural(results.length - errors.length, 'mail envoyé', 'mails envoyés')} : leur ancien lien ne fonctionne plus.{errors.length ? ` ${errors.length} en erreur : le lien de ces clubs n’a pas changé ; corrigez puis renvoyez.` : ''}
         </Alert>

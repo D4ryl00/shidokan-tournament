@@ -952,6 +952,16 @@ export function useUpdateAppSettings() {
   });
 }
 export const useSendTestMail = () => useMutation({ mutationFn: (to: string) => api<void>('POST', '/api/app-settings/test-mail', { to }) });
+/** « Se connecter avec Google » : le serveur donne l'adresse de Google, le navigateur y va (retour sur /parametres?google=…). */
+export const useGoogleStart = () =>
+  useMutation({ mutationFn: () => api<{ url: string }>('POST', '/api/app-settings/google/start'), onSuccess: ({ url }) => window.location.assign(url) });
+export function useGoogleDisconnect() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<{ revoked: boolean }>('POST', '/api/app-settings/google/disconnect'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['app-settings'] }),
+  });
+}
 
 // Envoi des liens par mail (un nouveau lien à chaque envoi).
 export interface SendResult { clubId: string; clubName: string; email: string | null; status: 'sent' | 'error'; error: string | null }

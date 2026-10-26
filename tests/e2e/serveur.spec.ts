@@ -43,3 +43,29 @@ test('serveur : session perdue pendant une saisie → reconnexion par-dessus l�
   await page.getByTestId('competition-submit').click();
   await expect(page.getByTestId('competition-row').filter({ hasText: 'Coupe après reconnexion' })).toBeVisible();
 });
+
+test('serveur : envoi des mails — choix Google, le bouton mène chez Google avec les bonnes autorisations', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('login-email').fill('orga@e2e.example');
+  await page.getByTestId('login-password').fill('mot-de-passe-e2e');
+  await page.getByTestId('login-submit').click();
+  await expect(page.getByTestId('new-competition')).toBeVisible();
+  await page.goto('/parametres#mails');
+  await page.getByText('Compte Google', { exact: true }).click();
+  await expect(page.getByText('Google affichera « application non validée »', { exact: false })).toBeVisible();
+  let googleUrl = '';
+  await page.route('https://accounts.google.com/**', (route) => {
+    googleUrl = route.request().url();
+    return route.abort();
+  });
+  await page.getByRole('button', { name: 'Se connecter avec Google' }).click();
+  await expect.poll(() => googleUrl).not.toBe('');
+  expect(googleUrl).toContain('client_id=e2e-client');
+  expect(googleUrl).toContain('redirect_uri=http%3A%2F%2Flocalhost%3A3101%2Fapi%2Fapp-settings%2Fgoogle%2Fcallback');
+  expect(googleUrl).toContain('gmail.send');
+  expect(googleUrl).not.toContain('mail.google.com');
+  await page.goto('/parametres?google=annule#mails');
+  await expect(page.getByText('Connexion à Google annulée.')).toBeVisible();
+  await expect.poll(() => page.url()).not.toContain('google=');
+  expect(page.url()).toContain('#mails');
+});

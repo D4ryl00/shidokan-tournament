@@ -122,3 +122,10 @@ test('zones autonomes : une aide à part, signalée dans l’aide des Combats et
   expect(HELP.combats.details.flat().join(' ')).toContain('À trancher');
   expect(HELP['jour-j'].details.flat().join(' ')).toContain('portable');
 });
+
+test('réglages : la voie Google d’abord, avec l’avertissement de Google annoncé', () => {
+  const text = HELP.parametres.details.flat().join(' ');
+  expect(text).toContain('Se connecter avec Google');
+  expect(text).toContain('application non validée');
+  expect(text).not.toMatch(/OAuth/);
+});

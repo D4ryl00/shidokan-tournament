@@ -110,10 +110,11 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     title: 'Réglages de l’application',
     short: 'Ce qui vaut pour toutes les compétitions : envoi des mails, message aux clubs, mention sur les données personnelles, conservation.',
     details: [
-      'Envoi des mails : le serveur d’envoi (SMTP) du compte qui enverra les liens aux clubs. « Envoyer un mail d’essai » vérifie les réglages.',
+      'Envoi des mails : le compte qui enverra les liens aux clubs. « Envoyer un mail d’essai » vérifie les réglages.',
       [
-        'Gmail : activez la validation en deux étapes du compte Google, puis créez un mot de passe d’application (Compte Google → Sécurité → Mots de passe des applications). Le mot de passe habituel ne fonctionne pas.',
-        'Gmail : serveur smtp.gmail.com, port 465, chiffrement TLS, identifiant = l’adresse Gmail ; environ 500 destinataires par jour.',
+        'Compte Google (sur le serveur en ligne) : « Se connecter avec Google », choisissez le compte, puis acceptez. Google affiche une fois « application non validée » : cliquez sur Paramètres avancés, puis Accéder.',
+        'L’application ne peut qu’envoyer des mails depuis ce compte, pas les lire ; « Déconnecter » lui retire l’accès. Si l’accès est retiré ou expire, l’écran demande de se reconnecter. Environ 500 destinataires par jour.',
+        'Autre serveur : le serveur d’envoi (SMTP), l’identifiant et le mot de passe. Pour Gmail sans « Se connecter avec Google » : un mot de passe d’application (Compte Google → Sécurité → Mots de passe des applications), serveur smtp.gmail.com, port 465, TLS.',
         'Le mot de passe enregistré n’est jamais réaffiché ; laissez le champ vide pour le garder.',
       ],
       'Message aux clubs : le modèle de mail, avec les variables {club}, {coach}, {competition}, {date}, {lieu}, {date_limite} et {lien} ; chaque compétition peut avoir le sien.',
