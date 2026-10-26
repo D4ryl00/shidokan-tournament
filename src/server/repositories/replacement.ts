@@ -1,10 +1,8 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { defaultFormat, generateBracket, resolveBracket } from '../../domain/brackets/index.js';
 import { categoryLabel, compareKeys, keyString } from '../../domain/categories.js';
 import { entryKey } from '../../domain/closed-categories.js';
 import { DISCIPLINES } from '../../domain/disciplines.js';
 import {
-  activeMembers,
   applyProposal,
   proposalMoves,
   detectCases,
@@ -13,14 +11,7 @@ import {
   isOverweight,
   overweightInCategory,
   recompute,
-  casesOfWave,
-  computePlan,
-  planLadder,
-  rulesView,
   type PlanChoice,
-  type PlanMove,
-  type LadderRow,
-  type RulesView,
   type Member,
   type Presence,
   type Proposal,
@@ -40,6 +31,11 @@ import { closedSet } from './closed-categories.js';
 import { getManagement } from '../sync/ownership.js';
 import { getCompetition, getGrid } from './competitions.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
+import type { PlanInput, PlanResponse } from '../plan/compute.js';
+import { runPlanJob } from '../plan/runner.js';
+
+// Parties pures, déplacées pour le fil de calcul (qui n'importe pas la base) : gardées ici pour les autres modules.
+export { displayedProposals, previewTransition, type PlanResponse } from '../plan/compute.js';
 
 export class StaleProposalError extends Error {
   constructor(message = "La situation a changé depuis l'affichage : rechargez les propositions.") {
@@ -147,18 +143,6 @@ export async function resumeCase(db: AppDb, competitionId: string, caseId: strin
 
 export function allProposals(state: State, cases = detectCases(state)): Map<string, Proposal[]> {
   return new Map(cases.map((c) => [c.id, proposalsFor(state, c)]));
-}
-
-/** Propositions à afficher : les valides, puis les refusées encore pertinentes (grisées, avec « Rétablir »). */
-export function displayedProposals(state: State, cases = detectCases(state)): Map<string, (Proposal & { refused?: true })[]> {
-  const all = { ...state, refused: [] };
-  const refused = new Set(state.refused);
-  return new Map(
-    cases.map((c) => [
-      c.id,
-      [...proposalsFor(state, c), ...proposalsFor(all, c).filter((p) => refused.has(p.id)).map((p) => ({ ...p, refused: true as const }))],
-    ]),
-  );
 }
 
 function findProposal(state: State, proposalId: string): Proposal {
@@ -311,56 +295,22 @@ export async function planWave(db: AppDb, competitionId: string, waveId: string 
   return null;
 }
 
-export interface PlanResponse {
-  view: RulesView;
-  /** Vide pour un plan à appliquer. */
-  rows: LadderRow[];
-  plan: {
-    moves: PlanMove[];
-    aloneBefore: number;
-    alone: string[];
-    onCards: string[];
-    dropped: PlanChoice[];
-    /** Pour appliquer : choix validés qui attendent un déplacement à valider non validé. */
-    waiting: PlanChoice[];
-    proven: boolean;
-    hash: string;
-    refused: { proposalId: string; registrationId: string; reason: string }[];
-  };
-  categories?: ReturnType<typeof previewTransition>;
-  fingerprint: string;
-}
-
-/** Plan d'ensemble de la session : le diagramme et le plan de la ligne de coupure, ou (`forApply`) le plan à appliquer et son aperçu. */
-export async function planResponse(db: AppDb, competitionId: string, body: { waveId?: string; choices: PlanChoice[]; forApply?: boolean }): Promise<PlanResponse> {
+/** Demande de plan vérifiée (vague connue) et l'état sur lequel le calculer ; les erreurs (400, 404) partent d'ici, avant tout calcul. */
+export async function planInput(db: AppDb, competitionId: string, body: { waveId?: string; choices: PlanChoice[]; forApply?: boolean }): Promise<{ state: State; input: PlanInput }> {
   const waveId = await planWave(db, competitionId, body.waveId);
   const state = await loadState(db, competitionId);
-  const { cutAfter } = state.settings.replacementRules;
-  const forApply = body.forApply === true;
-  const { rows, plan } = forApply
-    ? { rows: [] as LadderRow[], plan: computePlan(state, { waveId, level: cutAfter, choices: body.choices, forApply: true }) }
-    : planLadder(state, { waveId, choices: body.choices });
-  const refused: PlanResponse['plan']['refused'] = [];
-  for (const [, list] of displayedProposals(state, casesOfWave(state, detectCases(state), waveId))) {
-    for (const p of list) if (p.refused) refused.push({ proposalId: p.id, registrationId: p.registrationId, reason: p.reason });
-  }
-  return {
-    view: rulesView(state.settings),
-    rows,
-    plan: {
-      moves: plan.moves,
-      aloneBefore: plan.aloneBefore.length,
-      alone: plan.aloneAfter,
-      onCards: plan.onCards,
-      dropped: plan.dropped,
-      waiting: plan.waiting,
-      proven: plan.proven,
-      hash: plan.hash,
-      refused,
-    },
-    ...(forApply ? { categories: previewTransition(state, plan.final) } : {}),
-    fingerprint: stateFingerprint(state),
-  };
+  return { state, input: { waveId, choices: body.choices, forApply: body.forApply === true } };
+}
+
+/** Plan d'ensemble de la session (voir `planPayload`), calculé dans un fil à part. */
+export async function planResponse(
+  db: AppDb,
+  competitionId: string,
+  body: { waveId?: string; choices: PlanChoice[]; forApply?: boolean },
+  opts: { signal?: AbortSignal } = {},
+): Promise<PlanResponse> {
+  const { state, input } = await planInput(db, competitionId, body);
+  return runPlanJob(state, input, opts);
 }
 
 /**
@@ -375,7 +325,8 @@ export async function applyPlan(
   const waveId = await planWave(db, competitionId, body.waveId);
   let state = await loadState(db, competitionId);
   if (stateFingerprint(state) !== body.fingerprint) throw new StaleProposalError();
-  const plan = computePlan(state, { waveId, level: state.settings.replacementRules.cutAfter, choices: body.choices, forApply: true });
+  // Recalcul dans le fil, comme pour l'affichage : rien n'est écrit avant son résultat.
+  const { plan } = await runPlanJob(state, { waveId, choices: body.choices, forApply: true });
   if (plan.hash !== body.hash) throw new StaleProposalError('Le plan a changé depuis l’affichage : relisez-le avant de l’appliquer.');
   let applied = 0;
   for (const move of plan.moves) {
@@ -625,42 +576,6 @@ export async function weighInList(db: AppDb, competitionId: string, waveId?: str
       }))
       .sort((a, b) => a.club.localeCompare(b.club) || a.label.localeCompare(b.label)),
   };
-}
-
-// --- Aperçu ---
-
-/** Paires du 1er tour (élimination) ou liste des membres (poule, kata) d'une catégorie de l'état. */
-function lineup(state: State, categoryId: string): string[][] {
-  const members = activeMembers(state, categoryId);
-  const cat = state.categories.find((c) => c.id === categoryId);
-  if (!cat || members.length === 0) return [];
-  if (members.length < 2) return [members.map((m) => m.label)];
-  const labels = new Map(members.map((m) => [m.registrationId, m.label]));
-  const format = defaultFormat(cat.key.discipline, members.length, state.settings);
-  if (format !== 'single_elimination' && format !== 'double_elimination') return [members.map((m) => m.label)];
-  const bracket = generateBracket(
-    format,
-    members.map((m) => ({ registrationId: m.registrationId, clubId: m.clubId, label: m.label })),
-    { repechage: false, thirdPlace: false, kataBronzeCount: state.settings.kataBronzeCount },
-    1,
-  );
-  if (bracket.kind !== 'combat') return [members.map((m) => m.label)];
-  return resolveBracket(bracket, {}).matches
-    .filter((m) => m.round === 1 && m.phase === 'main')
-    .map((m) => [m.entrantA, m.entrantB].filter((x): x is string => x !== null).map((id) => labels.get(id)!));
-}
-
-export function previewTransition(before: State, after: State) {
-  const ids = new Set([...before.categories, ...after.categories].map((c) => c.id));
-  const out: { label: string; before: string[][]; after: string[][] }[] = [];
-  for (const id of ids) {
-    const b = activeMembers(before, id).map((m) => m.registrationId).sort().join();
-    const a = activeMembers(after, id).map((m) => m.registrationId).sort().join();
-    if (a === b) continue;
-    const cat = after.categories.find((c) => c.id === id) ?? before.categories.find((c) => c.id === id)!;
-    out.push({ label: categoryLabel(cat.key, after.grid), before: lineup(before, id), after: lineup(after, id) });
-  }
-  return out;
 }
 
 export { findProposal };

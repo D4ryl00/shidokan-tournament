@@ -16,6 +16,12 @@ vi.mock('../../src/domain/replacement/index.js', async (importOriginal) => {
     },
   };
 });
+// Le faux `computePlan` ne vaut que dans ce fil : le plan se calcule donc ici, pas dans le fil de calcul.
+vi.mock('../../src/server/plan/runner.js', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('../../src/server/plan/runner.js')>();
+  const { planPayload } = await import('../../src/server/plan/compute.js');
+  return { ...mod, runPlanJob: async (...[state, input, opts]: Parameters<typeof mod.runPlanJob>) => planPayload(state, input, opts?.onProgress) };
+});
 
 let app: FastifyInstance;
 let base: string;

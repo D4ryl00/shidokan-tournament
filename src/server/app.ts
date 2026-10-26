@@ -39,6 +39,7 @@ import { registerPermissions } from './auth/permissions.js';
 import { getManagement, registerReadOnlyGuard } from './sync/ownership.js';
 import { registerCategoryRevGuard } from './revisions.js';
 import { registerCompetitionEvents } from './events.js';
+import { PlanAbortedError, stopAllPlanJobs } from './plan/runner.js';
 import { syncRemoteRoutes } from './routes/sync-remote.js';
 import { syncFileRoutes, syncLocalRoutes } from './routes/sync-local.js';
 import { mirrorRoutes } from './routes/mirror.js';
@@ -93,6 +94,8 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   ensureInstance(db, opts.instanceName ?? 'PC');
   const stopBackups = startAutoBackup(db, opts.dbPath, opts.backupIntervalMin ?? 0, (e) => app.log.error(e));
   const stopRetention = startRetention(db, opts.dbPath, (e) => app.log.error(e));
+  // Calculs du plan en cours arrêtés dès le début de l'arrêt : une réponse en flux ne fait pas attendre la fermeture.
+  app.addHook('preClose', stopAllPlanJobs);
   app.addHook('onClose', async () => {
     stopBackups();
     stopRetention();
@@ -123,7 +126,9 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     // Le corps JSON illisible arrive en SyntaxError marquée 400 par Fastify ; toute autre SyntaxError est un bug serveur.
     if (error instanceof SyntaxError && (error as { statusCode?: number }).statusCode === 400) return reply.status(400).send({ error: 'Requête mal formée (JSON invalide)' });
     const status = (error as { statusCode?: number }).statusCode ?? 500;
-    if (status >= 500) app.log.error(error);
+    // Calcul du plan arrêté (client parti, serveur qui s'arrête) ou flux coupé par le client : pas une erreur du serveur.
+    const cancelled = error instanceof PlanAbortedError || (error as { code?: string }).code === 'ERR_STREAM_PREMATURE_CLOSE';
+    if (status >= 500 && !cancelled) app.log.error(error);
     // Une erreur d'au moins 500 garde son message seulement s'il est fait pour l'écran (`expose`, par exemple le serveur injoignable).
     const expose = (error as { expose?: boolean }).expose === true;
     // `reason` : cas que l'écran traite à part (par exemple RESCUE_DIVERGED), renvoyé dans `code`.

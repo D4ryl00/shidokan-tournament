@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { PassThrough } from 'node:stream';
 import { z } from 'zod';
 import { applyAll, applyProposal, casesOfWave, categoryWave, detectCases, isClosedTarget, isLocked, memberWave, stateFingerprint } from '../../domain/replacement/index.js';
 import type { AppDb } from '../db/client.js';
@@ -10,6 +11,7 @@ import {
   displayedProposals,
   applyProposalById,
   applyPlan,
+  planInput,
   planResponse,
   closeWeighIn,
   knownWave,
@@ -28,8 +30,11 @@ import {
   resumeCase,
   setAsideNotes,
   weighInList, fighterPresence } from '../repositories/replacement.js';
+import { PlanAbortedError, runPlanJob } from '../plan/runner.js';
 
 type P = { Params: { id: string } };
+/** Plan d'ensemble en flux : une ligne JSON par événement (progression, puis résultat ou erreur). */
+const NDJSON = 'application/x-ndjson';
 const planChoice = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('validate'), proposalId: z.string(), caseId: z.string() }),
   z.object({ kind: z.literal('manual'), registrationId: z.string(), categoryId: z.string() }),
@@ -153,9 +158,34 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
   });
 
   /** Plan d'ensemble de la réaffectation (diagramme et plan), ou, avec `forApply`, plan à appliquer et aperçu. */
-  app.post<P>('/api/competitions/:id/replacement/plan', async (req) => {
+  app.post<P>('/api/competitions/:id/replacement/plan', async (req, reply) => {
     const body = z.object({ waveId: z.string().optional(), choices, forApply: z.boolean().optional() }).strict().parse(req.body);
-    return planResponse(db, req.params.id, body);
+    // Client parti avant la fin (changement de choix, page quittée) : le fil est arrêté.
+    const gone = new AbortController();
+    reply.raw.on('close', () => {
+      if (!reply.raw.writableFinished) gone.abort();
+    });
+    if (!(req.headers.accept ?? '').includes(NDJSON)) return planResponse(db, req.params.id, body, { signal: gone.signal });
+    // Flux : les erreurs d'avant le calcul (400, 404) restent des réponses JSON ordinaires.
+    const { state, input } = await planInput(db, req.params.id, body);
+    const out = new PassThrough();
+    const send = (event: object) => {
+      if (!out.writableEnded && !out.destroyed) out.write(`${JSON.stringify(event)}\n`);
+    };
+    runPlanJob(state, input, { signal: gone.signal, onProgress: (p) => send({ type: 'progress', ...p }) })
+      .then(
+        (data) => send({ type: 'result', data }),
+        (e: unknown) => {
+          if (gone.signal.aborted) return;
+          const status = (e as { statusCode?: number }).statusCode ?? 500;
+          if (status >= 500 && !(e instanceof PlanAbortedError)) req.log.error(e);
+          send({ type: 'error', status, error: e instanceof PlanAbortedError ? e.message : 'Erreur interne du serveur' });
+        },
+      )
+      .finally(() => {
+        if (!out.destroyed) out.end();
+      });
+    return reply.type(NDJSON).send(out);
   });
 
   app.post<P>('/api/competitions/:id/replacement/plan/apply', async (req) => {
