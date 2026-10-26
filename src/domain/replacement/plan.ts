@@ -149,8 +149,6 @@ export function computePlan(state: State, opts: PlanOptions): PlanResult {
 }
 
 interface SolveExtra {
-  /** Nœuds de tout le calcul (partagés par les lignes du diagramme) : une fois épuisés, chaque recherche rend son rejeu. */
-  pool?: { left: number };
   /** Plan d'une ligne au-dessus (mêmes choix, règles moins nombreuses) : gardé s'il fait mieux que la recherche. */
   seed?: { pins: string; moves: SearchMove[] };
 }
@@ -229,7 +227,7 @@ function solvePlan(state: State, opts: PlanOptions, extra: SolveExtra): { result
   // lesquels il apparaît ; seuls ceux qui y mènent (catégories touchées en chaîne) sont fixés avant lui.
   while (pending.length > 0) {
     const screen: SearchContext = { waveId: opts.waveId, allowed: atLevel, forApply: false, excluded };
-    const plan = solveGroups(cur, screen, budget, extra.pool).moves;
+    const plan = solveGroups(cur, screen, budget).moves;
     let hit: { at: number; choice: PlanChoice; p: Proposal; after: State } | null = null;
     const taken = new Set(excluded);
     let s = cur;
@@ -267,7 +265,7 @@ function solvePlan(state: State, opts: PlanOptions, extra: SolveExtra): { result
 
   // 2. Les cas ouverts, en groupes indépendants ; chaque groupe part du rejeu « carte par carte » et cherche mieux.
   const ctx: SearchContext = { waveId: opts.waveId, allowed, forApply, excluded };
-  const solved = solveGroups(cur, ctx, budget, extra.pool);
+  const solved = solveGroups(cur, ctx, budget);
   let found = solved.moves;
   let onCards = solved.onCards;
   // Une chaîne fixée pour un choix n'est qu'un chemin parmi d'autres : le plan n'est alors plus prouvé.
@@ -348,40 +346,64 @@ export interface LadderRow {
   proven: boolean;
 }
 
-/**
- * Nœuds de tout un diagramme (toutes ses lignes) : une limite fixe, jamais un temps, pour qu'une demande ne bloque pas le
- * serveur plusieurs secondes quand des règles rares ouvrent beaucoup de combinaisons. Une fois épuisés, chaque ligne
- * restante rend le rejeu « carte par carte » (ou la ligne au-dessus, si elle fait mieux), sans « prouvé ».
- */
-export const LADDER_NODE_BUDGET = 20_000;
+/** Avancement d'un diagramme : `done` calculs faits sur `total`, et les lignes déjà connues (départ et lignes désactivées comprises). */
+export interface LadderProgress {
+  done: number;
+  total: number;
+  rows: LadderRow[];
+}
 
 /**
- * Diagramme de la liste : un calcul du plan par règle active, chacune étant la dernière permise.
- * Le plan retenu est celui de la ligne de coupure, calculé une seule fois.
+ * Diagramme de la liste : un calcul du plan par règle active, chacune étant la dernière permise, avec son propre budget
+ * de nœuds (`nodeBudget` par groupe, `DEFAULT_NODE_BUDGET` par défaut) : une ligne lourde n'en prive jamais une autre.
+ * Le plan retenu est celui de la ligne de coupure ; si cette règle est désactivée, c'est celui de la dernière ligne active
+ * au-dessus (mêmes règles permises), ou, à défaut, un calcul de plus.
  * Chaque ligne part aussi du plan de la ligne active au-dessus (ses déplacements restent permis avec une règle de
  * plus) : à partir de la première règle, les barres ne remontent jamais, même quand une recherche n'est pas prouvée.
+ * `onProgress` est appelé une fois après chaque calcul.
  */
 export function planLadder(
   state: State,
   opts: { waveId: string | null; choices: PlanChoice[]; nodeBudget?: number },
+  onProgress?: (p: LadderProgress) => void,
 ): { rows: LadderRow[]; plan: PlanResult } {
   const { order, cutAfter } = state.settings.replacementRules;
-  const pool = { left: opts.nodeBudget ?? LADDER_NODE_BUDGET };
+  const cutIndex = order.indexOf(cutAfter);
+  const active = order.filter((r) => isRuleOn(state.settings, r));
+  const needsExtra = !isRuleOn(state.settings, cutAfter) && !order.some((r, i) => i < cutIndex && isRuleOn(state.settings, r));
+  const total = active.length + (needsExtra ? 1 : 0);
+  let done = 0;
+  const off = (rule: RuleId): LadderRow => ({ rule, on: false, alone: null, moves: 0, toValidate: 0, proven: true });
+  const report = (rows: LadderRow[], next: number) => {
+    done++;
+    if (!onProgress) return;
+    const known = [...rows];
+    for (let j = next; j < order.length && !isRuleOn(state.settings, order[j]!); j++) known.push(off(order[j]!));
+    onProgress({ done, total, rows: known });
+  };
+  const base = { waveId: opts.waveId, choices: opts.choices, ...(opts.nodeBudget === undefined ? {} : { nodeBudget: opts.nodeBudget }) };
   let seed: SolveExtra['seed'];
   const rows: LadderRow[] = [
     { rule: null, on: true, alone: aloneRegistrations(state, opts.waveId).length, moves: 0, toValidate: 0, proven: true },
   ];
   let plan: PlanResult | null = null;
-  for (const rule of order) {
-    const on = isRuleOn(state.settings, rule);
-    if (!on) {
-      rows.push({ rule, on, alone: null, moves: 0, toValidate: 0, proven: true });
+  let above: PlanResult | null = null;
+  for (const [i, rule] of order.entries()) {
+    if (!isRuleOn(state.settings, rule)) {
+      rows.push(off(rule));
       continue;
     }
-    const { result: r, found, pins } = solvePlan(state, { waveId: opts.waveId, level: rule, choices: opts.choices }, { pool, seed });
+    const { result: r, found, pins } = solvePlan(state, { ...base, level: rule }, { seed });
     seed = pins === null ? undefined : { pins, moves: found };
     if (rule === cutAfter) plan = r;
-    rows.push({ rule, on, alone: r.aloneAfter.length, moves: r.moves.length, toValidate: r.moves.filter((m) => m.manual && !m.validated).length, proven: r.proven });
+    if (i < cutIndex) above = r;
+    rows.push({ rule, on: true, alone: r.aloneAfter.length, moves: r.moves.length, toValidate: r.moves.filter((m) => m.manual && !m.validated).length, proven: r.proven });
+    report(rows, i + 1);
   }
-  return { rows, plan: plan ?? solvePlan(state, { waveId: opts.waveId, level: cutAfter, choices: opts.choices }, { pool }).result };
+  if (!plan && above) plan = above;
+  if (!plan) {
+    plan = solvePlan(state, { ...base, level: cutAfter }, {}).result;
+    report(rows, order.length);
+  }
+  return { rows, plan };
 }

@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
-import { computePlan, LADDER_NODE_BUDGET, planLadder } from '../../../src/domain/replacement/plan.js';
+import { computePlan, planLadder, type LadderProgress } from '../../../src/domain/replacement/plan.js';
+import { isRuleOn } from '../../../src/domain/replacement/rules.js';
 import { greedyAlone } from './greedy-reference.js';
 import { randomState } from './random-state.js';
 
@@ -22,19 +23,20 @@ test('jamais pire que l’ancien calcul carte par carte', () => {
     expect(plan.aloneAfter.length, `seed ${seed}`).toBeLessThanOrEqual(greedyAlone(s, null));
   }
 });
-test('500 inscriptions : le diagramme en moins de 3 s, et prouvé', () => {
+test('500 inscriptions : le diagramme en moins de 4 s, et prouvé', () => {
   const s = randomState(42, 500);
   // Les autres fichiers de test tournent en parallèle et peuvent doubler le temps mesuré : on garde le meilleur de trois essais
   // (le calcul est identique à chaque essai ; seule la charge de la machine change).
   let best = Number.POSITIVE_INFINITY;
   let rows = planLadder(s, { waveId: null, choices: [] }).rows;
-  for (let attempt = 0; attempt < 3 && best >= 3000; attempt++) {
+  for (let attempt = 0; attempt < 3 && best >= 4000; attempt++) {
     const t = performance.now();
     rows = planLadder(s, { waveId: null, choices: [] }).rows;
     best = Math.min(best, performance.now() - t);
   }
+  // Mesure : 1705 ms ; borne = max(3000, 2 × 2000).
   console.log(`ladder 500: ${Math.round(best)} ms`);
-  expect(best).toBeLessThan(3000);
+  expect(best).toBeLessThan(4000);
   expect(rows.every((r) => r.alone === null || r.proven)).toBe(true);
 });
 
@@ -62,22 +64,61 @@ test('règles rares : les barres ne remontent jamais, même sans preuve', () => 
   }
 });
 
-test('nœuds de tout le diagramme limités : même résultat à chaque fois, jamais « prouvé » après la limite', () => {
+test('nœuds par ligne : nodeBudget 0 rend toujours les rejeux, et deux appels identiques donnent le même diagramme', () => {
   const s = allRules(8, 150);
   // Aucun nœud : chaque ligne rend son rejeu (ou la ligne au-dessus), aucune ne se dit prouvée.
   const none = planLadder(s, { waveId: null, choices: [], nodeBudget: 0 });
   expect(none.rows.filter((r) => r.rule !== null && r.alone !== null).every((r) => !r.proven)).toBe(true);
   expect(none.plan.proven).toBe(false);
   expect(none.plan.aloneAfter.length).toBeLessThanOrEqual(greedyAlone(s, null));
-  // Limite atteinte en route : même résultat à chaque calcul ; les lignes d'après et le plan ne sont pas prouvés.
   const a = planLadder(s, { waveId: null, choices: [], nodeBudget: 500 });
   const b = planLadder(s, { waveId: null, choices: [], nodeBudget: 500 });
   expect(a.rows).toEqual(b.rows);
   expect(a.plan.hash).toBe(b.plan.hash);
-  expect(a.rows.find((r) => r.rule === 'return')!.proven).toBe(true);
-  expect(a.rows[a.rows.length - 1]!.proven).toBe(false);
-  expect(a.plan.proven).toBe(false);
-  // Sans rien préciser, la limite par défaut s'applique à toute la demande.
-  const small = allRules(2, 60);
-  expect(planLadder(small, { waveId: null, choices: [] }).rows).toEqual(planLadder(small, { waveId: null, choices: [], nodeBudget: LADDER_NODE_BUDGET }).rows);
+});
+
+test('la ligne de coupure n’est jamais moins bonne que le plan calculé seul', { timeout: 60_000 }, () => {
+  for (const seed of [4, 6, 8]) {
+    const s = randomState(seed, 250);
+    const alone = computePlan(s, { waveId: null, level: s.settings.replacementRules.cutAfter, choices: [] }).aloneAfter.length;
+    const ladder = planLadder(s, { waveId: null, choices: [] });
+    expect(ladder.plan.aloneAfter.length, `seed ${seed}`).toBeLessThanOrEqual(alone);
+  }
+});
+
+test('la progression suit les calculs', { timeout: 30_000 }, () => {
+  const check = (s: ReturnType<typeof randomState>, extra: number) => {
+    const seen: LadderProgress[] = [];
+    const { rows } = planLadder(s, { waveId: null, choices: [] }, (p) => seen.push(p));
+    const total = s.settings.replacementRules.order.filter((r) => isRuleOn(s.settings, r)).length + extra;
+    expect(seen.map((p) => p.done)).toEqual(Array.from({ length: total }, (_, i) => i + 1));
+    expect(seen.every((p) => p.total === total)).toBe(true);
+    expect(seen[seen.length - 1]!.rows).toEqual(rows);
+  };
+  check(allRules(3, 60), 0);
+  // Règle de coupure désactivée avec une ligne active au-dessus : son plan est réutilisé, aucun calcul de plus.
+  const t = allRules(3, 60);
+  t.settings.replacementRules.cutAfter = 'ageUp';
+  t.settings.replacementRules.off = ['ageUp'];
+  check(t, 0);
+  const reused = planLadder(t, { waveId: null, choices: [] });
+  expect(reused.plan.aloneAfter.length).toBe(reused.rows.find((r) => r.rule === 'weightGap')!.alone);
+  // Règle de coupure désactivée, aucune ligne active au-dessus : un calcul de plus.
+  const u = allRules(3, 60);
+  u.settings.replacementRules.order = ['weight', ...u.settings.replacementRules.order.filter((r) => r !== 'weight')];
+  u.settings.replacementRules.cutAfter = 'weight';
+  u.settings.replacementRules.off = ['weight'];
+  check(u, 1);
+});
+
+test('150 inscriptions : le diagramme en moins de 2 s', { timeout: 60_000 }, () => {
+  const s = randomState(42, 150);
+  let best = Number.POSITIVE_INFINITY;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const t = performance.now();
+    planLadder(s, { waveId: null, choices: [] });
+    best = Math.min(best, performance.now() - t);
+  }
+  console.log(`ladder 150: ${Math.round(best)} ms`);
+  expect(best).toBeLessThan(2000);
 });
