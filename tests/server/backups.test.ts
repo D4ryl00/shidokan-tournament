@@ -202,13 +202,14 @@ test('restauration d’une sauvegarde plus ancienne : le compteur de versions ne
   d.close();
 });
 
-test('une sauvegarde ne contient ni compte, ni session, ni mot de passe SMTP', async () => {
+test('une sauvegarde ne contient ni compte, ni session, ni mot de passe SMTP, ni jeton Google', async () => {
   const { createUser, createSession } = await import('../../src/server/auth/sessions.js');
   await app.close();
   const db = (await import('../../src/server/db/client.js')).openDb(dbPath);
   const user = createUser(db, 'orga@example.org', 'mot-de-passe-long');
   createSession(db, user.id);
   db.$client.prepare("insert into app_settings (key, value_json) values ('smtp', ?)").run(JSON.stringify({ host: 'smtp.gmail.com', port: 465, security: 'tls', user: 'u', password: 'SECRET-SMTP', fromName: 'X', fromEmail: 'x@example.org' }));
+  db.$client.prepare("insert into app_settings (key, value_json) values ('google', ?)").run(JSON.stringify({ email: 'x@gmail.com', fromName: 'X', refreshToken: 'SECRET-GOOGLE', status: 'ok', lastRefreshAt: null }));
   (await import('../../src/server/db/client.js')).closeDb(db);
   app = await buildApp({ dbPath });
   const files = [
@@ -222,8 +223,11 @@ test('une sauvegarde ne contient ni compte, ni session, ni mot de passe SMTP', a
     expect(r.prepare('select count(*) as n from users').get()).toEqual({ n: 0 });
     expect(r.prepare('select count(*) as n from sessions').get()).toEqual({ n: 0 });
     expect(JSON.stringify(r.prepare('select * from app_settings').all())).not.toContain('SECRET-SMTP');
+    expect(JSON.stringify(r.prepare('select * from app_settings').all())).not.toContain('SECRET-GOOGLE');
+    expect(JSON.stringify(r.prepare('select * from app_settings').all())).toContain('x@gmail.com');
     r.close();
     expect(file.includes(Buffer.from('SECRET-SMTP'))).toBe(false);
+    expect(file.includes(Buffer.from('SECRET-GOOGLE'))).toBe(false);
   }
 });
 

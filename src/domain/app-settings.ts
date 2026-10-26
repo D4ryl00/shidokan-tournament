@@ -15,8 +15,20 @@ export interface SmtpSettings {
   fromName: string;
   fromEmail: string;
 }
+/** Envoi par un serveur SMTP (identifiant et mot de passe) ou par un compte Google (API Gmail, droit d'envoyer seulement). */
+export type MailMode = 'smtp' | 'google';
+/** Compte Google connecté : `status` passe à `reconnect` quand Google a retiré l'accès. */
+export interface GoogleSender {
+  email: string;
+  fromName: string;
+  refreshToken: string;
+  status: 'ok' | 'reconnect';
+  lastRefreshAt: string | null;
+}
 export interface AppSettings {
   smtp: SmtpSettings | null;
+  mailMode: MailMode;
+  google: GoogleSender | null;
   /** Mention affichée sur la page du club ; `{contact}` est remplacé par l'adresse de contact. */
   privacyNotice: string;
   privacyContact: string;
@@ -27,7 +39,13 @@ export interface AppSettings {
   defaultReplacementRules: RulesView;
 }
 export type PublicSmtpSettings = Omit<SmtpSettings, 'password'> & { hasPassword: boolean };
-export type PublicAppSettings = Omit<AppSettings, 'smtp'> & { smtp: PublicSmtpSettings | null };
+export type PublicGoogleSender = Omit<GoogleSender, 'refreshToken'>;
+export type PublicAppSettings = Omit<AppSettings, 'smtp' | 'google'> & { smtp: PublicSmtpSettings | null; google: PublicGoogleSender | null; googleAvailable: boolean };
+
+export const GOOGLE_RECONNECT = 'L’accès au compte Google a été retiré ou a expiré. Reconnectez-vous dans les Réglages de l’application.';
+export const GOOGLE_NOT_CONFIGURED = 'Le compte Google n’est plus configuré sur le serveur (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).';
+export const GOOGLE_NOT_SENT = 'Non envoyé : accès au compte Google retiré. Reconnectez-vous, puis relancez l’envoi pour ce club.';
+export const GOOGLE_CONNECT_FIRST = 'Connectez d’abord un compte Google.';
 
 export const DEFAULT_INVITATION_MAIL: MailTemplate = {
   subject: 'Inscriptions — {competition}',
@@ -70,6 +88,8 @@ export const currentInvitationMail = (t: MailTemplate): MailTemplate =>
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   smtp: null,
+  mailMode: 'smtp',
+  google: null,
   privacyNotice:
     'Les informations saisies sur cette page sont traitées par Shidokan France pour organiser la compétition (inscriptions, catégories, tableaux). Le poids, le grade et les coordonnées du coach sont effacés 13 mois après la compétition ; les résultats (nom, club, catégorie, classement) sont conservés comme archive sportive. Pour toute question, ou pour exercer vos droits sur ces données : {contact}.',
   privacyContact: '',
@@ -96,6 +116,9 @@ export const appSettingsPatchSchema = z
       })
       .strict()
       .nullable(),
+    mailMode: z.enum(['smtp', 'google']),
+    /** Nom de l'expéditeur du compte Google connecté. */
+    googleFromName: z.string().trim().min(1).max(120),
     privacyNotice: z.string().trim().min(1).max(3000),
     privacyContact: z.string().trim().max(200),
     retentionMonths: z.number().int().min(1).max(240),

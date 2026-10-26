@@ -239,7 +239,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     app.addHook('onClose', async () => stopZoneFollow());
   }
   await app.register(syncFileRoutes, { db, dbPath: opts.dbPath, role });
-  await app.register(appSettingsRoutes, { db, mailTransport });
+  await app.register(appSettingsRoutes, { db, mailTransport, googleAvailable: false });
 
   // Après toute écriture réussie qui touche aux inscriptions ou aux réglages : catégories et tableaux à jour.
   app.addHook('onResponse', async (req, reply) => {

@@ -39,6 +39,7 @@ function stripSecrets(file: string): void {
     if (has('app_settings')) {
       changes += copy.prepare("UPDATE app_settings SET value_json = json_remove(value_json, '$.password') WHERE key = 'smtp' AND json_extract(value_json, '$.password') IS NOT NULL").run().changes;
       changes += copy.prepare("UPDATE app_settings SET value_json = json_remove(value_json, '$.token') WHERE key = 'syncServer' AND json_extract(value_json, '$.token') IS NOT NULL").run().changes;
+      changes += copy.prepare("UPDATE app_settings SET value_json = json_remove(value_json, '$.refreshToken') WHERE key = 'google' AND json_extract(value_json, '$.refreshToken') IS NOT NULL").run().changes;
     }
     // Recompactée seulement s'il y avait un secret à effacer (jamais sur le PC de la compétition, sans comptes).
     if (changes) copy.exec('VACUUM');

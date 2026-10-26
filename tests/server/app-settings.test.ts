@@ -59,3 +59,24 @@ test('règles de réaffectation par défaut : celles d’une compétition neuve,
   expect((await patch({ defaultReplacementRules: { ...def, order: [...def.order].reverse() } })).statusCode).toBe(400);
   expect((await patch({ defaultReplacementRules: { ...def, on: { ...def.on, return: false } } })).statusCode).toBe(400);
 });
+
+test('mode d’envoi : SMTP par défaut, pas de compte Google, Google indisponible sans configuration', async () => {
+  expect(await get()).toMatchObject({ mailMode: 'smtp', google: null, googleAvailable: false });
+});
+
+test('mode Google ou nom d’expéditeur Google sans compte connecté → 400 « Connectez d’abord un compte Google. »', async () => {
+  for (const payload of [{ mailMode: 'google' }, { googleFromName: 'X' }]) {
+    const r = await patch(payload);
+    expect(r.statusCode).toBe(400);
+    expect(r.json().error).toBe('Connectez d’abord un compte Google.');
+  }
+  expect(await get()).toMatchObject({ mailMode: 'smtp', google: null });
+});
+
+test('un réglage smtp enregistré avant (sans mode) se lit comme du SMTP', async () => {
+  await patch({ smtp: SMTP });
+  const s = await get();
+  expect(s.mailMode).toBe('smtp');
+  expect(s.smtp.host).toBe('smtp.gmail.com');
+  expect(s).not.toHaveProperty('googleFromName');
+});

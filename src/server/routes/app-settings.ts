@@ -6,12 +6,12 @@ import { sendTestMail, type MailTransport } from '../mail.js';
 import { getAppSettings, publicAppSettings, updateAppSettings } from '../repositories/app-settings.js';
 
 /** Réglages de l'application (pas d'une compétition). */
-export async function appSettingsRoutes(app: FastifyInstance, { db, mailTransport }: { db: AppDb; mailTransport: MailTransport }) {
-  app.get('/api/app-settings', async () => publicAppSettings(getAppSettings(db)));
+export async function appSettingsRoutes(app: FastifyInstance, { db, mailTransport, googleAvailable }: { db: AppDb; mailTransport: MailTransport; googleAvailable: boolean }) {
+  app.get('/api/app-settings', async () => publicAppSettings(getAppSettings(db), googleAvailable));
   app.post('/api/app-settings/test-mail', async (req, reply) => {
     const { to } = z.object({ to: z.string().trim().email().max(200) }).parse(req.body);
     await sendTestMail(db, mailTransport, to);
     return reply.status(204).send();
   });
-  app.patch('/api/app-settings', async (req) => publicAppSettings(updateAppSettings(db, appSettingsPatchSchema.parse(req.body))));
+  app.patch('/api/app-settings', async (req) => publicAppSettings(updateAppSettings(db, appSettingsPatchSchema.parse(req.body)), googleAvailable));
 }
