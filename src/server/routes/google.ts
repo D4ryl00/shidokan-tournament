@@ -44,14 +44,16 @@ export async function googleRoutes(app: FastifyInstance, { db, google }: { db: A
       req.log.error({ reason: e instanceof Error ? e.message : 'inconnu' }, 'Connexion à Google impossible');
       return reply.redirect(back('erreur'));
     }
+    const current = getAppSettings(db);
+    // Révoquer chez Google retire toute l'autorisation du compte : jamais celle du compte déjà connecté.
+    const sameAccount = current.google?.email === granted.email;
     if (!granted.scopes.includes(GMAIL_SEND_SCOPE)) {
-      void google.revoke(granted.refreshToken);
+      if (!sameAccount) void google.revoke(granted.refreshToken);
       return reply.redirect(back('envoi-refuse'));
     }
-    const current = getAppSettings(db);
     const fromName = current.google?.fromName ?? current.smtp?.fromName ?? 'Shidokan France';
     setGoogleSender(db, { email: granted.email, fromName, refreshToken: granted.refreshToken, status: 'ok', lastRefreshAt: new Date().toISOString() }, 'google');
-    if (current.google && current.google.refreshToken !== granted.refreshToken) void google.revoke(current.google.refreshToken);
+    if (current.google && !sameAccount) void google.revoke(current.google.refreshToken);
     return reply.redirect(back('connecte'));
   });
 

@@ -12,6 +12,8 @@ export interface FakeGoogle {
   revokeAfterSends: number | null;
   /** Le prochain envoi reçoit 401 (jeton d'accès expiré). */
   expireAccessOnce: boolean;
+  /** Le jeton d'accès expire quand ce nombre de mails est atteint (une fois). */
+  expireAccessAfterSends: number | null;
   /** La révocation échoue. */
   revokeFails: boolean;
   /** Le réseau est coupé (fetch lève). */
@@ -31,11 +33,14 @@ export interface FakeGoogle {
 export function fakeGoogle(): FakeGoogle {
   let n = 0;
   const access = new Set<string>();
+  // Comme chez Google : révoquer un jeton retire toute l'autorisation du compte (tous ses jetons).
+  const accountOf = new Map<string, string>();
   const fake: FakeGoogle = {
     email: 'orga@gmail.com',
     grantedScopes: ['openid', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/gmail.send'],
     revokeAfterSends: null,
     expireAccessOnce: false,
+    expireAccessAfterSends: null,
     revokeFails: false,
     networkDown: false,
     noRefreshToken: false,
@@ -55,6 +60,7 @@ export function fakeGoogle(): FakeGoogle {
         const accessToken = `at-${++n}`;
         if (body.get('grant_type') === 'authorization_code') {
           access.add(accessToken);
+          accountOf.set(`rt-${n}`, fake.email);
           return json(200, {
             access_token: accessToken,
             expires_in: 3599,
@@ -72,14 +78,18 @@ export function fakeGoogle(): FakeGoogle {
       }
       if (url.startsWith('https://oauth2.googleapis.com/revoke')) {
         if (fake.revokeFails) return json(503, { error: 'unavailable' });
-        fake.revoked.push(new URLSearchParams(String(init?.body)).get('token')!);
+        const token = new URLSearchParams(String(init?.body)).get('token')!;
+        const account = accountOf.get(token);
+        const all = account ? [...accountOf].filter(([, a]) => a === account).map(([t]) => t) : [token];
+        for (const t of all) if (!fake.revoked.includes(t)) fake.revoked.push(t);
         return json(200, {});
       }
       if (url.startsWith('https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send')) {
         const headers = new Headers(init?.headers);
         const token = headers.get('authorization')?.replace(/^Bearer /, '') ?? '';
-        if (fake.expireAccessOnce) {
+        if (fake.expireAccessOnce || fake.expireAccessAfterSends === fake.sent.length) {
           fake.expireAccessOnce = false;
+          fake.expireAccessAfterSends = null;
           access.delete(token);
         }
         if (!access.has(token) || accessRevoked()) return json(401, { error: { code: 401, message: 'Invalid Credentials' } });

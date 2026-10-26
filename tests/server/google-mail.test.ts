@@ -108,3 +108,12 @@ test('retour au SMTP : le mode choisi sert pour les envois, le compte Google res
   expect(fake.sent).toHaveLength(0);
   expect((await settings()).google.email).toBe('orga@gmail.com');
 });
+
+test('jeton d’accès expiré entre deux mails d’un envoi groupé : renouvelé, tous les mails partent, l’état reste « ok »', async () => {
+  const links = await invited('a@example.org', 'b@example.org', 'c@example.org');
+  fake.expireAccessAfterSends = 1;
+  const res = (await send(links.map((l) => l.clubId))).json() as { status: string }[];
+  expect(res.map((r) => r.status)).toEqual(['sent', 'sent', 'sent']);
+  expect(fake.sent).toHaveLength(3);
+  expect((await settings()).google.status).toBe('ok');
+});

@@ -125,3 +125,21 @@ test('rôle serveur : le state d’un organisateur ne sert pas à un autre', asy
   expect(res.headers.location).toBe('/parametres?google=expire#mails');
   expect((await connectGoogle(app, { cookie: a })).headers.location).toBe('/parametres?google=connecte#mails');
 });
+
+const testMail = () => app.inject({ method: 'POST', url: '/api/app-settings/test-mail', payload: { to: 'moi@example.org' } });
+
+test('se reconnecter avec le même compte : la nouvelle connexion fonctionne (pas de révocation du compte)', async () => {
+  await connectGoogle(app);
+  expect((await connectGoogle(app)).headers.location).toBe('/parametres?google=connecte#mails');
+  expect(fake.revoked).toEqual([]);
+  expect((await testMail()).statusCode).toBe(204);
+});
+
+test('autorisation d’envoyer décochée en se reconnectant avec le même compte : la connexion déjà là continue de fonctionner', async () => {
+  await connectGoogle(app);
+  fake.grantedScopes = ['openid', 'https://www.googleapis.com/auth/userinfo.email'];
+  expect((await connectGoogle(app)).headers.location).toBe('/parametres?google=envoi-refuse#mails');
+  expect(fake.revoked).toEqual([]);
+  expect((await settings()).google).toMatchObject({ email: 'orga@gmail.com', status: 'ok' });
+  expect((await testMail()).statusCode).toBe(204);
+});
