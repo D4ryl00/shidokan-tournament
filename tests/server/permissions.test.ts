@@ -122,6 +122,14 @@ test('table : saisit une inscription et un résultat ; les routes de l’organis
   }
 });
 
+test('synchronisation Google de l’annuaire : réservée à l’organisateur', () => {
+  for (const route of ['/api/club-directory/google/preview', '/api/club-directory/google/apply']) {
+    expect(routeAccess(user('table'), 'POST', route), `table ${route}`).toBe('deny');
+    expect(routeAccess(user('zone'), 'POST', route), `zone ${route}`).toBe('deny');
+    expect(routeAccess(user('organisateur'), 'POST', route), `organisateur ${route}`).toBe('allow');
+  }
+});
+
 test('zone : résultats, notes de kata et départage de sa zone seulement', async () => {
   const { zone1, zone2, base, a54, b61, kata } = await setup();
   expect((await zone1('PUT', `${base}/categories/${a54.id}/results/w1-0`, result)).statusCode).toBe(200);

@@ -52,6 +52,7 @@ import { registerZoneJournal } from './zone/autonomous.js';
 import { authRoutes } from './routes/auth.js';
 import { appSettingsRoutes } from './routes/app-settings.js';
 import { googleRoutes } from './routes/google.js';
+import { googleContactsRoutes } from './routes/google-contacts.js';
 import { googleClient, googleConfigFrom } from './google/client.js';
 import { startGoogleKeepAlive } from './google/keepalive.js';
 import { defaultMailTransport, type MailTransport } from './mail.js';
@@ -248,6 +249,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(syncFileRoutes, { db, dbPath: opts.dbPath, role });
   await app.register(appSettingsRoutes, { db, mailTransport, googleAvailable: !!google });
   await app.register(googleRoutes, { db, google, role });
+  if (google) await app.register(googleContactsRoutes, { db, google });
   if (google) {
     const stopKeepAlive = startGoogleKeepAlive(db, google, (e) => app.log.error(e));
     app.addHook('onClose', async () => stopKeepAlive());

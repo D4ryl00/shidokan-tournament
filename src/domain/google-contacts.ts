@@ -110,3 +110,17 @@ export function syncPreview(contacts: GoogleContact[], clubs: (SyncClub & { arch
   diffs.sort((a, b) => normalizeName(a.clubName).localeCompare(normalizeName(b.clubName), 'fr'));
   return { diffs, newContacts: newContacts.sort(byLabel), pending: pendingOut.sort(byLabel), linked, clubs: active };
 }
+
+/** Réponse de l'aperçu de la synchronisation. */
+export type GoogleContactsView =
+  | { state: 'no-scope'; account: string }
+  | { state: 'ok'; account: string; labels: ContactLabel[]; label: string | null; total: number; preview: SyncPreview };
+
+/** Ce que l'organisateur a choisi d'appliquer. */
+export interface SyncApply {
+  updates: { clubId: string; version: number | null; set: Partial<Record<CoachField, string>> }[];
+  links: { clubId: string; version: number | null; contact: string; set: Partial<Record<CoachField, string>> }[];
+  creates: { contact: string; name: string; coachName: string | null; coachPhone: string | null; coachEmail: string | null }[];
+  /** Contacts choisis « Plus tard » cette fois. */
+  later: string[];
+}
