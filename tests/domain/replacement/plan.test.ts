@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { detectCases } from '../../../src/domain/replacement/detect.js';
 import { manualProposal } from '../../../src/domain/replacement/manual.js';
-import { aloneRegistrations, computePlan, type PlanChoice, type PlanOptions } from '../../../src/domain/replacement/plan.js';
+import { aloneRegistrations, computePlan, planLadder, type PlanChoice, type PlanMove, type PlanOptions } from '../../../src/domain/replacement/plan.js';
 import { cardByCardReplay, scoreOf } from '../../../src/domain/replacement/plan-search.js';
 import { rulesForMove } from '../../../src/domain/replacement/propose.js';
 import { allowedAt } from '../../../src/domain/replacement/rules.js';
@@ -191,6 +191,97 @@ test('pour appliquer : seulement sans validation et validés', () => {
   const r2 = plan(t, { forApply: true });
   expect(r2.moves.map((m) => [m.manual, m.rules])).toEqual([[false, ['weight']]]);
   expect(r2.aloneAfter).toEqual([mini.registrationId]);
+});
+
+test('pour appliquer : jamais une règle sans validation sous la ligne', () => {
+  // ALONE seule en +84 ; quatre en -84 : seule issue, le « split » (le plus lourd du dessous la rejoint).
+  const sen = (label: string, kg: number, wc = 'senior:M:-84') => member({ label, ageBandCode: 'senior', sex: 'M', weightClassId: wc, approxWeightKg: kg });
+  const s = makeState([sen('ALONE', 85, 'senior:M:+84'), sen('L1', 72), sen('L2', 78), sen('L3', 83), sen('L4', 84)]);
+  const usesCut = (r: ReturnType<typeof plan>) => r.moves.filter((m) => m.rules.some((x) => x === 'split' || x === 'weight'));
+  expect(usesCut(plan(s, { level: 'split', forApply: true }))).toHaveLength(1);
+  for (const level of ['return', 'weight'] as const) {
+    const t = structuredClone(s);
+    t.settings.replacementRules.cutAfter = level;
+    expect(usesCut(plan(t, { level })), level).toEqual([]);
+    expect(usesCut(plan(t, { level, forApply: true })), level).toEqual([]);
+  }
+  // « Split » rangé en dernier, ligne après « discipline » : ni à l'écran ni pour appliquer.
+  const last = structuredClone(s);
+  last.settings.replacementRules.order = [...s.settings.replacementRules.order.filter((r) => r !== 'split'), 'split'];
+  expect(usesCut(plan(last, { level: 'discipline', forApply: true }))).toEqual([]);
+  // « Catégorie de poids voisine » sous la ligne (ligne après « return ») : A et B restent seules, même pour appliquer.
+  const a = kgM('A', 'cadet:F:-54', 52);
+  const b = kgM('B', 'cadet:F:-61', 55);
+  const w = makeState([a, b]);
+  expect(plan(w, { level: 'weight', forApply: true }).moves.map((m) => m.rules)).toEqual([['weight']]);
+  const r = plan(w, { level: 'return', forApply: true });
+  expect([r.moves, r.aloneAfter]).toEqual([[], ids(a, b)]);
+});
+
+/** W, pesée 58 kg en -54 avec Y : sa correction vers -61 laisse Y seule, dont la seule issue est la tranche au-dessus. */
+function leftAlone(s1Kg = 58) {
+  const w = member({ label: 'W', weightClassId: 'cadet:F:-54', weighInKg: 58, presence: 'present' });
+  const y = kgM('Y', 'cadet:F:-54', 53);
+  const s1 = kgM('S1', 'cadet:F:-61', s1Kg);
+  const s2 = kgM('S2', 'cadet:F:-61', s1Kg + 0.5);
+  const j1 = member({ label: 'J1', ageBandCode: 'junior', weightClassId: 'junior:F:-53', approxWeightKg: 52 });
+  const j2 = member({ label: 'J2', ageBandCode: 'junior', weightClassId: 'junior:F:-53', approxWeightKg: 52.5 });
+  const s = makeState([w, y, s1, s2, j1, j2]);
+  s.settings.replacementRules.off = ['weightGap'];
+  return { s, w, y };
+}
+
+test('valider un déplacement qui suit un autre déplacement du plan : gardé, après lui', () => {
+  const { s, w, y } = leftAlone();
+  const shown = plan(s, { level: 'discipline' });
+  expect(shown.moves.map((m) => [m.registrationId, m.manual])).toEqual([[w.registrationId, false], [y.registrationId, true]]);
+  const yMove = shown.moves[1]!;
+  // Le cas de Y n'existe qu'après la correction de W.
+  expect(detectCases(s).some((c) => c.id === yMove.caseId)).toBe(false);
+  const choices: PlanChoice[] = [{ kind: 'validate', proposalId: yMove.id, caseId: yMove.caseId }];
+  const r = plan(s, { level: 'discipline', choices });
+  expect(r.dropped).toEqual([]);
+  expect(r.moves.map((m) => [m.id, m.validated])).toEqual([[shown.moves[0]!.id, false], [yMove.id, true]]);
+  expect(r.aloneAfter).toEqual([]);
+  // Pour appliquer : la correction (sans validation) puis Y, validée.
+  const applied = plan(s, { level: 'discipline', choices, forApply: true });
+  expect([applied.dropped, applied.waiting]).toEqual([[], []]);
+  expect(applied.moves.map((m) => [m.id, m.validated])).toEqual([[shown.moves[0]!.id, false], [yMove.id, true]]);
+  // Le diagramme garde le choix à chaque ligne où la correction existe.
+  expect(planLadder({ ...s, settings: { ...s.settings, replacementRules: { ...s.settings.replacementRules, cutAfter: 'discipline' } } }, { waveId: null, choices }).plan.dropped).toEqual([]);
+});
+
+test('valider un déplacement qui suit un déplacement à valider : en attente pour appliquer, jamais écarté', () => {
+  // Les -61 sont légers : la correction de W dépasse l'écart de poids, elle est à valider.
+  const { s, w, y } = leftAlone(52);
+  const shown = plan(s, { level: 'discipline' });
+  expect(shown.moves.map((m) => [m.registrationId, m.manual])).toEqual([[w.registrationId, true], [y.registrationId, true]]);
+  const [wMove, yMove] = shown.moves as [PlanMove, PlanMove];
+  const onlyY: PlanChoice[] = [{ kind: 'validate', proposalId: yMove.id, caseId: yMove.caseId }];
+  expect(plan(s, { level: 'discipline', choices: onlyY }).dropped).toEqual([]);
+  const applied = plan(s, { level: 'discipline', choices: onlyY, forApply: true });
+  expect([applied.moves, applied.dropped, applied.waiting]).toEqual([[], [], onlyY]);
+  // Les deux validés (dans n'importe quel ordre) : les deux appliqués, W d'abord.
+  const both: PlanChoice[] = [...onlyY, { kind: 'validate', proposalId: wMove.id, caseId: wMove.caseId }];
+  const r = plan(s, { level: 'discipline', choices: both, forApply: true });
+  expect([r.dropped, r.waiting]).toEqual([[], []]);
+  expect(r.moves.map((m) => [m.id, m.validated])).toEqual([[wMove.id, true], [yMove.id, true]]);
+});
+
+test('choix d’une autre session : écarté', () => {
+  const matin: Wave = { id: 'matin', name: 'Matin', order: 0, rules: { ageBandCodes: ['minime'], disciplines: [] }, weighInClosed: false };
+  const aprem: Wave = { id: 'aprem', name: 'Après-midi', order: 1, rules: { ageBandCodes: ['cadet'], disciplines: [] }, weighInClosed: false };
+  const a = kgM('A', 'cadet:F:-54', 52);
+  const b = kgM('B', 'cadet:F:-61', 55);
+  const s = makeState([a, b], { waves: [matin, aprem] });
+  const move = plan(s, { waveId: 'aprem' }).moves[0]!;
+  const choices: PlanChoice[] = [
+    { kind: 'validate', proposalId: move.id, caseId: move.caseId },
+    { kind: 'manual', registrationId: b.registrationId, categoryId: a.categoryId! },
+  ];
+  const r = plan(s, { waveId: 'matin', choices });
+  expect([r.moves, r.dropped]).toEqual([[], choices]);
+  expect(plan(s, { waveId: 'aprem', choices }).dropped).toEqual([choices[1]]);
 });
 
 test('choix gardés même si leur règle est coupée ensuite', () => {

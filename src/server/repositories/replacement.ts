@@ -321,6 +321,8 @@ export interface PlanResponse {
     alone: string[];
     onCards: string[];
     dropped: PlanChoice[];
+    /** Pour appliquer : choix validés qui attendent un déplacement à valider non validé. */
+    waiting: PlanChoice[];
     proven: boolean;
     hash: string;
     refused: { proposalId: string; registrationId: string; reason: string }[];
@@ -351,6 +353,7 @@ export async function planResponse(db: AppDb, competitionId: string, body: { wav
       alone: plan.aloneAfter,
       onCards: plan.onCards,
       dropped: plan.dropped,
+      waiting: plan.waiting,
       proven: plan.proven,
       hash: plan.hash,
       refused,
@@ -378,8 +381,9 @@ export async function applyPlan(
   for (const move of plan.moves) {
     state = await loadState(db, competitionId);
     let p: Proposal = move;
-    if ('categoryId' in move.target && move.target.categoryId.startsWith('new:') && move.anchor) {
-      const categoryId = state.members.find((m) => m.registrationId === move.anchor)?.categoryId;
+    if ('categoryId' in move.target && move.target.categoryId.startsWith('new:')) {
+      // Sans ancre, la catégorie créée en route ne se retrouve pas : le plan est à relire, rien n'est écrit pour celui-ci.
+      const categoryId = move.anchor === null ? undefined : state.members.find((m) => m.registrationId === move.anchor)?.categoryId;
       if (!categoryId) throw new StaleProposalError('Le plan a changé depuis l’affichage : relisez-le avant de l’appliquer.');
       p = { ...move, target: { categoryId } };
     }

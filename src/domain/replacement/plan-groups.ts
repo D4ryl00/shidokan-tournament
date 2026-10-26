@@ -42,7 +42,7 @@ const groupKey = (g: Group) => [...g.categories].sort(cmp).join('|');
  *    recalculés, jusqu'à stabilité (au plus autant de tours que de groupes).
  * Le plan n'est jamais moins bon que le rejeu : chaque groupe garde sa part du rejeu tant qu'il ne trouve pas mieux.
  */
-export function solveGroups(cur: State, ctx: SearchContext, budget: number): GroupsResult {
+export function solveGroups(cur: State, ctx: SearchContext, budget: number, pool?: { left: number }): GroupsResult {
   const replay = cardByCardReplay(cur, ctx);
   const cases = openCases(cur, ctx, new Set());
   const rel = relate(cur, ctx, new Set(), cases, {
@@ -78,7 +78,7 @@ export function solveGroups(cur: State, ctx: SearchContext, budget: number): Gro
       }
       const sub = subState(cur, g.categories);
       const incumbent = scoreOf(sub, ctx, share[i]!);
-      const solver = new GroupSolver(ctx, budget, memo);
+      const solver = new GroupSolver(ctx, budget, memo, pool);
       const found = solver.solve(sub, new Set(), new Map(), incumbent.score);
       const sol = found && compareScores(found.score, incumbent.score) < 0 ? found : incumbent;
       solved.set(key, { sol, exhausted: solver.exhausted });

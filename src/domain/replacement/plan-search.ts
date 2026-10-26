@@ -592,6 +592,8 @@ export class GroupSolver {
     private readonly ctx: SearchContext,
     budget: number,
     private readonly memo: Map<string, Solution>,
+    /** Nœuds partagés par plusieurs recherches (les lignes d'un diagramme) ; épuisés, la recherche s'arrête aussi. */
+    private readonly pool?: { left: number },
   ) {
     this.nodes = budget;
   }
@@ -604,7 +606,7 @@ export class GroupSolver {
     const failed = this.failed.get(sig);
     if (failed && compareBounds(cut, failed) <= 0) return null;
     this.visited++;
-    if (this.exhausted || --this.nodes < 0) {
+    if (this.exhausted || --this.nodes < 0 || (this.pool !== undefined && --this.pool.left < 0)) {
       this.exhausted = true;
       return this.greedy(s, decided);
     }

@@ -177,6 +177,41 @@ test('appliquer : sans validation et validés seulement, journal « en masse »'
   expect(entry).toMatchObject({ type: 'C', manual: true, bulk: true });
 });
 
+test('valider un déplacement qui n’existe qu’après une correction de poids : gardé, appliqué après elle', async () => {
+  // W (pesée 58 kg) quitte les -54 pour les -61 : Y y reste seule, et sa seule issue est la tranche au-dessus.
+  const w = await reg({ lastName: 'W', approxWeightKg: 52 });
+  const y = await reg({ lastName: 'Y', approxWeightKg: 53 });
+  for (const kg of [58, 58.5]) await reg({ weightClassId: 'cadet:F:-61', approxWeightKg: kg });
+  for (const kg of [52, 52.5]) await reg({ ageBandCode: 'junior', weightClassId: 'junior:F:-53', approxWeightKg: kg });
+  await call('PUT', `/weigh-in/${w.fighterId}`, { weighInKg: 58 });
+  const def = rulesView(defaultSettings());
+  expect((await call('PUT', '/replacement/rules', { ...def, on: { ...def.on, weightGap: false } })).statusCode).toBe(200);
+  const shown = await plan();
+  expect(shown.plan.moves.map((m) => [m.registrationId, m.manual])).toEqual([[w.id, false], [y.id, true]]);
+  const yMove = shown.plan.moves[1] as unknown as { id: string; caseId: string };
+  const choices: Choice[] = [{ kind: 'validate', proposalId: yMove.id, caseId: yMove.caseId }];
+  const pinned = await plan({ choices });
+  expect(pinned.plan.dropped).toEqual([]);
+  expect(pinned.plan.moves.map((m) => [m.registrationId, m.validated])).toEqual([[w.id, false], [y.id, true]]);
+  const toApply = await plan({ choices, forApply: true });
+  expect(toApply.plan.moves.map((m) => m.registrationId)).toEqual([w.id, y.id]);
+  expect((await applyPlan({ choices })).json()).toEqual({ applied: 2 });
+  const r = await replacement();
+  expect(r.cases).toEqual([]);
+  expect(r.recasements.find((e) => e.registrationId === y.id)).toMatchObject({ type: 'C', status: 'validated' });
+});
+
+test('appliquer : jamais une règle sans validation placée sous la ligne', async () => {
+  // A et B seules, voisines de poids : la règle 2 les réunit, sauf si la ligne passe juste après le retour.
+  await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 52 });
+  await reg({ weightClassId: 'cadet:F:-61', approxWeightKg: 55 });
+  const def = rulesView(defaultSettings());
+  expect((await call('PUT', '/replacement/rules', { ...def, cutAfter: 'return' })).statusCode).toBe(200);
+  expect((await plan()).plan.moves).toEqual([]);
+  expect((await plan({ forApply: true })).plan.moves).toEqual([]);
+  expect((await applyPlan()).json()).toEqual({ applied: 0 });
+});
+
 test('appliquer un plan périmé : 409, rien d’appliqué', async () => {
   const a = await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
   await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 49 });

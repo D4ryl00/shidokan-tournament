@@ -1,14 +1,15 @@
-import { categoryLabel, type CategoryKey } from '../categories.js';
+import { categoryLabel, keyString, type CategoryKey } from '../categories.js';
 import { DISCIPLINES } from '../disciplines.js';
 import type { RuleId } from '../settings.js';
 import { detectCases } from './detect.js';
 import { manualProposal } from './manual.js';
 import { applyAll } from './move.js';
 import { solveGroups } from './plan-groups.js';
-import { DEFAULT_NODE_BUDGET, aloneRegistrations, costRank, type SearchContext } from './plan-search.js';
+import { DEFAULT_NODE_BUDGET, aloneRegistrations, compareScores, costRank, moversOf, scoreOf, type SearchContext, type SearchMove } from './plan-search.js';
 import { proposalsFor, rulesForMove } from './propose.js';
 import { allowedAt, costBand, isRuleOn, NO_VALIDATION_RULES, ruleRank, withAllRules, type CostBand } from './rules.js';
 import type { Proposal, State } from './types.js';
+import { casesOfWave, memberWave } from './waves.js';
 import { activeMembers, categoryWeightGap, gapThreshold } from './weights.js';
 
 export { DEFAULT_NODE_BUDGET, aloneRegistrations } from './plan-search.js';
@@ -52,6 +53,8 @@ export interface PlanResult {
   /** Corrections de poids impossibles dans le plan : elles restent sur leur carte, pas comptées seules. */
   onCards: string[];
   dropped: PlanChoice[];
+  /** Pour appliquer : choix validés qui suivent un déplacement à valider non validé ; ni appliqués ni écartés. */
+  waiting: PlanChoice[];
   /** Vrai si la recherche est allée au bout : aucun plan dans ces règles ne laisse moins de seuls. */
   proven: boolean;
   final: State;
@@ -127,39 +130,65 @@ function planMove(
   };
 }
 
+/** Catégories qu'un déplacement touche : celles des combattants qui bougent, avant et après, et la cible (`new:…` comprise). */
+function touchedBy(before: State, after: State, p: Proposal): Set<string> {
+  const ids = new Set(moversOf(p).flatMap((r) => [before, after].map((x) => x.members.find((m) => m.registrationId === r)?.categoryId ?? '')));
+  ids.add('categoryId' in p.target ? p.target.categoryId : `new:${keyString(p.target.newKey)}`);
+  ids.delete('');
+  return ids;
+}
+
 /**
  * Plan d'ensemble d'une session : d'abord les choix de l'organisateur, dans l'ordre reçu ; puis, groupe par groupe,
  * le placement qui laisse le moins de combattants seuls avec les règles permises (actives, jusqu'à `level`).
+ * Un choix dont le cas n'existe qu'après un autre déplacement du plan (le partenaire d'une correction de poids, une
+ * catégorie créée en route) est placé juste après ces déplacements, qui sont alors fixés.
  */
 export function computePlan(state: State, opts: PlanOptions): PlanResult {
+  return solvePlan(state, opts, {}).result;
+}
+
+interface SolveExtra {
+  /** Nœuds de tout le calcul (partagés par les lignes du diagramme) : une fois épuisés, chaque recherche rend son rejeu. */
+  pool?: { left: number };
+  /** Plan d'une ligne au-dessus (mêmes choix, règles moins nombreuses) : gardé s'il fait mieux que la recherche. */
+  seed?: { pins: string; moves: SearchMove[] };
+}
+
+function solvePlan(state: State, opts: PlanOptions, extra: SolveExtra): { result: PlanResult; found: SearchMove[]; pins: string | null } {
   const forApply = opts.forApply === true;
   const atLevel = allowedAt(state.settings, opts.level);
-  const allowed = forApply ? NO_VALIDATION_RULES : atLevel;
+  // Pour appliquer : les règles sans validation au-dessus de la ligne seulement (retours et corrections de poids s'imposent).
+  const allowed = forApply ? new Set([...atLevel].filter((r) => NO_VALIDATION_RULES.has(r))) : atLevel;
+  const budget = opts.nodeBudget ?? DEFAULT_NODE_BUDGET;
   const moves: PlanMove[] = [];
   const dropped: PlanChoice[] = [];
+  const waiting: PlanChoice[] = [];
   const excluded = new Set<string>();
   let cur = state;
+  let prefixed = false;
 
-  // 1. Les choix d'abord : jamais défaits, même si leur règle est désactivée ou sous la ligne.
-  for (const choice of opts.choices) {
-    const everything = { ...cur, settings: withAllRules(cur.settings, cur.grid) };
-    let p: Proposal | null = null;
-    let warnings: string[] = [];
+  /** Le choix dans l'état `s` (cas ou combattant de la session) ; `null` : pas (encore) là. */
+  const resolve = (s: State, choice: PlanChoice): { p: Proposal; warnings: string[] } | null => {
+    const everything = { ...s, settings: withAllRules(s.settings, s.grid) };
     if (choice.kind === 'validate') {
-      const c = detectCases(cur).find((x) => x.id === choice.caseId);
-      p = c ? (proposalsFor(everything, c).find((x) => x.id === choice.proposalId) ?? null) : null;
-    } else {
-      const r = manualProposal(cur, choice.registrationId, choice.categoryId);
-      if ('p' in r) {
-        p = { ...r.p, rules: rulesForMove(everything, choice.registrationId, choice.categoryId) ?? [] };
-        warnings = r.warnings;
-      }
+      const c = casesOfWave(s, detectCases(s), opts.waveId).find((x) => x.id === choice.caseId);
+      const p = c ? proposalsFor(everything, c).find((x) => x.id === choice.proposalId) : undefined;
+      return p ? { p, warnings: [] } : null;
     }
-    const movers = p ? [p.registrationId, ...(p.alsoMoved ?? [])] : [];
-    if (!p || p.waveChange || p.waveShifts.length > 0 || movers.some((r) => excluded.has(r))) {
-      dropped.push(choice);
-      continue;
-    }
+    const m = s.members.find((x) => x.registrationId === choice.registrationId);
+    if (!m || (opts.waveId !== null && memberWave(s, m) !== opts.waveId)) return null;
+    const r = manualProposal(s, choice.registrationId, choice.categoryId);
+    if (!('p' in r)) return null;
+    return { p: { ...r.p, rules: rulesForMove(everything, choice.registrationId, choice.categoryId) ?? [] }, warnings: r.warnings };
+  };
+  const usable = (p: Proposal, taken: ReadonlySet<string>) => !p.waveChange && p.waveShifts.length === 0 && !moversOf(p).some((r) => taken.has(r));
+  /** Épingle le choix dans l'état courant : `missing` s'il n'y est pas (encore), `dropped` s'il y est mais impossible. */
+  const pin = (choice: PlanChoice): 'pinned' | 'dropped' | 'missing' => {
+    const found = resolve(cur, choice);
+    if (!found) return 'missing';
+    const { p, warnings } = found;
+    if (!usable(p, excluded)) return 'dropped';
     const rules = p.rules;
     const outside: PlanMove['outside'] =
       warnings.length > 0 ? 'breaks-rules'
@@ -169,13 +198,90 @@ export function computePlan(state: State, opts: PlanOptions): PlanResult {
     const after = applyAll(cur, p);
     const needsValidation = choice.kind === 'manual' ? rules.length === 0 || rules.some((r) => !NO_VALIDATION_RULES.has(r)) : p.manual;
     moves.push(planMove(cur, after, p, { validated: true, outside, needsValidation, measured: choice.kind === 'manual' }));
-    for (const r of movers) excluded.add(r);
+    for (const r of moversOf(p)) excluded.add(r);
     cur = after;
+    return 'pinned';
+  };
+  /** Épingle ce qui peut l'être, jusqu'à ce que plus rien ne change (une épingle peut en rendre une autre possible). */
+  const pinAll = (list: PlanChoice[]): PlanChoice[] => {
+    let pending = list;
+    for (let progress = true; progress; ) {
+      progress = false;
+      const next: PlanChoice[] = [];
+      for (const choice of pending) {
+        const r = pin(choice);
+        if (r === 'missing') next.push(choice);
+        else {
+          if (r === 'dropped') dropped.push(choice);
+          progress = true;
+        }
+      }
+      pending = next;
+    }
+    return pending;
+  };
+
+  // 1. Les choix d'abord : jamais défaits, même si leur règle est désactivée ou sous la ligne.
+  let pending = pinAll(opts.choices);
+  const pins = moves.map((m) => m.id).join('|');
+
+  // 1 bis. Un choix encore absent : on cherche, dans le plan affiché (règles jusqu'à la ligne), les déplacements après
+  // lesquels il apparaît ; seuls ceux qui y mènent (catégories touchées en chaîne) sont fixés avant lui.
+  while (pending.length > 0) {
+    const screen: SearchContext = { waveId: opts.waveId, allowed: atLevel, forApply: false, excluded };
+    const plan = solveGroups(cur, screen, budget, extra.pool).moves;
+    let hit: { at: number; choice: PlanChoice; p: Proposal; after: State } | null = null;
+    const taken = new Set(excluded);
+    let s = cur;
+    for (let i = 0; i < plan.length && !hit; i++) {
+      s = applyAll(s, plan[i]!.p);
+      for (const r of moversOf(plan[i]!.p)) taken.add(r);
+      for (const choice of pending) {
+        const found = resolve(s, choice);
+        if (found && usable(found.p, taken)) {
+          hit = { at: i, choice, p: found.p, after: s };
+          break;
+        }
+      }
+    }
+    if (!hit) break;
+    const before = plan.slice(0, hit.at + 1);
+    const needed = chainTo(cur, before, hit.p, hit.after);
+    pending = pending.filter((c) => c !== hit.choice);
+    // Pour appliquer : un déplacement à valider non validé n'est pas appliqué, le choix qui en dépend attend.
+    if (forApply && needed.some((m) => m.p.manual)) {
+      waiting.push(hit.choice);
+      continue;
+    }
+    for (const m of needed) {
+      const after = applyAll(cur, m.p);
+      moves.push(planMove(cur, after, m.p, { validated: false, outside: null, needsValidation: m.p.manual }));
+      for (const r of moversOf(m.p)) excluded.add(r);
+      cur = after;
+    }
+    prefixed = true;
+    if (pin(hit.choice) !== 'pinned') dropped.push(hit.choice);
+    pending = pinAll(pending);
   }
+  dropped.push(...pending);
 
   // 2. Les cas ouverts, en groupes indépendants ; chaque groupe part du rejeu « carte par carte » et cherche mieux.
   const ctx: SearchContext = { waveId: opts.waveId, allowed, forApply, excluded };
-  const { moves: found, onCards, proven } = solveGroups(cur, ctx, opts.nodeBudget ?? DEFAULT_NODE_BUDGET);
+  const solved = solveGroups(cur, ctx, budget, extra.pool);
+  let found = solved.moves;
+  let onCards = solved.onCards;
+  // Une chaîne fixée pour un choix n'est qu'un chemin parmi d'autres : le plan n'est alors plus prouvé.
+  let proven = solved.proven && !prefixed;
+  // Le plan de la ligne au-dessus reste permis ici (mêmes choix, plus de règles) : la recherche ne fait jamais moins bien.
+  if (extra.seed && !prefixed && extra.seed.pins === pins) {
+    const mine = scoreOf(cur, ctx, found);
+    const theirs = scoreOf(cur, ctx, extra.seed.moves);
+    if (compareScores(theirs.score, mine.score) < 0) {
+      found = extra.seed.moves;
+      onCards = theirs.onCards;
+      proven = false;
+    }
+  }
   // 3. Fusion : les déplacements des groupes, appliqués à l'état courant dans l'ordre trouvé.
   for (const m of found) {
     const after = applyAll(cur, m.p);
@@ -185,15 +291,49 @@ export function computePlan(state: State, opts: PlanOptions): PlanResult {
 
   const cards = new Set(onCards);
   return {
-    moves,
-    aloneBefore: aloneRegistrations(state, opts.waveId),
-    aloneAfter: aloneRegistrations(cur, opts.waveId).filter((r) => !cards.has(r)),
-    onCards: [...cards].sort(),
-    dropped,
-    proven,
-    final: cur,
-    hash: moves.map((m) => m.id).join('|'),
+    result: {
+      moves,
+      aloneBefore: aloneRegistrations(state, opts.waveId),
+      aloneAfter: aloneRegistrations(cur, opts.waveId).filter((r) => !cards.has(r)),
+      onCards: [...cards].sort(),
+      dropped,
+      waiting,
+      proven,
+      final: cur,
+      hash: moves.map((m) => m.id).join('|'),
+    },
+    found,
+    pins: prefixed ? null : pins,
   };
+}
+
+/**
+ * Parmi `prefix` (déplacements du plan appliqués à `start`, au bout desquels la proposition `p` apparaît dans `end`),
+ * ceux qui y mènent : en remontant, chaque déplacement qui touche une catégorie déjà retenue (celles de `p` d'abord).
+ * Si la chaîne seule ne fait pas apparaître `p`, tout le début du plan est gardé.
+ */
+function chainTo(start: State, prefix: SearchMove[], p: Proposal, end: State): SearchMove[] {
+  const touched: Set<string>[] = [];
+  let s = start;
+  for (const m of prefix) {
+    const after = applyAll(s, m.p);
+    touched.push(touchedBy(s, after, m.p));
+    s = after;
+  }
+  const need = touchedBy(end, end, p);
+  const keep = new Set<number>();
+  for (let i = prefix.length - 1; i >= 0; i--) {
+    if (![...touched[i]!].some((id) => need.has(id))) continue;
+    keep.add(i);
+    for (const id of touched[i]!) need.add(id);
+  }
+  const chain = prefix.filter((_, i) => keep.has(i));
+  if (chain.length === prefix.length) return chain;
+  let t = start;
+  for (const m of chain) t = applyAll(t, m.p);
+  const everything = { ...t, settings: withAllRules(t.settings, t.grid) };
+  const c = detectCases(t).find((x) => x.id === p.caseId);
+  return c && proposalsFor(everything, c).some((x) => x.id === p.id) ? chain : prefix;
 }
 
 export interface LadderRow {
@@ -209,12 +349,25 @@ export interface LadderRow {
 }
 
 /**
+ * Nœuds de tout un diagramme (toutes ses lignes) : une limite fixe, jamais un temps, pour qu'une demande ne bloque pas le
+ * serveur plusieurs secondes quand des règles rares ouvrent beaucoup de combinaisons. Une fois épuisés, chaque ligne
+ * restante rend le rejeu « carte par carte » (ou la ligne au-dessus, si elle fait mieux), sans « prouvé ».
+ */
+export const LADDER_NODE_BUDGET = 20_000;
+
+/**
  * Diagramme de la liste : un calcul du plan par règle active, chacune étant la dernière permise.
  * Le plan retenu est celui de la ligne de coupure, calculé une seule fois.
+ * Chaque ligne part aussi du plan de la ligne active au-dessus (ses déplacements restent permis avec une règle de
+ * plus) : à partir de la première règle, les barres ne remontent jamais, même quand une recherche n'est pas prouvée.
  */
-export function planLadder(state: State, opts: { waveId: string | null; choices: PlanChoice[] }): { rows: LadderRow[]; plan: PlanResult } {
+export function planLadder(
+  state: State,
+  opts: { waveId: string | null; choices: PlanChoice[]; nodeBudget?: number },
+): { rows: LadderRow[]; plan: PlanResult } {
   const { order, cutAfter } = state.settings.replacementRules;
-  const run = (level: RuleId) => computePlan(state, { waveId: opts.waveId, level, choices: opts.choices });
+  const pool = { left: opts.nodeBudget ?? LADDER_NODE_BUDGET };
+  let seed: SolveExtra['seed'];
   const rows: LadderRow[] = [
     { rule: null, on: true, alone: aloneRegistrations(state, opts.waveId).length, moves: 0, toValidate: 0, proven: true },
   ];
@@ -225,9 +378,10 @@ export function planLadder(state: State, opts: { waveId: string | null; choices:
       rows.push({ rule, on, alone: null, moves: 0, toValidate: 0, proven: true });
       continue;
     }
-    const r = run(rule);
+    const { result: r, found, pins } = solvePlan(state, { waveId: opts.waveId, level: rule, choices: opts.choices }, { pool, seed });
+    seed = pins === null ? undefined : { pins, moves: found };
     if (rule === cutAfter) plan = r;
     rows.push({ rule, on, alone: r.aloneAfter.length, moves: r.moves.length, toValidate: r.moves.filter((m) => m.manual && !m.validated).length, proven: r.proven });
   }
-  return { rows, plan: plan ?? run(cutAfter) };
+  return { rows, plan: plan ?? solvePlan(state, { waveId: opts.waveId, level: cutAfter, choices: opts.choices }, { pool }).result };
 }
