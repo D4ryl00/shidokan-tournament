@@ -177,6 +177,9 @@ Demandé par l'organisateur après la relecture : le calcul ne doit **jamais blo
 - ✅ **« Annuler le calcul »** arrête le fil tout de suite. 💡 L'écran garde le dernier plan calculé, avec « Calcul annulé : le plan affiché ne tient pas compte de votre dernier changement. » et un bouton **« Relancer le calcul »** ; « Appliquer le plan » reste désactivé jusqu'à un calcul complet. Annuler n'écrit rien et ne défait aucun choix (épingles, « Modifier », refus restent).
 - 💡 **Chaque nouveau geste annule le calcul en cours** du poste et en relance un (le résultat de l'ancien ne servirait plus) ; un poste qui ferme la page ou perd la connexion arrête aussi son calcul.
 - 💡 Le plan à appliquer (un seul calcul) passe par le même fil ; fermer la confirmation l'annule.
+- 💡 (2026-10-26, relecture) Pendant un calcul, tous les gestes restent possibles (liste des règles, Valider, Refuser, Modifier) et s'affichent tout de suite ; toute écriture du poste arrête le calcul en cours et en relance un. Seul « Appliquer le plan » attend un calcul complet (et la fin d'un enregistrement en cours).
+- 💡 (2026-10-26, relecture) Une écriture d'un autre poste ne relance pas un calcul en cours (il repartirait de zéro à chaque pesée) : un seul nouveau calcul part quand il finit. Un plan annulé est seulement marqué périmé : il ne repart que par un geste du poste ou « Relancer le calcul ».
+- 💡 (2026-10-26) Appliquer le plan : l'empreinte est revérifiée après le calcul, puis tous les déplacements sont écrits en une seule transaction (tout ou rien) ; chaque combattant doit encore être dans sa catégorie de départ.
 
 ## 6. Autour
 
