@@ -90,6 +90,14 @@ test('aperçus (routes …/preview) : aucun change (sinon les postes se recharge
   expect(await changesDuring(id, () => app.inject({ method: 'POST', url: `/api/competitions/${id}/club-forms/entry/preview`, payload: pkg }))).toBe(0);
 });
 
+test('plan d’ensemble (lecture) : aucun change ; son application, si (sinon deux postes se relancent le plan en boucle)', async () => {
+  const plan = () => app.inject({ method: 'POST', url: `/api/competitions/${id}/replacement/plan`, payload: { choices: [], forApply: true } });
+  expect(await changesDuring(id, plan)).toBe(0);
+  const { fingerprint, plan: { hash } } = (await plan()).json();
+  const apply = () => app.inject({ method: 'POST', url: `/api/competitions/${id}/replacement/plan/apply`, payload: { choices: [], fingerprint, hash } });
+  expect(await changesDuring(id, apply)).toBeGreaterThanOrEqual(1);
+});
+
 test('le change porte l’identifiant du poste qui a écrit (en-tête X-Poste-Id)', async () => {
   const controller = new AbortController();
   const res = await fetch(`${url}/api/competitions/${id}/events`, { signal: controller.signal });

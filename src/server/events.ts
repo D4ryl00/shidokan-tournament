@@ -52,8 +52,9 @@ export function registerCompetitionEvents(app: FastifyInstance): void {
   app.addHook('onResponse', async (req, reply) => {
     if (req.method === 'GET' || req.method === 'HEAD' || reply.statusCode >= 400) return;
     const route = req.routeOptions.url ?? '';
-    // Les aperçus ne changent rien (et un aperçu relu à chaque changement relancerait les postes en boucle).
-    if (!route.startsWith('/api/competitions/:id') || route.endsWith('/preview')) return;
+    // Les aperçus et le plan d'ensemble ne changent rien (et, relus à chaque changement, ils relanceraient les postes en boucle) ;
+    // l'application du plan (`plan/apply`), elle, prévient.
+    if (!route.startsWith('/api/competitions/:id') || route.endsWith('/preview') || route === '/api/competitions/:id/replacement/plan') return;
     const id = (req.params as { id?: string }).id;
     const origin = req.headers['x-poste-id'];
     if (id) competitionChanged(id, typeof origin === 'string' ? origin.slice(0, 64) : null);
