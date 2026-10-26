@@ -682,6 +682,17 @@ describe('réaffectation par session', () => {
     expect(await waveOfReg(mini.id)).toBe(matin);
   });
 
+  test('repartir de zéro : présence d’avant le changement de session rétablie', async () => {
+    const { mini, matin } = await setup();
+    await call('PUT', `/weigh-in/${mini.fighterId}`, { presence: 'present', weighInKg: 45, waveId: matin });
+    const r = await ofWave(matin);
+    await call('POST', '/replacement/apply', { proposalId: r.proposals[r.cases[0]!.id]![0]!.id });
+    expect((await regRow(mini.id)).presence).toBe('unknown');
+    expect((await call('POST', '/replacement/reset')).statusCode).toBe(200);
+    expect((await regRow(mini.id)).presence).toBe('present');
+    expect(await waveOfReg(mini.id)).toBe(matin);
+  });
+
   test('sessions : waveId obligatoire, inconnu 404, une seule session traitée', async () => {
     const { mini, alone, matin, aprem } = await setup();
     // Matin : la minime n'a que des propositions qui changent de session, le plan n'y touche pas.
@@ -999,5 +1010,97 @@ describe('annulation et valeurs d’origine', () => {
       expect((await call('POST', '/replacement/undo', { recasementId: entry.id })).statusCode).toBe(200);
     }
     expect((await registration(a.id)).weightClassId).toBe('cadet:F:-47');
+  });
+});
+
+describe('repartir de zéro', () => {
+  type RegRow = { id: string; categoryId: string | null; weightClassId: string | null; recasementType: string | null; withdrawn: boolean };
+  const regs = async () => (await call('GET', '/registrations')).json() as RegRow[];
+  /** Catégories comparables : libellé et membres, dans un ordre stable. */
+  const layout = async () => (await categories()).map((c) => `${c.label} : ${[...c.registrationIds].sort().join(',')}`).sort();
+  const reset = () => call('POST', '/replacement/reset');
+
+  test('rétablit les catégories d’avant toute réaffectation et efface l’historique', async () => {
+    await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+    for (let i = 0; i < 2; i++) await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
+    const lone = await reg({ sex: 'M', weightClassId: 'cadet:M:-52' });
+    const senior = await reg({ ageBandCode: 'senior', weightClassId: 'senior:F:-50' });
+    const before = await layout();
+    let r = await replacement();
+    const loneCase = r.cases.find((c) => c.registrationId === lone.id)!.id;
+    const refused = r.proposals[loneCase]?.[0];
+    if (refused) await call('POST', '/replacement/refuse', { proposalId: refused.id });
+    await applyPlan();
+    const target = (await categories()).find((c) => !c.registrationIds.includes(senior.id))!;
+    expect((await call('POST', '/replacement/move', { registrationId: senior.id, categoryId: target.id })).statusCode).toBe(200);
+    r = await replacement();
+    const aside = r.cases[0]!;
+    expect((await call('POST', '/replacement/set-aside', { caseId: aside.id, note: 'plus tard' })).statusCode).toBe(200);
+    const validated = r.recasements.filter((x) => x.status === 'validated').length;
+    expect(validated).toBeGreaterThan(1);
+
+    const res = await reset();
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true, undone: validated });
+    expect(await layout()).toEqual(before);
+    r = await replacement();
+    expect(r.recasements).toEqual([]);
+    expect(Object.values(r.proposals).flat().some((p) => p.refused)).toBe(false);
+    expect((r as Replacement & { summary: { setAside: number } }).summary.setAside).toBe(0);
+    expect((await regs()).every((x) => x.recasementType === null)).toBe(true);
+  });
+
+  test('un combattant réaffecté deux fois revient à sa première catégorie', async () => {
+    const a = await reg({ weightClassId: 'cadet:F:-54' });
+    await reg({ weightClassId: 'cadet:F:-61' });
+    await reg({ ageBandCode: 'senior', weightClassId: 'senior:F:-50' });
+    const before = await layout();
+    for (let i = 0; i < 2; i++) {
+      const target = (await categories()).find((c) => !c.registrationIds.includes(a.id))!;
+      await call('POST', '/replacement/move', { registrationId: a.id, categoryId: target.id });
+    }
+    expect((await reset()).json()).toEqual({ ok: true, undone: 2 });
+    expect(await layout()).toEqual(before);
+    expect((await regs()).find((x) => x.id === a.id)!.weightClassId).toBe('cadet:F:-54');
+  });
+
+  test('« Ne combat pas » levé', async () => {
+    const a = await reg();
+    await reg();
+    await reg();
+    await call('PUT', '/closed-categories', { cells: [{ ageBandCode: 'cadet', sex: 'F', discipline: 'karate', ruleset: 'jiyu' }], closed: true });
+    expect((await call('POST', '/replacement/withdraw', { registrationId: a.id, fingerprint: (await replacement()).fingerprint })).statusCode).toBe(200);
+    expect((await reset()).statusCode).toBe(200);
+    const row = (await regs()).find((x) => x.id === a.id)!;
+    expect(row.withdrawn).toBe(false);
+    expect(row.categoryId).not.toBeNull();
+  });
+
+  test('inscription supprimée depuis : passée outre', async () => {
+    const a = await reg({ weightClassId: 'cadet:F:-54' });
+    await reg({ weightClassId: 'cadet:F:-61' });
+    const target = (await categories()).find((c) => !c.registrationIds.includes(a.id))!;
+    await call('POST', '/replacement/move', { registrationId: a.id, categoryId: target.id });
+    expect((await app.inject({ method: 'DELETE', url: `${base}/registrations/${a.id}` })).statusCode).toBeLessThan(300);
+    const res = await reset();
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true, undone: 0 });
+    expect((await replacement()).recasements).toEqual([]);
+  });
+
+  test('session lancée : 409 et rien ne change', async () => {
+    const a = await reg({ weightClassId: 'cadet:F:-54' });
+    await reg({ weightClassId: 'cadet:F:-61' });
+    const target = (await categories()).find((c) => !c.registrationIds.includes(a.id))!;
+    await call('POST', '/replacement/move', { registrationId: a.id, categoryId: target.id });
+    const [zone] = (await call('GET', '/zones')).json() as { id: string }[];
+    for (const c of await categories()) await call('PATCH', `/categories/${c.id}`, { status: 'ready', zoneId: zone!.id });
+    expect((await call('POST', '/launch', { waveId: null })).statusCode).toBe(204);
+    const before = { layout: await layout(), log: (await replacement()).recasements };
+    const res = await reset();
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toContain('Une catégorie concernée a déjà commencé ou sa session est lancée : rouvrez-la pour repartir de zéro.');
+    expect(await layout()).toEqual(before.layout);
+    expect((await replacement()).recasements).toEqual(before.log);
   });
 });

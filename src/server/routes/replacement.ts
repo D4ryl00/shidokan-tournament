@@ -17,6 +17,7 @@ import {
   knownWave,
   findProposal,
   listRecasements,
+  resetReplacement,
   loadState,
   manualMove,
   manualProposal,
@@ -230,6 +231,8 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
     await undoRecasement(db, req.params.id, recasementId);
     return { ok: true };
   });
+
+  app.post<P>('/api/competitions/:id/replacement/reset', async (req) => ({ ok: true, ...(await resetReplacement(db, req.params.id)) }));
 
   app.post<P>('/api/competitions/:id/replacement/move', async (req) => {
     const { registrationId, categoryId } = z.object({ registrationId: z.string(), categoryId: z.string() }).parse(req.body);

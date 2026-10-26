@@ -471,6 +471,40 @@ export async function undoRecasement(db: AppDb, competitionId: string, recasemen
   await recomputeKeys(db, competitionId, () => touched);
 }
 
+/**
+ * « Repartir de zéro » : annule toutes les réaffectations validées (de la plus récente à la plus ancienne), puis efface
+ * l'historique, les refus et les cartes mises de côté. Tout ou rien : refusé si une catégorie touchée est lancée.
+ */
+export async function resetReplacement(db: AppDb, competitionId: string): Promise<{ undone: number }> {
+  const entries = db
+    .select({ row: recasements, n: sql<number>`rowid` })
+    .from(recasements)
+    .where(and(eq(recasements.competitionId, competitionId), eq(recasements.status, 'validated')))
+    .all()
+    .sort((a, b) => b.n - a.n)
+    .map(({ row }) => row);
+  const current = new Map(
+    db.select({ id: registrations.id, categoryId: registrations.categoryId }).from(registrations).where(eq(registrations.competitionId, competitionId)).all().map((r) => [r.id, r.categoryId]),
+  );
+  // Une inscription supprimée depuis : rien à rétablir, sa ligne est seulement effacée.
+  const replay = entries
+    .filter((e) => current.has(e.registrationId))
+    .map((e) => ({ registrationId: e.registrationId, snapshot: JSON.parse(e.snapshotJson) as RecasementSnapshot }));
+  const touched = [...new Set(replay.flatMap((e) => snapshotTouches(current.get(e.registrationId) ?? null, e.snapshot)))];
+  const state = await loadState(db, competitionId);
+  const blocked = state.categories.some((c) => touched.includes(c.id) && (c.frozen || c.status === 'started' || c.status === 'finished'));
+  if (blocked) throw new CategoryLockedError('Une catégorie concernée a déjà commencé ou sa session est lancée : rouvrez-la pour repartir de zéro.');
+  db.transaction((tx) => {
+    const t = tx as unknown as AppDb;
+    for (const e of replay) restoreSnapshot(t, e.registrationId, e.snapshot);
+    t.delete(recasements).where(eq(recasements.competitionId, competitionId)).run();
+    t.delete(refusals).where(eq(refusals.competitionId, competitionId)).run();
+    t.delete(setAsideCases).where(eq(setAsideCases.competitionId, competitionId)).run();
+  });
+  await recomputeKeys(db, competitionId, () => touched);
+  return { undone: replay.length };
+}
+
 /** Recalcule et enregistre la clé des catégories choisies d'après leurs membres, puis resynchronise. */
 async function recomputeKeys(db: AppDb, competitionId: string, pick: (state: State) => string[]): Promise<void> {
   const state = await loadState(db, competitionId);
