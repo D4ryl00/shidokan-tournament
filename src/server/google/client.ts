@@ -140,8 +140,10 @@ export function googleClient(config: GoogleConfig): GoogleClient {
     let pageToken: string | undefined;
     do {
       const res = await authorized(refreshToken, (access) => http(pageToken ? `${url}&pageToken=${encodeURIComponent(pageToken)}` : url, { headers: { authorization: `Bearer ${access}` } }));
-      const body = (await res.json().catch(() => ({}))) as { error?: { message?: string }; nextPageToken?: string } & Record<string, unknown>;
-      if (res.status === 403) throw new ContactsScopeMissingError(body.error?.message ?? 'forbidden');
+      const body = (await res.json().catch(() => ({}))) as { error?: { message?: string; details?: { reason?: string }[] }; nextPageToken?: string } & Record<string, unknown>;
+      // Seul un droit manquant demande de se reconnecter ; un autre 403 (API People non activée, par exemple) est une erreur ordinaire.
+      const insufficient = body.error?.details?.some((d) => d.reason === 'ACCESS_TOKEN_SCOPE_INSUFFICIENT') || /insufficient_scope/.test(res.headers.get('www-authenticate') ?? '');
+      if (res.status === 403 && insufficient) throw new ContactsScopeMissingError(body.error?.message ?? 'insufficient scope');
       if (!res.ok) throw new Error(`Google a refusé la lecture des contacts (${res.status}) : ${body.error?.message ?? 'réponse inattendue'}`);
       items.push(...((body[key] as T[] | undefined) ?? []));
       pageToken = body.nextPageToken || undefined;

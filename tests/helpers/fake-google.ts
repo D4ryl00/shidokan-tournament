@@ -116,7 +116,12 @@ export function fakeGoogle(): FakeGoogle {
           access.delete(token);
         }
         if (!access.has(token) || accessRevoked()) return json(401, { error: { code: 401, message: 'Invalid Credentials' } });
-        if (!fake.grantedScopes.includes(CONTACTS_SCOPE)) return json(403, { error: { code: 403, message: 'Request had insufficient authentication scopes.' } });
+        if (!fake.grantedScopes.includes(CONTACTS_SCOPE)) {
+          return new Response(JSON.stringify({ error: { code: 403, message: 'Request had insufficient authentication scopes.', status: 'PERMISSION_DENIED', details: [{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason: 'ACCESS_TOKEN_SCOPE_INSUFFICIENT' }] } }), {
+            status: 403,
+            headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer realm="https://accounts.google.com/", error="insufficient_scope"' },
+          });
+        }
         const u = new URL(url);
         const from = Number(u.searchParams.get('pageToken') ?? 0);
         const page = <T>(all: T[]) => ({ items: all.slice(from, from + 2), ...(from + 2 < all.length ? { nextPageToken: String(from + 2) } : {}) });

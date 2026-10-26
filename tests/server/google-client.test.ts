@@ -140,3 +140,16 @@ test('contacts : droit absent → ContactsScopeMissingError ; accès retiré →
   expect(await google.listContacts(rt)).toHaveLength(1);
   expect(fake.refreshCount).toBe(before + 1);
 });
+
+test('contacts : 403 API People désactivée → erreur ordinaire avec le message de Google, pas ContactsScopeMissingError', async () => {
+  const rt = (await google.exchangeCode('c')).refreshToken;
+  const message = 'People API has not been used in project 123 before or it is disabled.';
+  const off = googleClient(googleConfigFrom({ clientId: 'i', clientSecret: 's', publicUrl: 'https://x.org/', fetch: (async (input: string | URL | Request, init?: RequestInit) =>
+    String(input).startsWith('https://people.googleapis.com')
+      ? new Response(JSON.stringify({ error: { code: 403, message, status: 'PERMISSION_DENIED', details: [{ reason: 'SERVICE_DISABLED' }] } }), { status: 403, headers: { 'content-type': 'application/json' } })
+      : fake.fetch(input, init)) as typeof fetch })!);
+  const err = await off.listContacts(rt).catch((e: unknown) => e);
+  expect(err).toBeInstanceOf(Error);
+  expect(err).not.toBeInstanceOf(ContactsScopeMissingError);
+  expect((err as Error).message).toContain(message);
+});
