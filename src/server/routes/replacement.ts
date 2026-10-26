@@ -36,8 +36,8 @@ type P = { Params: { id: string } };
 /** Plan d'ensemble en flux : une ligne JSON par événement (progression, puis résultat ou erreur). */
 const NDJSON = 'application/x-ndjson';
 const planChoice = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('validate'), proposalId: z.string(), caseId: z.string() }),
-  z.object({ kind: z.literal('manual'), registrationId: z.string(), categoryId: z.string() }),
+  z.object({ kind: z.literal('validate'), proposalId: z.string(), caseId: z.string() }).strict(),
+  z.object({ kind: z.literal('manual'), registrationId: z.string(), categoryId: z.string() }).strict(),
 ]);
 const choices = z.array(planChoice).max(500);
 
@@ -185,6 +185,8 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
       .finally(() => {
         if (!out.destroyed) out.end();
       });
+    // Mêmes en-têtes que le flux SSE : Caddy (encode gzip) ne doit pas retenir les lignes de progression.
+    reply.header('Content-Encoding', 'identity').header('Cache-Control', 'no-cache, no-transform').header('X-Accel-Buffering', 'no');
     return reply.type(NDJSON).send(out);
   });
 

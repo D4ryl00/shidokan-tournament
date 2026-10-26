@@ -177,6 +177,27 @@ test('appliquer : sans validation et validés seulement, journal « en masse »'
   expect(entry).toMatchObject({ type: 'C', manual: true, bulk: true });
 });
 
+test('plan : un choix « manuel » est appliqué, et un choix aux champs inconnus est refusé (400)', async () => {
+  const a = await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  await reg({ approxWeightKg: 50 });
+  await reg({ approxWeightKg: 51 });
+  const target = (await categories()).find((c) => c.label.includes('-54'))!;
+  const choices: Choice[] = [{ kind: 'manual', registrationId: a.id, categoryId: target.id }];
+  expect((await applyPlan({ choices })).json()).toEqual({ applied: 1 });
+  expect((await categories()).find((c) => c.id === target.id)!.registrationIds).toContain(a.id);
+  const entry = (await replacement()).recasements.find((r) => r.registrationId === a.id)!;
+  expect(entry).toMatchObject({ type: 'M', status: 'validated' });
+  const extra = [{ kind: 'manual', registrationId: a.id, categoryId: target.id, surplus: 1 }];
+  expect((await call('POST', '/replacement/plan', { choices: extra })).statusCode).toBe(400);
+});
+
+test('plan en flux : en-têtes contre la mise en tampon (Caddy encode gzip), comme le flux d’événements', async () => {
+  await reg();
+  const res = await app.inject({ method: 'POST', url: `${base}/replacement/plan`, headers: { accept: 'application/x-ndjson' }, payload: { choices: [] } });
+  expect(res.statusCode).toBe(200);
+  expect(res.headers).toMatchObject({ 'content-type': expect.stringContaining('application/x-ndjson'), 'content-encoding': 'identity', 'cache-control': 'no-cache, no-transform', 'x-accel-buffering': 'no' });
+});
+
 test('valider un déplacement qui n’existe qu’après une correction de poids : gardé, appliqué après elle', async () => {
   // W (pesée 58 kg) quitte les -54 pour les -61 : Y y reste seule, et sa seule issue est la tranche au-dessus.
   const w = await reg({ lastName: 'W', approxWeightKg: 52 });
@@ -902,6 +923,7 @@ describe('liste des règles', () => {
   const def = rulesView(defaultSettings());
 
   test('Table centrale : range, coupe et active les règles, mélange mineurs/adultes compris', async () => {
+    const untouched = (await call('GET', '')).json().settings as Record<string, unknown>;
     const body = { order: ['return', ...def.order.filter((r) => r !== 'return').reverse()], on: { ...def.on, minorsAdults: true }, cutAfter: 'weight' };
     const res = await call('PUT', '/replacement/rules', body);
     expect(res.statusCode).toBe(200);
@@ -909,6 +931,10 @@ describe('liste des règles', () => {
     const s = await view();
     expect(s.mixMinorsAdults).toBe(true);
     expect(s.replacementRules.cutAfter).toBe('weight');
+    // Les autres réglages de la compétition restent intacts.
+    const { mixMinorsAdults: _m, replacementRules: _r, ...others } = (await call('GET', '')).json().settings as Record<string, unknown>;
+    const { mixMinorsAdults: _m0, replacementRules: _r0, ...othersBefore } = untouched;
+    expect(others).toEqual(othersBefore);
     const reset = await call('POST', '/replacement/rules/reset');
     expect(reset.statusCode).toBe(200);
     expect(reset.json()).toEqual(def);

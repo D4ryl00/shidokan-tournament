@@ -332,18 +332,32 @@ export async function applyPlan(
   // Pendant le calcul, un autre poste a pu écrire (pesée, déplacement, même plan appliqué) : on revérifie l'empreinte,
   // puis on écrit sans plus rendre la main (base synchrone, aucune attente d'entrée-sortie dans la boucle).
   if (stateFingerprint(await loadState(db, competitionId)) !== body.fingerprint) throw new StaleProposalError();
+  // Tout ou rien : une seule transaction pour tous les déplacements (les `await` ci-dessous ne rendent jamais la main à une
+  // autre requête, la base est synchrone). Un déplacement refusé annule ceux déjà écrits ; `persist` s'y emboîte en point de sauvegarde.
+  const raw = db.$client;
   let applied = 0;
-  for (const move of plan.moves) {
-    state = await loadState(db, competitionId);
-    let p: Proposal = move;
-    if ('categoryId' in move.target && move.target.categoryId.startsWith('new:')) {
-      // Sans ancre, la catégorie créée en route ne se retrouve pas : le plan est à relire, rien n'est écrit pour celui-ci.
-      const categoryId = move.anchor === null ? undefined : state.members.find((m) => m.registrationId === move.anchor)?.categoryId;
-      if (!categoryId) throw new StaleProposalError('Le plan a changé depuis l’affichage : relisez-le avant de l’appliquer.');
-      p = { ...move, target: { categoryId } };
+  raw.exec('BEGIN IMMEDIATE');
+  try {
+    for (const move of plan.moves) {
+      state = await loadState(db, competitionId);
+      // Le combattant doit encore être là où le plan l'a pris (une catégorie créée en route, `new:…`, n'existe pas encore en base).
+      if (move.fromCategoryId !== null && !move.fromCategoryId.startsWith('new:')) {
+        if (state.members.find((m) => m.registrationId === move.registrationId)?.categoryId !== move.fromCategoryId) throw new StaleProposalError();
+      }
+      let p: Proposal = move;
+      if ('categoryId' in move.target && move.target.categoryId.startsWith('new:')) {
+        // Sans ancre, la catégorie créée en route ne se retrouve pas : le plan est à relire, rien n'est écrit.
+        const categoryId = move.anchor === null ? undefined : state.members.find((m) => m.registrationId === move.anchor)?.categoryId;
+        if (!categoryId) throw new StaleProposalError('Le plan a changé depuis l’affichage : relisez-le avant de l’appliquer.');
+        p = { ...move, target: { categoryId } };
+      }
+      persistAll(db, competitionId, state, p, { bulk: true });
+      applied++;
     }
-    persistAll(db, competitionId, state, p, { bulk: true });
-    applied++;
+    raw.exec('COMMIT');
+  } catch (e) {
+    if (raw.inTransaction) raw.exec('ROLLBACK');
+    throw e;
   }
   return { applied };
 }

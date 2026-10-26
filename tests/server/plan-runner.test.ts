@@ -3,9 +3,34 @@ import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
 import { planPayload } from '../../src/server/plan/compute.js';
 import { PlanAbortedError, activePlanJobs, runPlanJob } from '../../src/server/plan/runner.js';
+import type { PlanResponse } from '../../src/server/plan/compute.js';
 import type { LadderProgress, State } from '../../src/domain/replacement/index.js';
 import { randomState } from '../domain/replacement/random-state.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
+
+/**
+ * Crochets de test sur le calcul du plan (inactifs par défaut) : `hold` retient chaque calcul jusqu'à ce que le test le libère,
+ * `tamper` modifie la réponse (le `hash` reste celui du vrai plan).
+ */
+const gate = vi.hoisted(() => ({
+  hold: null as Promise<void> | null,
+  entered: null as (() => void) | null,
+  tamper: null as ((r: PlanResponse) => PlanResponse) | null,
+}));
+vi.mock('../../src/server/plan/runner.js', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('../../src/server/plan/runner.js')>();
+  return {
+    ...mod,
+    runPlanJob: async (...args: Parameters<typeof mod.runPlanJob>) => {
+      if (gate.hold) {
+        gate.entered?.();
+        await gate.hold;
+      }
+      const r = await mod.runPlanJob(...args);
+      return gate.tamper ? gate.tamper(r) : r;
+    },
+  };
+});
 
 /** Toutes les règles actives, mélanges rares compris, ligne en bas (comme dans les tests du diagramme). */
 function allRules(seed: number, size: number) {
@@ -239,12 +264,44 @@ describe('appliquer pendant que d’autres écrivent', () => {
 
   test('une pesée pendant le calcul de l’application : 409, rien d’écrit', async () => {
     const { a, apply } = await setup();
-    const applying = apply();
-    await vi.waitFor(() => expect(activePlanJobs()).toBe(1), { timeout: 10_000, interval: 5 });
-    expect((await call('PUT', `/weigh-in/${a.fighterId}`, { weighInKg: 46 })).statusCode).toBeLessThan(300);
-    const res = await applying;
-    expect(res.statusCode).toBe(409);
-    expect(res.json().error).toBe("La situation a changé depuis l'affichage : rechargez les propositions.");
+    // Le calcul est retenu jusqu'à la fin de la pesée : aucune hypothèse sur la vitesse de démarrage du fil.
+    let release!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      gate.entered = resolve;
+    });
+    gate.hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      const applying = apply();
+      await entered;
+      expect((await call('PUT', `/weigh-in/${a.fighterId}`, { weighInKg: 46 })).statusCode).toBeLessThan(300);
+      release();
+      const res = await applying;
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error).toBe("La situation a changé depuis l'affichage : rechargez les propositions.");
+      expect(await journal()).toEqual([]);
+    } finally {
+      release();
+      gate.hold = null;
+      gate.entered = null;
+    }
+  });
+
+  test('un déplacement qui échoue en cours de boucle : tout est annulé, rien d’écrit (409)', async () => {
+    const { a, apply } = await setup();
+    const before = (await call('GET', '/registrations')).json() as { id: string; categoryId: string | null }[];
+    // Deuxième déplacement dont le combattant n'est plus là d'où le plan le prend : le premier est déjà écrit.
+    gate.tamper = (r) => ({ ...r, plan: { ...r.plan, moves: [...r.plan.moves, { ...r.plan.moves[0]!, fromCategoryId: 'ailleurs' }] } });
+    try {
+      const res = await apply();
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error).toBe("La situation a changé depuis l'affichage : rechargez les propositions.");
+    } finally {
+      gate.tamper = null;
+    }
     expect(await journal()).toEqual([]);
+    const after = (await call('GET', '/registrations')).json() as { id: string; categoryId: string | null }[];
+    expect(after.find((r) => r.id === a.id)!.categoryId).toBe(before.find((r) => r.id === a.id)!.categoryId);
   });
 });
