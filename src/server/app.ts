@@ -53,7 +53,7 @@ import { authRoutes } from './routes/auth.js';
 import { appSettingsRoutes } from './routes/app-settings.js';
 import { googleRoutes } from './routes/google.js';
 import { googleClient, googleConfigFrom } from './google/client.js';
-import { nodemailerTransport, type MailTransport } from './mail.js';
+import { defaultMailTransport, type MailTransport } from './mail.js';
 import { RestoreError, backupNow, startAutoBackup } from './repositories/backups.js';
 import { ensureInstance } from './repositories/instance.js';
 import { startRetention } from './repositories/retention.js';
@@ -224,7 +224,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(directoryRoutes, { db });
   const googleConfig = googleConfigFrom({ ...opts.google, publicUrl: opts.publicUrl });
   const google = googleConfig ? googleClient(googleConfig) : null;
-  const mailTransport = opts.mailTransport ?? nodemailerTransport;
+  const mailTransport = opts.mailTransport ?? defaultMailTransport(google);
   await app.register(invitationRoutes, { db, mailTransport, publicUrl: opts.publicUrl, mailPauseMs: opts.mailPauseMs, role });
   await app.register(clubEntryRoutes, { db });
   await app.register(authRoutes, { db, role });

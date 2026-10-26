@@ -41,7 +41,7 @@ export async function googleRoutes(app: FastifyInstance, { db, google }: { db: A
       granted = await google.exchangeCode(q.code);
     } catch (e) {
       // Ni le code ni les jetons dans le journal : seulement le motif.
-      req.log.error({ reason: e instanceof Error ? e.message : String(e) }, 'Connexion à Google impossible');
+      req.log.error({ reason: e instanceof Error ? e.message : 'inconnu' }, 'Connexion à Google impossible');
       return reply.redirect(back('erreur'));
     }
     if (!granted.scopes.includes(GMAIL_SEND_SCOPE)) {
