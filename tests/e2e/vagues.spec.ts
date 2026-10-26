@@ -156,8 +156,10 @@ test('réaffectation par session : cas de la session, changement de session sign
   await expect(page).toHaveURL(/session=/);
   await expect(cases).toHaveCount(1);
   await expect(cases).toContainText('SEULE');
-  await page.getByTestId('bulk-simple').click();
-  await page.getByTestId('bulk-confirm').click();
+  // Plan d'ensemble appliqué sans rien valider : le cas simple seulement.
+  await page.getByTestId('plan-show').click();
+  await page.getByTestId('plan-apply').click();
+  await page.getByTestId('plan-apply-confirm').click();
   await expect(page.getByText('1 réaffectation appliquée.')).toBeVisible();
   await expect(page.getByText('Aucun cas à traiter')).toBeVisible();
 
@@ -167,10 +169,13 @@ test('réaffectation par session : cas de la session, changement de session sign
   const proposal = cases.getByTestId('replacement-proposal');
   await expect(proposal.getByTestId('wave-change')).toHaveText('↪ Change de session : Matin → Après-midi');
   await expect(page.getByText('Les changements de session se valident un par un.')).toBeVisible();
-  // « Tout classer automatiquement » ne la prend pas.
-  await page.getByTestId('bulk-all').click();
-  await expect(page.getByTestId('bulk-confirm')).toHaveText('Confirmer (0)');
-  await expect(page.getByTestId('bulk-confirm')).toBeDisabled();
+  // Le plan d'ensemble ne la prend pas : elle reste seule, rien à valider ni à appliquer.
+  const plan = page.getByTestId('plan-view');
+  await expect(plan.getByTestId('plan-alone')).toContainText('MINI');
+  await expect(plan.getByTestId('plan-move')).toHaveCount(0);
+  await plan.getByTestId('plan-apply').click();
+  await expect(page.getByTestId('plan-apply-confirm')).toHaveText('Confirmer (0)');
+  await expect(page.getByTestId('plan-apply-confirm')).toBeDisabled();
   await page.keyboard.press('Escape');
   // Validée à la main : la minime passe dans l'Après-midi, à pointer, son poids gardé.
   await proposal.getByTestId('proposal-apply').click();

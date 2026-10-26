@@ -392,7 +392,7 @@ export function useReplacement(id: string, waveId?: string | null, enabled = tru
 }
 export function usePreviewReplacement(id: string) {
   return useMutation({
-    mutationFn: (body: { proposalId: string } | { bulk: 'simple' | 'all'; waveId?: string } | { move: { registrationId: string; categoryId: string } }) =>
+    mutationFn: (body: { proposalId: string } | { move: { registrationId: string; categoryId: string } }) =>
       api<PreviewData>('POST', `/api/competitions/${id}/replacement/preview`, body),
   });
 }
@@ -404,7 +404,6 @@ function useReplacementAction<T>(id: string, path: string) {
 export const useApplyProposal = (id: string) => useReplacementAction<{ proposalId: string; fingerprint: string }>(id, 'apply');
 export const useRefuseProposal = (id: string) => useReplacementAction<{ proposalId: string }>(id, 'refuse');
 export const useUnrefuseProposal = (id: string) => useReplacementAction<{ proposalId: string }>(id, 'unrefuse');
-export const useBulkReplacement = (id: string) => useReplacementAction<{ mode: 'simple' | 'all'; fingerprint: string; waveId?: string }>(id, 'bulk');
 export const useUndoRecasement = (id: string) => useReplacementAction<{ recasementId: string }>(id, 'undo');
 export const useManualMove = (id: string) => useReplacementAction<{ registrationId: string; categoryId: string }>(id, 'move');
 export const useSetAsideCase = (id: string) => useReplacementAction<{ caseId: string; note?: string }>(id, 'set-aside');

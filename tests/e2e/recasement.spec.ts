@@ -17,7 +17,7 @@ async function seed(request: APIRequestContext, id: string) {
 /** La carte d'un combattant (son nom en titre, pas cité comme adversaire dans une autre carte). */
 const caseOf = (page: Page, name: string) => page.getByTestId('replacement-case').filter({ has: page.getByTestId('case-name').filter({ hasText: name }) });
 
-test('pesée puis réaffectation : aperçu, validation, refus, masse, retour, annulation', async ({ page, request }) => {
+test('pesée puis réaffectation : aperçu, validation, refus, plan d’ensemble, retour, annulation', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe réaffectation');
   await seed(request, id);
 
@@ -89,15 +89,24 @@ test('pesée puis réaffectation : aperçu, validation, refus, masse, retour, an
     await expect(dubois.getByTestId('replacement-proposal-refused')).toHaveCount(1);
   }
 
-  // 4. Tout classer automatiquement : aperçu qui sépare simples et manuels
-  if ((await page.getByTestId('replacement-proposal').count()) > 0) {
-    await page.getByTestId('bulk-all').click();
-    await expect(page.getByTestId('preview-content')).toBeVisible();
-    await page.getByTestId('bulk-confirm').click();
+  // 4. Plan d'ensemble : chaque déplacement à valider est validé, puis le plan est appliqué, avec son aperçu.
+  await page.getByTestId('plan-show').click();
+  const plan = page.getByTestId('plan-view');
+  const validate = plan.getByTestId('plan-move-validate');
+  while ((await validate.count()) > 0) {
+    const row = plan.getByTestId('plan-move').filter({ has: page.getByTestId('plan-move-validate') }).first();
+    const rid = await row.getAttribute('data-registration');
+    await row.getByTestId('plan-move-validate').click();
+    await expect(plan.locator(`[data-testid="plan-move"][data-registration="${rid}"]`).getByTestId('plan-move-unvalidate')).toBeVisible();
+  }
+  if ((await plan.getByTestId('plan-move').count()) > 0) {
+    await plan.getByTestId('plan-apply').click();
+    await expect(page.getByRole('dialog').getByTestId('preview-content')).toBeVisible();
+    await page.getByTestId('plan-apply-confirm').click();
     await expect(page.getByText(/réaffectations? appliquées?/)).toBeVisible();
   }
   // Tout ce qui respecte les règles est classé. Une proposition hors de l'écart de poids autorisé peut rester (selon celle que le
-  // refus de l'étape 3 a écartée) : « Tout classer automatiquement » ne l'applique jamais.
+  // refus de l'étape 3 a écartée) : le plan ne l'applique jamais.
   await expect(page.getByTestId('replacement-proposal').filter({ hasNotText: 'au-delà du seuil' })).toHaveCount(0);
 
   // 5. Inscription sur place d'une nouvelle -47 → retour proposé et validé

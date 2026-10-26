@@ -5,7 +5,8 @@ import { applyRulesView, COST_BAND_LABELS, costBand, NO_VALIDATION_RULES, RULE_L
 import { defaultSettings, type RuleId } from '../../../domain/settings.js';
 import type { LadderRow } from '../../api.js';
 
-const BAND_COLOR = ['var(--sk-cost0)', 'var(--sk-cost1)', 'var(--sk-cost2)', 'var(--sk-cost3)', 'var(--sk-cost4)'];
+/** Couleur de chaque groupe de coût (`COST_BAND_LABELS`), du vert au rouge. */
+export const BAND_COLOR = ['var(--sk-cost0)', 'var(--sk-cost1)', 'var(--sk-cost2)', 'var(--sk-cost3)', 'var(--sk-cost4)'];
 
 /** Déplace la règle `from` à l’index `to` ; `return` reste en tête. */
 function moved(order: RuleId[], from: number, to: number): RuleId[] {

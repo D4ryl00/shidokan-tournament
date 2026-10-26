@@ -70,6 +70,7 @@ export function ReplacementBadge({ type, state = 'validated', size = 'sm', gapKg
           {detail.reason && <Text size="xs"><b>Motif :</b> {detail.reason}</Text>}
           <Text size="xs" c="dimmed">
             {new Date(detail.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} · {detail.bulk ? 'en masse' : 'unitaire'}
+            {detail.bulk && detail.manual ? ' · validé à la main' : ''}
             {detail.preApproved ? ' · pré-accord coach' : ''}
           </Text>
         </Stack>

@@ -1,13 +1,13 @@
-import { Alert, Box, Button, Card, Chip, Collapse, Group, Loader, Modal, SegmentedControl, Select, SimpleGrid, Stack, Switch, Table, Text, TextInput } from '@mantine/core';
+import { Alert, Box, Button, Card, Chip, Collapse, Group, Loader, Modal, SegmentedControl, Select, SimpleGrid, Stack, Switch, Table, Text, TextInput, type ComboboxData } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import type { Case, CaseKind, Proposal, ProposalType } from '../../domain/replacement/index.js';
 import type { Wave } from '../../domain/waves.js';
 import {
   useApplyProposal,
-  useBulkReplacement,
   useCategories,
+  useCompetition,
   useGrid,
   useManualMove,
   usePreviewReplacement,
@@ -15,6 +15,7 @@ import {
   useResetRules,
   useSetRules,
   type PlanChoice,
+  type PlanMove,
   useRefuseProposal,
   useUnrefuseProposal,
   useRegistrations,
@@ -35,13 +36,15 @@ import { ProposalPreview } from '../components/ProposalPreview.js';
 import { PROPOSAL_TYPES, ReplacementBadge } from '../components/ReplacementBadge.js';
 import { ageBandLabel, disciplineLabel, prefsLabel, rulesetShort, weightLabel } from '../labels.js';
 import { RuleLadder } from '../components/replacement/RuleLadder.js';
+import { PlanView, type PlanFighter } from '../components/replacement/PlanView.js';
+import { rulesView } from '../../domain/replacement/rules.js';
+import { usePlanChoices } from '../usePlanChoices.js';
 import { useSelectedWave } from '../useSelectedWave.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import { plural } from '../../domain/plural.js';
 
 type Dialog =
   | { kind: 'proposal'; proposal: Proposal; confirm: boolean }
-  | { kind: 'bulk'; mode: 'simple' | 'all' }
   | { kind: 'undo'; recasementId: string; label: string }
   | { kind: 'move'; registrationId: string; categoryId: string }
   | { kind: 'withdraw'; registrationId: string; categoryLabel: string }
@@ -109,22 +112,64 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: 'ok
   );
 }
 
-const NO_CHOICES: PlanChoice[] = [];
+const sameChoice = (a: PlanChoice, b: PlanChoice) =>
+  a.kind === 'validate' ? b.kind === 'validate' && a.proposalId === b.proposalId && a.caseId === b.caseId : b.kind === 'manual' && a.registrationId === b.registrationId && a.categoryId === b.categoryId;
+/** Inscription d'un choix (l'identifiant d'une proposition est `${type}:${inscription}>${cible}`). */
+const choiceRegistration = (c: PlanChoice) => (c.kind === 'manual' ? c.registrationId : c.proposalId.slice(c.proposalId.indexOf(':') + 1, c.proposalId.indexOf('>')));
 
-/** La liste des règles de la compétition, avec ses barres (le plan de la session choisie). */
-function RulesPanel({ id, waveId, ready }: { id: string; waveId: string | null; ready: boolean }) {
+/**
+ * La liste des règles de la compétition avec ses barres, et le plan d'ensemble de la session choisie (même calcul, avec les
+ * épingles et les choix de l'organisateur). Sans plan (calcul en cours ou en erreur), la liste reste réglable, sans barres.
+ */
+function RulesPanel({ id, waveId, ready, fighter, targets }: {
+  id: string;
+  waveId: string | null;
+  ready: boolean;
+  fighter: (registrationId: string) => PlanFighter;
+  targets: (move: PlanMove) => ComboboxData | null;
+}) {
+  const [choices, setChoices] = usePlanChoices(id, waveId);
+  const [dropped, setDropped] = useState<string[]>([]);
+  const [open, setOpen] = useState(false);
   // Avec des sessions, le plan n'existe que pour la session choisie.
-  const { data: plan } = usePlan(id, waveId, NO_CHOICES, ready);
+  const { data: shownPlan, error, isFetching, isPlaceholderData } = usePlan(id, waveId, choices, ready);
+  // Le plan gardé pendant un recalcul est celui de la même session seulement (pas celui de la session d'avant).
+  const [loadedWave, setLoadedWave] = useState<string | null | undefined>(undefined);
+  if (shownPlan && !isPlaceholderData && loadedWave !== waveId) setLoadedWave(waveId);
+  const plan = loadedWave === waveId ? shownPlan : undefined;
+  const { data: competition } = useCompetition(id);
   const setRules = useSetRules(id);
   const reset = useResetRules(id);
-  if (!plan) return null;
+  // Un choix qui n'est plus possible (données changées ailleurs) est retiré ; on dit lesquels.
+  useEffect(() => {
+    if (!plan || isPlaceholderData || plan.plan.dropped.length === 0) return;
+    const gone = plan.plan.dropped;
+    setDropped(gone.map((c) => fighter(choiceRegistration(c)).name));
+    setChoices(choices.filter((c) => !gone.some((d) => sameChoice(c, d))));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan, isPlaceholderData]);
+  const choose = (c: PlanChoice[]) => { setDropped([]); setChoices(c); };
+  const view = plan?.view ?? (competition ? rulesView(competition.settings) : null);
+  if (!view) return <ApiErrorAlert error={error} />;
+  const k = view.order.indexOf(view.cutAfter) + 1;
   return (
     <SectionCard title="Règles de réaffectation" description="L’ordre est la priorité ; la ligne pointillée marque où les règles s’arrêtent.">
-      <RuleLadder view={plan.view} rows={plan.rows} busy={setRules.isPending || reset.isPending} onChange={(v) => setRules.mutate(v)} />
-      <ApiErrorAlert error={setRules.error ?? reset.error} />
+      <RuleLadder view={view} rows={plan?.rows} busy={setRules.isPending || reset.isPending} onChange={(v) => setRules.mutate(v)} />
+      <ApiErrorAlert error={setRules.error ?? reset.error ?? error} />
       <Group>
         <Button variant="subtle" size="compact-sm" loading={reset.isPending} onClick={() => reset.mutate()}>Revenir aux réglages par défaut</Button>
       </Group>
+      {plan && (
+        <Group>
+          <Button data-testid="plan-show" variant={open ? 'default' : 'filled'} aria-expanded={open} onClick={() => setOpen((o) => !o)} style={{ maxWidth: '100%', height: 'auto', minHeight: 36, whiteSpace: 'normal' }}>
+            Voir le plan jusqu’à la règle {k} ({plural(plan.plan.moves.length, 'déplacement', 'déplacements')}, {plural(plan.plan.alone.length, 'seul', 'seuls')})
+          </Button>
+        </Group>
+      )}
+      {plan && open && (
+        <PlanView key={waveId ?? ''} id={id} waveId={waveId} data={plan} choices={choices} onChoices={choose} dropped={dropped}
+          busy={isFetching} fighter={fighter} targets={targets} />
+      )}
     </SectionCard>
   );
 }
@@ -134,7 +179,6 @@ export function ReplacementPage() {
   // Avec des vagues : le tableau de bord de la vague choisie (même choix que la Pesée).
   const { waves, waveId, select, ready } = useSelectedWave(id);
   const { data } = useReplacement(id, waveId, ready);
-  const inWave = waveId ? { waveId } : {};
   const waveName = (w: string | null) => (w === null ? 'en attente' : (waves.find((x) => x.id === w)?.name ?? '?'));
   const { data: rows = [] } = useRegistrations(id);
   const { data: categories = [] } = useCategories(id);
@@ -142,7 +186,6 @@ export function ReplacementPage() {
   const apply = useApplyProposal(id);
   const refuse = useRefuseProposal(id);
   const unrefuse = useUnrefuseProposal(id);
-  const bulk = useBulkReplacement(id);
   const undo = useUndoRecasement(id);
   const move = useManualMove(id);
   const withdraw = useWithdrawRegistration(id);
@@ -168,10 +211,6 @@ export function ReplacementPage() {
     setDialog({ kind: 'proposal', proposal, confirm });
     preview.mutate({ proposalId: proposal.id });
   };
-  const openBulk = (mode: 'simple' | 'all') => {
-    setDialog({ kind: 'bulk', mode });
-    preview.mutate({ bulk: mode, ...inWave });
-  };
   const done = (message: string) => {
     setDialog(null);
     notifications.show({ color: 'green', message });
@@ -187,7 +226,7 @@ export function ReplacementPage() {
   if (!ready || !data) return <Stack>{waveSelector}<Loader /></Stack>;
   const s = data.summary;
   /** Catégories proposées au déplacement manuel : les cohérentes avec les réglages, et les autres si on les demande. */
-  const moveOptions = (caseId: string) => {
+  const moveOptions = (caseId: string, all = allTargets[caseId] ?? false): ComboboxData => {
     const band = data.fighters[data.cases.find((x) => x.id === caseId)?.registrationId ?? '']?.ageBandCode;
     const option = (t: { categoryId: string; warnings: string[] }) => {
       const x = categories.find((k) => k.id === t.categoryId);
@@ -200,9 +239,20 @@ export function ReplacementPage() {
     };
     const targets = data.moveTargets[caseId] ?? [];
     const ok = targets.filter((t) => t.warnings.length === 0).map(option).filter((o) => o !== null);
-    if (!allTargets[caseId]) return ok;
+    if (!all) return ok;
     const others = targets.filter((t) => t.warnings.length > 0).map(option).filter((o) => o !== null);
     return [{ group: 'Cohérentes avec les réglages', items: ok }, { group: 'Règles enfreintes (avertissement)', items: others }].filter((g) => g.items.length > 0);
+  };
+  /** Combattant d'une ligne du plan : nom et club. */
+  const fighter = (rid: string): PlanFighter => {
+    const r = reg.get(rid);
+    return r ? { name: `${r.fighter.lastName} ${r.fighter.firstName}`, club: r.club?.name ?? null } : { name: rid, club: null };
+  };
+  /** « Modifier » une ligne du plan : la liste du déplacement manuel de son cas, quand c'est le combattant du cas qui bouge. */
+  const planTargets = (m: PlanMove): ComboboxData | null => {
+    const c = data.cases.find((x) => x.id === m.caseId);
+    if (!c || c.registrationId !== m.registrationId || (data.moveTargets[c.id] ?? []).length === 0) return null;
+    return moveOptions(c.id, true);
   };
   const activeCases = data.cases.filter((c) => !data.setAside[c.id]);
   const asideCases = data.cases.filter((c) => data.setAside[c.id]);
@@ -257,7 +307,7 @@ export function ReplacementPage() {
                       {!('newKey' in p.target) && (p.type === 'A' || p.type === 'B' || p.checks.weightGapKg > 0)
                         ? ` · écart de poids ${kg(p.checks.weightGapKg)} kg entre le plus léger et le plus lourd (max ${kg(p.checks.threshold)} kg)`
                         : ''}
-                      {p.checks.ageMove !== 'same' ? ' · âge : une tranche au-dessus' : ''}
+                      {p.checks.ageMove !== 'same' ? (p.checks.ageDirections.includes('down') ? ' · âge : une tranche au-dessous' : ' · âge : une tranche au-dessus') : ''}
                       {p.checks.mixedSex ? ' · mixte' : ''}
                       {p.manual ? ' · validation manuelle' : ' · cas simple'}
                     </Text>
@@ -321,7 +371,7 @@ export function ReplacementPage() {
   return (
     <Stack gap="md">
       {waveSelector}
-      <RulesPanel id={id} waveId={waveId} ready={ready && (waves.length === 0 || waveId !== null)} />
+      <RulesPanel id={id} waveId={waveId} ready={ready && (waves.length === 0 || waveId !== null)} fighter={fighter} targets={planTargets} />
       <SimpleGrid cols={{ base: 2, sm: 3, md: 5, xl: 9 }} spacing="sm" data-testid="replacement-summary">
         <Stat label="Présents" value={s.present} />
         <Stat label="Absents" value={s.absent} />
@@ -333,12 +383,8 @@ export function ReplacementPage() {
         <Stat label="Sans solution automatique" value={s.withoutProposal} tone={s.withoutProposal ? 'danger' : undefined} />
         <Stat label="Catégories lancées" value={s.startedCategories} />
       </SimpleGrid>
-      <Group>
-        <Button data-testid="bulk-simple" onClick={() => openBulk('simple')} disabled={s.cases === 0}>Classer automatiquement tous les cas simples</Button>
-        <Button data-testid="bulk-all" variant="default" onClick={() => openBulk('all')} disabled={s.cases === 0}>Tout classer automatiquement</Button>
-        {waves.length > 0 && <Text size="sm" c="dimmed">Les changements de session se valident un par un.</Text>}
-      </Group>
-      <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error ?? bulk.error ?? undo.error ?? move.error ?? withdraw.error ?? setAside.error ?? resume.error} />
+      {waves.length > 0 && <Text size="sm" c="dimmed">Les changements de session se valident un par un.</Text>}
+      <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error ?? undo.error ?? move.error ?? withdraw.error ?? setAside.error ?? resume.error} />
 
       {activeCases.length === 0 && (
         <EmptyState icon="✓" title="Aucun cas à traiter"
@@ -411,7 +457,7 @@ export function ReplacementPage() {
                 <Table.Td fw={500}>{name(r.registrationId)}</Table.Td>
                 <Table.Td>{r.fromLabel} → {r.toLabel}{r.reason && <Text size="xs" c="dimmed">{r.reason}</Text>}</Table.Td>
                 <Table.Td>
-                  {r.bulk ? 'en masse' : 'unitaire'}{r.preApproved ? ' · pré-accord coach' : ''}{r.status === 'undone' ? ' · annulée' : ''}
+                  {r.bulk ? 'en masse' : 'unitaire'}{r.bulk && r.manual ? ' · validé à la main' : ''}{r.preApproved ? ' · pré-accord coach' : ''}{r.status === 'undone' ? ' · annulée' : ''}
                   <Text size="xs" c="dimmed" className="num">{new Date(r.createdAt).toLocaleTimeString('fr-FR')}</Text>
                 </Table.Td>
                 <Table.Td ta="right">
@@ -428,8 +474,8 @@ export function ReplacementPage() {
       )}
       </SectionCard>
 
-      <Modal opened={dialog?.kind === 'proposal' || dialog?.kind === 'bulk' || dialog?.kind === 'move'} onClose={() => setDialog(null)} size="xl"
-        title={dialog?.kind === 'bulk' ? (dialog.mode === 'simple' ? 'Classer automatiquement tous les cas simples' : 'Tout classer automatiquement') : dialog?.kind === 'move' ? 'Déplacement manuel' : 'Aperçu de la réaffectation'}>
+      <Modal opened={dialog?.kind === 'proposal' || dialog?.kind === 'move'} onClose={() => setDialog(null)} size="xl"
+        title={dialog?.kind === 'move' ? 'Déplacement manuel' : 'Aperçu de la réaffectation'}>
         <Stack>
           {preview.isPending && <Text size="sm">Calcul de l’aperçu…</Text>}
           <ApiErrorAlert error={preview.error} />
@@ -440,9 +486,6 @@ export function ReplacementPage() {
             <WaveChangeWarning proposal={dialog.kind === 'proposal' ? dialog.proposal : preview.data?.steps[0]?.proposal} waves={waves} name={name} />
           )}
           {preview.data && <ProposalPreview data={preview.data} />}
-          {dialog?.kind === 'bulk' && dialog.mode === 'all' && (preview.data?.steps.some((x) => x.manual) ?? false) && (
-            <Alert color="orange">Certains déplacements demandent normalement une validation manuelle (accord des coachs) : en confirmant, vous en prenez la responsabilité.</Alert>
-          )}
           {dialog?.kind === 'move' && (
             <Group justify="flex-end">
               <Button variant="default" onClick={() => setDialog(null)}>Annuler</Button>
@@ -452,27 +495,20 @@ export function ReplacementPage() {
               </Button>
             </Group>
           )}
-          {(dialog?.kind === 'bulk' || (dialog?.kind === 'proposal' && dialog.confirm)) && (
+          {dialog?.kind === 'proposal' && dialog.confirm && (
             <Group justify="flex-end">
               <Button variant="default" onClick={() => setDialog(null)}>Annuler</Button>
-              {dialog.kind === 'proposal' ? (
-                <Button data-testid="proposal-confirm" loading={apply.isPending}
-                  onClick={() => apply.mutate({ proposalId: dialog.proposal.id, fingerprint: data.fingerprint }, { onSuccess: () => done('Réaffectation validée.') })}>
-                  {PROPOSAL_TYPES[dialog.proposal.type].simple ? 'Êtes-vous sûr ? Valider' : 'Confirmer la validation'}
-                </Button>
-              ) : (
-                <Button data-testid="bulk-confirm" loading={bulk.isPending} disabled={!preview.data || preview.data.steps.length === 0}
-                  onClick={() => bulk.mutate({ mode: dialog.mode, fingerprint: data.fingerprint, ...inWave }, { onSuccess: (r) => done(`${plural(r.applied ?? 0, 'réaffectation appliquée', 'réaffectations appliquées')}.`) })}>
-                  Confirmer ({preview.data?.steps.length ?? 0})
-                </Button>
-              )}
+              <Button data-testid="proposal-confirm" loading={apply.isPending}
+                onClick={() => apply.mutate({ proposalId: dialog.proposal.id, fingerprint: data.fingerprint }, { onSuccess: () => done('Réaffectation validée.') })}>
+                {PROPOSAL_TYPES[dialog.proposal.type].simple ? 'Êtes-vous sûr ? Valider' : 'Confirmer la validation'}
+              </Button>
             </Group>
           )}
         </Stack>
       </Modal>
       <Modal opened={dialog?.kind === 'set-aside'} onClose={() => setDialog(null)} title="Mettre cette carte de côté ?">
         <Stack>
-          <Text size="sm">Elle ne comptera plus dans les cas à traiter ni dans le classement automatique ; vous la retrouverez dans « Mises de côté ».</Text>
+          <Text size="sm">Elle ne comptera plus dans les cas à traiter ni dans le plan d’ensemble ; vous la retrouverez dans « Mises de côté ».</Text>
           <TextInput label="Note (facultative)" placeholder="ex. on attend le coach" maxLength={80} value={note} onChange={(e) => setNote(e.currentTarget.value)} data-testid="case-set-aside-note" />
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setDialog(null)}>Annuler</Button>

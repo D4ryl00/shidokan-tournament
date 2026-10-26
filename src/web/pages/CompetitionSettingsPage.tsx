@@ -225,6 +225,7 @@ export function CompetitionSettingsPage() {
             <MultiSelect label="Tranches d’âge où le mélange filles / garçons est possible" data={bandOptions}
               value={s.mixSexes.ageBandCodes} onChange={(ageBandCodes) => set({ mixSexes: { ...s.mixSexes, ageBandCodes } })} />
           )}
+          <Text size="sm" c="dimmed" data-testid="rules-in-replacement">L’ordre des règles et la ligne « je m’arrête ici » se règlent dans l’onglet Réaffectation.</Text>
         </Stack>
       </SectionCard>
 
