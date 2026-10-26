@@ -51,6 +51,8 @@ import { getZoneLink, resetZoneLinkStatus, restartZoneFollow, setZoneLink, start
 import { registerZoneJournal } from './zone/autonomous.js';
 import { authRoutes } from './routes/auth.js';
 import { appSettingsRoutes } from './routes/app-settings.js';
+import { googleRoutes } from './routes/google.js';
+import { googleClient, googleConfigFrom } from './google/client.js';
 import { nodemailerTransport, type MailTransport } from './mail.js';
 import { RestoreError, backupNow, startAutoBackup } from './repositories/backups.js';
 import { ensureInstance } from './repositories/instance.js';
@@ -75,6 +77,8 @@ export interface AppOptions {
   mailTransport?: MailTransport;
   /** Pause entre deux mails d'un envoi groupé (300 ms par défaut). */
   mailPauseMs?: number;
+  /** Compte Google expéditeur (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET) ; disponible seulement avec `publicUrl`. `fetch` : remplacé dans les tests. */
+  google?: { clientId: string; clientSecret: string; fetch?: typeof fetch };
 }
 
 const NOT_FOUND = { error: 'Compétition introuvable' };
@@ -218,6 +222,8 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(launchRoutes, { db });
   await app.register(backupRoutes, { db, dbPath: opts.dbPath });
   await app.register(directoryRoutes, { db });
+  const googleConfig = googleConfigFrom({ ...opts.google, publicUrl: opts.publicUrl });
+  const google = googleConfig ? googleClient(googleConfig) : null;
   const mailTransport = opts.mailTransport ?? nodemailerTransport;
   await app.register(invitationRoutes, { db, mailTransport, publicUrl: opts.publicUrl, mailPauseMs: opts.mailPauseMs, role });
   await app.register(clubEntryRoutes, { db });
@@ -239,7 +245,8 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     app.addHook('onClose', async () => stopZoneFollow());
   }
   await app.register(syncFileRoutes, { db, dbPath: opts.dbPath, role });
-  await app.register(appSettingsRoutes, { db, mailTransport, googleAvailable: false });
+  await app.register(appSettingsRoutes, { db, mailTransport, googleAvailable: !!google });
+  if (google) await app.register(googleRoutes, { db, google });
 
   // Après toute écriture réussie qui touche aux inscriptions ou aux réglages : catégories et tableaux à jour.
   app.addHook('onResponse', async (req, reply) => {

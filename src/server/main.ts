@@ -10,6 +10,7 @@ const app = await buildApp({
   instanceName: process.env.INSTANCE_NAME || process.env.COMPUTERNAME || 'PC',
   role: roleFromEnv(process.env.INSTANCE_ROLE),
   publicUrl: process.env.PUBLIC_URL || undefined,
+  google: process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET ? { clientId: process.env.GOOGLE_CLIENT_ID, clientSecret: process.env.GOOGLE_CLIENT_SECRET } : undefined,
 });
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

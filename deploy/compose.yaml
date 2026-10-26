@@ -10,6 +10,9 @@ services:
       - INSTANCE_ROLE=serveur
       - INSTANCE_NAME=SERVEUR
       - PUBLIC_URL=https://competitions.shidokanfrance.com
+      # Envoi des mails avec un compte Google : décommentez et remplissez (voir docs/installation-serveur.md).
+      # - GOOGLE_CLIENT_ID=…
+      # - GOOGLE_CLIENT_SECRET=…
       - BACKUP_INTERVAL_MIN=30
     # Pas de port publié : seul Caddy y accède.
 

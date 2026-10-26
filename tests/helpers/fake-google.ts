@@ -93,3 +93,12 @@ export function fakeGoogle(): FakeGoogle {
   };
   return fake;
 }
+
+type Injectable = { inject(o: { method: string; url: string; headers?: Record<string, string> }): Promise<{ statusCode: number; headers: Record<string, unknown>; json(): any }> };
+
+/** Parcours complet : « Se connecter avec Google », Google accepte, retour sur l'application. Renvoie la réponse du retour. */
+export async function connectGoogle(app: Injectable, headers: Record<string, string> = {}, code = 'code-ok') {
+  const start = await app.inject({ method: 'POST', url: '/api/app-settings/google/start', headers });
+  const state = new URL(start.json().url).searchParams.get('state')!;
+  return app.inject({ method: 'GET', url: `/api/app-settings/google/callback?code=${code}&state=${encodeURIComponent(state)}`, headers });
+}
