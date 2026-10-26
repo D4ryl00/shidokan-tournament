@@ -374,6 +374,8 @@ export interface ReplacementData {
   summary: { present: number; absent: number; unknown: number; cases: number; setAside: number; closed: number; alone: number; withoutProposal: number; readyCategories: number; startedCategories: number };
   fingerprint: string;
   recasements: RecasementEntry[];
+  /** Historique, refus ou carte de côté dans toute la compétition : « Repartir de zéro » a quelque chose à défaire. */
+  resettable: boolean;
 }
 export interface PreviewData {
   steps: { proposal: Proposal; manual: boolean }[];

@@ -421,13 +421,21 @@ function restoreSnapshot(t: AppDb, registrationId: string, snapshot: RecasementS
     t.update(categories).set(values).where(eq(categories.id, id)).run();
   }
   const previous = { ...snapshot.registration };
-  const current = t.select({ originalJson: registrations.originalJson }).from(registrations).where(eq(registrations.id, registrationId)).get();
+  const current = t
+    .select({ originalJson: registrations.originalJson, discipline: registrations.discipline, ruleset: registrations.ruleset, weightClassId: registrations.weightClassId })
+    .from(registrations)
+    .where(eq(registrations.id, registrationId))
+    .get();
   if (previous.originalJson !== undefined && current?.originalJson) {
     if (previous.originalJson === null) {
       // Cette réaffectation avait créé les valeurs d'origine : on revient à leur état actuel.
       const original = JSON.parse(current.originalJson) as Pick<Member, 'discipline' | 'ruleset' | 'weightClassId'>;
       Object.assign(previous, { discipline: original.discipline, ruleset: original.ruleset, weightClassId: original.weightClassId });
     } else previous.originalJson = current.originalJson;
+  } else if (previous.originalJson && current) {
+    // Annulation d'un retour : depuis, l'inscription porte ses valeurs d'origine elles-mêmes, corrections comprises.
+    const { discipline, ruleset, weightClassId } = current;
+    previous.originalJson = JSON.stringify({ ...JSON.parse(previous.originalJson), discipline, ruleset, weightClassId });
   }
   const exists = previous.categoryId && t.select().from(categories).where(eq(categories.id, previous.categoryId)).get();
   t.update(registrations)
@@ -519,6 +527,11 @@ export async function resetReplacement(db: AppDb, competitionId: string): Promis
   });
   await recomputeKeys(db, competitionId, () => touched);
   return { undone: replay.filter((e) => current.has(e.registrationId)).length };
+}
+
+/** Quelque chose à défaire par « Repartir de zéro », dans toute la compétition (toutes sessions) : historique, refus ou carte de côté. */
+export function hasReplacementTrace(db: AppDb, competitionId: string): boolean {
+  return [recasements, refusals, setAsideCases].some((table) => db.select({ c: table.competitionId }).from(table).where(eq(table.competitionId, competitionId)).limit(1).get() !== undefined);
 }
 
 /** Recalcule et enregistre la clé des catégories choisies d'après leurs membres, puis resynchronise. */

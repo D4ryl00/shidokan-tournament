@@ -33,6 +33,7 @@ type Replacement = {
   summary: Record<string, number>;
   fingerprint: string;
   recasements: { id: string; registrationId: string; type: string; status: string; reason: string }[];
+  resettable: boolean;
 };
 type Choice = { kind: 'validate'; proposalId: string; caseId: string } | { kind: 'manual'; registrationId: string; categoryId: string };
 type PlanBody = { waveId?: string; choices?: Choice[]; forApply?: boolean };
@@ -693,6 +694,13 @@ describe('réaffectation par session', () => {
     expect(await waveOfReg(mini.id)).toBe(matin);
   });
 
+  test('repartir de zéro possible d’après toute la compétition, pas la session affichée', async () => {
+    const { alone, matin } = await setup();
+    expect((await ofWave(matin)).resettable).toBe(false);
+    expect((await call('POST', '/replacement/set-aside', { caseId: `alone:${alone.id}` })).statusCode).toBe(200);
+    expect((await ofWave(matin)).resettable).toBe(true);
+  });
+
   test('sessions : waveId obligatoire, inconnu 404, une seule session traitée', async () => {
     const { mini, alone, matin, aprem } = await setup();
     // Matin : la minime n'a que des propositions qui changent de session, le plan n'y touche pas.
@@ -1119,6 +1127,22 @@ describe('repartir de zéro', () => {
     expect(res.body).toContain('Une catégorie concernée a déjà commencé ou sa session est lancée : rouvrez-la pour repartir de zéro.');
     expect(await layout()).toEqual(before);
     expect((await categories()).find((c) => c.id === fresh.id)!.registrationIds).not.toContain(light.id);
+  });
+
+  test('déplacement, retour, correction, nouveau déplacement : la correction survit', async () => {
+    const { light, heavy } = await mergeLight();
+    await reg({ weightClassId: 'cadet:F:-47', source: 'onsite' });
+    const r = await replacement();
+    const ret = r.cases.find((x) => x.kind === 'return' && x.registrationId === light.id)!;
+    expect((await call('POST', '/replacement/apply', { proposalId: r.proposals[ret.id]![0]!.id })).statusCode).toBe(200);
+    // Correction du poids (export FFK) pendant que le combattant est à sa place d'origine : les valeurs elles-mêmes changent.
+    const raw = new Database(dbPath);
+    raw.prepare('UPDATE registrations SET weight_class_id = ? WHERE id = ?').run('cadet:F:-61', light.id);
+    raw.close();
+    const host = (await categories()).find((c) => c.registrationIds.includes(heavy.id))!;
+    expect((await call('POST', '/replacement/move', { registrationId: light.id, categoryId: host.id })).statusCode).toBe(200);
+    expect((await reset()).statusCode).toBe(200);
+    expect((await regs()).find((x) => x.id === light.id)!.weightClassId).toBe('cadet:F:-61');
   });
 
   test('session lancée : 409 et rien ne change', async () => {

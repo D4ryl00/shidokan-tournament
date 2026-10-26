@@ -258,7 +258,6 @@ export function ReplacementPage() {
   // Tant que les vagues ne sont pas chargées, on ne sait pas quels cas afficher.
   if (!ready || !data) return <Stack>{waveSelector}<Loader /></Stack>;
   const s = data.summary;
-  const anyRefused = Object.values(data.proposals).some((ps) => ps.some((p) => p.refused));
   /** Catégories proposées au déplacement manuel : les cohérentes avec les réglages, et les autres si on les demande. */
   const moveOptions = (caseId: string, all = allTargets[caseId] ?? false, sessionOnly = false): ComboboxData => {
     const band = data.fighters[data.cases.find((x) => x.id === caseId)?.registrationId ?? '']?.ageBandCode;
@@ -477,7 +476,7 @@ export function ReplacementPage() {
       )}
 
       <SectionCard title={HELP['recasement.valides'].title} help="recasement.valides"
-        actions={(data.recasements.length > 0 || anyRefused || s.setAside > 0) && (
+        actions={(data.recasements.length > 0 || data.resettable) && (
           <Group gap="xs">
             {data.recasements.length > 0 && (
               <Group gap="xs" data-testid="recasement-filters">
@@ -487,7 +486,7 @@ export function ReplacementPage() {
                   data={[...new Set(data.recasements.map((r) => r.type))].map((t) => ({ value: t, label: `${PROPOSAL_TYPES[t as ProposalType].label} — ${PROPOSAL_TYPES[t as ProposalType].title}` }))} />
               </Group>
             )}
-            <Button size="compact-sm" variant="subtle" color="red" data-testid="replacement-reset" onClick={() => setDialog({ kind: 'reset' })}>
+            <Button size="compact-sm" variant="subtle" color="red" data-testid="replacement-reset" onClick={() => { resetAll.reset(); setDialog({ kind: 'reset' }); }}>
               Repartir de zéro
             </Button>
           </Group>
@@ -580,7 +579,8 @@ export function ReplacementPage() {
       </Modal>
       <Modal opened={dialog?.kind === 'reset'} onClose={() => setDialog(null)} title="Repartir de zéro ?">
         <Stack>
-          <Text>Toutes les réaffectations validées sont annulées, chaque combattant retrouve sa catégorie d’origine. Les refus, les cartes mises de côté et l’historique sont effacés. Les règles ne changent pas.</Text>
+          <Text>Toutes les réaffectations validées de la compétition, toutes sessions confondues, sont annulées : chaque combattant retrouve sa catégorie d’origine. Les refus, les cartes mises de côté et l’historique sont effacés. Les règles ne changent pas.</Text>
+          <ApiErrorAlert error={resetAll.error} />
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setDialog(null)}>Non</Button>
             <Button color="red" data-testid="replacement-reset-confirm" loading={resetAll.isPending}

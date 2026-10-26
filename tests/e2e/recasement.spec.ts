@@ -148,11 +148,28 @@ test('repartir de zéro remet la réaffectation à l’état d’avant', async (
   await page.getByTestId('replacement-reset').click();
   const dialog = page.getByRole('dialog', { name: 'Repartir de zéro ?' });
   await expect(dialog).toContainText(
-    'Toutes les réaffectations validées sont annulées, chaque combattant retrouve sa catégorie d’origine. Les refus, les cartes mises de côté et l’historique sont effacés. Les règles ne changent pas.',
+    'Toutes les réaffectations validées de la compétition, toutes sessions confondues, sont annulées : chaque combattant retrouve sa catégorie d’origine. Les refus, les cartes mises de côté et l’historique sont effacés. Les règles ne changent pas.',
   );
   await dialog.getByRole('button', { name: 'Tout annuler' }).click();
   await expect(page.getByTestId('recasement-row')).toHaveCount(0);
   await expect(page.getByText('Aucune pour l’instant.')).toBeVisible();
   await expect(page.getByTestId('replacement-reset')).toHaveCount(0);
   await expect(martin).toBeVisible();
+});
+
+test('repartir de zéro refusé : le motif se lit dans la confirmation', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe repartir de zéro refusé');
+  await seed(request, id);
+  await page.goto(`/competitions/${id}/reaffectation`);
+  const martin = caseOf(page, 'MARTIN Léa');
+  await martin.getByTestId('replacement-proposal').filter({ hasText: '-54' }).first().getByTestId('proposal-apply').click();
+  await page.getByTestId('proposal-confirm').click();
+  await expect(page.getByTestId('recasement-row')).toHaveCount(1);
+  const refusal = 'Une catégorie concernée a déjà commencé ou sa session est lancée : rouvrez-la pour repartir de zéro.';
+  await page.route('**/replacement/reset', (route) => route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: refusal }) }));
+  await page.getByTestId('replacement-reset').click();
+  const dialog = page.getByRole('dialog', { name: 'Repartir de zéro ?' });
+  await dialog.getByRole('button', { name: 'Tout annuler' }).click();
+  await expect(dialog).toContainText(refusal);
+  await expect(page.getByTestId('recasement-row')).toHaveCount(1);
 });

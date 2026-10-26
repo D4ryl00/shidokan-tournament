@@ -18,6 +18,7 @@ import {
   findProposal,
   listRecasements,
   resetReplacement,
+  hasReplacementTrace,
   loadState,
   manualMove,
   manualProposal,
@@ -134,6 +135,8 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
       },
       fingerprint: stateFingerprint(state),
       recasements: await listRecasements(db, req.params.id),
+      /** « Repartir de zéro » vaut pour toute la compétition, pas seulement la session affichée. */
+      resettable: hasReplacementTrace(db, req.params.id),
     };
   });
 
