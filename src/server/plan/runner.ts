@@ -21,6 +21,7 @@ export class PlanAbortedError extends Error {
   readonly expose = true;
   constructor(message = 'Calcul du plan annulé.') {
     super(message);
+    this.name = 'PlanAbortedError';
   }
 }
 

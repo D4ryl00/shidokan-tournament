@@ -18,6 +18,8 @@ function allRules(seed: number, size: number) {
 }
 
 const NDJSON = 'application/x-ndjson';
+/** Aucun fil en cours (ceux des tests précédents sont sortis) : le prochain fil compté est bien celui qu'on lance. */
+const idle = () => vi.waitFor(() => expect(activePlanJobs()).toBe(0), { timeout: 1000, interval: 5 });
 const lines = (body: string) => body.split('\n').filter((l) => l !== '').map((l) => JSON.parse(l) as { type: string; [k: string]: unknown });
 
 describe('dans le fil', () => {
@@ -86,8 +88,10 @@ describe('par la route', () => {
   let base: string;
   /** Compétition à peu de combattants (réponses rapides). */
   let small: string;
+  let dbPath: string;
   beforeAll(async () => {
-    app = await buildApp({ dbPath: tmpDbPath() });
+    dbPath = tmpDbPath();
+    app = await buildApp({ dbPath });
     await app.listen({ port: 0, host: '127.0.0.1' });
     url = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
     const create = async (name: string) => (await app.inject({ method: 'POST', url: '/api/competitions', payload: { name, date: '2026-11-22' } })).json().id as string;
@@ -115,6 +119,7 @@ describe('par la route', () => {
   afterAll(async () => app.close());
 
   test('le serveur répond pendant un calcul lourd', async () => {
+    await idle();
     let finished = false;
     const job = app.inject({ method: 'POST', url: `${base}/replacement/plan`, payload: { choices: [] } }).then((r) => {
       finished = true;
@@ -163,7 +168,9 @@ describe('par la route', () => {
   });
 
   test('client parti avant la fin (flux ou JSON) : le fil est arrêté', async () => {
+    await idle();
     for (const accept of [NDJSON, 'application/json']) {
+      await idle();
       const controller = new AbortController();
       const res = fetch(`${url}${base}/replacement/plan`, {
         method: 'POST', signal: controller.signal, headers: { 'content-type': 'application/json', accept }, body: JSON.stringify({ choices: [] }),
@@ -178,15 +185,66 @@ describe('par la route', () => {
   });
 
   test('arrêt du serveur pendant un calcul : le fil est arrêté, l’arrêt n’attend pas la fin', async () => {
-    const res = fetch(`${url}${base}/replacement/plan`, {
+    await idle();
+    // Un serveur à lui sur la même base : celui des autres tests reste ouvert jusqu'à la fin.
+    const own = await buildApp({ dbPath });
+    await own.listen({ port: 0, host: '127.0.0.1' });
+    const ownUrl = `http://127.0.0.1:${(own.server.address() as { port: number }).port}`;
+    const res = fetch(`${ownUrl}${base}/replacement/plan`, {
       method: 'POST', headers: { 'content-type': 'application/json', accept: NDJSON }, body: JSON.stringify({ choices: [] }),
     }).then((r) => r.text()).catch(() => '');
     await vi.waitFor(() => expect(activePlanJobs()).toBe(1), { timeout: 10_000, interval: 5 });
     const t = performance.now();
-    await app.close();
+    await own.close();
     expect(performance.now() - t).toBeLessThan(500);
     expect(activePlanJobs()).toBe(0);
     // Le client reçoit une erreur en fin de flux, ou une connexion coupée, jamais un résultat.
     expect(await res).not.toContain('"type":"result"');
+  });
+});
+
+describe('appliquer pendant que d’autres écrivent', () => {
+  let app: FastifyInstance;
+  let base: string;
+  const call = (method: 'GET' | 'POST' | 'PUT', path: string, payload?: object) => app.inject({ method, url: `${base}${path}`, payload });
+  const reg = async (weightClassId: string, approxWeightKg: number) => {
+    const res = await call('POST', '/registrations', {
+      clubId: null, lastName: weightClassId, firstName: 'x', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', weightClassId, approxWeightKg, source: 'manual',
+    });
+    return res.json().row as { id: string; fighterId: string };
+  };
+  /** Deux seules voisines de poids : le plan à appliquer les réunit (un déplacement). */
+  const setup = async () => {
+    base = `/api/competitions/${(await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22' } })).json().id}`;
+    const a = await reg('cadet:F:-47', 46);
+    await reg('cadet:F:-54', 49);
+    const p = (await call('POST', '/replacement/plan', { choices: [], forApply: true })).json() as { fingerprint: string; plan: { hash: string; moves: unknown[] } };
+    expect(p.plan.moves).toHaveLength(1);
+    await idle();
+    return { a, apply: () => call('POST', '/replacement/plan/apply', { choices: [], fingerprint: p.fingerprint, hash: p.plan.hash }) };
+  };
+  const journal = async () => ((await call('GET', '/replacement')).json() as { recasements: unknown[] }).recasements;
+  beforeAll(async () => {
+    app = await buildApp({ dbPath: tmpDbPath() });
+  });
+  afterAll(async () => app.close());
+
+  test('deux applications du même plan en même temps : une seule écrit, l’autre 409', async () => {
+    const { apply } = await setup();
+    const [r1, r2] = await Promise.all([apply(), apply()]);
+    expect([r1.statusCode, r2.statusCode].sort()).toEqual([200, 409]);
+    expect([r1, r2].find((r) => r.statusCode === 200)!.json()).toEqual({ applied: 1 });
+    expect(await journal()).toHaveLength(1);
+  });
+
+  test('une pesée pendant le calcul de l’application : 409, rien d’écrit', async () => {
+    const { a, apply } = await setup();
+    const applying = apply();
+    await vi.waitFor(() => expect(activePlanJobs()).toBe(1), { timeout: 10_000, interval: 5 });
+    expect((await call('PUT', `/weigh-in/${a.fighterId}`, { weighInKg: 46 })).statusCode).toBeLessThan(300);
+    const res = await applying;
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toBe("La situation a changé depuis l'affichage : rechargez les propositions.");
+    expect(await journal()).toEqual([]);
   });
 });

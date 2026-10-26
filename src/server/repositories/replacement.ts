@@ -325,9 +325,13 @@ export async function applyPlan(
   const waveId = await planWave(db, competitionId, body.waveId);
   let state = await loadState(db, competitionId);
   if (stateFingerprint(state) !== body.fingerprint) throw new StaleProposalError();
-  // Recalcul dans le fil, comme pour l'affichage : rien n'est écrit avant son résultat.
+  // Recalcul dans le fil, comme pour l'affichage : rien n'est écrit avant son résultat. Sans signal d'abandon : une écriture,
+  // une fois demandée, va jusqu'au bout (même si le client part), sauf si l'état a changé entre-temps.
   const { plan } = await runPlanJob(state, { waveId, choices: body.choices, forApply: true });
   if (plan.hash !== body.hash) throw new StaleProposalError('Le plan a changé depuis l’affichage : relisez-le avant de l’appliquer.');
+  // Pendant le calcul, un autre poste a pu écrire (pesée, déplacement, même plan appliqué) : on revérifie l'empreinte,
+  // puis on écrit sans plus rendre la main (base synchrone, aucune attente d'entrée-sortie dans la boucle).
+  if (stateFingerprint(await loadState(db, competitionId)) !== body.fingerprint) throw new StaleProposalError();
   let applied = 0;
   for (const move of plan.moves) {
     state = await loadState(db, competitionId);
