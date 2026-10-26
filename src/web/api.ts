@@ -435,6 +435,8 @@ const planBody = (waveId: string | null, choices: PlanChoice[]) => ({ ...(waveId
 
 /** Plans (clé hachée) qu'une mise à jour en direct a trouvés en plein calcul : un seul nouveau calcul part à la fin de celui-ci. */
 const refreshAfterPlan = new Set<string>();
+/** Calcul en cours par plan (clé hachée) : un calcul arrêté, qui finit après celui qui le remplace, ne touche plus à la marque. */
+const currentPlanRun = new Map<string, symbol>();
 
 /**
  * Mise à jour en direct (un autre poste a écrit, ou retour sur l'onglet) des plans : un calcul en cours n'est pas relancé (il
@@ -452,13 +454,19 @@ export function refreshPlansLive(qc: QueryClient): void {
 /** Un calcul du plan suivi par `refreshPlansLive` : s'il a reçu une mise à jour en direct, il est relancé une fois, à la fin. */
 export async function trackPlanFetch<T>(qc: QueryClient, queryKey: QueryKey, signal: AbortSignal, run: () => Promise<T>): Promise<T> {
   const hash = hashKey(queryKey);
+  const me = Symbol(hash);
+  currentPlanRun.set(hash, me);
   // Ce calcul lit l'état à jour : les mises à jour arrivées avant lui sont prises en compte.
   refreshAfterPlan.delete(hash);
   try {
     return await run();
   } finally {
-    // Arrêté (annulation, geste qui relance, page quittée) : rien à relancer, le calcul suivant lira l'état à jour.
-    if (refreshAfterPlan.delete(hash) && !signal.aborted) setTimeout(() => void qc.invalidateQueries({ queryKey, exact: true }), 0);
+    // Un calcul plus récent sur la même clé garde la marque (l'arrêt d'un fetch se règle après le départ du suivant).
+    if (currentPlanRun.get(hash) === me) {
+      currentPlanRun.delete(hash);
+      // Arrêté (annulation, geste qui relance, page quittée) : rien à relancer, le calcul suivant lira l'état à jour.
+      if (refreshAfterPlan.delete(hash) && !signal.aborted) setTimeout(() => void qc.invalidateQueries({ queryKey, exact: true }), 0);
+    }
   }
 }
 
@@ -699,7 +707,9 @@ export function useSaveZones(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: { zones: ZoneInput[]; knownIds: string[] }) => api<Zone[]>('PUT', `/api/competitions/${id}/zones`, body),
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      // Les zones enregistrées tout de suite dans le cache : le formulaire ne revient pas, le temps d'une relecture, à celles d'avant.
+      qc.setQueryData(['zones', id], saved);
       void qc.invalidateQueries({ queryKey: ['zones', id] });
       void qc.invalidateQueries({ queryKey: ['schedule', id] });
       void qc.invalidateQueries({ queryKey: ['categories', id] });

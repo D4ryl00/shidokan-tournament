@@ -72,3 +72,18 @@ test('plan annulé : une mise à jour en direct le marque périmé sans le relan
   expect(p.query().state.isInvalidated).toBe(true);
   p.unsubscribe();
 });
+
+test('calcul arrêté qui finit après celui qui le remplace : la mise à jour en direct reçue entre-temps est gardée', async () => {
+  const p = planQuery();
+  await p.release();
+  // Un geste relance le plan : le calcul 2 démarre, puis il est remplacé par le calcul 3 (le 2 finira plus tard).
+  void p.qc.invalidateQueries({ queryKey: p.queryKey });
+  void p.qc.invalidateQueries({ queryKey: p.queryKey });
+  expect(p.counts).toEqual({ starts: 3, aborts: 1 });
+  refreshPlansLive(p.qc);
+  // Le calcul 2, arrêté, ne finit qu'ici : il ne doit pas effacer la marque posée pour le calcul 3.
+  await p.release();
+  await p.release();
+  expect(p.counts.starts).toBe(4);
+  p.unsubscribe();
+});
