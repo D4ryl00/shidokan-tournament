@@ -62,3 +62,14 @@ test('fetchPlanStream : flux fini sans résultat, ApiError 500', async () => {
   expect(err).toBeInstanceOf(ApiError);
   expect(err).toMatchObject({ status: 500 });
 });
+
+test('fetchPlanStream : sur une ligne d’erreur, le flux est libéré', async () => {
+  let cancelled = false;
+  const body = new ReadableStream({
+    start(c) { c.enqueue(new TextEncoder().encode('{"type":"error","status":500,"error":"x"}\n')); },
+    cancel() { cancelled = true; },
+  });
+  const res = new Response(body, { status: 200, headers: { 'Content-Type': 'application/x-ndjson' } });
+  await withFetch(res, () => call()).catch(() => undefined);
+  expect(cancelled).toBe(true);
+});

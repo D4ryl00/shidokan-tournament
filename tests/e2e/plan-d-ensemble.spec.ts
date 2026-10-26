@@ -253,6 +253,13 @@ test('annuler un calcul long : le plan affiché est signalé périmé, « Relanc
   await ladder.locator('[data-testid="ladder-row"][data-rule="mixSexes"]').getByTestId('ladder-switch').click({ force: true });
   await expect(apply).toBeDisabled();
   await expect(page.getByText('Calcul du plan', { exact: false }).first()).toBeVisible();
+  // Un geste reste possible pendant le calcul (la progression ne recouvre aucune commande) et le relance.
+  // On clique la piste visible de l’interrupteur (vraie souris, sans force) : rien ne la recouvre.
+  const first = ladder.getByTestId('ladder-row').nth(1).locator('.mantine-Switch-track');
+  const relaunch = page.waitForRequest((r) => r.url().includes('/replacement/plan') && r.method() === 'POST');
+  await first.click();
+  await relaunch;
+  await expect(page.getByTestId('plan-progress')).toBeVisible();
   const aborted = page.waitForEvent('requestfailed', (r) => r.url().includes('/replacement/plan'));
   await page.getByRole('button', { name: 'Annuler le calcul' }).click();
   const message = page.getByText('Calcul annulé : le plan affiché ne tient pas compte de votre dernier changement.');

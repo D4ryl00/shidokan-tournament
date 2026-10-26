@@ -160,21 +160,14 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
   const fresh = computing ? new Set(progress.rows.map((r) => r.rule)) : isFetching ? new Set<RuleId | null>() : undefined;
   const k = view.order.indexOf(view.cutAfter) + 1;
   return (
-    <SectionCard title="Règles de réaffectation" description="L’ordre est la priorité ; la ligne pointillée marque où les règles s’arrêtent.">
+    <SectionCard title="Règles de réaffectation" description="L’ordre est la priorité ; la ligne pointillée marque où les règles s’arrêtent."
+      actions={isFetching ? <PlanProgress progress={progress} onCancel={cancel} /> : undefined}>
       {cancelled && (
         <Alert color="yellow" data-testid="plan-cancelled" p="xs" title="Calcul annulé : le plan affiché ne tient pas compte de votre dernier changement.">
           <Button size="compact-sm" data-testid="plan-restart" onClick={restart}>Relancer le calcul</Button>
         </Alert>
       )}
-      {/* La progression flotte sur le haut du diagramme : l'écran ne bouge pas quand elle apparaît. */}
-      <Box style={{ position: 'relative' }}>
-        {isFetching && (
-          <Box style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2, padding: 8, borderRadius: 8, background: 'var(--sk-bg)', border: '1px solid var(--sk-card-line)' }}>
-            <PlanProgress progress={progress} onCancel={cancel} />
-          </Box>
-        )}
-        <RuleLadder view={view} rows={ladderRows} fresh={fresh} busy={setRules.isPending || reset.isPending} onChange={(v) => setRules.mutate(v)} />
-      </Box>
+      <RuleLadder view={view} rows={ladderRows} fresh={fresh} busy={setRules.isPending || reset.isPending} onChange={(v) => setRules.mutate(v)} />
       <ApiErrorAlert error={setRules.error ?? reset.error ?? error} />
       <Group>
         <Button variant="subtle" size="compact-sm" loading={reset.isPending} onClick={() => reset.mutate()}>Revenir aux réglages par défaut</Button>

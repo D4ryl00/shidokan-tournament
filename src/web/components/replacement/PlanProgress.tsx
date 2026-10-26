@@ -5,7 +5,7 @@ import type { LadderProgress } from '../../api.js';
 /** Délai avant que la barre n'apparaisse : un calcul court ne fait pas clignoter l'écran. */
 export const PROGRESS_DELAY_MS = 500;
 
-/** Monté pendant un calcul du plan : après 500 ms, la barre d'avancement et « Annuler le calcul ». */
+/** Monté pendant un calcul du plan, à droite du titre de la section (ne recouvre aucune commande) : après 500 ms, la barre d'avancement et « Annuler le calcul ». */
 export function PlanProgress({ progress, onCancel }: { progress: LadderProgress | null; onCancel: () => void }) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
@@ -14,7 +14,7 @@ export function PlanProgress({ progress, onCancel }: { progress: LadderProgress 
   }, []);
   if (!visible) return null;
   return (
-    <Stack gap={4} data-testid="plan-progress" role="status">
+    <Stack gap={4} w={280} maw="100%" data-testid="plan-progress" role="status">
       <Group justify="space-between" wrap="wrap" gap="xs">
         <Text size="sm">{progress ? `Calcul du plan : ligne ${progress.done} sur ${progress.total}` : 'Calcul du plan…'}</Text>
         <Button size="compact-sm" variant="default" data-testid="plan-cancel" onClick={onCancel}>Annuler le calcul</Button>
