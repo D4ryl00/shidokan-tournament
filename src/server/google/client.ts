@@ -56,8 +56,8 @@ interface Person {
 /** Valeur marquée principale, sinon la première renseignée. */
 function primary(entries: PeopleEntry[] | undefined, field: (x: PeopleEntry) => string | undefined): string | null {
   const filled = (entries ?? []).filter((x) => field(x)?.trim());
-  const e = filled.find((x) => x.metadata?.primary) ?? filled[0];
-  return e ? field(e)!.trim() : null;
+  const best = filled.find((x) => x.metadata?.primary) ?? filled[0];
+  return best ? field(best)!.trim() : null;
 }
 
 function toContact(p: Person): GoogleContact {
