@@ -7,7 +7,7 @@ import { useReplacement, type RecasementEntry } from '../api.js';
 export const PROPOSAL_TYPES: Record<ProposalType, { color: string; label: string; simple: boolean; title: string }> = {
   A: { color: 'blue', label: '⚖ Poids', simple: true, title: 'Catégorie de poids voisine (dans l’écart autorisé)' },
   B: { color: 'blue', label: '⚖ Poids +', simple: false, title: 'Catégorie de poids voisine, écart au-delà du seuil' },
-  C: { color: 'orange', label: '↑ Âge', simple: false, title: 'Tranche d’âge au-dessus' },
+  C: { color: 'orange', label: '↑ Âge', simple: false, title: 'Tranche d’âge voisine' },
   D: { color: 'orange', label: '⇄ Sen./Vét.', simple: false, title: 'Mélange seniors / vétérans' },
   E: { color: 'orange', label: '↑ Min./Adultes', simple: false, title: 'Mélange mineurs / adultes' },
   F: { color: 'pink', label: '⚥ Mixte', simple: false, title: 'Mélange filles / garçons' },

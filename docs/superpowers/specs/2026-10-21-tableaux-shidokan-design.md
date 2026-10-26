@@ -247,7 +247,7 @@ Tous réglables **pour chaque compétition**.
 |---|---|---|
 | A | Catégorie de poids voisine, même âge, écart ≤ seuil (y compris la correction d'un poids hors catégorie) | **cas simple** : bouton « Valider » (2026-10-23, auparavant « Classer automatiquement ») ✅ |
 | B | Catégorie de poids voisine, écart > seuil | manuelle ✅ |
-| C | Tranche d'âge au-dessus (une seule) | manuelle, avec l'accord des deux coachs ✅ |
+| C | Tranche d'âge au-dessus ou au-dessous (une seule) ✅ (2026-10-25) | manuelle, avec l'accord des deux coachs ✅ (remplacé le 2026-10-25, voir ci-dessous : à valider, le pré-accord n'est qu'une indication) |
 | D | Mélange seniors / vétérans | manuelle, si l'option est activée 🟡 |
 | E | Mélange mineurs / adultes | manuelle, si l'option est activée ✅ |
 | F | Mélange filles / garçons | manuelle, si l'option est activée pour la catégorie ✅ |
@@ -255,8 +255,7 @@ Tous réglables **pour chaque compétition**.
 | H | Autre discipline, selon les préférences | manuelle ✅ |
 | R | **Retour dans la catégorie d'origine** | 💡 cas simple, comme A ✅ (le retour lui-même est décidé) |
 
-✅ (2026-10-25) **Deux sortes de déplacements** : seul un déplacement qui **ne change que la catégorie de poids, dans l'écart réglé** (A, y compris le split dans l'écart), se fait **sans validation** ; **tous les autres** (B, C, I, D, E, F, G, H, retour) sont **à valider** à la main. Le « pré-accord coach » n'est qu'une **indication** affichée sur le déplacement, jamais une validation. Détail : `docs/superpowers/specs/2026-10-25-plan-d-ensemble-reaffectation-design.md`.
-| I | ✅ (2026-10-25) **Tranche d'âge au-dessous** (une seule), mêmes conditions que la tranche au-dessus (C) | manuelle, **à valider** |
+✅ (2026-10-25) **Deux sortes de déplacements** : seul un déplacement qui **ne change que la catégorie de poids, dans l'écart réglé** (A, y compris le split dans l'écart), se fait **sans validation** ; **tous les autres** (B, C, D, E, F, G, H, retour) sont **à valider** à la main. Le « pré-accord coach » n'est qu'une **indication** affichée sur le déplacement, jamais une validation. Détail : `docs/superpowers/specs/2026-10-25-plan-d-ensemble-reaffectation-design.md`.
 
 ### 9.4 Génération des propositions 💡
 - Une **proposition** = un ou plusieurs combattants déplacés vers une catégorie cible. La cible peut être une catégorie existante ou une **fusion de deux catégories** (par exemple deux combattants seuls en -30 kg et en -35 kg réunis).
@@ -273,10 +272,10 @@ Tous réglables **pour chaque compétition**.
   - une discipline que le combattant n'a pas acceptée ;
   - une option de la compétition désactivée ;
   - une catégorie **déjà lancée** (§11.3).
-- ✅ (2026-10-23) **« Split »** : un combattant **seul** peut aussi recevoir le plus lourd, ou les deux plus lourds (pour former une poule de 3), de la catégorie de poids **juste en dessous** (même discipline, règlement, sexe et tranche d'âge), s'il y en reste au moins deux. Jamais dans l'autre sens (on ne fait pas descendre un combattant vers une catégorie plus légère). Ces combattants n'avaient pas de problème : la proposition est **toujours manuelle**, jamais validée en masse, et ils ne « reviennent » pas d'eux-mêmes. Chacun a sa ligne dans l'historique (annulable).
+- ✅ (2026-10-23) **« Split »** : un combattant **seul** peut aussi recevoir le plus lourd, ou les deux plus lourds (pour former une poule de 3), de la catégorie de poids **juste en dessous** (même discipline, règlement, sexe et tranche d'âge), s'il y en reste au moins deux. Jamais dans l'autre sens (on ne fait pas descendre un combattant vers une catégorie plus légère). Ces combattants n'avaient pas de problème : la proposition est **toujours manuelle**, jamais validée en masse (remplacé le 2026-10-25, voir ci-dessous : sans validation dans l'écart de poids réglé), et ils ne « reviennent » pas d'eux-mêmes. Chacun a sa ligne dans l'historique (annulable).
 - ✅ (2026-10-25) **Plan d'ensemble** : au lieu d'un classement carte par carte, l'application calcule un **plan** pour toute la session (ou la compétition) : parmi tous les plans qui n'utilisent que les règles actives au-dessus de la ligne de coupure, celui qui laisse le moins de combattants seuls, puis qui coûte le moins. La liste des règles montre pour chacune combien de combattants resteraient seuls si on l'autorise avec toutes celles du dessus. Le split n'est plus « toujours manuel » : dans l'écart de poids réglé, c'est un cas simple. Détail : `docs/superpowers/specs/2026-10-25-plan-d-ensemble-reaffectation-design.md`.
 - ✅ (2026-10-25) **Tranche d'âge « au-dessous »** : un combattant peut aussi être proposé dans la tranche d'âge juste en dessous, sous les mêmes conditions que la tranche au-dessus (une seule tranche, règle activée), toujours **à valider**.
-- Si le club a donné son **pré-accord**, les propositions C et B portent la mention « pré-accord coach ».
+- Si le club a donné son **pré-accord**, les propositions C et B portent la mention « pré-accord coach » (précisé le 2026-10-25 : simple indication, le déplacement reste à valider).
 - **Écart d'âge** : quand un combattant affronte un plus jeune, une alerte s'affiche sur la fiche du combat. Le coach du plus âgé lui demande en général d'y aller plus doucement.
 - Si aucune solution n'existe : le combattant est signalé « **sans adversaire** ». L'organisateur peut le déplacer à la main n'importe où (avec avertissement si une règle est enfreinte), ou le retirer.
 - ✅ (2026-10-23) **Poids hors catégorie, catégorie du poids réel vide** : la proposition « vers la catégorie du poids réel » indique qu'il y sera seul et passe en dernier ; avant elle, les catégories existantes où il aurait un adversaire (sa catégorie de poids est corrigée dans tous les cas), jamais une catégorie trop légère pour son poids pesé.
@@ -291,8 +290,8 @@ Tous réglables **pour chaque compétition**.
 ## 10. Tableau de bord du jour J ✅
 
 - **Liste des cas à traiter**, combattant par combattant, avec les propositions classées et un **aperçu avant validation** : qui bouge, quels tableaux changent, qui rencontre qui.
-- **Cas simples (A)** : bouton « Valider » → aperçu → « Êtes-vous sûr ? » → application. ✅ (2026-10-23) Chaque proposition nomme la catégorie **telle qu'elle sera après le déplacement** (« Benjamins / Minimes M · -45 / -50 kg ») et le nombre d'adversaires qu'il y aura (le détail est dans l'aperçu) ; l'écart de poids affiché est celui entre le plus léger et le plus lourd de cette catégorie.
-- **Bouton global « Tout classer automatiquement »** → aperçu global → confirmation. Il applique la meilleure proposition à **tous** les cas, **y compris ceux qui demandent normalement une validation manuelle**. L'organisateur en prend la responsabilité.
+- **Cas simples (A)** : bouton « Valider » → aperçu → « Êtes-vous sûr ? » → application (remplacé le 2026-10-25, voir ci-dessous : « Appliquer le plan »). ✅ (2026-10-23) Chaque proposition nomme la catégorie **telle qu'elle sera après le déplacement** (« Benjamins / Minimes M · -45 / -50 kg ») et le nombre d'adversaires qu'il y aura (le détail est dans l'aperçu) ; l'écart de poids affiché est celui entre le plus léger et le plus lourd de cette catégorie.
+- **Bouton global « Tout classer automatiquement »** (supprimé le 2026-10-25, voir ci-dessous) → aperçu global → confirmation. Il applique la meilleure proposition à **tous** les cas, **y compris ceux qui demandent normalement une validation manuelle**. L'organisateur en prend la responsabilité.
   - 💡 L'aperçu global sépare les cas simples des cas qui auraient dû être validés un par un.
 - ✅ (2026-10-25) **Le plan d'ensemble remplace le bouton global « Tout classer automatiquement » et le bouton « Classer automatiquement » des cas simples** (supprimés) : « Voir le plan » liste les déplacements du plus coûteux au moins coûteux ; « Valider », « Refuser » et « Modifier » agissent sur un déplacement à valider (le plan est recalculé à chaque fois, chaque choix s'annule) ; « Appliquer le plan » applique les déplacements sans validation et ceux que l'organisateur a validés, les autres restent en attente. Détail : `docs/superpowers/specs/2026-10-25-plan-d-ensemble-reaffectation-design.md`.
 - **Repérage visuel des combattants reclassés et du motif**, partout où ils apparaissent :
@@ -473,7 +472,7 @@ Hypothèses à faire confirmer (🟡) :
 | 2026-10-21 | Thèmes clair et sombre ; logo Shidokan France (WebP optimisé) ; interface testée sur Chrome. |
 | 2026-10-21 | Feuilles de résultats = mode d'affichage et d'impression des tableaux de combat, remplis avec les résultats. |
 | 2026-10-21 | Kata : tour 1 pour tous (note sur 10), finale à deux avec un 2e kata ; nombre d'arbitres variable ; moyenne simple s'il y a moins de 5 arbitres. |
-| 2026-10-23 | Pesée : règle FFK gardée (poids ≤ limite, tolérance comprise). Shobu → jiyu : réglage de la compétition, désactivé par défaut. « Split » vers la catégorie du combattant seul, jusqu'à une poule de 3, toujours manuel. Tranches voisines dans les deux sens en déplacement manuel seulement. |
+| 2026-10-23 | Pesée : règle FFK gardée (poids ≤ limite, tolérance comprise). Shobu → jiyu : réglage de la compétition, désactivé par défaut. « Split » vers la catégorie du combattant seul, jusqu'à une poule de 3, toujours manuel (revu le 2026-10-25). Tranches voisines dans les deux sens en déplacement manuel seulement. |
 | 2026-10-25 | Réaffectation : un **plan d'ensemble** par liste de règles ordonnée (interrupteurs et ligne de coupure par compétition, valeurs par défaut de l'application) remplace « Tout classer automatiquement » et « Classer automatiquement ». Seul un changement de catégorie de poids dans l'écart réglé se fait sans validation ; tout le reste est à valider ; le pré-accord coach n'est qu'une indication. Nouvelle règle : tranche d'âge au-dessous (à valider). Voir `docs/superpowers/specs/2026-10-25-plan-d-ensemble-reaffectation-design.md`. |
 
 ## 20. Prochaines étapes

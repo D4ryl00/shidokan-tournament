@@ -206,7 +206,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Les clubs sont créés par l’import des fiches club, par l’import FFK ou par la saisie des inscriptions.',
       [
         'Coach : nom, téléphone et e-mail, pour le joindre le jour J.',
-        'Pré-accord : le coach accepte d’avance qu’on réaffecte ses combattants. Les propositions qui demanderaient son accord sont alors marquées « pré-accord coach ».',
+        'Pré-accord : le coach accepte d’avance qu’on réaffecte ses combattants. Les déplacements d’âge et de poids portent alors la mention « pré-accord coach » (une indication : ils se valident toujours à la main).',
       ],
     ],
   },
@@ -361,7 +361,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Sous le nom du combattant : sa tranche d’âge, sa discipline et son règlement, sa catégorie de poids, son poids (pesé ou approximatif) et les disciplines qu’il accepte.',
       'Catégorie fermée : le combattant est inscrit dans une catégorie que vous n’avez pas ouverte ; déplacez-le ou choisissez « Ne combat pas ».',
       'Un combattant seul dans sa catégorie peut aussi recevoir le ou les deux plus lourds de la catégorie de poids juste en dessous, s’il y en reste au moins deux (« pour donner une poule à… »). Dans l’écart de poids réglé, c’est un cas simple.',
-      'Badges : ⚖ Poids (catégorie de poids voisine), ⚖ Poids + (écart au-delà du seuil), ↑ Âge (tranche au-dessus), ⇄ Sen./Vét., ↑ Min./Adultes, ⚥ Mixte, Shobu → Jiyu, ⇄ Discipline, ↩ Retour, ✋ Manuel. Cliquez un badge validé pour son détail.',
+      'Badges : ⚖ Poids (catégorie de poids voisine), ⚖ Poids + (écart au-delà du seuil), ↑ Âge (tranche voisine), ⇄ Sen./Vét., ↑ Min./Adultes, ⚥ Mixte, Shobu → Jiyu, ⇄ Discipline, ↩ Retour, ✋ Manuel. Cliquez un badge validé pour son détail.',
       'Seul un déplacement qui ne change que la catégorie de poids, dans l’écart réglé, se fait sans validation ; tous les autres se valident à la main. « Pré-accord coach » rappelle que le club a accepté d’avance les déplacements d’âge et de poids.',
       'Avec des sessions : choisissez la session en haut de l’écran (la même que pour la pesée). Les cas, les compteurs et le plan d’ensemble ne portent que sur ses catégories.',
       'Le badge « ↪ change de session : Matin → Dimanche » signale une proposition qui ferait passer le combattant dans une catégorie d’une autre session. Elle n’est jamais appliquée sans votre validation : validez-la une par une. Le combattant repasse alors « non pesé » dans sa nouvelle session, à pointer à sa pesée ; son poids déjà relevé est gardé.',
