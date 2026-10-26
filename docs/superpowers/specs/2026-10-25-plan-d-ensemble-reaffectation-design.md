@@ -95,6 +95,7 @@ Dans l'onglet **Réaffectation**, en haut, pour la **session choisie** (comme le
 - La ligne de coupure se déplace (glisser, ou clic sur la ligne où l'on s'arrête). Le bouton dessous : « Voir le plan jusqu'à la règle 5 (17 déplacements, 7 seuls) ».
 - Sous le bouton, quand c'est prouvé : « Aucune combinaison dans ces règles ne laisse moins de 7 seuls. » (§5.4).
 - Tout changement (ordre, interrupteur, ligne) recalcule les barres.
+- ✅ (2026-10-26) Pendant un calcul long, une **barre de progression** « Calcul du plan : ligne 4 sur 9 » et un bouton **« Annuler le calcul »** (§5.5).
 
 ### 4.2 Le plan ✅
 « Voir le plan » affiche les déplacements (maquette `plan.html`) :
@@ -161,11 +162,21 @@ La barre de la ligne k = l'optimum du §5.2 (critère 1) avec les règles active
 
 ### 5.4 Fiabilité
 - 🔧 La méthode (recherche exhaustive avec élagage, programmation en nombres entiers, autre) est au choix du constructeur, **sans service extérieur** : tout tourne sur le PC, hors ligne, dans le code métier `src/domain/replacement/` (indépendant de l'interface et de la base, comme le reste).
-- 💡 Ordre de grandeur à tenir : environ 500 inscriptions, quelques dizaines de cas par session ; la liste et ses barres en **moins de 2 secondes** sur le PC de la table centrale.
-- ✅ (2026-10-26) La limite est un **nombre de nœuds** de recherche, jamais un temps (même état, même plan) : par groupe de cas, et pour toute la liste (toutes ses barres) d'une même demande, pour qu'une règle rare activée ne bloque pas le serveur plusieurs secondes. Chaque barre part aussi du plan de la règle active au-dessus (ses déplacements restent permis) : à partir de la première règle, les barres ne remontent jamais.
+- 💡 Ordre de grandeur à tenir : environ 500 inscriptions, quelques dizaines de cas par session ; la liste et ses barres en **moins de 2 secondes** sur le PC de la table centrale. (2026-10-26 💡 : visé pour une compétition ordinaire d'environ 150 inscriptions ; au-delà, le calcul peut durer plus, à part et avec sa progression, §5.5.)
+- ✅ (2026-10-26) La limite est un **nombre de nœuds** de recherche, jamais un temps (même état, même plan), **par groupe de cas et par ligne** : chaque barre a son propre budget, aucune ligne ne prend celui d'une autre (une limite commune à toute la liste, essayée d'abord, laissait les lignes du haut affamer la ligne de coupure : plan affiché moins bon). Ce qui protège le serveur d'un calcul long, c'est le calcul à part (§5.5). Chaque barre part aussi du plan de la règle active au-dessus (ses déplacements restent permis) : à partir de la première règle, les barres ne remontent jamais.
 - ✅ (2026-10-26) Une épingle dont le déplacement n'existe qu'après un autre déplacement du plan (le partenaire laissé seul par une correction de poids, une catégorie créée en route) est gardée : les déplacements qui y mènent sont fixés juste avant elle (le plan ne se dit alors plus « prouvé »). Pour appliquer, si l'un d'eux est à valider et non validé, l'épingle attend (ni appliquée ni retirée).
 - 💡 Si le calcul atteint sa limite de temps, il rend le meilleur plan trouvé, et l'écran **ne dit pas** « on ne peut pas faire mieux » (il dit « meilleur plan trouvé »). La phrase « Aucune combinaison… » n'apparaît que si l'optimum est prouvé.
 - Tests (le calcul est la partie critique) : contre-exemples de l'approche carte par carte (Alice/Bruno/Chloé ; un déplacement qui fait monter l'écart et bloque le suivant) ; **jamais pire que l'ancien `bulkPlan`** sur des états générés au hasard (garder l'ancien calcul dans les tests comme référence) ; jamais une règle inactive ou sous la ligne ; épingles jamais défaites ; même entrée → même plan.
+
+### 5.5 Calcul à part, progression, annulation ✅ (2026-10-26)
+Demandé par l'organisateur après la relecture : le calcul ne doit **jamais bloquer l'app**, l'écran doit **faire patienter** et l'on doit pouvoir **annuler**.
+- ✅ Le calcul du plan (le diagramme, le plan affiché, le plan à appliquer et sa vérification au moment d'appliquer) tourne dans un **fil de calcul à part** du serveur (`worker_threads` de Node, aucune dépendance nouvelle). Pendant ce temps, le serveur répond à tous les postes (Table centrale, zones, mises à jour en direct). Le code métier reste pur (`src/domain/replacement/`) : le fil reçoit l'état chargé et rend le résultat ; la base n'est lue et écrite que par le serveur.
+- 💡 Même entrée → même plan, dans le fil comme hors du fil : le hash vérifié à l'application reste valable.
+- ✅ **Progression** : le diagramme se calcule ligne par ligne ; le serveur envoie l'avancement au fil de l'eau (« ligne k sur n », n = nombre de calculs de la demande) et chaque barre **apparaît dès que sa ligne est prête**. 💡 La barre de progression n'apparaît qu'après **une demi-seconde** de calcul, pour ne pas clignoter à chaque geste sur une compétition ordinaire (environ 150 inscriptions).
+- 💡 Pendant le calcul, l'écran garde le diagramme et le plan précédents, grisés (les lignes déjà recalculées prennent leur nouvelle barre) ; « Appliquer le plan » est désactivé.
+- ✅ **« Annuler le calcul »** arrête le fil tout de suite. 💡 L'écran garde le dernier plan calculé, avec « Calcul annulé : le plan affiché ne tient pas compte de votre dernier changement. » et un bouton **« Relancer le calcul »** ; « Appliquer le plan » reste désactivé jusqu'à un calcul complet. Annuler n'écrit rien et ne défait aucun choix (épingles, « Modifier », refus restent).
+- 💡 **Chaque nouveau geste annule le calcul en cours** du poste et en relance un (le résultat de l'ancien ne servirait plus) ; un poste qui ferme la page ou perd la connexion arrête aussi son calcul.
+- 💡 Le plan à appliquer (un seul calcul) passe par le même fil ; fermer la confirmation l'annule.
 
 ## 6. Autour
 
