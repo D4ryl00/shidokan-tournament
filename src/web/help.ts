@@ -6,6 +6,7 @@
 export type HelpTopicId =
   | 'competitions'
   | 'annuaire'
+  | 'synchro-google'
   | 'comptes'
   | 'parametres'
   | 'impression'
@@ -84,7 +85,27 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Le numéro d’affiliation FFK (les chiffres en tête du club dans l’export FFK) reconnaît un club à coup sûr, même si son nom est écrit autrement.',
         '« Modifier » change le nom, le numéro d’affiliation, le coach ou les notes ; « Archiver » cache un club qui ne vient plus, sans rien effacer.',
         '« Fusionner avec… » réunit deux fiches du même club : les compétitions de l’une passent à l’autre, puis la première est supprimée.',
+        '« Synchroniser avec Google » (sur le serveur en ligne, avec un compte Google connecté) compare les coachs de l’annuaire aux contacts Google ; un club lié porte la marque « Google ». « Ne plus synchroniser avec Google » retire ce lien sans rien effacer.',
       ],
+    ],
+  },
+  'synchro-google': {
+    title: 'Synchroniser les coachs avec Google',
+    short: 'Les coordonnées des coachs viennent des contacts Google : rien ne change dans l’annuaire avant « Appliquer ».',
+    details: [
+      'Choisissez un libellé de vos contacts Google (par exemple « Coachs »), ou « Tous les contacts ». Le dernier libellé choisi est repris la fois suivante.',
+      [
+        'Différences avec l’annuaire : pour chaque club lié à un contact, le coach, le téléphone et le mail qui diffèrent. Google l’emporte : chaque ligne est cochée.',
+        'Décochez une ligne pour garder la valeur de l’annuaire. Cela ne vaut que cette fois : la même différence revient à la synchronisation suivante, tant que Google et l’annuaire ne concordent pas.',
+        'Un champ vide dans Google n’efface jamais l’annuaire ; deux numéros écrits autrement (espaces, +33) ne sont pas une différence.',
+      ],
+      [
+        'Nouveaux contacts : « Lier à un club » choisit le club de l’annuaire de ce coach. Le club de même mail, sinon de même téléphone, est déjà choisi ; un nom qui ressemble est seulement proposé (« Peut-être : … ? »).',
+        '« Nouveau club » crée une fiche avec le nom saisi et les coordonnées du contact. « + Lier aussi à un autre club » sert au coach qui tient deux clubs.',
+        '« Plus tard » : à l’application, le contact est rangé dans « En attente d’un rattachement », repliée, où les mêmes choix restent possibles.',
+        '« Contacts déjà liés » permet de lier un contact à un club de plus. Pour retirer un lien : « Ne plus synchroniser avec Google » dans l’annuaire.',
+      ],
+      'Se reconnecter avec un autre compte Google (Réglages de l’application) efface les liens et la liste en attente : ils ne valent que pour le compte avec lequel ils ont été faits.',
     ],
   },
   comptes: {
@@ -113,7 +134,8 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Envoi des mails : le compte qui enverra les liens aux clubs. « Envoyer un mail d’essai » vérifie les réglages.',
       [
         'Compte Google (sur le serveur en ligne) : « Se connecter avec Google », choisissez le compte, puis acceptez. Google affiche une fois « application non validée » : cliquez sur Paramètres avancés, puis Accéder.',
-        'L’application ne peut qu’envoyer des mails depuis ce compte, pas les lire ; « Déconnecter » lui retire l’accès. Si l’accès est retiré ou expire, l’écran demande de se reconnecter. Environ 500 destinataires par jour.',
+        'L’application peut envoyer des mails depuis ce compte, sans les lire, et lire ses contacts, sans les modifier (synchronisation des coachs de l’annuaire) ; « Déconnecter » lui retire l’accès. Si l’accès est retiré ou expire, l’écran demande de se reconnecter. Environ 500 destinataires par jour.',
+        'Sous le compte connecté, « Contacts : accès accordé » ou « non accordé » : dans ce cas, reconnectez-vous et laissez la case des contacts cochée chez Google. Se reconnecter avec un autre compte efface les liens entre l’annuaire et les contacts.',
         'Autre serveur : le serveur d’envoi (SMTP), l’identifiant et le mot de passe. Pour Gmail sans « Se connecter avec Google » : un mot de passe d’application (Compte Google → Sécurité → Mots de passe des applications), serveur smtp.gmail.com, port 465, TLS.',
         'Le mot de passe enregistré n’est jamais réaffiché ; laissez le champ vide pour le garder.',
       ],

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { clipped, createCompetition, ellipsized } from './helpers.js';
+import { clipped, createCompetition, ellipsized, mockGoogleContacts } from './helpers.js';
 
 test('petit portable (1024 px) : inscriptions et pesée aux noms longs entièrement visibles (défilement si besoin)', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe mise en page');
@@ -62,4 +62,15 @@ test('Combats : « Noter » amène le panneau de la catégorie à l’écran', a
   await page.goto(`/competitions/${id}/combats`);
   await page.getByRole('button', { name: 'Noter', exact: true }).first().click();
   await expect(page.getByTestId('selected-category')).toBeInViewport();
+});
+
+test('synchronisation avec Google (aperçu simulé) : rien de coupé sur un petit portable ni sur un téléphone', async ({ page }) => {
+  await mockGoogleContacts(page);
+  for (const width of [1024, 375]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto('/annuaire/google');
+    await expect(page.getByTestId('google-apply')).toBeVisible();
+    expect(await clipped(page), String(width)).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), String(width)).toBeLessThanOrEqual(0);
+  }
 });

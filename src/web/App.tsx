@@ -13,6 +13,7 @@ import { ClubsPage } from './pages/ClubsPage.js';
 import { CompetitionSettingsPage } from './pages/CompetitionSettingsPage.js';
 import { CompetitionsPage } from './pages/CompetitionsPage.js';
 import { DirectoryPage } from './pages/DirectoryPage.js';
+import { DirectorySyncPage } from './pages/DirectorySyncPage.js';
 import { FfkImportPage } from './pages/FfkImportPage.js';
 import { GridEditorPage } from './pages/GridEditorPage.js';
 import { LoginPage, ReloginModal } from './pages/LoginPage.js';
@@ -70,6 +71,7 @@ function MainShell() {
           <Routes>
             <Route path="/" element={<CompetitionsPage />} />
             <Route path="/annuaire" element={<DirectoryPage />} />
+            <Route path="/annuaire/google" element={<DirectorySyncPage />} />
             <Route path="/comptes" element={<AccountsPage />} />
             <Route path="/parametres" element={<AppSettingsPage />} />
             <Route path="/competitions/:id" element={<CompetitionLayout />}>

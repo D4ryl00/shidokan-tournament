@@ -15,6 +15,7 @@ import { fetchPlanStream } from './planStream.js';
 import { applyRulesView, type RulesView } from '../domain/replacement/rules.js';
 import type { Wave, WaveInput } from '../domain/waves.js';
 import type { AppSettingsPatch, PublicAppSettings } from '../domain/app-settings.js';
+import type { GoogleContactsView, SyncApply } from '../domain/google-contacts.js';
 import type { Zone, ZoneInput } from '../domain/zones.js';
 import type { PassagePlan } from '../domain/passages/index.js';
 
@@ -822,9 +823,30 @@ function useDirectoryMutation<V>(fn: (v: V) => Promise<DirectoryEntry>) {
 }
 export const useCreateDirectoryEntry = () => useDirectoryMutation((input: DirectoryInput) => api<DirectoryEntry>('POST', '/api/club-directory', input));
 export const useUpdateDirectoryEntry = () =>
-  useDirectoryMutation(({ id, ...patch }: Partial<DirectoryInput> & { id: string; archived?: boolean }) => api<DirectoryEntry>('PATCH', `/api/club-directory/${id}`, patch));
+  useDirectoryMutation(({ id, ...patch }: Partial<DirectoryInput> & { id: string; archived?: boolean; googleContactId?: null }) => api<DirectoryEntry>('PATCH', `/api/club-directory/${id}`, patch));
 export const useMergeDirectoryEntries = () =>
   useDirectoryMutation((ids: { keepId: string; mergeId: string }) => api<DirectoryEntry>('POST', '/api/club-directory/merge', ids));
+
+const GOOGLE_CONTACTS_KEY = 'google-contacts';
+/**
+ * Aperçu de la synchronisation avec Google Contacts. `label` : undefined = le dernier libellé choisi, null = tous les contacts.
+ * Jamais relu tout seul (retour sur l'onglet) : les choix en cours à l'écran seraient perdus.
+ */
+export const useGoogleContactsPreview = (label: string | null | undefined) =>
+  useQuery({
+    queryKey: [GOOGLE_CONTACTS_KEY, label === undefined ? 'enregistré' : label],
+    queryFn: () => api<GoogleContactsView>('POST', '/api/club-directory/google/preview', label === undefined ? {} : { label }),
+    placeholderData: keepPreviousData,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+export function useApplyGoogleContacts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SyncApply) => api<{ updated: number; linked: number; created: number }>('POST', '/api/club-directory/google/apply', input),
+    onSuccess: () => Promise.all([['club-directory'], [GOOGLE_CONTACTS_KEY]].map((queryKey) => qc.invalidateQueries({ queryKey }))),
+  });
+}
 
 // Inscriptions en ligne : liens personnels des clubs, ouverture et gel.
 export interface ClubInvitationRow {

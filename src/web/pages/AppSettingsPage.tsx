@@ -1,8 +1,9 @@
 import { Alert, Button, Divider, Group, Modal, NativeSelect, NumberInput, PasswordInput, SegmentedControl, SimpleGrid, Stack, Text, Textarea, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
-import { GOOGLE_NOT_CONFIGURED, GOOGLE_RECONNECT, type MailMode, type PublicAppSettings, type SmtpSettings } from '../../domain/app-settings.js';
+import { GOOGLE_NOT_CONFIGURED, GOOGLE_RECONNECT, hasContactsScope, type MailMode, type PublicAppSettings, type SmtpSettings } from '../../domain/app-settings.js';
 import { useAppSettings, useAuthMe, useGoogleDisconnect, useGoogleStart, useSendTestMail, useUpdateAppSettings } from '../api.js';
+import { RECONNECT_OTHER_ACCOUNT } from '../../domain/google-contacts.js';
 import { useDocumentTitle } from '../documentTitle.js';
 import { SyncSettingsCard } from '../components/SyncPanel.js';
 import { MirrorCopies, MirrorSettingsCard } from '../components/MirrorPanels.js';
@@ -102,18 +103,26 @@ function GoogleForm({ settings }: { settings: PublicAppSettings }) {
       <ApiErrorAlert error={start.error ?? update.error ?? disconnect.error} />
       {!g ? (
         <Stack gap="xs" align="flex-start">
-          <Text size="sm" c="dimmed">Google affichera « application non validée » : cliquez sur Paramètres avancés, puis Accéder. L’application ne pourra qu’envoyer des mails, pas les lire.</Text>
+          <Text size="sm" c="dimmed">Google affichera « application non validée » : cliquez sur Paramètres avancés, puis Accéder. L’application pourra envoyer des mails, sans les lire, et lire vos contacts, sans les modifier.</Text>
           {connectButton('Se connecter avec Google')}
         </Stack>
       ) : (
         <>
           {g.status === 'reconnect' && <Alert color="red">{GOOGLE_RECONNECT}</Alert>}
-          <Group justify="space-between" wrap="wrap">
-            <Text data-testid="google-connected">Connecté : <b>{g.email}</b></Text>
-            <Group gap="xs">
-              {connectButton('Se reconnecter', g.status === 'reconnect' ? 'filled' : 'default')}
-              <Button variant="subtle" color="red" onClick={() => setConfirm(true)}>Déconnecter</Button>
-            </Group>
+          <Group justify="space-between" wrap="wrap" align="flex-start">
+            <Stack gap={2}>
+              <Text data-testid="google-connected">Connecté : <b>{g.email}</b></Text>
+              {hasContactsScope(g)
+                ? <Text size="sm" c="dimmed" data-testid="google-contacts-scope">Contacts : accès accordé</Text>
+                : <Text size="sm" c="var(--sk-warn-text)" data-testid="google-contacts-scope">Contacts : non accordé — reconnectez-vous</Text>}
+            </Stack>
+            <Stack gap={4} align="flex-end" maw={360}>
+              <Group gap="xs">
+                {connectButton('Se reconnecter', g.status === 'reconnect' ? 'filled' : 'default')}
+                <Button variant="subtle" color="red" onClick={() => setConfirm(true)}>Déconnecter</Button>
+              </Group>
+              <Text size="xs" c="dimmed" ta="right">{RECONNECT_OTHER_ACCOUNT}</Text>
+            </Stack>
           </Group>
           <Group justify="space-between" align="end" wrap="wrap">
             <TextInput label="Nom de l’expéditeur" value={fromName} w={260} onChange={(e) => setFromName(e.currentTarget.value)} />

@@ -1,9 +1,10 @@
 import { Button, Checkbox, Group, Menu, Modal, Select, Stack, Table, Text, Textarea, TextInput } from '@mantine/core';
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { normalizeName } from '../../domain/names.js';
 import { plural } from '../../domain/plural.js';
 import type { DirectoryEntry, DirectoryInput } from '../../domain/registration.js';
-import { useCreateDirectoryEntry, useDirectory, useMergeDirectoryEntries, useUpdateDirectoryEntry } from '../api.js';
+import { useAppSettings, useCreateDirectoryEntry, useDirectory, useMergeDirectoryEntries, useUpdateDirectoryEntry } from '../api.js';
 import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
@@ -84,6 +85,9 @@ export function DirectoryPage() {
   useDocumentTitle('Annuaire');
   const { data: entries = [], isLoading } = useDirectory();
   const update = useUpdateDirectoryEntry();
+  const { data: settings } = useAppSettings();
+  // Synchronisation : là où Google est disponible, avec un compte connecté (quel que soit le mode d'envoi des mails).
+  const canSync = !!settings?.googleAvailable && !!settings.google;
   const [search, setSearch] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<DirectoryEntry | 'new' | null>(null);
@@ -96,7 +100,10 @@ export function DirectoryPage() {
     <Stack gap="lg">
       <PageHeader title="Annuaire des clubs" help="annuaire"
         summary={entries.length > 0 ? `${plural(active, 'club')}${entries.length > active ? ` · ${plural(entries.length - active, 'archivé')}` : ''}` : undefined}
-        actions={<Button data-testid="directory-new" onClick={() => setEditing('new')}>Ajouter un club</Button>} />
+        actions={<>
+          {canSync && <Button variant="default" component={Link} to="/annuaire/google">Synchroniser avec Google</Button>}
+          <Button data-testid="directory-new" onClick={() => setEditing('new')}>Ajouter un club</Button>
+        </>} />
       <Group gap="md">
         <TextInput placeholder="Rechercher un nom ou un numéro" value={search} onChange={(e) => setSearch(e.currentTarget.value)} w={300} />
         <Checkbox label="Afficher les clubs archivés" checked={showArchived} onChange={(e) => setShowArchived(e.currentTarget.checked)} />
@@ -119,7 +126,11 @@ export function DirectoryPage() {
               {shown.map((e) => (
                 <Table.Tr key={e.id} data-testid="directory-row" c={e.archived ? 'dimmed' : undefined}>
                   <Table.Td fw={500}>
-                    <Group gap="xs" wrap="nowrap">{e.name}{e.archived && <StatusBadge tone="neutral" size="sm">Archivé</StatusBadge>}</Group>
+                    <Group gap="xs" wrap="nowrap">
+                      {e.name}
+                      {e.googleContactId && <StatusBadge tone="accent" size="sm" title="Lié à un contact Google">Google</StatusBadge>}
+                      {e.archived && <StatusBadge tone="neutral" size="sm">Archivé</StatusBadge>}
+                    </Group>
                   </Table.Td>
                   <Table.Td className="num">{e.affiliationNumber ?? '—'}</Table.Td>
                   <Table.Td>{e.coachName ?? '—'}</Table.Td>
@@ -134,6 +145,7 @@ export function DirectoryPage() {
                         <Menu.Dropdown>
                           <Menu.Item onClick={() => update.mutate({ id: e.id, archived: !e.archived })}>{e.archived ? 'Désarchiver' : 'Archiver'}</Menu.Item>
                           <Menu.Item onClick={() => setMerging(e)}>Fusionner avec…</Menu.Item>
+                          {e.googleContactId && <Menu.Item onClick={() => update.mutate({ id: e.id, googleContactId: null })}>Ne plus synchroniser avec Google</Menu.Item>}
                         </Menu.Dropdown>
                       </Menu>
                     </Group>

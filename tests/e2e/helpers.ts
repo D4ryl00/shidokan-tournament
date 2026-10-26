@@ -1,4 +1,5 @@
 import { expect, type Page } from '@playwright/test';
+import { CONTACTS_SCOPE } from '../../src/domain/app-settings.js';
 
 export async function createCompetition(page: Page, name: string): Promise<string> {
   await page.goto('/');
@@ -71,4 +72,58 @@ export async function clipped(page: Page): Promise<string[]> {
     }
     return [...new Set(out)].slice(0, 10);
   });
+}
+
+/** Contacts Google simulés pour l'écran de synchronisation : un compte connecté avec le droit sur les contacts, et un aperçu. */
+export const GOOGLE_PREVIEW = (() => {
+  const club = (id: string, name: string, extra: object) => ({ id, name, coachName: null, coachPhone: null, coachEmail: null, googleContactId: null, version: 1, ...extra });
+  const contact = (id: string, name: string, extra: object) => ({ resourceName: `people/${id}`, name, email: null, phone: null, organization: null, groups: ['contactGroups/coachs'], ...extra });
+  const marc = contact('marc', 'Marc Durand', { phone: '06 55 66 77 88' });
+  const paul = contact('paul', 'Paul Martin', { email: 'paul.martin@exemple.fr' });
+  const sophie = contact('sophie', 'Sophie Leroy', { phone: '07 12 34 56 78' });
+  const ali = contact('ali', 'Ali Benali', { email: 'ali@exemple.fr' });
+  return {
+    state: 'ok',
+    account: 'orga@gmail.com',
+    labels: [{ resourceName: 'contactGroups/coachs', name: 'Coachs' }],
+    label: null,
+    total: 4,
+    preview: {
+      diffs: [{ clubId: 'c-lilas', clubName: 'Dojo des Lilas', version: 3, contact: marc, fields: [{ field: 'coachPhone', directory: '06 11 22 33 44', google: '06 55 66 77 88' }] }],
+      newContacts: [
+        { contact: paul, exact: { clubId: 'c-est', reason: 'email' }, maybe: [] },
+        { contact: sophie, exact: null, maybe: [] },
+      ],
+      pending: [{ contact: ali, exact: null, maybe: [] }],
+      linked: [{ contact: marc, clubIds: ['c-lilas'] }],
+      clubs: [
+        club('c-lilas', 'Dojo des Lilas', { coachName: 'Marc Durand', coachPhone: '06 11 22 33 44', googleContactId: 'people/marc', version: 3 }),
+        club('c-est', 'Shidokan Est', { coachName: 'Paul Martin', coachEmail: 'paul.martin@exemple.fr', version: 5 }),
+      ],
+    },
+  };
+})();
+
+/** Simule un compte Google connecté (avec le droit sur les contacts) et l'aperçu de la synchronisation ; rend les corps envoyés à « Appliquer ». */
+export async function mockGoogleContacts(page: Page, preview: object = GOOGLE_PREVIEW): Promise<{ applied: unknown[]; previews: unknown[] }> {
+  const applied: unknown[] = [];
+  const previews: unknown[] = [];
+  await page.route('**/api/app-settings', async (route) => {
+    const res = await route.fetch();
+    const body = await res.json();
+    if (route.request().method() === 'GET') {
+      body.googleAvailable = true;
+      body.google = { email: 'orga@gmail.com', fromName: 'Shidokan France', status: 'ok', lastRefreshAt: null, scopes: ['openid', 'email', 'https://www.googleapis.com/auth/gmail.send', CONTACTS_SCOPE] };
+    }
+    await route.fulfill({ response: res, json: body });
+  });
+  await page.route('**/api/club-directory/google/preview', async (route) => {
+    previews.push(route.request().postDataJSON());
+    await route.fulfill({ json: preview });
+  });
+  await page.route('**/api/club-directory/google/apply', async (route) => {
+    applied.push(route.request().postDataJSON());
+    await route.fulfill({ json: { updated: 0, linked: 1, created: 1 } });
+  });
+  return { applied, previews };
 }
