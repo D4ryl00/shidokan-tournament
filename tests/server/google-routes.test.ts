@@ -107,6 +107,36 @@ test('déconnexion : révoquée chez Google, compte effacé, retour au SMTP ; é
   expect((await settings()).google).toBeNull();
 });
 
+async function serveurApp() {
+  const { createUser } = await import('../../src/server/auth/sessions.js');
+  const { openDb, closeDb } = await import('../../src/server/db/client.js');
+  await app.close();
+  const d = openDb(dbPath);
+  createUser(d, 'a@example.org', 'mot-de-passe-long');
+  closeDb(d);
+  app = await buildApp({ dbPath, role: 'serveur', publicUrl: PUBLIC_URL, google: { clientId: 'id', clientSecret: 's', fetch: fake.fetch } });
+  return async () => String((await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'a@example.org', password: 'mot-de-passe-long' } })).headers['set-cookie']).split(';')[0]!;
+}
+
+test('rôle serveur : le state est lié à la session (même compte, autre session → refusé)', async () => {
+  const login = await serveurApp();
+  const first = await login();
+  const second = await login();
+  const state = new URL((await app.inject({ method: 'POST', url: '/api/app-settings/google/start', headers: { cookie: first } })).json().url).searchParams.get('state')!;
+  const res = await app.inject({ method: 'GET', url: `/api/app-settings/google/callback?code=c&state=${state}`, headers: { cookie: second } });
+  expect(res.headers.location).toBe('/parametres?google=expire#mails');
+});
+
+test('rôle serveur : session expirée au retour de Google → retour sur les Réglages avec un message, pas une page brute', async () => {
+  const login = await serveurApp();
+  const cookie = await login();
+  const state = new URL((await app.inject({ method: 'POST', url: '/api/app-settings/google/start', headers: { cookie } })).json().url).searchParams.get('state')!;
+  const res = await app.inject({ method: 'GET', url: `/api/app-settings/google/callback?code=c&state=${state}` });
+  expect(res.statusCode).toBe(302);
+  expect(res.headers.location).toBe('/parametres?google=session#mails');
+  expect((await app.inject({ method: 'GET', url: '/api/app-settings' })).statusCode).toBe(401);
+});
+
 test('rôle serveur : le state d’un organisateur ne sert pas à un autre', async () => {
   const { createUser } = await import('../../src/server/auth/sessions.js');
   const { openDb, closeDb } = await import('../../src/server/db/client.js');

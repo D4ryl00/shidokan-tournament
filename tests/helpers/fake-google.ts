@@ -20,6 +20,8 @@ export interface FakeGoogle {
   networkDown: boolean;
   /** Google ne renvoie pas de jeton de renouvellement. */
   noRefreshToken: boolean;
+  /** Gmail refuse tout jeton d'accès (401), même neuf, alors que le renouvellement fonctionne (panne passagère). */
+  rejectAllSends: boolean;
   /** Erreur renvoyée par Gmail à l'envoi. */
   sendError: { status: number; message: string } | null;
   sent: Buffer[];
@@ -45,6 +47,7 @@ export function fakeGoogle(): FakeGoogle {
     networkDown: false,
     noRefreshToken: false,
     sendError: null,
+    rejectAllSends: false,
     sent: [],
     sendHeaders: [],
     revoked: [],
@@ -92,7 +95,7 @@ export function fakeGoogle(): FakeGoogle {
           fake.expireAccessAfterSends = null;
           access.delete(token);
         }
-        if (!access.has(token) || accessRevoked()) return json(401, { error: { code: 401, message: 'Invalid Credentials' } });
+        if (!access.has(token) || accessRevoked() || fake.rejectAllSends) return json(401, { error: { code: 401, message: 'Invalid Credentials' } });
         if (fake.sendError) return json(fake.sendError.status, { error: { code: fake.sendError.status, message: fake.sendError.message } });
         fake.sent.push(Buffer.from(init?.body as Uint8Array));
         fake.sendHeaders.push(headers);

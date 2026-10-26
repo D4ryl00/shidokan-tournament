@@ -247,8 +247,8 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   }
   await app.register(syncFileRoutes, { db, dbPath: opts.dbPath, role });
   await app.register(appSettingsRoutes, { db, mailTransport, googleAvailable: !!google });
+  await app.register(googleRoutes, { db, google, role });
   if (google) {
-    await app.register(googleRoutes, { db, google });
     const stopKeepAlive = startGoogleKeepAlive(db, google, (e) => app.log.error(e));
     app.addHook('onClose', async () => stopKeepAlive());
   }

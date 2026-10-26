@@ -113,9 +113,9 @@ export function googleClient(config: GoogleConfig): GoogleClient {
     },
     async sendRaw(refreshToken, mime) {
       let res = await send(await accessToken(refreshToken), mime);
-      // Jeton d'accès expiré ou retiré : un renouvellement (qui lève si l'accès a été retiré), puis un second essai.
+      // Jeton d'accès expiré ou retiré : un renouvellement (qui lève si l'accès a été retiré), puis un second essai. Un second 401
+      // avec un jeton neuf n'est pas un retrait d'accès (Google vient de renouveler) : erreur ordinaire.
       if (res.status === 401) res = await send(await accessToken(refreshToken, { force: true }), mime);
-      if (res.status === 401) throw new GoogleAccessRevokedError('Gmail refuse le jeton d’accès.');
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
         throw new Error(`Gmail a refusé l’envoi (${res.status}) : ${body.error?.message ?? 'réponse inattendue'}`);

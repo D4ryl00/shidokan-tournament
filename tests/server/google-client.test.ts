@@ -89,3 +89,11 @@ test('révocation : vrai et jeton noté ; échec → faux, sans lever', async ()
   fake.networkDown = true;
   expect(await google.revoke('rt-3')).toBe(false);
 });
+
+test('401 de Gmail même avec un jeton neuf (renouvellement accepté) : erreur ordinaire, pas un retrait d’accès', async () => {
+  fake.rejectAllSends = true;
+  const err = await google.sendRaw('rt-x', Buffer.from('1')).catch((e: unknown) => e);
+  expect(err).toBeInstanceOf(Error);
+  expect(err).not.toBeInstanceOf(GoogleAccessRevokedError);
+  expect(String(err)).toMatch(/401/);
+});

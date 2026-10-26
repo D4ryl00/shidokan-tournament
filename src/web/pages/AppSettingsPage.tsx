@@ -23,6 +23,7 @@ const GOOGLE_RETURN: Record<string, { color: string; message: string }> = {
   'envoi-refuse': { color: 'orange', message: 'L’autorisation d’envoyer des mails n’a pas été cochée chez Google : recommencez et cochez-la.' },
   expire: { color: 'orange', message: 'Le retour de Google a expiré ou n’est pas valable : recommencez.' },
   erreur: { color: 'red', message: 'Google n’a pas pu terminer la connexion : réessayez.' },
+  session: { color: 'orange', message: 'Votre session a expiré pendant la connexion à Google : reconnectez-vous à l’application, puis recommencez.' },
 };
 
 /** Retour de Google (`?google=…`) : un message, puis l'adresse nettoyée (on garde #mails). */
@@ -147,6 +148,8 @@ function GoogleForm({ settings }: { settings: PublicAppSettings }) {
 function MailCard({ settings }: { settings: PublicAppSettings }) {
   const choice = settings.googleAvailable || settings.mailMode === 'google';
   const [mode, setMode] = useState<MailMode>(settings.mailMode);
+  // Le mode enregistré change (« Déconnecter » repasse en SMTP) : le choix affiché suit.
+  useEffect(() => setMode(settings.mailMode), [settings.mailMode]);
   return (
     <SectionCard id="mails" title="Envoi des mails" description="Le compte qui envoie les invitations aux clubs et les mails d’essai.">
       {choice && (

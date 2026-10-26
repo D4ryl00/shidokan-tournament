@@ -42,7 +42,8 @@ export function cookieValue(req: FastifyRequest, name: string): string | null {
 }
 
 /** Routes ouvertes sans connexion (motifs des routes de Fastify, pas les adresses brutes). */
-const PUBLIC_ROUTES = new Set(['/api/health', '/api/auth/me', '/api/auth/login']);
+// Le retour de Google est ouvert pour renvoyer vers les Réglages même si la session a expiré ; il exige un state lié à la session.
+const PUBLIC_ROUTES = new Set(['/api/health', '/api/auth/me', '/api/auth/login', '/api/app-settings/google/callback']);
 export const isPublicRoute = (route: string) =>
   PUBLIC_ROUTES.has(route) || route === '/api/inscription/:token' || route.startsWith('/api/inscription/:token/') || route.startsWith('/api/sync/remote/'); // ouvertes par leur jeton
 const TOO_MANY = { error: 'Trop de requêtes : réessayez dans quelques minutes.' };

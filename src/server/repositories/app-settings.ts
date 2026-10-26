@@ -52,14 +52,14 @@ export function setGoogleSender(db: AppDb, google: GoogleSender | null, mailMode
   return getAppSettings(db);
 }
 
-/** Google a retiré l'accès : il faut se reconnecter. */
-export function markGoogleRevoked(db: AppDb): void {
+/** Google a retiré l'accès de ce jeton : il faut se reconnecter (sans effet si un autre compte a été connecté depuis). */
+export function markGoogleRevoked(db: AppDb, refreshToken: string): void {
   const { google } = getAppSettings(db);
-  if (google) writeSettings(db, { google: { ...google, status: 'reconnect' } });
+  if (google?.refreshToken === refreshToken) writeSettings(db, { google: { ...google, status: 'reconnect' } });
 }
 
-/** Accès renouvelé avec succès. */
-export function markGoogleRefreshed(db: AppDb, at: string): void {
+/** Accès de ce jeton renouvelé avec succès (sans effet si un autre compte a été connecté depuis). */
+export function markGoogleRefreshed(db: AppDb, at: string, refreshToken: string): void {
   const { google } = getAppSettings(db);
-  if (google) writeSettings(db, { google: { ...google, status: 'ok', lastRefreshAt: at } });
+  if (google?.refreshToken === refreshToken) writeSettings(db, { google: { ...google, status: 'ok', lastRefreshAt: at } });
 }

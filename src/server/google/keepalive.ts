@@ -15,10 +15,10 @@ export async function googleKeepAliveTick(db: AppDb, google: GoogleClient, now =
     await google.accessToken(sender.refreshToken, { force: true });
   } catch (e) {
     if (!(e instanceof GoogleAccessRevokedError)) return 'failed';
-    markGoogleRevoked(db);
+    markGoogleRevoked(db, sender.refreshToken);
     return 'revoked';
   }
-  markGoogleRefreshed(db, now.toISOString());
+  markGoogleRefreshed(db, now.toISOString(), sender.refreshToken);
   return 'refreshed';
 }
 

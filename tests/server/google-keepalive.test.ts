@@ -52,3 +52,13 @@ test('réseau coupé : échec sans changer l’état ni la date (nouvel essai le
   expect(await googleKeepAliveTick(db, google, NOW)).toBe('failed');
   expect(getAppSettings(db).google).toMatchObject({ status: 'ok', lastRefreshAt: daysBefore(31) });
 });
+
+test('« à reconnecter » et « renouvelé » ne touchent que le compte du jeton concerné', async () => {
+  const { markGoogleRevoked, markGoogleRefreshed } = await import('../../src/server/repositories/app-settings.js');
+  connect(daysBefore(31));
+  markGoogleRevoked(db, 'rt-ancien');
+  markGoogleRefreshed(db, NOW.toISOString(), 'rt-ancien');
+  expect(getAppSettings(db).google).toMatchObject({ status: 'ok', lastRefreshAt: daysBefore(31) });
+  markGoogleRevoked(db, 'rt-a');
+  expect(getAppSettings(db).google!.status).toBe('reconnect');
+});

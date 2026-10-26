@@ -145,7 +145,7 @@ export async function sendInvitations(db: AppDb, transport: MailTransport, compe
   try {
     await mailer.verify?.();
   } catch (e) {
-    if (e instanceof GoogleAccessRevokedError) markGoogleRevoked(db);
+    if (e instanceof GoogleAccessRevokedError && sender.kind === 'google') markGoogleRevoked(db, sender.google.refreshToken);
     throw new MailError(`Envoi impossible, aucun lien n’a changé : ${e instanceof GoogleAccessRevokedError ? GOOGLE_RECONNECT : errorText(e)}`);
   }
   // Les mêmes fiches pour chaque club : préparées une fois, avant le premier envoi.
@@ -183,7 +183,7 @@ export async function sendInvitations(db: AppDb, transport: MailTransport, compe
       revokeLink(db, link.token);
       if (e instanceof GoogleAccessRevokedError) {
         accessRevoked = true;
-        markGoogleRevoked(db);
+        if (sender.kind === 'google') markGoogleRevoked(db, sender.google.refreshToken);
         error = GOOGLE_NOT_SENT;
       } else error = errorText(e);
     }
@@ -207,7 +207,7 @@ export async function sendTestMail(db: AppDb, transport: MailTransport, to: stri
     await transport(sender).sendMail({ from: fromOf(sender), to: { name: to, address: to }, subject: 'Mail d’essai — Shidokan France', text: 'Les réglages d’envoi des mails fonctionnent.' });
   } catch (e) {
     if (e instanceof GoogleAccessRevokedError) {
-      markGoogleRevoked(db);
+      if (sender.kind === 'google') markGoogleRevoked(db, sender.google.refreshToken);
       throw new MailError(GOOGLE_RECONNECT);
     }
     throw new MailError(errorText(e));

@@ -44,12 +44,15 @@ test('serveur : session perdue pendant une saisie → reconnexion par-dessus l�
   await expect(page.getByTestId('competition-row').filter({ hasText: 'Coupe après reconnexion' })).toBeVisible();
 });
 
-test('serveur : envoi des mails — choix Google, le bouton mène chez Google avec les bonnes autorisations', async ({ page }) => {
+// Une seule connexion pour tout l'envoi par Google : le serveur e2e limite les connexions à 10 par adresse en 15 minutes.
+test('serveur : envoi des mails — choix Google, bouton vers Google ; compte connecté puis « Déconnecter » ; retours de Google annoncés', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('login-email').fill('orga@e2e.example');
   await page.getByTestId('login-password').fill('mot-de-passe-e2e');
   await page.getByTestId('login-submit').click();
   await expect(page.getByTestId('new-competition')).toBeVisible();
+
+  // Le bouton mène chez Google, avec le seul droit d'envoyer.
   await page.goto('/parametres#mails');
   await page.getByText('Compte Google', { exact: true }).click();
   await expect(page.getByText('Google affichera « application non validée »', { exact: false })).toBeVisible();
@@ -64,8 +67,34 @@ test('serveur : envoi des mails — choix Google, le bouton mène chez Google av
   expect(googleUrl).toContain('redirect_uri=http%3A%2F%2Flocalhost%3A3101%2Fapi%2Fapp-settings%2Fgoogle%2Fcallback');
   expect(googleUrl).toContain('gmail.send');
   expect(googleUrl).not.toContain('mail.google.com');
+
+  // Retours de Google : un message, puis l'adresse nettoyée.
   await page.goto('/parametres?google=annule#mails');
   await expect(page.getByText('Connexion à Google annulée.')).toBeVisible();
   await expect.poll(() => page.url()).not.toContain('google=');
   expect(page.url()).toContain('#mails');
+  await page.goto('/parametres?google=session#mails');
+  await expect(page.getByText('Votre session a expiré pendant la connexion à Google', { exact: false })).toBeVisible();
+
+  // Pas de vrai Google ici : le serveur répond « connecté » tant que « Déconnecter » n'a pas été confirmé.
+  let connected = true;
+  await page.route('**/api/app-settings', async (route) => {
+    const res = await route.fetch();
+    const body = await res.json();
+    if (route.request().method() === 'GET' && connected) {
+      body.mailMode = 'google';
+      body.google = { email: 'orga@gmail.com', fromName: 'Shidokan France', status: 'ok', lastRefreshAt: null };
+    }
+    await route.fulfill({ response: res, json: body });
+  });
+  await page.route('**/api/app-settings/google/disconnect', async (route) => {
+    connected = false;
+    await route.fulfill({ json: { revoked: true } });
+  });
+  await page.reload(); // même adresse (#mails) : un goto ne rechargerait pas la page
+  await expect(page.getByTestId('google-connected')).toContainText('orga@gmail.com');
+  await page.getByRole('button', { name: 'Déconnecter' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Déconnecter' }).click();
+  await expect(page.getByText('Compte Google déconnecté.')).toBeVisible();
+  await expect(page.getByLabel('Serveur SMTP')).toBeVisible();
 });

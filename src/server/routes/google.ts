@@ -1,40 +1,59 @@
-import { randomBytes } from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
+import { createHash, randomBytes } from 'node:crypto';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { cookieValue, SESSION_COOKIE, type InstanceRole } from '../auth/guard.js';
 import type { AppDb } from '../db/client.js';
 import { GMAIL_SEND_SCOPE, type GoogleClient } from '../google/client.js';
 import { getAppSettings, setGoogleSender } from '../repositories/app-settings.js';
 
 const STATE_TTL_MS = 10 * 60 * 1000;
-const back = (result: 'connecte' | 'annule' | 'envoi-refuse' | 'expire' | 'erreur') => `/parametres?google=${result}#mails`;
+const back = (result: 'connecte' | 'annule' | 'envoi-refuse' | 'expire' | 'erreur' | 'session') => `/parametres?google=${result}#mails`;
+
+/** Session de la requête (empreinte du cookie), ou null sans session (PC de la compétition). */
+const sessionOf = (req: FastifyRequest) => {
+  const cookie = cookieValue(req, SESSION_COOKIE);
+  return cookie ? createHash('sha256').update(cookie).digest('base64url') : null;
+};
 
 /** Retours attendus de Google : à usage unique, liés à la session qui a cliqué, valables 10 minutes. */
 class OAuthStates {
-  private readonly states = new Map<string, { userId: string | null; expiresAt: number }>();
-  create(userId: string | null): string {
+  private readonly states = new Map<string, { session: string | null; expiresAt: number }>();
+  create(session: string | null): string {
     const now = Date.now();
     for (const [k, v] of this.states) if (v.expiresAt <= now) this.states.delete(k);
     const state = randomBytes(32).toString('base64url');
-    this.states.set(state, { userId, expiresAt: now + STATE_TTL_MS });
+    this.states.set(state, { session, expiresAt: now + STATE_TTL_MS });
     return state;
   }
-  take(state: string | undefined, userId: string | null): boolean {
+  take(state: string | undefined, session: string | null): boolean {
     const entry = state ? this.states.get(state) : undefined;
     if (!entry) return false;
     this.states.delete(state!);
-    return entry.expiresAt > Date.now() && entry.userId === userId;
+    return entry.expiresAt > Date.now() && entry.session === session;
   }
 }
 
-/** « Se connecter avec Google » : départ vers Google, retour, déconnexion. Enregistrées seulement si Google est configuré. */
-export async function googleRoutes(app: FastifyInstance, { db, google }: { db: AppDb; google: GoogleClient }) {
+/**
+ * « Se connecter avec Google » : départ vers Google et retour, seulement si Google est configuré ; « Déconnecter » toujours (un compte
+ * peut rester enregistré après le retrait de la configuration).
+ */
+export async function googleRoutes(app: FastifyInstance, { db, google, role }: { db: AppDb; google: GoogleClient | null; role: InstanceRole }) {
+  app.post('/api/app-settings/google/disconnect', async () => {
+    const { google: sender } = getAppSettings(db);
+    const revoked = sender ? (google ? await google.revoke(sender.refreshToken) : false) : true;
+    setGoogleSender(db, null, 'smtp');
+    return { revoked };
+  });
+  if (!google) return;
   const states = new OAuthStates();
 
-  app.post('/api/app-settings/google/start', async (req) => ({ url: google.authUrl(states.create(req.user?.id ?? null)) }));
+  app.post('/api/app-settings/google/start', async (req) => ({ url: google.authUrl(states.create(sessionOf(req))) }));
 
+  // Route publique (voir guard.ts) : sans session, retour sur les Réglages, qui demandent de se connecter.
   app.get('/api/app-settings/google/callback', async (req, reply) => {
+    if (role === 'serveur' && !req.user) return reply.redirect(back('session'));
     const q = z.object({ code: z.string().max(2000).optional(), state: z.string().max(200).optional(), error: z.string().max(200).optional() }).parse(req.query);
-    if (!states.take(q.state, req.user?.id ?? null)) return reply.redirect(back('expire'));
+    if (!states.take(q.state, sessionOf(req))) return reply.redirect(back('expire'));
     if (q.error || !q.code) return reply.redirect(back('annule'));
     let granted: Awaited<ReturnType<GoogleClient['exchangeCode']>>;
     try {
@@ -55,12 +74,5 @@ export async function googleRoutes(app: FastifyInstance, { db, google }: { db: A
     setGoogleSender(db, { email: granted.email, fromName, refreshToken: granted.refreshToken, status: 'ok', lastRefreshAt: new Date().toISOString() }, 'google');
     if (current.google && !sameAccount) void google.revoke(current.google.refreshToken);
     return reply.redirect(back('connecte'));
-  });
-
-  app.post('/api/app-settings/google/disconnect', async () => {
-    const { google: sender } = getAppSettings(db);
-    const revoked = sender ? await google.revoke(sender.refreshToken) : true;
-    setGoogleSender(db, null, 'smtp');
-    return { revoked };
   });
 }

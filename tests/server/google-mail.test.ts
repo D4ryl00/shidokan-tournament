@@ -117,3 +117,15 @@ test('jeton d’accès expiré entre deux mails d’un envoi groupé : renouvel�
   expect(fake.sent).toHaveLength(3);
   expect((await settings()).google.status).toBe('ok');
 });
+
+test('configuration Google retirée avec un compte connecté : « Déconnecter » fonctionne, le mode Google est refusé', async () => {
+  await app.close();
+  app = await build(false);
+  const patch = await app.inject({ method: 'PATCH', url: '/api/app-settings', payload: { mailMode: 'google' } });
+  expect(patch.statusCode).toBe(400);
+  expect(patch.json().error).toBe(GOOGLE_NOT_CONFIGURED);
+  const res = await app.inject({ method: 'POST', url: '/api/app-settings/google/disconnect' });
+  expect(res.statusCode).toBe(200);
+  expect(res.json()).toEqual({ revoked: false });
+  expect(await settings()).toMatchObject({ google: null, mailMode: 'smtp' });
+});
