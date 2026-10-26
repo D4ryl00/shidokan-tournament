@@ -34,3 +34,9 @@ test('contraste lisible (≥ 4,5:1) dans les deux thèmes', () => {
     for (const [pair, fg, bg] of pairs) expect(contrast(fg, bg), `${name} ${pair}`).toBeGreaterThanOrEqual(4.5);
   }
 });
+
+test('texte des barres et bandeaux de coût lisible sur chaque couleur de coût (texte gras : ≥ 3:1)', () => {
+  for (const [name, t] of Object.entries(TOKENS)) {
+    for (const c of [t.cost0, t.cost1, t.cost2, t.cost3, t.cost4]) expect(contrast(t.onCost, c), `${name} onCost/${c}`).toBeGreaterThanOrEqual(3);
+  }
+});

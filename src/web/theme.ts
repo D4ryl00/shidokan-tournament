@@ -22,15 +22,15 @@ export const TOKENS = {
     text: '#f1edf5', soft: '#b9b1c2', muted: '#8d8497', accent: '#c17ad3', onAccent: '#1a0f1f',
     hero: 'linear-gradient(135deg, #3b1f47, #2a1833)', heroText: '#d9a8e6', heroSub: '#b9a9c4',
     chip: '#2a2131', chipText: '#e3c6ec', ok: '#1f2a22', okText: '#7fd6a0', warn: '#33281a', warnText: '#f0b766',
-    // Barres de la liste des règles : du vert (sans validation) au rouge (concessions très fortes), texte blanc.
-    cost0: '#2b8a57', cost1: '#5c8f22', cost2: '#9a7600', cost3: '#c25a0c', cost4: '#c43a30',
+    // Barres de la liste des règles : du vert (sans validation) au rouge (concessions très fortes), texte `onCost`.
+    cost0: '#2b8a57', cost1: '#5c8f22', cost2: '#9a7600', cost3: '#c25a0c', cost4: '#c43a30', onCost: '#ffffff',
   },
   light: {
     bg: '#f7f5f9', bar: '#ffffff', line: '#ebe6ef', card: '#ffffff', cardLine: '#e7e1ec', row: '#faf8fb',
     text: '#1d1622', soft: '#4b4354', muted: '#72687d', accent: '#722f82', onAccent: '#ffffff',
     hero: 'linear-gradient(135deg, #f3e6f7, #fbf6fd)', heroText: '#722f82', heroSub: '#6b5f75',
     chip: '#f1e4f6', chipText: '#722f82', ok: '#e6f5ec', okText: '#1f7a45', warn: '#fff3df', warnText: '#9a5a00',
-    cost0: '#1f7a45', cost1: '#4d7f1a', cost2: '#8a6a00', cost3: '#b04e00', cost4: '#b42318',
+    cost0: '#1f7a45', cost1: '#4d7f1a', cost2: '#8a6a00', cost3: '#b04e00', cost4: '#b42318', onCost: '#ffffff',
   },
 } as const;
 export type TokenName = keyof (typeof TOKENS)['dark'];

@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { TAB_ID } from './api.js';
+import { PLAN_KEY, refreshPlansLive, TAB_ID } from './api.js';
 import { whenSaved } from './unsaved.js';
 
 /**
@@ -9,6 +9,7 @@ import { whenSaved } from './unsaved.js';
  * - Les écritures de cet onglet sont ignorées (il relit déjà ses données après chaque écriture).
  * - Flux fermé (serveur redémarré, session expirée, proxy en erreur) : reconnexion après une attente croissante, puis relecture.
  * - Onglet caché : flux fermé (le navigateur n'ouvre que 6 connexions vers un même PC) ; rouvert, avec relecture, quand il revient.
+ * - Plan d'ensemble : un calcul en cours n'est pas relancé, un plan annulé non plus (voir `refreshPlansLive`).
  */
 export function useCompetitionEvents(competitionId: string): void {
   const qc = useQueryClient();
@@ -27,7 +28,9 @@ export function useCompetitionEvents(competitionId: string): void {
         waiting = true;
         whenSaved(() => {
           waiting = false;
-          if (!stopped) void qc.invalidateQueries();
+          if (stopped) return;
+          void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== PLAN_KEY });
+          refreshPlansLive(qc);
         });
       }, 300);
     };

@@ -2,7 +2,7 @@ import {
   ActionIcon, Alert, Button, Checkbox, List, Modal, Group, MultiSelect, NumberInput, Select, SimpleGrid, Stack, Switch, Text, TextInput,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useParams } from 'react-router';
 import type { CombatFormat, CompetitionSettings, PassageOrderMode } from '../../domain/settings.js';
 import { DISCIPLINES } from '../../domain/disciplines.js';
@@ -66,9 +66,6 @@ export function CompetitionSettingsPage() {
   const { data: passages } = usePassages(id);
   const [zoneErrors, setZoneErrors] = useState<string[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
-  useEffect(() => {
-    if (savedZones) setZones(savedZones.map(({ id: zid, name, disciplines }) => ({ key: zid, id: zid, name, disciplines })));
-  }, [savedZones]);
   // Catégories de la zone, épinglées ou réparties automatiquement.
   const zoneCategories = (zid?: string) => (zid ? categories.filter((c) => (passages?.categories[c.id]?.zoneId ?? c.zoneId) === zid) : []);
   const zoneLocked = (zid?: string) => zoneCategories(zid).some((c) => c.status === 'started' || c.status === 'finished');
@@ -94,18 +91,31 @@ export function CompetitionSettingsPage() {
       return next;
     });
 
-  useEffect(() => {
-    if (!competition) return;
-    setInfo({ name: competition.name, date: competition.date, location: competition.location ?? '' });
-    setS(competition.settings);
-  }, [competition]);
+  // Le formulaire part de `base` (réglages et zones tels que chargés). Rechargés (autre poste, retour sur l'onglet…) pendant une
+  // saisie, ils ne l'écrasent pas : l'enregistrement n'envoie que ce qui a changé depuis `base`, feuille par feuille.
+  const [base, setBase] = useState<{ info: typeof info; settings: CompetitionSettings } | null>(null);
+  const [zonesBase, setZonesBase] = useState<string | null>(null);
+  const [seen, setSeen] = useState<{ competition?: typeof competition; zones?: typeof savedZones }>({});
+  const formDirty = !!base && !!s && (JSON.stringify(s) !== JSON.stringify(base.settings) || JSON.stringify(info) !== JSON.stringify(base.info));
+  const zonesDirty = zonesBase !== null && JSON.stringify(zones) !== zonesBase;
+  const loadCompetition = (c: NonNullable<typeof competition>) => {
+    const next = { info: { name: c.name, date: c.date, location: c.location ?? '' }, settings: c.settings };
+    setBase(next);
+    setInfo(next.info);
+    setS(next.settings);
+  };
+  const loadZones = (zs: NonNullable<typeof savedZones>) => {
+    const view = zs.map(({ id: zid, name, disciplines }) => ({ key: zid, id: zid, name, disciplines }));
+    setZonesBase(JSON.stringify(view));
+    setZones(view);
+  };
+  if (competition !== seen.competition || savedZones !== seen.zones) {
+    setSeen({ competition, zones: savedZones });
+    if (competition && competition !== seen.competition && !formDirty) loadCompetition(competition);
+    if (savedZones && savedZones !== seen.zones && !zonesDirty) loadZones(savedZones);
+  }
   // Saisie en cours : la mise à jour automatique (autre poste) attend, et quitter l'onglet demande confirmation.
-  const savedZoneView = JSON.stringify((savedZones ?? []).map(({ id: zid, name, disciplines }) => ({ key: zid, id: zid, name, disciplines })));
-  const dirty =
-    !!competition && !!s &&
-    (JSON.stringify(s) !== JSON.stringify(competition.settings) ||
-      JSON.stringify(info) !== JSON.stringify({ name: competition.name, date: competition.date, location: competition.location ?? '' }) ||
-      (savedZones !== undefined && JSON.stringify(zones) !== savedZoneView));
+  const dirty = formDirty || zonesDirty;
   useUnsaved('reglages', dirty);
 
   if (!s) return null;
@@ -118,13 +128,27 @@ export function CompetitionSettingsPage() {
     const errors = validateZones(input);
     setZoneErrors(errors);
     if (errors.length) return;
+    const from = base!;
     saveZones.mutate({ zones: input, knownIds: (savedZones ?? []).map((z) => z.id) }, {
-      onSuccess: () =>
+      onSuccess: (saved) => {
+        loadZones(saved);
         update.mutate(
-          // Seuls les réglages changés ici : la liste des règles et ses interrupteurs, réglés dans Réaffectation, restent tels quels.
-          { name: info.name, date: info.date, location: info.location || null, settings: settingsPatch(competition!.settings, s) },
-          { onSuccess: () => notifications.show({ color: 'green', message: 'Réglages enregistrés' }) },
-        ),
+          // Seuls les champs et réglages changés ici : ce qu'un autre poste a changé entre-temps (dont la liste des règles et ses
+          // interrupteurs, réglés dans Réaffectation) reste tel quel.
+          {
+            ...(info.name !== from.info.name ? { name: info.name } : {}),
+            ...(info.date !== from.info.date ? { date: info.date } : {}),
+            ...(info.location !== from.info.location ? { location: info.location || null } : {}),
+            settings: settingsPatch(from.settings, s),
+          },
+          {
+            onSuccess: (c) => {
+              loadCompetition(c);
+              notifications.show({ color: 'green', message: 'Réglages enregistrés' });
+            },
+          },
+        );
+      },
     });
   };
 

@@ -1,4 +1,4 @@
-import { ActionIcon, Box, Switch, Text } from '@mantine/core';
+import { ActionIcon, Box, Switch, Text, UnstyledButton } from '@mantine/core';
 import { Fragment, useState, type CSSProperties } from 'react';
 import { plural } from '../../../domain/plural.js';
 import { applyRulesView, COST_BAND_LABELS, costBand, NO_VALIDATION_RULES, RULE_LABELS, type RulesView } from '../../../domain/replacement/rules.js';
@@ -19,7 +19,7 @@ function moved(order: RuleId[], from: number, to: number): RuleId[] {
 
 const barStyle = (pct: number, color: string): CSSProperties => ({
   width: `${pct}%`, minWidth: 'min(2.2rem, 100%)', maxWidth: '100%', boxSizing: 'border-box',
-  background: color, color: '#fff', borderRadius: 6, padding: '2px 8px', fontWeight: 700, fontSize: 13, lineHeight: 1.5,
+  background: color, color: 'var(--sk-on-cost)', borderRadius: 6, padding: '2px 8px', fontWeight: 700, fontSize: 13, lineHeight: 1.5,
 });
 
 /**
@@ -64,16 +64,18 @@ export function RuleLadder({ view, rows, onChange, busy, fresh }: {
         const manual = !NO_VALIDATION_RULES.has(rule);
         const label = RULE_LABELS[rule];
         const fixed = rule === 'return';
+        const cutHere = () => { if (!busy && view.cutAfter !== rule) onChange({ ...view, cutAfter: rule }); };
         return (
           <Fragment key={rule}>
             <Box
               data-testid="ladder-row" data-rule={rule}
               draggable={!fixed && !busy}
-              onDragStart={(e) => { setDragFrom(i); e.dataTransfer.effectAllowed = 'move'; }}
+              // Firefox ne commence un glisser qu'avec une donnée.
+              onDragStart={(e) => { setDragFrom(i); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', rule); }}
               onDragOver={(e) => { if (dragFrom !== null && !fixed) e.preventDefault(); }}
               onDrop={(e) => { e.preventDefault(); if (dragFrom !== null) reorder(dragFrom, i); setDragFrom(null); }}
               onDragEnd={() => setDragFrom(null)}
-              onClick={() => { if (!busy && view.cutAfter !== rule) onChange({ ...view, cutAfter: rule }); }}
+              onClick={cutHere}
               style={{
                 display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 8px', padding: '6px 8px', borderRadius: 8, cursor: 'pointer',
                 background: 'var(--sk-row)', border: '1px solid var(--sk-card-line)', opacity: on ? 1 : 0.55,
@@ -90,10 +92,15 @@ export function RuleLadder({ view, rows, onChange, busy, fresh }: {
                 )}
               </span>
               <Text size="sm" c="dimmed" className="num" style={{ minWidth: 18 }}>{i + 1}</Text>
-              <Text size="sm" fw={600} style={{ flex: '1 1 160px', minWidth: 0, overflowWrap: 'anywhere' }}>
-                {label}
-                {manual && <Text span size="xs" c="dimmed" fw={400}> · à valider</Text>}
-              </Text>
+              {/* Le nom est aussi le bouton « s'arrêter ici » au clavier (Tab, puis Entrée ou Espace). */}
+              <UnstyledButton data-testid="ladder-cut-here" aria-label={`S’arrêter après « ${label} »`} aria-pressed={view.cutAfter === rule} disabled={busy}
+                onClick={(e) => { e.stopPropagation(); cutHere(); }}
+                style={{ flex: '1 1 160px', minWidth: 0, cursor: 'inherit', borderRadius: 4 }}>
+                <Text size="sm" fw={600} style={{ overflowWrap: 'anywhere' }}>
+                  {label}
+                  {manual && <Text span size="xs" c="dimmed" fw={400}> · à valider</Text>}
+                </Text>
+              </UnstyledButton>
               <span role="img" aria-label={COST_BAND_LABELS[band]} title={COST_BAND_LABELS[band]}
                 style={{ width: 12, height: 12, borderRadius: '50%', background: BAND_COLOR[band], flex: 'none' }} />
               <span style={{ width: 40, display: 'inline-flex', justifyContent: 'flex-end' }} onClick={(e) => e.stopPropagation()}>

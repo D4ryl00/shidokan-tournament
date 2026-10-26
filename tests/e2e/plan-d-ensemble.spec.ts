@@ -75,6 +75,16 @@ test('la liste des règles tient dans un écran de téléphone, barres comprises
     const b = await bar.boundingBox();
     expect(b!.x + b!.width).toBeLessThanOrEqual(box!.x + box!.width + 1);
   }
+  // La progression d’un calcul long arrive dans une place gardée : rien ne bouge sous elle.
+  const row = ladder.locator('[data-testid="ladder-row"][data-rule="mixSexes"]');
+  const top = () => row.evaluate((e) => e.getBoundingClientRect().top + window.scrollY);
+  await page.route('**/replacement/plan', slowPlan(2000));
+  await row.getByTestId('ladder-switch').click({ force: true });
+  const y = await top();
+  await expect(page.getByTestId('plan-progress')).toBeVisible();
+  expect(await top()).toBe(y);
+  const wideNow = await page.evaluate(() => Array.from(document.querySelectorAll('[data-testid="plan-progress"], [data-testid="plan-progress"] *')).filter((e) => e.getBoundingClientRect().right > window.innerWidth + 1).length);
+  expect(wideNow).toBe(0);
 });
 
 /**
@@ -237,30 +247,49 @@ test('plan périmé à l’application : refusé, les choix restent', async ({ p
   await expect(view).toContainText('TARDIVE Léa');
 });
 
+/** Retarde de `ms` chaque calcul du plan demandé par la page (la demande peut être annulée pendant ce temps). */
+const slowPlan = (ms: number) => async (route: import('@playwright/test').Route) => {
+  await new Promise((r) => setTimeout(r, ms));
+  try { await route.fallback(); } catch { /* demande annulée */ }
+};
+const isPlanPost = (r: import('@playwright/test').Request) => r.url().endsWith('/replacement/plan') && r.method() === 'POST';
+
 test('annuler un calcul long : le plan affiché est signalé périmé, « Relancer le calcul » le remet à jour', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe plan annulé');
   await seedPlan(request, id);
   const { view } = await openPlan(page, id);
   const apply = view.getByTestId('plan-apply');
   await expect(apply).toBeEnabled();
-  // La demande est retardée de 2 s (et peut être annulée par le navigateur pendant ce temps).
-  const slow = async (route: import('@playwright/test').Route) => {
-    await new Promise((r) => setTimeout(r, 2000));
-    try { await route.fallback(); } catch { /* demande annulée */ }
-  };
+  const sent: { at: number; req: import('@playwright/test').Request }[] = [];
+  page.on('request', (r) => { if (isPlanPost(r)) sent.push({ at: Date.now(), req: r }); });
+  const slow = slowPlan(5000);
   await page.route('**/replacement/plan', slow);
   const ladder = page.getByTestId('rule-ladder');
-  await ladder.locator('[data-testid="ladder-row"][data-rule="mixSexes"]').getByTestId('ladder-switch').click({ force: true });
+  const switchOf = (rule: string) => ladder.locator(`[data-testid="ladder-row"][data-rule="${rule}"]`).getByTestId('ladder-switch');
+  const mix = switchOf('mixSexes');
+  const mixWas = await mix.isChecked();
+  const first = sent.length;
+  await mix.click({ force: true });
+  // Le geste se voit tout de suite, sans attendre le calcul (5 s).
+  await expect(mix).toBeChecked({ checked: !mixWas, timeout: 1000 });
   await expect(apply).toBeDisabled();
-  await expect(page.getByText('Calcul du plan', { exact: false }).first()).toBeVisible();
-  // Un geste reste possible pendant le calcul (la progression ne recouvre aucune commande) et le relance.
-  // On clique la piste visible de l’interrupteur (vraie souris, sans force) : rien ne la recouvre.
-  const first = ladder.getByTestId('ladder-row').nth(1).locator('.mantine-Switch-track');
-  const relaunch = page.waitForRequest((r) => r.url().includes('/replacement/plan') && r.method() === 'POST');
-  await first.click();
-  await relaunch;
   await expect(page.getByTestId('plan-progress')).toBeVisible();
-  const aborted = page.waitForEvent('requestfailed', (r) => r.url().includes('/replacement/plan'));
+  await expect.poll(() => sent.length).toBe(first + 1);
+  // Un second geste pendant le calcul : l’interrupteur répond aussitôt (vraie souris, rien ne le recouvre), son nouvel état se
+  // voit, et il relance le calcul bien avant la fin du premier.
+  const weight = switchOf('weight');
+  const weightWas = await weight.isChecked();
+  await ladder.locator('[data-testid="ladder-row"][data-rule="weight"]').locator('.mantine-Switch-track').click({ timeout: 1000 });
+  await expect(weight).toBeChecked({ checked: !weightWas, timeout: 1000 });
+  await expect(mix).toBeChecked({ checked: !mixWas });
+  await expect.poll(() => sent.length).toBe(first + 2);
+  expect(sent[first + 1]!.at - sent[first]!.at).toBeLessThan(4000);
+  // Les deux changements sont enregistrés (le second ne défait pas le premier).
+  const { settings } = await (await request.get(`/api/competitions/${id}`)).json();
+  expect(settings.mixSexes.enabled).toBe(!mixWas);
+  expect(settings.replacementRules.off.includes('weight')).toBe(weightWas);
+  await expect(page.getByTestId('plan-progress')).toBeVisible();
+  const aborted = page.waitForEvent('requestfailed', (r) => r === sent[first + 1]!.req);
   await page.getByRole('button', { name: 'Annuler le calcul' }).click();
   const message = page.getByText('Calcul annulé : le plan affiché ne tient pas compte de votre dernier changement.');
   // L'annulation arrête vraiment la demande (et ne se contente pas de lever un drapeau).
@@ -268,21 +297,77 @@ test('annuler un calcul long : le plan affiché est signalé périmé, « Relanc
   await expect(message).toBeVisible({ timeout: 1000 });
   await expect(apply).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Annuler le calcul' })).toHaveCount(0);
+  // Un autre poste écrit : le plan annulé n’est pas relancé (seuls un geste d’ici ou « Relancer le calcul » le relancent).
+  const before = sent.length;
+  await request.post(`/api/competitions/${id}/registrations`, {
+    data: { clubId: null, lastName: 'TARDIVE', firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54', approxWeightKg: 50, source: 'onsite' },
+  });
+  await expect(page.getByTestId('replacement-case').filter({ hasText: 'TARDIVE' })).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(sent.length).toBe(before);
+  await expect(message).toBeVisible();
+  await expect(apply).toBeDisabled();
   await page.unroute('**/replacement/plan', slow);
   await page.getByRole('button', { name: 'Relancer le calcul' }).click();
   await expect(message).toHaveCount(0);
   await expect(apply).toBeEnabled();
+  // Le plan relancé voit l’inscription de l’autre poste (4 seuls au départ au lieu de 3).
+  await expect(view).toContainText('(au lieu de 4)');
 
   // Annuler de nouveau, puis un geste : tout calcul complet efface l’annulation, même pour le même choix.
   await page.route('**/replacement/plan', slow);
-  const sw = ladder.locator('[data-testid="ladder-row"][data-rule="mixSexes"]').getByTestId('ladder-switch');
-  await sw.click({ force: true });
+  await mix.click({ force: true });
   await page.getByRole('button', { name: 'Annuler le calcul' }).click();
   await expect(message).toBeVisible();
   await page.unroute('**/replacement/plan', slow);
-  await sw.click({ force: true });
+  await mix.click({ force: true });
   await expect(message).toHaveCount(0);
   await expect(apply).toBeEnabled();
+
+  // Les choix du plan restent aussi utilisables pendant un calcul (chacun le relance) ; seul « Appliquer le plan » attend.
+  await page.route('**/replacement/plan', slow);
+  await mix.click({ force: true });
+  await expect(page.getByTestId('plan-progress')).toBeVisible();
+  const mini = view.getByTestId('plan-move').filter({ hasText: 'MINI Léa' });
+  const n = sent.length;
+  await mini.getByTestId('plan-move-validate').click({ timeout: 1000 });
+  await expect(mini.getByTestId('plan-move-unvalidate')).toBeVisible({ timeout: 1000 });
+  await expect.poll(() => sent.length).toBe(n + 1);
+  await expect(apply).toBeDisabled();
+  await page.unroute('**/replacement/plan', slow);
+});
+
+test('un calcul en cours n’est pas relancé par l’écriture d’un autre poste : un seul nouveau calcul part à sa fin', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan en direct');
+  await seedPlan(request, id);
+  const { view } = await openPlan(page, id);
+  const sent: import('@playwright/test').Request[] = [];
+  const failed: import('@playwright/test').Request[] = [];
+  page.on('request', (r) => { if (isPlanPost(r)) sent.push(r); });
+  page.on('requestfailed', (r) => { if (isPlanPost(r)) failed.push(r); });
+  await page.route('**/replacement/plan', slowPlan(3000));
+  await page.getByTestId('rule-ladder').locator('[data-testid="ladder-row"][data-rule="mixSexes"]').getByTestId('ladder-switch').click({ force: true });
+  await expect.poll(() => sent.length).toBe(1);
+  // Deux écritures d’un autre poste pendant le calcul.
+  for (const data of [
+    { lastName: 'TARDIVE', firstName: 'Léa', sex: 'F', weightClassId: 'cadet:F:-54', approxWeightKg: 50 },
+    { lastName: 'TARDIF', firstName: 'Paul', sex: 'M', weightClassId: 'cadet:M:-57', approxWeightKg: 55 },
+  ]) {
+    await request.post(`/api/competitions/${id}/registrations`, {
+      data: { clubId: null, ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', source: 'onsite', ...data },
+    });
+  }
+  // Les autres données sont relues tout de suite ; le calcul continue.
+  await expect(page.getByTestId('replacement-case').filter({ hasText: 'TARDIF' })).toBeVisible();
+  expect(sent.length).toBe(1);
+  // À sa fin, un seul nouveau calcul, qui voit les deux inscriptions.
+  await expect.poll(() => sent.length, { timeout: 10_000 }).toBe(2);
+  await expect(view.getByTestId('plan-apply')).toBeEnabled({ timeout: 10_000 });
+  await expect(view).toContainText('(au lieu de 5)');
+  await expect(view).toContainText('TARDIF Paul');
+  await page.waitForTimeout(500);
+  expect(sent.length).toBe(2);
+  expect(failed).toEqual([]);
 });
 
 test('sans plan (calcul en erreur), la liste des règles reste réglable', async ({ page, request }) => {
@@ -298,6 +383,17 @@ test('sans plan (calcul en erreur), la liste des règles reste réglable', async
   // La ligne se déplace quand même.
   await ladder.locator('[data-testid="ladder-row"][data-rule="ageUp"]').getByText('Tranche d’âge au-dessus').click();
   await expect(ladder.locator('[data-testid="ladder-row"][data-rule="ageUp"]').locator('xpath=following-sibling::*[1]')).toHaveAttribute('data-testid', 'ladder-cut');
+  // Et au clavier : le nom de la règle est un bouton (Entrée ou Espace).
+  const cutHere = ladder.getByRole('button', { name: 'S’arrêter après « Mélange seniors / vétérans »' });
+  await expect(cutHere).toHaveAttribute('aria-pressed', 'false');
+  await cutHere.focus();
+  await page.keyboard.press('Enter');
+  await expect(ladder.locator('[data-testid="ladder-row"][data-rule="seniorsVeterans"]').locator('xpath=following-sibling::*[1]')).toHaveAttribute('data-testid', 'ladder-cut');
+  await expect(cutHere).toHaveAttribute('aria-pressed', 'true');
+  await ladder.getByRole('button', { name: 'S’arrêter après « Catégorie de poids voisine »' }).press('Space');
+  await expect(ladder.locator('[data-testid="ladder-row"][data-rule="weight"]').locator('xpath=following-sibling::*[1]')).toHaveAttribute('data-testid', 'ladder-cut');
+  const { settings } = await (await request.get(`/api/competitions/${id}`)).json();
+  expect(settings.replacementRules.cutAfter).toBe('weight');
 });
 
 test('le plan tient dans un écran de téléphone', async ({ page, request }) => {
@@ -444,6 +540,8 @@ test('cartes : correction de poids au-delà de l’écart à confirmer comme une
   await page.keyboard.press('Escape');
   const down = page.getByTestId('replacement-case').filter({ hasText: 'MINA' }).getByTestId('replacement-proposal').filter({ hasText: 'une tranche au-dessous' });
   await expect(down.getByTestId('replacement-badge')).toHaveText('↓ Âge');
+  await expect(down).toContainText('âge : une tranche au-dessous');
+  await expect(down).not.toContainText('une tranche au-dessus');
 });
 
 test('réglages : enregistrer garde la liste des règles changée entre-temps dans Réaffectation', async ({ page, request }) => {
@@ -460,4 +558,129 @@ test('réglages : enregistrer garde la liste des règles changée entre-temps da
   expect(settings.shobuToJiyu).toBe(true);
   expect(settings.mixSexes.enabled).toBe(true);
   expect(settings.replacementRules).toMatchObject({ order, cutAfter: 'ageUp' });
+});
+
+test('plan : mentions « pré-accord coach », « règle désactivée » et « sous la ligne »', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan mentions');
+  const club = await (await request.post(`/api/competitions/${id}/clubs`, { data: { name: 'Club accord', preApproval: true } })).json() as { id: string };
+  const reg = regIn(request, id);
+  await reg({ lastName: 'MINI', ageBandCode: 'minime', weightClassId: 'minime:F:-45', approxWeightKg: 45, clubId: club.id });
+  for (const n of ['CADA', 'CADB']) await reg({ lastName: n, weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  const man = { firstName: 'Paul', sex: 'M', approxWeightKg: 74 };
+  await reg({ ...man, lastName: 'VETE', ageBandCode: 'v1', weightClassId: 'v1:M:-75' });
+  for (const n of ['SENA', 'SENB']) await reg({ ...man, lastName: n, ageBandCode: 'senior', weightClassId: 'senior:M:-75' });
+  const { view, moveOf } = await openPlan(page, id);
+  // Club au pré-accord : la montée d’âge de MINI le porte, pas le mélange seniors / vétérans de VETE (club sans pré-accord).
+  await expect(moveOf('MINI Léa')).toContainText('pré-accord coach');
+  await expect(moveOf('VETE Paul')).not.toContainText('pré-accord coach');
+  await moveOf('MINI Léa').getByTestId('plan-move-validate').click();
+  await moveOf('VETE Paul').getByTestId('plan-move-validate').click();
+  await expect(view).toContainText('Validés 2 / 2');
+  const ladder = page.getByTestId('rule-ladder');
+  // La ligne remonte sous « Tranche d’âge au-dessus » : VETE, épinglé, reste, « sous la ligne ».
+  await ladder.locator('[data-testid="ladder-row"][data-rule="ageUp"]').getByText('Tranche d’âge au-dessus').click();
+  await expect(moveOf('VETE Paul')).toContainText('sous la ligne');
+  await expect(moveOf('MINI Léa')).not.toContainText('sous la ligne');
+  // La règle de MINI désactivée : MINI, épinglée, reste, « règle désactivée ».
+  await ladder.locator('[data-testid="ladder-row"][data-rule="ageUp"]').getByTestId('ladder-switch').click({ force: true });
+  await expect(moveOf('MINI Léa')).toContainText('règle désactivée');
+  await expect(moveOf('VETE Paul')).toContainText('sous la ligne');
+  await expect(view.getByTestId('plan-move')).toHaveCount(2);
+  await expect(view).toContainText('Validés 2 / 2');
+});
+
+/** Deux sessions : le matin MINI (minime) peut monter chez les cadettes ; l’après-midi VETE (vétéran) peut rejoindre les seniors. */
+async function seedSessions(request: APIRequestContext, id: string) {
+  const reg = regIn(request, id);
+  const mini = await reg({ lastName: 'MINI', ageBandCode: 'minime', weightClassId: 'minime:F:-45', approxWeightKg: 45 });
+  for (const n of ['CADA', 'CADB']) await reg({ lastName: n, weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  const man = { firstName: 'Paul', sex: 'M', approxWeightKg: 74 };
+  await reg({ ...man, lastName: 'VETE', ageBandCode: 'v1', weightClassId: 'v1:M:-75' });
+  for (const n of ['SENA', 'SENB']) await reg({ ...man, lastName: n, ageBandCode: 'senior', weightClassId: 'senior:M:-75' });
+  const waves = await (await request.put(`/api/competitions/${id}/waves`, { data: [
+    { name: 'Matin', rules: { ageBandCodes: ['minime', 'cadet'], disciplines: [] } },
+    { name: 'Après-midi', rules: { ageBandCodes: ['senior', 'v1'], disciplines: [] } },
+  ] })).json() as { id: string; name: string }[];
+  return { mini, morning: waves.find((w) => w.name === 'Matin')!.id };
+}
+
+/** Choisit la session et (ré)ouvre le plan (l’écran se recharge à chaque session). */
+async function openSession(page: Page, name: string) {
+  await page.getByTestId('replacement-wave').getByText(name, { exact: true }).click();
+  await expect(page.getByRole('radio', { name, exact: true })).toBeChecked();
+  const show = page.getByTestId('plan-show');
+  await expect(show).toBeVisible();
+  if ((await show.getAttribute('aria-expanded')) !== 'true') await show.click();
+  await expect(page.getByTestId('plan-view')).toBeVisible();
+}
+
+test('plan : les choix sont gardés par session', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan sessions');
+  await seedSessions(request, id);
+  await page.goto(`/competitions/${id}/reaffectation`);
+  const session = (name: string) => openSession(page, name);
+  await session('Matin');
+  const view = page.getByTestId('plan-view');
+  const moveOf = (name: string) => view.getByTestId('plan-move').filter({ hasText: name });
+  await moveOf('MINI Léa').getByTestId('plan-move-validate').click();
+  await expect(moveOf('MINI Léa').getByTestId('plan-move-unvalidate')).toBeVisible();
+  await expect(view).toContainText('Validés 1 / 1');
+  // L’après-midi a ses propres choix (aucun).
+  await session('Après-midi');
+  await expect(moveOf('VETE Paul').getByTestId('plan-move-validate')).toBeVisible();
+  await expect(view.getByTestId('plan-move').filter({ hasText: 'MINI Léa' })).toHaveCount(0);
+  await expect(view).toContainText('Validés 0 / 1');
+  await moveOf('VETE Paul').getByTestId('plan-move-validate').click();
+  await expect(view).toContainText('Validés 1 / 1');
+  // De retour le matin, l’épingle de MINI est toujours là ; et l’après-midi, celle de VETE (gardées sur le poste, page rechargée).
+  await session('Matin');
+  await expect(moveOf('MINI Léa').getByTestId('plan-move-unvalidate')).toBeVisible();
+  await page.reload();
+  await session('Après-midi');
+  await expect(moveOf('VETE Paul').getByTestId('plan-move-unvalidate')).toBeVisible();
+});
+
+test('plan : un choix devenu impossible est retiré et nommé, dans sa session seulement', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan choix retiré');
+  const { mini, morning } = await seedSessions(request, id);
+  await page.goto(`/competitions/${id}/reaffectation`);
+  const session = (name: string) => openSession(page, name);
+  await session('Matin');
+  const view = page.getByTestId('plan-view');
+  const moveOf = (name: string) => view.getByTestId('plan-move').filter({ hasText: name });
+  await moveOf('MINI Léa').getByTestId('plan-move-validate').click();
+  await expect(view).toContainText('Validés 1 / 1');
+  // Un autre poste pointe MINI absente : son déplacement épinglé n’existe plus.
+  const put = await request.put(`/api/competitions/${id}/weigh-in/${mini.fighterId}`, { data: { presence: 'absent', waveId: morning } });
+  expect(put.status(), await put.text()).toBe(204);
+  const dropped = view.getByTestId('plan-dropped');
+  await expect(dropped).toHaveText('Certains choix ne sont plus possibles et ont été retirés : MINI Léa.');
+  await expect(view.getByTestId('plan-move')).toHaveCount(0);
+  // Le message ne suit pas dans l’autre session, et le choix retiré ne revient pas.
+  await session('Après-midi');
+  await expect(moveOf('VETE Paul')).toBeVisible();
+  await expect(view.getByTestId('plan-dropped')).toHaveCount(0);
+  await session('Matin');
+  await expect(view.getByTestId('plan-move-unvalidate')).toHaveCount(0);
+});
+
+test('réglages : une relecture pendant une saisie ne l’efface pas, et l’enregistrement garde ce qu’un autre poste a changé', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe réglages relus');
+  await page.goto(`/competitions/${id}/reglages`);
+  const place = page.getByLabel('Lieu', { exact: true });
+  await place.fill('Dojo de la saisie');
+  // Pendant ce temps, un autre poste renomme la compétition ; l’onglet revient au premier plan (relecture des données).
+  expect((await request.patch(`/api/competitions/${id}`, { data: { name: 'Coupe renommée ailleurs' } })).ok()).toBe(true);
+  const reread = page.waitForResponse((r) => r.url().endsWith(`/api/competitions/${id}`) && r.request().method() === 'GET');
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange', { bubbles: true })));
+  await reread;
+  await page.waitForTimeout(300);
+  await expect(place).toHaveValue('Dojo de la saisie');
+  await page.getByTestId('settings-save').click();
+  await expect(page.getByText('Réglages enregistrés')).toBeVisible();
+  const c = await (await request.get(`/api/competitions/${id}`)).json();
+  expect(c.location).toBe('Dojo de la saisie');
+  expect(c.name).toBe('Coupe renommée ailleurs');
+  // Le formulaire reprend la compétition enregistrée.
+  await expect(page.getByLabel('Nom', { exact: true })).toHaveValue('Coupe renommée ailleurs');
 });

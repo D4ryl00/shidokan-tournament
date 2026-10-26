@@ -35,9 +35,9 @@ import { HelpButton } from '../components/Help.js';
 import { ProposalPreview } from '../components/ProposalPreview.js';
 import { PROPOSAL_TYPES, ReplacementBadge } from '../components/ReplacementBadge.js';
 import { ageBandLabel, disciplineLabel, prefsLabel, rulesetShort, weightLabel } from '../labels.js';
-import { PlanProgress } from '../components/replacement/PlanProgress.js';
+import { PlanProgress, PROGRESS_HEIGHT } from '../components/replacement/PlanProgress.js';
 import { RuleLadder } from '../components/replacement/RuleLadder.js';
-import { PlanView, type PlanFighter } from '../components/replacement/PlanView.js';
+import { PlanView, WARN_ALERT, type PlanFighter } from '../components/replacement/PlanView.js';
 import type { RuleId } from '../../domain/settings.js';
 import { rulesView } from '../../domain/replacement/rules.js';
 import { usePlanChoices } from '../usePlanChoices.js';
@@ -116,12 +116,14 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: 'ok
 
 const sameChoice = (a: PlanChoice, b: PlanChoice) =>
   a.kind === 'validate' ? b.kind === 'validate' && a.proposalId === b.proposalId && a.caseId === b.caseId : b.kind === 'manual' && a.registrationId === b.registrationId && a.categoryId === b.categoryId;
-/** Inscription d'un choix (l'identifiant d'une proposition est `${type}:${inscription}>${cible}`). */
-const choiceRegistration = (c: PlanChoice) => (c.kind === 'manual' ? c.registrationId : c.proposalId.slice(c.proposalId.indexOf(':') + 1, c.proposalId.indexOf('>')));
+/** Inscriptions d'un choix (l'identifiant d'une proposition est `${type}:${inscription}>${cible}`, `a+b` pour un split). */
+const choiceRegistrations = (c: PlanChoice) =>
+  c.kind === 'manual' ? [c.registrationId] : c.proposalId.slice(c.proposalId.indexOf(':') + 1, c.proposalId.indexOf('>')).split('+');
 
 /**
  * La liste des règles de la compétition avec ses barres, et le plan d'ensemble de la session choisie (même calcul, avec les
  * épingles et les choix de l'organisateur). Sans plan (calcul en cours ou en erreur), la liste reste réglable, sans barres.
+ * Pendant un calcul, tous les gestes restent possibles et relancent le calcul ; seul « Appliquer le plan » attend.
  */
 function RulesPanel({ id, waveId, ready, fighter, targets }: {
   id: string;
@@ -131,7 +133,8 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
   targets: (move: PlanMove) => ComboboxData | null;
 }) {
   const [choices, setChoices] = usePlanChoices(id, waveId);
-  const [dropped, setDropped] = useState<string[]>([]);
+  // Choix retirés (noms), pour la session où ils l'ont été seulement.
+  const [dropped, setDropped] = useState<{ waveId: string | null; names: string[] }>({ waveId, names: [] });
   const [open, setOpen] = useState(false);
   // Avec des sessions, le plan n'existe que pour la session choisie.
   const { data: shownPlan, error, isFetching, isPlaceholderData, progress, cancelled, cancel, restart } = usePlan(id, waveId, choices, ready);
@@ -146,31 +149,40 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
   useEffect(() => {
     if (!plan || isPlaceholderData || plan.plan.dropped.length === 0) return;
     const gone = plan.plan.dropped;
-    setDropped(gone.map((c) => fighter(choiceRegistration(c)).name));
+    setDropped({ waveId, names: gone.map((c) => choiceRegistrations(c).map((r) => fighter(r).name).join(' + ')) });
     setChoices(choices.filter((c) => !gone.some((d) => sameChoice(c, d))));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, isPlaceholderData]);
-  const choose = (c: PlanChoice[]) => { setDropped([]); setChoices(c); };
-  // Après une annulation, le plan affiché date d'avant le dernier changement : la liste suit les réglages enregistrés.
-  const view = (cancelled && competition ? rulesView(competition.settings) : plan?.view) ?? (competition ? rulesView(competition.settings) : null);
-  if (!view) return <ApiErrorAlert error={error} />;
+  const choose = (c: PlanChoice[]) => { setDropped({ waveId, names: [] }); setChoices(c); };
+  // La liste affichée : celle qui s'enregistre (le geste se voit aussitôt), sinon celle du plan affiché ; pendant un calcul ou après
+  // une annulation, le plan date d'avant le dernier changement : la liste suit alors les réglages enregistrés.
+  const saved = competition ? rulesView(competition.settings) : null;
+  const view = (setRules.isPending ? setRules.variables : undefined) ?? (plan && !isFetching && !cancelled ? plan.view : saved) ?? plan?.view ?? null;
+  const saving = setRules.isPending || reset.isPending;
+  // La place de la progression est gardée : son arrivée ne décale rien (sur téléphone, l'en-tête passe à la ligne).
+  const actions = <Box w={280} maw="100%" mih={PROGRESS_HEIGHT}>{isFetching && <PlanProgress progress={progress} onCancel={cancel} />}</Box>;
+  if (!view) {
+    return error ? <ApiErrorAlert error={error} /> : (
+      <SectionCard title="Règles de réaffectation" actions={actions}><Loader size="sm" /></SectionCard>
+    );
+  }
   // Pendant le calcul, les lignes déjà recalculées remplacent celles du plan précédent (grisées).
   const computing = isFetching && !!progress;
   const ladderRows = computing ? [...(progress.rows), ...(plan?.rows ?? []).filter((r) => !progress.rows.some((p) => p.rule === r.rule))] : plan?.rows;
   const fresh = computing ? new Set(progress.rows.map((r) => r.rule)) : isFetching ? new Set<RuleId | null>() : undefined;
-  const k = view.order.indexOf(view.cutAfter) + 1;
+  // Le numéro de la règle et les nombres viennent du même plan (pas de mélange après un changement ou une annulation).
+  const k = plan ? plan.view.order.indexOf(plan.view.cutAfter) + 1 : 0;
   return (
-    <SectionCard title="Règles de réaffectation" description="L’ordre est la priorité ; la ligne pointillée marque où les règles s’arrêtent."
-      actions={isFetching ? <PlanProgress progress={progress} onCancel={cancel} /> : undefined}>
+    <SectionCard title="Règles de réaffectation" description="L’ordre est la priorité ; la ligne pointillée marque où les règles s’arrêtent." actions={actions}>
       {cancelled && (
-        <Alert color="yellow" data-testid="plan-cancelled" p="xs" title="Calcul annulé : le plan affiché ne tient pas compte de votre dernier changement.">
+        <Alert data-testid="plan-cancelled" p="xs" title="Calcul annulé : le plan affiché ne tient pas compte de votre dernier changement." styles={WARN_ALERT}>
           <Button size="compact-sm" data-testid="plan-restart" onClick={restart}>Relancer le calcul</Button>
         </Alert>
       )}
-      <RuleLadder view={view} rows={ladderRows} fresh={fresh} busy={setRules.isPending || reset.isPending} onChange={(v) => setRules.mutate(v)} />
+      <RuleLadder view={view} rows={ladderRows} fresh={fresh} busy={saving} onChange={(v) => setRules.mutate(v)} />
       <ApiErrorAlert error={setRules.error ?? reset.error ?? error} />
       <Group>
-        <Button variant="subtle" size="compact-sm" loading={reset.isPending} onClick={() => reset.mutate()}>Revenir aux réglages par défaut</Button>
+        <Button variant="subtle" size="compact-sm" loading={reset.isPending} disabled={saving} onClick={() => reset.mutate()}>Revenir aux réglages par défaut</Button>
       </Group>
       {plan && (
         <Group>
@@ -181,8 +193,8 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
       )}
       {plan && open && (
         <Box style={{ opacity: isFetching ? 0.5 : 1 }}>
-          <PlanView key={waveId ?? ''} id={id} waveId={waveId} data={plan} choices={choices} onChoices={choose} dropped={dropped}
-            busy={isFetching} cancelled={cancelled} fighter={fighter} targets={targets} />
+          <PlanView key={waveId ?? ''} id={id} waveId={waveId} data={plan} choices={choices} onChoices={choose}
+            dropped={dropped.waveId === waveId ? dropped.names : []} computing={isFetching} cancelled={cancelled} fighter={fighter} targets={targets} />
         </Box>
       )}
     </SectionCard>

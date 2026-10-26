@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { hashKey, keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import type { Competition, CompetitionInput } from '../domain/competition.js';
 import type { BracketFormat, KataScores, MatchMethod, Podium } from '../domain/brackets/index.js';
 import type { CategoryProgress, MedalRow, ResultRecord } from '../domain/results.js';
@@ -12,7 +12,7 @@ import type { Case, Presence, Proposal, ProposalType } from '../domain/replaceme
 import type { CategoryGrid, DisciplineId } from '../domain/types.js';
 import type { LadderProgress, LadderRow, PlanChoice, PlanMove } from '../domain/replacement/plan.js';
 import { fetchPlanStream } from './planStream.js';
-import type { RulesView } from '../domain/replacement/rules.js';
+import { applyRulesView, type RulesView } from '../domain/replacement/rules.js';
 import type { Wave, WaveInput } from '../domain/waves.js';
 import type { AppSettingsPatch, PublicAppSettings } from '../domain/app-settings.js';
 import type { Zone, ZoneInput } from '../domain/zones.js';
@@ -421,31 +421,67 @@ export interface PlanResponse {
   fingerprint: string;
 }
 const planBody = (waveId: string | null, choices: PlanChoice[]) => ({ ...(waveId ? { waveId } : {}), choices });
+
+/** Premier élément de la clé des requêtes du plan (`usePlan`). */
+export const PLAN_KEY = 'replacement-plan';
+/** Plans (clé hachée) qu'une mise à jour en direct a trouvés en plein calcul : un seul nouveau calcul part à la fin de celui-ci. */
+const refreshAfterPlan = new Set<string>();
+
+/**
+ * Mise à jour en direct (un autre poste a écrit, ou retour sur l'onglet) des plans : un calcul en cours n'est pas relancé (il
+ * repartirait de zéro à chaque écriture d'ailleurs), un seul nouveau calcul part quand il finit ; un plan annulé (`meta.cancelledAt`)
+ * est seulement marqué périmé — seuls un geste de ce poste ou « Relancer le calcul » le relancent ; les autres sont relus.
+ */
+export function refreshPlansLive(qc: QueryClient): void {
+  for (const q of qc.getQueryCache().findAll({ queryKey: [PLAN_KEY] })) {
+    if (q.state.fetchStatus === 'fetching') refreshAfterPlan.add(q.queryHash);
+    else if (q.meta?.cancelledAt === q.state.dataUpdatedAt) q.invalidate();
+    else void qc.invalidateQueries({ queryKey: q.queryKey, exact: true });
+  }
+}
+
+/** Un calcul du plan suivi par `refreshPlansLive` : s'il a reçu une mise à jour en direct, il est relancé une fois, à la fin. */
+export async function trackPlanFetch<T>(qc: QueryClient, queryKey: QueryKey, signal: AbortSignal, run: () => Promise<T>): Promise<T> {
+  const hash = hashKey(queryKey);
+  // Ce calcul lit l'état à jour : les mises à jour arrivées avant lui sont prises en compte.
+  refreshAfterPlan.delete(hash);
+  try {
+    return await run();
+  } finally {
+    // Arrêté (annulation, geste qui relance, page quittée) : rien à relancer, le calcul suivant lira l'état à jour.
+    if (refreshAfterPlan.delete(hash) && !signal.aborted) setTimeout(() => void qc.invalidateQueries({ queryKey, exact: true }), 0);
+  }
+}
+
 /**
  * Le diagramme des règles et le plan de la ligne de coupure ; rafraîchi par toute action de réaffectation (`queryKey[1]` = compétition).
  * Le calcul se fait à part côté serveur : `progress` donne son avancement, `cancel()` l'arrête (le plan affiché ne tient alors
- * plus compte du dernier changement : `cancelled`), `restart()` le relance. Changer de choix annule le calcul précédent.
+ * plus compte du dernier changement : `cancelled`), `restart()` le relance. Changer de choix annule le calcul précédent ; les mises
+ * à jour en direct suivent `refreshPlansLive`.
  */
 export function usePlan(id: string, waveId: string | null, choices: PlanChoice[], enabled: boolean) {
   const qc = useQueryClient();
   // L'avancement porte la clé du calcul : celui d'un calcul abandonné ne s'affiche jamais pour le suivant.
   const [progress, setProgress] = useState<{ key: string; p: LadderProgress | null } | null>(null);
-  const queryKey = ['replacement-plan', id, waveId, choices];
+  const queryKey = [PLAN_KEY, id, waveId, choices];
   const keyText = JSON.stringify(queryKey);
   const [cancelledAt, setCancelledAt] = useState<{ key: string; updatedAt: number } | null>(null);
   const query = useQuery({
     queryKey,
     queryFn: ({ signal }) => {
       setProgress({ key: keyText, p: null });
-      return fetchPlanStream(`/api/competitions/${id}/replacement/plan`, planBody(waveId, choices), {
-        signal,
-        onProgress: (p) => { if (!signal.aborted) setProgress({ key: keyText, p }); },
-      });
+      return trackPlanFetch(qc, queryKey, signal, () =>
+        fetchPlanStream(`/api/competitions/${id}/replacement/plan`, planBody(waveId, choices), {
+          signal,
+          onProgress: (p) => { if (!signal.aborted) setProgress({ key: keyText, p }); },
+        }));
     },
     enabled,
     placeholderData: keepPreviousData,
     // Les événements des autres postes et les gestes le tiennent à jour : un calcul au retour sur l'onglet serait du travail perdu.
     refetchOnWindowFocus: false,
+    // Lu par `refreshPlansLive` : le plan affiché date de cette annulation.
+    meta: { cancelledAt: cancelledAt?.key === keyText ? cancelledAt.updatedAt : null },
   });
   // Annulé tant qu'aucun calcul complet n'est arrivé pour ce même choix (le plan affiché date d'avant l'annulation).
   const cancelled = cancelledAt?.key === keyText && cancelledAt.updatedAt === query.dataUpdatedAt && !query.isFetching;
@@ -465,20 +501,24 @@ export function usePlanForApply(id: string) {
   });
 }
 export const useApplyPlan = (id: string) => useReplacementAction<{ waveId?: string; choices: PlanChoice[]; fingerprint: string; hash: string }>(id, 'plan/apply');
-export function useSetRules(id: string) {
+/**
+ * La liste des règles enregistrée (réponse du serveur) est mise tout de suite dans la compétition, et le recalcul n'est pas attendu :
+ * l'écran montre le nouvel état aussitôt, le geste suivant part de la liste enregistrée (aucune écriture perdue) et relance le
+ * calcul (celui en cours est annulé).
+ */
+function useSaveRules<V>(id: string, save: (v: V) => Promise<RulesView>) {
+  const qc = useQueryClient();
   const invalidate = useInvalidateDay(id);
   return useMutation({
-    mutationFn: (view: RulesView) => api<RulesView>('PUT', `/api/competitions/${id}/replacement/rules`, view),
-    onSuccess: invalidate,
+    mutationFn: save,
+    onSuccess: (view: RulesView) => {
+      qc.setQueryData<Competition>(['competitions', id], (c) => c && { ...c, settings: applyRulesView(c.settings, view) });
+      void invalidate();
+    },
   });
 }
-export function useResetRules(id: string) {
-  const invalidate = useInvalidateDay(id);
-  return useMutation({
-    mutationFn: () => api<RulesView>('POST', `/api/competitions/${id}/replacement/rules/reset`),
-    onSuccess: invalidate,
-  });
-}
+export const useSetRules = (id: string) => useSaveRules(id, (view: RulesView) => api<RulesView>('PUT', `/api/competitions/${id}/replacement/rules`, view));
+export const useResetRules = (id: string) => useSaveRules<void>(id, () => api<RulesView>('POST', `/api/competitions/${id}/replacement/rules/reset`));
 
 // --- Jour J (étape 6) ---
 
