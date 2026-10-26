@@ -53,6 +53,7 @@ import { authRoutes } from './routes/auth.js';
 import { appSettingsRoutes } from './routes/app-settings.js';
 import { googleRoutes } from './routes/google.js';
 import { googleClient, googleConfigFrom } from './google/client.js';
+import { startGoogleKeepAlive } from './google/keepalive.js';
 import { defaultMailTransport, type MailTransport } from './mail.js';
 import { RestoreError, backupNow, startAutoBackup } from './repositories/backups.js';
 import { ensureInstance } from './repositories/instance.js';
@@ -246,7 +247,11 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   }
   await app.register(syncFileRoutes, { db, dbPath: opts.dbPath, role });
   await app.register(appSettingsRoutes, { db, mailTransport, googleAvailable: !!google });
-  if (google) await app.register(googleRoutes, { db, google });
+  if (google) {
+    await app.register(googleRoutes, { db, google });
+    const stopKeepAlive = startGoogleKeepAlive(db, google, (e) => app.log.error(e));
+    app.addHook('onClose', async () => stopKeepAlive());
+  }
 
   // Après toute écriture réussie qui touche aux inscriptions ou aux réglages : catégories et tableaux à jour.
   app.addHook('onResponse', async (req, reply) => {
