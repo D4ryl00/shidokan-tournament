@@ -960,3 +960,44 @@ describe('liste des règles', () => {
     expect((await app.inject({ method: 'PUT', url: '/api/competitions/nope/replacement/rules', payload: def })).statusCode).toBe(404);
   });
 });
+
+describe('annulation et valeurs d’origine', () => {
+  /** Correction d'origine comme l'export FFK sur une inscription réaffectée (`ffk-import.ts`) : seules les valeurs d'origine changent. */
+  const correctOriginal = (registrationId: string, weightClassId: string) => {
+    const raw = new Database(dbPath);
+    const row = raw.prepare('SELECT original_json FROM registrations WHERE id = ?').get(registrationId) as { original_json: string };
+    raw.prepare('UPDATE registrations SET original_json = ? WHERE id = ?').run(JSON.stringify({ ...JSON.parse(row.original_json), weightClassId }), registrationId);
+    raw.close();
+  };
+  const registration = async (id: string) =>
+    ((await call('GET', '/registrations')).json() as { id: string; weightClassId: string | null; recasementType: string | null }[]).find((r) => r.id === id)!;
+  const moveElsewhere = async (id: string) => {
+    const target = (await categories()).find((c) => !c.registrationIds.includes(id))!;
+    expect((await call('POST', '/replacement/move', { registrationId: id, categoryId: target.id })).statusCode).toBe(200);
+  };
+
+  test('une correction d’origine arrivée après la réaffectation survit à l’annulation', async () => {
+    const a = await reg({ weightClassId: 'cadet:F:-54' });
+    await reg({ weightClassId: 'cadet:F:-61' });
+    await moveElsewhere(a.id);
+    correctOriginal(a.id, 'cadet:F:-47');
+    const [entry] = (await replacement()).recasements;
+    expect((await call('POST', '/replacement/undo', { recasementId: entry!.id })).statusCode).toBe(200);
+    const r = await registration(a.id);
+    expect(r.weightClassId).toBe('cadet:F:-47');
+    expect(r.recasementType).toBeNull();
+  });
+
+  test('deux réaffectations puis une correction : l’annulation des deux garde la correction', async () => {
+    const a = await reg({ weightClassId: 'cadet:F:-54' });
+    await reg({ weightClassId: 'cadet:F:-61' });
+    await reg({ ageBandCode: 'senior', weightClassId: 'senior:F:-50' });
+    await moveElsewhere(a.id);
+    await moveElsewhere(a.id);
+    correctOriginal(a.id, 'cadet:F:-47');
+    for (const entry of (await replacement()).recasements) {
+      expect((await call('POST', '/replacement/undo', { recasementId: entry.id })).statusCode).toBe(200);
+    }
+    expect((await registration(a.id)).weightClassId).toBe('cadet:F:-47');
+  });
+});

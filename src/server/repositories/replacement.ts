@@ -394,20 +394,53 @@ export async function manualMove(db: AppDb, competitionId: string, registrationI
   return { warnings };
 }
 
+/** Instantané d'une réaffectation : ce qu'il faut réécrire pour l'annuler. */
+type RecasementSnapshot = {
+  /** Instantané d'un « Ne combat pas » : la catégorie et le retrait seulement. */
+  registration: {
+    categoryId: string | null; placementLocked?: boolean; originalJson?: string | null; recasementType?: string | null;
+    discipline?: Member['discipline']; ruleset?: Member['ruleset']; weightClassId?: string | null;
+    withdrawnReason?: null; withdrawnEntry?: null;
+  };
+  categories: { id: string; keyString: string; keyJson: string; aliasKeys: string; label: string }[];
+  /** Absente des instantanés d'avant les vagues. */
+  presences?: { id: string; presence: Presence }[];
+};
+
+/** Catégories qu'une annulation touche : la catégorie actuelle, celle d'avant et celles dont la clé avait changé. */
+const snapshotTouches = (currentCategoryId: string | null, snapshot: RecasementSnapshot): string[] =>
+  [...new Set([currentCategoryId, snapshot.registration.categoryId, ...snapshot.categories.map((c) => c.id)].filter((x): x is string => !!x))];
+
+/**
+ * Réécrit l'état d'avant une réaffectation (dans une transaction de l'appelant). Les valeurs d'origine corrigées depuis
+ * (export FFK, fiche club : elles ne changent que `originalJson` d'une inscription réaffectée) sont gardées.
+ */
+function restoreSnapshot(t: AppDb, registrationId: string, snapshot: RecasementSnapshot): void {
+  for (const c of snapshot.categories) {
+    const { id, ...values } = c;
+    t.update(categories).set(values).where(eq(categories.id, id)).run();
+  }
+  const previous = { ...snapshot.registration };
+  const current = t.select({ originalJson: registrations.originalJson }).from(registrations).where(eq(registrations.id, registrationId)).get();
+  if (previous.originalJson !== undefined && current?.originalJson) {
+    if (previous.originalJson === null) {
+      // Cette réaffectation avait créé les valeurs d'origine : on revient à leur état actuel.
+      const original = JSON.parse(current.originalJson) as Pick<Member, 'discipline' | 'ruleset' | 'weightClassId'>;
+      Object.assign(previous, { discipline: original.discipline, ruleset: original.ruleset, weightClassId: original.weightClassId });
+    } else previous.originalJson = current.originalJson;
+  }
+  const exists = previous.categoryId && t.select().from(categories).where(eq(categories.id, previous.categoryId)).get();
+  t.update(registrations)
+    .set({ ...previous, categoryId: exists ? previous.categoryId : null })
+    .where(eq(registrations.id, registrationId))
+    .run();
+  for (const r of snapshot.presences ?? []) t.update(registrations).set({ presence: r.presence }).where(eq(registrations.id, r.id)).run();
+}
+
 export async function undoRecasement(db: AppDb, competitionId: string, recasementId: string): Promise<void> {
   const entry = db.select().from(recasements).where(and(eq(recasements.id, recasementId), eq(recasements.competitionId, competitionId))).get();
   if (!entry || entry.status !== 'validated') throw new NotFoundError('Réaffectation introuvable');
-  const snapshot = JSON.parse(entry.snapshotJson) as {
-    /** Instantané d'un « Ne combat pas » : la catégorie et le retrait seulement. */
-    registration: {
-      categoryId: string | null; placementLocked?: boolean; originalJson?: string | null; recasementType?: string | null;
-      discipline?: Member['discipline']; ruleset?: Member['ruleset']; weightClassId?: string | null;
-      withdrawnReason?: null; withdrawnEntry?: null;
-    };
-    categories: { id: string; keyString: string; keyJson: string; aliasKeys: string; label: string }[];
-    /** Absente des instantanés d'avant les vagues. */
-    presences?: { id: string; presence: Presence }[];
-  };
+  const snapshot = JSON.parse(entry.snapshotJson) as RecasementSnapshot;
   const reg = db.select().from(registrations).where(eq(registrations.id, entry.registrationId)).get();
   if (!reg) throw new NotFoundError('Inscription introuvable');
   const locked = (id: string | null) => {
@@ -428,24 +461,14 @@ export async function undoRecasement(db: AppDb, competitionId: string, recasemen
     .all()
     .some((r) => r.id !== entry.id && r.n > mine);
   if (newer) throw new StaleProposalError("Annulez d'abord la réaffectation plus récente de ce combattant.");
-  const touched = new Set([reg.categoryId, snapshot.registration.categoryId, ...snapshot.categories.map((c) => c.id)].filter((x): x is string => !!x));
+  const touched = snapshotTouches(reg.categoryId, snapshot);
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
-    for (const c of snapshot.categories) {
-      const { id, ...values } = c;
-      t.update(categories).set(values).where(eq(categories.id, id)).run();
-    }
-    const previous = snapshot.registration;
-    const exists = previous.categoryId && t.select().from(categories).where(eq(categories.id, previous.categoryId)).get();
-    t.update(registrations)
-      .set({ ...previous, categoryId: exists ? previous.categoryId : null })
-      .where(eq(registrations.id, entry.registrationId))
-      .run();
-    for (const r of snapshot.presences ?? []) t.update(registrations).set({ presence: r.presence }).where(eq(registrations.id, r.id)).run();
+    restoreSnapshot(t, entry.registrationId, snapshot);
     t.update(recasements).set({ status: 'undone' }).where(eq(recasements.id, recasementId)).run();
   });
   // Les clés des catégories touchées sont recalculées d'après leurs membres actuels.
-  await recomputeKeys(db, competitionId, () => [...touched]);
+  await recomputeKeys(db, competitionId, () => touched);
 }
 
 /** Recalcule et enregistre la clé des catégories choisies d'après leurs membres, puis resynchronise. */
