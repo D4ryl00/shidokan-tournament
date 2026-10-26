@@ -34,8 +34,6 @@ test('500 inscriptions : le diagramme en moins de 4 s, et prouvé', () => {
     rows = planLadder(s, { waveId: null, choices: [] }).rows;
     best = Math.min(best, performance.now() - t);
   }
-  // Mesure : 1705 ms ; borne = max(3000, 2 × 2000).
-  console.log(`ladder 500: ${Math.round(best)} ms`);
   expect(best).toBeLessThan(4000);
   expect(rows.every((r) => r.alone === null || r.proven)).toBe(true);
 });
@@ -96,13 +94,27 @@ test('la progression suit les calculs', { timeout: 30_000 }, () => {
     expect(seen[seen.length - 1]!.rows).toEqual(rows);
   };
   check(allRules(3, 60), 0);
+  // Les lignes disent la vérité sur le plan retenu : déplacements et déplacements à valider de la ligne de coupure.
+  const cut = allRules(3, 60);
+  const l = planLadder(cut, { waveId: null, choices: [] });
+  const cutRow = l.rows.find((r) => r.rule === cut.settings.replacementRules.cutAfter)!;
+  expect([cutRow.moves, cutRow.toValidate]).toEqual([l.plan.moves.length, l.plan.moves.filter((m) => m.manual && !m.validated).length]);
+  expect(cutRow.alone).toBe(l.plan.aloneAfter.length);
   // Règle de coupure désactivée avec une ligne active au-dessus : son plan est réutilisé, aucun calcul de plus.
   const t = allRules(3, 60);
   t.settings.replacementRules.cutAfter = 'ageUp';
   t.settings.replacementRules.off = ['ageUp'];
   check(t, 0);
   const reused = planLadder(t, { waveId: null, choices: [] });
-  expect(reused.plan.aloneAfter.length).toBe(reused.rows.find((r) => r.rule === 'weightGap')!.alone);
+  const above = reused.rows.find((r) => r.rule === 'weightGap')!;
+  expect([reused.plan.aloneAfter.length, reused.plan.moves.length, reused.plan.moves.filter((m) => m.manual && !m.validated).length, reused.plan.proven])
+    .toEqual([above.alone, above.moves, above.toValidate, above.proven]);
+  // Le plan réutilisé est celui de la ligne du dessus : même plan que la liste renvoyée sans coupure désactivée sur cette ligne.
+  const sameCut = allRules(3, 60);
+  sameCut.settings.replacementRules.cutAfter = 'weightGap';
+  // (Les identifiants d'inscription changent d'un tirage à l'autre : on compare la forme du plan.)
+  const shape = (r: typeof reused.plan) => [r.aloneAfter.length, r.proven, r.moves.map((m) => [m.type, m.rules, m.manual])];
+  expect(shape(planLadder(sameCut, { waveId: null, choices: [] }).plan)).toEqual(shape(reused.plan));
   // Règle de coupure désactivée, aucune ligne active au-dessus : un calcul de plus.
   const u = allRules(3, 60);
   u.settings.replacementRules.order = ['weight', ...u.settings.replacementRules.order.filter((r) => r !== 'weight')];
@@ -119,6 +131,5 @@ test('150 inscriptions : le diagramme en moins de 2 s', { timeout: 60_000 }, () 
     planLadder(s, { waveId: null, choices: [] });
     best = Math.min(best, performance.now() - t);
   }
-  console.log(`ladder 150: ${Math.round(best)} ms`);
   expect(best).toBeLessThan(2000);
 });

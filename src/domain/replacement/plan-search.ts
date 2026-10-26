@@ -18,6 +18,7 @@ const sorted = (xs: Iterable<string>) => [...xs].sort(cmp);
 /**
  * Combattants seuls de la session (`null` : toutes les catégories non lancées), triés : les actifs (présents ou non
  * pointés) seuls parmi les actifs de leur catégorie, et les inscrits non déplacés d'une catégorie fermée.
+ * Comme `detectCases`, les membres comptés sont les actifs non fermés de la catégorie (écart accepté avec le texte du brief).
  */
 export function aloneRegistrations(state: State, waveId: string | null): string[] {
   const waves = waveId === null ? null : categoryWaves(state);
@@ -94,7 +95,10 @@ export function optionsOf(s: State, c: Case, ctx: SearchContext, decided: Readon
 }
 
 const lookups = new WeakMap<object, (ks: string) => CategoryState | undefined>();
-/** `categoryForKey`, avec un index gardé tant que la liste des catégories est la même (les états ne sont jamais modifiés). */
+/**
+ * `categoryForKey`, avec un index gardé tant que la liste des catégories est la même (les états ne sont jamais modifiés).
+ * Les caches de module sont indexés par objet : modifier un état ou une liste sur place les rendrait faux (utiliser `applyAll`, qui recopie).
+ */
 function categoryFor(s: State, ks: string): CategoryState | undefined {
   let lookup = lookups.get(s.categories);
   if (!lookup) {
@@ -295,6 +299,8 @@ export function relate(
   opts.link?.((a, b) => uf.union(a, b));
 
   // (d) Élargissement en un pas : après une option de X, Y obtient-il une option permise vers ce que X a touché ?
+  // Seuls Y `alone` / `closed` sont regardés : un poids hors catégorie (`weight_out`) n'est pas élargi (groupes plus gros
+  // sur des cas rares, donc des plans qui changeraient ; non fait faute de garantie de ne jamais les dégrader).
   const widenable = movers.filter((mv) => mv.c.kind === 'alone' || mv.c.kind === 'closed');
   if (widenable.length > 0) {
     for (const x of movers) {
@@ -448,6 +454,8 @@ function returnersLeft(s: State, ctx: SearchContext, decided: ReadonlySet<string
  * cas laissés pour l'instant.
  * La part d'une catégorie est gardée par objet : un déplacement recopie les catégories qu'il change (`applyProposal`),
  * et rien ne les modifie pendant un calcul.
+ * Les ids `since` d'un cas laissé qui sortent du sous-état n'y figurent pas : ils ne font que séparer des sous-problèmes
+ * identiques (moins de réutilisations de la mémoire, jamais un résultat faux).
  */
 function signature(s: State, decided: ReadonlySet<string>, deferred: Deferral, parts: WeakMap<object, string>): string {
   let members: Map<string, Member[]> | null = null;
@@ -679,7 +687,10 @@ export class GroupSolver {
     return best;
   }
 
-  /** « Carte par carte » à partir de `s` : la première option du premier cas qui en a une, jusqu'au bout. */
+  /**
+   * « Carte par carte » à partir de `s` : la première option du premier cas qui en a une, jusqu'au bout.
+   * Repli du budget épuisé : il ignore les cas laissés (report) ; le plan est alors marqué non prouvé de toute façon.
+   */
   greedy(s: State, decided: ReadonlySet<string>): Solution {
     const moves: SearchMove[] = [];
     let d = decided;

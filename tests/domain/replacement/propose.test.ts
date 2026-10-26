@@ -4,7 +4,8 @@ import { seededRandom } from '../../../src/domain/brackets/seeding.js';
 import { DISCIPLINES } from '../../../src/domain/disciplines.js';
 import { weightClassesFor } from '../../../src/domain/grid.js';
 import { detectCases } from '../../../src/domain/replacement/detect.js';
-import { moveViolations, proposalsFor } from '../../../src/domain/replacement/propose.js';
+import { moveViolations, proposalsFor, ruleProfile } from '../../../src/domain/replacement/propose.js';
+import { NO_VALIDATION_RULES } from '../../../src/domain/replacement/rules.js';
 import { defaultSettings } from '../../../src/domain/settings.js';
 import { applyAll, applyProposal } from '../../../src/domain/replacement/apply.js';
 import { computePlan } from '../../../src/domain/replacement/plan.js';
@@ -187,6 +188,8 @@ test('contraintes absolues sur un état aléatoire', () => {
     expect(m.presence).not.toBe('absent');
     for (const p of proposalsFor(s, c)) {
       count++;
+      // Un déplacement est manuel exactement quand il utilise une règle à valider.
+      expect(p.manual).toBe(p.rules.some((r) => !NO_VALIDATION_RULES.has(r)));
       const minor = s.grid.ageBands.find((b) => b.code === m.ageBandCode)!.isMinor;
       const target = 'categoryId' in p.target ? s.categories.find((x) => x.id === (p.target as { categoryId: string }).categoryId)! : null;
       const key = target ? target.key : (p.target as { newKey: typeof s.categories[number]['key'] }).newKey;
@@ -444,5 +447,52 @@ describe('règles des propositions', () => {
     };
     expect(run(true, false)).toMatchObject({ rules: ['split', 'weightGap'], preApproved: false });
     expect(run(true, true)).toMatchObject({ rules: ['split', 'weightGap'], preApproved: true });
+  });
+});
+
+describe('ruleProfile', () => {
+  const m = member({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
+  const s = makeState([m]);
+  const profile = (over: Partial<Omit<Parameters<typeof ruleProfile>[1], 'checks'>> & { checks?: Partial<Proposal['checks']> } = {}) => {
+    const { checks, ...rest } = over;
+    return ruleProfile(s, {
+      id: 'x', caseId: `alone:${m.registrationId}`, type: 'A', registrationId: m.registrationId, target: { categoryId: m.categoryId! },
+      changes: {}, waveChange: null, waveShifts: [], reason: '',
+      checks: { weightGapKg: 1, threshold: 5, ageMove: 'same', crossesMinorAdult: false, mixedSex: false, ageDirections: [], ...checks },
+      ...rest,
+    });
+  };
+  test('retour : « return », imposé', () => {
+    expect(profile({ type: 'R' })).toEqual({ rules: ['return'], forced: true });
+  });
+  test('shobu → jiyu : « shobuToJiyu » ; une discipline autre ajoute « discipline »', () => {
+    expect(profile({ type: 'G', changes: { ruleset: 'jiyu' } }).rules).toEqual(['shobuToJiyu']);
+    expect(profile({ type: 'H', changes: { discipline: 'shido-boxing' } }).rules).toEqual(['discipline']);
+    expect(profile({ type: 'H', changes: { discipline: 'shido-boxing', ruleset: 'jiyu' } }).rules).toEqual(['discipline', 'shobuToJiyu']);
+  });
+  test('âge : monter, descendre, mineurs / adultes (qui remplace les directions), seniors / vétérans', () => {
+    expect(profile({ type: 'C', checks: { ageMove: 'C', ageDirections: ['up'] } }).rules).toEqual(['ageUp']);
+    expect(profile({ type: 'C', checks: { ageMove: 'C', ageDirections: ['down'] } }).rules).toEqual(['ageDown']);
+    expect(profile({ type: 'C', checks: { ageMove: 'C', ageDirections: ['up', 'down'] } }).rules).toEqual(['ageUp', 'ageDown']);
+    expect(profile({ type: 'E', checks: { crossesMinorAdult: true, ageMove: 'C', ageDirections: ['down'] } }).rules).toEqual(['minorsAdults']);
+    expect(profile({ type: 'D', checks: { ageMove: 'D' } }).rules).toEqual(['seniorsVeterans']);
+    expect(profile({ type: 'F', checks: { mixedSex: true } }).rules).toEqual(['mixSexes']);
+  });
+  test('poids : « weight » seul s’il n’y a rien d’autre, « weightGap » au-delà du seuil (sans « weight »)', () => {
+    expect(profile().rules).toEqual(['weight']);
+    expect(profile({ type: 'B', checks: { weightGapKg: 6, threshold: 5 } }).rules).toEqual(['weightGap']);
+    expect(profile({ type: 'C', checks: { weightGapKg: 6, threshold: 5, ageMove: 'C', ageDirections: ['up'] } }).rules).toEqual(['ageUp', 'weightGap']);
+  });
+  test('split (un autre que le seul est déplacé) : « split », plus « weightGap » au-delà du seuil, même écart désactivé', () => {
+    const other = member({ weightClassId: 'cadet:F:-54' });
+    const base = { caseId: `alone:${other.registrationId}` };
+    expect(profile(base)).toEqual({ rules: ['split'], forced: false });
+    expect(profile({ ...base, checks: { weightGapKg: 6, threshold: 5 } })).toEqual({ rules: ['split', 'weightGap'], forced: false });
+    // Écart de poids désactivé : le profil ne dépend pas des interrupteurs (c'est `proposalsFor` qui écarte la proposition).
+    const off = { ...s, settings: { ...s.settings, replacementRules: { ...s.settings.replacementRules, off: ['weightGap' as const] } } };
+    expect(ruleProfile(off, {
+      id: 'x', caseId: base.caseId, type: 'B', registrationId: m.registrationId, target: { categoryId: m.categoryId! }, changes: {},
+      waveChange: null, waveShifts: [], reason: '', checks: { weightGapKg: 6, threshold: 5, ageMove: 'same', crossesMinorAdult: false, mixedSex: false, ageDirections: [] },
+    }).rules).toEqual(['split', 'weightGap']);
   });
 });

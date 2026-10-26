@@ -37,7 +37,7 @@ const groupKey = (g: Group) => [...g.categories].sort(cmp).join('|');
  * Meilleur plan des cas ouverts de `cur` (l'état après les choix), groupe par groupe :
  * 1. l'ancien calcul « carte par carte » est rejoué une fois sur tout l'état ; ses déplacements relient ce qu'ils touchent ;
  * 2. les cas sont découpés en groupes indépendants (`relate`), chaque groupe part de sa part du rejeu et cherche mieux ;
- * 3. point fixe : dans l'état final, si un cas encore en attente a une option qui touche un autre groupe (une chaîne de
+ * 3. point fixe : dans l'état final, si un cas encore en attente (ouvert et non déplacé : un cas déjà déplacé ne rouvre rien) a une option qui touche un autre groupe (une chaîne de
  *    plusieurs déplacements a ouvert une porte que la découpe ne voyait pas), les groupes concernés sont réunis et
  *    recalculés, jusqu'à stabilité (au plus autant de tours que de groupes).
  * Le plan n'est jamais moins bon que le rejeu : chaque groupe garde sa part du rejeu tant qu'il ne trouve pas mieux.
@@ -63,6 +63,7 @@ export function solveGroups(cur: State, ctx: SearchContext, budget: number): Gro
     replay.moves.forEach((m, i) => {
       const ids = replay.touched[i]!.filter((n) => !n.startsWith('r:')).map((n) => (n.startsWith('k:') ? `new:${n.slice(2)}` : n.slice(2)));
       const gi = ids.map((id) => owner.get(id)).find((x) => x !== undefined);
+      // Un déplacement du rejeu sans groupe (aucune catégorie touchée n'appartient à un groupe) n'est dans aucune part : ignoré.
       if (gi === undefined) return;
       share[gi]!.push(m);
       for (const id of ids) owner.set(id, gi);

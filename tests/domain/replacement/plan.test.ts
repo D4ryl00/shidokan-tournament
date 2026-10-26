@@ -483,7 +483,7 @@ test('budget épuisé : pas prouvé', () => {
   s.settings.replacementRules.off = ['weightGap'];
   const r = plan(s, { nodeBudget: 1 });
   expect(r.proven).toBe(false);
-  // Toujours un plan valable, jamais moins bon que le rejeu carte par carte.
+  // Toujours un plan valable : jamais plus de seuls qu'au départ.
   expect(r.aloneAfter.length).toBeLessThanOrEqual(r.aloneBefore.length);
   expect(plan(s).proven).toBe(true);
 });

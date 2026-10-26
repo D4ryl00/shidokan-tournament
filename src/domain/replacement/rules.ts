@@ -107,13 +107,12 @@ export function ruleRank(
   m: Pick<Member, 'ruleset' | 'acceptsJiyuFirst'>,
 ): number {
   const { order } = s.replacementRules;
-  const rank = order.indexOf(r);
   if (m.ruleset === 'shobu' && m.acceptsJiyuFirst === true && (r === 'discipline' || r === 'shobuToJiyu')) {
     const a = order.indexOf('discipline');
     const b = order.indexOf('shobuToJiyu');
     return r === 'shobuToJiyu' ? Math.min(a, b) : Math.max(a, b);
   }
-  return rank;
+  return order.indexOf(r);
 }
 
 /** Règles actives dont l'index est au plus celui de `level` (`return` compris). */

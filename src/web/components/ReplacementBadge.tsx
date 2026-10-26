@@ -4,18 +4,18 @@ import type { Proposal, ProposalType } from '../../domain/replacement/index.js';
 import { useReplacement, type RecasementEntry } from '../api.js';
 
 /** Couleur = nature du changement (5 couleurs + gris), icône + texte : jamais la couleur seule. */
-export const PROPOSAL_TYPES: Record<ProposalType, { color: string; label: string; simple: boolean; title: string }> = {
-  A: { color: 'blue', label: '⚖ Poids', simple: true, title: 'Catégorie de poids voisine (dans l’écart autorisé)' },
-  B: { color: 'blue', label: '⚖ Poids +', simple: false, title: 'Catégorie de poids voisine, écart au-delà du seuil' },
-  C: { color: 'orange', label: '↑ Âge', simple: false, title: 'Tranche d’âge voisine' },
-  D: { color: 'orange', label: '⇄ Sen./Vét.', simple: false, title: 'Mélange seniors / vétérans' },
-  E: { color: 'orange', label: '↑ Min./Adultes', simple: false, title: 'Mélange mineurs / adultes' },
-  F: { color: 'pink', label: '⚥ Mixte', simple: false, title: 'Mélange filles / garçons' },
-  G: { color: 'cyan', label: 'Shobu → Jiyu', simple: false, title: 'Passage du shobu au jiyu' },
-  H: { color: 'grape', label: '⇄ Discipline', simple: false, title: 'Autre discipline (préférences du combattant)' },
-  R: { color: 'gray', label: '↩ Retour', simple: true, title: 'Retour dans la catégorie d’origine' },
-  M: { color: 'gray', label: '✋ Manuel', simple: false, title: 'Déplacement manuel de l’organisateur' },
-  W: { color: 'gray', label: '⊘ Ne combat pas', simple: false, title: 'Ne combat pas (catégorie non ouverte)' },
+export const PROPOSAL_TYPES: Record<ProposalType, { color: string; label: string; title: string }> = {
+  A: { color: 'blue', label: '⚖ Poids', title: 'Catégorie de poids voisine (dans l’écart autorisé)' },
+  B: { color: 'blue', label: '⚖ Poids +', title: 'Catégorie de poids voisine, écart au-delà du seuil' },
+  C: { color: 'orange', label: '↑ Âge', title: 'Tranche d’âge voisine' },
+  D: { color: 'orange', label: '⇄ Sen./Vét.', title: 'Mélange seniors / vétérans' },
+  E: { color: 'orange', label: '↑ Min./Adultes', title: 'Mélange mineurs / adultes' },
+  F: { color: 'pink', label: '⚥ Mixte', title: 'Mélange filles / garçons' },
+  G: { color: 'cyan', label: 'Shobu → Jiyu', title: 'Passage du shobu au jiyu' },
+  H: { color: 'grape', label: '⇄ Discipline', title: 'Autre discipline (préférences du combattant)' },
+  R: { color: 'gray', label: '↩ Retour', title: 'Retour dans la catégorie d’origine' },
+  M: { color: 'gray', label: '✋ Manuel', title: 'Déplacement manuel de l’organisateur' },
+  W: { color: 'gray', label: '⊘ Ne combat pas', title: 'Ne combat pas (catégorie non ouverte)' },
 };
 
 const kg = (x: number) => `${Number(x.toFixed(1)).toString().replace('.', ',')} kg`;

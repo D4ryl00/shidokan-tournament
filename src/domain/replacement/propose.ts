@@ -228,8 +228,8 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
     make('A', existing ? { categoryId: existing.id } : { newKey: key }, existing?.key ?? key, { changes: { weightClassId: wic.id }, checks }, merged.length - 1);
     if (merged.length === 1) {
       // Catégorie du poids réel vide : il y serait seul. Proposée en dernier, après les catégories où il aurait un adversaire.
-      const alone = out.at(-1);
-      if (!alone) return [];
+      // Correction de poids qui s'impose (`forced`) : `withRules` ne la refuse jamais, la proposition vient d'être ajoutée.
+      const alone = out.at(-1)!;
       alone.reason += ' — il y sera seul (sans adversaire), à réaffecter ensuite';
       alone.sortKey[0] = Number.MAX_SAFE_INTEGER;
       const corrected = { ...m, weightClassId: wic.id };
