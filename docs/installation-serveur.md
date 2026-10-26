@@ -11,7 +11,7 @@ Cette procédure met l'application en ligne, à l'adresse `https://competitions.
 - Un serveur **Ubuntu** (22.04 ou plus récent) joignable depuis internet. L'image existe en `linux/amd64` et `linux/arm64`.
 - Le DNS de `competitions.shidokanfrance.com` qui pointe vers l'adresse IP du serveur (enregistrement A, et AAAA en IPv6).
 - Les **ports 80 et 443** ouverts sur le serveur, y compris au pare-feu de l'hébergeur. Caddy, le serveur web placé devant l'application, en a besoin pour obtenir et renouveler tout seul le certificat HTTPS (Let's Encrypt).
-- Un compte qui enverra les mails aux clubs, par exemple un compte **Gmail** avec la validation en deux étapes activée.
+- Un compte qui enverra les mails aux clubs, par exemple un compte **Gmail**. L'application s'y connecte avec « Se connecter avec Google » (voir [Créer l'accès Google](#créer-laccès-google-une-seule-fois)).
 
 Si le serveur a déjà un serveur web sur les ports 80 et 443 (nginx, Traefik, Apache…), suivez la variante en fin de document.
 
@@ -47,6 +47,8 @@ Pour une autre adresse que `competitions.shidokanfrance.com`, il y a deux endroi
 - la première ligne du `Caddyfile` ;
 - `PUBLIC_URL` dans `compose.yaml`, qui sert de base aux liens envoyés aux clubs.
 
+Avec l'envoi par Google, l'adresse de redirection déclarée chez Google doit aussi changer (voir plus bas).
+
 ## 3. Créer le premier compte organisateur
 
 ```sh
@@ -66,17 +68,47 @@ Autres commandes : `… cli.js list-users`, `… cli.js delete-user <e-mail>`.
 
 Dans l'application, menu **Réglages de l'application** :
 
-1. **Envoi des mails**. Pour Gmail :
-   - créez d'abord un **mot de passe d'application** dans le compte Google (Compte Google → Sécurité → Mots de passe des applications ; il faut la validation en deux étapes). Le mot de passe habituel du compte ne fonctionne pas ;
-   - puis remplissez :
-     - serveur `smtp.gmail.com`, port `465`, chiffrement TLS ;
-     - identifiant : l'adresse Gmail ; mot de passe : le mot de passe d'application ;
-     - nom de l'expéditeur, par exemple « Shidokan France » ; adresse de l'expéditeur : l'adresse Gmail.
+1. **Envoi des mails** avec un compte Gmail. Il faut d'abord avoir [créé l'accès Google](#créer-laccès-google-une-seule-fois) :
+   - choisissez **Compte Google**, puis cliquez **« Se connecter avec Google »** ;
+   - choisissez le compte Gmail expéditeur. Google affiche **« Google n'a pas validé cette application »** : c'est attendu. Cliquez **Paramètres avancés**, puis **Accéder à Shidokan France (non sécurisé)** ;
+   - acceptez. Si Google présente des cases à cocher, laissez cochée celle qui permet d'**envoyer des e-mails** : sans elle, l'application refuse la connexion ;
+   - de retour dans les Réglages, l'écran affiche « Connecté : … ». Réglez le nom de l'expéditeur (« Shidokan France »), cliquez « Enregistrer », puis « Envoyer un mail d'essai ».
 
-   Cliquez « Enregistrer », puis « Envoyer un mail d'essai ». Gmail accepte environ 500 destinataires par jour.
+   L'application ne peut qu'**envoyer** des mails depuis ce compte : elle ne peut ni les lire ni les supprimer. « Déconnecter » lui retire l'accès ; on peut aussi le retirer depuis le compte Google (Sécurité → Applications tierces). Si l'accès est retiré ou expire (par exemple quand le mot de passe du compte Gmail change), les Réglages affichent « reconnectez-vous ». L'application renouvelle d'elle-même l'accès chaque mois, pour qu'il n'expire pas entre deux compétitions. Gmail accepte environ 500 destinataires par jour.
+
+   **Variante sans Google** (« Autre serveur (identifiant et mot de passe) ») : serveur SMTP, identifiant et mot de passe. Pour Gmail par ce chemin, il faut un **mot de passe d'application** (Compte Google → Sécurité → Mots de passe des applications, avec la validation en deux étapes), le serveur `smtp.gmail.com`, le port `465` et le chiffrement TLS.
 2. **Données personnelles** : indiquez l'**adresse de contact** (par exemple une adresse de Shidokan France). Elle apparaît dans la mention en bas de la page de chaque club. Relisez la mention, et faites-la valider par Shidokan France si un référent RGPD existe.
 3. **Message aux clubs** : le modèle de mail par défaut, modifiable. Chaque compétition peut aussi avoir le sien.
 4. **Conservation** : 13 mois et 3 ans par défaut (voir plus bas).
+
+## Créer l'accès Google (une seule fois)
+
+Pour que le bouton « Se connecter avec Google » fonctionne, l'application doit être déclarée chez Google. Ça se fait une seule fois, dans la [console Google Cloud](https://console.cloud.google.com/), **connecté avec le compte Gmail expéditeur**. Les libellés ci-dessous sont ceux de la console en anglais ; ils peuvent varier un peu.
+
+1. **Créer un projet** : en haut de la console, sélecteur de projet → **New project**, nom « Shidokan France », puis **Create**.
+2. **Activer l'API Gmail** : menu **APIs & Services → Library**, cherchez « Gmail API », puis **Enable**.
+3. **Écran de consentement** : menu **Google Auth platform → Branding** (cliquez **Get started** si la console le propose) :
+   - **App name** : « Shidokan France » ; **User support email** : l'adresse Gmail ; **Next** ;
+   - **Audience** : **External** ; **Next** ;
+   - **Contact information** : l'adresse Gmail ; **Next** ; acceptez la charte, puis **Create**.
+4. **Autorisations** : **Google Auth platform → Data Access → Add or remove scopes**. Cochez `.../auth/gmail.send` (« Send email on your behalf »), `openid` et `.../auth/userinfo.email`, puis **Update** et **Save**. Ne prenez **pas** `https://mail.google.com/` : il donne l'accès complet à la boîte.
+5. **Publier** : **Google Auth platform → Audience → Publish app**, puis confirmez. Le statut passe à **In production**. C'est nécessaire : en mode « Testing », Google retire l'accès au bout de 7 jours. Ne demandez pas la vérification par Google : elle n'est pas nécessaire pour un seul compte expéditeur. Le prix à payer est l'avertissement « application non validée » à la connexion.
+6. **Identifiant client** : **Google Auth platform → Clients → Create client** :
+   - **Application type** : **Web application** ; **Name** : « Shidokan France » ;
+   - **Authorized redirect URIs → Add URI** : `https://competitions.shidokanfrance.com/api/app-settings/google/callback` (avec votre adresse si elle est différente) ;
+   - **Create**. Notez le **Client ID** et le **Client secret** affichés.
+7. **Sur le serveur**, dans `~/shidokan/compose.yaml`, décommentez et remplissez les deux lignes du service `app` :
+   ```yaml
+         - GOOGLE_CLIENT_ID=123456789-xxxx.apps.googleusercontent.com
+         - GOOGLE_CLIENT_SECRET=GOCSPX-xxxx
+   ```
+   (Si votre `compose.yaml` est plus ancien et ne les a pas, ajoutez-les sous `PUBLIC_URL`.) Puis :
+   ```sh
+   cd ~/shidokan && docker compose up -d
+   ```
+8. Dans l'application : **Réglages de l'application → Envoi des mails → Compte Google → « Se connecter avec Google »**, comme décrit plus haut.
+
+Le code secret reste dans `compose.yaml` : il n'est jamais écrit dans la base ni dans les sauvegardes. Le jeton remis par Google est gardé par l'application, mais retiré des sauvegardes. Après une installation neuve, il faut donc se reconnecter ; une restauration sur le même serveur garde la connexion.
 
 ## Ensuite
 
@@ -108,7 +140,7 @@ Les sauvegardes automatiques (toutes les 30 minutes quand quelque chose a chang�
 rsync -a utilisateur@serveur:shidokan/data/sauvegardes/ ~/sauvegardes-shidokan/
 ```
 
-- **Les sauvegardes ne contiennent pas les comptes.** Après une restauration sur un nouveau serveur, recréez-les avec `cli.js add-user`, et refaites les réglages d'envoi des mails.
+- **Les sauvegardes ne contiennent pas les comptes.** Après une restauration sur un nouveau serveur, recréez-les avec `cli.js add-user`, et refaites les réglages d'envoi des mails (reconnectez le compte Google).
 - **N'ouvrez jamais `data/shidokan.sqlite` avec un autre programme depuis l'hôte** pendant que l'application tourne. Utilisez les fichiers de `data/sauvegardes/` ou « Télécharger la base complète ». La commande `docker compose exec app …` (le CLI des comptes), elle, est sans risque.
 
 ## Variante : un serveur web existe déjà sur les ports 80 et 443
