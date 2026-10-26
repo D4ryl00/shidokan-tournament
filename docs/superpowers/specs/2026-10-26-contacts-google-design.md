@@ -88,11 +88,11 @@ Pour chaque club **lié** dont le contact (dans le libellé choisi) diffère de 
 - 💡 Deux téléphones qui ne diffèrent que par l'écriture (espaces, points, `+33 6…` contre `06…`) ne sont pas une différence. Deux mails qui ne diffèrent que par les majuscules non plus. La valeur prise est celle de Google telle qu'écrite.
 - 💡 Pour un contact qui a plusieurs mails ou téléphones, on prend le **principal** (celui marqué comme tel dans Google, sinon le premier).
 - 💡 Nom du coach : le nom affiché du contact (`displayName`).
-- 💡 Clubs **archivés** : laissés de côté, jamais affichés ni modifiés (leurs coordonnées ont été effacées au titre du RGPD). Si leur contact est encore dans Google, il n'apparaît pas non plus parmi les nouveaux contacts.
+- 💡 Clubs **archivés** : laissés de côté, jamais affichés ni modifiés (leurs coordonnées ont été effacées au titre du RGPD). Comme l'archivage efface le lien (§4), leur ancien contact redevient un nouveau contact, qu'on peut lier à un autre club (le coach a changé de club) ou laisser en attente.
 - 💡 Un club lié dont le contact n'est plus dans le libellé, ou a été supprimé de Google : rien ne change dans l'annuaire, et le lien est gardé.
 
 ### 5.3 Nouveaux contacts
-Chaque contact du libellé qui n'est lié à **aucun** club (archivé ou non) et qui n'est pas « en attente » est montré avec son nom, son mail et son téléphone. Pour chacun, un choix :
+Chaque contact du libellé qui n'est lié à **aucun** club et qui n'est pas « en attente » est montré avec son nom, son mail et son téléphone. Pour chacun, un choix :
 
 - **Lier à un club existant** ✅ : liste des clubs non archivés de l'annuaire. 💡 Un club déjà lié à un autre contact y figure avec la mention « lié à <contact> » ; le choisir remplace son lien.
   - 💡 **Présélection seulement sur une concordance exacte** : le club dont le coach a le même mail, sinon le même téléphone (écritures équivalentes, §5.2), est présélectionné avec la raison (« même mail »).
