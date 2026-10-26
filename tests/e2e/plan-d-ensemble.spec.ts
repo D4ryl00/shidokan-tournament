@@ -253,13 +253,27 @@ test('annuler un calcul long : le plan affiché est signalé périmé, « Relanc
   await ladder.locator('[data-testid="ladder-row"][data-rule="mixSexes"]').getByTestId('ladder-switch').click({ force: true });
   await expect(apply).toBeDisabled();
   await expect(page.getByText('Calcul du plan', { exact: false }).first()).toBeVisible();
+  const aborted = page.waitForEvent('requestfailed', (r) => r.url().includes('/replacement/plan'));
   await page.getByRole('button', { name: 'Annuler le calcul' }).click();
   const message = page.getByText('Calcul annulé : le plan affiché ne tient pas compte de votre dernier changement.');
-  await expect(message).toBeVisible();
+  // L'annulation arrête vraiment la demande (et ne se contente pas de lever un drapeau).
+  await aborted;
+  await expect(message).toBeVisible({ timeout: 1000 });
   await expect(apply).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Annuler le calcul' })).toHaveCount(0);
   await page.unroute('**/replacement/plan', slow);
   await page.getByRole('button', { name: 'Relancer le calcul' }).click();
+  await expect(message).toHaveCount(0);
+  await expect(apply).toBeEnabled();
+
+  // Annuler de nouveau, puis un geste : tout calcul complet efface l’annulation, même pour le même choix.
+  await page.route('**/replacement/plan', slow);
+  const sw = ladder.locator('[data-testid="ladder-row"][data-rule="mixSexes"]').getByTestId('ladder-switch');
+  await sw.click({ force: true });
+  await page.getByRole('button', { name: 'Annuler le calcul' }).click();
+  await expect(message).toBeVisible();
+  await page.unroute('**/replacement/plan', slow);
+  await sw.click({ force: true });
   await expect(message).toHaveCount(0);
   await expect(apply).toBeEnabled();
 });

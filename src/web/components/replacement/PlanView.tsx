@@ -64,7 +64,7 @@ const numberStyle = (color: string): CSSProperties => ({
  * Les choix (épingles et « Modifier ») sont des données de la page ; les refus sont enregistrés sur le serveur.
  */
 export function PlanView({
-  id, waveId, data, choices, onChoices, dropped, busy, fighter, targets,
+  id, waveId, data, choices, onChoices, dropped, busy, cancelled, fighter, targets,
 }: {
   id: string;
   waveId: string | null;
@@ -75,6 +75,8 @@ export function PlanView({
   dropped: string[];
   /** Un recalcul est en cours : les gestes attendent. */
   busy: boolean;
+  /** Calcul annulé : le plan affiché est périmé, on ne l'applique pas (les autres gestes relancent le calcul). */
+  cancelled: boolean;
   fighter: (registrationId: string) => PlanFighter;
   /** Catégories proposées à « Modifier » ; `null` : pas de « Modifier » pour ce déplacement. */
   targets: (move: PlanMove) => ComboboxData | null;
@@ -232,7 +234,7 @@ export function PlanView({
         <Text size="sm">Restent seuls{' '}<b className="num">{plan.alone.length}</b>{' '}<Text span size="sm" c="dimmed">(au lieu de {plan.aloneBefore})</Text></Text>
         <Text size="sm">Déplacements{' '}<b className="num">{plan.moves.length}</b></Text>
         <Text size="sm">Validés{' '}<b className="num">{validatedCount} / {manualMoves.length}</b></Text>
-        <Button size="xs" data-testid="plan-apply" onClick={openApply} loading={forApply.isPending} disabled={busy}>Appliquer le plan</Button>
+        <Button size="xs" data-testid="plan-apply" onClick={openApply} loading={forApply.isPending} disabled={busy || cancelled}>Appliquer le plan</Button>
       </Group>
       <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error} />
 

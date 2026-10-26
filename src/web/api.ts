@@ -18,20 +18,8 @@ import type { AppSettingsPatch, PublicAppSettings } from '../domain/app-settings
 import type { Zone, ZoneInput } from '../domain/zones.js';
 import type { PassagePlan } from '../domain/passages/index.js';
 
-export class ApiError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-    readonly issues: string[] = [],
-    /** Refus que l'écran traite à part (par exemple RESCUE_DIVERGED). */
-    readonly code?: string,
-  ) {
-    super(message);
-  }
-}
-
-/** Identifiant de cet onglet : envoyé avec chaque écriture, il évite à l'onglet de se recharger pour sa propre écriture. */
-export const TAB_ID = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Math.random()).slice(2);
+import { ApiError, TAB_ID } from './apiError.js';
+export { ApiError, TAB_ID };
 
 /** `rev` : révision de la donnée telle que l'écran l'a lue (null : elle n'existait pas) ; envoyée en If-Match. */
 export async function api<T>(method: string, url: string, body?: unknown, opts: { rev?: string | null } = {}): Promise<T> {
@@ -440,30 +428,33 @@ const planBody = (waveId: string | null, choices: PlanChoice[]) => ({ ...(waveId
  */
 export function usePlan(id: string, waveId: string | null, choices: PlanChoice[], enabled: boolean) {
   const qc = useQueryClient();
-  const [progress, setProgress] = useState<LadderProgress | null>(null);
+  // L'avancement porte la clé du calcul : celui d'un calcul abandonné ne s'affiche jamais pour le suivant.
+  const [progress, setProgress] = useState<{ key: string; p: LadderProgress | null } | null>(null);
   const queryKey = ['replacement-plan', id, waveId, choices];
   const keyText = JSON.stringify(queryKey);
-  const [cancelledKey, setCancelledKey] = useState<string | null>(null);
+  const [cancelledAt, setCancelledAt] = useState<{ key: string; updatedAt: number } | null>(null);
   const query = useQuery({
     queryKey,
     queryFn: ({ signal }) => {
-      setProgress(null);
+      setProgress({ key: keyText, p: null });
       return fetchPlanStream(`/api/competitions/${id}/replacement/plan`, planBody(waveId, choices), {
         signal,
-        onProgress: (p) => { if (!signal.aborted) setProgress(p); },
+        onProgress: (p) => { if (!signal.aborted) setProgress({ key: keyText, p }); },
       });
     },
     enabled,
     placeholderData: keepPreviousData,
+    // Les événements des autres postes et les gestes le tiennent à jour : un calcul au retour sur l'onglet serait du travail perdu.
+    refetchOnWindowFocus: false,
   });
-  // Annulé tant qu'aucun nouveau calcul n'est reparti pour ce même choix.
-  const cancelled = cancelledKey === keyText && !query.isFetching;
+  // Annulé tant qu'aucun calcul complet n'est arrivé pour ce même choix (le plan affiché date d'avant l'annulation).
+  const cancelled = cancelledAt?.key === keyText && cancelledAt.updatedAt === query.dataUpdatedAt && !query.isFetching;
   return {
     ...query,
-    progress: query.isFetching ? progress : null,
+    progress: query.isFetching && progress?.key === keyText ? progress.p : null,
     cancelled,
-    cancel: () => { setCancelledKey(keyText); void qc.cancelQueries({ queryKey }); },
-    restart: () => { setCancelledKey(null); void query.refetch(); },
+    cancel: () => { setCancelledAt({ key: keyText, updatedAt: query.dataUpdatedAt }); void qc.cancelQueries({ queryKey }); },
+    restart: () => { setCancelledAt(null); void query.refetch(); },
   };
 }
 /** Le plan à appliquer (sans validation) et son aperçu ; `signal` annule le calcul (fermeture de la confirmation). */

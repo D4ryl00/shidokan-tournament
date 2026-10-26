@@ -1,5 +1,6 @@
 import type { LadderProgress } from '../domain/replacement/plan.js';
-import { ApiError, TAB_ID, type PlanResponse } from './api.js';
+import { ApiError, TAB_ID } from './apiError.js';
+import type { PlanResponse } from './api.js';
 
 /**
  * Découpe un flux NDJSON en lignes JSON : une ligne à cheval sur deux morceaux n'est rendue qu'une fois entière,
@@ -58,12 +59,17 @@ export async function fetchPlanStream(
   if (res.body) {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      handle(lines.push(decoder.decode(value, { stream: true })));
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        handle(lines.push(decoder.decode(value, { stream: true })));
+      }
+      handle(lines.push(decoder.decode()));
+    } finally {
+      // Ligne d'erreur ou annulation : le flux est libéré (sans effet s'il est déjà fini).
+      void reader.cancel().catch(() => {});
     }
-    handle(lines.push(decoder.decode()));
   } else {
     handle(lines.push(await res.text()));
   }
