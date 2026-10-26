@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { applyAll, applyProposal, bulkPlan, casesOfWave, categoryWave, detectCases, isClosedTarget, isLocked, memberWave, stateFingerprint } from '../../domain/replacement/index.js';
+import { applyAll, applyProposal, casesOfWave, categoryWave, detectCases, isClosedTarget, isLocked, memberWave, stateFingerprint } from '../../domain/replacement/index.js';
 import type { AppDb } from '../db/client.js';
 import { applyRulesView, rulesView, rulesViewSchema } from '../../domain/replacement/rules.js';
 import { getAppSettings } from '../repositories/app-settings.js';
@@ -9,8 +9,8 @@ import {
   allProposals,
   displayedProposals,
   applyProposalById,
-  bulkApply,
-  bulkWave,
+  applyPlan,
+  planResponse,
   closeWeighIn,
   knownWave,
   findProposal,
@@ -30,7 +30,11 @@ import {
   weighInList, fighterPresence } from '../repositories/replacement.js';
 
 type P = { Params: { id: string } };
-const mode = z.enum(['simple', 'all']);
+const planChoice = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('validate'), proposalId: z.string(), caseId: z.string() }),
+  z.object({ kind: z.literal('manual'), registrationId: z.string(), categoryId: z.string() }),
+]);
+const choices = z.array(planChoice).max(500);
 
 export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppDb }) {
   app.addHook('preHandler', async (req, reply) => {
@@ -129,7 +133,7 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
 
   app.post<P>('/api/competitions/:id/replacement/preview', async (req) => {
     const body = z
-      .union([z.object({ proposalId: z.string() }), z.object({ bulk: mode, waveId: z.string().optional() }), z.object({ move: z.object({ registrationId: z.string(), categoryId: z.string() }) })])
+      .union([z.object({ proposalId: z.string() }), z.object({ move: z.object({ registrationId: z.string(), categoryId: z.string() }) })])
       .parse(req.body);
     const state = await loadState(db, req.params.id);
     if ('move' in body) {
@@ -140,8 +144,6 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
       const p = findProposal(state, body.proposalId);
       return { steps: [{ proposal: p, manual: p.manual }], categories: previewTransition(state, applyAll(state, p)) };
     }
-    const plan = bulkPlan(state, body.bulk, await bulkWave(db, req.params.id, body.waveId));
-    return { steps: plan.steps, categories: previewTransition(state, plan.final), unresolved: plan.unresolved.length };
   });
 
   app.post<P>('/api/competitions/:id/replacement/apply', async (req, reply) => {
@@ -150,9 +152,15 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
     return reply.status(200).send({ ok: true });
   });
 
-  app.post<P>('/api/competitions/:id/replacement/bulk', async (req) => {
-    const body = z.object({ mode, fingerprint: z.string(), waveId: z.string().optional() }).parse(req.body);
-    return bulkApply(db, req.params.id, body.mode, body.fingerprint, body.waveId);
+  /** Plan d'ensemble de la réaffectation (diagramme et plan), ou, avec `forApply`, plan à appliquer et aperçu. */
+  app.post<P>('/api/competitions/:id/replacement/plan', async (req) => {
+    const body = z.object({ waveId: z.string().optional(), choices, forApply: z.boolean().optional() }).strict().parse(req.body);
+    return planResponse(db, req.params.id, body);
+  });
+
+  app.post<P>('/api/competitions/:id/replacement/plan/apply', async (req) => {
+    const body = z.object({ waveId: z.string().optional(), choices, fingerprint: z.string(), hash: z.string() }).strict().parse(req.body);
+    return applyPlan(db, req.params.id, body);
   });
 
   app.post<P>('/api/competitions/:id/replacement/refuse', async (req) => {

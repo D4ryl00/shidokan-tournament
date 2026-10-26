@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
-import { applyAll, bulkPlan } from '../../../src/domain/replacement/apply.js';
+import { applyAll } from '../../../src/domain/replacement/apply.js';
+import { computePlan } from '../../../src/domain/replacement/plan.js';
 import { detectCases } from '../../../src/domain/replacement/detect.js';
 import { proposalsFor } from '../../../src/domain/replacement/propose.js';
 import type { State } from '../../../src/domain/replacement/types.js';
@@ -59,7 +60,7 @@ test("déplacé hors d'une catégorie fermée : pas de retour", () => {
 
 test('classement automatique : déplace un combattant de catégorie fermée', () => {
   const { s, a } = closedFixture();
-  expect(bulkPlan(s, 'all').steps.some((step) => step.proposal.caseId === `closed:${a.registrationId}`)).toBe(true);
+  expect(computePlan(s, { waveId: null, level: 'minorsAdults', choices: [] }).moves.some((step) => step.caseId === `closed:${a.registrationId}`)).toBe(true);
 });
 
 test("retour vers une catégorie d'origine fermée : pas de carte « Retour possible »", () => {

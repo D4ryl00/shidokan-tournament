@@ -6,7 +6,8 @@ import { weightClassesFor } from '../../../src/domain/grid.js';
 import { detectCases } from '../../../src/domain/replacement/detect.js';
 import { moveViolations, proposalsFor } from '../../../src/domain/replacement/propose.js';
 import { defaultSettings } from '../../../src/domain/settings.js';
-import { applyAll, applyProposal, bulkPlan } from '../../../src/domain/replacement/apply.js';
+import { applyAll, applyProposal } from '../../../src/domain/replacement/apply.js';
+import { computePlan } from '../../../src/domain/replacement/plan.js';
 import type { Member, Proposal, State } from '../../../src/domain/replacement/types.js';
 import { makeState, member } from './fixtures.js';
 
@@ -236,7 +237,7 @@ describe('corrections de la relecture (étape 5)', () => {
     const gapCase = detectCases(s).find((c) => c.kind === 'weight_gap')!;
     s = applyProposal(s, proposalsFor(s, gapCase)[0]!);
     expect(detectCases(s).filter((c) => c.kind === 'return')).toEqual([]);
-    expect(bulkPlan(s, 'simple').steps).toEqual([]);
+    expect(computePlan(s, { waveId: null, level: 'minorsAdults', choices: [], forApply: true }).moves).toEqual([]);
   });
   test('un combattant plus léger que sa catégorie n’est pas « hors catégorie »', () => {
     const a = member({ weightClassId: 'cadet:F:-61', weighInKg: 50, presence: 'present' });
@@ -299,8 +300,13 @@ describe('split : le combattant seul reçoit les plus lourds de la catégorie du
     expect(after.members.filter((m) => m.categoryId === alone.categoryId)).toHaveLength(3);
     expect(after.members.find((m) => m.registrationId === below[3]!.registrationId)!.original?.reason).toBe('pulled');
     expect(detectCases(after).some((c) => c.kind === 'alone' || c.kind === 'return')).toBe(false);
-    expect(bulkPlan(s, 'simple').steps).toEqual([]);
-    expect(bulkPlan(s, 'all').steps.map((x) => x.proposal.registrationId)).toEqual([alone.registrationId]);
+    // Le « split » fait partie du plan d'ensemble : il se fait sans validation.
+    const applied = computePlan(s, { waveId: null, level: 'minorsAdults', choices: [], forApply: true });
+    expect(applied.moves).toHaveLength(1);
+    expect(applied.moves[0]).toMatchObject({ type: 'A', manual: false, registrationId: below[3]!.registrationId });
+    expect(applied.moves[0]!.rules).toEqual(['split']);
+    expect(applied.aloneAfter).toEqual([]);
+    expect(computePlan(s, { waveId: null, level: 'minorsAdults', choices: [] }).aloneAfter).toEqual([]);
   });
   test('il en reste au moins deux dans la catégorie du dessous ; jamais vers le bas', () => {
     const alone = sen(85, 'senior:M:+84');

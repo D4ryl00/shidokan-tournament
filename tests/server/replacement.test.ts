@@ -34,6 +34,21 @@ type Replacement = {
   fingerprint: string;
   recasements: { id: string; registrationId: string; type: string; status: string; reason: string }[];
 };
+type Choice = { kind: 'validate'; proposalId: string; caseId: string } | { kind: 'manual'; registrationId: string; categoryId: string };
+type PlanBody = { waveId?: string; choices?: Choice[]; forApply?: boolean };
+type PlanOut = {
+  view: { order: string[]; cutAfter: string };
+  rows: { rule: string | null; on: boolean; alone: number | null; moves: number; toValidate: number; proven: boolean }[];
+  plan: { moves: { id: string; registrationId: string; type: string; manual: boolean; anchor: string | null; validated: boolean }[]; aloneBefore: number; alone: string[]; onCards: string[]; dropped: unknown[]; proven: boolean; hash: string; refused: { proposalId: string; registrationId: string; reason: string }[] };
+  categories?: { label: string; before: string[][]; after: string[][] }[];
+  fingerprint: string;
+};
+const plan = async (body: PlanBody = {}) => (await call('POST', '/replacement/plan', { choices: [], ...body })).json() as PlanOut;
+/** Plan à appliquer (sans validation), puis application avec son empreinte et son hash. */
+const applyPlan = async (body: PlanBody = {}) => {
+  const p = await plan({ ...body, forApply: true });
+  return call('POST', '/replacement/plan/apply', { waveId: body.waveId, choices: body.choices ?? [], fingerprint: p.fingerprint, hash: p.plan.hash });
+};
 const replacement = async () => (await call('GET', '/replacement')).json() as Replacement;
 type Cat = { id: string; label: string; registrationIds: string[]; bracket: { entrants: { registrationId: string }[] } | null };
 const categories = async () => (await call('GET', '/categories')).json() as Cat[];
@@ -103,19 +118,109 @@ test('annulation : remet l’inscription en place', async () => {
   expect(r.recasements[0]!.status).toBe('undone');
 });
 
-test('masse : simple avec empreinte ; empreinte périmée → 409', async () => {
+test('plan : diagramme, plan et empreinte', async () => {
   await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
   await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 49 });
-  await reg({ ageBandCode: 'minime', weightClassId: 'minime:F:-45', approxWeightKg: 45 });
+  const p = await plan();
+  expect(p.rows[0]).toMatchObject({ rule: null, on: true, alone: 2, moves: 0 });
+  expect(p.rows.length).toBe(p.view.order.length + 1);
+  expect(p.plan.moves.length).toBeGreaterThan(0);
+  expect(p.plan).toMatchObject({ aloneBefore: 2, alone: [], refused: [], dropped: [] });
+  expect(typeof p.plan.hash).toBe('string');
+  expect(p.categories).toBeUndefined();
+  expect(p.fingerprint).toBe((await replacement()).fingerprint);
+  // Sans effet sur la base.
+  expect((await categories()).map((c) => c.registrationIds.length)).toEqual([1, 1]);
+});
+
+test('plan à appliquer : pas de diagramme, aperçu avant / après', async () => {
+  await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 49 });
+  const p = await plan({ forApply: true });
+  expect(p.rows).toEqual([]);
+  expect(p.categories!.some((c) => c.after.flat().length === 2)).toBe(true);
+});
+
+test('plan : les propositions refusées des cas ouverts sont listées', async () => {
+  const a = await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 49 });
   const r = await replacement();
-  expect((await call('POST', '/replacement/bulk', { mode: 'simple', fingerprint: 'périmée' })).statusCode).toBe(409);
-  const res = await call('POST', '/replacement/bulk', { mode: 'simple', fingerprint: r.fingerprint });
+  const pid = r.proposals[r.cases.find((x) => x.registrationId === a.id)!.id]![0]!.id;
+  await call('POST', '/replacement/refuse', { proposalId: pid });
+  const p = await plan();
+  expect(p.plan.refused).toEqual([{ proposalId: pid, registrationId: a.id, reason: expect.any(String) }]);
+});
+
+test('plan : 501 choix refusés', async () => {
+  const choices = Array.from({ length: 501 }, () => ({ kind: 'manual', registrationId: 'x', categoryId: 'y' }));
+  expect((await call('POST', '/replacement/plan', { choices })).statusCode).toBe(400);
+});
+
+test('appliquer : sans validation et validés seulement, journal « en masse »', async () => {
+  await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 49 });
+  const mini = await reg({ ageBandCode: 'minime', weightClassId: 'minime:F:-45', approxWeightKg: 45 });
+  const res = await applyPlan();
   expect(res.json()).toEqual({ applied: 1 });
-  const after = await replacement();
-  expect(after.cases).toHaveLength(1); // la minime reste (cas manuel)
-  const all = await call('POST', '/replacement/bulk', { mode: 'all', fingerprint: after.fingerprint });
-  expect(all.json().applied).toBe(1);
-  expect((await replacement()).cases).toEqual([]);
+  let r = await replacement();
+  expect(r.recasements.map((x) => x.type)).toEqual(['A']);
+  expect(r.recasements[0]!.registrationId).not.toBe(mini.id);
+  expect(r.cases.map((c) => c.registrationId)).toEqual([mini.id]); // la minime reste (cas à valider)
+  const c = r.cases[0]!;
+  const proposalId = r.proposals[c.id]![0]!.id;
+  expect(r.proposals[c.id]![0]!.type).toBe('C');
+  const choices: Choice[] = [{ kind: 'validate', proposalId, caseId: c.id }];
+  expect((await applyPlan({ choices })).json()).toEqual({ applied: 1 });
+  r = await replacement();
+  expect(r.cases).toEqual([]);
+  const entry = (await call('GET', '/replacement')).json().recasements.find((x: { registrationId: string }) => x.registrationId === mini.id);
+  expect(entry).toMatchObject({ type: 'C', manual: true, bulk: true });
+});
+
+test('appliquer un plan périmé : 409, rien d’appliqué', async () => {
+  const a = await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 49 });
+  const p = await plan({ forApply: true });
+  await call('PUT', `/weigh-in/${a.fighterId}`, { weighInKg: 47 });
+  const res = await call('POST', '/replacement/plan/apply', { choices: [], fingerprint: p.fingerprint, hash: p.plan.hash });
+  expect(res.statusCode).toBe(409);
+  expect((await replacement()).recasements).toEqual([]);
+  expect((await call('POST', '/replacement/plan/apply', { choices: [], fingerprint: 'périmée', hash: p.plan.hash })).statusCode).toBe(409);
+});
+
+test('appliquer un plan qui a changé : 409', async () => {
+  await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 49 });
+  const p = await plan({ forApply: true });
+  const res = await call('POST', '/replacement/plan/apply', { choices: [], fingerprint: p.fingerprint, hash: 'autre' });
+  expect(res.statusCode).toBe(409);
+  expect(res.json().error).toBe('Le plan a changé depuis l’affichage : relisez-le avant de l’appliquer.');
+  expect((await replacement()).recasements).toEqual([]);
+});
+
+test('nouvelle catégorie puis un autre combattant qui la rejoint : appliqué en entier', async () => {
+  // X pèse 58 kg (inscrit -54). L'organisateur valide sa correction vers une catégorie -61 vide (nouvelle) ;
+  // Y, seule en +61, la rejoint ensuite : son déplacement vise une catégorie qui n'existe pas encore en base.
+  const x = await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 52 });
+  await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 52 });
+  await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 52 });
+  const y = await reg({ weightClassId: 'cadet:F:+61', approxWeightKg: 62 });
+  await call('PUT', `/weigh-in/${x.fighterId}`, { weighInKg: 58 });
+  const r = await replacement();
+  const c = r.cases.find((k) => k.kind === 'weight_out' && k.registrationId === x.id)!;
+  const toNew = (r.proposals[c.id] as unknown as { id: string; target: object }[]).find((p) => 'newKey' in p.target)!;
+  const choices: Choice[] = [{ kind: 'validate', proposalId: toNew.id, caseId: c.id }];
+  const before = await plan({ forApply: true, choices });
+  expect(before.plan.moves.map((m) => m.registrationId)).toEqual([x.id, y.id]);
+  expect(before.plan.moves[0]).toMatchObject({ validated: true, anchor: null });
+  expect(before.plan.moves[1]!.anchor).toBe(x.id);
+  expect(before.plan.alone).toEqual([]);
+  expect((await applyPlan({ choices })).json()).toEqual({ applied: 2 });
+  const cats = await categories();
+  expect(cats.map((k) => k.registrationIds.length).sort()).toEqual([2, 2]);
+  expect(cats.find((k) => k.registrationIds.includes(x.id))!.registrationIds).toContain(y.id);
+  const journal = (await replacement()).recasements;
+  expect(journal.map((e) => e.registrationId).sort()).toEqual([x.id, y.id].sort());
 });
 
 test('aperçu : avant / après sans modifier la base', async () => {
@@ -128,8 +233,12 @@ test('aperçu : avant / après sans modifier la base', async () => {
   // Avant : chacune seule dans sa catégorie (et non une liste vide).
   expect(prev.categories.flatMap((c) => c.before).filter((x) => x.length === 1)).toHaveLength(2);
   expect((await categories()).map((c) => c.registrationIds.length)).toEqual([1, 1]);
-  const bulk = (await call('POST', '/replacement/preview', { bulk: 'all' })).json() as { steps: { manual: boolean }[] };
-  expect(bulk.steps.length).toBeGreaterThan(0);
+  // L'aperçu « en masse » n'existe plus : le plan d'ensemble a sa propre route.
+  expect((await call('POST', '/replacement/preview', { bulk: 'all' })).statusCode).toBe(400);
+});
+
+test('la route en masse n’existe plus', async () => {
+  expect((await call('POST', '/replacement/bulk', { mode: 'all', fingerprint: 'x' })).statusCode).toBe(404);
 });
 
 test('refus : la proposition n’est plus applicable', async () => {
@@ -153,7 +262,7 @@ test('déplacement manuel hors règles : effectué avec avertissement', async ()
   expect((await categories())[0]!.registrationIds).toHaveLength(2);
 });
 
-test('catégorie lancée : jamais cible ni modifiée par la réaffectation en masse', async () => {
+test('catégorie lancée : jamais cible ni modifiée par le plan d’ensemble', async () => {
   await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
   const b = await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
   await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
@@ -161,7 +270,7 @@ test('catégorie lancée : jamais cible ni modifiée par la réaffectation en ma
   await call('PATCH', `/categories/${cat54.id}`, { status: 'started' });
   const r = await replacement();
   expect(Object.values(r.proposals).flat().some((p) => p.id.includes(cat54.id))).toBe(false);
-  await call('POST', '/replacement/bulk', { mode: 'all', fingerprint: r.fingerprint });
+  await applyPlan();
   expect((await categories()).find((c) => c.id === cat54.id)!.registrationIds).toHaveLength(2);
 });
 
@@ -517,35 +626,37 @@ describe('réaffectation par session', () => {
     expect(await waveOfReg(mini.id)).toBe(matin);
   });
 
-  test('validation globale de la session : changements de session exclus ; sans session alors qu’il y en a → 400', async () => {
+  test('sessions : waveId obligatoire, inconnu 404, une seule session traitée', async () => {
     const { mini, alone, matin, aprem } = await setup();
-    let r = await ofWave(matin);
-    const preview = (await call('POST', '/replacement/preview', { bulk: 'all', waveId: matin })).json() as { steps: unknown[]; unresolved: number };
-    expect(preview).toMatchObject({ steps: [], unresolved: 1 });
-    expect((await call('POST', '/replacement/bulk', { mode: 'all', fingerprint: r.fingerprint, waveId: matin })).json()).toEqual({ applied: 0 });
+    // Matin : la minime n'a que des propositions qui changent de session, le plan n'y touche pas.
+    const forMatin = await plan({ waveId: matin });
+    expect(forMatin.plan.moves).toEqual([]);
+    expect(forMatin.plan.alone).toEqual([mini.id]);
+    expect((await applyPlan({ waveId: matin })).json()).toEqual({ applied: 0 });
     expect((await ofWave(matin)).cases.map((c) => c.registrationId)).toEqual([mini.id]);
 
-    expect((await call('POST', '/replacement/bulk', { mode: 'all', fingerprint: r.fingerprint })).statusCode).toBe(400);
-    expect((await call('POST', '/replacement/preview', { bulk: 'all' })).statusCode).toBe(400);
-    expect((await call('POST', '/replacement/bulk', { mode: 'all', fingerprint: r.fingerprint, waveId: 'inconnue' })).statusCode).toBe(404);
+    expect((await call('POST', '/replacement/plan', { choices: [] })).statusCode).toBe(400);
+    expect((await call('POST', '/replacement/plan/apply', { choices: [], fingerprint: 'x', hash: 'x' })).statusCode).toBe(400);
+    expect((await call('POST', '/replacement/plan', { choices: [], waveId: 'inconnue' })).statusCode).toBe(404);
+    expect((await call('POST', '/replacement/plan/apply', { choices: [], fingerprint: 'x', hash: 'x', waveId: 'inconnue' })).statusCode).toBe(404);
 
-    r = await ofWave(aprem);
-    expect((await call('POST', '/replacement/preview', { bulk: 'simple', waveId: aprem })).json().steps).toHaveLength(1);
-    expect((await call('POST', '/replacement/bulk', { mode: 'simple', fingerprint: r.fingerprint, waveId: aprem })).json()).toEqual({ applied: 1 });
+    expect((await plan({ waveId: aprem, forApply: true })).plan.moves).toHaveLength(1);
+    expect((await applyPlan({ waveId: aprem })).json()).toEqual({ applied: 1 });
     expect((await ofWave(aprem)).cases).toEqual([]);
     expect((await replacement()).recasements.map((x) => x.registrationId)).toEqual([alone.id]);
   });
 
-  test('empreinte : sessions modifiées entre l’aperçu et la validation → 409', async () => {
+  test('empreinte : sessions modifiées entre le plan et son application → 409', async () => {
     const { aprem } = await setup();
-    const r = await ofWave(aprem);
+    const p = await plan({ waveId: aprem, forApply: true });
     const waves = (await call('GET', '/waves')).json() as { id: string; name: string; rules: { ageBandCodes: string[]; disciplines: string[] } }[];
     await call('PUT', '/waves', waves.map((w) => ({ id: w.id, name: w.name, rules: { ...w.rules, ageBandCodes: [...w.rules.ageBandCodes, 'espoir'] } })));
-    expect((await call('POST', '/replacement/bulk', { mode: 'all', fingerprint: r.fingerprint, waveId: aprem })).statusCode).toBe(409);
-    const r2 = await ofWave(aprem);
+    const apply = (q: PlanOut) => call('POST', '/replacement/plan/apply', { waveId: aprem, choices: [], fingerprint: q.fingerprint, hash: q.plan.hash });
+    expect((await apply(p)).statusCode).toBe(409);
+    const p2 = await plan({ waveId: aprem, forApply: true });
     const cat = ((await call('GET', '/categories')).json() as { id: string; waveId: string | null }[]).find((c) => c.waveId === aprem)!;
     await call('PATCH', `/categories/${cat.id}`, { waveOverride: 'none' });
-    expect((await call('POST', '/replacement/bulk', { mode: 'all', fingerprint: r2.fingerprint, waveId: aprem })).statusCode).toBe(409);
+    expect((await apply(p2)).statusCode).toBe(409);
   });
 
   test('changement de session entraîné : les réaffectés qui changent de session avec leur catégorie repassent « non pesé » ; annuler rétablit', async () => {
@@ -555,18 +666,18 @@ describe('réaffectation par session', () => {
     const cads = ((await call('GET', '/registrations')).json() as { id: string; fighterId: string; fighter: { lastName: string } }[]).filter((x) => x.fighter.lastName.startsWith('CAD'));
     for (const c of cads) await call('PUT', `/weigh-in/${c.fighterId}`, { weighInKg: 52, waveId: aprem });
     await call('PUT', `/weigh-in/${mini.fighterId}`, { presence: 'present', waveId: aprem });
-    r = await ofWave(aprem);
-    expect((await call('POST', '/replacement/bulk', { mode: 'simple', fingerprint: r.fingerprint, waveId: aprem })).json()).toEqual({ applied: 2 }); // CAD0 et SEULE
+    expect((await applyPlan({ waveId: aprem })).json()).toEqual({ applied: 2 }); // CAD0 et SEULE
     expect(await waveOfReg(mini.id)).toBe(aprem);
     r = await ofWave(aprem);
-    const last = r.cases.find((c) => c.registrationId === cads[1]!.id)!;
+    // Le plan a casé l'une des deux cadettes ; l'autre, dernière d'origine, est encore hors catégorie.
+    const last = r.cases.find((c) => c.kind === 'weight_out' && cads.some((x) => x.id === c.registrationId))!;
     const p = r.proposals[last.id]![0]!;
     expect(p.waveShifts).toMatchObject([{ registrationId: mini.id, from: aprem, to: matin }]);
     await call('POST', '/replacement/apply', { proposalId: p.id });
     expect(await waveOfReg(mini.id)).toBe(matin);
     expect((await regRow(mini.id)).presence).toBe('unknown');
-    expect((await regRow(cads[1]!.id)).presence).toBe('present');
-    const entry = (await replacement()).recasements.find((x) => x.registrationId === cads[1]!.id)!;
+    expect((await regRow(last.registrationId)).presence).toBe('present');
+    const entry = (await replacement()).recasements.find((x) => x.registrationId === last.registrationId)!;
     await call('POST', '/replacement/undo', { recasementId: entry.id });
     expect(await waveOfReg(mini.id)).toBe(aprem);
     expect((await regRow(mini.id)).presence).toBe('present');

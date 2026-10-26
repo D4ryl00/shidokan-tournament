@@ -8,13 +8,19 @@ import {
   applyProposal,
   proposalMoves,
   detectCases,
-  nextBulkStep,
   proposalsFor,
   stateFingerprint,
   isOverweight,
   overweightInCategory,
   recompute,
-  type BulkMode,
+  casesOfWave,
+  computePlan,
+  planLadder,
+  rulesView,
+  type PlanChoice,
+  type PlanMove,
+  type LadderRow,
+  type RulesView,
   type Member,
   type Presence,
   type Proposal,
@@ -295,29 +301,90 @@ export function knownWave(waves: Pick<Wave, 'id'>[], waveId: string | undefined)
 }
 
 /**
- * Vague d'une validation en masse : avec des vagues, elle se fait toujours dans une vague (400 sinon, 404 si inconnue) ;
+ * Vague du plan d'ensemble : avec des vagues, il se fait toujours dans une vague (400 sinon, 404 si inconnue) ;
  * sans vague, `null` (tous les cas).
  */
-export async function bulkWave(db: AppDb, competitionId: string, waveId: string | undefined): Promise<string | null> {
+export async function planWave(db: AppDb, competitionId: string, waveId: string | undefined): Promise<string | null> {
   const all = await listWaves(db, competitionId);
   if (waveId) return knownWave(all, waveId);
   if (all.length > 0) throw new RegistrationValidationError(['Choisissez la session de la réaffectation (rechargez la page si les sessions viennent d’être créées).']);
   return null;
 }
 
-export async function bulkApply(db: AppDb, competitionId: string, mode: BulkMode, fingerprint: string, waveId?: string): Promise<{ applied: number }> {
-  const wave = await bulkWave(db, competitionId, waveId);
+export interface PlanResponse {
+  view: RulesView;
+  /** Vide pour un plan à appliquer. */
+  rows: LadderRow[];
+  plan: {
+    moves: PlanMove[];
+    aloneBefore: number;
+    alone: string[];
+    onCards: string[];
+    dropped: PlanChoice[];
+    proven: boolean;
+    hash: string;
+    refused: { proposalId: string; registrationId: string; reason: string }[];
+  };
+  categories?: ReturnType<typeof previewTransition>;
+  fingerprint: string;
+}
+
+/** Plan d'ensemble de la session : le diagramme et le plan de la ligne de coupure, ou (`forApply`) le plan à appliquer et son aperçu. */
+export async function planResponse(db: AppDb, competitionId: string, body: { waveId?: string; choices: PlanChoice[]; forApply?: boolean }): Promise<PlanResponse> {
+  const waveId = await planWave(db, competitionId, body.waveId);
+  const state = await loadState(db, competitionId);
+  const { cutAfter } = state.settings.replacementRules;
+  const forApply = body.forApply === true;
+  const { rows, plan } = forApply
+    ? { rows: [] as LadderRow[], plan: computePlan(state, { waveId, level: cutAfter, choices: body.choices, forApply: true }) }
+    : planLadder(state, { waveId, choices: body.choices });
+  const refused: PlanResponse['plan']['refused'] = [];
+  for (const [, list] of displayedProposals(state, casesOfWave(state, detectCases(state), waveId))) {
+    for (const p of list) if (p.refused) refused.push({ proposalId: p.id, registrationId: p.registrationId, reason: p.reason });
+  }
+  return {
+    view: rulesView(state.settings),
+    rows,
+    plan: {
+      moves: plan.moves,
+      aloneBefore: plan.aloneBefore.length,
+      alone: plan.aloneAfter,
+      onCards: plan.onCards,
+      dropped: plan.dropped,
+      proven: plan.proven,
+      hash: plan.hash,
+      refused,
+    },
+    ...(forApply ? { categories: previewTransition(state, plan.final) } : {}),
+    fingerprint: stateFingerprint(state),
+  };
+}
+
+/**
+ * Applique le plan à appliquer (sans validation, plus les choix) : l'empreinte et le hash doivent être ceux de l'affichage.
+ * Chaque déplacement part de l'état rechargé ; une catégorie créée par un déplacement précédent (`new:…`) se retrouve par son ancre.
+ */
+export async function applyPlan(
+  db: AppDb,
+  competitionId: string,
+  body: { waveId?: string; choices: PlanChoice[]; fingerprint: string; hash: string },
+): Promise<{ applied: number }> {
+  const waveId = await planWave(db, competitionId, body.waveId);
   let state = await loadState(db, competitionId);
-  if (stateFingerprint(state) !== fingerprint) throw new StaleProposalError();
-  const moved = new Set<string>();
+  if (stateFingerprint(state) !== body.fingerprint) throw new StaleProposalError();
+  const plan = computePlan(state, { waveId, level: state.settings.replacementRules.cutAfter, choices: body.choices, forApply: true });
+  if (plan.hash !== body.hash) throw new StaleProposalError('Le plan a changé depuis l’affichage : relisez-le avant de l’appliquer.');
   let applied = 0;
-  for (let guard = 0; guard <= state.members.length; guard++) {
-    const p = nextBulkStep(state, mode, moved, wave);
-    if (!p) break;
-    persistAll(db, competitionId, state, p, { bulk: true });
-    for (const x of proposalMoves(p)) moved.add(x.registrationId);
-    applied++;
+  for (const move of plan.moves) {
     state = await loadState(db, competitionId);
+    let p: Proposal = move;
+    if ('categoryId' in move.target && move.target.categoryId.startsWith('new:') && move.anchor) {
+      const categoryId = state.members.find((m) => m.registrationId === move.anchor)?.categoryId;
+      if (!categoryId) throw new StaleProposalError('Le plan a changé depuis l’affichage : relisez-le avant de l’appliquer.');
+      p = { ...move, target: { categoryId } };
+    }
+    persistAll(db, competitionId, state, p, { bulk: true });
+    applied++;
   }
   return { applied };
 }

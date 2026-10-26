@@ -1,46 +1,7 @@
 import { keyString } from '../categories.js';
-import { detectCases } from './detect.js';
-import { proposalsFor } from './propose.js';
-import { applyAll, proposalMoves } from './move.js';
-import type { Case, Proposal, State } from './types.js';
-import { casesOfWave } from './waves.js';
+import type { State } from './types.js';
 
 export { applyAll, applyProposal, proposalMoves, recompute } from './move.js';
-
-export type BulkMode = 'simple' | 'all';
-export interface BulkStep {
-  proposal: Proposal;
-  manual: boolean;
-}
-
-/**
- * Prochaine étape d'un recasement en masse : meilleure proposition sans changement de vague (ni du combattant, ni entraîné), ni « split », du premier cas traitable
- * de la vague (`null` : toutes), hors inscriptions déjà déplacées et cartes mises de côté. Un changement de vague se valide un par un.
- */
-export function nextBulkStep(state: State, mode: BulkMode, moved: Set<string>, waveId: string | null = null): Proposal | null {
-  for (const c of casesOfWave(state, detectCases(state), waveId)) {
-    if (moved.has(c.registrationId) || state.setAside.includes(c.id)) continue;
-    // Un « split » déplace des combattants qui n'étaient pas des cas : jamais en masse.
-    const p = proposalsFor(state, c).find((x) => !x.waveChange && x.waveShifts.length === 0 && x.registrationId === c.registrationId && (mode === 'all' || !x.manual));
-    if (p) return p;
-  }
-  return null;
-}
-
-/** Applique la meilleure proposition du premier cas traitable, recalcule, recommence ; une étape par inscription au plus. */
-export function bulkPlan(state: State, mode: BulkMode, waveId: string | null = null): { steps: BulkStep[]; final: State; unresolved: Case[] } {
-  let current = state;
-  const steps: BulkStep[] = [];
-  const moved = new Set<string>();
-  for (let guard = 0; guard <= state.members.length; guard++) {
-    const p = nextBulkStep(current, mode, moved, waveId);
-    if (!p) break;
-    current = applyAll(current, p);
-    steps.push({ proposal: p, manual: p.manual });
-    for (const x of proposalMoves(p)) moved.add(x.registrationId);
-  }
-  return { steps, final: current, unresolved: casesOfWave(current, detectCases(current), waveId) };
-}
 
 export function stateFingerprint(state: State): string {
   const data = JSON.stringify({

@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { detectCases } from '../../../src/domain/replacement/detect.js';
 import { proposalsFor } from '../../../src/domain/replacement/propose.js';
-import { applyProposal, bulkPlan, stateFingerprint } from '../../../src/domain/replacement/apply.js';
+import { applyProposal, stateFingerprint } from '../../../src/domain/replacement/apply.js';
+import { computePlan } from '../../../src/domain/replacement/plan.js';
 import { casesOfWave, categoryWave, memberWave, waveMoves } from '../../../src/domain/replacement/waves.js';
 import type { State } from '../../../src/domain/replacement/types.js';
 import type { Wave } from '../../../src/domain/waves.js';
@@ -13,6 +14,7 @@ const waves = [matin, aprem];
 
 const caseOf = (s: State, regId: string) => detectCases(s).find((c) => c.registrationId === regId)!;
 const props = (s: State, regId: string) => proposalsFor(s, caseOf(s, regId));
+const planOf = (s: State, waveId: string | null = null, forApply = false) => computePlan(s, { waveId, level: 'minorsAdults', choices: [], ...(forApply ? { forApply: true } : {}) });
 
 /** Minime seule (Matin) dont la seule proposition est la catégorie cadette (Après-midi). */
 function minimeAlone(over: Partial<State> = {}) {
@@ -62,9 +64,9 @@ describe('réaffectation par session', () => {
 
   test('validation globale « tout » : pas de changement de session', () => {
     const { s, mini } = minimeAlone();
-    const plan = bulkPlan(s, 'all');
-    expect(plan.steps).toEqual([]);
-    expect(plan.unresolved.map((c) => c.registrationId)).toEqual([mini.registrationId]);
+    const plan = planOf(s);
+    expect(plan.moves).toEqual([]);
+    expect(plan.aloneAfter).toEqual([mini.registrationId]);
 
     // Une autre catégorie cadette, choisie à la main pour le Matin : c'est elle qui est prise.
     const far = member({ weightClassId: 'cadet:F:-54', approxWeightKg: 49 });
@@ -74,8 +76,8 @@ describe('réaffectation par session', () => {
     farCat.waveOverride = 'matin';
     const ps = props(s2, mini.registrationId);
     expect(ps.map((p) => p.waveChange?.to ?? 'matin')).toEqual(['aprem', 'matin']);
-    const plan2 = bulkPlan(s2, 'all');
-    expect(plan2.steps.map((x) => [x.proposal.registrationId, (x.proposal.target as { categoryId: string }).categoryId])).toEqual([[mini.registrationId, farCat.id]]);
+    const plan2 = planOf(s2);
+    expect(plan2.moves.map((x) => [x.registrationId, (x.target as { categoryId: string }).categoryId])).toEqual([[mini.registrationId, farCat.id]]);
   });
 
   test('validation globale limitée à la session', () => {
@@ -90,9 +92,9 @@ describe('réaffectation par session', () => {
     expect(casesOfWave(s, cases, 'aprem').map((c) => c.registrationId)).toEqual([c1.registrationId]);
     expect(casesOfWave(s, cases, 'matin').map((c) => c.registrationId)).toEqual([p1.registrationId]);
     expect(casesOfWave(s, cases, null)).toEqual(cases);
-    const plan = bulkPlan(s, 'all', 'aprem');
-    expect(plan.steps.map((x) => x.proposal.registrationId)).toEqual([c1.registrationId]);
-    expect(bulkPlan(s, 'all').steps.map((x) => x.proposal.registrationId).sort()).toEqual([c1.registrationId, p1.registrationId].sort());
+    const plan = planOf(s, 'aprem');
+    expect(plan.moves.map((x) => x.registrationId)).toEqual([c1.registrationId]);
+    expect(planOf(s).moves.map((x) => x.registrationId).sort()).toEqual([c1.registrationId, p1.registrationId].sort());
   });
 
   test('empreinte : change si une règle de session ou un choix individuel change', () => {
@@ -118,6 +120,6 @@ describe('réaffectation par session', () => {
     expect(p2).toMatchObject({ type: 'A', waveChange: null, preApproved: false, waveShifts: [{ registrationId: mini.registrationId, label: mini.label, from: 'aprem', to: 'matin' }] });
     expect(waveMoves(s2, applyProposal(s2, p2))).toEqual([{ registrationId: mini.registrationId, from: 'aprem', to: 'matin' }]);
     // La validation globale ne la prend pas.
-    expect(bulkPlan(s1, 'simple', 'aprem').steps.map((x) => x.proposal.registrationId)).toEqual([c1!.registrationId]);
+    expect(planOf(s1, 'aprem', true).moves.map((x) => x.registrationId)).toEqual([c1!.registrationId]);
   });
 });

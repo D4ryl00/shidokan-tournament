@@ -1,11 +1,13 @@
 import { expect, test } from 'vitest';
 import { categoryLabel, keyString } from '../../../src/domain/categories.js';
-import { applyProposal, bulkPlan, recompute, stateFingerprint } from '../../../src/domain/replacement/apply.js';
+import { applyProposal, recompute, stateFingerprint } from '../../../src/domain/replacement/apply.js';
 import { detectCases } from '../../../src/domain/replacement/detect.js';
+import { computePlan } from '../../../src/domain/replacement/plan.js';
 import { proposalsFor } from '../../../src/domain/replacement/propose.js';
 import type { State } from '../../../src/domain/replacement/types.js';
 import { makeState, member } from './fixtures.js';
 
+const planOf = (s: State, o: { forApply?: boolean; waveId?: string | null } = {}) => computePlan(s, { waveId: o.waveId ?? null, level: 'minorsAdults', choices: [], ...(o.forApply ? { forApply: true } : {}) });
 const best = (s: State, regId: string) => proposalsFor(s, detectCases(s).find((c) => c.registrationId === regId)!)[0]!;
 const memberOf = (s: State, regId: string) => s.members.find((m) => m.registrationId === regId)!;
 
@@ -55,26 +57,26 @@ test('R : retour, catégorie fusionnée qui retrouve sa clé', () => {
   expect(host.key.weightClassIds).toEqual(['cadet:F:-54']);
 });
 
-test('masse « simple » : 4 seules, deux paires voisines → 2 étapes, plus aucun cas', () => {
+test('plan sans validation : 4 seules, deux paires voisines → 2 déplacements, plus aucun cas', () => {
   const ms = [
     member({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 }), member({ weightClassId: 'cadet:F:-54', approxWeightKg: 49 }),
     member({ ageBandCode: 'senior', sex: 'M', weightClassId: 'senior:M:-67', approxWeightKg: 66 }), member({ ageBandCode: 'senior', sex: 'M', weightClassId: 'senior:M:-75', approxWeightKg: 69 }),
   ];
-  const { steps, final, unresolved } = bulkPlan(makeState(ms), 'simple');
-  expect(steps).toHaveLength(2);
-  expect(new Set(steps.map((x) => x.proposal.registrationId)).size).toBe(2);
-  expect(unresolved).toEqual([]);
+  const { moves, final, aloneAfter } = planOf(makeState(ms), { forApply: true });
+  expect(moves).toHaveLength(2);
+  expect(new Set(moves.map((x) => x.registrationId)).size).toBe(2);
+  expect(aloneAfter).toEqual([]);
   expect(detectCases(final)).toEqual([]);
 });
 
-test('masse « all » inclut les cas manuels, « simple » non', () => {
+test('le plan complet inclut les déplacements à valider, le plan à appliquer non', () => {
   const mini = member({ ageBandCode: 'minime', weightClassId: 'minime:F:-45', approxWeightKg: 45 });
   const cad = member({ weightClassId: 'cadet:F:-47', approxWeightKg: 47 });
   const s = makeState([mini, cad]);
-  expect(bulkPlan(s, 'simple').steps).toEqual([]);
-  const all = bulkPlan(s, 'all');
-  expect(all.steps).toHaveLength(1);
-  expect(all.steps[0]).toMatchObject({ manual: true, proposal: { type: 'C' } });
+  expect(planOf(s, { forApply: true }).moves).toEqual([]);
+  const all = planOf(s);
+  expect(all.moves).toHaveLength(1);
+  expect(all.moves[0]).toMatchObject({ manual: true, type: 'C' });
 });
 
 test('empreinte : change quand un membre change', () => {
@@ -117,6 +119,6 @@ test('clé d’une catégorie recalculée sur les membres présents', () => {
 test('classement automatique : ignore les cartes mises de côté', () => {
   const a = member({ weightClassId: 'cadet:F:-47' });
   const s = makeState([a, member({ weightClassId: 'cadet:F:-54' }), member({ weightClassId: 'cadet:F:-54' })]);
-  expect(bulkPlan(s, 'all').steps.map((x) => x.proposal.caseId)).toEqual([`alone:${a.registrationId}`]);
-  expect(bulkPlan({ ...s, setAside: [`alone:${a.registrationId}`] }, 'all').steps).toEqual([]);
+  expect(planOf(s).moves.map((x) => x.caseId)).toEqual([`alone:${a.registrationId}`]);
+  expect(planOf({ ...s, setAside: [`alone:${a.registrationId}`] }).moves).toEqual([]);
 });
