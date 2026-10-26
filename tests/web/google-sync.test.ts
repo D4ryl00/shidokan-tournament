@@ -38,14 +38,14 @@ test('au départ : différences cochées, lien sur la concordance exacte, sinon 
   expect(c.plans['people/ali']).toMatchObject({ mode: 'later', clubs: ['nord'] });
   expect(c.plans['people/marc']).toMatchObject({ mode: null, clubs: [] });
   const r = buildApply(preview, c);
-  expect(r.counts).toEqual({ diffs: 2, links: 1, creates: 0, kept: 0 });
+  expect(r.counts).toEqual({ diffs: 2, links: 1, creates: 0, later: 1, kept: 0 });
   expect(r.apply).toEqual({
     updates: [{ clubId: 'lilas', version: 3, set: { coachPhone: '06 55 66 77 88', coachEmail: 'marc@exemple.fr' } }],
     links: [{ clubId: 'est', version: 5, contact: 'people/paul', set: { coachName: 'Paul', coachPhone: '07 00 00 00 00' } }],
     creates: [],
     later: ['people/sophie'],
   });
-  expect(applyButtonLabel(r)).toBe('Appliquer : 2 différences, 1 lien');
+  expect(applyButtonLabel(r)).toBe('Appliquer : 2 différences, 1 lien, 1 contact en attente');
 });
 
 test('cases décochées : valeur de l’annuaire gardée, comptée « gardée » ; un champ vide de la fiche est rempli sans case', () => {
@@ -54,8 +54,8 @@ test('cases décochées : valeur de l’annuaire gardée, comptée « gardée »
   const r = buildApply(preview, c);
   expect(r.apply.updates).toEqual([]);
   expect(r.apply.links).toEqual([{ clubId: 'est', version: 5, contact: 'people/paul', set: { coachPhone: '07 00 00 00 00' } }]);
-  expect(r.counts).toEqual({ diffs: 0, links: 1, creates: 0, kept: 3 });
-  expect(applyButtonLabel(r)).toBe('Appliquer : 1 lien, 3 gardées');
+  expect(r.counts).toEqual({ diffs: 0, links: 1, creates: 0, later: 1, kept: 3 });
+  expect(applyButtonLabel(r)).toBe('Appliquer : 1 lien, 1 contact en attente, 3 gardées');
 });
 
 test('nouveau club : sans nom, le bouton est bloqué ; avec un nom, la fiche reçoit les coordonnées du contact', () => {
@@ -85,4 +85,12 @@ test('les contacts en attente laissés « Plus tard » ne sont pas renvoyés ; r
   expect(r.apply).toEqual({ updates: [], links: [], creates: [], later: [] });
   expect(applyButtonLabel(r)).toBe('Rien à appliquer');
   expect(r.nothing).toBe(true);
+});
+
+test('« Plus tard » seul : rangé en attente à l’application, le bouton le dit', () => {
+  const only: SyncPreview = { ...preview, diffs: [], linked: [], pending: [], newContacts: [preview.newContacts[1]!, { contact: ali, exact: null, maybe: [] }] };
+  const r = buildApply(only, initialChoices(only));
+  expect(r.nothing).toBe(false);
+  expect(r.apply).toEqual({ updates: [], links: [], creates: [], later: ['people/sophie', 'people/ali'] });
+  expect(applyButtonLabel(r)).toBe('Appliquer : 2 contacts en attente');
 });

@@ -830,15 +830,18 @@ export const useMergeDirectoryEntries = () =>
 const GOOGLE_CONTACTS_KEY = 'google-contacts';
 /**
  * Aperçu de la synchronisation avec Google Contacts. `label` : undefined = le dernier libellé choisi, null = tous les contacts.
- * Jamais relu tout seul (retour sur l'onglet) : les choix en cours à l'écran seraient perdus.
+ * Google est relu à chaque ouverture de la page et à chaque changement de libellé (même déjà vu : le serveur retient le libellé
+ * choisi). Jamais relu tout seul (retour sur l'onglet, réseau revenu) : les choix en cours à l'écran seraient perdus.
  */
 export const useGoogleContactsPreview = (label: string | null | undefined) =>
   useQuery({
     queryKey: [GOOGLE_CONTACTS_KEY, label === undefined ? 'enregistré' : label],
     queryFn: () => api<GoogleContactsView>('POST', '/api/club-directory/google/preview', label === undefined ? {} : { label }),
     placeholderData: keepPreviousData,
-    staleTime: Infinity,
+    staleTime: 0,
+    refetchOnMount: 'always',
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 export function useApplyGoogleContacts() {
   const qc = useQueryClient();

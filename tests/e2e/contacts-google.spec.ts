@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { CONTACTS_NOT_GRANTED, DIRECTORY_CHANGED } from '../../src/domain/google-contacts.js';
-import { mockGoogleContacts } from './helpers.js';
+import { GOOGLE_PREVIEW, mockGoogleContacts } from './helpers.js';
 
 // Google n'est pas joignable ici : les réglages (compte connecté) et l'aperçu sont simulés sur le serveur local habituel.
 
@@ -13,11 +13,12 @@ test('annuaire : synchroniser avec Google — différences, lien suggéré, nouv
   await expect(page.getByText('orga@gmail.com · 4 contacts')).toBeVisible();
 
   const apply = page.getByTestId('google-apply');
-  await expect(apply).toHaveText('Appliquer : 1 différence, 1 lien');
+  // Sophie (sans correspondance) attend « Plus tard » : elle sera rangée en attente.
+  await expect(apply).toHaveText('Appliquer : 1 différence, 1 lien, 1 contact en attente');
 
   // Décocher la différence : la valeur de l'annuaire est gardée.
   await page.getByRole('checkbox', { name: 'Prendre Google : Dojo des Lilas, Téléphone' }).uncheck();
-  await expect(apply).toHaveText('Appliquer : 1 lien, 1 gardée');
+  await expect(apply).toHaveText('Appliquer : 1 lien, 1 contact en attente, 1 gardée');
 
   // Le contact proposé est lié au club de même mail ; celui sans correspondance attend « Plus tard ».
   const paul = page.getByTestId('contact-card').filter({ hasText: 'Paul Martin' });
@@ -49,17 +50,44 @@ test('annuaire : synchroniser avec Google — différences, lien suggéré, nouv
   await expect.poll(() => previews.length).toBeGreaterThanOrEqual(2);
 });
 
-test('annuaire : changer de libellé relit Google', async ({ page }) => {
-  const { previews } = await mockGoogleContacts(page);
+test('annuaire : changer de libellé relit Google, à chaque fois, et revenir sur la page aussi', async ({ page }) => {
+  const labels = [{ resourceName: 'contactGroups/coachs', name: 'Coachs' }, { resourceName: 'contactGroups/arbitres', name: 'Arbitres' }];
+  const { previews } = await mockGoogleContacts(page, { ...GOOGLE_PREVIEW, labels });
   await page.goto('/annuaire/google');
   await expect(page.getByTestId('google-apply')).toBeVisible();
   expect(previews).toEqual([{}]);
-  await page.getByTestId('google-label').click();
-  await page.getByRole('option', { name: 'Coachs' }).click();
-  await expect.poll(() => previews.at(-1)).toEqual({ label: 'contactGroups/coachs' });
-  await page.getByTestId('google-label').click();
-  await page.getByRole('option', { name: 'Tous les contacts' }).click();
+  const choose = async (name: string) => {
+    await page.getByTestId('google-label').click();
+    await page.getByRole('option', { name }).click();
+  };
+  // A → B → A : Google est relu à chaque changement, même pour un libellé déjà vu.
+  await choose('Coachs');
+  await expect.poll(() => previews.length).toBe(2);
+  await choose('Arbitres');
+  await expect.poll(() => previews.length).toBe(3);
+  await choose('Coachs');
+  await expect.poll(() => previews.length).toBe(4);
+  expect(previews).toEqual([{}, { label: 'contactGroups/coachs' }, { label: 'contactGroups/arbitres' }, { label: 'contactGroups/coachs' }]);
+  await choose('Tous les contacts');
   await expect.poll(() => previews.at(-1)).toEqual({ label: null });
+  // Revenir sur la page relit Google (le dernier libellé retenu par le serveur).
+  const before = previews.length;
+  await page.getByRole('link', { name: 'Retour à l’annuaire' }).click();
+  await page.getByRole('link', { name: 'Synchroniser avec Google' }).click();
+  await expect.poll(() => previews.length).toBe(before + 1);
+  expect(previews.at(-1)).toEqual({});
+});
+
+test('annuaire : seulement des contacts laissés « Plus tard », ils sont rangés en attente', async ({ page }) => {
+  const only = { ...GOOGLE_PREVIEW, preview: { ...GOOGLE_PREVIEW.preview, diffs: [], linked: [], pending: [], newContacts: [GOOGLE_PREVIEW.preview.newContacts[1]] } };
+  const { applied } = await mockGoogleContacts(page, only);
+  await page.goto('/annuaire/google');
+  const apply = page.getByTestId('google-apply');
+  await expect(apply).toHaveText('Appliquer : 1 contact en attente');
+  await expect(apply).toBeEnabled();
+  await apply.click();
+  await expect(page.getByText('Annuaire mis à jour.')).toBeVisible();
+  expect(applied).toEqual([{ updates: [], links: [], creates: [], later: ['people/sophie'] }]);
 });
 
 test('annuaire : l’annuaire a changé entre-temps, l’aperçu est relu et le message reste', async ({ page }) => {

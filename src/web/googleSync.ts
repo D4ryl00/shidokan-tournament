@@ -53,10 +53,10 @@ export function linkTargets(plan: ContactPlan, alreadyLinked: string[] = []): st
 
 export interface ApplyPlan {
   apply: SyncApply;
-  counts: { diffs: number; links: number; creates: number; kept: number };
+  counts: { diffs: number; links: number; creates: number; later: number; kept: number };
   /** Un « Nouveau club » sans nom : le bouton reste bloqué. */
   missingName: boolean;
-  /** Ni différence, ni lien, ni nouveau club. */
+  /** Ni différence, ni lien, ni nouveau club, ni contact à ranger en attente. */
   nothing: boolean;
 }
 
@@ -103,20 +103,21 @@ export function buildApply(p: SyncPreview, choices: SyncChoices): ApplyPlan {
     if (plan.mode === 'later' && newIds.has(contact.resourceName)) apply.later.push(contact.resourceName);
   }
   const creates = apply.creates.length + (missingName ? countUnnamed(choices) : 0);
-  const counts = { diffs, links: apply.links.length, creates, kept };
-  return { apply, counts, missingName, nothing: diffs + counts.links + creates === 0 };
+  const counts = { diffs, links: apply.links.length, creates, later: apply.later.length, kept };
+  return { apply, counts, missingName, nothing: diffs + counts.links + creates + counts.later === 0 };
 }
 
 const filled = (v: string | null): string | null => (v && v.trim() ? v.trim() : null);
 const countUnnamed = (c: SyncChoices): number => Object.values(c.plans).filter((p) => p.mode === 'create' && !p.name.trim()).length;
 
-/** « Appliquer : 3 différences, 1 lien, 1 nouveau club, 1 gardée » ; les éléments à zéro sont omis. */
+/** « Appliquer : 3 différences, 1 lien, 1 nouveau club, 2 contacts en attente, 1 gardée » ; les éléments à zéro sont omis. */
 export function applyButtonLabel({ counts, nothing }: Pick<ApplyPlan, 'counts' | 'nothing'>): string {
   if (nothing) return 'Rien à appliquer';
   const parts = [
     counts.diffs ? plural(counts.diffs, 'différence') : null,
     counts.links ? plural(counts.links, 'lien') : null,
     counts.creates ? plural(counts.creates, 'nouveau club', 'nouveaux clubs') : null,
+    counts.later ? plural(counts.later, 'contact en attente', 'contacts en attente') : null,
     counts.kept ? plural(counts.kept, 'gardée') : null,
   ].filter((x) => x !== null);
   return `Appliquer : ${parts.join(', ')}`;
