@@ -1088,6 +1088,39 @@ describe('repartir de zéro', () => {
     expect((await replacement()).recasements).toEqual([]);
   });
 
+  /** -47 seule fusionnée avec la -54 seule (« -47 / -54 ») ; rend les deux inscriptions. */
+  const mergeLight = async () => {
+    const light = await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+    const heavy = await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
+    const r = await replacement();
+    await call('POST', '/replacement/apply', { proposalId: r.proposals[r.cases.find((x) => x.registrationId === light.id)!.id]!.find((p) => p.id.includes('>'))!.id });
+    expect((await categories()).find((c) => c.registrationIds.includes(heavy.id))!.label).toContain('-47 / -54');
+    return { light, heavy };
+  };
+
+  test('inscription fusionnée puis supprimée : la catégorie qui l’avait accueillie retrouve sa clé', async () => {
+    const { light, heavy } = await mergeLight();
+    await app.inject({ method: 'DELETE', url: `${base}/registrations/${light.id}` });
+    expect((await reset()).statusCode).toBe(200);
+    const host = (await categories()).find((c) => c.registrationIds.includes(heavy.id))!;
+    expect(host.label).toContain('-54');
+    expect(host.label).not.toContain('-47');
+    expect((await replacement()).recasements).toEqual([]);
+  });
+
+  test('catégorie d’origine disparue et remplacée par une catégorie commencée : 409, rien ne change', async () => {
+    const { light } = await mergeLight();
+    for (let i = 0; i < 2; i++) await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+    const fresh = (await categories()).find((c) => c.label.endsWith('-47 kg'))!;
+    await call('PATCH', `/categories/${fresh.id}`, { status: 'started' });
+    const before = await layout();
+    const res = await reset();
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toContain('Une catégorie concernée a déjà commencé ou sa session est lancée : rouvrez-la pour repartir de zéro.');
+    expect(await layout()).toEqual(before);
+    expect((await categories()).find((c) => c.id === fresh.id)!.registrationIds).not.toContain(light.id);
+  });
+
   test('session lancée : 409 et rien ne change', async () => {
     const a = await reg({ weightClassId: 'cadet:F:-54' });
     await reg({ weightClassId: 'cadet:F:-61' });

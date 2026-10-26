@@ -1,5 +1,5 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { categoryLabel, compareKeys, keyString } from '../../domain/categories.js';
+import { categoryLabel, compareKeys, keyString, naturalKey } from '../../domain/categories.js';
 import { entryKey } from '../../domain/closed-categories.js';
 import { DISCIPLINES } from '../../domain/disciplines.js';
 import {
@@ -476,33 +476,49 @@ export async function undoRecasement(db: AppDb, competitionId: string, recasemen
  * l'historique, les refus et les cartes mises de côté. Tout ou rien : refusé si une catégorie touchée est lancée.
  */
 export async function resetReplacement(db: AppDb, competitionId: string): Promise<{ undone: number }> {
-  const entries = db
+  const LOCKED_MESSAGE = 'Une catégorie concernée a déjà commencé ou sa session est lancée : rouvrez-la pour repartir de zéro.';
+  // D'abord la synchronisation (faite par `loadState`) : les catégories lues ensuite sont à jour.
+  const state = await loadState(db, competitionId);
+  const frozen = new Set(state.categories.filter((c) => c.frozen).map((c) => c.id));
+  const isLocked = (c: { id: string; status: string }) => c.status === 'started' || c.status === 'finished' || frozen.has(c.id);
+  const replay = db
     .select({ row: recasements, n: sql<number>`rowid` })
     .from(recasements)
     .where(and(eq(recasements.competitionId, competitionId), eq(recasements.status, 'validated')))
     .all()
     .sort((a, b) => b.n - a.n)
-    .map(({ row }) => row);
+    .map(({ row }) => ({ registrationId: row.registrationId, snapshot: JSON.parse(row.snapshotJson) as RecasementSnapshot }));
   const current = new Map(
     db.select({ id: registrations.id, categoryId: registrations.categoryId }).from(registrations).where(eq(registrations.competitionId, competitionId)).all().map((r) => [r.id, r.categoryId]),
   );
-  // Une inscription supprimée depuis : rien à rétablir, sa ligne est seulement effacée.
-  const replay = entries
-    .filter((e) => current.has(e.registrationId))
-    .map((e) => ({ registrationId: e.registrationId, snapshot: JSON.parse(e.snapshotJson) as RecasementSnapshot }));
+  // Une inscription supprimée depuis : sa ligne est rejouée quand même (clés des catégories, présences emmenées) ; l'inscription
+  // elle-même n'existe plus et n'est pas comptée.
   const touched = [...new Set(replay.flatMap((e) => snapshotTouches(current.get(e.registrationId) ?? null, e.snapshot)))];
-  const state = await loadState(db, competitionId);
-  const blocked = state.categories.some((c) => touched.includes(c.id) && (c.frozen || c.status === 'started' || c.status === 'finished'));
-  if (blocked) throw new CategoryLockedError('Une catégorie concernée a déjà commencé ou sa session est lancée : rouvrez-la pour repartir de zéro.');
+  if (state.categories.some((c) => touched.includes(c.id) && isLocked(c))) throw new CategoryLockedError(LOCKED_MESSAGE);
+  const restored = new Set(replay.map((e) => e.registrationId).filter((id) => current.has(id)));
+  const fs = new Map(db.select().from(fighters).where(eq(fighters.competitionId, competitionId)).all().map((f) => [f.id, f]));
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     for (const e of replay) restoreSnapshot(t, e.registrationId, e.snapshot);
+    // Un combattant dont la catégorie d'avant a disparu sera rangé d'après sa clé (même choix que `syncCategories` : clé exacte
+    // avant alias, catégorie non commencée avant commencée) : refus si c'est une catégorie commencée ou d'une session lancée.
+    const cats = t.select().from(categories).where(eq(categories.competitionId, competitionId)).all();
+    const regs = t.select().from(registrations).where(inArray(registrations.id, [...restored])).all();
+    for (const r of regs) {
+      if (r.withdrawnReason || (r.placementLocked && r.categoryId)) continue;
+      const ks = keyString(naturalKey(r, fs.get(r.fighterId)!));
+      const rank = (c: (typeof cats)[number]) => (c.keyString === ks ? 0 : 2) + (c.status === 'started' || c.status === 'finished' ? 1 : 0);
+      const target = cats
+        .filter((c) => c.keyString === ks || (JSON.parse(c.aliasKeys) as string[]).includes(ks))
+        .sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id))[0];
+      if (target && isLocked(target)) throw new CategoryLockedError(LOCKED_MESSAGE);
+    }
     t.delete(recasements).where(eq(recasements.competitionId, competitionId)).run();
     t.delete(refusals).where(eq(refusals.competitionId, competitionId)).run();
     t.delete(setAsideCases).where(eq(setAsideCases.competitionId, competitionId)).run();
   });
   await recomputeKeys(db, competitionId, () => touched);
-  return { undone: replay.length };
+  return { undone: replay.filter((e) => current.has(e.registrationId)).length };
 }
 
 /** Recalcule et enregistre la clé des catégories choisies d'après leurs membres, puis resynchronise. */
