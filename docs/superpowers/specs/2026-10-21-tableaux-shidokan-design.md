@@ -238,6 +238,8 @@ Tous réglables **pour chaque compétition**.
 | Passage de shobu à jiyu (type G) | **désactivé** ✅ (2026-10-23) ; si activé : proposé, validation manuelle |
 | Plusieurs disciplines de combat le même jour | désactivé |
 
+✅ (2026-10-25) **Liste des règles** : ces réglages sont repris dans une liste ordonnée, **de la règle la plus acceptable à la moins acceptable**, propre à chaque compétition : chaque règle a son interrupteur et un numéro dans l'ordre, et une **ligne de coupure** (« je m'arrête ici ») sépare ce que le plan peut utiliser de ce qu'il ne propose pas. L'application a des **règles par défaut** (ordre, interrupteurs, ligne de coupure) dont chaque nouvelle compétition part. Détail : `docs/superpowers/specs/2026-10-25-plan-d-ensemble-reaffectation-design.md`.
+
 💡 L'écart de poids d'une catégorie se mesure entre **le plus léger et le plus lourd** de ses combattants, avec les poids réels de la pesée (ou la limite de la catégorie si le combattant n'est pas encore pesé).
 
 ### 9.3 Types de recasement et validation
@@ -252,6 +254,9 @@ Tous réglables **pour chaque compétition**.
 | G | Shobu → jiyu | manuelle ✅, seulement si le réglage l'autorise |
 | H | Autre discipline, selon les préférences | manuelle ✅ |
 | R | **Retour dans la catégorie d'origine** | 💡 cas simple, comme A ✅ (le retour lui-même est décidé) |
+
+✅ (2026-10-25) **Deux sortes de déplacements** : seul un déplacement qui **ne change que la catégorie de poids, dans l'écart réglé** (A, y compris le split dans l'écart), se fait **sans validation** ; **tous les autres** (B, C, I, D, E, F, G, H, retour) sont **à valider** à la main. Le « pré-accord coach » n'est qu'une **indication** affichée sur le déplacement, jamais une validation. Détail : `docs/superpowers/specs/2026-10-25-plan-d-ensemble-reaffectation-design.md`.
+| I | ✅ (2026-10-25) **Tranche d'âge au-dessous** (une seule), mêmes conditions que la tranche au-dessus (C) | manuelle, **à valider** |
 
 ### 9.4 Génération des propositions 💡
 - Une **proposition** = un ou plusieurs combattants déplacés vers une catégorie cible. La cible peut être une catégorie existante ou une **fusion de deux catégories** (par exemple deux combattants seuls en -30 kg et en -35 kg réunis).
@@ -269,6 +274,8 @@ Tous réglables **pour chaque compétition**.
   - une option de la compétition désactivée ;
   - une catégorie **déjà lancée** (§11.3).
 - ✅ (2026-10-23) **« Split »** : un combattant **seul** peut aussi recevoir le plus lourd, ou les deux plus lourds (pour former une poule de 3), de la catégorie de poids **juste en dessous** (même discipline, règlement, sexe et tranche d'âge), s'il y en reste au moins deux. Jamais dans l'autre sens (on ne fait pas descendre un combattant vers une catégorie plus légère). Ces combattants n'avaient pas de problème : la proposition est **toujours manuelle**, jamais validée en masse, et ils ne « reviennent » pas d'eux-mêmes. Chacun a sa ligne dans l'historique (annulable).
+- ✅ (2026-10-25) **Plan d'ensemble** : au lieu d'un classement carte par carte, l'application calcule un **plan** pour toute la session (ou la compétition) : parmi tous les plans qui n'utilisent que les règles actives au-dessus de la ligne de coupure, celui qui laisse le moins de combattants seuls, puis qui coûte le moins. La liste des règles montre pour chacune combien de combattants resteraient seuls si on l'autorise avec toutes celles du dessus. Le split n'est plus « toujours manuel » : dans l'écart de poids réglé, c'est un cas simple. Détail : `docs/superpowers/specs/2026-10-25-plan-d-ensemble-reaffectation-design.md`.
+- ✅ (2026-10-25) **Tranche d'âge « au-dessous »** : un combattant peut aussi être proposé dans la tranche d'âge juste en dessous, sous les mêmes conditions que la tranche au-dessus (une seule tranche, règle activée), toujours **à valider**.
 - Si le club a donné son **pré-accord**, les propositions C et B portent la mention « pré-accord coach ».
 - **Écart d'âge** : quand un combattant affronte un plus jeune, une alerte s'affiche sur la fiche du combat. Le coach du plus âgé lui demande en général d'y aller plus doucement.
 - Si aucune solution n'existe : le combattant est signalé « **sans adversaire** ». L'organisateur peut le déplacer à la main n'importe où (avec avertissement si une règle est enfreinte), ou le retirer.
@@ -287,6 +294,7 @@ Tous réglables **pour chaque compétition**.
 - **Cas simples (A)** : bouton « Valider » → aperçu → « Êtes-vous sûr ? » → application. ✅ (2026-10-23) Chaque proposition nomme la catégorie **telle qu'elle sera après le déplacement** (« Benjamins / Minimes M · -45 / -50 kg ») et le nombre d'adversaires qu'il y aura (le détail est dans l'aperçu) ; l'écart de poids affiché est celui entre le plus léger et le plus lourd de cette catégorie.
 - **Bouton global « Tout classer automatiquement »** → aperçu global → confirmation. Il applique la meilleure proposition à **tous** les cas, **y compris ceux qui demandent normalement une validation manuelle**. L'organisateur en prend la responsabilité.
   - 💡 L'aperçu global sépare les cas simples des cas qui auraient dû être validés un par un.
+- ✅ (2026-10-25) **Le plan d'ensemble remplace le bouton global « Tout classer automatiquement » et le bouton « Classer automatiquement » des cas simples** (supprimés) : « Voir le plan » liste les déplacements du plus coûteux au moins coûteux ; « Valider », « Refuser » et « Modifier » agissent sur un déplacement à valider (le plan est recalculé à chaque fois, chaque choix s'annule) ; « Appliquer le plan » applique les déplacements sans validation et ceux que l'organisateur a validés, les autres restent en attente. Détail : `docs/superpowers/specs/2026-10-25-plan-d-ensemble-reaffectation-design.md`.
 - **Repérage visuel des combattants reclassés et du motif**, partout où ils apparaissent :
   - **badge = couleur + icône + texte court** (« ⚖ +3 kg », « ↑ Âge », « ⇄ Discipline », « Shobu → Jiyu », « ⚥ Mixte ») ;
   - la **couleur indique le type** de changement (poids, âge, discipline, règlement, mixité), 5 couleurs au maximum ;
@@ -466,6 +474,7 @@ Hypothèses à faire confirmer (🟡) :
 | 2026-10-21 | Feuilles de résultats = mode d'affichage et d'impression des tableaux de combat, remplis avec les résultats. |
 | 2026-10-21 | Kata : tour 1 pour tous (note sur 10), finale à deux avec un 2e kata ; nombre d'arbitres variable ; moyenne simple s'il y a moins de 5 arbitres. |
 | 2026-10-23 | Pesée : règle FFK gardée (poids ≤ limite, tolérance comprise). Shobu → jiyu : réglage de la compétition, désactivé par défaut. « Split » vers la catégorie du combattant seul, jusqu'à une poule de 3, toujours manuel. Tranches voisines dans les deux sens en déplacement manuel seulement. |
+| 2026-10-25 | Réaffectation : un **plan d'ensemble** par liste de règles ordonnée (interrupteurs et ligne de coupure par compétition, valeurs par défaut de l'application) remplace « Tout classer automatiquement » et « Classer automatiquement ». Seul un changement de catégorie de poids dans l'écart réglé se fait sans validation ; tout le reste est à valider ; le pré-accord coach n'est qu'une indication. Nouvelle règle : tranche d'âge au-dessous (à valider). Voir `docs/superpowers/specs/2026-10-25-plan-d-ensemble-reaffectation-design.md`. |
 
 ## 20. Prochaines étapes
 1. ~~Valider ce document~~ ✅ validé le 2026-10-21.
