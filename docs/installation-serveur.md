@@ -83,14 +83,18 @@ Dans l'application, menu **Réglages de l'application** :
 
 ## Créer l'accès Google (une seule fois)
 
-Pour que le bouton « Se connecter avec Google » fonctionne, l'application doit être déclarée chez Google. Ça se fait une seule fois, dans la [console Google Cloud](https://console.cloud.google.com/), **connecté avec le compte Gmail expéditeur**. Les libellés ci-dessous sont ceux de la console en anglais ; ils peuvent varier un peu.
+Pour que le bouton « Se connecter avec Google » fonctionne, l'application doit être déclarée chez Google. Ça se fait une seule fois, dans la [console Google Cloud](https://console.cloud.google.com/), avec **n'importe quel compte Google**. L'adresse qui enverra les mails n'a pas besoin d'être celle-là : c'est le compte choisi plus tard, dans l'application, en cliquant « Se connecter avec Google » (par exemple `shidokanfranceofficiel@gmail.com`).
+
+Conseil : prenez un compte qui restera accessible à Shidokan France, celui de l'expéditeur par exemple. Si le projet Google est supprimé, ou si son code secret change, l'envoi s'arrête jusqu'à ce que `compose.yaml` soit mis à jour et le compte reconnecté.
+
+Les libellés ci-dessous sont ceux de la console en anglais ; ils peuvent varier un peu.
 
 1. **Créer un projet** : en haut de la console, sélecteur de projet → **New project**, nom « Shidokan France », puis **Create**.
 2. **Activer l'API Gmail** : menu **APIs & Services → Library**, cherchez « Gmail API », puis **Enable**.
 3. **Écran de consentement** : menu **Google Auth platform → Branding** (cliquez **Get started** si la console le propose) :
-   - **App name** : « Shidokan France » ; **User support email** : l'adresse Gmail ; **Next** ;
+   - **App name** : « Shidokan France » (c'est le nom affiché à la connexion) ; **User support email** : votre adresse (celle du compte de la console, proposée dans la liste) ; **Next** ;
    - **Audience** : **External** ; **Next** ;
-   - **Contact information** : l'adresse Gmail ; **Next** ; acceptez la charte, puis **Create**.
+   - **Contact information** : une adresse où Google peut vous écrire au sujet du projet ; **Next** ; acceptez la charte, puis **Create**.
 4. **Autorisations** : **Google Auth platform → Data Access → Add or remove scopes**. Cochez `.../auth/gmail.send` (« Send email on your behalf »), `openid` et `.../auth/userinfo.email`, puis **Update** et **Save**. Ne prenez **pas** `https://mail.google.com/` : il donne l'accès complet à la boîte.
 5. **Publier** : **Google Auth platform → Audience → Publish app**, puis confirmez. Le statut passe à **In production**. C'est nécessaire : en mode « Testing », Google retire l'accès au bout de 7 jours. Ne demandez pas la vérification par Google : elle n'est pas nécessaire pour un seul compte expéditeur. Le prix à payer est l'avertissement « application non validée » à la connexion.
 6. **Identifiant client** : **Google Auth platform → Clients → Create client** :

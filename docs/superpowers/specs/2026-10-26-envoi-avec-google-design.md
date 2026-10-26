@@ -113,7 +113,7 @@ L'aide de l'écran (`src/web/help.ts`) est mise à jour en conséquence.
 
 ## 7. Documentation d'installation
 
-`docs/installation-serveur.md`, étape 4 « Envoi des mails » : le mode **Compte Google** devient la voie conseillée pour Gmail 💡. Le passage sur le mot de passe d'application est gardé en variante courte (« Autre serveur »). Une nouvelle section décrit, pas à pas et une seule fois, en se connectant à la console Google Cloud avec le compte expéditeur :
+`docs/installation-serveur.md`, étape 4 « Envoi des mails » : le mode **Compte Google** devient la voie conseillée pour Gmail 💡. Le passage sur le mot de passe d'application est gardé en variante courte (« Autre serveur »). Une nouvelle section décrit, pas à pas et une seule fois, la déclaration dans la console Google Cloud. ✅ Le compte de la console peut être n'importe quel compte Google : l'adresse expéditrice est celle choisie avec « Se connecter avec Google ». Conseil : un compte qui reste accessible à Shidokan France.
 1. créer un projet ;
 2. activer l'**API Gmail** ;
 3. configurer l'écran de consentement OAuth : type **Externe**, nom « Shidokan France », adresse d'assistance, autorisations `gmail.send`, `openid` et `email`, puis **publier l'application** (passage en production) ;
