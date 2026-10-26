@@ -16,6 +16,7 @@ import { IconArrowDown, IconArrowUp, IconTrash } from '../components/ui/icons.js
 import { SectionCard } from '../components/ui/SectionCard.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { useUnsaved } from '../unsaved.js';
+import { settingsPatch } from '../settingsPatch.js';
 import { SyncPanel } from '../components/SyncPanel.js';
 import { HELP } from '../help.js';
 
@@ -120,7 +121,8 @@ export function CompetitionSettingsPage() {
     saveZones.mutate({ zones: input, knownIds: (savedZones ?? []).map((z) => z.id) }, {
       onSuccess: () =>
         update.mutate(
-          { name: info.name, date: info.date, location: info.location || null, settings: s },
+          // Seuls les réglages changés ici : la liste des règles et ses interrupteurs, réglés dans Réaffectation, restent tels quels.
+          { name: info.name, date: info.date, location: info.location || null, settings: settingsPatch(competition!.settings, s) },
           { onSuccess: () => notifications.show({ color: 'green', message: 'Réglages enregistrés' }) },
         ),
     });

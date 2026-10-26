@@ -278,3 +278,138 @@ test('le plan tient dans un écran de téléphone', async ({ page, request }) =>
   await page.setViewportSize({ width: 1280, height: 800 });
   expect(await clipped(page)).toEqual([]);
 });
+
+const regIn = (request: APIRequestContext, id: string) => async (data: object) =>
+  (await (await request.post(`/api/competitions/${id}/registrations`, {
+    data: { clubId: null, firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', source: 'manual', ...data },
+  })).json()).row as { id: string; fighterId: string };
+
+test('appliquer : la confirmation montre ce qui diffère de l’écran', async ({ page, request }) => {
+  // À l’écran : MINI monte chez CADA (à valider), qui reste. Sans MINI, CADA rejoint les -54 : absent de l’écran.
+  // WALID (pesé 59 kg) part en -63 au-delà de l’écart (à valider) : YANIS, laissé seul, rejoint les -52 (sans validation) ;
+  // sans la correction, YANIS n’est pas seul : son déplacement n’est pas appliqué.
+  const id = await createCompetition(page, 'Coupe plan différences');
+  const reg = regIn(request, id);
+  await reg({ lastName: 'MINI', ageBandCode: 'minime', weightClassId: 'minime:F:-45', approxWeightKg: 45 });
+  await reg({ lastName: 'CADA', weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  for (const [n, kg] of [['PIA', 50], ['PAULA', 50.5]] as const) await reg({ lastName: n, weightClassId: 'cadet:F:-54', approxWeightKg: kg });
+  const boy = { firstName: 'Paul', sex: 'M' };
+  const w = await reg({ ...boy, lastName: 'WALID', weightClassId: 'cadet:M:-57', approxWeightKg: 56 });
+  await reg({ ...boy, lastName: 'YANIS', weightClassId: 'cadet:M:-57', approxWeightKg: 56 });
+  for (const n of ['SAMI', 'SACHA']) await reg({ ...boy, lastName: n, weightClassId: 'cadet:M:-63', approxWeightKg: 53 });
+  for (const [n, kg] of [['BASILE', 51], ['BRUNO', 51.5]] as const) await reg({ ...boy, lastName: n, weightClassId: 'cadet:M:-52', approxWeightKg: kg });
+  await request.put(`/api/competitions/${id}/weigh-in/${w.fighterId}`, { data: { weighInKg: 59 } });
+  const { view, moveOf } = await openPlan(page, id);
+  await expect(moveOf('YANIS Paul')).toBeVisible();
+  await expect(view.getByTestId('plan-move').filter({ hasText: 'CADA Léa' })).toHaveCount(0);
+  await view.getByTestId('plan-apply').click();
+  const dialog = page.getByRole('dialog');
+  await expect(page.getByTestId('plan-apply-confirm')).toHaveText('Confirmer (1)');
+  await expect(dialog.getByTestId('plan-apply-move').filter({ hasText: 'CADA Léa' })).toContainText('(pas à l’écran)');
+  const skipped = dialog.getByTestId('plan-apply-skipped');
+  await expect(skipped).toContainText('Ne sera pas appliqué, sans les déplacements à valider non validés :');
+  await expect(skipped).toContainText('YANIS Paul');
+  await expect(skipped).not.toContainText('MINI Léa');
+  await expect(skipped).not.toContainText('WALID Paul');
+  await expect(dialog).toContainText('2 déplacements à valider non validés restent en attente dans le plan.');
+});
+
+test('valider un déplacement qui suit une correction de poids : gardé, puis appliqué après elle', async ({ page, request }) => {
+  // WANDA (pesée 58 kg) quitte les -54 pour les -61 : YVETTE y reste seule, et ne peut que monter chez les juniors.
+  const id = await createCompetition(page, 'Coupe plan chaîne');
+  const reg = regIn(request, id);
+  const w = await reg({ lastName: 'WANDA', weightClassId: 'cadet:F:-54', approxWeightKg: 52 });
+  await reg({ lastName: 'YVETTE', weightClassId: 'cadet:F:-54', approxWeightKg: 53 });
+  for (const [n, kg] of [['SOFIA', 58], ['SARAH', 58.5]] as const) await reg({ lastName: n, weightClassId: 'cadet:F:-61', approxWeightKg: kg });
+  for (const [n, kg] of [['JADE', 52], ['JULIA', 52.5]] as const) await reg({ lastName: n, ageBandCode: 'junior', weightClassId: 'junior:F:-53', approxWeightKg: kg });
+  await request.put(`/api/competitions/${id}/weigh-in/${w.fighterId}`, { data: { weighInKg: 58 } });
+  const { view: rules } = await (await request.post(`/api/competitions/${id}/replacement/plan`, { data: { choices: [] } })).json();
+  await request.put(`/api/competitions/${id}/replacement/rules`, { data: { ...rules, on: { ...rules.on, weightGap: false } } });
+  const { view, moveOf } = await openPlan(page, id);
+  await moveOf('YVETTE Léa').getByTestId('plan-move-validate').click();
+  await expect(moveOf('YVETTE Léa').getByTestId('plan-move-unvalidate')).toBeVisible();
+  await expect(view).toContainText('Validés 1 / 1');
+  await expect(view.getByTestId('plan-dropped')).toHaveCount(0);
+  await expect(moveOf('WANDA Léa')).toBeVisible();
+  await view.getByTestId('plan-apply').click();
+  await expect(page.getByTestId('plan-apply-confirm')).toHaveText('Confirmer (2)');
+  await page.getByTestId('plan-apply-confirm').click();
+  await expect(page.getByText('2 réaffectations appliquées.')).toBeVisible();
+  await expect(page.getByText('Aucun cas à traiter')).toBeVisible();
+});
+
+test('« Modifier » sans règle à valider : pas compté dans « Validés »', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan modifier simple');
+  await seedPlan(request, id);
+  const { view, moveOf } = await openPlan(page, id);
+  await expect(view).toContainText('Validés 0 / 2');
+  const seule = moveOf('SEULE Léa');
+  await seule.getByTestId('plan-move-modify').click();
+  await seule.getByTestId('plan-move-target').click();
+  await page.getByRole('option', { name: /Cadets F · \+61 kg/ }).click();
+  await expect(seule.getByTestId('plan-move-unchoose')).toBeVisible();
+  await expect(view.locator('[data-testid="plan-band"][data-band="0"]')).toContainText('SEULE Léa');
+  await expect(view).toContainText('Validés 0 / 2');
+});
+
+test('« Modifier » : seulement les catégories de la session choisie', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan modifier session');
+  const reg = regIn(request, id);
+  await reg({ lastName: 'MINI', ageBandCode: 'minime', weightClassId: 'minime:F:-45', approxWeightKg: 45 });
+  await reg({ lastName: 'SEULE', weightClassId: 'cadet:F:-61', approxWeightKg: 58 });
+  for (const n of ['LOURDEA', 'LOURDEB']) await reg({ lastName: n, weightClassId: 'cadet:F:+61', approxWeightKg: 60 });
+  await request.put(`/api/competitions/${id}/waves`, { data: [
+    { name: 'Matin', rules: { ageBandCodes: ['poussin', 'pupille', 'benjamin', 'minime'], disciplines: [] } },
+    { name: 'Après-midi', rules: { ageBandCodes: ['cadet', 'junior', 'senior'], disciplines: [] } },
+  ] });
+  await page.goto(`/competitions/${id}/reaffectation`);
+  await page.getByTestId('replacement-wave').getByText('Après-midi', { exact: true }).click();
+  await page.getByTestId('plan-show').click();
+  const seule = page.getByTestId('plan-view').getByTestId('plan-move').filter({ hasText: 'SEULE Léa' });
+  await seule.getByTestId('plan-move-modify').click();
+  await seule.getByTestId('plan-move-target').click();
+  await expect(page.getByRole('option', { name: /Cadets F · \+61 kg/ })).toBeVisible();
+  await expect(page.getByRole('option', { name: /Minimes/ })).toHaveCount(0);
+  // Sur la carte, le déplacement manuel garde toutes les catégories (avec leur session).
+  const card = page.getByTestId('replacement-case').filter({ hasText: 'SEULE' });
+  await page.keyboard.press('Escape');
+  await card.getByTestId('manual-move-all').click({ force: true });
+  await card.getByTestId('manual-move-select').click();
+  await expect(page.getByRole('option', { name: /Minimes.*session Matin/ })).toBeVisible();
+});
+
+test('cartes : correction de poids au-delà de l’écart à confirmer comme une validation ; « ↓ Âge » pour la tranche au-dessous', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe cartes badges');
+  const reg = regIn(request, id);
+  // WANDA (pesée 58 kg) : les -61 pèsent 52 kg, la correction dépasse l’écart de poids (à valider).
+  const w = await reg({ lastName: 'WANDA', weightClassId: 'cadet:F:-54', approxWeightKg: 52 });
+  for (const n of ['SOFIA', 'SARAH']) await reg({ lastName: n, weightClassId: 'cadet:F:-61', approxWeightKg: 52 });
+  await request.put(`/api/competitions/${id}/weigh-in/${w.fighterId}`, { data: { weighInKg: 58 } });
+  // MINA, minime seule, peut descendre chez les benjamines.
+  await reg({ lastName: 'MINA', ageBandCode: 'minime', weightClassId: 'minime:F:-40', approxWeightKg: 39 });
+  for (const [n, kg] of [['BENA', 37], ['BENB', 38]] as const) await reg({ lastName: n, ageBandCode: 'benjamin', weightClassId: 'benjamin:F:-40', approxWeightKg: kg });
+  await page.goto(`/competitions/${id}/reaffectation`);
+  const correction = page.getByTestId('replacement-case').filter({ hasText: 'WANDA' }).getByTestId('replacement-proposal').filter({ hasText: 'validation manuelle' }).first();
+  await expect(correction.getByTestId('replacement-badge')).toContainText('⚖ Poids');
+  await correction.getByTestId('proposal-apply').click();
+  await expect(page.getByTestId('proposal-confirm')).toHaveText('Confirmer la validation');
+  await page.keyboard.press('Escape');
+  const down = page.getByTestId('replacement-case').filter({ hasText: 'MINA' }).getByTestId('replacement-proposal').filter({ hasText: 'une tranche au-dessous' });
+  await expect(down.getByTestId('replacement-badge')).toHaveText('↓ Âge');
+});
+
+test('réglages : enregistrer garde la liste des règles changée entre-temps dans Réaffectation', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe réglages et règles');
+  await page.goto(`/competitions/${id}/reglages`);
+  await page.getByTestId('shobu-to-jiyu').click({ force: true });
+  // Pendant ce temps, la Table centrale range la liste et active le mélange filles / garçons.
+  const { view } = await (await request.post(`/api/competitions/${id}/replacement/plan`, { data: { choices: [] } })).json();
+  const order = ['return', 'ageUp', ...view.order.filter((r: string) => r !== 'return' && r !== 'ageUp')];
+  expect((await request.put(`/api/competitions/${id}/replacement/rules`, { data: { ...view, order, cutAfter: 'ageUp', on: { ...view.on, mixSexes: true } } })).ok()).toBe(true);
+  await page.getByTestId('settings-save').click();
+  await expect(page.getByText('Réglages enregistrés')).toBeVisible();
+  const { settings } = await (await request.get(`/api/competitions/${id}`)).json();
+  expect(settings.shobuToJiyu).toBe(true);
+  expect(settings.mixSexes.enabled).toBe(true);
+  expect(settings.replacementRules).toMatchObject({ order, cutAfter: 'ageUp' });
+});

@@ -226,11 +226,12 @@ export function ReplacementPage() {
   if (!ready || !data) return <Stack>{waveSelector}<Loader /></Stack>;
   const s = data.summary;
   /** Catégories proposées au déplacement manuel : les cohérentes avec les réglages, et les autres si on les demande. */
-  const moveOptions = (caseId: string, all = allTargets[caseId] ?? false): ComboboxData => {
+  const moveOptions = (caseId: string, all = allTargets[caseId] ?? false, sessionOnly = false): ComboboxData => {
     const band = data.fighters[data.cases.find((x) => x.id === caseId)?.registrationId ?? '']?.ageBandCode;
     const option = (t: { categoryId: string; warnings: string[] }) => {
       const x = categories.find((k) => k.id === t.categoryId);
-      if (!x) return null;
+      // Le plan d'ensemble ne change personne de session : il ne propose que les catégories de la session choisie.
+      if (!x || (sessionOnly && waveId && x.waveId !== waveId)) return null;
       const otherBand = band !== undefined && !x.key.ageBandCodes.includes(band);
       return {
         value: x.id,
@@ -248,11 +249,15 @@ export function ReplacementPage() {
     const r = reg.get(rid);
     return r ? { name: `${r.fighter.lastName} ${r.fighter.firstName}`, club: r.club?.name ?? null } : { name: rid, club: null };
   };
-  /** « Modifier » une ligne du plan : la liste du déplacement manuel de son cas, quand c'est le combattant du cas qui bouge. */
+  /**
+   * « Modifier » une ligne du plan : la liste du déplacement manuel de son cas, quand c'est le combattant du cas qui bouge,
+   * limitée aux catégories de la session choisie.
+   */
   const planTargets = (m: PlanMove): ComboboxData | null => {
     const c = data.cases.find((x) => x.id === m.caseId);
     if (!c || c.registrationId !== m.registrationId || (data.moveTargets[c.id] ?? []).length === 0) return null;
-    return moveOptions(c.id, true);
+    const options = moveOptions(c.id, true, true);
+    return options.length > 0 ? options : null;
   };
   const activeCases = data.cases.filter((c) => !data.setAside[c.id]);
   const asideCases = data.cases.filter((c) => data.setAside[c.id]);
@@ -287,7 +292,7 @@ export function ReplacementPage() {
               return (
                 <Group key={p.id} justify="space-between" wrap="nowrap" data-testid="replacement-proposal-refused" style={{ opacity: 0.55 }}>
                   <Group gap="xs" wrap="nowrap">
-                    <ReplacementBadge type={p.type} state="refused" gapKg={p.checks.weightGapKg} />
+                    <ReplacementBadge type={p.type} state="refused" gapKg={p.checks.weightGapKg} checks={p.checks} />
                     <Text size="sm" td="line-through">{p.reason}</Text>
                     <Text size="xs" c="dimmed">refusée</Text>
                   </Group>
@@ -299,7 +304,7 @@ export function ReplacementPage() {
               <Group key={p.id} justify="space-between" wrap="nowrap" data-testid="replacement-proposal" p="xs"
                 style={{ border: '1px solid var(--sk-line)', borderRadius: 'var(--mantine-radius-md)', background: 'var(--sk-bg)' }}>
                 <Group gap="xs" wrap="nowrap">
-                  <Box style={{ flexShrink: 0 }}><ReplacementBadge type={p.type} state="proposed" gapKg={'newKey' in p.target ? undefined : p.checks.weightGapKg} /></Box>
+                  <Box style={{ flexShrink: 0 }}><ReplacementBadge type={p.type} state="proposed" gapKg={'newKey' in p.target ? undefined : p.checks.weightGapKg} checks={p.checks} /></Box>
                   <div>
                     <Text size="sm">{p.reason}</Text>
                     <Text size="xs" c="dimmed">
@@ -500,7 +505,8 @@ export function ReplacementPage() {
               <Button variant="default" onClick={() => setDialog(null)}>Annuler</Button>
               <Button data-testid="proposal-confirm" loading={apply.isPending}
                 onClick={() => apply.mutate({ proposalId: dialog.proposal.id, fingerprint: data.fingerprint }, { onSuccess: () => done('Réaffectation validée.') })}>
-                {PROPOSAL_TYPES[dialog.proposal.type].simple ? 'Êtes-vous sûr ? Valider' : 'Confirmer la validation'}
+                {/* Un cas simple n'a pas de validation manuelle ; une correction de poids au-delà de l'écart en a une. */}
+                {dialog.proposal.manual ? 'Confirmer la validation' : 'Êtes-vous sûr ? Valider'}
               </Button>
             </Group>
           )}

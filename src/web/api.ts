@@ -421,6 +421,8 @@ export interface PlanResponse {
     alone: string[];
     onCards: string[];
     dropped: PlanChoice[];
+    /** Pour appliquer : choix validés qui attendent un déplacement à valider non validé. */
+    waiting: PlanChoice[];
     proven: boolean;
     hash: string;
     refused: { proposalId: string; registrationId: string; reason: string }[];

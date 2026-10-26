@@ -107,7 +107,8 @@ export function PlanView({
   const manualChoice = (m: PlanMove) => (m.type === 'M' ? choices.find((c) => c.kind === 'manual' && c.registrationId === m.registrationId) : undefined);
   const without = (pred: (c: PlanChoice) => boolean) => choices.filter((c) => !pred(c));
 
-  const manualMoves = plan.moves.filter((m) => m.manual);
+  // Déplacements dont les règles demandent une validation (un « Modifier » sans règle à valider n'en est pas un).
+  const manualMoves = plan.moves.filter((m) => m.band !== 0);
   const validatedCount = manualMoves.filter((m) => m.validated).length;
 
   const openApply = () => {
@@ -116,6 +117,9 @@ export function PlanView({
     forApply.mutate({ waveId, choices });
   };
   const toApply = forApply.data;
+  // À l'écran sans validation (ou validés), mais absents du plan à appliquer : ils dépendaient d'un déplacement à valider.
+  const applied = new Set((toApply?.plan.moves ?? []).map((m) => m.registrationId));
+  const skipped = toApply ? plan.moves.filter((m) => (m.band === 0 || m.validated) && !applied.has(m.registrationId)) : [];
   const confirm = () => {
     if (!toApply) return;
     apply.mutate(
@@ -123,7 +127,8 @@ export function PlanView({
       {
         onSuccess: (r) => {
           setConfirming(false);
-          onChoices([]);
+          // Les choix appliqués disparaissent ; ceux qui attendent un déplacement à valider restent épinglés.
+          onChoices(toApply.plan.waiting);
           notifications.show({ color: 'green', message: `${plural(r.applied ?? 0, 'réaffectation appliquée', 'réaffectations appliquées')}.` });
         },
         // Plan périmé ou changé : les choix restent, le plan est recalculé (rechargement des données) et l'erreur affichée.
@@ -301,13 +306,25 @@ export function PlanView({
                   {toApply.plan.moves.map((m) => {
                     const onScreen = plan.moves.find((x) => x.registrationId === m.registrationId);
                     return (
-                      <Text key={m.id} size="sm" style={{ overflowWrap: 'anywhere' }}>
+                      <Text key={m.id} size="sm" data-testid="plan-apply-move" style={{ overflowWrap: 'anywhere' }}>
                         <b>{name(m.registrationId)}</b> → {m.toLabel}
                         {m.validated ? ' · validé à la main' : ' · sans validation'}
+                        {!onScreen && <Text span size="sm" c="var(--sk-warn-text)"> (pas à l’écran)</Text>}
                         {onScreen && onScreen.toLabel !== m.toLabel && <Text span size="sm" c="var(--sk-warn-text)"> (à l’écran : {onScreen.toLabel})</Text>}
                       </Text>
                     );
                   })}
+                </Stack>
+              )}
+              {skipped.length > 0 && (
+                <Stack gap={4} data-testid="plan-apply-skipped">
+                  <Text size="sm">Ne {skipped.length > 1 ? 'seront' : 'sera'} pas {skipped.length > 1 ? 'appliqués' : 'appliqué'}, sans les déplacements à valider non validés :</Text>
+                  {skipped.map((m) => (
+                    <Text key={m.id} size="sm" c="var(--sk-warn-text)" style={{ overflowWrap: 'anywhere' }}>
+                      <b>{name(m.registrationId)}</b> → {m.toLabel}
+                      {m.validated ? ' · validé à la main, attend un déplacement à valider' : ' · sans validation'}
+                    </Text>
+                  ))}
                 </Stack>
               )}
               {plan.moves.some((m) => m.manual && !m.validated) && (

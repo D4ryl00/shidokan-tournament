@@ -30,13 +30,13 @@ export function ProposalPreview({ data }: { data: PreviewData }) {
           <Title order={6}>Cas simples ({simple.length})</Title>
           <Stack gap={4} data-testid="preview-simple">
             {simple.map((s) => (
-              <Group key={s.proposal.id} gap="xs" wrap="nowrap"><ReplacementBadge type={s.proposal.type} state="proposed" size="xs" /><Text size="sm">{s.proposal.reason}</Text></Group>
+              <Group key={s.proposal.id} gap="xs" wrap="nowrap"><ReplacementBadge type={s.proposal.type} state="proposed" size="xs" checks={s.proposal.checks} /><Text size="sm">{s.proposal.reason}</Text></Group>
             ))}
           </Stack>
           <Title order={6}>Cas qui demandent normalement une validation manuelle ({manual.length})</Title>
           <Stack gap={4} data-testid="preview-manual">
             {manual.map((s) => (
-              <Group key={s.proposal.id} gap="xs" wrap="nowrap"><ReplacementBadge type={s.proposal.type} state="proposed" size="xs" /><Text size="sm">{s.proposal.reason}</Text></Group>
+              <Group key={s.proposal.id} gap="xs" wrap="nowrap"><ReplacementBadge type={s.proposal.type} state="proposed" size="xs" checks={s.proposal.checks} /><Text size="sm">{s.proposal.reason}</Text></Group>
             ))}
           </Stack>
         </>

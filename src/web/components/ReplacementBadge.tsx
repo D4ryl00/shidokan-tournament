@@ -1,6 +1,6 @@
 import { Badge, Popover, Stack, Text, UnstyledButton } from '@mantine/core';
 import { useMemo } from 'react';
-import type { ProposalType } from '../../domain/replacement/index.js';
+import type { Proposal, ProposalType } from '../../domain/replacement/index.js';
 import { useReplacement, type RecasementEntry } from '../api.js';
 
 /** Couleur = nature du changement (5 couleurs + gris), icône + texte : jamais la couleur seule. */
@@ -33,16 +33,19 @@ export function useRecasementDetails(competitionId: string): Map<string, Recasem
 
 /**
  * Contour = proposé, plein = validé, grisé = refusé ou annulé.
- * `gapKg` : écart de poids affiché sur les badges « ⚖ Poids » ; `detail` : origine, arrivée, motif et heure au clic.
+ * `gapKg` : écart de poids affiché sur les badges « ⚖ Poids » ; `detail` : origine, arrivée, motif et heure au clic ;
+ * `checks` : vérifications d'une proposition (une tranche d'âge au-dessous seulement : « ↓ Âge »). Sans elles (historique), « ↑ Âge ».
  */
-export function ReplacementBadge({ type, state = 'validated', size = 'sm', gapKg, detail }: {
+export function ReplacementBadge({ type, state = 'validated', size = 'sm', gapKg, detail, checks }: {
   type: ProposalType;
   state?: 'proposed' | 'validated' | 'refused';
   size?: 'xs' | 'sm' | 'md';
   gapKg?: number;
   detail?: RecasementEntry;
+  checks?: Pick<Proposal['checks'], 'ageDirections'>;
 }) {
-  const t = PROPOSAL_TYPES[type];
+  const down = type === 'C' && !!checks && checks.ageDirections.includes('down') && !checks.ageDirections.includes('up');
+  const t = down ? { ...PROPOSAL_TYPES.C, label: '↓ Âge' } : PROPOSAL_TYPES[type];
   const badge = (
     <Badge
       data-testid="replacement-badge"
