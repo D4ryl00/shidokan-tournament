@@ -1,5 +1,7 @@
+import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { CONTACTS_SCOPE } from '../../src/domain/app-settings.js';
 import { buildApp } from '../../src/server/app.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 import { connectGoogle, fakeGoogle, type FakeGoogle } from '../helpers/fake-google.js';
@@ -172,4 +174,49 @@ test('autorisation d’envoyer décochée en se reconnectant avec le même compt
   expect(fake.revoked).toEqual([]);
   expect((await settings()).google).toMatchObject({ email: 'orga@gmail.com', status: 'ok' });
   expect((await testMail()).statusCode).toBe(204);
+});
+
+const rawDb = () => new Database(dbPath);
+
+test('connexion : droits accordés retenus ; contacts décochés → connecté quand même', async () => {
+  await connectGoogle(app);
+  expect((await settings()).google.scopes).toContain(CONTACTS_SCOPE);
+  fake.grantedScopes = fake.grantedScopes.filter((s) => s !== CONTACTS_SCOPE);
+  const res = await connectGoogle(app);
+  expect(res.headers.location).toBe('/parametres?google=connecte#mails');
+  expect((await settings()).google.scopes).not.toContain(CONTACTS_SCOPE);
+});
+
+test('reconnexion : mode d’envoi gardé ; première connexion après « Déconnecter » → google', async () => {
+  await app.inject({ method: 'PATCH', url: '/api/app-settings', payload: { smtp: { host: 'smtp.x.org', port: 465, security: 'tls', user: 'u', password: 'p', fromName: 'Ligue', fromEmail: 'l@x.org' } } });
+  await connectGoogle(app);
+  expect((await settings()).mailMode).toBe('google');
+  expect((await app.inject({ method: 'PATCH', url: '/api/app-settings', payload: { mailMode: 'smtp' } })).statusCode).toBe(200);
+  await connectGoogle(app);
+  expect((await settings()).mailMode).toBe('smtp');
+  await app.inject({ method: 'POST', url: '/api/app-settings/google/disconnect' });
+  await connectGoogle(app);
+  expect((await settings()).mailMode).toBe('google');
+});
+
+test('reconnexion avec un autre compte : liens et attente effacés ; même compte : rien ne change', async () => {
+  await connectGoogle(app);
+  const club = (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { name: 'Tani Dojo', affiliationNumber: null, coachName: null, coachPhone: null, coachEmail: null, notes: null } })).json().id as string;
+  const db = rawDb();
+  try {
+    db.prepare('update club_directory set google_contact_id = ? where id = ?').run('people/c1', club);
+    const state = JSON.parse((db.prepare("select value_json v from app_settings where key = 'googleContacts'").get() as { v: string }).v);
+    db.prepare("update app_settings set value_json = ? where key = 'googleContacts'").run(JSON.stringify({ ...state, pending: ['people/c9'] }));
+    const read = () => ({
+      link: (db.prepare('select google_contact_id l from club_directory where id = ?').get(club) as { l: string | null }).l,
+      state: JSON.parse((db.prepare("select value_json v from app_settings where key = 'googleContacts'").get() as { v: string }).v),
+    });
+    await connectGoogle(app);
+    expect(read()).toMatchObject({ link: 'people/c1', state: { account: 'orga@gmail.com', pending: ['people/c9'] } });
+    fake.email = 'autre@gmail.com';
+    await connectGoogle(app);
+    expect(read()).toMatchObject({ link: null, state: { account: 'autre@gmail.com', pending: [] } });
+  } finally {
+    db.close();
+  }
 });

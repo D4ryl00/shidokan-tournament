@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from 'vitest';
-import { GOOGLE_SCOPES, GoogleAccessRevokedError, googleClient, googleConfigFrom, type GoogleClient } from '../../src/server/google/client.js';
+import { ContactsScopeMissingError, GOOGLE_SCOPES, GoogleAccessRevokedError, googleClient, googleConfigFrom, type GoogleClient } from '../../src/server/google/client.js';
 import { fakeGoogle, type FakeGoogle } from '../helpers/fake-google.js';
 
 let fake: FakeGoogle;
@@ -16,7 +16,7 @@ test('configuration : il faut l’ID client, le code secret et l’adresse publi
   expect(googleConfigFrom({ clientId: 'i', clientSecret: 's', publicUrl: 'https://x.org/' })!.redirectUri).toBe('https://x.org/api/app-settings/google/callback');
 });
 
-test('adresse d’autorisation : le seul droit d’envoyer, accès durable, consentement redemandé, state', () => {
+test('adresse d’autorisation : le droit d’envoyer et de lire les contacts, accès durable, consentement redemandé, state', () => {
   const url = new URL(google.authUrl('etat-123'));
   expect(url.origin + url.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth');
   expect(Object.fromEntries(url.searchParams)).toEqual({
@@ -28,7 +28,7 @@ test('adresse d’autorisation : le seul droit d’envoyer, accès durable, cons
     prompt: 'consent',
     state: 'etat-123',
   });
-  expect(GOOGLE_SCOPES).toEqual(['openid', 'email', 'https://www.googleapis.com/auth/gmail.send']);
+  expect(GOOGLE_SCOPES).toEqual(['openid', 'email', 'https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/contacts.readonly']);
   expect(url.toString()).not.toContain('mail.google.com');
 });
 
@@ -96,4 +96,47 @@ test('401 de Gmail même avec un jeton neuf (renouvellement accepté) : erreur o
   expect(err).toBeInstanceOf(Error);
   expect(err).not.toBeInstanceOf(GoogleAccessRevokedError);
   expect(String(err)).toMatch(/401/);
+});
+
+test('autorisation : contacts en lecture seule demandés', () => {
+  const scope = new URL(google.authUrl('s')).searchParams.get('scope')!;
+  expect(scope).toContain('contacts.readonly');
+  expect(scope.replace('contacts.readonly', '')).not.toContain('auth/contacts');
+});
+
+test('contacts : toutes les pages, principal choisi, libellés', async () => {
+  fake.contacts = [1, 2, 3, 4, 5].map((i) => ({ resourceName: `people/c${i}`, name: `Coach ${i}`, email: `c${i}@x.org`, phone: i === 2 ? null : `060000000${i}`, organization: i === 3 ? 'Dojo' : null, groups: i === 1 ? ['contactGroups/g1'] : [] }));
+  const rt = (await google.exchangeCode('c')).refreshToken;
+  const list = await google.listContacts(rt);
+  expect(list).toHaveLength(5);
+  expect(list[0]).toEqual({ resourceName: 'people/c1', name: 'Coach 1', email: 'c1@x.org', phone: '0600000001', organization: null, groups: ['contactGroups/g1'] });
+  expect(list[1]!.phone).toBeNull();
+  expect(list[2]!.organization).toBe('Dojo');
+});
+
+test('libellés : seulement ceux de l’utilisateur, triés par nom', async () => {
+  fake.labels = [{ resourceName: 'contactGroups/b', name: 'Coachs' }, { resourceName: 'contactGroups/a', name: 'Arbitres' }, { resourceName: 'contactGroups/c', name: 'Dojos' }];
+  const rt = (await google.exchangeCode('c')).refreshToken;
+  expect(await google.listContactLabels(rt)).toEqual([
+    { resourceName: 'contactGroups/a', name: 'Arbitres' },
+    { resourceName: 'contactGroups/b', name: 'Coachs' },
+    { resourceName: 'contactGroups/c', name: 'Dojos' },
+  ]);
+});
+
+test('contacts : droit absent → ContactsScopeMissingError ; accès retiré → GoogleAccessRevokedError ; 401 → renouvelé une fois', async () => {
+  const rt = (await google.exchangeCode('c')).refreshToken;
+  fake.grantedScopes = fake.grantedScopes.filter((s) => !s.includes('contacts'));
+  await expect(google.listContacts(rt)).rejects.toBeInstanceOf(ContactsScopeMissingError);
+  await expect(google.listContactLabels(rt)).rejects.toBeInstanceOf(ContactsScopeMissingError);
+  fake.grantedScopes.push('https://www.googleapis.com/auth/contacts.readonly');
+  fake.contacts = [{ resourceName: 'people/c1', name: 'A', email: null, phone: null, organization: null, groups: [] }];
+  await google.accessToken(rt); // jeton en cache
+  fake.revokeAfterSends = 0;
+  await expect(google.listContacts(rt)).rejects.toBeInstanceOf(GoogleAccessRevokedError);
+  fake.revokeAfterSends = null;
+  const before = fake.refreshCount;
+  fake.expireAccessOnce = true;
+  expect(await google.listContacts(rt)).toHaveLength(1);
+  expect(fake.refreshCount).toBe(before + 1);
 });

@@ -1,4 +1,7 @@
-// Faux Google des tests : jetons, révocation et envoi Gmail, aiguillés selon l'adresse appelée.
+import { CONTACTS_SCOPE } from '../../src/domain/app-settings.js';
+import type { ContactLabel, GoogleContact } from '../../src/domain/google-contacts.js';
+
+// Faux Google des tests : jetons, révocation, envoi Gmail et API People, aiguillés selon l'adresse appelée.
 const b64url = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const json = (status: number, body: object) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
@@ -24,6 +27,9 @@ export interface FakeGoogle {
   rejectAllSends: boolean;
   /** Erreur renvoyée par Gmail à l'envoi. */
   sendError: { status: number; message: string } | null;
+  /** Contacts et libellés servis par l'API People (pages de 2). */
+  contacts: GoogleContact[];
+  labels: ContactLabel[];
   sent: Buffer[];
   sendHeaders: Headers[];
   revoked: string[];
@@ -39,7 +45,7 @@ export function fakeGoogle(): FakeGoogle {
   const accountOf = new Map<string, string>();
   const fake: FakeGoogle = {
     email: 'orga@gmail.com',
-    grantedScopes: ['openid', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/gmail.send'],
+    grantedScopes: ['openid', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/gmail.send', CONTACTS_SCOPE],
     revokeAfterSends: null,
     expireAccessOnce: false,
     expireAccessAfterSends: null,
@@ -48,6 +54,8 @@ export function fakeGoogle(): FakeGoogle {
     noRefreshToken: false,
     sendError: null,
     rejectAllSends: false,
+    contacts: [],
+    labels: [],
     sent: [],
     sendHeaders: [],
     revoked: [],
@@ -100,6 +108,37 @@ export function fakeGoogle(): FakeGoogle {
         fake.sent.push(Buffer.from(init?.body as Uint8Array));
         fake.sendHeaders.push(headers);
         return json(200, { id: `m${fake.sent.length}`, threadId: 't', labelIds: ['SENT'] });
+      }
+      if (url.startsWith('https://people.googleapis.com/v1/')) {
+        const token = new Headers(init?.headers).get('authorization')?.replace(/^Bearer /, '') ?? '';
+        if (fake.expireAccessOnce) {
+          fake.expireAccessOnce = false;
+          access.delete(token);
+        }
+        if (!access.has(token) || accessRevoked()) return json(401, { error: { code: 401, message: 'Invalid Credentials' } });
+        if (!fake.grantedScopes.includes(CONTACTS_SCOPE)) return json(403, { error: { code: 403, message: 'Request had insufficient authentication scopes.' } });
+        const u = new URL(url);
+        const from = Number(u.searchParams.get('pageToken') ?? 0);
+        const page = <T>(all: T[]) => ({ items: all.slice(from, from + 2), ...(from + 2 < all.length ? { nextPageToken: String(from + 2) } : {}) });
+        if (u.pathname === '/v1/contactGroups') {
+          const all = [{ resourceName: 'contactGroups/myContacts', name: 'myContacts', groupType: 'SYSTEM_CONTACT_GROUP' }, ...fake.labels.map((l) => ({ ...l, groupType: 'USER_CONTACT_GROUP' }))];
+          const { items, nextPageToken } = page(all);
+          return json(200, { contactGroups: items, nextPageToken });
+        }
+        if (u.pathname === '/v1/people/me/connections') {
+          const { items, nextPageToken } = page(fake.contacts);
+          return json(200, {
+            connections: items.map((c) => ({
+              resourceName: c.resourceName,
+              names: c.name ? [{ displayName: c.name, metadata: { primary: true } }] : undefined,
+              emailAddresses: c.email ? [{ value: 'secondaire@example.org' }, { value: c.email, metadata: { primary: true } }] : undefined,
+              phoneNumbers: c.phone ? [{ value: c.phone, metadata: { primary: true } }] : undefined,
+              organizations: c.organization ? [{ name: c.organization }] : undefined,
+              memberships: c.groups.map((g) => ({ contactGroupMembership: { contactGroupResourceName: g } })),
+            })),
+            nextPageToken,
+          });
+        }
       }
       return json(404, { error: 'not found' });
     }) as typeof fetch,

@@ -71,7 +71,7 @@ Dans l'application, menu **Réglages de l'application** :
 1. **Envoi des mails** avec un compte Gmail. Il faut d'abord avoir [créé l'accès Google](#créer-laccès-google-une-seule-fois) :
    - choisissez **Compte Google**, puis cliquez **« Se connecter avec Google »** ;
    - choisissez le compte Gmail expéditeur. Google affiche **« Google n'a pas validé cette application »** : c'est attendu. Cliquez **Paramètres avancés**, puis **Accéder à Shidokan France (non sécurisé)** ;
-   - acceptez. Si Google présente des cases à cocher, laissez cochée celle qui permet d'**envoyer des e-mails** : sans elle, l'application refuse la connexion ;
+   - acceptez. Si Google présente des cases à cocher, laissez cochée celle qui permet d'**envoyer des e-mails** : sans elle, l'application refuse la connexion. Laissez aussi cochée celle des **contacts** : sans elle, l'envoi fonctionne mais la synchronisation des coachs avec Google Contacts est indisponible ;
    - de retour dans les Réglages, l'écran affiche « Connecté : … ». Réglez le nom de l'expéditeur (« Shidokan France »), cliquez « Enregistrer », puis « Envoyer un mail d'essai ».
 
    L'application ne peut qu'**envoyer** des mails depuis ce compte : elle ne peut ni les lire ni les supprimer. « Déconnecter » lui retire l'accès ; on peut aussi le retirer depuis le compte Google (Sécurité → Applications tierces). Si l'accès est retiré ou expire (par exemple quand le mot de passe du compte Gmail change), les Réglages affichent « reconnectez-vous ». L'application renouvelle d'elle-même l'accès chaque mois, pour qu'il n'expire pas entre deux compétitions. Gmail accepte environ 500 destinataires par jour.
@@ -90,12 +90,12 @@ Conseil : prenez un compte qui restera accessible à Shidokan France, celui de l
 Les libellés ci-dessous sont ceux de la console en anglais ; ils peuvent varier un peu.
 
 1. **Créer un projet** : en haut de la console, sélecteur de projet → **New project**, nom « Shidokan France », puis **Create**.
-2. **Activer l'API Gmail** : menu **APIs & Services → Library**, cherchez « Gmail API », puis **Enable**.
+2. **Activer l'API Gmail et l'API People** : menu **APIs & Services → Library**, cherchez « Gmail API », puis **Enable** ; recommencez avec « People API » (elle sert à lire les contacts pour synchroniser les coachs de l'annuaire).
 3. **Écran de consentement** : menu **Google Auth platform → Branding** (cliquez **Get started** si la console le propose) :
    - **App name** : « Shidokan France » (c'est le nom affiché à la connexion) ; **User support email** : votre adresse (celle du compte de la console, proposée dans la liste) ; **Next** ;
    - **Audience** : **External** ; **Next** ;
    - **Contact information** : une adresse où Google peut vous écrire au sujet du projet ; **Next** ; acceptez la charte, puis **Create**.
-4. **Autorisations** : **Google Auth platform → Data Access → Add or remove scopes**. Cochez `.../auth/gmail.send` (« Send email on your behalf »), `openid` et `.../auth/userinfo.email`, puis **Update** et **Save**. Ne prenez **pas** `https://mail.google.com/` : il donne l'accès complet à la boîte.
+4. **Autorisations** : **Google Auth platform → Data Access → Add or remove scopes**. Cochez `.../auth/gmail.send` (« Send email on your behalf »), `.../auth/contacts.readonly` (« See and download your contacts », lecture seule), `openid` et `.../auth/userinfo.email`, puis **Update** et **Save**. Ne prenez **pas** `https://mail.google.com/` : il donne l'accès complet à la boîte.
 5. **Publier** : **Google Auth platform → Audience → Publish app**, puis confirmez. Le statut passe à **In production**. C'est nécessaire : en mode « Testing », Google retire l'accès au bout de 7 jours. Ne demandez pas la vérification par Google : elle n'est pas nécessaire pour un seul compte expéditeur. Le prix à payer est l'avertissement « application non validée » à la connexion.
 6. **Identifiant client** : **Google Auth platform → Clients → Create client** :
    - **Application type** : **Web application** ; **Name** : « Shidokan France » ;

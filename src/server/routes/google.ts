@@ -3,8 +3,9 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { cookieValue, SESSION_COOKIE, type InstanceRole } from '../auth/guard.js';
 import type { AppDb } from '../db/client.js';
+import { clubDirectory } from '../db/schema.js';
 import { GMAIL_SEND_SCOPE, type GoogleClient } from '../google/client.js';
-import { getAppSettings, setGoogleSender } from '../repositories/app-settings.js';
+import { getAppSettings, setGoogleContactsState, setGoogleSender } from '../repositories/app-settings.js';
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 const back = (result: 'connecte' | 'annule' | 'envoi-refuse' | 'expire' | 'erreur' | 'session') => `/parametres?google=${result}#mails`;
@@ -71,7 +72,19 @@ export async function googleRoutes(app: FastifyInstance, { db, google, role }: {
       return reply.redirect(back('envoi-refuse'));
     }
     const fromName = current.google?.fromName ?? current.smtp?.fromName ?? 'Shidokan France';
-    setGoogleSender(db, { email: granted.email, fromName, refreshToken: granted.refreshToken, status: 'ok', lastRefreshAt: new Date().toISOString() }, 'google');
+    const sender = { email: granted.email, fromName, refreshToken: granted.refreshToken, status: 'ok' as const, lastRefreshAt: new Date().toISOString(), scopes: granted.scopes };
+    const knownAccount = current.googleContacts.account;
+    db.transaction((tx) => {
+      const t = tx as unknown as AppDb;
+      // Reconnexion : le mode d'envoi choisi est gardé ; première connexion (ou après « Déconnecter ») : Google.
+      setGoogleSender(t, sender, current.google ? current.mailMode : 'google');
+      // Autre compte Google : les liens faits avec les contacts de l'ancien compte n'ont plus de sens.
+      if (knownAccount !== null && knownAccount !== granted.email) {
+        t.update(clubDirectory).set({ googleContactId: null }).run();
+        setGoogleContactsState(t, { pending: [] });
+      }
+      setGoogleContactsState(t, { account: granted.email });
+    });
     if (current.google && !sameAccount) void google.revoke(current.google.refreshToken);
     return reply.redirect(back('connecte'));
   });
