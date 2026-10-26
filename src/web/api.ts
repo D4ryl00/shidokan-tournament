@@ -410,6 +410,7 @@ export const useManualMove = (id: string) => useReplacementAction<{ registration
 export const useSetAsideCase = (id: string) => useReplacementAction<{ caseId: string; note?: string }>(id, 'set-aside');
 export const useResumeCase = (id: string) => useReplacementAction<{ caseId: string }>(id, 'resume');
 export const useWithdrawRegistration = (id: string) => useReplacementAction<{ registrationId: string; fingerprint: string }>(id, 'withdraw');
+export const useResetReplacement = (id: string) => useReplacementAction<Record<string, never>>(id, 'reset');
 
 export type { LadderProgress, LadderRow, PlanChoice, PlanMove, RulesView };
 /** Réponse de `POST /replacement/plan` (voir `planResponse`, côté serveur). */

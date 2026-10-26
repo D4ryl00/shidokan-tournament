@@ -31,6 +31,17 @@ function write(key: string, choices: PlanChoice[]): void {
   }
 }
 
+/** Oublie les choix du plan de toutes les sessions de la compétition sur ce poste (après « Repartir de zéro »). */
+export function clearPlanChoices(competitionId: string): void {
+  try {
+    const prefix = `plan-choices:${competitionId}:`;
+    const keys = Array.from({ length: sessionStorage.length }, (_, i) => sessionStorage.key(i)).filter((k): k is string => k?.startsWith(prefix) ?? false);
+    for (const k of keys) sessionStorage.removeItem(k);
+  } catch {
+    // Stockage indisponible : rien à oublier.
+  }
+}
+
 /**
  * Épingles (« Valider ») et choix (« Modifier ») du plan d'ensemble de la session : ils vivent dans la page jusqu'à
  * l'application, gardés en `sessionStorage` du poste (une clé par compétition et par session).

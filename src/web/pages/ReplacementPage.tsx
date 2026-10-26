@@ -21,6 +21,7 @@ import {
   useRegistrations,
   useReplacement,
   useUndoRecasement,
+  useResetReplacement,
   useWithdrawRegistration,
   useSetAsideCase,
   useResumeCase,
@@ -40,7 +41,7 @@ import { RuleLadder } from '../components/replacement/RuleLadder.js';
 import { PlanView, WARN_ALERT, type PlanFighter } from '../components/replacement/PlanView.js';
 import type { RuleId } from '../../domain/settings.js';
 import { rulesView } from '../../domain/replacement/rules.js';
-import { usePlanChoices } from '../usePlanChoices.js';
+import { clearPlanChoices, usePlanChoices } from '../usePlanChoices.js';
 import { useSelectedWave } from '../useSelectedWave.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import { plural } from '../../domain/plural.js';
@@ -51,6 +52,7 @@ type Dialog =
   | { kind: 'move'; registrationId: string; categoryId: string }
   | { kind: 'withdraw'; registrationId: string; categoryLabel: string }
   | { kind: 'set-aside'; caseId: string }
+  | { kind: 'reset' }
   | null;
 
 const CASE_KINDS: Record<CaseKind, string> = { closed: 'Catégorie fermée', alone: 'Sans adversaire', weight_out: 'Poids hors catégorie', weight_gap: 'Écart de poids', return: 'Retour possible' };
@@ -215,6 +217,9 @@ export function ReplacementPage() {
   const refuse = useRefuseProposal(id);
   const unrefuse = useUnrefuseProposal(id);
   const undo = useUndoRecasement(id);
+  const resetAll = useResetReplacement(id);
+  // Change à chaque « Repartir de zéro » : la liste des règles et le plan repartent sans les choix du poste.
+  const [resets, setResets] = useState(0);
   const move = useManualMove(id);
   const withdraw = useWithdrawRegistration(id);
   const setAside = useSetAsideCase(id);
@@ -253,6 +258,7 @@ export function ReplacementPage() {
   // Tant que les vagues ne sont pas chargées, on ne sait pas quels cas afficher.
   if (!ready || !data) return <Stack>{waveSelector}<Loader /></Stack>;
   const s = data.summary;
+  const anyRefused = Object.values(data.proposals).some((ps) => ps.some((p) => p.refused));
   /** Catégories proposées au déplacement manuel : les cohérentes avec les réglages, et les autres si on les demande. */
   const moveOptions = (caseId: string, all = allTargets[caseId] ?? false, sessionOnly = false): ComboboxData => {
     const band = data.fighters[data.cases.find((x) => x.id === caseId)?.registrationId ?? '']?.ageBandCode;
@@ -404,7 +410,7 @@ export function ReplacementPage() {
   return (
     <Stack gap="md">
       {waveSelector}
-      <RulesPanel id={id} waveId={waveId} ready={ready && (waves.length === 0 || waveId !== null)} fighter={fighter} targets={planTargets} />
+      <RulesPanel key={resets} id={id} waveId={waveId} ready={ready && (waves.length === 0 || waveId !== null)} fighter={fighter} targets={planTargets} />
       <SimpleGrid cols={{ base: 2, sm: 3, md: 5, xl: 9 }} spacing="sm" data-testid="replacement-summary">
         <Stat label="Présents" value={s.present} />
         <Stat label="Absents" value={s.absent} />
@@ -417,7 +423,7 @@ export function ReplacementPage() {
         <Stat label="Catégories lancées" value={s.startedCategories} />
       </SimpleGrid>
       {waves.length > 0 && <Text size="sm" c="dimmed">Les changements de session se valident un par un.</Text>}
-      <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error ?? undo.error ?? move.error ?? withdraw.error ?? setAside.error ?? resume.error} />
+      <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error ?? undo.error ?? resetAll.error ?? move.error ?? withdraw.error ?? setAside.error ?? resume.error} />
 
       {activeCases.length === 0 && (
         <EmptyState icon="✓" title="Aucun cas à traiter"
@@ -471,12 +477,19 @@ export function ReplacementPage() {
       )}
 
       <SectionCard title={HELP['recasement.valides'].title} help="recasement.valides"
-        actions={data.recasements.length > 0 && (
-          <Group gap="xs" data-testid="recasement-filters">
-            <SegmentedControl size="xs" value={logState} onChange={(v) => setLogState(v as typeof logState)}
-              data={[{ value: 'all', label: 'Toutes' }, { value: 'validated', label: 'Validées' }, { value: 'undone', label: 'Annulées' }]} />
-            <Select size="xs" w={200} placeholder="Tous les types" clearable value={logType} onChange={setLogType}
-              data={[...new Set(data.recasements.map((r) => r.type))].map((t) => ({ value: t, label: `${PROPOSAL_TYPES[t as ProposalType].label} — ${PROPOSAL_TYPES[t as ProposalType].title}` }))} />
+        actions={(data.recasements.length > 0 || anyRefused || s.setAside > 0) && (
+          <Group gap="xs">
+            {data.recasements.length > 0 && (
+              <Group gap="xs" data-testid="recasement-filters">
+                <SegmentedControl size="xs" value={logState} onChange={(v) => setLogState(v as typeof logState)}
+                  data={[{ value: 'all', label: 'Toutes' }, { value: 'validated', label: 'Validées' }, { value: 'undone', label: 'Annulées' }]} />
+                <Select size="xs" w={200} placeholder="Tous les types" clearable value={logType} onChange={setLogType}
+                  data={[...new Set(data.recasements.map((r) => r.type))].map((t) => ({ value: t, label: `${PROPOSAL_TYPES[t as ProposalType].label} — ${PROPOSAL_TYPES[t as ProposalType].title}` }))} />
+              </Group>
+            )}
+            <Button size="compact-sm" variant="subtle" color="red" data-testid="replacement-reset" onClick={() => setDialog({ kind: 'reset' })}>
+              Repartir de zéro
+            </Button>
           </Group>
         )}>
       {data.recasements.length === 0 ? (
@@ -561,6 +574,24 @@ export function ReplacementPage() {
             <Button color="red" data-testid="case-withdraw-confirm" loading={withdraw.isPending}
               onClick={() => dialog?.kind === 'withdraw' && withdraw.mutate({ registrationId: dialog.registrationId, fingerprint: data.fingerprint }, { onSuccess: () => done('Inscription retirée : ne combat pas.') })}>
               Confirmer
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+      <Modal opened={dialog?.kind === 'reset'} onClose={() => setDialog(null)} title="Repartir de zéro ?">
+        <Stack>
+          <Text>Toutes les réaffectations validées sont annulées, chaque combattant retrouve sa catégorie d’origine. Les refus, les cartes mises de côté et l’historique sont effacés. Les règles ne changent pas.</Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setDialog(null)}>Non</Button>
+            <Button color="red" data-testid="replacement-reset-confirm" loading={resetAll.isPending}
+              onClick={() => resetAll.mutate({}, {
+                onSuccess: () => {
+                  clearPlanChoices(id);
+                  setResets((n) => n + 1);
+                  done('Réaffectation remise à zéro.');
+                },
+              })}>
+              Tout annuler
             </Button>
           </Group>
         </Stack>
