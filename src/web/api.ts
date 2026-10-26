@@ -301,10 +301,21 @@ export function useWeighIn(id: string, waveId?: string | null) {
   });
 }
 
-/** Pesée et recasement changent les catégories, les vagues, l'ordre de passage… : toutes les données de la compétition sont rechargées. */
+/** Premier élément de la clé des requêtes du plan (`usePlan`). */
+export const PLAN_KEY = 'replacement-plan';
+
+/**
+ * Pesée et recasement changent les catégories, les vagues, l'ordre de passage… : toutes les données de la compétition sont rechargées.
+ * Les calculs du plan en cours sont d'abord arrêtés : ils dataient d'avant l'écriture, et un calcul encore sans résultat ne serait
+ * pas relancé par la seule invalidation (TanStack ne réutilise alors que la demande en cours). Ce n'est pas une annulation de
+ * l'organisateur (« Annuler le calcul ») : le plan est aussitôt recalculé.
+ */
 function useInvalidateDay(id: string) {
   const qc = useQueryClient();
-  return () => qc.invalidateQueries({ predicate: (q) => q.queryKey[1] === id });
+  return async () => {
+    await qc.cancelQueries({ queryKey: [PLAN_KEY, id] });
+    return qc.invalidateQueries({ predicate: (q) => q.queryKey[1] === id });
+  };
 }
 
 export function useSetWeighIn(id: string) {
@@ -422,8 +433,6 @@ export interface PlanResponse {
 }
 const planBody = (waveId: string | null, choices: PlanChoice[]) => ({ ...(waveId ? { waveId } : {}), choices });
 
-/** Premier élément de la clé des requêtes du plan (`usePlan`). */
-export const PLAN_KEY = 'replacement-plan';
 /** Plans (clé hachée) qu'une mise à jour en direct a trouvés en plein calcul : un seul nouveau calcul part à la fin de celui-ci. */
 const refreshAfterPlan = new Set<string>();
 

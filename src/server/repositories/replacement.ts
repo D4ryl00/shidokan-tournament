@@ -336,8 +336,12 @@ export async function applyPlan(
   // autre requête, la base est synchrone). Un déplacement refusé annule ceux déjà écrits ; `persist` s'y emboîte en point de sauvegarde.
   const raw = db.$client;
   let applied = 0;
-  raw.exec('BEGIN IMMEDIATE');
+  let begun = false;
   try {
+    // Dans le `try` : un échec du BEGIN suit le même chemin d'erreur, sans ROLLBACK (aucune transaction ouverte ici, et une
+    // transaction ouverte ailleurs n'est pas la nôtre).
+    raw.exec('BEGIN IMMEDIATE');
+    begun = true;
     for (const move of plan.moves) {
       state = await loadState(db, competitionId);
       // Le combattant doit encore être là où le plan l'a pris (une catégorie créée en route, `new:…`, n'existe pas encore en base).
@@ -356,7 +360,7 @@ export async function applyPlan(
     }
     raw.exec('COMMIT');
   } catch (e) {
-    if (raw.inTransaction) raw.exec('ROLLBACK');
+    if (begun && raw.inTransaction) raw.exec('ROLLBACK');
     throw e;
   }
   return { applied };

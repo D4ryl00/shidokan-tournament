@@ -22,8 +22,8 @@ export const TOKENS = {
     text: '#f1edf5', soft: '#b9b1c2', muted: '#8d8497', accent: '#c17ad3', onAccent: '#1a0f1f',
     hero: 'linear-gradient(135deg, #3b1f47, #2a1833)', heroText: '#d9a8e6', heroSub: '#b9a9c4',
     chip: '#2a2131', chipText: '#e3c6ec', ok: '#1f2a22', okText: '#7fd6a0', warn: '#33281a', warnText: '#f0b766',
-    // Barres de la liste des règles : du vert (sans validation) au rouge (concessions très fortes), texte `onCost`.
-    cost0: '#2b8a57', cost1: '#5c8f22', cost2: '#9a7600', cost3: '#c25a0c', cost4: '#c43a30', onCost: '#ffffff',
+    // Barres de la liste des règles : du vert (sans validation) au rouge (concessions très fortes), texte `onCost` (≥ 4,5:1).
+    cost0: '#298454', cost1: '#53811f', cost2: '#927000', cost3: '#bc570c', cost4: '#c43a30', onCost: '#ffffff',
   },
   light: {
     bg: '#f7f5f9', bar: '#ffffff', line: '#ebe6ef', card: '#ffffff', cardLine: '#e7e1ec', row: '#faf8fb',

@@ -154,10 +154,11 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, isPlaceholderData]);
   const choose = (c: PlanChoice[]) => { setDropped({ waveId, names: [] }); setChoices(c); };
-  // La liste affichée : celle qui s'enregistre (le geste se voit aussitôt), sinon celle du plan affiché ; pendant un calcul ou après
-  // une annulation, le plan date d'avant le dernier changement : la liste suit alors les réglages enregistrés.
+  // La liste affichée : celle qui s'enregistre (le geste se voit aussitôt), sinon celle du plan affiché ; pendant un calcul, après
+  // une annulation ou avec le plan d'autres choix, le plan date d'avant le dernier changement : la liste suit les réglages enregistrés.
   const saved = competition ? rulesView(competition.settings) : null;
-  const view = (setRules.isPending ? setRules.variables : undefined) ?? (plan && !isFetching && !cancelled ? plan.view : saved) ?? plan?.view ?? null;
+  const current = plan && !isFetching && !isPlaceholderData && !cancelled;
+  const view = (setRules.isPending ? setRules.variables : undefined) ?? (current ? plan.view : saved) ?? plan?.view ?? null;
   const saving = setRules.isPending || reset.isPending;
   // La place de la progression est gardée : son arrivée ne décale rien (sur téléphone, l'en-tête passe à la ligne).
   const actions = <Box w={280} maw="100%" mih={PROGRESS_HEIGHT}>{isFetching && <PlanProgress progress={progress} onCancel={cancel} />}</Box>;
@@ -194,7 +195,7 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
       {plan && open && (
         <Box style={{ opacity: isFetching ? 0.5 : 1 }}>
           <PlanView key={waveId ?? ''} id={id} waveId={waveId} data={plan} choices={choices} onChoices={choose}
-            dropped={dropped.waveId === waveId ? dropped.names : []} computing={isFetching} cancelled={cancelled} fighter={fighter} targets={targets} />
+            dropped={dropped.waveId === waveId ? dropped.names : []} computing={isFetching || saving} cancelled={cancelled} fighter={fighter} targets={targets} />
         </Box>
       )}
     </SectionCard>

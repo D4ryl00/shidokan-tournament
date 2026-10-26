@@ -35,8 +35,11 @@ test('contraste lisible (≥ 4,5:1) dans les deux thèmes', () => {
   }
 });
 
-test('texte des barres et bandeaux de coût lisible sur chaque couleur de coût (texte gras : ≥ 3:1)', () => {
+test('texte des barres et bandeaux de coût lisible sur chaque couleur de coût (13 px gras, pas un « grand texte » : ≥ 4,5:1)', () => {
   for (const [name, t] of Object.entries(TOKENS)) {
-    for (const c of [t.cost0, t.cost1, t.cost2, t.cost3, t.cost4]) expect(contrast(t.onCost, c), `${name} onCost/${c}`).toBeGreaterThanOrEqual(3);
+    const costs = [t.cost0, t.cost1, t.cost2, t.cost3, t.cost4];
+    for (const c of costs) expect(contrast(t.onCost, c), `${name} onCost/${c}`).toBeGreaterThanOrEqual(4.5);
+    // Cinq couleurs distinctes.
+    expect(new Set(costs).size).toBe(5);
   }
 });

@@ -79,7 +79,7 @@ export function PlanView({
   onChoices: (c: PlanChoice[]) => void;
   /** Noms des combattants dont un choix n'est plus possible et a été retiré. */
   dropped: string[];
-  /** Un recalcul est en cours : les gestes restent possibles (chacun relance le calcul), « Appliquer le plan » attend. */
+  /** Un recalcul (ou l'enregistrement d'une règle) est en cours : les gestes restent possibles (chacun relance le calcul), « Appliquer le plan » attend. */
   computing: boolean;
   /** Calcul annulé : le plan affiché est périmé, on ne l'applique pas (les autres gestes relancent le calcul). */
   cancelled: boolean;
@@ -99,8 +99,10 @@ export function PlanView({
   // Message du recalcul : on compare le plan affiché au précédent.
   const [shown, setShown] = useState(plan.moves);
   const [changes, setChanges] = useState<Change[]>([]);
+  // Inscriptions dont le déplacement vient d'être appliqué : leur départ du plan n'est pas un changement à signaler.
+  const [justApplied, setJustApplied] = useState<ReadonlySet<string>>(new Set());
   if (shown !== plan.moves) {
-    setChanges(diff(shown, plan.moves, name));
+    setChanges(diff(shown, plan.moves, name).filter((c) => !justApplied.has(c.registrationId) || plan.moves.some((m) => m.registrationId === c.registrationId)));
     setShown(plan.moves);
   }
   const changed = new Set(changes.filter((c) => plan.moves.some((m) => m.registrationId === c.registrationId)).map((c) => c.registrationId));
@@ -119,7 +121,7 @@ export function PlanView({
     if (refuse.isError) refuse.reset();
     if (unrefuse.isError) unrefuse.reset();
   };
-  const choose = (c: PlanChoice[]) => { clearErrors(); onChoices(c); };
+  const choose = (c: PlanChoice[]) => { clearErrors(); setJustApplied(new Set()); onChoices(c); };
 
   // Déplacements dont les règles demandent une validation (un « Modifier » sans règle à valider n'en est pas un).
   const manualMoves = plan.moves.filter((m) => m.band !== 0);
@@ -146,6 +148,8 @@ export function PlanView({
   const skipped = toApply ? plan.moves.filter((m) => (m.band === 0 || m.validated) && !applied.has(m.registrationId)) : [];
   const confirm = () => {
     if (!toApply) return;
+    // Posé avant l'envoi : le plan recalculé arrive avant la fin de la mutation (les données sont relues d'abord).
+    setJustApplied(new Set(toApply.plan.moves.map((m) => m.registrationId)));
     apply.mutate(
       { ...(waveId ? { waveId } : {}), choices, fingerprint: toApply.fingerprint, hash: toApply.plan.hash },
       {
@@ -156,7 +160,7 @@ export function PlanView({
           notifications.show({ color: 'green', message: `${plural(r.applied ?? 0, 'réaffectation appliquée', 'réaffectations appliquées')}.` });
         },
         // Plan périmé ou changé : les choix restent, le plan est recalculé (rechargement des données) et l'erreur affichée.
-        onError: () => setConfirming(false),
+        onError: () => { setJustApplied(new Set()); setConfirming(false); },
       },
     );
   };
@@ -251,7 +255,7 @@ export function PlanView({
         <Text size="sm">Restent seuls{' '}<b className="num">{plan.alone.length}</b>{' '}<Text span size="sm" c="dimmed">(au lieu de {plan.aloneBefore})</Text></Text>
         <Text size="sm">Déplacements{' '}<b className="num">{plan.moves.length}</b></Text>
         <Text size="sm">Validés{' '}<b className="num">{validatedCount} / {manualMoves.length}</b></Text>
-        <Button size="xs" data-testid="plan-apply" onClick={openApply} loading={forApply.isPending} disabled={computing || cancelled}>Appliquer le plan</Button>
+        <Button size="xs" data-testid="plan-apply" onClick={openApply} loading={forApply.isPending} disabled={computing || cancelled || refuse.isPending || unrefuse.isPending}>Appliquer le plan</Button>
       </Group>
       <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error} />
 

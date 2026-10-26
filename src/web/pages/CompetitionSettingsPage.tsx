@@ -93,27 +93,24 @@ export function CompetitionSettingsPage() {
 
   // Le formulaire part de `base` (réglages et zones tels que chargés). Rechargés (autre poste, retour sur l'onglet…) pendant une
   // saisie, ils ne l'écrasent pas : l'enregistrement n'envoie que ce qui a changé depuis `base`, feuille par feuille.
-  const [base, setBase] = useState<{ info: typeof info; settings: CompetitionSettings } | null>(null);
-  const [zonesBase, setZonesBase] = useState<string | null>(null);
-  const [seen, setSeen] = useState<{ competition?: typeof competition; zones?: typeof savedZones }>({});
+  // `from` : la donnée chargée ; une plus récente est reprise dès que le formulaire n'a plus de modification (même défaite à la main).
+  const [base, setBase] = useState<{ info: typeof info; settings: CompetitionSettings; from: unknown } | null>(null);
+  const [zonesBase, setZonesBase] = useState<{ view: string; ids: string[]; from: unknown } | null>(null);
   const formDirty = !!base && !!s && (JSON.stringify(s) !== JSON.stringify(base.settings) || JSON.stringify(info) !== JSON.stringify(base.info));
-  const zonesDirty = zonesBase !== null && JSON.stringify(zones) !== zonesBase;
+  const zonesDirty = zonesBase !== null && JSON.stringify(zones) !== zonesBase.view;
   const loadCompetition = (c: NonNullable<typeof competition>) => {
-    const next = { info: { name: c.name, date: c.date, location: c.location ?? '' }, settings: c.settings };
+    const next = { info: { name: c.name, date: c.date, location: c.location ?? '' }, settings: c.settings, from: c };
     setBase(next);
     setInfo(next.info);
     setS(next.settings);
   };
   const loadZones = (zs: NonNullable<typeof savedZones>) => {
     const view = zs.map(({ id: zid, name, disciplines }) => ({ key: zid, id: zid, name, disciplines }));
-    setZonesBase(JSON.stringify(view));
+    setZonesBase({ view: JSON.stringify(view), ids: zs.map((z) => z.id), from: zs });
     setZones(view);
   };
-  if (competition !== seen.competition || savedZones !== seen.zones) {
-    setSeen({ competition, zones: savedZones });
-    if (competition && competition !== seen.competition && !formDirty) loadCompetition(competition);
-    if (savedZones && savedZones !== seen.zones && !zonesDirty) loadZones(savedZones);
-  }
+  if (competition && competition !== base?.from && !formDirty) loadCompetition(competition);
+  if (savedZones && savedZones !== zonesBase?.from && !zonesDirty) loadZones(savedZones);
   // Saisie en cours : la mise à jour automatique (autre poste) attend, et quitter l'onglet demande confirmation.
   const dirty = formDirty || zonesDirty;
   useUnsaved('reglages', dirty);
@@ -129,7 +126,8 @@ export function CompetitionSettingsPage() {
     setZoneErrors(errors);
     if (errors.length) return;
     const from = base!;
-    saveZones.mutate({ zones: input, knownIds: (savedZones ?? []).map((z) => z.id) }, {
+    // Les zones que le formulaire a vues : une zone ajoutée ailleurs entre-temps fait refuser l'envoi (jamais supprimée sans être vue).
+    saveZones.mutate({ zones: input, knownIds: zonesBase?.ids ?? [] }, {
       onSuccess: (saved) => {
         loadZones(saved);
         update.mutate(

@@ -1,3 +1,4 @@
+import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
@@ -249,10 +250,35 @@ describe('appliquer pendant que d’autres écrivent', () => {
     return { a, apply: () => call('POST', '/replacement/plan/apply', { choices: [], fingerprint: p.fingerprint, hash: p.plan.hash }) };
   };
   const journal = async () => ((await call('GET', '/replacement')).json() as { recasements: unknown[] }).recasements;
+  let applyDbPath: string;
   beforeAll(async () => {
-    app = await buildApp({ dbPath: tmpDbPath() });
+    applyDbPath = tmpDbPath();
+    app = await buildApp({ dbPath: applyDbPath });
   });
   afterAll(async () => app.close());
+
+  test('le début de la transaction échoue (base verrouillée par un autre écrivain) : erreur, rien d’écrit, rien de resté ouvert', async () => {
+    const { apply } = await setup();
+    const other = new Database(applyDbPath);
+    // Verrou d'écriture pris juste avant l'écriture du plan : le BEGIN IMMEDIATE du serveur attend puis échoue (base occupée).
+    gate.tamper = (r) => {
+      other.exec('BEGIN IMMEDIATE');
+      return r;
+    };
+    try {
+      const res = await apply();
+      expect(res.statusCode).toBeGreaterThanOrEqual(500);
+    } finally {
+      gate.tamper = null;
+      if (other.inTransaction) other.exec('ROLLBACK');
+      other.close();
+    }
+    expect(await journal()).toEqual([]);
+    // Aucune transaction n'est restée ouverte : la même application passe maintenant.
+    const again = await apply();
+    expect(again.statusCode).toBe(200);
+    expect(again.json()).toEqual({ applied: 1 });
+  }, 20_000);
 
   test('deux applications du même plan en même temps : une seule écrit, l’autre 409', async () => {
     const { apply } = await setup();

@@ -117,6 +117,15 @@ export function RuleLadder({ view, rows, onChange, busy, fresh }: {
                   <Text size="xs" c="dimmed" style={{ flex: '1 1 100%' }}>{plural(row.moves, 'déplacement', 'déplacements')} · {row.toValidate} à valider</Text>
                 </>
               )}
+              {/* Règle activée dont la ligne n'est pas encore calculée : une ligne active, la barre en attente. */}
+              {rows && on && !(row && row.alone !== null) && (
+                <>
+                  <Box style={{ flex: '2 1 200px', minWidth: 0 }}>
+                    <Box data-testid="ladder-pending" style={{ ...barStyle(0, 'transparent'), border: '1px dashed var(--sk-muted)', color: 'var(--sk-muted)' }}>…</Box>
+                  </Box>
+                  <Text size="xs" c="dimmed" style={{ flex: '1 1 100%' }}>pas encore calculée</Text>
+                </>
+              )}
             </Box>
             {view.cutAfter === rule && (
               <Box data-testid="ladder-cut" role="separator" style={{ borderTop: '2px dashed var(--sk-accent)', color: 'var(--sk-accent)', fontSize: 12, fontWeight: 700, paddingTop: 2, textAlign: 'center' }}>

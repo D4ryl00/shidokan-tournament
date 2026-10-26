@@ -181,6 +181,8 @@ test('valider un déplacement à valider, appliquer : seuls lui et les cas simpl
   await expect(rows.filter({ hasText: 'SEULE' })).not.toContainText('validé à la main');
   // Le déplacement non validé reste en attente dans le plan recalculé ; les choix sont vidés.
   await expect(view.getByTestId('plan-move')).toHaveCount(1);
+  // Les déplacements appliqués ne sont pas signalés comme « n’est plus déplacé ».
+  await expect(view.getByText(/n’est plus déplacé/)).toHaveCount(0);
   await expect(moveOf('VETE Paul').getByTestId('plan-move-validate')).toBeVisible();
   await expect(view).toContainText('Validés 0 / 1');
 });
@@ -683,4 +685,83 @@ test('réglages : une relecture pendant une saisie ne l’efface pas, et l’enr
   expect(c.name).toBe('Coupe renommée ailleurs');
   // Le formulaire reprend la compétition enregistrée.
   await expect(page.getByLabel('Nom', { exact: true })).toHaveValue('Coupe renommée ailleurs');
+});
+
+test('un geste sur les règles pendant le premier calcul d’un choix le relance : le plan final tient compte des deux', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan geste et choix');
+  await seedPlan(request, id);
+  const { view: rules } = await (await request.post(`/api/competitions/${id}/replacement/plan`, { data: { choices: [] } })).json();
+  await request.put(`/api/competitions/${id}/replacement/rules`, { data: { ...rules, on: { ...rules.on, mixSexes: false } } });
+  const { view, moveOf } = await openPlan(page, id);
+  const apply = view.getByTestId('plan-apply');
+  await expect(apply).toBeEnabled();
+  const sent: import('@playwright/test').Request[] = [];
+  const failed: import('@playwright/test').Request[] = [];
+  page.on('request', (r) => { if (isPlanPost(r)) sent.push(r); });
+  page.on('requestfailed', (r) => { if (isPlanPost(r)) failed.push(r); });
+  const slow = slowPlan(3000);
+  await page.route('**/replacement/plan', slow);
+  // Valider : un nouveau choix, donc un calcul encore sans résultat.
+  await moveOf('MINI Léa').getByTestId('plan-move-validate').click();
+  await expect.poll(() => sent.length).toBe(1);
+  const row = page.getByTestId('rule-ladder').locator('[data-testid="ladder-row"][data-rule="mixSexes"]');
+  const sw = row.getByTestId('ladder-switch');
+  await sw.click({ force: true });
+  await expect(sw).toBeChecked({ timeout: 1000 });
+  // Règle activée pas encore calculée : une ligne active, la barre en attente.
+  await expect(row.getByTestId('ladder-pending')).toBeVisible();
+  await expect(row).toContainText('pas encore calculée');
+  // Le geste arrête le calcul commencé avant lui et en relance un, bien avant la fin du premier.
+  await expect.poll(() => sent.length, { timeout: 2000 }).toBe(2);
+  await expect.poll(() => failed.includes(sent[0]!)).toBe(true);
+  await page.unroute('**/replacement/plan', slow);
+  await expect(apply).toBeEnabled({ timeout: 10_000 });
+  await expect(sw).toBeChecked();
+  await expect(row.getByTestId('ladder-pending')).toHaveCount(0);
+  await expect(row.getByTestId('ladder-alone')).toBeVisible();
+  await expect(moveOf('MINI Léa').getByTestId('plan-move-unvalidate')).toBeVisible();
+  const { settings } = await (await request.get(`/api/competitions/${id}`)).json();
+  expect(settings.mixSexes.enabled).toBe(true);
+
+  // Pendant l’enregistrement d’une règle (avant le recalcul), « Appliquer le plan » attend aussi.
+  const slowPut = async (route: import('@playwright/test').Route) => {
+    await new Promise((r) => setTimeout(r, 1500));
+    await route.fallback();
+  };
+  await page.route('**/replacement/rules', slowPut);
+  const n = sent.length;
+  await sw.click({ force: true });
+  await expect(apply).toBeDisabled({ timeout: 500 });
+  expect(sent.length).toBe(n);
+  await expect.poll(() => sent.length, { timeout: 5000 }).toBe(n + 1);
+  await expect(apply).toBeEnabled({ timeout: 10_000 });
+  await expect(sw).not.toBeChecked();
+  await page.unroute('**/replacement/rules', slowPut);
+});
+
+test('réglages : une zone ajoutée ailleurs pendant une saisie n’est jamais supprimée sans être vue', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe relecture des zones');
+  await page.goto(`/competitions/${id}/reglages`);
+  const names = page.getByTestId('zone-name');
+  const zones = await (await request.get(`/api/competitions/${id}/zones`)).json() as { id: string; name: string; disciplines: string[] | null }[];
+  await expect(names).toHaveCount(zones.length);
+  await names.first().fill('Tatami A');
+  expect((await request.put(`/api/competitions/${id}/zones`, {
+    data: [...zones.map((z) => ({ id: z.id, name: z.name, disciplines: z.disciplines })), { name: 'Zone ailleurs', disciplines: null }],
+  })).ok()).toBe(true);
+  const reread = page.waitForResponse((r) => r.url().endsWith(`/api/competitions/${id}/zones`) && r.request().method() === 'GET');
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange', { bubbles: true })));
+  await reread;
+  await page.waitForTimeout(300);
+  // La saisie reste ; l’enregistrement est refusé au lieu de supprimer la zone qu’il n’a pas vue.
+  await expect(names).toHaveCount(zones.length);
+  await expect(names.first()).toHaveValue('Tatami A');
+  await page.getByTestId('settings-save').click();
+  await expect(page.getByTestId('api-error')).toContainText('Les zones ont été modifiées ailleurs entre-temps');
+  const after = await (await request.get(`/api/competitions/${id}/zones`)).json() as { name: string }[];
+  expect(after.map((z) => z.name)).toContain('Zone ailleurs');
+  // Saisie défaite à la main : le formulaire reprend les zones enregistrées.
+  await names.first().fill(zones[0]!.name);
+  await expect(names).toHaveCount(zones.length + 1);
+  await expect(names.last()).toHaveValue('Zone ailleurs');
 });
