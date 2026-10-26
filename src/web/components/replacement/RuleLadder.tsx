@@ -27,7 +27,14 @@ const barStyle = (pct: number, color: string): CSSProperties => ({
  * appliquées. Avec `rows` (le plan), chaque règle a sa barre alignée à gauche : combattants encore seuls une fois les règles
  * jusqu’à celle-là permises.
  */
-export function RuleLadder({ view, rows, onChange, busy }: { view: RulesView; rows?: LadderRow[]; onChange: (v: RulesView) => void; busy?: boolean }) {
+export function RuleLadder({ view, rows, onChange, busy, fresh }: {
+  view: RulesView;
+  rows?: LadderRow[];
+  onChange: (v: RulesView) => void;
+  busy?: boolean;
+  /** Pendant un calcul : les lignes (`null` : le départ) déjà recalculées ; les autres, celles du plan précédent, sont grisées. */
+  fresh?: ReadonlySet<RuleId | null>;
+}) {
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const settings = applyRulesView(defaultSettings(), view);
   const byRule = new Map(rows?.filter((r) => r.rule !== null).map((r) => [r.rule, r]));
@@ -35,13 +42,14 @@ export function RuleLadder({ view, rows, onChange, busy }: { view: RulesView; ro
   // Une règle peut laisser plus de combattants seuls que le départ (correction de poids obligatoire) : l’échelle est le plus grand nombre.
   const max = Math.max(1, ...(rows ?? []).map((r) => r.alone ?? 0));
   const pct = (n: number) => (n / max) * 100;
+  const stale = (rule: RuleId | null) => (fresh && !fresh.has(rule) ? 0.4 : 1);
   const reorder = (from: number, to: number) => onChange({ ...view, order: moved(view.order, from, to) });
   const bandOf = (rule: RuleId) => costBand(settings, rule, !NO_VALIDATION_RULES.has(rule));
 
   return (
     <Box data-testid="rule-ladder" role="group" aria-label="Règles de réaffectation" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {start && (
-        <Box data-testid="ladder-start" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '6px 8px' }}>
+        <Box data-testid="ladder-start" style={{ opacity: stale(null), display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '6px 8px' }}>
           <Text size="sm" fw={600} style={{ flex: '1 1 160px', minWidth: 0 }}>Sans rien changer</Text>
           <Box style={{ flex: '2 1 200px', minWidth: 0 }}>
             <Box data-testid="ladder-alone" style={barStyle(pct(start.alone ?? 0), 'var(--sk-text)')}><span style={{ color: 'var(--sk-bg)' }}>{start.alone ?? 0}</span></Box>
@@ -96,7 +104,7 @@ export function RuleLadder({ view, rows, onChange, busy }: { view: RulesView; ro
               </span>
               {rows && on && row && row.alone !== null && (
                 <>
-                  <Box style={{ flex: '2 1 200px', minWidth: 0 }}>
+                  <Box style={{ flex: '2 1 200px', minWidth: 0, opacity: stale(rule) }}>
                     <Box data-testid="ladder-alone" style={barStyle(pct(row.alone), BAND_COLOR[band]!)}>{row.alone}</Box>
                   </Box>
                   <Text size="xs" c="dimmed" style={{ flex: '1 1 100%' }}>{plural(row.moves, 'déplacement', 'déplacements')} · {row.toValidate} à valider</Text>

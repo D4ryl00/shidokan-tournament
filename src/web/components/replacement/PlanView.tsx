@@ -1,6 +1,6 @@
 import { Alert, Box, Button, Group, Modal, Select, Stack, Text, type ComboboxData } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { plural } from '../../../domain/plural.js';
 import { applyRulesView, COST_BAND_LABELS, costBand, NO_VALIDATION_RULES, RULE_LABELS, type CostBand } from '../../../domain/replacement/rules.js';
 import { defaultSettings, type RuleId } from '../../../domain/settings.js';
@@ -111,10 +111,20 @@ export function PlanView({
   const manualMoves = plan.moves.filter((m) => m.band !== 0);
   const validatedCount = manualMoves.filter((m) => m.validated).length;
 
+  // Fermer la confirmation (ou quitter l'écran) annule le calcul du plan à appliquer.
+  const applyAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => applyAbort.current?.abort(), []);
   const openApply = () => {
     apply.reset();
     setConfirming(true);
-    forApply.mutate({ waveId, choices });
+    applyAbort.current?.abort();
+    applyAbort.current = new AbortController();
+    forApply.mutate({ waveId, choices, signal: applyAbort.current.signal });
+  };
+  const closeApply = () => {
+    applyAbort.current?.abort();
+    forApply.reset();
+    setConfirming(false);
   };
   const toApply = forApply.data;
   // À l'écran sans validation (ou validés), mais absents du plan à appliquer : ils dépendaient d'un déplacement à valider.
@@ -290,7 +300,7 @@ export function PlanView({
         </Text>
       )}
 
-      <Modal opened={confirming} onClose={() => setConfirming(false)} size="xl" title="Appliquer le plan">
+      <Modal opened={confirming} onClose={closeApply} size="xl" title="Appliquer le plan">
         <Stack>
           {forApply.isPending && <Text size="sm">Calcul du plan à appliquer…</Text>}
           <ApiErrorAlert error={forApply.error ?? apply.error} />
@@ -336,7 +346,7 @@ export function PlanView({
             </>
           )}
           <Group justify="flex-end">
-            <Button variant="default" onClick={() => setConfirming(false)}>Annuler</Button>
+            <Button variant="default" onClick={() => closeApply()}>Annuler</Button>
             <Button data-testid="plan-apply-confirm" loading={apply.isPending} disabled={!toApply || forApply.isPending || toApply.plan.moves.length === 0} onClick={confirm}>
               Confirmer ({forApply.isPending ? 0 : (toApply?.plan.moves.length ?? 0)})
             </Button>

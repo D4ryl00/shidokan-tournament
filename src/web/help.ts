@@ -354,6 +354,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         '« Refuser » écarte une proposition (elle reste en grisé, « Rétablir » la reprend).',
         '« Plan d’ensemble » : la liste des règles, de la plus acceptable à la moins acceptable, montre pour chacune combien de combattants resteraient seuls si on l’autorise avec toutes celles du dessus. Rangez les règles, activez-les ou non, et placez la ligne « je m’arrête ici ».',
         '« Voir le plan » liste les déplacements, du plus coûteux au moins coûteux. « Valider » confirme un déplacement à valider (il ne bougera plus), « Refuser » l’écarte, « Modifier » choisit une autre catégorie : le plan est recalculé à chaque fois, et chaque choix s’annule.',
+        'Le calcul du plan se fait à part : une barre montre sa progression si elle dure, et « Annuler le calcul » l’arrête (le plan affiché ne tient alors pas compte de votre dernier changement ; « Relancer le calcul » le reprend).',
         '« Appliquer le plan » applique les déplacements sans validation et ceux que vous avez validés ; les autres restent en attente.',
         '« Déplacer manuellement vers… » ne liste que les catégories cohérentes avec les réglages (âge, poids, règlement, mixité). « Toutes les catégories » ajoute les autres, marquées « ⚠ N règles enfreintes » : le détail s’affiche avant de confirmer.',
       ],

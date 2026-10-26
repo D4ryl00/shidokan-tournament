@@ -35,8 +35,10 @@ import { HelpButton } from '../components/Help.js';
 import { ProposalPreview } from '../components/ProposalPreview.js';
 import { PROPOSAL_TYPES, ReplacementBadge } from '../components/ReplacementBadge.js';
 import { ageBandLabel, disciplineLabel, prefsLabel, rulesetShort, weightLabel } from '../labels.js';
+import { PlanProgress } from '../components/replacement/PlanProgress.js';
 import { RuleLadder } from '../components/replacement/RuleLadder.js';
 import { PlanView, type PlanFighter } from '../components/replacement/PlanView.js';
+import type { RuleId } from '../../domain/settings.js';
 import { rulesView } from '../../domain/replacement/rules.js';
 import { usePlanChoices } from '../usePlanChoices.js';
 import { useSelectedWave } from '../useSelectedWave.js';
@@ -132,7 +134,7 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
   const [dropped, setDropped] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
   // Avec des sessions, le plan n'existe que pour la session choisie.
-  const { data: shownPlan, error, isFetching, isPlaceholderData } = usePlan(id, waveId, choices, ready);
+  const { data: shownPlan, error, isFetching, isPlaceholderData, progress, cancelled, cancel, restart } = usePlan(id, waveId, choices, ready);
   // Le plan gardé pendant un recalcul est celui de la même session seulement (pas celui de la session d'avant).
   const [loadedWave, setLoadedWave] = useState<string | null | undefined>(undefined);
   if (shownPlan && !isPlaceholderData && loadedWave !== waveId) setLoadedWave(waveId);
@@ -149,12 +151,23 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, isPlaceholderData]);
   const choose = (c: PlanChoice[]) => { setDropped([]); setChoices(c); };
-  const view = plan?.view ?? (competition ? rulesView(competition.settings) : null);
+  // Après une annulation, le plan affiché date d'avant le dernier changement : la liste suit les réglages enregistrés.
+  const view = (cancelled && competition ? rulesView(competition.settings) : plan?.view) ?? (competition ? rulesView(competition.settings) : null);
   if (!view) return <ApiErrorAlert error={error} />;
+  // Pendant le calcul, les lignes déjà recalculées remplacent celles du plan précédent (grisées).
+  const computing = isFetching && !!progress;
+  const ladderRows = computing ? [...(progress.rows), ...(plan?.rows ?? []).filter((r) => !progress.rows.some((p) => p.rule === r.rule))] : plan?.rows;
+  const fresh = computing ? new Set(progress.rows.map((r) => r.rule)) : isFetching ? new Set<RuleId | null>() : undefined;
   const k = view.order.indexOf(view.cutAfter) + 1;
   return (
     <SectionCard title="Règles de réaffectation" description="L’ordre est la priorité ; la ligne pointillée marque où les règles s’arrêtent.">
-      <RuleLadder view={view} rows={plan?.rows} busy={setRules.isPending || reset.isPending} onChange={(v) => setRules.mutate(v)} />
+      {isFetching && <PlanProgress progress={progress} onCancel={cancel} />}
+      {cancelled && (
+        <Alert color="yellow" data-testid="plan-cancelled" p="xs" title="Calcul annulé : le plan affiché ne tient pas compte de votre dernier changement.">
+          <Button size="compact-sm" data-testid="plan-restart" onClick={restart}>Relancer le calcul</Button>
+        </Alert>
+      )}
+      <RuleLadder view={view} rows={ladderRows} fresh={fresh} busy={setRules.isPending || reset.isPending} onChange={(v) => setRules.mutate(v)} />
       <ApiErrorAlert error={setRules.error ?? reset.error ?? error} />
       <Group>
         <Button variant="subtle" size="compact-sm" loading={reset.isPending} onClick={() => reset.mutate()}>Revenir aux réglages par défaut</Button>
@@ -167,8 +180,10 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
         </Group>
       )}
       {plan && open && (
-        <PlanView key={waveId ?? ''} id={id} waveId={waveId} data={plan} choices={choices} onChoices={choose} dropped={dropped}
-          busy={isFetching} fighter={fighter} targets={targets} />
+        <Box style={{ opacity: isFetching ? 0.5 : 1 }}>
+          <PlanView key={waveId ?? ''} id={id} waveId={waveId} data={plan} choices={choices} onChoices={choose} dropped={dropped}
+            busy={isFetching || cancelled} fighter={fighter} targets={targets} />
+        </Box>
       )}
     </SectionCard>
   );

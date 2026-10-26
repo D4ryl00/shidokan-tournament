@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Competition, CompetitionInput } from '../domain/competition.js';
 import type { BracketFormat, KataScores, MatchMethod, Podium } from '../domain/brackets/index.js';
@@ -9,7 +10,8 @@ import type { ColumnMapping, FfkChoices, FfkImportPlan } from '../domain/ffk-imp
 import type { Club, DirectoryEntry, DirectoryInput, RegistrationInput, RegistrationRow } from '../domain/registration.js';
 import type { Case, Presence, Proposal, ProposalType } from '../domain/replacement/index.js';
 import type { CategoryGrid, DisciplineId } from '../domain/types.js';
-import type { LadderRow, PlanChoice, PlanMove } from '../domain/replacement/plan.js';
+import type { LadderProgress, LadderRow, PlanChoice, PlanMove } from '../domain/replacement/plan.js';
+import { fetchPlanStream } from './planStream.js';
 import type { RulesView } from '../domain/replacement/rules.js';
 import type { Wave, WaveInput } from '../domain/waves.js';
 import type { AppSettingsPatch, PublicAppSettings } from '../domain/app-settings.js';
@@ -410,7 +412,7 @@ export const useSetAsideCase = (id: string) => useReplacementAction<{ caseId: st
 export const useResumeCase = (id: string) => useReplacementAction<{ caseId: string }>(id, 'resume');
 export const useWithdrawRegistration = (id: string) => useReplacementAction<{ registrationId: string; fingerprint: string }>(id, 'withdraw');
 
-export type { LadderRow, PlanChoice, PlanMove, RulesView };
+export type { LadderProgress, LadderRow, PlanChoice, PlanMove, RulesView };
 /** Réponse de `POST /replacement/plan` (voir `planResponse`, côté serveur). */
 export interface PlanResponse {
   view: RulesView;
@@ -431,20 +433,44 @@ export interface PlanResponse {
   fingerprint: string;
 }
 const planBody = (waveId: string | null, choices: PlanChoice[]) => ({ ...(waveId ? { waveId } : {}), choices });
-/** Le diagramme des règles et le plan de la ligne de coupure ; rafraîchi par toute action de réaffectation (`queryKey[1]` = compétition). */
+/**
+ * Le diagramme des règles et le plan de la ligne de coupure ; rafraîchi par toute action de réaffectation (`queryKey[1]` = compétition).
+ * Le calcul se fait à part côté serveur : `progress` donne son avancement, `cancel()` l'arrête (le plan affiché ne tient alors
+ * plus compte du dernier changement : `cancelled`), `restart()` le relance. Changer de choix annule le calcul précédent.
+ */
 export function usePlan(id: string, waveId: string | null, choices: PlanChoice[], enabled: boolean) {
-  return useQuery({
-    queryKey: ['replacement-plan', id, waveId, choices],
-    queryFn: () => api<PlanResponse>('POST', `/api/competitions/${id}/replacement/plan`, planBody(waveId, choices)),
+  const qc = useQueryClient();
+  const [progress, setProgress] = useState<LadderProgress | null>(null);
+  const queryKey = ['replacement-plan', id, waveId, choices];
+  const keyText = JSON.stringify(queryKey);
+  const [cancelledKey, setCancelledKey] = useState<string | null>(null);
+  const query = useQuery({
+    queryKey,
+    queryFn: ({ signal }) => {
+      setProgress(null);
+      return fetchPlanStream(`/api/competitions/${id}/replacement/plan`, planBody(waveId, choices), {
+        signal,
+        onProgress: (p) => { if (!signal.aborted) setProgress(p); },
+      });
+    },
     enabled,
     placeholderData: keepPreviousData,
   });
+  // Annulé tant qu'aucun nouveau calcul n'est reparti pour ce même choix.
+  const cancelled = cancelledKey === keyText && !query.isFetching;
+  return {
+    ...query,
+    progress: query.isFetching ? progress : null,
+    cancelled,
+    cancel: () => { setCancelledKey(keyText); void qc.cancelQueries({ queryKey }); },
+    restart: () => { setCancelledKey(null); void query.refetch(); },
+  };
 }
-/** Le plan à appliquer (sans validation) et son aperçu. */
+/** Le plan à appliquer (sans validation) et son aperçu ; `signal` annule le calcul (fermeture de la confirmation). */
 export function usePlanForApply(id: string) {
   return useMutation({
-    mutationFn: ({ waveId, choices }: { waveId?: string | null; choices: PlanChoice[] }) =>
-      api<PlanResponse>('POST', `/api/competitions/${id}/replacement/plan`, { ...planBody(waveId ?? null, choices), forApply: true }),
+    mutationFn: ({ waveId, choices, signal }: { waveId?: string | null; choices: PlanChoice[]; signal?: AbortSignal }) =>
+      fetchPlanStream(`/api/competitions/${id}/replacement/plan`, { ...planBody(waveId ?? null, choices), forApply: true }, { signal }),
   });
 }
 export const useApplyPlan = (id: string) => useReplacementAction<{ waveId?: string; choices: PlanChoice[]; fingerprint: string; hash: string }>(id, 'plan/apply');

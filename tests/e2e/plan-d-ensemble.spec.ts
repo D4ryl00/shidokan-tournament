@@ -237,6 +237,33 @@ test('plan périmé à l’application : refusé, les choix restent', async ({ p
   await expect(view).toContainText('TARDIVE Léa');
 });
 
+test('annuler un calcul long : le plan affiché est signalé périmé, « Relancer le calcul » le remet à jour', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan annulé');
+  await seedPlan(request, id);
+  const { view } = await openPlan(page, id);
+  const apply = view.getByTestId('plan-apply');
+  await expect(apply).toBeEnabled();
+  // La demande est retardée de 2 s (et peut être annulée par le navigateur pendant ce temps).
+  const slow = async (route: import('@playwright/test').Route) => {
+    await new Promise((r) => setTimeout(r, 2000));
+    try { await route.fallback(); } catch { /* demande annulée */ }
+  };
+  await page.route('**/replacement/plan', slow);
+  const ladder = page.getByTestId('rule-ladder');
+  await ladder.locator('[data-testid="ladder-row"][data-rule="mixSexes"]').getByTestId('ladder-switch').click({ force: true });
+  await expect(apply).toBeDisabled();
+  await expect(page.getByText('Calcul du plan', { exact: false }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Annuler le calcul' }).click();
+  const message = page.getByText('Calcul annulé : le plan affiché ne tient pas compte de votre dernier changement.');
+  await expect(message).toBeVisible();
+  await expect(apply).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Annuler le calcul' })).toHaveCount(0);
+  await page.unroute('**/replacement/plan', slow);
+  await page.getByRole('button', { name: 'Relancer le calcul' }).click();
+  await expect(message).toHaveCount(0);
+  await expect(apply).toBeEnabled();
+});
+
 test('sans plan (calcul en erreur), la liste des règles reste réglable', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe plan en erreur');
   await seedPlan(request, id);
