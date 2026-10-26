@@ -91,6 +91,8 @@ export const clubDirectory = sqliteTable(
     coachEmail: text('coach_email'),
     notes: text('notes'),
     archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+    /** Contact Google relié (nom de ressource `people/…`) ; effacé à l'archivage. */
+    googleContactId: text('google_contact_id'),
     createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
     ...rowMeta(),
   },

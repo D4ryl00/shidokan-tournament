@@ -24,11 +24,22 @@ export interface GoogleSender {
   refreshToken: string;
   status: 'ok' | 'reconnect';
   lastRefreshAt: string | null;
+  /** Droits accordés par Google à la connexion ; absent = connexion d'avant la synchronisation des contacts (envoi seulement). */
+  scopes?: string[];
+}
+export const CONTACTS_SCOPE = 'https://www.googleapis.com/auth/contacts.readonly';
+export const hasContactsScope = (g: { scopes?: string[] } | null): boolean => !!g?.scopes?.includes(CONTACTS_SCOPE);
+/** Synchronisation des contacts : compte pour lequel les liens ont été faits, libellé choisi, contacts mis « plus tard ». */
+export interface GoogleContactsState {
+  account: string | null;
+  label: string | null;
+  pending: string[];
 }
 export interface AppSettings {
   smtp: SmtpSettings | null;
   mailMode: MailMode;
   google: GoogleSender | null;
+  googleContacts: GoogleContactsState;
   /** Mention affichée sur la page du club ; `{contact}` est remplacé par l'adresse de contact. */
   privacyNotice: string;
   privacyContact: string;
@@ -40,7 +51,7 @@ export interface AppSettings {
 }
 export type PublicSmtpSettings = Omit<SmtpSettings, 'password'> & { hasPassword: boolean };
 export type PublicGoogleSender = Omit<GoogleSender, 'refreshToken'>;
-export type PublicAppSettings = Omit<AppSettings, 'smtp' | 'google'> & { smtp: PublicSmtpSettings | null; google: PublicGoogleSender | null; googleAvailable: boolean };
+export type PublicAppSettings = Omit<AppSettings, 'smtp' | 'google' | 'googleContacts'> & { smtp: PublicSmtpSettings | null; google: PublicGoogleSender | null; googleAvailable: boolean };
 
 export const GOOGLE_RECONNECT = 'L’accès au compte Google a été retiré ou a expiré. Reconnectez-vous dans les Réglages de l’application.';
 export const GOOGLE_NOT_CONFIGURED = 'Le compte Google n’est plus configuré sur le serveur (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).';
@@ -90,6 +101,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   smtp: null,
   mailMode: 'smtp',
   google: null,
+  googleContacts: { account: null, label: null, pending: [] },
   privacyNotice:
     'Les informations saisies sur cette page sont traitées par Shidokan France pour organiser la compétition (inscriptions, catégories, tableaux). Le poids, le grade et les coordonnées du coach sont effacés 13 mois après la compétition ; les résultats (nom, club, catégorie, classement) sont conservés comme archive sportive. Pour toute question, ou pour exercer vos droits sur ces données : {contact}.',
   privacyContact: '',

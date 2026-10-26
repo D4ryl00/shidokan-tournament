@@ -15,7 +15,7 @@ function toEntry(db: AppDb, row: Row): DirectoryEntry {
   const competitions = db.select({ n: count() }).from(clubs).where(eq(clubs.directoryClubId, row.id)).get()!.n;
   return {
     id: row.id, name: row.name, affiliationNumber: row.affiliationNumber, ffkEntity: row.ffkEntity, coachName: row.coachName,
-    coachPhone: row.coachPhone, coachEmail: row.coachEmail, notes: row.notes, archived: row.archived, createdAt: row.createdAt, competitions,
+    coachPhone: row.coachPhone, coachEmail: row.coachEmail, notes: row.notes, archived: row.archived, googleContactId: row.googleContactId, createdAt: row.createdAt, competitions,
   };
 }
 
@@ -43,10 +43,10 @@ export function createDirectoryEntry(db: AppDb, input: DirectoryInput): Director
   return toEntry(db, getRow(db, id));
 }
 
-export function updateDirectoryEntry(db: AppDb, id: string, patch: Partial<DirectoryInput> & { archived?: boolean }): DirectoryEntry {
+export function updateDirectoryEntry(db: AppDb, id: string, patch: Partial<DirectoryInput> & { archived?: boolean; googleContactId?: null }): DirectoryEntry {
   getRow(db, id);
   checkNumber(db, patch.affiliationNumber, id);
-  const set = { ...patch, ...(patch.name ? { name: patch.name.trim(), nameKey: normalizeName(patch.name) } : {}) };
+  const set = { ...patch, ...(patch.archived ? { googleContactId: null } : {}), ...(patch.name ? { name: patch.name.trim(), nameKey: normalizeName(patch.name) } : {}) };
   if (Object.keys(set).length) db.update(clubDirectory).set(set).where(eq(clubDirectory.id, id)).run();
   return toEntry(db, getRow(db, id));
 }
@@ -62,6 +62,7 @@ export function mergeDirectoryEntries(db: AppDb, keepId: string, mergeId: string
     t.delete(clubDirectory).where(eq(clubDirectory.id, mergeId)).run(); // avant de reprendre son numéro (unique)
     const fields = ['affiliationNumber', 'ffkEntity', 'coachName', 'coachPhone', 'coachEmail', 'notes'] as const;
     const fill = Object.fromEntries(fields.filter((f) => !keep[f] && merged[f]).map((f) => [f, merged[f]]));
+    if (!keep.googleContactId && merged.googleContactId) Object.assign(fill, { googleContactId: merged.googleContactId });
     if (Object.keys(fill).length) t.update(clubDirectory).set(fill).where(eq(clubDirectory.id, keepId)).run();
   });
   return toEntry(db, getRow(db, keepId));

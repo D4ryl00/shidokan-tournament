@@ -105,3 +105,17 @@ test('délais réglés à 24 mois : rien d’effacé à 13 mois', () => {
   seedCompetition(db, 'old', '2026-11-22');
   expect(purgeExpiredData(db, dbPath, NOW).competitions).toBe(0);
 });
+
+test('archivage RGPD efface le lien Google', () => {
+  const dbPath = tmpDbPath();
+  db = openDb(dbPath);
+  db.$client.exec(`
+    INSERT INTO club_directory (id, name, name_key, coach_name, created_at, google_contact_id) VALUES
+      ('ancien', 'Ancien club', 'ANCIEN CLUB', 'A', '2020-01-01T00:00:00.000Z', 'people/c1');
+    INSERT INTO club_directory (id, name, name_key, archived, created_at, google_contact_id) VALUES
+      ('deja', 'Déjà archivé', 'DEJA ARCHIVE', 1, '2020-01-01T00:00:00.000Z', 'people/c2');
+  `);
+  expect(purgeExpiredData(db, dbPath, NOW).directoryEntries).toBe(2);
+  expect(one(db, "select archived, google_contact_id from club_directory where id = 'ancien'")).toEqual({ archived: 1, google_contact_id: null });
+  expect(one(db, "select archived, google_contact_id from club_directory where id = 'deja'")).toEqual({ archived: 1, google_contact_id: null });
+});

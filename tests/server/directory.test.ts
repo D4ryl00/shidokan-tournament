@@ -1,17 +1,20 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
+import Database from 'better-sqlite3';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
+let dbPath: string;
 beforeEach(async () => {
-  app = await buildApp({ dbPath: tmpDbPath() });
+  dbPath = tmpDbPath();
+  app = await buildApp({ dbPath });
 });
 afterEach(async () => app.close());
 
 const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmail: null, notes: null };
 const create = (payload: object) => app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, ...payload } });
-const list = async () => (await app.inject({ method: 'GET', url: '/api/club-directory' })).json() as { id: string; name: string; archived: boolean; competitions: number; coachPhone: string | null; affiliationNumber: string | null }[];
+const list = async () => (await app.inject({ method: 'GET', url: '/api/club-directory' })).json() as { id: string; name: string; archived: boolean; competitions: number; coachPhone: string | null; affiliationNumber: string | null; googleContactId: string | null }[];
 
 test('création, liste triée, modification, archivage', async () => {
   expect((await create({ name: 'Tani Dojo', affiliationNumber: '0060893' })).statusCode).toBe(201);
@@ -58,4 +61,25 @@ test('e-mail invalide (liste) refusé dans l’annuaire et dans les clubs d’un
   const c = (await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22' } })).json().id;
   expect((await app.inject({ method: 'POST', url: `/api/competitions/${c}/clubs`, payload: { name: 'Club', coachEmail: 'a@x.fr, b@y.fr' } })).statusCode).toBe(400);
   expect((await app.inject({ method: 'POST', url: `/api/competitions/${c}/clubs`, payload: { name: 'Club', coachEmail: 'a@x.fr' } })).statusCode).toBe(201);
+});
+
+test('lien Google : retiré à la main, effacé à l’archivage, gardé à la fusion', async () => {
+  const link = (id: string, contact: string | null) => {
+    const sqlite = new Database(dbPath);
+    sqlite.prepare('update club_directory set google_contact_id = ? where id = ?').run(contact, id);
+    sqlite.close();
+  };
+  const patch = (id: string, payload: object) => app.inject({ method: 'PATCH', url: `/api/club-directory/${id}`, payload });
+  const a = (await create({ name: 'Tani Dojo' })).json();
+  const b = (await create({ name: 'Dojo Tani' })).json();
+  expect(a.googleContactId).toBeNull();
+  link(a.id, 'people/c1');
+  expect((await list()).find((e) => e.id === a.id)!.googleContactId).toBe('people/c1');
+  expect((await patch(a.id, { googleContactId: null })).json().googleContactId).toBeNull();
+  link(a.id, 'people/c1');
+  expect((await patch(a.id, { archived: true })).json()).toMatchObject({ archived: true, googleContactId: null });
+  expect((await patch(a.id, { googleContactId: 'people/x' })).statusCode).toBe(400);
+  link(b.id, 'people/c2');
+  const merged = await app.inject({ method: 'POST', url: '/api/club-directory/merge', payload: { keepId: a.id, mergeId: b.id } });
+  expect(merged.json().googleContactId).toBe('people/c2');
 });

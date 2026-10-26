@@ -39,10 +39,10 @@ export function purgeExpiredData(db: AppDb, dbPath: string, now = new Date()): P
     // Fiche sans compétition depuis le délai (ou jamais, et créée avant) : archivée, coordonnées effacées.
     report.directoryEntries = client
       .prepare(
-        `update club_directory set archived = 1, coach_name = null, coach_phone = null, coach_email = null, notes = null
+        `update club_directory set archived = 1, coach_name = null, coach_phone = null, coach_email = null, notes = null, google_contact_id = null
          where coalesce((select max(c.date) from clubs k join competitions c on c.id = k.competition_id where k.directory_club_id = club_directory.id),
                         substr(created_at, 1, 10)) < ?
-           and (archived = 0 or coach_name is not null or coach_phone is not null or coach_email is not null or notes is not null)`,
+           and (archived = 0 or coach_name is not null or coach_phone is not null or coach_email is not null or notes is not null or google_contact_id is not null)`,
       )
       .run(directoryCutoff.slice(0, 10)).changes;
   })();

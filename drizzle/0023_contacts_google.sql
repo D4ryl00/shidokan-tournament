@@ -1,0 +1,1 @@
+ALTER TABLE `club_directory` ADD `google_contact_id` text;

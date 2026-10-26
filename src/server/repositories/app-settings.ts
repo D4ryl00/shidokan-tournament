@@ -1,4 +1,4 @@
-import { currentInvitationMail, DEFAULT_APP_SETTINGS, GOOGLE_CONNECT_FIRST, type AppSettings, type AppSettingsPatch, type GoogleSender, type MailMode, type PublicAppSettings } from '../../domain/app-settings.js';
+import { currentInvitationMail, DEFAULT_APP_SETTINGS, GOOGLE_CONNECT_FIRST, type AppSettings, type AppSettingsPatch, type GoogleContactsState, type GoogleSender, type MailMode, type PublicAppSettings } from '../../domain/app-settings.js';
 import type { AppDb } from '../db/client.js';
 import { appSettings } from '../db/schema.js';
 
@@ -16,7 +16,7 @@ class SettingsError extends Error {
 /** Réglages tels que renvoyés à l'écran : jamais le mot de passe SMTP ni le jeton Google. */
 export function publicAppSettings(full: AppSettings, googleAvailable: boolean): PublicAppSettings {
   // Le serveur relié (et son jeton) ne passe que par /api/sync/settings.
-  const { syncServer: _sync, smtp, google, ...s } = full as AppSettings & { syncServer?: unknown };
+  const { syncServer: _sync, smtp, google, googleContacts: _contacts, ...s } = full as AppSettings & { syncServer?: unknown };
   const publicGoogle = google ? (({ refreshToken: _token, ...g }) => g)(google) : null;
   const publicSmtp = smtp ? (({ password, ...rest }) => ({ ...rest, hasPassword: !!password }))(smtp) : null;
   return { ...s, smtp: publicSmtp, google: publicGoogle, googleAvailable };
@@ -62,4 +62,9 @@ export function markGoogleRevoked(db: AppDb, refreshToken: string): void {
 export function markGoogleRefreshed(db: AppDb, at: string, refreshToken: string): void {
   const { google } = getAppSettings(db);
   if (google?.refreshToken === refreshToken) writeSettings(db, { google: { ...google, status: 'ok', lastRefreshAt: at } });
+}
+
+/** État de la synchronisation des contacts Google : les champs donnés remplacent les anciens. */
+export function setGoogleContactsState(db: AppDb, patch: Partial<GoogleContactsState>): void {
+  writeSettings(db, { googleContacts: { ...getAppSettings(db).googleContacts, ...patch } });
 }

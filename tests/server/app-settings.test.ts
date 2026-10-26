@@ -1,8 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, expect, test } from 'vitest';
-import { DEFAULT_APP_SETTINGS } from '../../src/domain/app-settings.js';
+import { CONTACTS_SCOPE, DEFAULT_APP_SETTINGS, hasContactsScope } from '../../src/domain/app-settings.js';
 import { rulesView } from '../../src/domain/replacement/rules.js';
 import { defaultSettings } from '../../src/domain/settings.js';
+import { openDb, closeDb } from '../../src/server/db/client.js';
+import { getAppSettings } from '../../src/server/repositories/app-settings.js';
 import { buildApp } from '../../src/server/app.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
@@ -79,4 +81,24 @@ test('un réglage smtp enregistré avant (sans mode) se lit comme du SMTP', asyn
   expect(s.mailMode).toBe('smtp');
   expect(s.smtp.host).toBe('smtp.gmail.com');
   expect(s).not.toHaveProperty('googleFromName');
+});
+
+test('état des contacts Google : défaut, jamais envoyé à l’écran, refusé en modification', async () => {
+  const dbPath = tmpDbPath();
+  const own = await buildApp({ dbPath });
+  try {
+    expect(((await own.inject({ method: 'GET', url: '/api/app-settings' })).json() as Record<string, unknown>).googleContacts).toBeUndefined();
+    expect((await own.inject({ method: 'PATCH', url: '/api/app-settings', payload: { googleContacts: { account: 'x', label: null, pending: [] } } })).statusCode).toBe(400);
+  } finally {
+    await own.close();
+  }
+  const db = openDb(dbPath);
+  try {
+    expect(getAppSettings(db).googleContacts).toEqual({ account: null, label: null, pending: [] });
+  } finally {
+    closeDb(db);
+  }
+  expect(hasContactsScope(null)).toBe(false);
+  expect(hasContactsScope({})).toBe(false);
+  expect(hasContactsScope({ scopes: [CONTACTS_SCOPE] })).toBe(true);
 });

@@ -162,6 +162,13 @@
       "when": 1792940004508,
       "tag": "0022_ne_combat_pas_et_cartes",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1793055406909,
+      "tag": "0023_contacts_google",
+      "breakpoints": true
     }
   ]
 }

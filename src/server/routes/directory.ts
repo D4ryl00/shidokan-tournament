@@ -21,7 +21,7 @@ export async function directoryRoutes(app: FastifyInstance, { db }: { db: AppDb 
   app.get('/api/club-directory', async () => listDirectory(db));
   app.post('/api/club-directory', async (req, reply) => reply.status(201).send(createDirectoryEntry(db, directorySchema.parse(req.body))));
   app.patch<{ Params: { entryId: string } }>('/api/club-directory/:entryId', async (req) =>
-    updateDirectoryEntry(db, req.params.entryId, directorySchema.partial().extend({ archived: z.boolean().optional() }).parse(req.body)),
+    updateDirectoryEntry(db, req.params.entryId, directorySchema.partial().extend({ archived: z.boolean().optional(), googleContactId: z.null().optional() }).parse(req.body)),
   );
   app.post('/api/club-directory/merge', async (req) => {
     const { keepId, mergeId } = z.object({ keepId: z.string(), mergeId: z.string() }).parse(req.body);

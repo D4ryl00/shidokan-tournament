@@ -190,6 +190,8 @@ export interface DirectoryEntry extends DirectoryInput {
   id: string;
   ffkEntity: string | null;
   archived: boolean;
+  /** Contact Google relié à cette fiche, ou null. */
+  googleContactId: string | null;
   createdAt: string;
   /** Nombre de clubs de compétition reliés à cette fiche. */
   competitions: number;
