@@ -57,14 +57,39 @@ Un PC perdu ou volé permet de lire toutes les compétitions du serveur : **rév
 
 Les onglets de l'étape **Préparer**, dans l'ordre habituel :
 
-1. **Annuaire des clubs** (menu de l'application) : clubs, e-mail du coach, et si possible le numéro d'affiliation FFK.
+1. **Annuaire des clubs** (menu de l'application) : clubs, e-mail du coach, et si possible le numéro d'affiliation FFK. Les coordonnées des coachs peuvent venir de vos contacts Google (voir plus bas).
 2. Créez la compétition, puis **Réglages** (zones de combat, formats, ordre de passage…) et **Grille âge / poids** (la grille FFK est déjà remplie). Dans la grille, la section **Catégories ouvertes** ferme ce que vous n’ouvrez pas à cette compétition (par exemple pas de shido-mix chez les benjamins) : ces catégories disparaissent de la fiche club et de l’inscription en ligne. Un combattant déjà inscrit dans une catégorie fermée apparaît en Réaffectation.
 3. **Sessions**, si la compétition se pèse et se lance en plusieurs fois (« Samedi matin », « Dimanche »…).
 4. **Fiche club** — les clubs inscrivent leurs combattants de l'une de ces façons :
-   - **en ligne** (section « Inscriptions en ligne ») : date limite, « Ouvrir les inscriptions », inviter les clubs, puis « Envoyer le lien par mail ». **Chaque envoi crée un nouveau lien** et désactive le précédent. À la date limite, « Figer les inscriptions » ;
+   - **en ligne** (section « Inscriptions en ligne ») : date limite, « Ouvrir les inscriptions », inviter les clubs, puis « Envoyer le lien par mail ». **Chaque envoi crée un nouveau lien** et désactive le précédent. À la date limite, « Figer les inscriptions ». Les mails partent du compte réglé dans Réglages de l'application → **Envoi des mails** (« Compte Google », voir plus bas, ou « Autre serveur ») ;
    - **par fichier** : envoyer le modèle (.ods) ou la fiche papier (PDF), puis importer ou saisir les fiches renvoyées. Les fiches indiquent les catégories non ouvertes ; une fiche renvoyée qui en contient quand même est acceptée avec un avertissement, et ces combattants passent en Réaffectation.
 5. **Import FFK**, à la clôture : aperçu, rapprochement avec les fiches des clubs, import.
 6. **Inscriptions** et **Clubs** : vérifier, corriger, ajouter sur place.
+
+### Le compte Google (mails et contacts)
+
+Sur le serveur en ligne, Réglages de l'application → **Envoi des mails** → « Compte Google » → **« Se connecter avec Google »**, avec le compte de Shidokan France. Google demande en une fois deux autorisations : **envoyer des mails** (les invitations aux clubs) et **voir vos contacts** (lecture seule : l'application ne modifie jamais vos contacts). Google affiche « application non validée » : cliquez sur « Paramètres avancés », puis « Accéder ».
+
+- Laissez les deux cases cochées. Si « contacts » est décochée, les mails fonctionnent mais la synchronisation des coachs non : la ligne « Contacts : non accordé » le rappelle dans les Réglages ; « Se reconnecter » corrige.
+- Se reconnecter avec **un autre compte** Google efface les liens entre l'annuaire et les contacts (ils appartenaient à l'ancien compte).
+- La préparation côté Google (une fois, par l'administrateur du serveur) est décrite dans `docs/installation-serveur.md`.
+
+### Coordonnées des coachs depuis Google Contacts
+
+Rangez les contacts des coachs sous un **libellé** dans Google Contacts (par exemple « Coachs »). Le champ **Entreprise** d'un contact, s'il porte le nom du club, aide l'application à proposer le bon club.
+
+Dans l'**Annuaire**, « **Synchroniser avec Google** » ouvre une page unique. **Rien ne change dans l'annuaire avant « Appliquer ».**
+
+1. **Libellé** : choisissez-le en haut (ou « Tous les contacts ») ; il est repris la fois suivante.
+2. **Différences avec l'annuaire** : pour chaque club déjà lié à un contact, le coach, le téléphone et le mail qui diffèrent. **Google l'emporte** : chaque ligne est cochée. Décochez une ligne pour garder la valeur de l'annuaire — cela ne vaut que cette fois, la différence reviendra à la synchronisation suivante. Un champ vide dans Google n'efface jamais l'annuaire ; une valeur que l'annuaire refuserait (deux adresses dans un même champ, texte trop long) est signalée « valeur Google non reprise ».
+3. **Nouveaux contacts**, pour chacun :
+   - **Lier à un club** : le club de l'annuaire qui a le même mail, sinon le même téléphone, est déjà choisi ; un nom qui ressemble est seulement proposé (« Peut-être : … ? »). Un club déjà lié à un autre contact n'est jamais choisi d'office.
+   - **Nouveau club** : saisissez le nom du club (pré-rempli avec « Entreprise ») ; la fiche est créée avec les coordonnées du contact, et vous pourrez inviter ce club.
+   - **Plus tard** : le contact est rangé dans « En attente d'un rattachement », où les mêmes choix restent possibles.
+   - « + Lier aussi à un autre club » : pour un coach qui tient deux clubs.
+4. **Appliquer** : tout est enregistré d'un coup. Si l'annuaire a été modifié entre-temps, rien n'est enregistré et la page se recharge : vérifiez, puis appliquez de nouveau.
+
+Un club lié porte la marque « Google » dans l'annuaire ; « **Ne plus synchroniser avec Google** » (menu « … » du club) retire le lien sans rien effacer. Archiver un club retire aussi son lien.
 
 ## 5. La veille : passer la compétition au PC
 
