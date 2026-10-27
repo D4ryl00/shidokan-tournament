@@ -32,6 +32,7 @@ npm run build && DATABASE_PATH=tmp/demo.sqlite npm start   # http://localhost:30
 ```bash
 npm run dev          # serveur (port 3000) + interface Vite (http://localhost:5173)
 npm test             # tests unitaires (domaine, serveur)
+npm run test:perf    # tests de durée, lancés seuls (diagramme de réaffectation)
 npm run test:e2e     # tests d'interface sur Google Chrome (Playwright)
 npm run typecheck
 npm run seed:dev     # ajoute une compétition de démonstration à la base (-- --seed 42 : autre tirage)

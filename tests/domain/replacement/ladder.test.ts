@@ -43,21 +43,6 @@ test('jamais pire que l’ancien calcul carte par carte', () => {
     expect(plan.aloneAfter.length, `seed ${seed}`).toBeLessThanOrEqual(greedyAlone(s, null));
   }
 });
-test('500 inscriptions : le diagramme en moins de 4 s, et prouvé', () => {
-  const s = randomState(42, 500);
-  // Les autres fichiers de test tournent en parallèle et peuvent doubler le temps mesuré : on garde le meilleur de trois essais
-  // (le calcul est identique à chaque essai ; seule la charge de la machine change).
-  let best = Number.POSITIVE_INFINITY;
-  let rows = planLadder(s, { waveId: null, choices: [] }).rows;
-  for (let attempt = 0; attempt < 3 && best >= 4000; attempt++) {
-    const t = performance.now();
-    rows = planLadder(s, { waveId: null, choices: [] }).rows;
-    best = Math.min(best, performance.now() - t);
-  }
-  expect(best).toBeLessThan(4000);
-  expect(rows.every((r) => r.alone === null || r.proven)).toBe(true);
-});
-
 /** Toutes les règles actives, mélanges rares compris (filles / garçons dans toutes les tranches), ligne en bas. */
 function allRules(seed: number, size: number) {
   const s = randomState(seed, size);
@@ -141,15 +126,4 @@ test('la progression suit les calculs', { timeout: 30_000 }, () => {
   u.settings.replacementRules.cutAfter = 'weight';
   u.settings.replacementRules.off = ['weight'];
   check(u, 1);
-});
-
-test('150 inscriptions : le diagramme en moins de 2 s', { timeout: 60_000 }, () => {
-  const s = randomState(42, 150);
-  let best = Number.POSITIVE_INFINITY;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const t = performance.now();
-    planLadder(s, { waveId: null, choices: [] });
-    best = Math.min(best, performance.now() - t);
-  }
-  expect(best).toBeLessThan(2000);
 });

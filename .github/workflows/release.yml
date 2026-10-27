@@ -27,6 +27,7 @@ jobs:
       - run: npm test
         env:
           TZ: Europe/Paris
+      - run: npm run test:perf
 
   release:
     needs: test
