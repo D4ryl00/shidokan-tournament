@@ -8,6 +8,7 @@ const isChoice = (c: unknown): c is PlanChoice => {
   const x = c as Record<string, unknown>;
   if (x.kind === 'validate') return typeof x.proposalId === 'string' && typeof x.caseId === 'string';
   if (x.kind === 'manual') return typeof x.registrationId === 'string' && typeof x.categoryId === 'string';
+  if (x.kind === 'refuse') return typeof x.proposalId === 'string' && typeof x.registrationId === 'string' && typeof x.reason === 'string';
   return false;
 };
 
@@ -43,7 +44,38 @@ export function clearPlanChoices(competitionId: string): void {
 }
 
 /**
- * Épingles (« Valider ») et choix (« Modifier ») du plan d'ensemble de la session : ils vivent dans la page jusqu'à
+ * Coche « Tenir compte des décisions prises sur les cartes » de la session, gardée sur le poste (cochée par défaut, et si le
+ * stockage est absent ou bloqué).
+ */
+export function usePlanCardDecisions(competitionId: string, waveId: string | null): [boolean, (v: boolean) => void] {
+  const key = `plan-card-decisions:${competitionId}:${waveId ?? ''}`;
+  const readFlag = () => {
+    try {
+      return sessionStorage.getItem(key) !== 'false';
+    } catch {
+      return true;
+    }
+  };
+  const [store, setStore] = useState(() => ({ key, on: readFlag() }));
+  let current = store;
+  if (store.key !== key) {
+    current = { key, on: readFlag() };
+    setStore(current);
+  }
+  const set = useCallback((on: boolean) => {
+    try {
+      if (on) sessionStorage.removeItem(key);
+      else sessionStorage.setItem(key, 'false');
+    } catch {
+      // Stockage indisponible : la coche vit seulement dans la page.
+    }
+    setStore({ key, on });
+  }, [key]);
+  return [current.on, set];
+}
+
+/**
+ * Épingles (« Valider »), choix (« Modifier ») et refus du plan d'ensemble de la session : ils vivent dans la page jusqu'à
  * l'application, gardés en `sessionStorage` du poste (une clé par compétition et par session).
  */
 export function usePlanChoices(competitionId: string, waveId: string | null): [PlanChoice[], (c: PlanChoice[]) => void] {

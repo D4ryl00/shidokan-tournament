@@ -1,4 +1,4 @@
-import { Alert, Box, Button, Card, Chip, Collapse, Group, Loader, Modal, SegmentedControl, Select, SimpleGrid, Stack, Switch, Table, Text, TextInput, type ComboboxData } from '@mantine/core';
+import { Alert, Box, Button, Card, Checkbox, Chip, Collapse, Group, Loader, Modal, SegmentedControl, Select, SimpleGrid, Stack, Switch, Table, Text, TextInput, type ComboboxData } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
@@ -41,7 +41,7 @@ import { RuleLadder } from '../components/replacement/RuleLadder.js';
 import { PlanView, WARN_ALERT, type PlanFighter } from '../components/replacement/PlanView.js';
 import type { RuleId } from '../../domain/settings.js';
 import { ruleNumber, rulesView } from '../../domain/replacement/rules.js';
-import { clearPlanChoices, usePlanChoices } from '../usePlanChoices.js';
+import { clearPlanChoices, usePlanCardDecisions, usePlanChoices } from '../usePlanChoices.js';
 import { useSelectedWave } from '../useSelectedWave.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import { plural } from '../../domain/plural.js';
@@ -137,11 +137,12 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
   targets: (move: PlanMove) => ComboboxData | null;
 }) {
   const [choices, setChoices] = usePlanChoices(id, waveId);
+  const [cardDecisions, setCardDecisions] = usePlanCardDecisions(id, waveId);
   // Choix retirés (noms), pour la session où ils l'ont été seulement.
   const [dropped, setDropped] = useState<{ waveId: string | null; names: string[] }>({ waveId, names: [] });
   const [open, setOpen] = useState(false);
   // Avec des sessions, le plan n'existe que pour la session choisie.
-  const { data: shownPlan, error, isFetching, isPlaceholderData, progress, cancelled, cancel, restart } = usePlan(id, waveId, choices, ready);
+  const { data: shownPlan, error, isFetching, isPlaceholderData, progress, cancelled, cancel, restart } = usePlan(id, waveId, choices, cardDecisions, ready);
   // Le plan gardé pendant un recalcul est celui de la même session seulement (pas celui de la session d'avant).
   const [loadedWave, setLoadedWave] = useState<string | null | undefined>(undefined);
   if (shownPlan && !isPlaceholderData && loadedWave !== waveId) setLoadedWave(waveId);
@@ -184,6 +185,9 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
           <Button size="compact-sm" data-testid="plan-restart" onClick={restart}>Relancer le calcul</Button>
         </Alert>
       )}
+      <Checkbox data-testid="plan-card-decisions" label="Tenir compte des décisions prises sur les cartes"
+        description="Décochée : le plan reprend les propositions refusées sur les cartes et les cartes mises de côté (les cartes ne changent pas)."
+        checked={cardDecisions} onChange={(e) => setCardDecisions(e.currentTarget.checked)} />
       <RuleLadder view={view} rows={ladderRows} fresh={fresh} busy={saving} onChange={(v) => setRules.mutate(v)} />
       <ApiErrorAlert error={setRules.error ?? reset.error ?? error} />
       <Group>
@@ -194,11 +198,13 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
           <Button data-testid="plan-show" variant={open ? 'default' : 'filled'} aria-expanded={open} onClick={() => setOpen((o) => !o)} style={{ maxWidth: '100%', height: 'auto', minHeight: 36, whiteSpace: 'normal' }}>
             {k === null ? 'Voir le plan des corrections imposées' : `Voir le plan jusqu’à la règle ${k}`} ({plural(plan.plan.moves.length, 'déplacement', 'déplacements')}, {plural(plan.plan.alone.length, 'seul', 'seuls')})
           </Button>
+          {/* Efface les validations, « Modifier » et refus du plan de la session ; rien d'enregistré n'est touché. */}
+          <Button data-testid="plan-restart-choices" variant="default" disabled={choices.length === 0} onClick={() => choose([])}>Recommencer le plan</Button>
         </Group>
       )}
       {plan && open && (
         <Box style={{ opacity: isFetching ? 0.5 : 1 }}>
-          <PlanView key={waveId ?? ''} id={id} waveId={waveId} data={plan} choices={choices} onChoices={choose}
+          <PlanView key={waveId ?? ''} id={id} waveId={waveId} data={plan} choices={choices} onChoices={choose} cardDecisions={cardDecisions}
             dropped={dropped.waveId === waveId ? dropped.names : []} computing={isFetching || saving} cancelled={cancelled} fighter={fighter} targets={targets} />
         </Box>
       )}

@@ -449,7 +449,7 @@ export interface PlanResponse {
   categories?: PreviewData['categories'];
   fingerprint: string;
 }
-const planBody = (waveId: string | null, choices: PlanChoice[]) => ({ ...(waveId ? { waveId } : {}), choices });
+const planBody = (waveId: string | null, choices: PlanChoice[], cardDecisions: boolean) => ({ ...(waveId ? { waveId } : {}), choices, cardDecisions });
 
 /** Plans (clé hachée) qu'une mise à jour en direct a trouvés en plein calcul : un seul nouveau calcul part à la fin de celui-ci. */
 const refreshAfterPlan = new Set<string>();
@@ -494,11 +494,11 @@ export async function trackPlanFetch<T>(qc: QueryClient, queryKey: QueryKey, sig
  * plus compte du dernier changement : `cancelled`), `restart()` le relance. Changer de choix annule le calcul précédent ; les mises
  * à jour en direct suivent `refreshPlansLive`.
  */
-export function usePlan(id: string, waveId: string | null, choices: PlanChoice[], enabled: boolean) {
+export function usePlan(id: string, waveId: string | null, choices: PlanChoice[], cardDecisions: boolean, enabled: boolean) {
   const qc = useQueryClient();
   // L'avancement porte la clé du calcul : celui d'un calcul abandonné ne s'affiche jamais pour le suivant.
   const [progress, setProgress] = useState<{ key: string; p: LadderProgress | null } | null>(null);
-  const queryKey = [PLAN_KEY, id, waveId, choices];
+  const queryKey = [PLAN_KEY, id, waveId, choices, cardDecisions];
   const keyText = JSON.stringify(queryKey);
   const [cancelledAt, setCancelledAt] = useState<{ key: string; updatedAt: number } | null>(null);
   const query = useQuery({
@@ -506,7 +506,7 @@ export function usePlan(id: string, waveId: string | null, choices: PlanChoice[]
     queryFn: ({ signal }) => {
       setProgress({ key: keyText, p: null });
       return trackPlanFetch(qc, queryKey, signal, () =>
-        fetchPlanStream(`/api/competitions/${id}/replacement/plan`, planBody(waveId, choices), {
+        fetchPlanStream(`/api/competitions/${id}/replacement/plan`, planBody(waveId, choices, cardDecisions), {
           signal,
           onProgress: (p) => { if (!signal.aborted) setProgress({ key: keyText, p }); },
         }));
@@ -531,11 +531,11 @@ export function usePlan(id: string, waveId: string | null, choices: PlanChoice[]
 /** Le plan à appliquer (sans validation) et son aperçu ; `signal` annule le calcul (fermeture de la confirmation). */
 export function usePlanForApply(id: string) {
   return useMutation({
-    mutationFn: ({ waveId, choices, signal }: { waveId?: string | null; choices: PlanChoice[]; signal?: AbortSignal }) =>
-      fetchPlanStream(`/api/competitions/${id}/replacement/plan`, { ...planBody(waveId ?? null, choices), forApply: true }, { signal }),
+    mutationFn: ({ waveId, choices, cardDecisions, signal }: { waveId?: string | null; choices: PlanChoice[]; cardDecisions: boolean; signal?: AbortSignal }) =>
+      fetchPlanStream(`/api/competitions/${id}/replacement/plan`, { ...planBody(waveId ?? null, choices, cardDecisions), forApply: true }, { signal }),
   });
 }
-export const useApplyPlan = (id: string) => useReplacementAction<{ waveId?: string; choices: PlanChoice[]; fingerprint: string; hash: string }>(id, 'plan/apply');
+export const useApplyPlan = (id: string) => useReplacementAction<{ waveId?: string; choices: PlanChoice[]; cardDecisions: boolean; fingerprint: string; hash: string }>(id, 'plan/apply');
 /**
  * La liste des règles enregistrée (réponse du serveur) est mise tout de suite dans la compétition, et le recalcul n'est pas attendu :
  * l'écran montre le nouvel état aussitôt, le geste suivant part de la liste enregistrée (aucune écriture perdue) et relance le

@@ -245,12 +245,86 @@ test('refuser puis annuler le refus', async ({ page, request }) => {
   await expect(view.getByTestId('plan-move')).toHaveCount(2);
   await expect(view.getByTestId('plan-alone')).toContainText('VETE Paul');
   await expect(view.getByTestId('plan-unrefuse')).toHaveCount(1);
-  // Le refus est enregistré : la carte ne le propose plus non plus.
-  await expect(page.getByTestId('replacement-case').filter({ hasText: 'VETE' }).getByTestId('replacement-proposal-refused')).toHaveCount(1);
+  // Le refus ne vaut que pour le plan : la carte propose toujours ce déplacement.
+  const card = page.getByTestId('replacement-case').filter({ hasText: 'VETE' });
+  await expect(card.getByTestId('replacement-proposal-refused')).toHaveCount(0);
+  await expect(card.getByTestId('replacement-proposal').first()).toBeVisible();
+  // Gardé sur le poste.
+  await page.reload();
+  await page.getByTestId('plan-show').click();
+  await expect(view.getByTestId('plan-refused')).toContainText('VETE Paul');
   await view.getByTestId('plan-unrefuse').click();
   await expect(view.getByTestId('plan-move')).toHaveCount(3);
   await expect(view.getByTestId('plan-unrefuse')).toHaveCount(0);
   await expect(moveOf('VETE Paul')).toBeVisible();
+});
+
+test('refus du plan gardé après « Appliquer le plan »', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan refus appliqué');
+  await seedPlan(request, id);
+  const { view, moveOf } = await openPlan(page, id);
+  await moveOf('VETE Paul').getByTestId('plan-move-refuse').click();
+  await expect(view.getByTestId('plan-move')).toHaveCount(2);
+  await moveOf('MINI Léa').getByTestId('plan-move-validate').click();
+  await view.getByTestId('plan-apply').click();
+  await page.getByTestId('plan-apply-confirm').click();
+  await expect(page.getByText('2 réaffectations appliquées.')).toBeVisible();
+  // Le refus reste ; la validation appliquée n’est plus un choix.
+  await expect(view.getByTestId('plan-refused')).toContainText('VETE Paul');
+  await expect(view.getByTestId('plan-move')).toHaveCount(0);
+  await expect(page.getByTestId('plan-restart-choices')).toBeEnabled();
+});
+
+test('« Recommencer le plan » efface validations, modifications et refus du plan', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan recommencer');
+  await seedPlan(request, id);
+  const { view, moveOf } = await openPlan(page, id);
+  const restart = page.getByTestId('plan-restart-choices');
+  await expect(restart).toBeDisabled();
+  // Validation d'abord : un « Modifier » de SEULE vers -47 ne la défait pas (les choix sont fixés avant le calcul).
+  await moveOf('MINI Léa').getByTestId('plan-move-validate').click();
+  await expect(moveOf('MINI Léa').getByTestId('plan-move-unvalidate')).toBeVisible();
+  await moveOf('VETE Paul').getByTestId('plan-move-refuse').click();
+  await moveOf('SEULE Léa').getByTestId('plan-move-modify').click();
+  await moveOf('SEULE Léa').getByTestId('plan-move-target').click();
+  await page.getByRole('option', { name: /Cadets F · -47 kg/ }).click();
+  await expect(moveOf('SEULE Léa')).toContainText('hors règles');
+  await expect(moveOf('MINI Léa').getByTestId('plan-move-unvalidate')).toBeVisible();
+  await page.getByTestId('plan-card-decisions').uncheck();
+  await restart.click();
+  // Plus aucun choix : le plan revient à son calcul de départ ; la coche ne bouge pas.
+  await expect(view.getByTestId('plan-move')).toHaveCount(3);
+  await expect(view.getByTestId('plan-unrefuse')).toHaveCount(0);
+  await expect(moveOf('SEULE Léa')).not.toContainText('hors règles');
+  await expect(moveOf('MINI Léa').getByTestId('plan-move-validate')).toBeVisible();
+  await expect(page.getByTestId('plan-card-decisions')).not.toBeChecked();
+  await expect(restart).toBeDisabled();
+});
+
+test('coche décochée : le plan reprend une proposition refusée sur la carte et une carte mise de côté', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan coche');
+  await seedPlan(request, id);
+  const { view, moveOf } = await openPlan(page, id);
+  const cards = page.getByTestId('replacement-case');
+  // Refus sur la carte de VETE, carte de MINI mise de côté.
+  const vete = cards.filter({ hasText: 'VETE' });
+  await vete.getByTestId('replacement-proposal').filter({ hasText: /seniors|Seniors/ }).first().getByTestId('proposal-refuse').click();
+  await expect(vete.getByTestId('replacement-proposal-refused')).toHaveCount(1);
+  await cards.filter({ hasText: 'MINI' }).getByTestId('case-set-aside').click();
+  await page.getByTestId('case-set-aside-confirm').click();
+  await expect(moveOf('VETE Paul')).toHaveCount(0);
+  await expect(moveOf('MINI Léa')).toHaveCount(0);
+  const box = page.getByTestId('plan-card-decisions');
+  await expect(box).toBeChecked();
+  await box.uncheck();
+  await expect(moveOf('VETE Paul')).toBeVisible();
+  await expect(moveOf('MINI Léa')).toBeVisible();
+  // Les cartes ne changent pas.
+  await expect(vete.getByTestId('replacement-proposal-refused')).toHaveCount(1);
+  await expect(page.getByTestId('set-aside-section')).toContainText('Mises de côté (1)');
+  await box.check();
+  await expect(moveOf('VETE Paul')).toHaveCount(0);
+  await expect(view.getByTestId('plan-move')).toHaveCount(1);
 });
 
 test('plan périmé à l’application : refusé, les choix restent', async ({ page, request }) => {

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { plural } from '../../../domain/plural.js';
 import { applyRulesView, COST_BAND_LABELS, costBand, NO_VALIDATION_RULES, RULE_LABELS, ruleNumber, type CostBand } from '../../../domain/replacement/rules.js';
 import { defaultSettings, type RuleId } from '../../../domain/settings.js';
-import { useApplyPlan, usePlanForApply, useRefuseProposal, useUnrefuseProposal, type PlanChoice, type PlanMove, type PlanResponse } from '../../api.js';
+import { useApplyPlan, usePlanForApply, type PlanChoice, type PlanMove, type PlanResponse } from '../../api.js';
 import { ApiErrorAlert } from '../ApiErrorAlert.js';
 import { ProposalPreview } from '../ProposalPreview.js';
 import { BAND_COLOR } from './RuleLadder.js';
@@ -67,16 +67,18 @@ const numberStyle = (color: string): CSSProperties => ({
 /**
  * Le plan d'ensemble de la session : résumé, ce que le dernier recalcul a changé, les déplacements par groupe de coût
  * (Valider, Refuser, Modifier, et leurs annulations), les refus, qui reste seul ; puis « Appliquer le plan ».
- * Les choix (épingles et « Modifier ») sont des données de la page ; les refus sont enregistrés sur le serveur.
+ * Les choix (épingles, « Modifier » et refus) sont des données du poste : ils ne valent que pour le plan, les cartes n'en voient rien.
  */
 export function PlanView({
-  id, waveId, data, choices, onChoices, dropped, computing, cancelled, fighter, targets,
+  id, waveId, data, choices, onChoices, cardDecisions, dropped, computing, cancelled, fighter, targets,
 }: {
   id: string;
   waveId: string | null;
   data: PlanResponse;
   choices: PlanChoice[];
   onChoices: (c: PlanChoice[]) => void;
+  /** Coche « Tenir compte des décisions prises sur les cartes » : envoyée au plan à appliquer et à l'application. */
+  cardDecisions: boolean;
   /** Noms des combattants dont un choix n'est plus possible et a été retiré. */
   dropped: string[];
   /** Un recalcul (ou l'enregistrement d'une règle) est en cours : les gestes restent possibles (chacun relance le calcul), « Appliquer le plan » attend. */
@@ -88,8 +90,6 @@ export function PlanView({
   targets: (move: PlanMove) => ComboboxData | null;
 }) {
   const { plan, view } = data;
-  const refuse = useRefuseProposal(id);
-  const unrefuse = useUnrefuseProposal(id);
   const forApply = usePlanForApply(id);
   const apply = useApplyPlan(id);
   const [confirming, setConfirming] = useState(false);
@@ -116,12 +116,8 @@ export function PlanView({
   const validateChoice = (m: PlanMove) => choices.find((c) => c.kind === 'validate' && c.proposalId === m.id);
   const manualChoice = (m: PlanMove) => (m.type === 'M' ? choices.find((c) => c.kind === 'manual' && c.registrationId === m.registrationId) : undefined);
   const without = (pred: (c: PlanChoice) => boolean) => choices.filter((c) => !pred(c));
-  // L'erreur d'un refus (ou de son annulation) s'efface au geste suivant.
-  const clearErrors = () => {
-    if (refuse.isError) refuse.reset();
-    if (unrefuse.isError) unrefuse.reset();
-  };
-  const choose = (c: PlanChoice[]) => { clearErrors(); setJustApplied(new Set()); onChoices(c); };
+  const choose = (c: PlanChoice[]) => { setJustApplied(new Set()); onChoices(c); };
+  const refusals = choices.filter((c) => c.kind === 'refuse');
 
   // Déplacements dont les règles demandent une validation (un « Modifier » sans règle à valider n'en est pas un).
   const manualMoves = plan.moves.filter((m) => m.band !== 0);
@@ -135,7 +131,7 @@ export function PlanView({
     setConfirming(true);
     applyAbort.current?.abort();
     applyAbort.current = new AbortController();
-    forApply.mutate({ waveId, choices, signal: applyAbort.current.signal });
+    forApply.mutate({ waveId, choices, cardDecisions, signal: applyAbort.current.signal });
   };
   const closeApply = () => {
     applyAbort.current?.abort();
@@ -151,12 +147,13 @@ export function PlanView({
     // Posé avant l'envoi : le plan recalculé arrive avant la fin de la mutation (les données sont relues d'abord).
     setJustApplied(new Set(toApply.plan.moves.map((m) => m.registrationId)));
     apply.mutate(
-      { ...(waveId ? { waveId } : {}), choices, fingerprint: toApply.fingerprint, hash: toApply.plan.hash },
+      { ...(waveId ? { waveId } : {}), choices, cardDecisions, fingerprint: toApply.fingerprint, hash: toApply.plan.hash },
       {
         onSuccess: (r) => {
           setConfirming(false);
-          // Les choix appliqués disparaissent ; ceux qui attendent un déplacement à valider restent épinglés.
-          onChoices(toApply.plan.waiting);
+          // Les choix appliqués disparaissent ; ceux qui attendent un déplacement à valider restent épinglés, et les refus du plan
+          // restent (ils ne partent qu'avec « Recommencer le plan », « Annuler le refus », ou quand le combattant n'est plus là).
+          onChoices([...toApply.plan.waiting, ...refusals]);
           notifications.show({ color: 'green', message: `${plural(r.applied ?? 0, 'réaffectation appliquée', 'réaffectations appliquées')}.` });
         },
         // Plan périmé ou changé : les choix restent, le plan est recalculé (rechargement des données) et l'erreur affichée.
@@ -209,13 +206,9 @@ export function PlanView({
             </Button>
           ) : null}
           {!chosen && (
-            <Button size="compact-xs" variant="subtle" color="red" data-testid="plan-move-refuse" loading={refuse.isPending && refuse.variables?.proposalId === m.id}
-              onClick={() => {
-                // Refusé, il n'est plus épinglé : retiré tout de suite (pas au retour du serveur, qui partirait d'anciens choix).
-                if (pinned) choose(without((c) => c === pinned));
-                if (unrefuse.isError) unrefuse.reset();
-                refuse.mutate({ proposalId: m.id });
-              }}>
+            <Button size="compact-xs" variant="subtle" color="red" data-testid="plan-move-refuse"
+              // Refusé, il n'est plus épinglé. Le refus ne vaut que pour le plan : gardé avec les choix du poste, rien n'est enregistré.
+              onClick={() => choose([...without((c) => c === pinned), { kind: 'refuse', proposalId: m.id, registrationId: m.registrationId, reason: m.reason }])}>
               Refuser
             </Button>
           )}
@@ -255,9 +248,9 @@ export function PlanView({
         <Text size="sm">Restent seuls{' '}<b className="num">{plan.alone.length}</b>{' '}<Text span size="sm" c="dimmed">(au lieu de {plan.aloneBefore})</Text></Text>
         <Text size="sm">Déplacements{' '}<b className="num">{plan.moves.length}</b></Text>
         <Text size="sm">Validés{' '}<b className="num">{validatedCount} / {manualMoves.length}</b></Text>
-        <Button size="xs" data-testid="plan-apply" onClick={openApply} loading={forApply.isPending} disabled={computing || cancelled || refuse.isPending || unrefuse.isPending}>Appliquer le plan</Button>
+        <Button size="xs" data-testid="plan-apply" onClick={openApply} loading={forApply.isPending} disabled={computing || cancelled}>Appliquer le plan</Button>
       </Group>
-      <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error} />
+      <ApiErrorAlert error={apply.error} />
 
       {changes.length > 0 && (
         <Alert data-testid="plan-changes" p="xs" styles={WARN_ALERT}>
@@ -284,6 +277,23 @@ export function PlanView({
           </Box>
         );
       })}
+
+      {refusals.length > 0 && (
+        <Box data-testid="plan-refused">
+          <Text style={groupTitle}>Refusés</Text>
+          {refusals.map((r) => (
+            <Box key={r.proposalId} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 12px', padding: '6px 8px', borderTop: '1px solid var(--sk-line)' }}>
+              <Box style={{ flex: '1 1 220px', minWidth: 0 }}>
+                <Text size="sm" fw={600}>{name(r.registrationId)}</Text>
+                <Text size="xs" c="dimmed" td="line-through" style={{ overflowWrap: 'anywhere' }}>{r.reason}</Text>
+              </Box>
+              <Button size="compact-xs" variant="subtle" data-testid="plan-unrefuse" onClick={() => choose(without((c) => c === r))}>
+                Annuler le refus
+              </Button>
+            </Box>
+          ))}
+        </Box>
+      )}
 
       <Box data-testid="plan-alone">
         <Text style={groupTitle}>Restent seuls ({plan.alone.length})</Text>
