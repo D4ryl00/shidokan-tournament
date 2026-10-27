@@ -7,13 +7,16 @@ import { HelpButton, HelpText } from '../Help.js';
  * Section en carte (remplace les cadres « fieldset ») : titre, aide, actions à droite, puis le contenu. Un groupe dont le nom lu
  * (lecteur d'écran) est le titre seul.
  */
-export function SectionCard({ title, help, description, actions, children, id, 'data-testid': testId }: {
-  title: ReactNode; help?: HelpTopicId; description?: ReactNode; actions?: ReactNode; children: ReactNode; id?: string; 'data-testid'?: string;
+export function SectionCard({ title, help, description, actions, children, id, borderColor, 'data-testid': testId }: {
+  title: ReactNode; help?: HelpTopicId; description?: ReactNode; actions?: ReactNode; children: ReactNode; id?: string;
+  /** Bordure marquée (jeton `--sk-*`) : une étape de la page à distinguer des autres. */
+  borderColor?: string;
+  'data-testid'?: string;
 }) {
   const titleId = useId();
   return (
     <Card withBorder padding="lg" id={id} data-testid={testId} component="section" role="group" aria-labelledby={titleId}
-      style={{ scrollMarginTop: 72 }}>
+      style={{ scrollMarginTop: 72, ...(borderColor ? { border: `2px solid ${borderColor}` } : {}) }}>
       <Stack gap="md">
         <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
           <Stack gap={2} style={{ minWidth: 0, flex: '1 1 260px' }}>

@@ -862,3 +862,38 @@ test('réglages : une zone ajoutée ailleurs pendant une saisie n’est jamais s
   await expect(names).toHaveCount(zones.length + 1);
   await expect(names.last()).toHaveValue('Zone ailleurs');
 });
+
+test('la page : compteurs, puis ① Plan automatique, puis ② Cas un par un', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe deux blocs');
+  await seedPlan(request, id);
+  await page.goto(`/competitions/${id}/reaffectation`);
+  const summary = page.getByTestId('replacement-summary');
+  const planStep = page.getByTestId('replacement-step-plan');
+  const cardsStep = page.getByTestId('replacement-step-cards');
+  await expect(planStep).toContainText('① Plan automatique');
+  await expect(planStep).toContainText('Le cas général : choisissez jusqu’où vont les règles, vérifiez le plan, puis appliquez-le.');
+  await expect(cardsStep).toContainText('② Cas un par un : ce que le plan ne règle pas');
+  await expect(cardsStep).toContainText('Une fois le plan appliqué, les combattants encore seuls sont ici, carte par carte.');
+  await expect(planStep.getByTestId('rule-ladder')).toBeVisible();
+  await expect(planStep.getByTestId('plan-card-decisions')).toBeVisible();
+  await expect(cardsStep.getByTestId('replacement-case').first()).toBeVisible();
+  await expect(planStep.getByTestId('replacement-case')).toHaveCount(0);
+  const y = async (l: ReturnType<typeof page.getByTestId>) => (await l.boundingBox())!.y;
+  expect(await y(summary)).toBeLessThan(await y(planStep));
+  expect(await y(planStep)).toBeLessThan(await y(cardsStep));
+  // Mises de côté dans ② ; l'historique (« Repartir de zéro ») sous les deux blocs, hors d'eux.
+  await cardsStep.getByTestId('replacement-case').first().getByTestId('case-set-aside').click();
+  await page.getByTestId('case-set-aside-confirm').click();
+  await expect(cardsStep.getByTestId('set-aside-section')).toBeVisible();
+  await page.getByTestId('plan-show').click();
+  await page.getByTestId('plan-apply').click();
+  await page.getByTestId('plan-apply-confirm').click();
+  const reset = page.getByTestId('replacement-reset');
+  await expect(reset).toBeVisible();
+  await expect(planStep.getByTestId('replacement-reset')).toHaveCount(0);
+  await expect(cardsStep.getByTestId('replacement-reset')).toHaveCount(0);
+  expect(await y(reset)).toBeGreaterThan(await y(cardsStep));
+  // Téléphone : rien de coupé.
+  await page.setViewportSize({ width: 390, height: 800 });
+  expect(await clipped(page)).toEqual([]);
+});

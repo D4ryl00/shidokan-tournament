@@ -116,6 +116,14 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: 'ok
   );
 }
 
+/** Bloc ① de la page : le plan automatique, le cas général. */
+const PLAN_STEP = {
+  title: '① Plan automatique',
+  description: 'Le cas général : choisissez jusqu’où vont les règles, vérifiez le plan, puis appliquez-le. L’ordre des règles est la priorité ; la ligne pointillée marque où elles s’arrêtent.',
+  borderColor: 'var(--sk-accent)',
+  'data-testid': 'replacement-step-plan',
+};
+
 const sameChoice = (a: PlanChoice, b: PlanChoice) =>
   a.kind === 'validate' ? b.kind === 'validate' && a.proposalId === b.proposalId && a.caseId === b.caseId
   : a.kind === 'manual' ? b.kind === 'manual' && a.registrationId === b.registrationId && a.categoryId === b.categoryId
@@ -169,7 +177,7 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
   const actions = <Box w={280} maw="100%" mih={PROGRESS_HEIGHT}>{isFetching && <PlanProgress progress={progress} onCancel={cancel} />}</Box>;
   if (!view) {
     return error ? <ApiErrorAlert error={error} /> : (
-      <SectionCard title="Règles de réaffectation" actions={actions}><Loader size="sm" /></SectionCard>
+      <SectionCard {...PLAN_STEP} actions={actions}><Loader size="sm" /></SectionCard>
     );
   }
   // Pendant le calcul, les lignes déjà recalculées remplacent celles du plan précédent (grisées).
@@ -179,7 +187,7 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
   // Le numéro de la règle et les nombres viennent du même plan (pas de mélange après un changement ou une annulation).
   const k = plan ? ruleNumber(plan.view.order, plan.view.cutAfter) : null;
   return (
-    <SectionCard title="Règles de réaffectation" description="L’ordre est la priorité ; la ligne pointillée marque où les règles s’arrêtent." actions={actions}>
+    <SectionCard {...PLAN_STEP} actions={actions}>
       {cancelled && (
         <Alert data-testid="plan-cancelled" p="xs" title="Calcul annulé : le plan affiché ne tient pas compte de votre dernier changement." styles={WARN_ALERT}>
           <Button size="compact-sm" data-testid="plan-restart" onClick={restart}>Relancer le calcul</Button>
@@ -342,9 +350,9 @@ export function ReplacementPage() {
               );
             }
             return (
-              <Group key={p.id} justify="space-between" wrap="nowrap" data-testid="replacement-proposal" p="xs"
+              <Group key={p.id} justify="space-between" wrap="wrap" data-testid="replacement-proposal" p="xs"
                 style={{ border: '1px solid var(--sk-line)', borderRadius: 'var(--mantine-radius-md)', background: 'var(--sk-bg)' }}>
-                <Group gap="xs" wrap="nowrap">
+                <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
                   <Box style={{ flexShrink: 0 }}><ReplacementBadge type={p.type} state="proposed" gapKg={'newKey' in p.target ? undefined : p.checks.weightGapKg} checks={p.checks} /></Box>
                   <div>
                     <Text size="sm">{p.reason}</Text>
@@ -417,7 +425,6 @@ export function ReplacementPage() {
   return (
     <Stack gap="md">
       {waveSelector}
-      <RulesPanel key={resets} id={id} waveId={waveId} ready={ready && (waves.length === 0 || waveId !== null)} fighter={fighter} targets={planTargets} />
       <SimpleGrid cols={{ base: 2, sm: 3, md: 5, xl: 9 }} spacing="sm" data-testid="replacement-summary">
         <Stat label="Présents" value={s.present} />
         <Stat label="Absents" value={s.absent} />
@@ -429,59 +436,63 @@ export function ReplacementPage() {
         <Stat label="Sans solution automatique" value={s.withoutProposal} tone={s.withoutProposal ? 'danger' : undefined} />
         <Stat label="Catégories lancées" value={s.startedCategories} />
       </SimpleGrid>
-      {waves.length > 0 && <Text size="sm" c="dimmed">Les changements de session se valident un par un.</Text>}
-      <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error ?? undo.error ?? resetAll.error ?? move.error ?? withdraw.error ?? setAside.error ?? resume.error} />
+      <RulesPanel key={resets} id={id} waveId={waveId} ready={ready && (waves.length === 0 || waveId !== null)} fighter={fighter} targets={planTargets} />
+      <SectionCard title="② Cas un par un : ce que le plan ne règle pas" description="Une fois le plan appliqué, les combattants encore seuls sont ici, carte par carte."
+        borderColor="var(--sk-warn-text)" data-testid="replacement-step-cards">
+        {waves.length > 0 && <Text size="sm" c="dimmed">Les changements de session se valident un par un.</Text>}
+        <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error ?? undo.error ?? resetAll.error ?? move.error ?? withdraw.error ?? setAside.error ?? resume.error} />
 
-      {activeCases.length === 0 && (
-        <EmptyState icon="✓" title="Aucun cas à traiter"
-          text={asideCases.length > 0 ? `${plural(asideCases.length, 'carte mise de côté', 'cartes mises de côté')}, à retrouver plus bas.` : 'Toutes les catégories ont au moins deux combattants et aucun poids n’est hors catégorie.'} />
-      )}
-      {activeCases.length > 0 && (
-        <Chip.Group multiple value={kinds} onChange={setKinds}>
-          <Group gap="xs" data-testid="case-filters">
-            <Text size="sm" c="dimmed">Afficher :</Text>
-            {(Object.keys(CASE_KINDS) as CaseKind[]).filter((k) => activeCases.some((c) => c.kind === k)).map((k) => (
-              <Chip key={k} value={k} size="xs">{CASE_KINDS[k]} ({activeCases.filter((c) => c.kind === k).length})</Chip>
-            ))}
-          </Group>
-        </Chip.Group>
-      )}
-      {activeCases.filter((c) => kinds.length === 0 || kinds.includes(c.kind)).map(caseCard)}
-
-      {asideCases.length > 0 && (
-        <Card withBorder padding="md" data-testid="set-aside-section">
-          <Group justify="space-between" wrap="nowrap">
-            <Group gap={4}>
-              <Button variant="subtle" color="gray" size="compact-md" data-testid="set-aside-toggle" onClick={() => setAsideOpen((o) => !o)}>
-                {asideOpen ? '▾' : '▸'} Mises de côté ({asideCases.length})
-              </Button>
-              <HelpButton topic="recasement.de-cote" />
+        {activeCases.length === 0 && (
+          <EmptyState icon="✓" title="Aucun cas à traiter"
+            text={asideCases.length > 0 ? `${plural(asideCases.length, 'carte mise de côté', 'cartes mises de côté')}, à retrouver plus bas.` : 'Toutes les catégories ont au moins deux combattants et aucun poids n’est hors catégorie.'} />
+        )}
+        {activeCases.length > 0 && (
+          <Chip.Group multiple value={kinds} onChange={setKinds}>
+            <Group gap="xs" data-testid="case-filters">
+              <Text size="sm" c="dimmed">Afficher :</Text>
+              {(Object.keys(CASE_KINDS) as CaseKind[]).filter((k) => activeCases.some((c) => c.kind === k)).map((k) => (
+                <Chip key={k} value={k} size="xs">{CASE_KINDS[k]} ({activeCases.filter((c) => c.kind === k).length})</Chip>
+              ))}
             </Group>
-          </Group>
-          <Collapse in={asideOpen}>
-            <Stack gap="xs" mt="sm">
-              {asideCases.map((c) => {
-                const mark = data.setAside[c.id]!;
-                return (
-                  <Stack key={c.id} gap="xs">
-                    <Group justify="space-between" wrap="nowrap" data-testid="set-aside-row" p="xs" style={{ border: '1px solid var(--sk-line)', borderRadius: 'var(--mantine-radius-md)', cursor: 'pointer' }}
-                      onClick={() => setExpanded((e) => ({ ...e, [c.id]: !e[c.id] }))}>
-                      <Group gap="xs" wrap="wrap" style={{ minWidth: 0 }}>
-                        <Text fw={600} size="sm">{name(c.registrationId)}</Text>
-                        <StatusBadge tone="warn" size="sm">{CASE_KINDS[c.kind]}</StatusBadge>
-                        {mark.note && <Text size="sm" c="dimmed">« {mark.note} »</Text>}
-                        <Text size="xs" c="dimmed" className="num">{new Date(mark.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</Text>
+          </Chip.Group>
+        )}
+        {activeCases.filter((c) => kinds.length === 0 || kinds.includes(c.kind)).map(caseCard)}
+
+        {asideCases.length > 0 && (
+          <Card withBorder padding="md" data-testid="set-aside-section">
+            <Group justify="space-between" wrap="nowrap">
+              <Group gap={4}>
+                <Button variant="subtle" color="gray" size="compact-md" data-testid="set-aside-toggle" onClick={() => setAsideOpen((o) => !o)}>
+                  {asideOpen ? '▾' : '▸'} Mises de côté ({asideCases.length})
+                </Button>
+                <HelpButton topic="recasement.de-cote" />
+              </Group>
+            </Group>
+            <Collapse in={asideOpen}>
+              <Stack gap="xs" mt="sm">
+                {asideCases.map((c) => {
+                  const mark = data.setAside[c.id]!;
+                  return (
+                    <Stack key={c.id} gap="xs">
+                      <Group justify="space-between" wrap="nowrap" data-testid="set-aside-row" p="xs" style={{ border: '1px solid var(--sk-line)', borderRadius: 'var(--mantine-radius-md)', cursor: 'pointer' }}
+                        onClick={() => setExpanded((e) => ({ ...e, [c.id]: !e[c.id] }))}>
+                        <Group gap="xs" wrap="wrap" style={{ minWidth: 0 }}>
+                          <Text fw={600} size="sm">{name(c.registrationId)}</Text>
+                          <StatusBadge tone="warn" size="sm">{CASE_KINDS[c.kind]}</StatusBadge>
+                          {mark.note && <Text size="sm" c="dimmed">« {mark.note} »</Text>}
+                          <Text size="xs" c="dimmed" className="num">{new Date(mark.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</Text>
+                        </Group>
+                        <Button size="xs" variant="default" data-testid="case-resume" onClick={(e) => { e.stopPropagation(); resume.mutate({ caseId: c.id }); }}>Reprendre</Button>
                       </Group>
-                      <Button size="xs" variant="default" data-testid="case-resume" onClick={(e) => { e.stopPropagation(); resume.mutate({ caseId: c.id }); }}>Reprendre</Button>
-                    </Group>
-                    {expanded[c.id] && caseCard(c)}
-                  </Stack>
-                );
-              })}
-            </Stack>
-          </Collapse>
-        </Card>
-      )}
+                      {expanded[c.id] && caseCard(c)}
+                    </Stack>
+                  );
+                })}
+              </Stack>
+            </Collapse>
+          </Card>
+        )}
+      </SectionCard>
 
       <SectionCard title={HELP['recasement.valides'].title} help="recasement.valides"
         actions={(data.recasements.length > 0 || data.resettable) && (
