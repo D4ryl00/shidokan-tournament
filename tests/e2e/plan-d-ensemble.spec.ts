@@ -135,6 +135,9 @@ test('le diagramme baisse règle par règle ; déplacer la ligne change le plan'
   expect(await bar('ageUp').getByTestId('ladder-segment').evaluateAll((els) => els.map((e) => [e.getAttribute('data-band'), e.textContent]))).toEqual([['0', '1'], ['1', '1']]);
   await expect(bar('seniorsVeterans')).toHaveAttribute('data-alone', '0');
   await expect(bar('seniorsVeterans').getByTestId('ladder-alone')).toHaveCount(0);
+  // Une règle désactivée (sans barre) garde ses colonnes : interrupteur aligné sur celui d’une règle active.
+  const switchX = async (rule: string) => (await ladder.locator(`[data-testid="ladder-row"][data-rule="${rule}"]`).getByTestId('ladder-switch').boundingBox())!.x;
+  expect(await switchX('mixSexes')).toBeCloseTo(await switchX('weight'), 0);
   // « Retour » n’a pas de numéro : « Catégorie de poids voisine » est la règle 1.
   await expect(ladder.locator('[data-testid="ladder-row"][data-rule="weight"]')).toContainText('1Catégorie de poids voisine');
   const show = page.getByTestId('plan-show');
@@ -253,6 +256,8 @@ test('refuser puis annuler le refus', async ({ page, request }) => {
   await page.reload();
   await page.getByTestId('plan-show').click();
   await expect(view.getByTestId('plan-refused')).toContainText('VETE Paul');
+  // La raison ne répète pas le nom, comme dans les lignes du plan.
+  await expect(view.getByTestId('plan-refused')).not.toContainText('VETE Paul :');
   await view.getByTestId('plan-unrefuse').click();
   await expect(view.getByTestId('plan-move')).toHaveCount(3);
   await expect(view.getByTestId('plan-unrefuse')).toHaveCount(0);

@@ -162,6 +162,9 @@ export function PlanView({
     );
   };
 
+  /** Raison sans le nom du combattant en tête (« NOM Prénom : … »), déjà écrit au-dessus. */
+  const withoutName = (reason: string, who: string) => (reason.startsWith(`${who} : `) ? reason.slice(who.length + 3) : reason);
+
   const moveRow = (m: PlanMove) => {
     const f = fighter(m.registrationId);
     const pinned = validateChoice(m);
@@ -177,7 +180,7 @@ export function PlanView({
             {(m.alsoMoved ?? []).map((r) => ` + ${name(r)}`).join('')}
             {f.club && <Text span size="xs" c="dimmed" fw={400}> · {f.club}</Text>}
           </Text>
-          <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{m.reason.startsWith(`${f.name} : `) ? m.reason.slice(f.name.length + 3) : m.reason}</Text>
+          <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{withoutName(m.reason, f.name)}</Text>
           {m.type === 'M' && <Text size="xs" style={{ overflowWrap: 'anywhere' }}>→ {m.toLabel}</Text>}
         </Box>
         <Box style={{ flex: '1 1 220px', minWidth: 0, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
@@ -285,7 +288,7 @@ export function PlanView({
             <Box key={r.proposalId} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 12px', padding: '6px 8px', borderTop: '1px solid var(--sk-line)' }}>
               <Box style={{ flex: '1 1 220px', minWidth: 0 }}>
                 <Text size="sm" fw={600}>{name(r.registrationId)}</Text>
-                <Text size="xs" c="dimmed" td="line-through" style={{ overflowWrap: 'anywhere' }}>{r.reason}</Text>
+                <Text size="xs" c="dimmed" td="line-through" style={{ overflowWrap: 'anywhere' }}>{withoutName(r.reason, name(r.registrationId))}</Text>
               </Box>
               <Button size="compact-xs" variant="subtle" data-testid="plan-unrefuse" onClick={() => choose(without((c) => c === r))}>
                 Annuler le refus

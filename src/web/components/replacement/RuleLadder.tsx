@@ -213,6 +213,8 @@ export function RuleLadder({ view, rows, onChange, busy, fresh }: {
                   <Text size="xs" c="dimmed" style={COL.moves}>pas encore calculée</Text>
                 </>
               )}
+              {/* Règle désactivée, ou aucun seul au départ : pas de barre, mais les colonnes restent à leur place. */}
+              {rows && (!on || (row && row.alone !== null && !bar)) && <><span style={COL.bar} /><span style={COL.moves} /></>}
             </Box>
             {view.cutAfter === rule && (
               <Box data-testid="ladder-cut" role="separator" style={{ borderTop: '2px dashed var(--sk-accent)', color: 'var(--sk-accent)', fontSize: 12, fontWeight: 700, paddingTop: 2, textAlign: 'center' }}>
