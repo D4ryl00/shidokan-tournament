@@ -81,7 +81,7 @@ Pour chaque club **lié** dont le contact (dans le libellé choisi) diffère de 
 | ☑ | Club | Champ | Annuaire | Google |
 |---|------|-------|----------|--------|
 
-- Champs comparés : **nom du coach**, **téléphone**, **mail**.
+- Champs comparés : **nom du coach**, **téléphone**, **mail**, et depuis l'étape 29 le **numéro d'affiliation FFK** (§10).
 - ✅ Google l'emporte : chaque ligne est **cochée par défaut** (« prendre Google »). On **décoche** une ligne pour garder la valeur de l'annuaire.
 - ✅ Une ligne décochée est ignorée **seulement cette fois** : rien n'est retenu, et la même différence revient à la synchronisation suivante tant que Google et l'annuaire ne concordent pas.
 - 💡 Un champ **vide dans Google** n'efface pas la valeur de l'annuaire : ce n'est pas une différence. Un champ vide dans l'annuaire et rempli dans Google en est une (cochée par défaut).
@@ -95,7 +95,7 @@ Pour chaque club **lié** dont le contact (dans le libellé choisi) diffère de 
 Chaque contact du libellé qui n'est lié à **aucun** club et qui n'est pas « en attente » est montré avec son nom, son mail et son téléphone. Pour chacun, un choix :
 
 - **Lier à un club existant** ✅ : liste des clubs non archivés de l'annuaire. 💡 Un club déjà lié à un autre contact y figure avec la mention « lié à <contact> » ; le choisir remplace son lien.
-  - 💡 **Présélection seulement sur une concordance exacte** : le club dont le coach a le même mail, sinon le même téléphone (écritures équivalentes, §5.2), est présélectionné avec la raison (« même mail »).
+  - 💡 **Présélection seulement sur une concordance exacte** : le club au même numéro d'affiliation (étape 29, §10), sinon celui dont le coach a le même mail, sinon le même téléphone (écritures équivalentes, §5.2), est présélectionné avec la raison (« même mail »).
   - 💡 Un nom proche (nom du coach, ou nom du club qui ressemble à « Entreprise ») est seulement **proposé** (« Peut-être : Shidokan Est ? », un clic pour le choisir), jamais présélectionné : un mauvais rattachement écraserait les coordonnées d'un autre coach.
   - ✅ S'il n'y a aucun coach correspondant, rien n'est présélectionné.
   - 💡 Juste en dessous, les champs qui diffèrent entre ce contact et le club choisi sont affichés, avec les mêmes cases que §5.2 (cochées par défaut). Les champs vides du club sont simplement remplis.
@@ -144,3 +144,14 @@ Les mêmes comptes que ceux qui peuvent modifier l'annuaire (`src/server/auth/pe
 ## 9. Laissé au constructeur 🔧
 
 La forme du stockage, le nom des routes et des fichiers, la façon exacte de filtrer par libellé côté Google, la mise en page fine de l'écran (la maquette « tout sur une page » validée sert de base), et la simulation de Google dans les tests.
+
+## 10. Numéro d'affiliation FFK (étape 29, 27 oct.)
+
+Le numéro d'affiliation FFK reconnaît un club à coup sûr. Le site public de la FFK ne le publie pas : il se range dans le contact Google, pour être repris dans l'annuaire.
+
+- **Dans Google** : un **champ personnalisé** (« Modifier », « Plus », « Ajouter un champ personnalisé »), valeur `0060808` (7 chiffres), libellé **`Num affiliation FFK`** (sans « ° », difficile à taper). Côté API People : `userDefined`, lu avec `personFields=…,userDefined`.
+- **Lecture** : le premier champ personnalisé dont le libellé contient « affiliation » (casse et accents ignorés : « N° d’affiliation » convient aussi), espaces retirés. Une valeur qui n'a pas 7 chiffres est signalée « valeur Google non reprise », comme un mail invalide.
+- **Rapprochement** : un nouveau contact dont le numéro est celui d'un club libre de l'annuaire est lié d'office à ce club (« même n° d’affiliation »), avant le mail et le téléphone. Club déjà lié à un autre contact : seulement « Peut-être… ».
+- **Différences** : le numéro se compare comme les autres champs (Google l'emporte, case cochée ; champ vide de l'annuaire rempli) ; un nouveau club le reçoit.
+- **Unicité** : un numéro est unique dans l'annuaire, fiches archivées comprises. Un numéro Google déjà porté par une autre fiche n'est jamais proposé ni envoyé ; il est signalé (« … (déjà celui de « X ») »), sous les différences pour un contact lié, sous le club choisi ou le nom du nouveau club sinon. Si l'annuaire change entre l'aperçu et « Appliquer », le serveur refuse tout (409, message qui nomme la fiche).
+
