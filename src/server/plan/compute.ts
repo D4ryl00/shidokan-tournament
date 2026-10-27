@@ -81,7 +81,8 @@ export function planPayload(real: State, input: PlanInput, onProgress?: (p: Ladd
       dropped: [...plan.dropped, ...stale],
       waiting: plan.waiting,
       proven: plan.proven,
-      hash: plan.hash,
+      // La coche entre dans l'empreinte : un plan vu avec une coche ne s'applique pas avec l'autre, même à déplacements égaux.
+      hash: `${plan.hash}#${input.cardDecisions === false ? 'sans-cartes' : 'cartes'}`,
     },
     ...(forApply ? { categories: previewTransition(state, plan.final) } : {}),
     fingerprint: stateFingerprint(real),

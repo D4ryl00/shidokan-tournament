@@ -40,7 +40,7 @@ const NDJSON = 'application/x-ndjson';
 const planChoice = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('validate'), proposalId: z.string(), caseId: z.string() }).strict(),
   z.object({ kind: z.literal('manual'), registrationId: z.string(), categoryId: z.string() }).strict(),
-  z.object({ kind: z.literal('refuse'), proposalId: z.string(), registrationId: z.string(), reason: z.string().max(500) }).strict(),
+  z.object({ kind: z.literal('refuse'), proposalId: z.string(), registrationId: z.string(), reason: z.string().max(500), fromCategoryId: z.string().nullable().optional() }).strict(),
 ]);
 const choices = z.array(planChoice).max(500);
 

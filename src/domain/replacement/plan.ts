@@ -18,8 +18,11 @@ export { DEFAULT_NODE_BUDGET, aloneRegistrations } from './plan-search.js';
 export type PlanChoice =
   | { kind: 'validate'; proposalId: string; caseId: string }
   | { kind: 'manual'; registrationId: string; categoryId: string }
-  /** Refus fait dans le plan : il ne vaut que pour le plan (voir `preparePlanState`) ; nom et raison pour la liste « Refusés ». */
-  | { kind: 'refuse'; proposalId: string; registrationId: string; reason: string };
+  /**
+   * Refus fait dans le plan : il ne vaut que pour le plan (voir `preparePlanState`) ; nom et raison pour la liste « Refusés »,
+   * catégorie de départ du déplacement refusé (le combattant l'a quittée pour de vrai : le refus n'a plus d'objet).
+   */
+  | { kind: 'refuse'; proposalId: string; registrationId: string; reason: string; fromCategoryId?: string | null };
 
 export interface PlanMove extends Proposal {
   /** Première inscription active de la cible au moment du déplacement, hors celles qui bougent (`null` : nouvelle catégorie). */

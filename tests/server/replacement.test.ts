@@ -191,6 +191,16 @@ test('appliquer avec une autre coche que l’affichage : 409, rien d’appliqué
   expect((await applyPlan({ cardDecisions: false })).statusCode).toBe(200);
 });
 
+test('appliquer avec une autre coche, même si les déplacements sont les mêmes : 409', async () => {
+  await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 49 });
+  // Aucune décision de carte : les deux coches donnent le même plan, mais l'empreinte du plan dit laquelle a été vue.
+  const shown = await plan({ forApply: true, cardDecisions: false });
+  const res = await call('POST', '/replacement/plan/apply', { choices: [], cardDecisions: true, fingerprint: shown.fingerprint, hash: shown.plan.hash });
+  expect(res.statusCode).toBe(409);
+  expect((await applyPlan({ cardDecisions: false })).statusCode).toBe(200);
+});
+
 test('plan : refus d’un combattant absent → dans dropped', async () => {
   const a = await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
   await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 49 });

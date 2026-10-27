@@ -208,7 +208,7 @@ export function PlanView({
           {!chosen && (
             <Button size="compact-xs" variant="subtle" color="red" data-testid="plan-move-refuse"
               // Refusé, il n'est plus épinglé. Le refus ne vaut que pour le plan : gardé avec les choix du poste, rien n'est enregistré.
-              onClick={() => choose([...without((c) => c === pinned), { kind: 'refuse', proposalId: m.id, registrationId: m.registrationId, reason: m.reason }])}>
+              onClick={() => choose([...without((c) => c === pinned), { kind: 'refuse', proposalId: m.id, registrationId: m.registrationId, reason: m.reason, fromCategoryId: m.fromCategoryId }])}>
               Refuser
             </Button>
           )}

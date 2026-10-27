@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import type { LadderRow } from '../../src/domain/replacement/plan.js';
 import type { RuleId } from '../../src/domain/settings.js';
-import { ladderBars, rowBars } from '../../src/web/components/replacement/ladderBars.js';
+import { labelFits, ladderBars, rowBars } from '../../src/web/components/replacement/ladderBars.js';
 
 test('ladderBars : 6 → 4 → 4 → 2, chaque règle peint ce qu’elle case', () => {
   const bars = ladderBars(6, [
@@ -77,4 +77,13 @@ test('rowBars : aucun combattant seul au départ, aucune barre pour les règles'
     { rule: 'weight', on: true, alone: 0, moves: 0, toValidate: 0, proven: true },
   ];
   expect(rowBars(rows, () => 0)).toEqual({ start: 0, bars: new Map() });
+});
+
+test('labelFits : le nombre d’un morceau ne s’affiche que s’il tient', () => {
+  // Barre d'au moins 200 px : 1 sur 40 fait 5 px, trop étroit ; 4 sur 10 fait 80 px.
+  expect(labelFits('1', 1, 40)).toBe(false);
+  expect(labelFits('4', 4, 10)).toBe(true);
+  expect(labelFits('12 seuls', 3, 10)).toBe(false);
+  expect(labelFits('12 seuls', 6, 10)).toBe(true);
+  expect(labelFits('1', 0, 0)).toBe(false);
 });

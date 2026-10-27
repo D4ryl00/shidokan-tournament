@@ -440,7 +440,8 @@ export function ReplacementPage() {
       <SectionCard title="② Cas un par un : ce que le plan ne règle pas" description="Une fois le plan appliqué, les combattants encore seuls sont ici, carte par carte."
         borderColor="var(--sk-warn-text)" data-testid="replacement-step-cards">
         {waves.length > 0 && <Text size="sm" c="dimmed">Les changements de session se valident un par un.</Text>}
-        <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error ?? undo.error ?? resetAll.error ?? move.error ?? withdraw.error ?? setAside.error ?? resume.error} />
+        {/* Erreurs des cartes ; celles de l'historique (annuler, repartir de zéro) s'affichent dans leur fenêtre. */}
+        <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error ?? move.error ?? withdraw.error ?? setAside.error ?? resume.error} />
 
         {activeCases.length === 0 && (
           <EmptyState icon="✓" title="Aucun cas à traiter"
@@ -526,7 +527,7 @@ export function ReplacementPage() {
                 </Table.Td>
                 <Table.Td ta="right">
                   {r.status === 'validated' && (
-                    <Button size="compact-sm" variant="subtle" color="red" data-testid="recasement-undo" onClick={() => setDialog({ kind: 'undo', recasementId: r.id, label: name(r.registrationId) })}>
+                    <Button size="compact-sm" variant="subtle" color="red" data-testid="recasement-undo" onClick={() => { undo.reset(); setDialog({ kind: 'undo', recasementId: r.id, label: name(r.registrationId) }); }}>
                       Annuler
                     </Button>
                   )}
@@ -618,6 +619,7 @@ export function ReplacementPage() {
       <Modal opened={dialog?.kind === 'undo'} onClose={() => setDialog(null)} title="Annuler cette réaffectation ?">
         <Stack>
           <Text>{dialog?.kind === 'undo' && dialog.label} retrouvera sa place d’avant.</Text>
+          <ApiErrorAlert error={undo.error} />
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setDialog(null)}>Non</Button>
             <Button color="red" data-testid="recasement-undo-confirm"

@@ -4,7 +4,7 @@ import { plural } from '../../../domain/plural.js';
 import { applyRulesView, COST_BAND_LABELS, costBand, NO_VALIDATION_RULES, RULE_LABELS, ruleNumber, type CostBand, type RulesView } from '../../../domain/replacement/rules.js';
 import { defaultSettings, type RuleId } from '../../../domain/settings.js';
 import type { LadderRow } from '../../api.js';
-import { rowBars, type LadderBar } from './ladderBars.js';
+import { labelFits, rowBars, type LadderBar } from './ladderBars.js';
 
 /** Couleur de chaque groupe de coût (`COST_BAND_LABELS`), du vert au rouge. */
 export const BAND_COLOR = ['var(--sk-cost0)', 'var(--sk-cost1)', 'var(--sk-cost2)', 'var(--sk-cost3)', 'var(--sk-cost4)'];
@@ -60,12 +60,12 @@ function Bar({ bar }: { bar: LadderBar }) {
           {bar.placed.map((s, i) => (
             <span key={i} data-testid="ladder-segment" data-band={s.band}
               style={{ ...cell, width: pct(s.count), background: BAND_COLOR[s.band], color: 'var(--sk-on-cost)', justifyContent: 'center' }}>
-              {s.count}
+              {labelFits(String(s.count), s.count, bar.total) ? s.count : ''}
             </span>
           ))}
           {bar.alone > 0 && (
             <span data-testid="ladder-alone" style={{ ...cell, width: pct(bar.alone), background: HATCH, color: 'var(--sk-alone-text)', paddingLeft: 8 }}>
-              {plural(bar.alone, 'seul')}
+              {labelFits(plural(bar.alone, 'seul'), bar.alone, bar.total) ? plural(bar.alone, 'seul') : labelFits(String(bar.alone), bar.alone, bar.total) ? bar.alone : ''}
             </span>
           )}
         </>
@@ -158,7 +158,7 @@ export function RuleLadder({ view, rows, onChange, busy, fresh }: {
               onClick={cutHere}
               style={{
                 ...ROW, cursor: 'pointer',
-                background: fixed ? 'var(--sk-chip)' : 'var(--sk-row)', border: '1px solid var(--sk-card-line)', opacity: on ? 1 : 0.55,
+                background: fixed ? 'var(--sk-start-row)' : 'var(--sk-row)', border: '1px solid var(--sk-card-line)', opacity: on ? 1 : 0.55,
                 outline: dragFrom === i ? '2px dashed var(--sk-accent)' : undefined,
               }}
             >

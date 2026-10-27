@@ -49,3 +49,18 @@ test('preparePlanState : un refus dont le cas n’existe qu’au milieu du plan 
   const choice = refuse(`A:${a.registrationId}>ailleurs`, a.registrationId);
   expect(preparePlanState(s, [choice], true, null).stale).toEqual([]);
 });
+
+test('preparePlanState : refus d’un combattant déplacé depuis (plan appliqué) : stale', () => {
+  const a = member();
+  const s = makeState([a]);
+  const from = a.categoryId!;
+  const choice = { kind: 'refuse' as const, proposalId: 'p', registrationId: a.registrationId, reason: 'r', fromCategoryId: from };
+  expect(preparePlanState(s, [choice], true, null).stale).toEqual([]);
+  // Déplacé pour de vrai : le déplacement refusé partait d'une catégorie qu'il a quittée.
+  a.categoryId = 'ailleurs';
+  s.categories.push({ ...s.categories[0]!, id: 'ailleurs' });
+  expect(preparePlanState(s, [choice], true, null).stale).toEqual([choice]);
+  // Catégorie créée en route (`new:…`) ou refus d'avant ce champ : on ne peut pas comparer, le refus reste.
+  expect(preparePlanState(s, [{ ...choice, fromCategoryId: 'new:x' }], true, null).stale).toEqual([]);
+  expect(preparePlanState(s, [{ kind: 'refuse', proposalId: 'p', registrationId: a.registrationId, reason: 'r' }], true, null).stale).toEqual([]);
+});

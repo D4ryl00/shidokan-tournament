@@ -8,7 +8,10 @@ const isChoice = (c: unknown): c is PlanChoice => {
   const x = c as Record<string, unknown>;
   if (x.kind === 'validate') return typeof x.proposalId === 'string' && typeof x.caseId === 'string';
   if (x.kind === 'manual') return typeof x.registrationId === 'string' && typeof x.categoryId === 'string';
-  if (x.kind === 'refuse') return typeof x.proposalId === 'string' && typeof x.registrationId === 'string' && typeof x.reason === 'string';
+  if (x.kind === 'refuse') {
+    return typeof x.proposalId === 'string' && typeof x.registrationId === 'string' && typeof x.reason === 'string'
+      && (x.fromCategoryId === undefined || x.fromCategoryId === null || typeof x.fromCategoryId === 'string');
+  }
   return false;
 };
 

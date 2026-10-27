@@ -26,6 +26,8 @@ export const TOKENS = {
     cost0: '#298454', cost1: '#53811f', cost2: '#927000', cost3: '#bc570c', cost4: '#c43a30', onCost: '#ffffff',
     // Part « restent seuls » des barres : hachures de deux rayures rouges, texte `aloneText` (≥ 4,5:1 sur chacune).
     alone: '#3d1a1d', aloneAlt: '#2c1518', aloneText: '#ff9a8f',
+    // Ligne de départ du diagramme des règles : fond légèrement grisé, distinct des lignes de règles (`row`).
+    startRow: '#211f24',
   },
   light: {
     bg: '#f7f5f9', bar: '#ffffff', line: '#ebe6ef', card: '#ffffff', cardLine: '#e7e1ec', row: '#faf8fb',
@@ -34,6 +36,7 @@ export const TOKENS = {
     chip: '#f1e4f6', chipText: '#722f82', ok: '#e6f5ec', okText: '#1f7a45', warn: '#fff3df', warnText: '#9a5a00',
     cost0: '#1f7a45', cost1: '#4d7f1a', cost2: '#8a6a00', cost3: '#b04e00', cost4: '#b42318', onCost: '#ffffff',
     alone: '#f8d7d3', aloneAlt: '#fdeceb', aloneText: '#9b1c14',
+    startRow: '#eeedf0',
   },
 } as const;
 export type TokenName = keyof (typeof TOKENS)['dark'];

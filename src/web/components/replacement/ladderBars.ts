@@ -47,3 +47,12 @@ export function rowBars(rows: LadderRow[], bandOf: (rule: RuleId) => CostBand): 
   const after = rows.filter((r): r is LadderRow & { rule: RuleId } => r.rule !== null && r.rule !== 'return');
   return { start, bars: ladderBars(start, after.map((r) => ({ rule: r.rule, alone: r.on ? r.alone : null, band: bandOf(r.rule) }))) };
 }
+
+/** Largeur la plus petite d'une barre (colonne du tableau, en px) : sert à savoir si un texte tient dans un morceau. */
+const MIN_BAR_PX = 200;
+
+/** Le texte d'un morceau (`count` sur `total`) tient-il dans la barre la plus étroite ? Sinon il est masqué (l'infobulle le donne). */
+export function labelFits(text: string, count: number, total: number): boolean {
+  if (total <= 0) return false;
+  return (count / total) * MIN_BAR_PX >= text.length * 7 + 8;
+}

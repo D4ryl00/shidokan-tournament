@@ -897,3 +897,17 @@ test('la page : compteurs, puis ① Plan automatique, puis ② Cas un par un', a
   await page.setViewportSize({ width: 390, height: 800 });
   expect(await clipped(page)).toEqual([]);
 });
+
+test('une annulation refusée dans l’historique : l’erreur dans sa fenêtre, pas dans le bloc des cartes', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe annulation refusée');
+  await seedPlan(request, id);
+  const { view } = await openPlan(page, id);
+  await view.getByTestId('plan-apply').click();
+  await page.getByTestId('plan-apply-confirm').click();
+  await expect(page.getByText('1 réaffectation appliquée.')).toBeVisible();
+  await page.route('**/replacement/undo', (route) => route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Catégorie déjà lancée' }) }));
+  await page.getByTestId('recasement-undo').first().click();
+  await page.getByTestId('recasement-undo-confirm').click();
+  await expect(page.getByRole('dialog').getByTestId('api-error')).toContainText('Catégorie déjà lancée');
+  await expect(page.getByTestId('replacement-step-cards').getByTestId('api-error')).toHaveCount(0);
+});
