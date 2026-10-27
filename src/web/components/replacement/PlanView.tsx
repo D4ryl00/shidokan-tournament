@@ -285,24 +285,6 @@ export function PlanView({
         );
       })}
 
-      {plan.refused.length > 0 && (
-        <Box>
-          <Text style={groupTitle}>Refusés</Text>
-          {plan.refused.map((r) => (
-            <Box key={r.proposalId} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 12px', padding: '6px 8px', borderTop: '1px solid var(--sk-line)' }}>
-              <Box style={{ flex: '1 1 220px', minWidth: 0 }}>
-                <Text size="sm" fw={600}>{name(r.registrationId)}</Text>
-                <Text size="xs" c="dimmed" td="line-through" style={{ overflowWrap: 'anywhere' }}>{r.reason}</Text>
-              </Box>
-              <Button size="compact-xs" variant="subtle" data-testid="plan-unrefuse" loading={unrefuse.isPending && unrefuse.variables?.proposalId === r.proposalId}
-                onClick={() => { if (refuse.isError) refuse.reset(); unrefuse.mutate({ proposalId: r.proposalId }); }}>
-                Annuler le refus
-              </Button>
-            </Box>
-          ))}
-        </Box>
-      )}
-
       <Box data-testid="plan-alone">
         <Text style={groupTitle}>Restent seuls ({plan.alone.length})</Text>
         {plan.alone.length > 0 && <Text size="sm">{plan.alone.map(name).join(' · ')}</Text>}

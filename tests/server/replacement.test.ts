@@ -35,12 +35,15 @@ type Replacement = {
   recasements: { id: string; registrationId: string; type: string; status: string; reason: string }[];
   resettable: boolean;
 };
-type Choice = { kind: 'validate'; proposalId: string; caseId: string } | { kind: 'manual'; registrationId: string; categoryId: string };
-type PlanBody = { waveId?: string; choices?: Choice[]; forApply?: boolean };
+type Choice =
+  | { kind: 'validate'; proposalId: string; caseId: string }
+  | { kind: 'manual'; registrationId: string; categoryId: string }
+  | { kind: 'refuse'; proposalId: string; registrationId: string; reason: string };
+type PlanBody = { waveId?: string; choices?: Choice[]; forApply?: boolean; cardDecisions?: boolean };
 type PlanOut = {
   view: { order: string[]; cutAfter: string };
   rows: { rule: string | null; on: boolean; alone: number | null; moves: number; toValidate: number; proven: boolean }[];
-  plan: { moves: { id: string; registrationId: string; type: string; manual: boolean; anchor: string | null; validated: boolean }[]; aloneBefore: number; alone: string[]; onCards: string[]; dropped: unknown[]; proven: boolean; hash: string; refused: { proposalId: string; registrationId: string; reason: string }[] };
+  plan: { moves: { id: string; registrationId: string; type: string; manual: boolean; anchor: string | null; validated: boolean }[]; aloneBefore: number; alone: string[]; onCards: string[]; dropped: unknown[]; proven: boolean; hash: string };
   categories?: { label: string; before: string[][]; after: string[][] }[];
   fingerprint: string;
 };
@@ -48,7 +51,7 @@ const plan = async (body: PlanBody = {}) => (await call('POST', '/replacement/pl
 /** Plan à appliquer (sans validation), puis application avec son empreinte et son hash. */
 const applyPlan = async (body: PlanBody = {}) => {
   const p = await plan({ ...body, forApply: true });
-  return call('POST', '/replacement/plan/apply', { waveId: body.waveId, choices: body.choices ?? [], fingerprint: p.fingerprint, hash: p.plan.hash });
+  return call('POST', '/replacement/plan/apply', { waveId: body.waveId, choices: body.choices ?? [], cardDecisions: body.cardDecisions, fingerprint: p.fingerprint, hash: p.plan.hash });
 };
 const replacement = async () => (await call('GET', '/replacement')).json() as Replacement;
 type Cat = { id: string; label: string; registrationIds: string[]; bracket: { entrants: { registrationId: string }[] } | null };
@@ -126,7 +129,8 @@ test('plan : diagramme, plan et empreinte', async () => {
   expect(p.rows[0]).toMatchObject({ rule: null, on: true, alone: 2, moves: 0 });
   expect(p.rows.length).toBe(p.view.order.length + 1);
   expect(p.plan.moves.length).toBeGreaterThan(0);
-  expect(p.plan).toMatchObject({ aloneBefore: 2, alone: [], refused: [], dropped: [] });
+  expect(p.plan).toMatchObject({ aloneBefore: 2, alone: [], dropped: [] });
+  expect(p.plan).not.toHaveProperty('refused');
   expect(typeof p.plan.hash).toBe('string');
   expect(p.categories).toBeUndefined();
   expect(p.fingerprint).toBe((await replacement()).fingerprint);
@@ -142,14 +146,62 @@ test('plan à appliquer : pas de diagramme, aperçu avant / après', async () =>
   expect(p.categories!.some((c) => c.after.flat().length === 2)).toBe(true);
 });
 
-test('plan : les propositions refusées des cas ouverts sont listées', async () => {
+test('plan : un refus du plan écarte la proposition sans rien enregistrer', async () => {
+  await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 49 });
+  // Le combattant déplacé dépend des identifiants (aléatoires) : on prend celui du plan.
+  const { id: pid, registrationId: moved } = (await plan()).plan.moves[0]!;
+  const p = await plan({ choices: [{ kind: 'refuse', proposalId: pid, registrationId: moved, reason: 'x' }] });
+  expect(p.plan.moves.map((m) => m.id)).not.toContain(pid);
+  expect(p.plan.dropped).toEqual([]);
+  // Rien d'enregistré : la carte propose toujours ce déplacement.
+  const r = await replacement();
+  expect(Object.values(r.proposals).flat().find((x) => x.id === pid)?.refused).toBeUndefined();
+});
+
+test('plan : coche décochée, un refus de carte et une mise de côté sont ignorés', async () => {
+  await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 49 });
+  // Le combattant déplacé dépend des identifiants (aléatoires) : on prend celui du plan.
+  const { id: pid, registrationId: moved } = (await plan()).plan.moves[0]!;
+  await call('POST', '/replacement/refuse', { proposalId: pid });
+  expect((await plan()).plan.moves.map((m) => m.id)).not.toContain(pid);
+  expect((await plan({ cardDecisions: false })).plan.moves.map((m) => m.id)).toContain(pid);
+
+  await call('POST', '/replacement/unrefuse', { proposalId: pid });
+  const caseId = (await replacement()).cases.find((c) => c.registrationId === moved)!.id;
+  expect((await call('POST', '/replacement/set-aside', { caseId })).statusCode).toBe(200);
+  expect((await plan()).plan.moves.map((m) => m.registrationId)).not.toContain(moved);
+  expect((await plan({ cardDecisions: false })).plan.moves.map((m) => m.registrationId)).toContain(moved);
+  // Les cartes ne changent pas.
+  expect((await replacement()).summary.setAside).toBe(1);
+});
+
+test('appliquer avec une autre coche que l’affichage : 409, rien d’appliqué', async () => {
+  await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 49 });
+  // Le combattant déplacé dépend des identifiants (aléatoires) : on prend celui du plan.
+  const { id: pid, registrationId: moved } = (await plan()).plan.moves[0]!;
+  await call('POST', '/replacement/refuse', { proposalId: pid });
+  const shown = await plan({ forApply: true, cardDecisions: false });
+  const res = await call('POST', '/replacement/plan/apply', { choices: [], cardDecisions: true, fingerprint: shown.fingerprint, hash: shown.plan.hash });
+  expect(res.statusCode).toBe(409);
+  expect((await categories()).map((c) => c.registrationIds.length)).toEqual([1, 1]);
+  // Avec la même coche, il s'applique.
+  expect((await applyPlan({ cardDecisions: false })).statusCode).toBe(200);
+});
+
+test('plan : refus d’un combattant absent → dans dropped', async () => {
   const a = await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
   await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 49 });
-  const r = await replacement();
-  const pid = r.proposals[r.cases.find((x) => x.registrationId === a.id)!.id]![0]!.id;
-  await call('POST', '/replacement/refuse', { proposalId: pid });
-  const p = await plan();
-  expect(p.plan.refused).toEqual([{ proposalId: pid, registrationId: a.id, reason: expect.any(String) }]);
+  const choice = { kind: 'refuse' as const, proposalId: 'A:x>y', registrationId: 'inconnue', reason: 'x' };
+  expect((await plan({ choices: [choice] })).plan.dropped).toEqual([choice]);
+  expect((await plan({ choices: [{ ...choice, registrationId: a.id }] })).plan.dropped).toEqual([]);
+});
+
+test('plan : un refus aux champs inconnus est refusé (400)', async () => {
+  const choices = [{ kind: 'refuse', proposalId: 'p', registrationId: 'r', reason: 'x', extra: 1 }];
+  expect((await call('POST', '/replacement/plan', { choices })).statusCode).toBe(400);
 });
 
 test('plan : 501 choix refusés', async () => {

@@ -117,10 +117,12 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: 'ok
 }
 
 const sameChoice = (a: PlanChoice, b: PlanChoice) =>
-  a.kind === 'validate' ? b.kind === 'validate' && a.proposalId === b.proposalId && a.caseId === b.caseId : b.kind === 'manual' && a.registrationId === b.registrationId && a.categoryId === b.categoryId;
+  a.kind === 'validate' ? b.kind === 'validate' && a.proposalId === b.proposalId && a.caseId === b.caseId
+  : a.kind === 'manual' ? b.kind === 'manual' && a.registrationId === b.registrationId && a.categoryId === b.categoryId
+  : b.kind === 'refuse' && a.proposalId === b.proposalId;
 /** Inscriptions d'un choix (l'identifiant d'une proposition est `${type}:${inscription}>${cible}`, `a+b` pour un split). */
 const choiceRegistrations = (c: PlanChoice) =>
-  c.kind === 'manual' ? [c.registrationId] : c.proposalId.slice(c.proposalId.indexOf(':') + 1, c.proposalId.indexOf('>')).split('+');
+  c.kind !== 'validate' ? [c.registrationId] : c.proposalId.slice(c.proposalId.indexOf(':') + 1, c.proposalId.indexOf('>')).split('+');
 
 /**
  * La liste des règles de la compétition avec ses barres, et le plan d'ensemble de la session choisie (même calcul, avec les

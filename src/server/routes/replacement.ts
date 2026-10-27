@@ -40,6 +40,7 @@ const NDJSON = 'application/x-ndjson';
 const planChoice = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('validate'), proposalId: z.string(), caseId: z.string() }).strict(),
   z.object({ kind: z.literal('manual'), registrationId: z.string(), categoryId: z.string() }).strict(),
+  z.object({ kind: z.literal('refuse'), proposalId: z.string(), registrationId: z.string(), reason: z.string().max(500) }).strict(),
 ]);
 const choices = z.array(planChoice).max(500);
 
@@ -163,7 +164,7 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
 
   /** Plan d'ensemble de la réaffectation (diagramme et plan), ou, avec `forApply`, plan à appliquer et aperçu. */
   app.post<P>('/api/competitions/:id/replacement/plan', async (req, reply) => {
-    const body = z.object({ waveId: z.string().optional(), choices, forApply: z.boolean().optional() }).strict().parse(req.body);
+    const body = z.object({ waveId: z.string().optional(), choices, forApply: z.boolean().optional(), cardDecisions: z.boolean().optional() }).strict().parse(req.body);
     // Client parti avant la fin (changement de choix, page quittée) : le fil est arrêté.
     const gone = new AbortController();
     reply.raw.on('close', () => {
@@ -195,7 +196,7 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
   });
 
   app.post<P>('/api/competitions/:id/replacement/plan/apply', async (req) => {
-    const body = z.object({ waveId: z.string().optional(), choices, fingerprint: z.string(), hash: z.string() }).strict().parse(req.body);
+    const body = z.object({ waveId: z.string().optional(), choices, cardDecisions: z.boolean().optional(), fingerprint: z.string(), hash: z.string() }).strict().parse(req.body);
     return applyPlan(db, req.params.id, body);
   });
 

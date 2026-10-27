@@ -8,3 +8,4 @@ export * from './move.js';
 export * from './rules.js';
 export * from './manual.js';
 export * from './plan.js';
+export * from './plan-inputs.js';

@@ -10,6 +10,7 @@ import {
   computePlan,
   detectCases,
   planLadder,
+  preparePlanState,
   proposalsFor,
   rulesView,
   stateFingerprint,
@@ -26,8 +27,11 @@ import {
 /** Demande de plan, une fois la vague vérifiée : `waveId` `null` pour tous les cas (compétition sans vague). */
 export interface PlanInput {
   waveId: string | null;
+  /** Refus du plan compris (`kind: 'refuse'`) : ils ne valent que pour ce calcul. */
   choices: PlanChoice[];
   forApply: boolean;
+  /** Coche « Tenir compte des décisions prises sur les cartes » (refus des cartes, mises de côté) ; absente : cochée. */
+  cardDecisions?: boolean;
 }
 
 export interface PlanResponse {
@@ -44,7 +48,6 @@ export interface PlanResponse {
     waiting: PlanChoice[];
     proven: boolean;
     hash: string;
-    refused: { proposalId: string; registrationId: string; reason: string }[];
   };
   categories?: ReturnType<typeof previewTransition>;
   fingerprint: string;
@@ -54,8 +57,10 @@ export interface PlanResponse {
  * Plan d'ensemble de la session : le diagramme et le plan de la ligne de coupure, ou (`forApply`) le plan à appliquer et son aperçu.
  * `onProgress` : après chaque calcul du diagramme ; pour un plan à appliquer, une seule fois (`total` = 1, sans lignes).
  */
-export function planPayload(state: State, input: PlanInput, onProgress?: (p: LadderProgress) => void): PlanResponse {
-  const { waveId, choices, forApply } = input;
+export function planPayload(real: State, input: PlanInput, onProgress?: (p: LadderProgress) => void): PlanResponse {
+  const { waveId, forApply } = input;
+  // L'état du calcul (refus du plan, coche) ; l'empreinte reste celle de l'état réel, comparée à l'application.
+  const { state, choices, stale } = preparePlanState(real, input.choices, input.cardDecisions !== false, waveId);
   const { cutAfter } = state.settings.replacementRules;
   let rows: LadderRow[] = [];
   let plan: PlanResult;
@@ -65,10 +70,6 @@ export function planPayload(state: State, input: PlanInput, onProgress?: (p: Lad
   } else {
     ({ rows, plan } = planLadder(state, { waveId, choices }, onProgress));
   }
-  const refused: PlanResponse['plan']['refused'] = [];
-  for (const [, list] of displayedProposals(state, casesOfWave(state, detectCases(state), waveId))) {
-    for (const p of list) if (p.refused) refused.push({ proposalId: p.id, registrationId: p.registrationId, reason: p.reason });
-  }
   return {
     view: rulesView(state.settings),
     rows,
@@ -77,14 +78,13 @@ export function planPayload(state: State, input: PlanInput, onProgress?: (p: Lad
       aloneBefore: plan.aloneBefore.length,
       alone: plan.aloneAfter,
       onCards: plan.onCards,
-      dropped: plan.dropped,
+      dropped: [...plan.dropped, ...stale],
       waiting: plan.waiting,
       proven: plan.proven,
       hash: plan.hash,
-      refused,
     },
     ...(forApply ? { categories: previewTransition(state, plan.final) } : {}),
-    fingerprint: stateFingerprint(state),
+    fingerprint: stateFingerprint(real),
   };
 }
 

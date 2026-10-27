@@ -296,17 +296,21 @@ export async function planWave(db: AppDb, competitionId: string, waveId: string 
 }
 
 /** Demande de plan vérifiée (vague connue) et l'état sur lequel le calculer ; les erreurs (400, 404) partent d'ici, avant tout calcul. */
-export async function planInput(db: AppDb, competitionId: string, body: { waveId?: string; choices: PlanChoice[]; forApply?: boolean }): Promise<{ state: State; input: PlanInput }> {
+export async function planInput(
+  db: AppDb,
+  competitionId: string,
+  body: { waveId?: string; choices: PlanChoice[]; forApply?: boolean; cardDecisions?: boolean },
+): Promise<{ state: State; input: PlanInput }> {
   const waveId = await planWave(db, competitionId, body.waveId);
   const state = await loadState(db, competitionId);
-  return { state, input: { waveId, choices: body.choices, forApply: body.forApply === true } };
+  return { state, input: { waveId, choices: body.choices, forApply: body.forApply === true, cardDecisions: body.cardDecisions !== false } };
 }
 
 /** Plan d'ensemble de la session (voir `planPayload`), calculé dans un fil à part. */
 export async function planResponse(
   db: AppDb,
   competitionId: string,
-  body: { waveId?: string; choices: PlanChoice[]; forApply?: boolean },
+  body: { waveId?: string; choices: PlanChoice[]; forApply?: boolean; cardDecisions?: boolean },
   opts: { signal?: AbortSignal } = {},
 ): Promise<PlanResponse> {
   const { state, input } = await planInput(db, competitionId, body);
@@ -320,14 +324,14 @@ export async function planResponse(
 export async function applyPlan(
   db: AppDb,
   competitionId: string,
-  body: { waveId?: string; choices: PlanChoice[]; fingerprint: string; hash: string },
+  body: { waveId?: string; choices: PlanChoice[]; cardDecisions?: boolean; fingerprint: string; hash: string },
 ): Promise<{ applied: number }> {
   const waveId = await planWave(db, competitionId, body.waveId);
   let state = await loadState(db, competitionId);
   if (stateFingerprint(state) !== body.fingerprint) throw new StaleProposalError();
   // Recalcul dans le fil, comme pour l'affichage : rien n'est écrit avant son résultat. Sans signal d'abandon : une écriture,
   // une fois demandée, va jusqu'au bout (même si le client part), sauf si l'état a changé entre-temps.
-  const { plan } = await runPlanJob(state, { waveId, choices: body.choices, forApply: true });
+  const { plan } = await runPlanJob(state, { waveId, choices: body.choices, forApply: true, cardDecisions: body.cardDecisions !== false });
   if (plan.hash !== body.hash) throw new StaleProposalError('Le plan a changé depuis l’affichage : relisez-le avant de l’appliquer.');
   // Pendant le calcul, un autre poste a pu écrire (pesée, déplacement, même plan appliqué) : on revérifie l'empreinte,
   // puis on écrit sans plus rendre la main (base synchrone, aucune attente d'entrée-sortie dans la boucle).

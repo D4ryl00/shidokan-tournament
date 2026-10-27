@@ -445,7 +445,6 @@ export interface PlanResponse {
     waiting: PlanChoice[];
     proven: boolean;
     hash: string;
-    refused: { proposalId: string; registrationId: string; reason: string }[];
   };
   categories?: PreviewData['categories'];
   fingerprint: string;

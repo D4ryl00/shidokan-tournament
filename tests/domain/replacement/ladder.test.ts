@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
-import { computePlan, planLadder, type LadderProgress } from '../../../src/domain/replacement/plan.js';
+import { computePlan, planLadder, type LadderProgress, type PlanChoice } from '../../../src/domain/replacement/plan.js';
 import { isRuleOn } from '../../../src/domain/replacement/rules.js';
+import { makeState, member } from './fixtures.js';
 import { greedyAlone } from './greedy-reference.js';
 import { randomState } from './random-state.js';
 
@@ -14,6 +15,25 @@ test('diagramme : une ligne par règle, décroissante, règle coupée sans barre
   const values = rows.filter((r) => r.rule !== null && r.alone !== null).map((r) => r.alone!);
   expect(values).toEqual([...values].sort((x, y) => y - x));
   expect(plan.aloneAfter.length).toBe(rows.find((r) => r.rule === 'discipline')!.alone);
+});
+test('ligne « return » : détail des corrections imposées et des choix', () => {
+  const kgM = (label: string, wc: string, kg: number) => member({ label, weightClassId: wc, approxWeightKg: kg });
+  // R, déplacée parce qu'elle était seule en -47, peut y revenir ; W, pesée 58 kg en -54, passe en -61.
+  const back = member({
+    label: 'R', weightClassId: 'cadet:F:-54', approxWeightKg: 47, placementLocked: true, recasementType: 'A',
+    original: { discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-47', reason: 'alone' },
+  });
+  const w = member({ label: 'W', weightClassId: 'cadet:F:-54', weighInKg: 58, presence: 'present' });
+  const s = makeState([
+    kgM('H1', 'cadet:F:-47', 45), kgM('H2', 'cadet:F:-47', 46), back, kgM('P1', 'cadet:F:-54', 50), kgM('P2', 'cadet:F:-54', 51), w,
+    kgM('S1', 'cadet:F:-61', 58), kgM('S2', 'cadet:F:-61', 59),
+  ]);
+  const start = (choices: PlanChoice[]) => planLadder(s, { waveId: null, choices }).rows.find((r) => r.rule === 'return')!.start;
+  expect(start([])).toEqual({ returns: 1, weights: 1, choices: 0 });
+  // Un retour validé est compté parmi les choix, pas parmi les retours.
+  expect(start([{ kind: 'validate', proposalId: `R:${back.registrationId}>${s.members.find((m) => m.label === 'H1')!.categoryId}`, caseId: `return:${back.registrationId}` }]))
+    .toEqual({ returns: 0, weights: 1, choices: 1 });
+  expect(planLadder(s, { waveId: null, choices: [] }).rows.filter((r) => r.rule !== 'return').every((r) => r.start === undefined)).toBe(true);
 });
 test('jamais pire que l’ancien calcul carte par carte', () => {
   for (let seed = 1; seed <= 40; seed++) {

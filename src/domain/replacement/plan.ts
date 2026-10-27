@@ -17,7 +17,9 @@ export { DEFAULT_NODE_BUDGET, aloneRegistrations } from './plan-search.js';
 /** Décision de l'organisateur, fixée avant le calcul : une proposition validée, ou une catégorie choisie (« Modifier »). */
 export type PlanChoice =
   | { kind: 'validate'; proposalId: string; caseId: string }
-  | { kind: 'manual'; registrationId: string; categoryId: string };
+  | { kind: 'manual'; registrationId: string; categoryId: string }
+  /** Refus fait dans le plan : il ne vaut que pour le plan (voir `preparePlanState`) ; nom et raison pour la liste « Refusés ». */
+  | { kind: 'refuse'; proposalId: string; registrationId: string; reason: string };
 
 export interface PlanMove extends Proposal {
   /** Première inscription active de la cible au moment du déplacement, hors celles qui bougent (`null` : nouvelle catégorie). */
@@ -174,6 +176,7 @@ function solvePlan(state: State, opts: PlanOptions, extra: SolveExtra): { result
       const p = c ? proposalsFor(everything, c).find((x) => x.id === choice.proposalId) : undefined;
       return p ? { p, warnings: [] } : null;
     }
+    if (choice.kind !== 'manual') return null;
     const m = s.members.find((x) => x.registrationId === choice.registrationId);
     if (!m || (opts.waveId !== null && memberWave(s, m) !== opts.waveId)) return null;
     const r = manualProposal(s, choice.registrationId, choice.categoryId);
@@ -220,7 +223,8 @@ function solvePlan(state: State, opts: PlanOptions, extra: SolveExtra): { result
   };
 
   // 1. Les choix d'abord : jamais défaits, même si leur règle est désactivée ou sous la ligne.
-  let pending = pinAll(opts.choices);
+  // Les refus ne s'épinglent pas : `preparePlanState` les a déjà mis dans l'état.
+  let pending = pinAll(opts.choices.filter((c) => c.kind !== 'refuse'));
   const pins = moves.map((m) => m.id).join('|');
 
   // 1 bis. Un choix encore absent : on cherche, dans le plan affiché (règles jusqu'à la ligne), les déplacements après
@@ -334,6 +338,16 @@ function chainTo(start: State, prefix: SearchMove[], p: Proposal, end: State): S
   return c && proposalsFor(everything, c).some((x) => x.id === p.id) ? chain : prefix;
 }
 
+/** Détail de la ligne de départ : retours, corrections de poids, et choix de l'organisateur (comptés à part). */
+function startDetail(moves: PlanMove[]): NonNullable<LadderRow['start']> {
+  const free = moves.filter((m) => !m.validated);
+  return {
+    returns: free.filter((m) => m.type === 'R').length,
+    weights: free.filter((m) => m.type !== 'R' && m.caseId.startsWith('weight_out:')).length,
+    choices: moves.length - free.length,
+  };
+}
+
 export interface LadderRow {
   /** `null` : la ligne de départ (aucune règle). */
   rule: RuleId | null;
@@ -344,6 +358,8 @@ export interface LadderRow {
   /** Déplacements à valider à la main. */
   toValidate: number;
   proven: boolean;
+  /** Ligne `return` seulement (le départ du diagramme) : ce que son plan contient, chaque déplacement compté une fois. */
+  start?: { returns: number; weights: number; choices: number };
 }
 
 /** Avancement d'un diagramme : `done` calculs faits sur `total`, et les lignes déjà connues (départ et lignes désactivées comprises). */
@@ -397,7 +413,10 @@ export function planLadder(
     seed = pins === null ? undefined : { pins, moves: found };
     if (rule === cutAfter) plan = r;
     if (i < cutIndex) above = r;
-    rows.push({ rule, on: true, alone: r.aloneAfter.length, moves: r.moves.length, toValidate: r.moves.filter((m) => m.manual && !m.validated).length, proven: r.proven });
+    rows.push({
+      rule, on: true, alone: r.aloneAfter.length, moves: r.moves.length, toValidate: r.moves.filter((m) => m.manual && !m.validated).length, proven: r.proven,
+      ...(rule === 'return' ? { start: startDetail(r.moves) } : {}),
+    });
     report(rows, i + 1);
   }
   if (!plan && above) plan = above;
