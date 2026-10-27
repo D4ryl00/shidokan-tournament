@@ -40,7 +40,7 @@ import { PlanProgress, PROGRESS_HEIGHT } from '../components/replacement/PlanPro
 import { RuleLadder } from '../components/replacement/RuleLadder.js';
 import { PlanView, WARN_ALERT, type PlanFighter } from '../components/replacement/PlanView.js';
 import type { RuleId } from '../../domain/settings.js';
-import { rulesView } from '../../domain/replacement/rules.js';
+import { ruleNumber, rulesView } from '../../domain/replacement/rules.js';
 import { clearPlanChoices, usePlanChoices } from '../usePlanChoices.js';
 import { useSelectedWave } from '../useSelectedWave.js';
 import type { CategoryGrid } from '../../domain/types.js';
@@ -176,7 +176,7 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
   const ladderRows = computing ? [...(progress.rows), ...(plan?.rows ?? []).filter((r) => !progress.rows.some((p) => p.rule === r.rule))] : plan?.rows;
   const fresh = computing ? new Set(progress.rows.map((r) => r.rule)) : isFetching ? new Set<RuleId | null>() : undefined;
   // Le numéro de la règle et les nombres viennent du même plan (pas de mélange après un changement ou une annulation).
-  const k = plan ? plan.view.order.indexOf(plan.view.cutAfter) + 1 : 0;
+  const k = plan ? ruleNumber(plan.view.order, plan.view.cutAfter) : null;
   return (
     <SectionCard title="Règles de réaffectation" description="L’ordre est la priorité ; la ligne pointillée marque où les règles s’arrêtent." actions={actions}>
       {cancelled && (
@@ -192,7 +192,7 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
       {plan && (
         <Group>
           <Button data-testid="plan-show" variant={open ? 'default' : 'filled'} aria-expanded={open} onClick={() => setOpen((o) => !o)} style={{ maxWidth: '100%', height: 'auto', minHeight: 36, whiteSpace: 'normal' }}>
-            Voir le plan jusqu’à la règle {k} ({plural(plan.plan.moves.length, 'déplacement', 'déplacements')}, {plural(plan.plan.alone.length, 'seul', 'seuls')})
+            {k === null ? 'Voir le plan des corrections imposées' : `Voir le plan jusqu’à la règle ${k}`} ({plural(plan.plan.moves.length, 'déplacement', 'déplacements')}, {plural(plan.plan.alone.length, 'seul', 'seuls')})
           </Button>
         </Group>
       )}

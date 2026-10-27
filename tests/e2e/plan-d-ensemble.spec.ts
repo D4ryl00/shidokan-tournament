@@ -13,9 +13,11 @@ test('réglages de l’application : ranger les règles par défaut, une nouvell
     const rows = ladder.getByTestId('ladder-row');
     await expect(rows).toHaveCount(11);
     // Pas de barres sans plan, pas de boutons ni d’interrupteur pour le retour dans la catégorie d’origine.
-    await expect(ladder.getByTestId('ladder-alone')).toHaveCount(0);
+    await expect(ladder.getByTestId('ladder-bar')).toHaveCount(0);
     const first = rows.first();
     await expect(first).toHaveAttribute('data-rule', 'return');
+    // Le retour est la ligne de départ : sans numéro, toujours fait.
+    await expect(first.getByTestId('ladder-start')).toContainText('Au départ, corrections imposées');
     await expect(first.getByTestId('ladder-switch')).toHaveCount(0);
     await expect(first.getByTestId('ladder-up')).toHaveCount(0);
     await expect(first.getByTestId('ladder-down')).toHaveCount(0);
@@ -44,8 +46,8 @@ test('réglages de l’application : ranger les règles par défaut, une nouvell
     const mineSwitch = mineRows.filter({ hasText: 'Mélange filles / garçons' }).getByTestId('ladder-switch');
     if (wasOn) await expect(mineSwitch).not.toBeChecked(); else await expect(mineSwitch).toBeChecked();
     // Le plan donne la ligne de départ et une barre par règle active.
-    await expect(mine.getByTestId('ladder-start')).toContainText('Sans rien changer');
-    await expect(mine.getByTestId('ladder-alone').first()).toBeVisible();
+    await expect(mine.getByTestId('ladder-start')).toContainText('Au départ, corrections imposées');
+    await expect(mine.getByTestId('ladder-bar').first()).toBeVisible();
 
     // Retour aux réglages par défaut de l’application : un changement local est défait.
     await mineSwitch.click({ force: true });
@@ -67,11 +69,11 @@ test('la liste des règles tient dans un écran de téléphone, barres comprises
   await page.setViewportSize({ width: 390, height: 800 });
   await page.goto(`/competitions/${id}/reaffectation`);
   const ladder = page.getByTestId('rule-ladder');
-  await expect(ladder.getByTestId('ladder-start')).toContainText('Sans rien changer');
+  await expect(ladder.getByTestId('ladder-start')).toContainText('Au départ, corrections imposées');
   const wide = await page.evaluate(() => Array.from(document.querySelectorAll('[data-testid="rule-ladder"], [data-testid="rule-ladder"] *')).filter((e) => e.getBoundingClientRect().right > window.innerWidth + 1).map((e) => `${e.tagName} ${e.getAttribute('data-testid') ?? ''} ${(e.textContent ?? '').slice(0, 30)}`).slice(0, 8));
   expect(wide).toEqual([]);
   const box = await ladder.boundingBox();
-  for (const bar of await ladder.getByTestId('ladder-alone').all()) {
+  for (const bar of await ladder.getByTestId('ladder-bar').all()) {
     const b = await bar.boundingBox();
     expect(b!.x + b!.width).toBeLessThanOrEqual(box!.x + box!.width + 1);
   }
@@ -118,14 +120,25 @@ test('le diagramme baisse règle par règle ; déplacer la ligne change le plan'
   await seedPlan(request, id);
   await page.goto(`/competitions/${id}/reaffectation`);
   const ladder = page.getByTestId('rule-ladder');
-  const bar = (rule: string) => ladder.locator(`[data-testid="ladder-row"][data-rule="${rule}"]`).getByTestId('ladder-alone');
-  await expect(ladder.getByTestId('ladder-start').getByTestId('ladder-alone')).toHaveText('3');
-  await expect(bar('weight')).toHaveText('2');
-  await expect(bar('weightGap')).toHaveText('2');
-  await expect(bar('ageUp')).toHaveText('1');
-  await expect(bar('seniorsVeterans')).toHaveText('0');
+  const bar = (rule: string) => ladder.locator(`[data-testid="ladder-row"][data-rule="${rule}"]`).getByTestId('ladder-bar');
+  // En-tête du tableau, ligne de départ (aucune correction imposée ici) : 3 seuls à caser.
+  await expect(ladder.getByTestId('ladder-header')).toContainText('Combattants : casés · restent seuls');
+  await expect(ladder.getByTestId('ladder-start-detail')).toHaveText('aucune correction');
+  await expect(bar('return')).toHaveAttribute('data-alone', '3');
+  await expect(bar('return')).toHaveAttribute('data-placed', '0');
+  await expect(bar('weight')).toHaveAttribute('data-alone', '2');
+  await expect(bar('weight')).toHaveAttribute('data-placed', '1');
+  await expect(bar('weight').getByTestId('ladder-alone')).toHaveText('2 seuls');
+  await expect(bar('weightGap')).toHaveAttribute('data-alone', '2');
+  await expect(bar('ageUp')).toHaveAttribute('data-alone', '1');
+  // Casés découpés par couleur : un par la règle sans validation, un par la tranche d’âge.
+  expect(await bar('ageUp').getByTestId('ladder-segment').evaluateAll((els) => els.map((e) => [e.getAttribute('data-band'), e.textContent]))).toEqual([['0', '1'], ['1', '1']]);
+  await expect(bar('seniorsVeterans')).toHaveAttribute('data-alone', '0');
+  await expect(bar('seniorsVeterans').getByTestId('ladder-alone')).toHaveCount(0);
+  // « Retour » n’a pas de numéro : « Catégorie de poids voisine » est la règle 1.
+  await expect(ladder.locator('[data-testid="ladder-row"][data-rule="weight"]')).toContainText('1Catégorie de poids voisine');
   const show = page.getByTestId('plan-show');
-  await expect(show).toHaveText('Voir le plan jusqu’à la règle 8 (3 déplacements, 0 seul)');
+  await expect(show).toHaveText('Voir le plan jusqu’à la règle 7 (3 déplacements, 0 seul)');
   await show.click();
   const view = page.getByTestId('plan-view');
   await expect(view).toContainText('Restent seuls 0 (au lieu de 3)');
@@ -135,26 +148,36 @@ test('le diagramme baisse règle par règle ; déplacer la ligne change le plan'
   const bands = view.getByTestId('plan-band');
   expect(await bands.evaluateAll((els) => els.map((e) => e.getAttribute('data-band')))).toEqual(['3', '1', '0']);
   await expect(bands.nth(0)).toContainText('Concessions fortes');
-  await expect(bands.nth(0)).toContainText('règle 7 · 1 déplacement');
+  await expect(bands.nth(0)).toContainText('règle 6 · 1 déplacement');
   await expect(bands.nth(0)).toContainText('VETE Paul');
   await expect(bands.nth(1)).toContainText('Concessions légères');
-  await expect(bands.nth(1)).toContainText('règles 4–5 · 1 déplacement');
+  await expect(bands.nth(1)).toContainText('règles 3–4 · 1 déplacement');
   await expect(bands.nth(1)).toContainText('MINI Léa');
   await expect(bands.nth(1)).toContainText('Tranche d’âge au-dessus');
   await expect(bands.nth(1)).toContainText('Minimes → Cadets');
   await expect(bands.nth(2)).toContainText('Sans validation');
-  await expect(bands.nth(2)).toContainText('règles 1–3 · 1 déplacement');
+  await expect(bands.nth(2)).toContainText('règles 1–2 · 1 déplacement');
   await expect(bands.nth(2)).toContainText('SEULE Léa');
   await expect(view.getByTestId('plan-move').filter({ hasText: 'SEULE Léa' }).getByTestId('plan-move-validate')).toHaveCount(0);
 
   // La ligne remonte sous « Tranche d’âge au-dessus » : VETE n’est plus déplacé, MINI change de couleur.
   await ladder.locator('[data-testid="ladder-row"][data-rule="ageUp"]').getByText('Tranche d’âge au-dessus').click();
-  await expect(show).toHaveText('Voir le plan jusqu’à la règle 5 (2 déplacements, 1 seul)');
+  await expect(show).toHaveText('Voir le plan jusqu’à la règle 4 (2 déplacements, 1 seul)');
   await expect(view.getByTestId('plan-move')).toHaveCount(2);
   await expect(view.getByTestId('plan-changes')).toContainText('VETE Paul n’est plus déplacé.');
   await expect(view.getByTestId('plan-alone')).toContainText('VETE Paul');
   await expect(view.locator('[data-testid="plan-band"][data-band="3"]')).toContainText('MINI Léa');
   await expect(view.getByTestId('plan-proven')).toHaveText('Aucune combinaison dans ces règles ne laisse moins de 1 seul.');
+});
+
+test('coupure sous la ligne de départ : seulement les corrections imposées', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan départ');
+  await seedPlan(request, id);
+  await page.goto(`/competitions/${id}/reaffectation`);
+  const ladder = page.getByTestId('rule-ladder');
+  await ladder.getByTestId('ladder-start').click();
+  await expect(ladder.locator('[data-testid="ladder-row"][data-rule="return"]').locator('xpath=following-sibling::*[1]')).toHaveAttribute('data-testid', 'ladder-cut');
+  await expect(page.getByTestId('plan-show')).toHaveText('Voir le plan des corrections imposées (0 déplacement, 3 seuls)');
 });
 
 test('valider un déplacement à valider, appliquer : seuls lui et les cas simples sont appliqués', async ({ page, request }) => {
@@ -379,7 +402,7 @@ test('sans plan (calcul en erreur), la liste des règles reste réglable', async
   await page.goto(`/competitions/${id}/reaffectation`);
   const ladder = page.getByTestId('rule-ladder');
   await expect(ladder.getByTestId('ladder-row')).toHaveCount(11);
-  await expect(ladder.getByTestId('ladder-alone')).toHaveCount(0);
+  await expect(ladder.getByTestId('ladder-bar')).toHaveCount(0);
   await expect(page.getByTestId('api-error').first()).toContainText('Calcul impossible');
   await expect(page.getByTestId('plan-show')).toHaveCount(0);
   // La ligne se déplace quand même.
@@ -718,7 +741,7 @@ test('un geste sur les règles pendant le premier calcul d’un choix le relance
   await expect(apply).toBeEnabled({ timeout: 10_000 });
   await expect(sw).toBeChecked();
   await expect(row.getByTestId('ladder-pending')).toHaveCount(0);
-  await expect(row.getByTestId('ladder-alone')).toBeVisible();
+  await expect(row.getByTestId('ladder-bar')).toBeVisible();
   await expect(moveOf('MINI Léa').getByTestId('plan-move-unvalidate')).toBeVisible();
   const { settings } = await (await request.get(`/api/competitions/${id}`)).json();
   expect(settings.mixSexes.enabled).toBe(true);

@@ -43,3 +43,9 @@ test('texte des barres et bandeaux de coût lisible sur chaque couleur de coût 
     expect(new Set(costs).size).toBe(5);
   }
 });
+
+test('hachures « restent seuls » : texte lisible sur les deux rayures (≥ 4,5:1)', () => {
+  for (const [name, t] of Object.entries(TOKENS)) {
+    for (const stripe of [t.alone, t.aloneAlt]) expect(contrast(t.aloneText, stripe), `${name} aloneText/${stripe}`).toBeGreaterThanOrEqual(4.5);
+  }
+});

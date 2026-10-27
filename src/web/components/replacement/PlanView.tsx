@@ -2,7 +2,7 @@ import { Alert, Box, Button, Group, Modal, Select, Stack, Text, type ComboboxDat
 import { notifications } from '@mantine/notifications';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { plural } from '../../../domain/plural.js';
-import { applyRulesView, COST_BAND_LABELS, costBand, NO_VALIDATION_RULES, RULE_LABELS, type CostBand } from '../../../domain/replacement/rules.js';
+import { applyRulesView, COST_BAND_LABELS, costBand, NO_VALIDATION_RULES, RULE_LABELS, ruleNumber, type CostBand } from '../../../domain/replacement/rules.js';
 import { defaultSettings, type RuleId } from '../../../domain/settings.js';
 import { useApplyPlan, usePlanForApply, useRefuseProposal, useUnrefuseProposal, type PlanChoice, type PlanMove, type PlanResponse } from '../../api.js';
 import { ApiErrorAlert } from '../ApiErrorAlert.js';
@@ -111,7 +111,7 @@ export function PlanView({
   const cut = view.order.indexOf(view.cutAfter);
   const isOn = (r: RuleId) => r === 'return' || view.on[r];
   const bandOf = (r: RuleId) => costBand(settings, r, !NO_VALIDATION_RULES.has(r));
-  const number = (r: RuleId) => view.order.indexOf(r) + 1;
+  const number = (r: RuleId) => ruleNumber(view.order, r);
 
   const validateChoice = (m: PlanMove) => choices.find((c) => c.kind === 'validate' && c.proposalId === m.id);
   const manualChoice = (m: PlanMove) => (m.type === 'M' ? choices.find((c) => c.kind === 'manual' && c.registrationId === m.registrationId) : undefined);
@@ -188,7 +188,7 @@ export function PlanView({
             const color = BAND_COLOR[bandOf(d.rule)]!;
             return (
               <span key={d.rule} data-testid="plan-rule" style={pillStyle(color, d.rule === m.costRule)}>
-                <span style={numberStyle(color)} className="num">{number(d.rule)}</span>
+                {number(d.rule) !== null && <span style={numberStyle(color)} className="num">{number(d.rule)}</span>}
                 {RULE_LABELS[d.rule]}
                 {d.detail && <Text span size="xs" c="dimmed" fw={400}>{d.detail}</Text>}
               </span>
@@ -271,8 +271,8 @@ export function PlanView({
         const covered = view.order
           .map((r, i) => ({ r, i }))
           .filter(({ r, i }) => i <= cut && isOn(r) && bandOf(r) === b)
-          .map(({ i }) => i + 1)
-          .concat(moves.flatMap((m) => (m.costRule ? [number(m.costRule)] : [])));
+          .flatMap(({ r }) => (number(r) === null ? [] : [number(r)!]))
+          .concat(moves.flatMap((m) => (m.costRule && number(m.costRule) !== null ? [number(m.costRule)!] : [])));
         const rules = covered.length === 0 ? '' : `${new Set(covered).size > 1 ? 'règles' : 'règle'} ${ranges(covered)} · `;
         return (
           <Box key={b} data-testid="plan-band" data-band={b} style={{ border: '1px solid var(--sk-card-line)', borderRadius: 8, overflow: 'hidden' }}>
