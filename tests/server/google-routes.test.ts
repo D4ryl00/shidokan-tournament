@@ -201,7 +201,10 @@ test('reconnexion : mode d’envoi gardé ; première connexion après « Décon
 
 test('reconnexion avec un autre compte : liens et attente effacés ; même compte : rien ne change', async () => {
   await connectGoogle(app);
-  const club = (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { name: 'Tani Dojo', affiliationNumber: null, coachName: null, coachPhone: null, coachEmail: null, notes: null } })).json().id as string;
+  const add = async (name: string) => (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { name, affiliationNumber: null, coachName: null, coachPhone: null, coachEmail: null, notes: null } })).json().id as string;
+  const club = await add('Tani Dojo');
+  // Un club sans lien n'est pas touché (sa version ne bouge pas) quand les liens sont effacés.
+  const free = await add('Dojo Libre');
   const db = rawDb();
   try {
     db.prepare('update club_directory set google_contact_id = ? where id = ?').run('people/c1', club);
@@ -211,11 +214,14 @@ test('reconnexion avec un autre compte : liens et attente effacés ; même compt
       link: (db.prepare('select google_contact_id l from club_directory where id = ?').get(club) as { l: string | null }).l,
       state: JSON.parse((db.prepare("select value_json v from app_settings where key = 'googleContacts'").get() as { v: string }).v),
     });
+    const freeVersion = () => (db.prepare('select version v from club_directory where id = ?').get(free) as { v: number }).v;
+    const before = freeVersion();
     await connectGoogle(app);
     expect(read()).toMatchObject({ link: 'people/c1', state: { account: 'orga@gmail.com', pending: ['people/c9'] } });
     fake.email = 'autre@gmail.com';
     await connectGoogle(app);
     expect(read()).toMatchObject({ link: null, state: { account: 'autre@gmail.com', pending: [] } });
+    expect(freeVersion()).toBe(before);
   } finally {
     db.close();
   }

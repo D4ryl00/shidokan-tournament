@@ -1,11 +1,24 @@
 import { eq } from 'drizzle-orm';
 import { GOOGLE_CONNECT_FIRST, GOOGLE_RECONNECT, hasContactsScope } from '../../domain/app-settings.js';
-import { DIRECTORY_CHANGED, syncPreview, type GoogleContactsView, type SyncApply } from '../../domain/google-contacts.js';
+import { DIRECTORY_CHANGED, syncPreview, type ContactLabel, type GoogleContact, type GoogleContactsView, type SyncApply } from '../../domain/google-contacts.js';
 import type { AppDb } from '../db/client.js';
 import { clubDirectory } from '../db/schema.js';
 import { ContactsScopeMissingError, GoogleAccessRevokedError, type GoogleClient } from '../google/client.js';
 import { getAppSettings, markGoogleRevoked, setGoogleContactsState } from './app-settings.js';
 import { createDirectoryEntry, DirectoryConflictError } from './directory.js';
+
+/**
+ * Refus de la synchronisation, montré tel quel à l'écran : 409 (compte à connecter ou à reconnecter),
+ * 502 pour une autre erreur Google (API People non activée, réseau…), dont le message reste affiché.
+ */
+export class GoogleContactsError extends Error {
+  readonly expose = true;
+  constructor(message: string, readonly statusCode = 409) {
+    super(message);
+  }
+}
+
+const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 500);
 
 /**
  * Lit les contacts Google (libellé choisi, sinon celui enregistré, sinon tous) et les compare à l'annuaire.
@@ -14,27 +27,29 @@ import { createDirectoryEntry, DirectoryConflictError } from './directory.js';
 export async function googleContactsPreview(db: AppDb, google: GoogleClient, label: string | null | undefined): Promise<GoogleContactsView> {
   const settings = getAppSettings(db);
   const sender = settings.google;
-  if (!sender) throw new DirectoryConflictError(GOOGLE_CONNECT_FIRST);
+  if (!sender) throw new GoogleContactsError(GOOGLE_CONNECT_FIRST);
   if (!hasContactsScope(sender)) return { state: 'no-scope', account: sender.email };
+  let labels: ContactLabel[];
+  let contacts: GoogleContact[];
   try {
-    const [labels, contacts] = await Promise.all([google.listContactLabels(sender.refreshToken), google.listContacts(sender.refreshToken)]);
-    if (label !== undefined) setGoogleContactsState(db, { label });
-    const wanted = label !== undefined ? label : settings.googleContacts.label;
-    const chosen = wanted && labels.some((l) => l.resourceName === wanted) ? wanted : null;
-    const kept = chosen ? contacts.filter((c) => c.groups.includes(chosen)) : contacts;
-    const rows = db.select().from(clubDirectory).all().map((r) => ({
-      id: r.id, name: r.name, coachName: r.coachName, coachPhone: r.coachPhone, coachEmail: r.coachEmail,
-      googleContactId: r.googleContactId, version: r.version, archived: r.archived,
-    }));
-    return { state: 'ok', account: sender.email, labels, label: chosen, total: kept.length, preview: syncPreview(kept, rows, getAppSettings(db).googleContacts.pending) };
+    [labels, contacts] = await Promise.all([google.listContactLabels(sender.refreshToken), google.listContacts(sender.refreshToken)]);
   } catch (e) {
     if (e instanceof ContactsScopeMissingError) return { state: 'no-scope', account: sender.email };
     if (e instanceof GoogleAccessRevokedError) {
       markGoogleRevoked(db, sender.refreshToken);
-      throw new DirectoryConflictError(GOOGLE_RECONNECT);
+      throw new GoogleContactsError(GOOGLE_RECONNECT);
     }
-    throw e;
+    throw new GoogleContactsError(`Lecture des contacts Google impossible (${errorText(e)})`, 502);
   }
+  if (label !== undefined) setGoogleContactsState(db, { label });
+  const wanted = label !== undefined ? label : settings.googleContacts.label;
+  const chosen = wanted && labels.some((l) => l.resourceName === wanted) ? wanted : null;
+  const kept = chosen ? contacts.filter((c) => c.groups.includes(chosen)) : contacts;
+  const rows = db.select().from(clubDirectory).all().map((r) => ({
+    id: r.id, name: r.name, coachName: r.coachName, coachPhone: r.coachPhone, coachEmail: r.coachEmail,
+    googleContactId: r.googleContactId, version: r.version, archived: r.archived,
+  }));
+  return { state: 'ok', account: sender.email, labels, label: chosen, total: kept.length, preview: syncPreview(kept, rows, getAppSettings(db).googleContacts.pending) };
 }
 
 /** Applique les choix en une seule transaction : une fiche modifiée ou archivée depuis l'aperçu annule tout. */

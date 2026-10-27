@@ -62,6 +62,29 @@ test('aperçu : sans droit contacts → no-scope sans appel ; sans compte → 40
   expect((await app.inject({ method: 'GET', url: '/api/app-settings' })).json().google.status).toBe('reconnect');
 });
 
+test('aperçu : autre erreur Google (API People non activée, réseau) → message de Google à l’écran, pas « Erreur interne »', async () => {
+  await connectGoogle(app);
+  const disabled = 'People API has not been used in project 123 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/people.googleapis.com/overview?project=123 then retry.';
+  fake.peopleError = { status: 403, message: disabled, reason: 'SERVICE_DISABLED' };
+  const res = await preview();
+  expect(res.statusCode).not.toBe(500);
+  expect(res.statusCode).toBeGreaterThanOrEqual(400);
+  expect(res.json().error).toMatch(/^Lecture des contacts Google impossible \(/);
+  expect(res.json().error).toContain('People API has not been used');
+  // Pas un retrait d'accès : le compte reste connecté.
+  expect((await app.inject({ method: 'GET', url: '/api/app-settings' })).json().google.status).toBe('ok');
+
+  fake.peopleError = { status: 500, message: 'x'.repeat(2000), reason: 'BACKEND_ERROR' };
+  const long = (await preview()).json().error as string;
+  expect(long.length).toBeLessThan(600);
+
+  fake.peopleError = null;
+  fake.networkDown = true;
+  const down = await preview();
+  expect(down.statusCode).not.toBe(500);
+  expect(down.json().error).toMatch(/^Lecture des contacts Google impossible \(.+\)$/);
+});
+
 test('appliquer : différences, lien, création, plus tard', async () => {
   await connectGoogle(app);
   await addClub('Dojo des Lilas', { coachName: 'Paul Martin', coachPhone: '01 11 11 11 11' });
@@ -73,7 +96,6 @@ test('appliquer : différences, lien, création, plus tard', async () => {
     contact('c4', { name: 'Plus Tard' }),
   ];
   const [lilas] = (await directory()).filter((c) => c.name === 'Dojo des Lilas');
-  await app.inject({ method: 'PATCH', url: `/api/club-directory/${lilas.id}`, payload: { googleContactId: null } });
   // Lien Lilas ↔ c1 : par un premier envoi.
   let p = (await preview()).json().preview;
   const lilasV = p.clubs.find((c: any) => c.name === 'Dojo des Lilas').version;

@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { isNotNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { cookieValue, SESSION_COOKIE, type InstanceRole } from '../auth/guard.js';
 import type { AppDb } from '../db/client.js';
@@ -80,7 +81,7 @@ export async function googleRoutes(app: FastifyInstance, { db, google, role }: {
       setGoogleSender(t, sender, current.google ? current.mailMode : 'google');
       // Autre compte Google : les liens faits avec les contacts de l'ancien compte n'ont plus de sens.
       if (knownAccount !== null && knownAccount !== granted.email) {
-        t.update(clubDirectory).set({ googleContactId: null }).run();
+        t.update(clubDirectory).set({ googleContactId: null }).where(isNotNull(clubDirectory.googleContactId)).run();
         setGoogleContactsState(t, { pending: [] });
       }
       setGoogleContactsState(t, { account: granted.email });

@@ -27,6 +27,8 @@ export interface FakeGoogle {
   rejectAllSends: boolean;
   /** Erreur renvoyée par Gmail à l'envoi. */
   sendError: { status: number; message: string } | null;
+  /** Erreur renvoyée par l'API People (par exemple API non activée : 403 SERVICE_DISABLED). */
+  peopleError: { status: number; message: string; reason: string } | null;
   /** Contacts et libellés servis par l'API People (pages de 2). */
   contacts: GoogleContact[];
   labels: ContactLabel[];
@@ -53,6 +55,7 @@ export function fakeGoogle(): FakeGoogle {
     networkDown: false,
     noRefreshToken: false,
     sendError: null,
+    peopleError: null,
     rejectAllSends: false,
     contacts: [],
     labels: [],
@@ -121,6 +124,10 @@ export function fakeGoogle(): FakeGoogle {
             status: 403,
             headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer realm="https://accounts.google.com/", error="insufficient_scope"' },
           });
+        }
+        if (fake.peopleError) {
+          const { status, message, reason } = fake.peopleError;
+          return json(status, { error: { code: status, message, status: 'PERMISSION_DENIED', details: [{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason }] } });
         }
         const u = new URL(url);
         const from = Number(u.searchParams.get('pageToken') ?? 0);
