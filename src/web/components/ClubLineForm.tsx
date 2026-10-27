@@ -1,4 +1,4 @@
-import { Button, Checkbox, Group, Modal, NativeSelect, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
+import { Button, Checkbox, Group, Input, Modal, NativeSelect, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { useState } from 'react';
 import type { ClubFormLine, CombatDiscipline } from '../../domain/club-form.js';
@@ -62,7 +62,8 @@ export function ClubLineForm({ token, line, ageBands, closed, opened, onClose }:
     return saved?.combat === form.combat && saved.ruleset === r ? [[r, label + NOT_OPEN]] : [];
   });
   const kataOpen = isOpen('kata', null);
-  const nothingOpen = !!band && !!form.sex && combats.length === 0 && !kataOpen && !saved?.kata;
+  const kataShown = kataOpen || !!saved?.kata;
+  const nothingOpen = !!band && !!form.sex && combats.length === 0 && !kataShown;
   // Un refus parce que la ligne a changé ou disparu entre-temps (ou que les inscriptions sont closes) ferme le formulaire : la liste est rechargée.
   const onError = (e: Error) => {
     if (e instanceof ApiError && RELOAD_STATUSES.has(e.status)) onClose(e.message);
@@ -78,14 +79,13 @@ export function ClubLineForm({ token, line, ageBands, closed, opened, onClose }:
           <TextInput data-testid="line-last-name" label="Nom" required value={form.lastName} onChange={(e) => set({ lastName: e.currentTarget.value })} />
           <TextInput data-testid="line-first-name" label="Prénom" required value={form.firstName} onChange={(e) => set({ firstName: e.currentTarget.value })} />
         </SimpleGrid>
-        <Stack gap={4} role="group" aria-label="Sexe">
-          <Text size="sm" fw={500}>Sexe</Text>
+        <Input.Wrapper label="Sexe" required labelElement="div" role="group" aria-label="Sexe">
           <OneOf value={form.sex} options={[['F', 'Féminin'], ['M', 'Masculin']]} onChange={(sex) => set({ sex })} />
-        </Stack>
+        </Input.Wrapper>
         <SimpleGrid cols={{ base: 1, xs: 2 }}>
-          <Select data-testid="line-age" label="Catégorie d’âge" data={ageBands.map((b) => ({ value: b.code, label: b.label }))} value={form.ageBandCode}
+          <Select data-testid="line-age" label="Catégorie d’âge" required data={ageBands.map((b) => ({ value: b.code, label: b.label }))} value={form.ageBandCode}
             onChange={(ageBandCode) => set({ ageBandCode })} />
-          <TextInput data-testid="line-weight" label="Poids actuel" rightSection={<Text size="xs">kg</Text>} inputMode="decimal" value={weight}
+          <TextInput data-testid="line-weight" label="Poids actuel" required={!!form.combat} rightSection={<Text size="xs">kg</Text>} inputMode="decimal" value={weight}
             onChange={(e) => {
               const raw = e.currentTarget.value;
               setWeight(raw);
@@ -93,19 +93,22 @@ export function ClubLineForm({ token, line, ageBands, closed, opened, onClose }:
               set({ weightKg: raw.trim() && kg > 0 ? kg : null });
             }} />
         </SimpleGrid>
-        <Stack gap={4} role="group" aria-label="Discipline de combat">
-          <Text size="sm" fw={500}>Discipline de combat</Text>
-          <OneOf value={form.combat} options={combats} onChange={(combat) => set({ combat })} />
-        </Stack>
-        {(kataOpen || saved?.kata) && (
-          <Checkbox data-testid="line-kata" label={kataOpen ? 'Kata' : `Kata${NOT_OPEN}`} checked={form.kata} onChange={(e) => set({ kata: e.currentTarget.checked })} />
-        )}
+        {/* Au moins une discipline : un combat, le kata, ou les deux (le poids et le règlement ne sont demandés que pour un combat). */}
+        <Input.Wrapper label="Disciplines" required labelElement="div" description={kataShown ? 'Un combat, le kata, ou les deux.' : undefined}>
+          <Stack gap="sm" mt={4}>
+            <div role="group" aria-label="Discipline de combat">
+              <OneOf value={form.combat} options={combats} onChange={(combat) => set({ combat })} />
+            </div>
+            {kataShown && (
+              <Checkbox data-testid="line-kata" label={kataOpen ? 'Kata' : `Kata${NOT_OPEN}`} checked={form.kata} onChange={(e) => set({ kata: e.currentTarget.checked })} />
+            )}
+          </Stack>
+        </Input.Wrapper>
         {nothingOpen && <Text size="sm" c="var(--sk-warn-text)" data-testid="line-nothing-open">Aucune catégorie ouverte pour cette tranche d’âge à cette compétition.</Text>}
         {form.combat && (
-          <Stack gap={4} role="group" aria-label="Règlement">
-            <Text size="sm" fw={500}>Règlement</Text>
+          <Input.Wrapper label="Règlement" required labelElement="div" role="group" aria-label="Règlement">
             <OneOf value={form.ruleset} options={rulesets} onChange={(ruleset) => set({ ruleset })} />
-          </Stack>
+          </Input.Wrapper>
         )}
         {form.kata && <TextInput data-testid="line-grade" label="Grade (pour le kata)" value={form.grade ?? ''} onChange={(e) => set({ grade: e.currentTarget.value || null })} />}
         {form.combat && (
