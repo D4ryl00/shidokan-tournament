@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { DEFAULT_INVITATION_MAIL } from '../../src/domain/app-settings.js';
-import { renderTemplate, type MailValues } from '../../src/domain/mail-template.js';
+import { renderTemplate, textToHtml, type MailValues } from '../../src/domain/mail-template.js';
 
 const VALUES: MailValues = {
   club: 'Tani Dojo', coach: 'Jean', competition: 'Coupe 2026', date: '22/11/2026', lieu: 'Nice', date_limite: '15/11/2026', lien: 'https://x/inscription/abc',
@@ -34,4 +34,17 @@ test('message par défaut rendu exactement', () => {
 
 test('variables héritées ignorées : {constructor} et {__proto__} restent tels quels', () => {
   expect(renderTemplate('{constructor} {__proto__} {toString}', VALUES)).toBe('{constructor} {__proto__} {toString}');
+});
+
+test('version HTML : un paragraphe par bloc, retours à la ligne gardés, lien cliquable, texte échappé', () => {
+  expect(textToHtml('Bonjour <Jean> & co,\n\nPage :\nhttps://x/inscription/a_b-c?x=1&y=2\nMerci.')).toBe(
+    '<p>Bonjour &lt;Jean&gt; &amp; co,</p>\n'
+      + '<p>Page :<br>\n<a href="https://x/inscription/a_b-c?x=1&amp;y=2">https://x/inscription/a_b-c?x=1&amp;y=2</a><br>\nMerci.</p>',
+  );
+});
+
+test('version HTML : ponctuation après un lien laissée hors du lien ; lignes vides en trop ignorées', () => {
+  expect(textToHtml('Voir https://x/a. Puis (https://x/b).\n\n\n\nFin\n')).toBe(
+    '<p>Voir <a href="https://x/a">https://x/a</a>. Puis (<a href="https://x/b">https://x/b</a>).</p>\n<p>Fin</p>',
+  );
 });

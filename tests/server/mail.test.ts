@@ -4,7 +4,7 @@ import { buildApp } from '../../src/server/app.js';
 import type { MailTransport } from '../../src/server/mail.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
-type Sent = { from: { name: string; address: string }; to: { name: string; address: string }[]; subject: string; text: string; attachments?: { filename: string; content: Buffer; contentType: string }[] };
+type Sent = { from: { name: string; address: string }; to: { name: string; address: string }[]; subject: string; text: string; html?: string; attachments?: { filename: string; content: Buffer; contentType: string }[] };
 let sent: (Omit<Sent, 'to'> & { to: string })[];
 let failFor: Set<string>;
 let verifyError: string | null;
@@ -61,6 +61,9 @@ test('envoi à deux clubs : mails rendus, liens neufs qui fonctionnent, journal 
   expect(tani.text).toContain('« Coupe 2026 » (22/11/2026, Nice)');
   expect(tani.text).toContain("jusqu'au 15/11/2026");
   expect(tani.text).toContain('https://competitions.example.org/inscription/');
+  // Version HTML jointe : Gmail recoupe le texte brut à ~76 caractères, la version HTML garde les phrases entières.
+  expect(tani.html).toContain('<p>Les inscriptions à la compétition « Coupe 2026 » (22/11/2026, Nice) sont ouvertes.<br>');
+  expect(tani.html).toContain(`<a href="https://competitions.example.org/inscription/${tokenOf(tani.text)}">`);
   expect((await app.inject({ method: 'GET', url: `/api/inscription/${tokenOf(tani.text)}` })).statusCode).toBe(200);
   const old = await app.inject({ method: 'GET', url: `/api/inscription/${links.find((l) => l.clubName === 'Tani Dojo')!.token}` });
   expect(old.statusCode).toBe(410);

@@ -5,7 +5,7 @@ import { buildClubFormPdf } from './club-form-pdf.js';
 import { buildClubFormTemplate } from './club-form-template.js';
 import { writeOds } from './spreadsheet/ods.js';
 import { isAcceptableEmail, joinEmails, sameEmail } from '../domain/emails.js';
-import { frenchDate, renderTemplate, type MailValues } from '../domain/mail-template.js';
+import { frenchDate, renderTemplate, textToHtml, type MailValues } from '../domain/mail-template.js';
 import type { AppDb } from './db/client.js';
 import { clubs, mailLog } from './db/schema.js';
 import { getAppSettings, markGoogleRevoked } from './repositories/app-settings.js';
@@ -24,6 +24,8 @@ export interface OutgoingMail {
   to: MailAddress[];
   subject: string;
   text: string;
+  /** Même message en HTML, affiché de préférence par les messageries. */
+  html?: string;
   attachments?: MailAttachment[];
 }
 export interface MailAttachment {
@@ -198,7 +200,7 @@ export async function sendInvitations(db: AppDb, transport: MailTransport, compe
     let error: string | null = null;
     try {
       const message = await invitationMessage(db, competitionId, clubId, linkUrl(baseUrl, link.token));
-      await mailer.sendMail({ from: fromOf(sender), to: recipients.emails.map((address) => ({ name: club.name, address })), subject: message.subject, text: message.body, attachments });
+      await mailer.sendMail({ from: fromOf(sender), to: recipients.emails.map((address) => ({ name: club.name, address })), subject: message.subject, text: message.body, html: textToHtml(message.body), attachments });
       keepOnlyLink(db, competitionId, clubId, link.token);
     } catch (e) {
       revokeLink(db, link.token);
