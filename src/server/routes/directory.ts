@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { DIRECTORY_LIMITS as MAX } from '../../domain/registration.js';
 import { optionalEmail } from './fields.js';
 import type { AppDb } from '../db/client.js';
 import { createDirectoryEntry, listDirectory, mergeDirectoryEntries, updateDirectoryEntry } from '../repositories/directory.js';
@@ -7,12 +8,12 @@ import { createDirectoryEntry, listDirectory, mergeDirectoryEntries, updateDirec
 const text = (max: number) => z.string().trim().max(max).transform((v) => v || null).nullable();
 const directorySchema = z
   .object({
-    name: z.string().trim().min(1, 'Le nom du club est obligatoire.').max(120),
+    name: z.string().trim().min(1, 'Le nom du club est obligatoire.').max(MAX.name),
     affiliationNumber: z.string().trim().regex(/^\d{7}$/, 'Le numéro d’affiliation FFK a 7 chiffres.').nullable(),
-    coachName: text(120),
-    coachPhone: text(40),
+    coachName: text(MAX.coachName),
+    coachPhone: text(MAX.coachPhone),
     coachEmail: optionalEmail,
-    notes: text(1000),
+    notes: text(MAX.notes),
   })
   .strict();
 

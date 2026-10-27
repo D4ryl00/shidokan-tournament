@@ -1,5 +1,6 @@
-import { fieldDiffs, type CoachField, type FieldDiff, type GoogleContact, type SyncApply, type SyncClub, type SyncPreview } from '../domain/google-contacts.js';
+import { fieldDiffs, isAcceptableCoachValue, type CoachField, type FieldDiff, type GoogleContact, type SyncApply, type SyncClub, type SyncPreview } from '../domain/google-contacts.js';
 import { plural } from '../domain/plural.js';
+import { DIRECTORY_LIMITS } from '../domain/registration.js';
 
 /**
  * Choix faits sur l'écran de synchronisation avec Google, et ce qu'ils envoient à « Appliquer ».
@@ -27,7 +28,11 @@ export const diffKey = (clubId: string, field: CoachField): string => `${clubId}
 
 export function initialChoices(p: SyncPreview): SyncChoices {
   const plans: Record<string, ContactPlan> = {};
-  const name = (c: GoogleContact) => c.organization?.trim() ?? '';
+  // Nom proposé pour un « Nouveau club » : l'entreprise du contact, si l'annuaire l'accepte.
+  const name = (c: GoogleContact) => {
+    const org = c.organization?.trim() ?? '';
+    return org.length <= DIRECTORY_LIMITS.name ? org : '';
+  };
   for (const { contact, exact } of p.newContacts) {
     plans[contact.resourceName] = exact
       ? { mode: 'link', clubs: [exact.clubId], name: name(contact), kept: [] }
@@ -98,7 +103,7 @@ export function buildApply(p: SyncPreview, choices: SyncChoices): ApplyPlan {
     if (plan.mode === 'create') {
       const name = plan.name.trim();
       if (!name) missingName = true;
-      else apply.creates.push({ contact: contact.resourceName, name, coachName: filled(contact.name), coachPhone: filled(contact.phone), coachEmail: filled(contact.email) });
+      else apply.creates.push({ contact: contact.resourceName, name, coachName: filled('coachName', contact.name), coachPhone: filled('coachPhone', contact.phone), coachEmail: filled('coachEmail', contact.email) });
     }
     if (plan.mode === 'later' && newIds.has(contact.resourceName)) apply.later.push(contact.resourceName);
   }
@@ -107,7 +112,8 @@ export function buildApply(p: SyncPreview, choices: SyncChoices): ApplyPlan {
   return { apply, counts, missingName, nothing: diffs + counts.links + creates + counts.later === 0 };
 }
 
-const filled = (v: string | null): string | null => (v && v.trim() ? v.trim() : null);
+/** Valeur reprise dans un nouveau club : vide ou refusée par l'annuaire (voir `rejectedValues`) → rien. */
+const filled = (field: CoachField, v: string | null): string | null => (v && isAcceptableCoachValue(field, v) ? v.trim() : null);
 const countUnnamed = (c: SyncChoices): number => Object.values(c.plans).filter((p) => p.mode === 'create' && !p.name.trim()).length;
 
 /** « Appliquer : 3 différences, 1 lien, 1 nouveau club, 2 contacts en attente, 1 gardée » ; les éléments à zéro sont omis. */

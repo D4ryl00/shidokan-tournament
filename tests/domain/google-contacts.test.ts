@@ -1,8 +1,9 @@
 import { expect, test } from 'vitest';
 import {
-  fieldDiffs, normalizePhone, syncPreview,
+  fieldDiffs, isAcceptableCoachValue, normalizePhone, rejectedValues, syncPreview,
   type GoogleContact, type SyncClub,
 } from '../../src/domain/google-contacts.js';
+import { DIRECTORY_LIMITS } from '../../src/domain/registration.js';
 
 const contact = (o: Partial<GoogleContact> & { resourceName: string }): GoogleContact => ({
   name: null, email: null, phone: null, organization: null, groups: [], ...o,
@@ -92,4 +93,52 @@ test('contact incomplet', () => {
   const sans = syncPreview([c], [club({ id: 'k1', name: 'Dojo A' })], []);
   expect(sans.newContacts[0]!.exact).toBeNull();
   expect(sans.newContacts[0]!.maybe).toEqual([]);
+});
+
+test('suggestion exacte : un club déjà lié à un autre contact n’est que « peut-être » (pas de lien remplacé par défaut)', () => {
+  const clubs = [
+    club({ id: 'k1', name: 'Dojo A', coachEmail: 'julie@ex.fr', googleContactId: 'people/ancien' }),
+    club({ id: 'k2', name: 'Dojo B', coachPhone: '06 22 33 44 55', googleContactId: 'people/ancien2' }),
+  ];
+  const p = syncPreview([
+    // Deux contacts au même mail : l'un est lié au club, l'autre est nouveau.
+    contact({ resourceName: 'people/ancien', email: 'julie@ex.fr' }),
+    contact({ resourceName: 'people/m', email: 'JULIE@ex.fr' }),
+    contact({ resourceName: 'people/t', phone: '+33 6 22 33 44 55' }),
+  ], clubs, ['people/t']);
+  expect(p.linked.map((l) => l.contact.resourceName)).toEqual(['people/ancien']);
+  const m = p.newContacts.find((x) => x.contact.resourceName === 'people/m')!;
+  expect(m.exact).toBeNull();
+  expect(m.maybe).toEqual(['k1']);
+  const t = p.pending.find((x) => x.contact.resourceName === 'people/t')!;
+  expect(t.exact).toBeNull();
+  expect(t.maybe).toEqual(['k2']);
+  // Deux nouveaux contacts au même mail, club libre : la même suggestion exacte pour les deux.
+  const libre = syncPreview([contact({ resourceName: 'people/x', email: 'a@b.fr' }), contact({ resourceName: 'people/y', email: 'a@b.fr' })],
+    [club({ id: 'k3', name: 'Dojo C', coachEmail: 'a@b.fr' })], []);
+  expect(libre.newContacts.map((x) => x.exact)).toEqual([{ clubId: 'k3', reason: 'email' }, { clubId: 'k3', reason: 'email' }]);
+});
+
+test('valeur Google que l’annuaire refuserait : ni différence, ni remplissage, mais signalée', () => {
+  expect(isAcceptableCoachValue('coachEmail', 'a@x.fr')).toBe(true);
+  expect(isAcceptableCoachValue('coachEmail', ' a@x.fr ')).toBe(true);
+  expect(isAcceptableCoachValue('coachEmail', 'a@x.fr, b@y.fr')).toBe(false);
+  expect(isAcceptableCoachValue('coachEmail', `${'a'.repeat(DIRECTORY_LIMITS.coachEmail)}@x.fr`)).toBe(false);
+  expect(isAcceptableCoachValue('coachPhone', '0'.repeat(DIRECTORY_LIMITS.coachPhone))).toBe(true);
+  expect(isAcceptableCoachValue('coachPhone', '0'.repeat(DIRECTORY_LIMITS.coachPhone + 1))).toBe(false);
+  expect(isAcceptableCoachValue('coachName', 'x'.repeat(DIRECTORY_LIMITS.coachName + 1))).toBe(false);
+  expect(isAcceptableCoachValue('coachName', '  ')).toBe(false);
+
+  const c = contact({ resourceName: 'people/c1', name: 'x'.repeat(121), email: 'a@x.fr, b@y.fr', phone: '06 11 22 33 44' });
+  expect(fieldDiffs(c, { coachName: 'Paul', coachPhone: '01 00 00 00 00', coachEmail: null })).toEqual([
+    { field: 'coachPhone', directory: '01 00 00 00 00', google: '06 11 22 33 44' },
+  ]);
+  expect(rejectedValues(c)).toEqual([
+    { field: 'coachName', value: 'x'.repeat(121) },
+    { field: 'coachEmail', value: 'a@x.fr, b@y.fr' },
+  ]);
+  expect(rejectedValues(contact({ resourceName: 'people/c2', name: 'Paul', email: 'p@x.fr' }))).toEqual([]);
+
+  const lie = club({ id: 'k1', name: 'Dojo A', coachEmail: 'a@x.fr', googleContactId: 'people/c1' });
+  expect(syncPreview([c], [lie], []).diffs[0]!.fields.map((f) => f.field)).toEqual(['coachPhone']);
 });

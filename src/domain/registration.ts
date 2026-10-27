@@ -177,6 +177,9 @@ export function combatConflictWarning(
     : null;
 }
 
+/** Longueurs maximales d'une fiche de l'annuaire (et des coordonnées du coach) : les mêmes pour la saisie et pour ce que Google apporte. */
+export const DIRECTORY_LIMITS = { name: 120, coachName: 120, coachPhone: 40, coachEmail: 160, notes: 1000 } as const;
+
 /** Fiche de l'annuaire des clubs (indépendante des compétitions). */
 export interface DirectoryInput {
   name: string;

@@ -94,3 +94,15 @@ test('« Plus tard » seul : rangé en attente à l’application, le bouton le 
   expect(r.apply).toEqual({ updates: [], links: [], creates: [], later: ['people/sophie', 'people/ali'] });
   expect(applyButtonLabel(r)).toBe('Appliquer : 2 contacts en attente');
 });
+
+test('valeur Google que l’annuaire refuserait : ni envoyée au lien, ni au nouveau club ; le reste part', () => {
+  const bad = contact('bad', { name: 'Zoé Mail', email: 'a@x.fr, b@y.fr', phone: '0'.repeat(41), organization: 'O'.repeat(121) });
+  const p: SyncPreview = { ...preview, diffs: [], linked: [], pending: [], newContacts: [{ contact: bad, exact: null, maybe: [] }] };
+  const c = initialChoices(p);
+  // Nom d'entreprise trop long : pas repris comme nom du club.
+  expect(c.plans['people/bad']).toMatchObject({ mode: 'later', name: '' });
+  c.plans['people/bad'] = { ...c.plans['people/bad']!, mode: 'link', clubs: ['nord'] };
+  expect(buildApply(p, c).apply.links).toEqual([{ clubId: 'nord', version: 7, contact: 'people/bad', set: { coachName: 'Zoé Mail' } }]);
+  c.plans['people/bad'] = { ...c.plans['people/bad']!, mode: 'create', name: 'Dojo Zoé' };
+  expect(buildApply(p, c).apply.creates).toEqual([{ contact: 'people/bad', name: 'Dojo Zoé', coachName: 'Zoé Mail', coachPhone: null, coachEmail: null }]);
+});

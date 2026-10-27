@@ -1,4 +1,6 @@
+import { isSingleEmail } from './mail-template.js';
 import { normalizeName } from './names.js';
+import { DIRECTORY_LIMITS } from './registration.js';
 
 // Calcul pur de la synchronisation des coachs avec Google Contacts.
 // Importé aussi par la page : aucune dépendance au serveur.
@@ -33,11 +35,27 @@ export function normalizePhone(p: string): string {
 const blank = (v: string | null | undefined): v is null | undefined => v === null || v === undefined || v.trim() === '';
 const normEmail = (v: string): string => v.trim().toLowerCase();
 
-/** Différences à proposer : un champ Google vide n'en est jamais une. */
+const CONTACT_VALUE: Record<CoachField, (c: GoogleContact) => string | null> = { coachName: (c) => c.name, coachPhone: (c) => c.phone, coachEmail: (c) => c.email };
+
+/** Une valeur Google que la fiche de l'annuaire accepterait (mêmes limites que la saisie, une seule adresse e-mail). */
+export function isAcceptableCoachValue(field: CoachField, value: string): boolean {
+  const v = value.trim();
+  return v !== '' && v.length <= DIRECTORY_LIMITS[field] && (field !== 'coachEmail' || isSingleEmail(v));
+}
+
+/** Valeurs Google que l'annuaire refuserait (deux adresses dans un champ, numéro trop long…) : jamais reprises, signalées à l'écran. */
+export function rejectedValues(contact: GoogleContact): { field: CoachField; value: string }[] {
+  return (Object.keys(CONTACT_VALUE) as CoachField[]).flatMap((field) => {
+    const value = CONTACT_VALUE[field](contact);
+    return blank(value) || isAcceptableCoachValue(field, value) ? [] : [{ field, value }];
+  });
+}
+
+/** Différences à proposer : un champ Google vide, ou que l'annuaire refuserait, n'en est jamais une. */
 export function fieldDiffs(contact: GoogleContact, club: Pick<SyncClub, CoachField>): FieldDiff[] {
   const out: FieldDiff[] = [];
   const check = (field: CoachField, google: string | null, directory: string | null, same: (a: string, b: string) => boolean): void => {
-    if (blank(google)) return;
+    if (blank(google) || !isAcceptableCoachValue(field, google)) return;
     if (!blank(directory) && same(google, directory)) return;
     out.push({ field, directory: blank(directory) ? null : directory, google });
   };
@@ -69,20 +87,21 @@ export function syncPreview(contacts: GoogleContact[], clubs: (SyncClub & { arch
   const choice = (contact: GoogleContact): ContactChoice => {
     const email = blank(contact.email) ? null : normEmail(contact.email);
     const phone = blank(contact.phone) ? '' : normalizePhone(contact.phone);
+    const sameEmail = (c: SyncClub): boolean => !!email && !blank(c.coachEmail) && normEmail(c.coachEmail) === email;
+    const samePhone = (c: SyncClub): boolean => !!phone && !blank(c.coachPhone) && normalizePhone(c.coachPhone) === phone;
+    // Un club déjà lié à un autre contact n'est jamais proposé d'office : « Appliquer » remplacerait ce lien sans qu'on l'ait choisi.
+    const free = (c: SyncClub): boolean => !c.googleContactId || c.googleContactId === contact.resourceName;
     let exact: ContactChoice['exact'] = null;
-    if (email) {
-      const hit = active.find((c) => !blank(c.coachEmail) && normEmail(c.coachEmail) === email);
-      if (hit) exact = { clubId: hit.id, reason: 'email' };
-    }
-    if (!exact && phone) {
-      const hit = active.find((c) => !blank(c.coachPhone) && normalizePhone(c.coachPhone) === phone);
-      if (hit) exact = { clubId: hit.id, reason: 'phone' };
-    }
+    const byEmail = active.find((c) => free(c) && sameEmail(c));
+    if (byEmail) exact = { clubId: byEmail.id, reason: 'email' };
+    const byPhone = exact ? undefined : active.find((c) => free(c) && samePhone(c));
+    if (byPhone) exact = { clubId: byPhone.id, reason: 'phone' };
     const person = blank(contact.name) ? '' : normalizeName(contact.name);
     const org = blank(contact.organization) ? '' : normalizeName(contact.organization);
     const maybe = active
       .filter((c) => c.id !== exact?.clubId)
-      .filter((c) => (person && !blank(c.coachName) && normalizeName(c.coachName) === person) || (org && normalizeName(c.name) === org))
+      .filter((c) => (person && !blank(c.coachName) && normalizeName(c.coachName) === person) || (org && normalizeName(c.name) === org)
+        || (!free(c) && (sameEmail(c) || samePhone(c))))
       .map((c) => c.id);
     return { contact, exact, maybe };
   };
