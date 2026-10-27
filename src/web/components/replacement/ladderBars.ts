@@ -1,3 +1,4 @@
+import type { LadderRow } from '../../../domain/replacement/plan.js';
 import type { CostBand } from '../../../domain/replacement/rules.js';
 import type { RuleId } from '../../../domain/settings.js';
 
@@ -33,4 +34,16 @@ export function ladderBars(start: number, rows: { rule: RuleId; alone: number | 
     previous = alone;
   }
   return out;
+}
+
+/**
+ * Barres du diagramme à partir des lignes calculées, dans **leur** ordre (celui du calcul) : après un rangement pas encore
+ * recalculé (ou annulé), la liste affichée a un autre ordre, et additionner ses lignes dans cet ordre donnerait des barres fausses.
+ * `start` : seuls de la ligne de départ (`return`), `null` tant qu'elle n'est pas calculée. Aucun seul au départ : aucune barre.
+ */
+export function rowBars(rows: LadderRow[], bandOf: (rule: RuleId) => CostBand): { start: number | null; bars: Map<RuleId, LadderBar> } {
+  const start = rows.find((r) => r.rule === 'return')?.alone ?? null;
+  if (start === null || start === 0) return { start, bars: new Map() };
+  const after = rows.filter((r): r is LadderRow & { rule: RuleId } => r.rule !== null && r.rule !== 'return');
+  return { start, bars: ladderBars(start, after.map((r) => ({ rule: r.rule, alone: r.on ? r.alone : null, band: bandOf(r.rule) }))) };
 }

@@ -4,7 +4,7 @@ import { plural } from '../../../domain/plural.js';
 import { applyRulesView, COST_BAND_LABELS, costBand, NO_VALIDATION_RULES, RULE_LABELS, ruleNumber, type CostBand, type RulesView } from '../../../domain/replacement/rules.js';
 import { defaultSettings, type RuleId } from '../../../domain/settings.js';
 import type { LadderRow } from '../../api.js';
-import { ladderBars, type LadderBar } from './ladderBars.js';
+import { rowBars, type LadderBar } from './ladderBars.js';
 
 /** Couleur de chaque groupe de coût (`COST_BAND_LABELS`), du vert au rouge. */
 export const BAND_COLOR = ['var(--sk-cost0)', 'var(--sk-cost1)', 'var(--sk-cost2)', 'var(--sk-cost3)', 'var(--sk-cost4)'];
@@ -110,11 +110,7 @@ export function RuleLadder({ view, rows, onChange, busy, fresh }: {
   const isOn = (rule: RuleId) => rule === 'return' || view.on[rule];
 
   const startRow = byRule.get('return');
-  const start = startRow?.alone ?? null;
-  const bars = start === null ? new Map<RuleId, LadderBar>() : ladderBars(start, view.order.filter((r) => r !== 'return').map((rule) => {
-    const row = byRule.get(rule);
-    return { rule, alone: isOn(rule) && row ? row.alone : null, band: bandOf(rule) };
-  }));
+  const { start, bars } = rowBars(rows ?? [], bandOf);
   const shownBands = [...new Set([...bars.values()].flatMap((b) => b.placed.map((s) => s.band)))].sort();
 
   /** Colonne Déplacements : « 3 » ou « 3 · 1 à valider ». */
@@ -209,7 +205,7 @@ export function RuleLadder({ view, rows, onChange, busy, fresh }: {
                 </>
               )}
               {/* Règle activée dont la ligne n'est pas encore calculée : une ligne active, la barre en attente. */}
-              {rows && on && !(row && row.alone !== null && bar) && (
+              {rows && on && !(row && row.alone !== null) && (
                 <>
                   <Box style={COL.bar}>
                     <Box data-testid="ladder-pending" style={{ height: 22, width: '2.2rem', borderRadius: 6, border: '1px dashed var(--sk-muted)', color: 'var(--sk-muted)', fontSize: 13, textAlign: 'center' }}>…</Box>
