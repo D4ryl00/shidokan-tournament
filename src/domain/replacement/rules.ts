@@ -126,6 +126,12 @@ export function allowedAt(s: CompetitionSettings, level: RuleId): Set<RuleId> {
   return out;
 }
 
+/** Numéro affiché d'une règle : « Retour » est dans la ligne de départ (pas de numéro), les autres comptent à partir de 1. */
+export function ruleNumber(order: RuleId[], rule: RuleId): number | null {
+  if (rule === 'return') return null;
+  return order.filter((r) => r !== 'return').indexOf(rule) + 1;
+}
+
 export type CostBand = 0 | 1 | 2 | 3 | 4;
 export const COST_BAND_LABELS: Record<CostBand, string> = {
   0: 'Sans validation',

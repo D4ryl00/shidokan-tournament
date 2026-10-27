@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { RULE_IDS, defaultSettings, isValidRuleOrder, type RuleId } from '../../../src/domain/settings.js';
 import { ffkDefaultGrid } from '../../../src/domain/grid-ffk.js';
-import { PRE_APPROVAL_RULES, allowedAt, applyRulesView, costBand, isRuleOn, ruleRank, rulesView, rulesViewSchema, withAllRules } from '../../../src/domain/replacement/rules.js';
+import { PRE_APPROVAL_RULES, allowedAt, applyRulesView, costBand, isRuleOn, ruleNumber, ruleRank, rulesView, rulesViewSchema, withAllRules } from '../../../src/domain/replacement/rules.js';
 
 test('interrupteurs : les quatre mélanges sont les réglages existants', () => {
   const s = defaultSettings();
@@ -75,4 +75,11 @@ test('bandes de coût : ligne de coupure sur une règle désactivée', () => {
   s.replacementRules.off = ['ageDown'];
   expect(['weightGap', 'ageUp'].map((r) => costBand(s, r as RuleId, true))).toEqual([1, 3]);
   expect(['ageDown', 'seniorsVeterans', 'discipline'].map((r) => costBand(s, r as RuleId, true))).toEqual([4, 4, 4]);
+});
+
+test('ruleNumber : « Retour » sans numéro, les autres à partir de 1', () => {
+  const order: RuleId[] = ['return', 'weight', 'split'];
+  expect(ruleNumber(order, 'return')).toBeNull();
+  expect(ruleNumber(order, 'weight')).toBe(1);
+  expect(ruleNumber(order, 'split')).toBe(2);
 });
