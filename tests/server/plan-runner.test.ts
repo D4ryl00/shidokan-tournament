@@ -158,7 +158,7 @@ describe('par la route', () => {
     await new Promise((r) => setTimeout(r, 50));
     const health = await app.inject({ method: 'GET', url: '/api/health' });
     const elapsed = performance.now() - t;
-    expect(health.json()).toEqual({ ok: true });
+    expect(health.json()).toMatchObject({ ok: true });
     expect(elapsed).toBeLessThan(250);
     expect(finished).toBe(false);
     expect((await job).statusCode).toBe(200);

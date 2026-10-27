@@ -1,12 +1,11 @@
 import { createHash } from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
 import type { InstanceRole } from '../auth/guard.js';
 import type { AppDb } from '../db/client.js';
 import { versionedTables } from '../db/row-versions.js';
 import { backupNow } from '../repositories/backups.js';
 import { competitionChanged } from '../events.js';
 import { getInstance } from '../repositories/instance.js';
+import { APP_VERSION } from '../version.js';
 
 /** Une compétition entière, telle qu'elle passe d'une installation à l'autre (réseau ou fichier). */
 export interface SyncPackage {
@@ -78,14 +77,6 @@ const REFERENCES: [table: string, column: string, target: string][] = [
 
 /** Valeur acceptée dans une ligne : texte, nombre fini dans l'intervalle des entiers sûrs, ou vide. */
 const scalar = (v: unknown) => v === null || typeof v === 'string' || (typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= Number.MAX_SAFE_INTEGER);
-
-const APP_VERSION = (() => {
-  try {
-    return (JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../../../package.json'), 'utf8')) as { version: string }).version;
-  } catch {
-    return 'inconnue';
-  }
-})();
 
 const migrationCount = (db: AppDb) => (db.$client.prepare('select count(*) as n from __drizzle_migrations').get() as { n: number }).n;
 const columnsOf = (db: AppDb, table: string) => (db.$client.prepare('select name, pk from pragma_table_info(?)').all(table) as { name: string; pk: number }[]);

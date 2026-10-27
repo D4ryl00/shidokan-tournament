@@ -23,7 +23,7 @@ async function create(body: object = { name: NAME, date: '2026-11-22' }) {
 
 test('santé', async () => {
   const res = await app.inject({ method: 'GET', url: '/api/health' });
-  expect(res.json()).toEqual({ ok: true });
+  expect(res.json()).toMatchObject({ ok: true });
 });
 
 test('créer, lister, lire : les accents restent intacts', async () => {

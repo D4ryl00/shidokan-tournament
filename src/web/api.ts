@@ -935,6 +935,9 @@ export interface AccountRole { role: UserRole; competitionId: string | null; zon
 export interface AuthMe { role: 'serveur' | 'local'; user: ({ email: string } & AccountRole) | null }
 export interface UserRow extends AccountRole { id: string; email: string; createdAt: string; competitionName: string | null; zoneName: string | null }
 
+/** Version de l'application (semantic-release), lue une fois par le serveur. */
+export const useAppVersion = () =>
+  useQuery({ queryKey: ['health'], queryFn: () => api<{ ok: boolean; version: string }>('GET', '/api/health'), staleTime: Infinity }).data?.version;
 export const useAuthMe = () => useQuery({ queryKey: ['auth'], queryFn: () => api<AuthMe>('GET', '/api/auth/me'), staleTime: 60_000 });
 /** Tout est permis : rôle local (pas de comptes), ou compte Organisateur. */
 export const isOrganiser = (me: AuthMe | undefined) => !me?.user || me.user.role === 'organisateur';

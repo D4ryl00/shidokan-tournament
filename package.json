@@ -1,6 +1,6 @@
 {
   "name": "shidokan-tournaments",
-  "version": "1.0.0",
+  "version": "0.0.0-dev",
   "scripts": {
     "dev": "concurrently -n server,web \"tsx watch src/server/main.ts\" \"vite\"",
     "build": "tsc -p tsconfig.server.json && vite build",

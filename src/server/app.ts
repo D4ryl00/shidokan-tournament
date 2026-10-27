@@ -62,6 +62,7 @@ import { startRetention } from './repositories/retention.js';
 import { ffkImportRoutes } from './routes/ffk-import.js';
 import { registrationRoutes } from './routes/registrations.js';
 import { UnreadableFileError } from './spreadsheet/read.js';
+import { APP_VERSION } from './version.js';
 
 export interface AppOptions {
   dbPath: string;
@@ -147,7 +148,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     done(null, body),
   );
 
-  app.get('/api/health', async () => ({ ok: true }));
+  app.get('/api/health', async () => ({ ok: true, version: APP_VERSION }));
 
   // Un compte Zone ne voit que la compétition de sa zone.
   // Liste de l'accueil : en plus, le nombre d'inscrits et l'état de la main (lecture seule).

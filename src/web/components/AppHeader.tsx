@@ -1,6 +1,6 @@
 import { Anchor, Group, Menu, ActionIcon, Text, UnstyledButton } from '@mantine/core';
 import { Link, useLocation } from 'react-router';
-import { isOrganiser, useAuthMe, type AuthMe } from '../api.js';
+import { isOrganiser, useAppVersion, useAuthMe, type AuthMe } from '../api.js';
 import { Logo } from './Logo.js';
 import { ThemeToggle } from './ThemeToggle.js';
 import { UserMenu } from './UserMenu.js';
@@ -16,13 +16,19 @@ export function appLinks(me: AuthMe | undefined): { to: string; label: string; t
   ];
 }
 
-/** Logo et nom, retour à la liste des compétitions. */
+/** Version affichée : « v1.2.3 », ou « dev » hors d'une image publiée. */
+export const versionLabel = (version: string) => (version.includes('-dev') ? 'dev' : `v${version}`);
+
+/** Logo et nom, retour à la liste des compétitions ; la version en petit à côté du nom (et au survol du logo). */
 export function Brand({ compact = false }: { compact?: boolean }) {
+  const version = useAppVersion();
+  const label = version ? versionLabel(version) : null;
   return (
-    <UnstyledButton component={Link} to="/" aria-label="Shidokan France — compétitions" style={{ flexShrink: 0 }}>
+    <UnstyledButton component={Link} to="/" aria-label="Shidokan France — compétitions" title={label ? `Version ${label}` : undefined} style={{ flexShrink: 0 }}>
       <Group gap="xs" wrap="nowrap">
         <Logo size={compact ? 30 : 34} />
         {!compact && <Text fw={800} size="lg" style={{ whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>Shidokan France</Text>}
+        {!compact && label && <Text size="xs" c="dimmed" visibleFrom="sm" data-testid="app-version" style={{ whiteSpace: 'nowrap' }}>{label}</Text>}
       </Group>
     </UnstyledButton>
   );

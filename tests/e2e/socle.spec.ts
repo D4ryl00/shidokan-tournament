@@ -6,6 +6,11 @@ test('créer une compétition avec accents', async ({ page }) => {
   await expect(page.getByRole('heading', { name: "Coupe Shidokan – Côte d'Azur" })).toBeVisible();
 });
 
+test('version de l’application à côté du nom (hors image publiée : « dev »)', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('app-version')).toHaveText('dev');
+});
+
 test('modifier une catégorie de poids', async ({ page }) => {
   const id = await createCompetition(page, 'Grille modifiée');
   await page.goto(`/competitions/${id}/grille`);
