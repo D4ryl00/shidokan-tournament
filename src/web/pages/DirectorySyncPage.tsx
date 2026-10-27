@@ -2,12 +2,12 @@ import { Accordion, Alert, Anchor, Button, Center, Checkbox, Group, Loader, Sele
 import { notifications } from '@mantine/notifications';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { CONTACTS_NOT_GRANTED, DIRECTORY_CHANGED, type ContactChoice, type GoogleContact, type SyncApply, type SyncPreview } from '../../domain/google-contacts.js';
+import { CONTACTS_NOT_GRANTED, DIRECTORY_CHANGED, rejectedValues, type ContactChoice, type GoogleContact, type SyncApply, type SyncPreview } from '../../domain/google-contacts.js';
 import { plural } from '../../domain/plural.js';
 import { ApiError, useApplyGoogleContacts, useGoogleContactsPreview } from '../api.js';
 import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
-import { contactName, FIELD_LABEL, GoogleContactCard } from '../components/GoogleContactCard.js';
+import { contactName, FIELD_LABEL, GoogleContactCard, rejectedText } from '../components/GoogleContactCard.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
 import { TableCard } from '../components/ui/TableCard.js';
@@ -24,6 +24,9 @@ export function DirectorySyncPage() {
   const preview = useGoogleContactsPreview(label);
   const apply = useApplyGoogleContacts();
   const view = preview.data;
+  // Revenir sur la page (ou changer de libellé) : l'aperçu gardé en mémoire n'est pas montré pendant que Google est relu,
+  // sinon les choix faits entre-temps seraient effacés à l'arrivée du nouveau.
+  const reading = preview.isFetching && !preview.isFetchedAfterMount;
 
   const send = (input: SyncApply) =>
     apply.mutate(input, {
@@ -59,11 +62,13 @@ export function DirectorySyncPage() {
               value={(label === undefined ? view.label : label) ?? ALL}
               onChange={(v) => { apply.reset(); setLabel(v === ALL || v === null ? null : v); }} />
             <Text size="sm" c="dimmed" pb={8}>{view.account} · {plural(view.total, 'contact')}</Text>
-            {preview.isFetching && <Loader size="sm" mb={8} />}
+            {preview.isFetching && !reading && <Loader size="sm" mb={8} />}
           </Group>
-          {/* Un nouvel aperçu (libellé, application, annuaire changé) repart des choix par défaut. */}
-          <SyncForm key={preview.dataUpdatedAt} preview={view.preview} busy={preview.isFetching} pending={apply.isPending} onApply={send}
-            error={<ApiErrorAlert error={apply.error} />} />
+          {reading ? <Center py="xl" data-testid="google-sync-loading"><Loader /></Center> : (
+            // Un nouvel aperçu (libellé, application, annuaire changé) repart des choix par défaut.
+            <SyncForm key={preview.dataUpdatedAt} preview={view.preview} busy={preview.isFetching} pending={apply.isPending} onApply={send}
+              error={<ApiErrorAlert error={apply.error} />} />
+          )}
         </>
       )}
     </Stack>
@@ -85,11 +90,20 @@ function SyncForm({ preview: p, busy, pending, onApply, error }: { preview: Sync
     );
   };
   const rows = p.diffs.flatMap((d) => d.fields.map((f) => ({ d, f, key: diffKey(d.clubId, f.field) })));
+  const clubName = new Map(p.clubs.map((c) => [c.id, c.name]));
+  // Valeurs Google des contacts liés que l'annuaire refuserait : jamais reprises, signalées sous les différences.
+  const rejected = p.linked.flatMap((l) => rejectedValues(l.contact).map((r) => ({
+    key: `${l.contact.resourceName}:${r.field}`, text: `${l.clubIds.map((id) => clubName.get(id) ?? '—').join(', ')} · ${rejectedText(r)}`,
+  })));
+  const unnamed = Object.entries(choices.plans).filter(([, pl]) => pl.mode === 'create' && !pl.name.trim()).map(([id]) => names.get(id) ?? 'Contact sans nom');
 
   return (
     <Stack gap="lg">
       <SectionCard title={`Différences avec l’annuaire (${rows.length})`}
         description="Google l’emporte : décochez une ligne pour garder la valeur de l’annuaire, cette fois seulement.">
+        {rejected.map((r) => (
+          <Text key={r.key} size="sm" c="var(--sk-warn-text)" mb="xs" data-testid="google-rejected-diff" style={{ overflowWrap: 'anywhere' }}>{r.text}</Text>
+        ))}
         {rows.length === 0 ? <Text size="sm" c="dimmed">Aucune différence : les clubs liés sont à jour.</Text> : (
           <TableCard>
             <Table>
@@ -142,7 +156,12 @@ function SyncForm({ preview: p, busy, pending, onApply, error }: { preview: Sync
       )}
 
       {error}
-      <Group justify="flex-end">
+      <Group justify="flex-end" align="center" wrap="wrap">
+        {unnamed.length > 0 && (
+          <Text size="sm" c="var(--sk-warn-text)" data-testid="google-apply-blocked">
+            {unnamed.length === 1 ? `Donnez un nom au nouveau club de ${unnamed[0]}.` : `Donnez un nom aux nouveaux clubs de ${unnamed.join(', ')}.`}
+          </Text>
+        )}
         <Button data-testid="google-apply" disabled={plan.nothing || plan.missingName || busy} loading={pending} onClick={() => onApply(plan.apply)}
           style={{ maxWidth: '100%' }} styles={{ label: { whiteSpace: 'normal', textAlign: 'center' } }} h="auto" mih={36} py={6}>
           {applyButtonLabel(plan)}

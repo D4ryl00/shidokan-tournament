@@ -105,7 +105,7 @@ export const GOOGLE_PREVIEW = (() => {
 })();
 
 /** Simule un compte Google connecté (avec le droit sur les contacts) et l'aperçu de la synchronisation ; rend les corps envoyés à « Appliquer ». */
-export async function mockGoogleContacts(page: Page, preview: object = GOOGLE_PREVIEW): Promise<{ applied: unknown[]; previews: unknown[] }> {
+export async function mockGoogleContacts(page: Page, preview: object = GOOGLE_PREVIEW, { status = 'ok' }: { status?: 'ok' | 'reconnect' } = {}): Promise<{ applied: unknown[]; previews: unknown[] }> {
   const applied: unknown[] = [];
   const previews: unknown[] = [];
   await page.route('**/api/app-settings', async (route) => {
@@ -113,7 +113,7 @@ export async function mockGoogleContacts(page: Page, preview: object = GOOGLE_PR
     const body = await res.json();
     if (route.request().method() === 'GET') {
       body.googleAvailable = true;
-      body.google = { email: 'orga@gmail.com', fromName: 'Shidokan France', status: 'ok', lastRefreshAt: null, scopes: ['openid', 'email', 'https://www.googleapis.com/auth/gmail.send', CONTACTS_SCOPE] };
+      body.google = { email: 'orga@gmail.com', fromName: 'Shidokan France', status, lastRefreshAt: null, scopes: ['openid', 'email', 'https://www.googleapis.com/auth/gmail.send', CONTACTS_SCOPE] };
     }
     await route.fulfill({ response: res, json: body });
   });

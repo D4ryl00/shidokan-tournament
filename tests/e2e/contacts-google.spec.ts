@@ -122,3 +122,88 @@ test('réglages : la ligne « Contacts » sous le compte connecté', async ({ pa
   await expect(page.getByTestId('google-connected')).toContainText('orga@gmail.com');
   await expect(page.getByText('Contacts : accès accordé')).toBeVisible();
 });
+
+test('réglages : accès Google à reconnecter, pas de « Contacts : accès accordé »', async ({ page }) => {
+  await mockGoogleContacts(page, GOOGLE_PREVIEW, { status: 'reconnect' });
+  await page.goto('/parametres#mails');
+  await page.getByText('Compte Google', { exact: true }).click();
+  await expect(page.getByTestId('google-connected')).toContainText('orga@gmail.com');
+  await expect(page.getByText('Contacts : accès accordé')).toHaveCount(0);
+});
+
+test('annuaire : nouveau club sans nom, le bouton bloqué dit pourquoi, même replié en attente', async ({ page }) => {
+  await mockGoogleContacts(page);
+  await page.goto('/annuaire/google');
+  const apply = page.getByTestId('google-apply');
+  await expect(apply).toBeEnabled();
+  await page.getByText('En attente d’un rattachement (1)').click();
+  const ali = page.getByTestId('contact-card').filter({ hasText: 'Ali Benali' });
+  await ali.getByRole('radio', { name: 'Nouveau club' }).check();
+  await expect(ali.getByText('Donnez un nom au club.')).toBeVisible();
+  await page.getByText('En attente d’un rattachement (1)').click();
+  await expect(apply).toBeDisabled();
+  await expect(page.getByTestId('google-apply-blocked')).toHaveText('Donnez un nom au nouveau club de Ali Benali.');
+  await page.getByText('En attente d’un rattachement (1)').click();
+  await ali.getByRole('textbox', { name: 'Nom du club' }).fill('Dojo Ali');
+  await expect(page.getByTestId('google-apply-blocked')).toHaveCount(0);
+  await expect(apply).toBeEnabled();
+});
+
+test('annuaire : club déjà lié proposé « peut-être », valeur Google refusée signalée et non envoyée', async ({ page }) => {
+  const base = GOOGLE_PREVIEW.preview;
+  const paul = base.newContacts[0]!.contact;
+  const bad = { ...paul, resourceName: 'people/bad', name: 'Bruno Double', email: 'a@x.fr, b@y.fr', phone: '06 00 00 00 00' };
+  const marc = base.linked[0]!.contact;
+  const marcBad = { ...marc, email: 'm1@x.fr; m2@y.fr' };
+  const preview = {
+    ...GOOGLE_PREVIEW,
+    preview: {
+      ...base,
+      diffs: [{ ...base.diffs[0], contact: marcBad }],
+      linked: [{ contact: marcBad, clubIds: ['c-lilas'] }],
+      pending: [],
+      // Bruno : même téléphone que Dojo des Lilas, déjà lié à Marc → seulement « peut-être ».
+      newContacts: [{ contact: bad, exact: null, maybe: ['c-lilas'] }],
+    },
+  };
+  const { applied } = await mockGoogleContacts(page, preview);
+  await page.goto('/annuaire/google');
+  const card = page.getByTestId('contact-card').filter({ hasText: 'Bruno Double' });
+  await expect(card.getByRole('radio', { name: 'Plus tard' })).toBeChecked();
+  await expect(card.getByRole('button', { name: 'Peut-être : Dojo des Lilas ? (déjà lié à Marc Durand)' })).toBeVisible();
+  await expect(card.getByText('E-mail — valeur Google non reprise : a@x.fr, b@y.fr')).toBeVisible();
+  await expect(page.getByTestId('google-rejected-diff')).toHaveText('Dojo des Lilas · E-mail — valeur Google non reprise : m1@x.fr; m2@y.fr');
+  await card.getByRole('radio', { name: 'Nouveau club' }).check();
+  await card.getByRole('textbox', { name: 'Nom du club' }).fill('Dojo Bruno');
+  await page.getByTestId('google-apply').click();
+  await expect(page.getByText('Annuaire mis à jour.')).toBeVisible();
+  expect(applied).toEqual([{
+    updates: [{ clubId: 'c-lilas', version: 3, set: { coachPhone: '06 55 66 77 88' } }],
+    links: [],
+    creates: [{ contact: 'people/bad', name: 'Dojo Bruno', coachName: 'Bruno Double', coachPhone: '06 00 00 00 00', coachEmail: null }],
+    later: [],
+  }]);
+});
+
+test('annuaire : en revenant sur la page, pas d’ancien aperçu avant la relecture de Google', async ({ page }) => {
+  const { previews } = await mockGoogleContacts(page);
+  await page.goto('/annuaire/google');
+  await expect(page.getByTestId('google-apply')).toBeVisible();
+  await page.getByRole('link', { name: 'Retour à l’annuaire' }).click();
+  // La relecture suivante reste en suspens tant que le test ne la libère pas.
+  let release!: () => void;
+  const held = new Promise<void>((r) => { release = r; });
+  await page.route('**/api/club-directory/google/preview', async (route) => {
+    previews.push(route.request().postDataJSON());
+    await held;
+    await route.fulfill({ json: GOOGLE_PREVIEW });
+  });
+  await page.getByRole('link', { name: 'Synchroniser avec Google' }).click();
+  await expect.poll(() => previews.length).toBe(2);
+  await expect(page.getByTestId('google-sync-loading')).toBeVisible();
+  await expect(page.getByTestId('google-apply')).toHaveCount(0);
+  await expect(page.getByTestId('contact-card')).toHaveCount(0);
+  release();
+  await expect(page.getByTestId('google-apply')).toBeVisible();
+  await expect(page.getByTestId('google-sync-loading')).toHaveCount(0);
+});

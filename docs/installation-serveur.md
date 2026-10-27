@@ -74,7 +74,7 @@ Dans l'application, menu **Réglages de l'application** :
    - acceptez. Si Google présente des cases à cocher, laissez cochée celle qui permet d'**envoyer des e-mails** : sans elle, l'application refuse la connexion. Laissez aussi cochée celle des **contacts** : sans elle, l'envoi fonctionne mais la synchronisation des coachs avec Google Contacts est indisponible ;
    - de retour dans les Réglages, l'écran affiche « Connecté : … ». Réglez le nom de l'expéditeur (« Shidokan France »), cliquez « Enregistrer », puis « Envoyer un mail d'essai ».
 
-   L'application ne peut qu'**envoyer** des mails depuis ce compte : elle ne peut ni les lire ni les supprimer. « Déconnecter » lui retire l'accès ; on peut aussi le retirer depuis le compte Google (Sécurité → Applications tierces). Si l'accès est retiré ou expire (par exemple quand le mot de passe du compte Gmail change), les Réglages affichent « reconnectez-vous ». L'application renouvelle d'elle-même l'accès chaque mois, pour qu'il n'expire pas entre deux compétitions. Gmail accepte environ 500 destinataires par jour.
+   Avec ce compte, l'application peut **envoyer** des mails, sans pouvoir les lire ni les supprimer, et **lire** les contacts (nom, mail, téléphone, entreprise, libellés), sans pouvoir les modifier : ils servent à synchroniser les coachs de l'annuaire. « Déconnecter » lui retire l'accès ; on peut aussi le retirer depuis le compte Google (Sécurité → Applications tierces). Si l'accès est retiré ou expire (par exemple quand le mot de passe du compte Gmail change), les Réglages affichent « reconnectez-vous ». L'application renouvelle d'elle-même l'accès chaque mois, pour qu'il n'expire pas entre deux compétitions. Gmail accepte environ 500 destinataires par jour.
 
    **Variante sans Google** (« Autre serveur (identifiant et mot de passe) ») : serveur SMTP, identifiant et mot de passe. Pour Gmail par ce chemin, il faut un **mot de passe d'application** (Compte Google → Sécurité → Mots de passe des applications, avec la validation en deux étapes), le serveur `smtp.gmail.com`, le port `465` et le chiffrement TLS.
 2. **Données personnelles** : indiquez l'**adresse de contact** (par exemple une adresse de Shidokan France). Elle apparaît dans la mention en bas de la page de chaque club. Relisez la mention, et faites-la valider par Shidokan France si un référent RGPD existe.
@@ -111,6 +111,13 @@ Les libellés ci-dessous sont ceux de la console en anglais ; ils peuvent varier
    cd ~/shidokan && docker compose up -d
    ```
 8. Dans l'application : **Réglages de l'application → Envoi des mails → Compte Google → « Se connecter avec Google »**, comme décrit plus haut.
+
+**Projet Google déjà créé pour l'envoi des mails** (installation antérieure à la synchronisation des contacts) : il n'y a pas à tout refaire. Dans la console Google Cloud, sur le même projet :
+1. **APIs & Services → Library** : cherchez « People API », puis **Enable** ;
+2. **Google Auth platform → Data Access → Add or remove scopes** : cochez en plus `.../auth/contacts.readonly` (« See and download your contacts »), puis **Update** et **Save** ;
+3. dans l'application, **Réglages de l'application → Envoi des mails → « Se reconnecter »** avec le même compte, en laissant cochée la case des **contacts**. Les Réglages affichent alors « Contacts : accès accordé ».
+
+Sans l'étape 1, la synchronisation affiche « Lecture des contacts Google impossible (… People API has not been used … ) » ; sans les étapes 2 et 3, « Contacts : non accordé — reconnectez-vous ».
 
 Le code secret reste dans `compose.yaml` : il n'est jamais écrit dans la base ni dans les sauvegardes. Le jeton remis par Google est gardé par l'application, mais retiré des sauvegardes. Après une installation neuve, il faut donc se reconnecter ; une restauration sur le même serveur garde la connexion.
 

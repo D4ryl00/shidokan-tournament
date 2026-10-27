@@ -112,9 +112,10 @@ function GoogleForm({ settings }: { settings: PublicAppSettings }) {
           <Group justify="space-between" wrap="wrap" align="flex-start">
             <Stack gap={2}>
               <Text data-testid="google-connected">Connecté : <b>{g.email}</b></Text>
-              {hasContactsScope(g)
-                ? <Text size="sm" c="dimmed" data-testid="google-contacts-scope">Contacts : accès accordé</Text>
-                : <Text size="sm" c="var(--sk-warn-text)" data-testid="google-contacts-scope">Contacts : non accordé — reconnectez-vous</Text>}
+              {/* Accès retiré (« reconnectez-vous » au-dessus) : le droit sur les contacts n'est plus utilisable, rien n'est affiché. */}
+              {!hasContactsScope(g)
+                ? <Text size="sm" c="var(--sk-warn-text)" data-testid="google-contacts-scope">Contacts : non accordé — reconnectez-vous</Text>
+                : g.status === 'ok' && <Text size="sm" c="dimmed" data-testid="google-contacts-scope">Contacts : accès accordé</Text>}
             </Stack>
             <Stack gap={4} align="flex-end" maw={360}>
               <Group gap="xs">
