@@ -1,5 +1,5 @@
 import { CONTACTS_SCOPE } from '../../domain/app-settings.js';
-import type { ContactLabel, GoogleContact } from '../../domain/google-contacts.js';
+import { affiliationFromCustomFields, type ContactLabel, type GoogleContact } from '../../domain/google-contacts.js';
 
 /**
  * Compte Google expéditeur : autorisation OAuth 2.0 (application Web), renouvellement du jeton d'accès, révocation, et envoi d'un
@@ -13,7 +13,7 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
 const SEND_URL = 'https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media';
 const LABELS_URL = 'https://people.googleapis.com/v1/contactGroups?groupFields=name,groupType&pageSize=1000';
-const CONTACTS_URL = 'https://people.googleapis.com/v1/people/me/connections?personFields=names,emailAddresses,phoneNumbers,organizations,memberships&pageSize=1000';
+const CONTACTS_URL = 'https://people.googleapis.com/v1/people/me/connections?personFields=names,emailAddresses,phoneNumbers,organizations,userDefined,memberships&pageSize=1000';
 export const GOOGLE_CALLBACK_PATH = '/api/app-settings/google/callback';
 
 /** Google a retiré l'accès (réponse `invalid_grant`) : il faut se reconnecter. */
@@ -50,6 +50,8 @@ interface Person {
   emailAddresses?: PeopleEntry[];
   phoneNumbers?: PeopleEntry[];
   organizations?: PeopleEntry[];
+  /** Champs personnalisés (« Num affiliation FFK »). */
+  userDefined?: { key?: string; value?: string }[];
   memberships?: { contactGroupMembership?: { contactGroupResourceName?: string } }[];
 }
 
@@ -74,6 +76,7 @@ function toContact(p: Person): GoogleContact {
     emails: allEmails(p.emailAddresses),
     phone: primary(p.phoneNumbers, (e) => e.value),
     organization: primary(p.organizations, (e) => e.name),
+    affiliationNumber: affiliationFromCustomFields(p.userDefined),
     groups: (p.memberships ?? []).map((m) => m.contactGroupMembership?.contactGroupResourceName).filter((g): g is string => !!g),
   };
 }

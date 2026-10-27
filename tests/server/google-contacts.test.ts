@@ -17,7 +17,7 @@ afterEach(async () => {
   await app.close();
 });
 
-const contact = (n: string, extra: Partial<GoogleContact> = {}): GoogleContact => ({ resourceName: `people/${n}`, name: null, emails: [], phone: null, organization: null, groups: [], ...extra });
+const contact = (n: string, extra: Partial<GoogleContact> = {}): GoogleContact => ({ resourceName: `people/${n}`, name: null, emails: [], phone: null, organization: null, affiliationNumber: null, groups: [], ...extra });
 const preview = (payload: object = {}) => app.inject({ method: 'POST', url: '/api/club-directory/google/preview', payload });
 const apply = (payload: object) => app.inject({ method: 'POST', url: '/api/club-directory/google/apply', payload });
 const directory = async () => (await app.inject({ method: 'GET', url: '/api/club-directory' })).json() as any[];
@@ -108,7 +108,7 @@ test('appliquer : différences, lien, création, plus tard', async () => {
   const res = await apply({
     updates: [{ clubId: lilas.id, version: lilasNow.version, set: { coachPhone: '06 22 22 22 22' } }],
     links: [{ clubId: est.id, version: est.version, contact: 'people/c2', set: {} }],
-    creates: [{ contact: 'people/c3', name: 'Kyokushin Sud', coachName: 'Sophie Leroy', coachPhone: null, coachEmails: ['s@ex.fr'] }],
+    creates: [{ contact: 'people/c3', name: 'Kyokushin Sud', coachName: 'Sophie Leroy', coachPhone: null, coachEmails: ['s@ex.fr'], affiliationNumber: null }],
     later: ['people/c4'],
   });
   expect(res.json()).toEqual({ updated: 1, linked: 1, created: 1 });
@@ -163,7 +163,7 @@ test('appliquer : annuaire modifié entre-temps → 409, rien d’écrit', async
   const res = await apply({
     updates: [{ clubId: club.id, version: v, set: { coachName: 'Paul' } }],
     links: [],
-    creates: [{ contact: 'people/c1', name: 'Nouveau', coachName: null, coachPhone: null, coachEmails: [] }],
+    creates: [{ contact: 'people/c1', name: 'Nouveau', coachName: null, coachPhone: null, coachEmails: [], affiliationNumber: null }],
     later: ['people/c9'],
   });
   expect(res.statusCode).toBe(409);
@@ -211,7 +211,52 @@ test('appliquer : valeurs trop longues ou mail invalide refusés', async () => {
 
 test('un contact sans mail ni téléphone : le nouveau club ne reçoit que les champs remplis', async () => {
   await connectGoogle(app);
-  const res = await apply({ ...none, creates: [{ contact: 'people/c1', name: 'Solo', coachName: 'Seul', coachPhone: null, coachEmails: [] }] });
+  const res = await apply({ ...none, creates: [{ contact: 'people/c1', name: 'Solo', coachName: 'Seul', coachPhone: null, coachEmails: [], affiliationNumber: null }] });
   expect(res.statusCode).toBe(200);
   expect((await directory())[0]).toMatchObject({ name: 'Solo', coachName: 'Seul', coachPhone: null, coachEmails: [], googleContactId: 'people/c1' });
+});
+
+test('numéro d’affiliation : lu dans le champ personnalisé Google, rapproche, remplit, crée ; jamais celui d’une autre fiche', async () => {
+  await connectGoogle(app);
+  const issa = await addClub('Issa Kyokushin', { affiliationNumber: '0060808' });
+  const lilas = await addClub('Dojo des Lilas');
+  await addClub('Ancien club', { affiliationNumber: '0060057' });
+  fake.contacts = [
+    contact('c1', { name: 'Issa', affiliationNumber: '0060808' }),
+    contact('c2', { name: 'Lilas', affiliationNumber: '0060893' }),
+    contact('c3', { name: 'Sakura', affiliationNumber: '0060918' }),
+    contact('c4', { name: 'Doublon', affiliationNumber: '0060057' }),
+  ];
+  const p = (await preview()).json().preview;
+  const by = (id: string) => p.newContacts.find((c: any) => c.contact.resourceName === `people/${id}`);
+  expect(by('c1').contact.affiliationNumber).toBe('0060808');
+  expect(by('c1').exact).toEqual({ clubId: issa.id, reason: 'number' });
+  expect(p.numbers['0060057'].name).toBe('Ancien club');
+  const v = (id: string) => p.clubs.find((c: any) => c.id === id).version;
+
+  const ok = await apply({
+    ...none,
+    links: [
+      { clubId: issa.id, version: v(issa.id), contact: 'people/c1', set: {} },
+      { clubId: lilas.id, version: v(lilas.id), contact: 'people/c2', set: { affiliationNumber: '0060893' } },
+    ],
+    creates: [{ contact: 'people/c3', name: 'Sakura Dojo', coachName: null, coachPhone: null, coachEmails: [], affiliationNumber: '0060918' }],
+  });
+  expect(ok.statusCode).toBe(200);
+  const dir = await directory();
+  expect(dir.find((c) => c.name === 'Dojo des Lilas').affiliationNumber).toBe('0060893');
+  expect(dir.find((c) => c.name === 'Sakura Dojo')).toMatchObject({ affiliationNumber: '0060918', googleContactId: 'people/c3' });
+
+  // Numéro d'une autre fiche (archivée ou non) : refusé, rien d'écrit.
+  const after = (await preview()).json().preview;
+  const lilasNow = after.clubs.find((c: any) => c.id === lilas.id);
+  const taken = await apply({ ...none, updates: [{ clubId: lilas.id, version: lilasNow.version, set: { affiliationNumber: '0060057', coachName: 'X' } }] });
+  expect(taken.statusCode).toBe(409);
+  expect(taken.json().error).toContain('Ancien club');
+  const create = await apply({ ...none, creates: [{ contact: 'people/c4', name: 'Doublon', coachName: null, coachPhone: null, coachEmails: [], affiliationNumber: '0060057' }] });
+  expect(create.statusCode).toBe(409);
+  expect((await directory()).find((c) => c.id === lilas.id)).toMatchObject({ affiliationNumber: '0060893', coachName: null });
+  expect((await directory()).some((c) => c.name === 'Doublon')).toBe(false);
+  // Pas 7 chiffres : refusé.
+  expect((await apply({ ...none, updates: [{ clubId: lilas.id, version: lilasNow.version, set: { affiliationNumber: '60893' } }] })).statusCode).toBe(400);
 });

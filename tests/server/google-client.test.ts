@@ -105,14 +105,16 @@ test('autorisation : contacts en lecture seule demandés', () => {
 });
 
 test('contacts : toutes les pages, principal choisi, toutes les adresses (principale en tête), libellés', async () => {
-  fake.contacts = [1, 2, 3, 4, 5].map((i) => ({ resourceName: `people/c${i}`, name: `Coach ${i}`, emails: i === 4 ? [] : [`c${i}@x.org`, `autre${i}@x.org`], phone: i === 2 ? null : `060000000${i}`, organization: i === 3 ? 'Dojo' : null, groups: i === 1 ? ['contactGroups/g1'] : [] }));
+  fake.contacts = [1, 2, 3, 4, 5].map((i) => ({ resourceName: `people/c${i}`, name: `Coach ${i}`, emails: i === 4 ? [] : [`c${i}@x.org`, `autre${i}@x.org`], phone: i === 2 ? null : `060000000${i}`, organization: i === 3 ? 'Dojo' : null, affiliationNumber: i === 5 ? '0060808' : null, groups: i === 1 ? ['contactGroups/g1'] : [] }));
   const rt = (await google.exchangeCode('c')).refreshToken;
   const list = await google.listContacts(rt);
   expect(list).toHaveLength(5);
-  expect(list[0]).toEqual({ resourceName: 'people/c1', name: 'Coach 1', emails: ['c1@x.org', 'autre1@x.org'], phone: '0600000001', organization: null, groups: ['contactGroups/g1'] });
+  expect(list[0]).toEqual({ resourceName: 'people/c1', name: 'Coach 1', emails: ['c1@x.org', 'autre1@x.org'], phone: '0600000001', organization: null, affiliationNumber: null, groups: ['contactGroups/g1'] });
   expect(list[1]!.phone).toBeNull();
   expect(list[2]!.organization).toBe('Dojo');
   expect(list[3]!.emails).toEqual([]);
+  // Champ personnalisé « Num affiliation FFK », après un autre champ personnalisé.
+  expect(list[4]!.affiliationNumber).toBe('0060808');
 });
 
 test('libellés : seulement ceux de l’utilisateur, triés par nom', async () => {
@@ -131,7 +133,7 @@ test('contacts : droit absent → ContactsScopeMissingError ; accès retiré →
   await expect(google.listContacts(rt)).rejects.toBeInstanceOf(ContactsScopeMissingError);
   await expect(google.listContactLabels(rt)).rejects.toBeInstanceOf(ContactsScopeMissingError);
   fake.grantedScopes.push('https://www.googleapis.com/auth/contacts.readonly');
-  fake.contacts = [{ resourceName: 'people/c1', name: 'A', emails: [], phone: null, organization: null, groups: [] }];
+  fake.contacts = [{ resourceName: 'people/c1', name: 'A', emails: [], phone: null, organization: null, affiliationNumber: null, groups: [] }];
   await google.accessToken(rt); // jeton en cache
   fake.revokeAfterSends = 0;
   await expect(google.listContacts(rt)).rejects.toBeInstanceOf(GoogleAccessRevokedError);

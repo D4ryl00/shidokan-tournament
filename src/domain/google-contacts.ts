@@ -5,12 +5,17 @@ import { DIRECTORY_LIMITS } from './registration.js';
 // Calcul pur de la synchronisation des coachs avec Google Contacts.
 // Importé aussi par la page : aucune dépendance au serveur.
 
-/** `emails` : toutes les adresses du contact (la principale en premier), telles que Google les donne, découpées aux virgules. */
-export interface GoogleContact { resourceName: string; name: string | null; emails: string[]; phone: string | null; organization: string | null; groups: string[] }
+/**
+ * `emails` : toutes les adresses du contact (la principale en premier), telles que Google les donne, découpées aux virgules.
+ * `affiliationNumber` : le champ personnalisé « Num affiliation FFK » (voir `affiliationFromCustomFields`).
+ */
+export interface GoogleContact { resourceName: string; name: string | null; emails: string[]; phone: string | null; organization: string | null; affiliationNumber: string | null; groups: string[] }
 export interface ContactLabel { resourceName: string; name: string }
-export type TextField = 'coachName' | 'coachPhone';
+export type TextField = 'coachName' | 'coachPhone' | 'affiliationNumber';
 export type CoachField = TextField | 'coachEmails';
-export interface SyncClub { id: string; name: string; coachName: string | null; coachPhone: string | null; coachEmails: string[]; googleContactId: string | null; version: number | null }
+export interface SyncClub { id: string; name: string; coachName: string | null; coachPhone: string | null; coachEmails: string[]; affiliationNumber: string | null; googleContactId: string | null; version: number | null }
+/** Numéros d'affiliation de l'annuaire, fiches archivées comprises (un numéro est unique) : numéro → fiche qui le porte. */
+export type NumberHolders = Record<string, { clubId: string; name: string }>;
 /**
  * Champ qui diffère entre Google et l'annuaire. Pour les e-mails, `google` liste les adresses Google absentes de la fiche, à
  * ajouter : rien n'est retiré de l'annuaire.
@@ -19,15 +24,16 @@ export type FieldDiff =
   | { field: TextField; directory: string | null; google: string }
   | { field: 'coachEmails'; directory: string[]; google: string[] };
 /** Ce qu'« Appliquer » change dans une fiche : `addEmails` s'ajoute aux adresses de la fiche. */
-export interface CoachSet { coachName?: string; coachPhone?: string; addEmails?: string[] }
+export interface CoachSet { coachName?: string; coachPhone?: string; affiliationNumber?: string; addEmails?: string[] }
 export interface ClubDiff { clubId: string; clubName: string; version: number | null; contact: GoogleContact; fields: FieldDiff[] }
-export interface ContactChoice { contact: GoogleContact; exact: { clubId: string; reason: 'email' | 'phone' } | null; maybe: string[] }
+export interface ContactChoice { contact: GoogleContact; exact: { clubId: string; reason: 'number' | 'email' | 'phone' } | null; maybe: string[] }
 export interface SyncPreview {
   diffs: ClubDiff[];
   newContacts: ContactChoice[];
   pending: ContactChoice[];
   linked: { contact: GoogleContact; clubIds: string[] }[];
   clubs: SyncClub[];
+  numbers: NumberHolders;
 }
 
 export const CONTACTS_NOT_GRANTED = 'Le droit de lire les contacts n’a pas été accordé à l’application. Reconnectez-vous avec Google et laissez la case « contacts » cochée.';
@@ -42,13 +48,45 @@ export function normalizePhone(p: string): string {
   return d;
 }
 
+/** Libellé du champ personnalisé des contacts Google qui porte le numéro d'affiliation FFK (sans « ° », difficile à taper). */
+export const AFFILIATION_FIELD = 'Num affiliation FFK';
+/** Même règle que la fiche de l'annuaire. */
+export const AFFILIATION_PATTERN = /^\d{7}$/;
+
+/**
+ * Numéro d'affiliation d'un contact : la valeur du premier champ personnalisé dont le libellé contient « affiliation »
+ * (« Num affiliation FFK », « N° d’affiliation »…), sans ses espaces ; null s'il n'y en a pas. Une valeur qui n'est pas un
+ * numéro reste telle quelle : `rejectedValues` la signale.
+ */
+export function affiliationFromCustomFields(fields: { key?: string; value?: string }[] | undefined): string | null {
+  const field = (fields ?? []).find((f) => normalizeName(f.key ?? '').includes('AFFILIATION') && f.value?.trim());
+  return field ? field.value!.replace(/\s+/g, '') : null;
+}
+
 const blank = (v: string | null | undefined): v is null | undefined => v === null || v === undefined || v.trim() === '';
-const CONTACT_VALUE: Record<TextField, (c: GoogleContact) => string | null> = { coachName: (c) => c.name, coachPhone: (c) => c.phone };
+const CONTACT_VALUE: Record<TextField, (c: GoogleContact) => string | null> = {
+  coachName: (c) => c.name, coachPhone: (c) => c.phone, affiliationNumber: (c) => c.affiliationNumber,
+};
 
 /** Une valeur Google que la fiche de l'annuaire accepterait (mêmes limites que la saisie). */
 export function isAcceptableCoachValue(field: TextField, value: string): boolean {
   const v = value.trim();
+  if (field === 'affiliationNumber') return AFFILIATION_PATTERN.test(v);
   return v !== '' && v.length <= DIRECTORY_LIMITS[field];
+}
+
+/** Numéro Google acceptable, ou null. */
+const contactNumber = (c: GoogleContact): string | null =>
+  !blank(c.affiliationNumber) && isAcceptableCoachValue('affiliationNumber', c.affiliationNumber) ? c.affiliationNumber.trim() : null;
+
+/**
+ * Fiche qui porte déjà le numéro Google, si ce n'est pas `clubId` (null : un nouveau club) : ce numéro ne peut pas être repris.
+ * Renvoie son nom, sinon null.
+ */
+export function numberConflict(contact: GoogleContact, clubId: string | null, numbers: NumberHolders): string | null {
+  const number = contactNumber(contact);
+  const holder = number ? numbers[number] : undefined;
+  return holder && holder.clubId !== clubId ? holder.name : null;
 }
 
 /** Adresses Google que la fiche accepterait, sans doublon. */
@@ -64,8 +102,11 @@ export function rejectedValues(contact: GoogleContact): { field: CoachField; val
   return [...texts, ...emails];
 }
 
-/** Différences à proposer : un champ Google vide, ou que l'annuaire refuserait, n'en est jamais une. */
-export function fieldDiffs(contact: GoogleContact, club: Pick<SyncClub, CoachField>): FieldDiff[] {
+/**
+ * Différences à proposer : un champ Google vide, ou que l'annuaire refuserait, n'en est jamais une ; ni un numéro d'affiliation
+ * qu'une autre fiche porte déjà (`numberConflict`).
+ */
+export function fieldDiffs(contact: GoogleContact, club: Pick<SyncClub, 'id' | CoachField>, numbers: NumberHolders = {}): FieldDiff[] {
   const out: FieldDiff[] = [];
   const check = (field: TextField, google: string | null, directory: string | null, same: (a: string, b: string) => boolean): void => {
     if (blank(google) || !isAcceptableCoachValue(field, google)) return;
@@ -74,6 +115,7 @@ export function fieldDiffs(contact: GoogleContact, club: Pick<SyncClub, CoachFie
   };
   check('coachName', contact.name, club.coachName, (a, b) => normalizeName(a) === normalizeName(b));
   check('coachPhone', contact.phone, club.coachPhone, (a, b) => normalizePhone(a) === normalizePhone(b));
+  if (!numberConflict(contact, club.id, numbers)) check('affiliationNumber', contact.affiliationNumber, club.affiliationNumber, (a, b) => a.trim() === b.trim());
   const added = missingEmails(club.coachEmails, contactEmails(contact));
   if (added.length) out.push({ field: 'coachEmails', directory: club.coachEmails, google: added });
   return out;
@@ -98,6 +140,8 @@ function contactLabel(c: GoogleContact): string {
 export function syncPreview(contacts: GoogleContact[], clubs: (SyncClub & { archived: boolean })[], pending: string[]): SyncPreview {
   const active: SyncClub[] = clubs.filter((c) => !c.archived).map(({ archived: _a, ...c }) => c).sort(byName);
   const pendingIds = new Set(pending);
+  const numbers: NumberHolders = {};
+  for (const c of clubs) if (c.affiliationNumber) numbers[c.affiliationNumber] = { clubId: c.id, name: c.name };
 
   const linksByContact = new Map<string, SyncClub[]>();
   for (const club of active) {
@@ -113,10 +157,15 @@ export function syncPreview(contacts: GoogleContact[], clubs: (SyncClub & { arch
     // Une adresse en commun suffit.
     const sharesEmail = (c: SyncClub): boolean => c.coachEmails.some((a) => emails.some((b) => sameEmail(a, b)));
     const samePhone = (c: SyncClub): boolean => !!phone && !blank(c.coachPhone) && normalizePhone(c.coachPhone) === phone;
+    const number = contactNumber(contact);
+    const sameNumber = (c: SyncClub): boolean => !!number && c.affiliationNumber === number;
     // Un club déjà lié à un autre contact n'est jamais proposé d'office : « Appliquer » remplacerait ce lien sans qu'on l'ait choisi.
     const free = (c: SyncClub): boolean => !c.googleContactId || c.googleContactId === contact.resourceName;
+    // Le numéro d'affiliation reconnaît un club à coup sûr ; puis une adresse, puis le téléphone.
     let exact: ContactChoice['exact'] = null;
-    const byEmail = active.find((c) => free(c) && sharesEmail(c));
+    const byNumber = active.find((c) => free(c) && sameNumber(c));
+    if (byNumber) exact = { clubId: byNumber.id, reason: 'number' };
+    const byEmail = exact ? undefined : active.find((c) => free(c) && sharesEmail(c));
     if (byEmail) exact = { clubId: byEmail.id, reason: 'email' };
     const byPhone = exact ? undefined : active.find((c) => free(c) && samePhone(c));
     if (byPhone) exact = { clubId: byPhone.id, reason: 'phone' };
@@ -125,7 +174,7 @@ export function syncPreview(contacts: GoogleContact[], clubs: (SyncClub & { arch
     const maybe = active
       .filter((c) => c.id !== exact?.clubId)
       .filter((c) => (person && !blank(c.coachName) && normalizeName(c.coachName) === person) || (org && normalizeName(c.name) === org)
-        || (!free(c) && (sharesEmail(c) || samePhone(c))))
+        || (!free(c) && (sharesEmail(c) || samePhone(c) || sameNumber(c))))
       .map((c) => c.id);
     return { contact, exact, maybe };
   };
@@ -139,7 +188,7 @@ export function syncPreview(contacts: GoogleContact[], clubs: (SyncClub & { arch
     if (links) {
       linked.push({ contact, clubIds: links.map((c) => c.id) });
       for (const club of links) {
-        const fields = fieldDiffs(contact, club);
+        const fields = fieldDiffs(contact, club, numbers);
         if (fields.length) diffs.push({ clubId: club.id, clubName: club.name, version: club.version, contact, fields });
       }
     } else if (pendingIds.has(contact.resourceName)) {
@@ -151,7 +200,7 @@ export function syncPreview(contacts: GoogleContact[], clubs: (SyncClub & { arch
   const byLabel = (a: ContactChoice, b: ContactChoice): number =>
     normalizeName(contactLabel(a.contact)).localeCompare(normalizeName(contactLabel(b.contact)), 'fr');
   diffs.sort((a, b) => normalizeName(a.clubName).localeCompare(normalizeName(b.clubName), 'fr'));
-  return { diffs, newContacts: newContacts.sort(byLabel), pending: pendingOut.sort(byLabel), linked, clubs: active };
+  return { diffs, newContacts: newContacts.sort(byLabel), pending: pendingOut.sort(byLabel), linked, clubs: active, numbers };
 }
 
 /** Réponse de l'aperçu de la synchronisation. */
@@ -163,7 +212,7 @@ export type GoogleContactsView =
 export interface SyncApply {
   updates: { clubId: string; version: number | null; set: CoachSet }[];
   links: { clubId: string; version: number | null; contact: string; set: CoachSet }[];
-  creates: { contact: string; name: string; coachName: string | null; coachPhone: string | null; coachEmails: string[] }[];
+  creates: { contact: string; name: string; coachName: string | null; coachPhone: string | null; coachEmails: string[]; affiliationNumber: string | null }[];
   /** Contacts choisis « Plus tard » cette fois. */
   later: string[];
 }

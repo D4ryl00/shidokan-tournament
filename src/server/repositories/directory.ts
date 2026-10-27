@@ -27,7 +27,7 @@ function getRow(db: AppDb, id: string): Row {
 }
 
 /** Refuse un numéro d'affiliation déjà porté par une autre fiche. */
-function checkNumber(db: AppDb, number: string | null | undefined, selfId: string | null): void {
+export function checkNumber(db: AppDb, number: string | null | undefined, selfId: string | null): void {
   if (!number) return;
   const holder = db.select().from(clubDirectory).where(eq(clubDirectory.affiliationNumber, number)).get();
   if (holder && holder.id !== selfId) throw new DirectoryConflictError(`Ce numéro d’affiliation est déjà celui de « ${holder.name} ».`);

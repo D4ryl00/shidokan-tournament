@@ -3,9 +3,9 @@ import type { GoogleContact, SyncClub, SyncPreview } from '../../src/domain/goog
 import { applyButtonLabel, buildApply, diffKey, initialChoices, type SyncChoices } from '../../src/web/googleSync.js';
 
 const contact = (id: string, extra: Partial<GoogleContact> = {}): GoogleContact =>
-  ({ resourceName: `people/${id}`, name: null, emails: [], phone: null, organization: null, groups: [], ...extra });
+  ({ resourceName: `people/${id}`, name: null, emails: [], phone: null, organization: null, affiliationNumber: null, groups: [], ...extra });
 const club = (id: string, extra: Partial<SyncClub> = {}): SyncClub =>
-  ({ id, name: id, coachName: null, coachPhone: null, coachEmails: [], googleContactId: null, version: 1, ...extra });
+  ({ id, name: id, coachName: null, coachPhone: null, coachEmails: [], affiliationNumber: null, googleContactId: null, version: 1, ...extra });
 
 const marc = contact('marc', { name: 'Marc', phone: '06 55 66 77 88', emails: ['marc@exemple.fr'] });
 const paul = contact('paul', { name: 'Paul', emails: ['paul@exemple.fr', 'paul.perso@exemple.fr'], phone: '07 00 00 00 00' });
@@ -28,6 +28,7 @@ const preview: SyncPreview = {
     club('est', { coachName: 'P. Martin', coachEmails: ['paul@exemple.fr'], version: 5 }),
     club('nord', { version: 7 }),
   ],
+  numbers: {},
 };
 
 test('au départ : différences cochées, lien sur la concordance exacte, sinon « Plus tard » ; en attente : « Plus tard »', () => {
@@ -65,7 +66,7 @@ test('nouveau club : sans nom, le bouton est bloqué ; avec un nom, la fiche re�
   c.plans['people/sophie'] = { ...c.plans['people/sophie']!, name: ' Dojo Sud ' };
   const r = buildApply(preview, c);
   expect(r.missingName).toBe(false);
-  expect(r.apply.creates).toEqual([{ contact: 'people/sophie', name: 'Dojo Sud', coachName: 'Sophie', coachPhone: null, coachEmails: [] }]);
+  expect(r.apply.creates).toEqual([{ contact: 'people/sophie', name: 'Dojo Sud', coachName: 'Sophie', coachPhone: null, coachEmails: [], affiliationNumber: null }]);
   expect(r.apply.later).toEqual([]);
   expect(applyButtonLabel(r)).toBe('Appliquer : 2 différences, 1 lien, 1 nouveau club');
 });
@@ -104,7 +105,7 @@ test('valeur Google que l’annuaire refuserait : ni envoyée au lien, ni au nou
   c.plans['people/bad'] = { ...c.plans['people/bad']!, mode: 'link', clubs: ['nord'] };
   expect(buildApply(p, c).apply.links).toEqual([{ clubId: 'nord', version: 7, contact: 'people/bad', set: { coachName: 'Zoé Mail' } }]);
   c.plans['people/bad'] = { ...c.plans['people/bad']!, mode: 'create', name: 'Dojo Zoé' };
-  expect(buildApply(p, c).apply.creates).toEqual([{ contact: 'people/bad', name: 'Dojo Zoé', coachName: 'Zoé Mail', coachPhone: null, coachEmails: [] }]);
+  expect(buildApply(p, c).apply.creates).toEqual([{ contact: 'people/bad', name: 'Dojo Zoé', coachName: 'Zoé Mail', coachPhone: null, coachEmails: [], affiliationNumber: null }]);
 });
 
 test('nouveau club : toutes les adresses valides du contact, sans doublon', () => {
@@ -112,5 +113,26 @@ test('nouveau club : toutes les adresses valides du contact, sans doublon', () =
   const p: SyncPreview = { ...preview, diffs: [], linked: [], pending: [], newContacts: [{ contact: multi, exact: null, maybe: [] }] };
   const c = initialChoices(p);
   c.plans['people/multi'] = { ...c.plans['people/multi']!, mode: 'create', name: 'Dojo Léa' };
-  expect(buildApply(p, c).apply.creates).toEqual([{ contact: 'people/multi', name: 'Dojo Léa', coachName: 'Léa', coachPhone: null, coachEmails: ['lea@dojo.fr', 'club@dojo.fr'] }]);
+  expect(buildApply(p, c).apply.creates).toEqual([{ contact: 'people/multi', name: 'Dojo Léa', coachName: 'Léa', coachPhone: null, coachEmails: ['lea@dojo.fr', 'club@dojo.fr'], affiliationNumber: null }]);
+});
+
+test('numéro d’affiliation : rempli au lien et à la création ; celui d’une autre fiche n’est jamais envoyé', () => {
+  const sakura = contact('sakura', { name: 'Sakura', affiliationNumber: '0060918' });
+  const issa = contact('issa', { name: 'Issa', affiliationNumber: '0060808' });
+  const p: SyncPreview = {
+    ...preview, diffs: [], linked: [], pending: [],
+    newContacts: [{ contact: sakura, exact: null, maybe: [] }, { contact: issa, exact: null, maybe: [] }],
+    clubs: [...preview.clubs, club('issa-club', { affiliationNumber: '0060808' })],
+    numbers: { '0060808': { clubId: 'issa-club', name: 'issa-club' } },
+  };
+  const c = initialChoices(p);
+  c.plans['people/sakura'] = { ...c.plans['people/sakura']!, mode: 'link', clubs: ['nord'] };
+  c.plans['people/issa'] = { ...c.plans['people/issa']!, mode: 'link', clubs: ['est'] };
+  expect(buildApply(p, c).apply.links).toEqual([
+    { clubId: 'nord', version: 7, contact: 'people/sakura', set: { coachName: 'Sakura', affiliationNumber: '0060918' } },
+    { clubId: 'est', version: 5, contact: 'people/issa', set: { coachName: 'Issa' } },
+  ]);
+  c.plans['people/sakura'] = { ...c.plans['people/sakura']!, mode: 'create', name: 'Sakura Dojo' };
+  c.plans['people/issa'] = { ...c.plans['people/issa']!, mode: 'create', name: 'Issa bis' };
+  expect(buildApply(p, c).apply.creates.map((x) => x.affiliationNumber)).toEqual(['0060918', null]);
 });

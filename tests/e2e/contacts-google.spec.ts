@@ -26,6 +26,7 @@ test('annuaire : synchroniser avec Google — différences, lien suggéré, nouv
   await expect(paul.getByRole('radio', { name: 'Lier à un club' })).toBeChecked();
   const sophie = page.getByTestId('contact-card').filter({ hasText: 'Sophie Leroy' });
   await expect(sophie.getByRole('radio', { name: 'Plus tard' })).toBeChecked();
+  await expect(sophie.getByText('N° 0060918')).toBeVisible();
 
   // Nouveau club : sans nom, rien ne part.
   await sophie.getByRole('radio', { name: 'Nouveau club' }).check();
@@ -43,7 +44,7 @@ test('annuaire : synchroniser avec Google — différences, lien suggéré, nouv
   expect(applied).toEqual([{
     updates: [],
     links: [{ clubId: 'c-est', version: 5, contact: 'people/paul', set: {} }],
-    creates: [{ contact: 'people/sophie', name: 'Kyokushin Sud', coachName: 'Sophie Leroy', coachPhone: '07 12 34 56 78', coachEmails: [] }],
+    creates: [{ contact: 'people/sophie', name: 'Kyokushin Sud', coachName: 'Sophie Leroy', coachPhone: '07 12 34 56 78', coachEmails: [], affiliationNumber: '0060918' }],
     later: [],
   }]);
   // Nouvel aperçu après l'application.
@@ -149,10 +150,10 @@ test('annuaire : nouveau club sans nom, le bouton bloqué dit pourquoi, même re
   await expect(apply).toBeEnabled();
 });
 
-test('annuaire : club déjà lié proposé « peut-être », valeur Google refusée signalée et non envoyée', async ({ page }) => {
+test('annuaire : club déjà lié proposé « peut-être », valeur Google refusée ou numéro d’une autre fiche signalés et non envoyés', async ({ page }) => {
   const base = GOOGLE_PREVIEW.preview;
   const paul = base.newContacts[0]!.contact;
-  const bad = { ...paul, resourceName: 'people/bad', name: 'Bruno Double', emails: ['"Bruno" <b@x.fr>'], phone: '06 00 00 00 00' };
+  const bad = { ...paul, resourceName: 'people/bad', name: 'Bruno Double', emails: ['"Bruno" <b@x.fr>'], phone: '06 00 00 00 00', affiliationNumber: '0060808' };
   const marc = base.linked[0]!.contact;
   const marcBad = { ...marc, emails: ['m1 chez x.fr'] };
   const preview = {
@@ -164,6 +165,7 @@ test('annuaire : club déjà lié proposé « peut-être », valeur Google refus
       pending: [],
       // Bruno : même téléphone que Dojo des Lilas, déjà lié à Marc → seulement « peut-être ».
       newContacts: [{ contact: bad, exact: null, maybe: ['c-lilas'] }],
+      numbers: { '0060808': { clubId: 'c-ancien', name: 'Ancien club' } },
     },
   };
   const { applied } = await mockGoogleContacts(page, preview);
@@ -175,12 +177,13 @@ test('annuaire : club déjà lié proposé « peut-être », valeur Google refus
   await expect(page.getByTestId('google-rejected-diff')).toHaveText('Dojo des Lilas · E-mails — valeur Google non reprise : m1 chez x.fr');
   await card.getByRole('radio', { name: 'Nouveau club' }).check();
   await card.getByRole('textbox', { name: 'Nom du club' }).fill('Dojo Bruno');
+  await expect(card.getByText('N° d’affiliation — valeur Google non reprise : 0060808 (déjà celui de « Ancien club »)')).toBeVisible();
   await page.getByTestId('google-apply').click();
   await expect(page.getByText('Annuaire mis à jour.')).toBeVisible();
   expect(applied).toEqual([{
     updates: [{ clubId: 'c-lilas', version: 3, set: { coachPhone: '06 55 66 77 88' } }],
     links: [],
-    creates: [{ contact: 'people/bad', name: 'Dojo Bruno', coachName: 'Bruno Double', coachPhone: '06 00 00 00 00', coachEmails: [] }],
+    creates: [{ contact: 'people/bad', name: 'Dojo Bruno', coachName: 'Bruno Double', coachPhone: '06 00 00 00 00', coachEmails: [], affiliationNumber: null }],
     later: [],
   }]);
 });

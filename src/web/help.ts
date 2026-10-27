@@ -96,13 +96,14 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     details: [
       'Choisissez un libellé de vos contacts Google (par exemple « Coachs »), ou « Tous les contacts ». Le dernier libellé choisi est repris la fois suivante.',
       [
-        'Différences avec l’annuaire : pour chaque club lié à un contact, le coach, le téléphone et les adresses e-mail qui diffèrent. Google l’emporte : chaque ligne est cochée.',
+        'Différences avec l’annuaire : pour chaque club lié à un contact, le coach, le téléphone, les adresses e-mail et le numéro d’affiliation qui diffèrent. Google l’emporte : chaque ligne est cochée.',
+        'Le numéro d’affiliation FFK se met dans le contact Google en champ personnalisé : « Modifier », « Plus », « Ajouter un champ personnalisé », valeur 0060808 (7 chiffres), libellé « Num affiliation FFK ». Un numéro que porte déjà un autre club de l’annuaire n’est jamais repris : il est signalé.',
         'Toutes les adresses e-mail d’un contact sont lues. Celles qui manquent dans l’annuaire sont proposées en ajout (« + adresse ») : une adresse de l’annuaire absente de Google n’est jamais retirée.',
         'Décochez une ligne pour garder la valeur de l’annuaire. Cela ne vaut que cette fois : la même différence revient à la synchronisation suivante, tant que Google et l’annuaire ne concordent pas.',
         'Un champ vide dans Google n’efface jamais l’annuaire ; deux numéros écrits autrement (espaces, +33) ne sont pas une différence ; une adresse que l’annuaire refuserait est signalée « valeur Google non reprise ».',
       ],
       [
-        'Nouveaux contacts : « Lier à un club » choisit le club de l’annuaire de ce coach. Le club qui a une adresse e-mail en commun, sinon le même téléphone, est déjà choisi ; un nom qui ressemble est seulement proposé (« Peut-être : … ? »).',
+        'Nouveaux contacts : « Lier à un club » choisit le club de l’annuaire de ce coach. Le club au même numéro d’affiliation, sinon celui qui a une adresse e-mail en commun, sinon le même téléphone, est déjà choisi ; un nom qui ressemble est seulement proposé (« Peut-être : … ? »).',
         '« Nouveau club » crée une fiche avec le nom saisi et les coordonnées du contact. « + Lier aussi à un autre club » sert au coach qui tient deux clubs.',
         '« Plus tard » : à l’application, le contact est rangé dans « En attente d’un rattachement », repliée, où les mêmes choix restent possibles.',
         '« Contacts déjà liés » permet de lier un contact à un club de plus. Pour retirer un lien : « Ne plus synchroniser avec Google » dans l’annuaire.',

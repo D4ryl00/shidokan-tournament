@@ -139,6 +139,8 @@ export function fakeGoogle(): FakeGoogle {
         }
         if (u.pathname === '/v1/people/me/connections') {
           const { items, nextPageToken } = page(fake.contacts);
+          // Comme l'API People : un champ non demandé dans personFields n'est pas renvoyé.
+          const asked = (u.searchParams.get('personFields') ?? '').split(',');
           return json(200, {
             connections: items.map((c) => ({
               resourceName: c.resourceName,
@@ -147,6 +149,8 @@ export function fakeGoogle(): FakeGoogle {
               emailAddresses: c.emails.length ? [...c.emails.slice(1).map((value) => ({ value })), { value: c.emails[0], metadata: { primary: true } }] : undefined,
               phoneNumbers: c.phone ? [{ value: c.phone, metadata: { primary: true } }] : undefined,
               organizations: c.organization ? [{ name: c.organization }] : undefined,
+              // Comme dans Google Contacts : un autre champ personnalisé avant celui du numéro.
+              userDefined: c.affiliationNumber && asked.includes('userDefined') ? [{ key: 'Ceinture', value: 'noire' }, { key: 'Num affiliation FFK', value: c.affiliationNumber }] : undefined,
               memberships: c.groups.map((g) => ({ contactGroupMembership: { contactGroupResourceName: g } })),
             })),
             nextPageToken,

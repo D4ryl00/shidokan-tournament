@@ -1,4 +1,4 @@
-import { applyDiff, contactEmails, fieldDiffs, fillsEmpty, isAcceptableCoachValue, type CoachField, type FieldDiff, type GoogleContact, type SyncApply, type SyncClub, type SyncPreview, type TextField } from '../domain/google-contacts.js';
+import { applyDiff, contactEmails, fieldDiffs, fillsEmpty, isAcceptableCoachValue, numberConflict, type CoachField, type FieldDiff, type GoogleContact, type NumberHolders, type SyncApply, type SyncClub, type SyncPreview, type TextField } from '../domain/google-contacts.js';
 import { EMAIL_LIMITS } from '../domain/emails.js';
 import { plural } from '../domain/plural.js';
 import { DIRECTORY_LIMITS } from '../domain/registration.js';
@@ -46,8 +46,8 @@ export function initialChoices(p: SyncPreview): SyncChoices {
 }
 
 /** Sous un club choisi : les champs qui diffèrent (une case chacun) et ceux que Google remplit dans une fiche vide. */
-export function linkFields(contact: GoogleContact, club: SyncClub): { boxes: FieldDiff[]; fills: FieldDiff[] } {
-  const all = fieldDiffs(contact, club);
+export function linkFields(contact: GoogleContact, club: SyncClub, numbers: NumberHolders): { boxes: FieldDiff[]; fills: FieldDiff[] } {
+  const all = fieldDiffs(contact, club, numbers);
   return { boxes: all.filter((f) => !fillsEmpty(f)), fills: all.filter(fillsEmpty) };
 }
 
@@ -93,7 +93,7 @@ export function buildApply(p: SyncPreview, choices: SyncChoices): ApplyPlan {
       const club = clubs.get(clubId);
       if (!club) continue;
       const set: SyncApply['links'][number]['set'] = {};
-      const { boxes, fills } = linkFields(contact, club);
+      const { boxes, fills } = linkFields(contact, club, p.numbers);
       for (const f of fills) applyDiff(set, f);
       for (const f of boxes) {
         if (plan.kept.includes(diffKey(clubId, f.field))) kept++;
@@ -104,7 +104,9 @@ export function buildApply(p: SyncPreview, choices: SyncChoices): ApplyPlan {
     if (plan.mode === 'create') {
       const name = plan.name.trim();
       if (!name) missingName = true;
-      else apply.creates.push({ contact: contact.resourceName, name, coachName: filled('coachName', contact.name), coachPhone: filled('coachPhone', contact.phone), coachEmails: contactEmails(contact).slice(0, EMAIL_LIMITS.count) });
+      else apply.creates.push({ contact: contact.resourceName, name, coachName: filled('coachName', contact.name), coachPhone: filled('coachPhone', contact.phone), coachEmails: contactEmails(contact).slice(0, EMAIL_LIMITS.count),
+        // Le numéro d'une autre fiche n'est pas repris (l'écran le signale).
+        affiliationNumber: numberConflict(contact, null, p.numbers) ? null : filled('affiliationNumber', contact.affiliationNumber) });
     }
     if (plan.mode === 'later' && newIds.has(contact.resourceName)) apply.later.push(contact.resourceName);
   }

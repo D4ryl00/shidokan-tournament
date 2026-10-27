@@ -1,15 +1,15 @@
 import { expect, test } from 'vitest';
 import {
-  applyDiff, contactEmails, fieldDiffs, fillsEmpty, isAcceptableCoachValue, normalizePhone, rejectedValues, syncPreview,
+  affiliationFromCustomFields, applyDiff, contactEmails, fieldDiffs, fillsEmpty, isAcceptableCoachValue, normalizePhone, numberConflict, rejectedValues, syncPreview,
   type CoachSet, type GoogleContact, type SyncClub,
 } from '../../src/domain/google-contacts.js';
 import { DIRECTORY_LIMITS } from '../../src/domain/registration.js';
 
 const contact = (o: Partial<GoogleContact> & { resourceName: string }): GoogleContact => ({
-  name: null, emails: [], phone: null, organization: null, groups: [], ...o,
+  name: null, emails: [], phone: null, organization: null, affiliationNumber: null, groups: [], ...o,
 });
 const club = (o: Partial<SyncClub & { archived: boolean }> & { id: string; name: string }): SyncClub & { archived: boolean } => ({
-  coachName: null, coachPhone: null, coachEmails: [], googleContactId: null, version: 1, archived: false, ...o,
+  coachName: null, coachPhone: null, coachEmails: [], affiliationNumber: null, googleContactId: null, version: 1, archived: false, ...o,
 });
 
 test('téléphones équivalents', () => {
@@ -19,12 +19,12 @@ test('téléphones équivalents', () => {
 
 test('différences : vide Google ignoré, vide annuaire comblé, écritures équivalentes ignorées', () => {
   const c = contact({ resourceName: 'people/c1', name: 'Julie Petit', emails: ['JULIE@ex.fr'], phone: '+33 6 11 22 33 44' });
-  expect(fieldDiffs(c, { coachName: 'J. Petit', coachPhone: '06 11 22 33 44', coachEmails: [] })).toEqual([
+  expect(fieldDiffs(c, { id: 'k1', coachName: 'J. Petit', coachPhone: '06 11 22 33 44', coachEmails: [], affiliationNumber: null })).toEqual([
     { field: 'coachName', directory: 'J. Petit', google: 'Julie Petit' },
     { field: 'coachEmails', directory: [], google: ['JULIE@ex.fr'] },
   ]);
   const vide = contact({ resourceName: 'people/c1' });
-  expect(fieldDiffs(vide, { coachName: 'X', coachPhone: '0611223344', coachEmails: ['a@b.fr'] })).toEqual([]);
+  expect(fieldDiffs(vide, { id: 'k1', coachName: 'X', coachPhone: '0611223344', coachEmails: ['a@b.fr'], affiliationNumber: '0060808' })).toEqual([]);
 });
 
 test('aperçu : club lié → différences ; club archivé ignoré', () => {
@@ -126,7 +126,7 @@ test('valeur Google que l’annuaire refuserait : ni différence, ni remplissage
   expect(isAcceptableCoachValue('coachName', '  ')).toBe(false);
 
   const c = contact({ resourceName: 'people/c1', name: 'x'.repeat(121), emails: ['"Paul" <p@x.fr>'], phone: '06 11 22 33 44' });
-  expect(fieldDiffs(c, { coachName: 'Paul', coachPhone: '01 00 00 00 00', coachEmails: [] })).toEqual([
+  expect(fieldDiffs(c, { id: 'k1', coachName: 'Paul', coachPhone: '01 00 00 00 00', coachEmails: [], affiliationNumber: null })).toEqual([
     { field: 'coachPhone', directory: '01 00 00 00 00', google: '06 11 22 33 44' },
   ]);
   expect(rejectedValues(c)).toEqual([
@@ -152,4 +152,53 @@ test('plusieurs adresses : une en commun suffit au rapprochement ; seules celles
   expect(fieldDiffs(contact({ resourceName: 'people/c2', emails: ['coach@lilas.fr'] }), k)).toEqual([]);
   expect(fillsEmpty(fieldDiffs(c, { ...k, coachEmails: [] })[0]!)).toBe(true);
   expect(contactEmails(c)).toEqual(['pres@lilas.fr', 'COACH@lilas.fr']);
+});
+
+test('numéro d’affiliation : lu dans le champ personnalisé « Num affiliation FFK » (libellé écrit librement), espaces retirés', () => {
+  expect(affiliationFromCustomFields([{ key: 'Num affiliation FFK', value: ' 006 0808 ' }])).toBe('0060808');
+  expect(affiliationFromCustomFields([{ key: 'Autre', value: '1' }, { key: 'N° d’affiliation ffk', value: '0060057' }])).toBe('0060057');
+  expect(affiliationFromCustomFields([{ key: 'NUM AFFILIATION', value: '0060057' }])).toBe('0060057');
+  expect(affiliationFromCustomFields([{ key: 'Ceinture', value: 'noire' }])).toBeNull();
+  expect(affiliationFromCustomFields([{ key: 'Num affiliation FFK', value: '  ' }])).toBeNull();
+  expect(affiliationFromCustomFields(undefined)).toBeNull();
+  // Valeur que l'annuaire refuserait : gardée telle quelle, signalée, jamais reprise.
+  expect(affiliationFromCustomFields([{ key: 'Num affiliation FFK', value: '60808' }])).toBe('60808');
+  const c = contact({ resourceName: 'people/c1', affiliationNumber: '60808' });
+  expect(rejectedValues(c)).toEqual([{ field: 'affiliationNumber', value: '60808' }]);
+  expect(fieldDiffs(c, { id: 'k1', coachName: null, coachPhone: null, coachEmails: [], affiliationNumber: null })).toEqual([]);
+});
+
+test('numéro d’affiliation : rapproche à coup sûr, avant le mail ; différence proposée ; jamais celui d’une autre fiche', () => {
+  const clubs = [
+    club({ id: 'k1', name: 'Dojo A', coachEmails: ['julie@ex.fr'] }),
+    club({ id: 'k2', name: 'Issa Kyokushin', affiliationNumber: '0060808' }),
+    club({ id: 'k3', name: 'Ancien club', affiliationNumber: '0060057', archived: true }),
+  ];
+  const c = contact({ resourceName: 'people/c1', emails: ['julie@ex.fr'], affiliationNumber: '0060808' });
+  const p = syncPreview([c], clubs, []);
+  expect(p.newContacts[0]!.exact).toEqual({ clubId: 'k2', reason: 'number' });
+  expect(p.newContacts[0]!.maybe).toEqual([]);
+  // Fiches archivées comprises : le numéro est unique dans tout l'annuaire.
+  expect(p.numbers).toEqual({ '0060808': { clubId: 'k2', name: 'Issa Kyokushin' }, '0060057': { clubId: 'k3', name: 'Ancien club' } });
+
+  const k1 = { ...clubs[0]!, affiliationNumber: '0000001' };
+  expect(fieldDiffs(c, k1)).toEqual([{ field: 'affiliationNumber', directory: '0000001', google: '0060808' }]);
+  expect(fieldDiffs(c, { ...k1, affiliationNumber: null }, {})).toEqual([{ field: 'affiliationNumber', directory: null, google: '0060808' }]);
+  const set: CoachSet = {};
+  applyDiff(set, fieldDiffs(c, k1)[0]!);
+  expect(set).toEqual({ affiliationNumber: '0060808' });
+  // Lié à k1 alors que k2 porte ce numéro : pas de différence, mais un conflit signalé.
+  expect(fieldDiffs(c, k1, p.numbers)).toEqual([]);
+  expect(fieldDiffs(c, { ...k1, affiliationNumber: null }, p.numbers)).toEqual([]);
+  expect(numberConflict(c, 'k1', p.numbers)).toBe('Issa Kyokushin');
+  expect(numberConflict(c, 'k2', p.numbers)).toBeNull();
+  expect(numberConflict(c, null, p.numbers)).toBe('Issa Kyokushin');
+  expect(numberConflict(contact({ resourceName: 'people/c2', affiliationNumber: '0060057' }), 'k1', p.numbers)).toBe('Ancien club');
+
+  const linked = syncPreview([c], [club({ ...clubs[0]!, googleContactId: 'people/c1' }), clubs[1]!], []);
+  expect(linked.diffs).toEqual([]);
+  // Club au même numéro déjà lié à un autre contact : seulement « peut-être ».
+  const taken = syncPreview([c], [club({ id: 'k2', name: 'Issa', affiliationNumber: '0060808', googleContactId: 'people/autre' })], []);
+  expect(taken.newContacts[0]!.exact).toBeNull();
+  expect(taken.newContacts[0]!.maybe).toEqual(['k2']);
 });

@@ -2,12 +2,12 @@ import { Accordion, Alert, Anchor, Button, Center, Checkbox, Group, Loader, Sele
 import { notifications } from '@mantine/notifications';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { CONTACTS_NOT_GRANTED, DIRECTORY_CHANGED, rejectedValues, type ContactChoice, type GoogleContact, type SyncApply, type SyncPreview } from '../../domain/google-contacts.js';
+import { CONTACTS_NOT_GRANTED, DIRECTORY_CHANGED, numberConflict, rejectedValues, type ContactChoice, type GoogleContact, type SyncApply, type SyncPreview } from '../../domain/google-contacts.js';
 import { plural } from '../../domain/plural.js';
 import { ApiError, useApplyGoogleContacts, useGoogleContactsPreview } from '../api.js';
 import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
-import { contactName, diffText, FIELD_LABEL, GoogleContactCard, rejectedText } from '../components/GoogleContactCard.js';
+import { conflictText, contactName, diffText, FIELD_LABEL, GoogleContactCard, rejectedText } from '../components/GoogleContactCard.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
 import { TableCard } from '../components/ui/TableCard.js';
@@ -86,15 +86,21 @@ function SyncForm({ preview: p, busy, pending, onApply, error }: { preview: Sync
     const current = choices.plans[contact.resourceName];
     return current && (
       <GoogleContactCard key={contact.resourceName} contact={contact} choice={extra.choice} linkedTo={extra.linkedTo} plan={current}
-        onChange={setPlan(contact.resourceName)} clubs={p.clubs} names={names} />
+        onChange={setPlan(contact.resourceName)} clubs={p.clubs} numbers={p.numbers} names={names} />
     );
   };
   const rows = p.diffs.flatMap((d) => d.fields.map((f) => ({ d, f, key: diffKey(d.clubId, f.field) })));
   const clubName = new Map(p.clubs.map((c) => [c.id, c.name]));
-  // Valeurs Google des contacts liés que l'annuaire refuserait : jamais reprises, signalées sous les différences.
-  const rejected = p.linked.flatMap((l) => rejectedValues(l.contact).map((r) => ({
-    key: `${l.contact.resourceName}:${r.field}:${r.value}`, text: `${l.clubIds.map((id) => clubName.get(id) ?? '—').join(', ')} · ${rejectedText(r)}`,
-  })));
+  // Valeurs Google des contacts liés que l'annuaire refuserait, ou numéro d'une autre fiche : jamais repris, signalés sous les différences.
+  const rejected = p.linked.flatMap((l) => [
+    ...rejectedValues(l.contact).map((r) => ({
+      key: `${l.contact.resourceName}:${r.field}:${r.value}`, text: `${l.clubIds.map((id) => clubName.get(id) ?? '—').join(', ')} · ${rejectedText(r)}`,
+    })),
+    ...l.clubIds.flatMap((id) => {
+      const holder = numberConflict(l.contact, id, p.numbers);
+      return holder ? [{ key: `${l.contact.resourceName}:${id}:number`, text: `${clubName.get(id) ?? '—'} · ${conflictText(l.contact, holder)}` }] : [];
+    }),
+  ]);
   const unnamed = Object.entries(choices.plans).filter(([, pl]) => pl.mode === 'create' && !pl.name.trim()).map(([id]) => names.get(id) ?? 'Contact sans nom');
 
   return (

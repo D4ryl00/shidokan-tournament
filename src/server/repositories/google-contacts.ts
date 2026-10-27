@@ -6,7 +6,7 @@ import type { AppDb } from '../db/client.js';
 import { clubDirectory } from '../db/schema.js';
 import { ContactsScopeMissingError, GoogleAccessRevokedError, type GoogleClient } from '../google/client.js';
 import { getAppSettings, markGoogleRevoked, setGoogleContactsState } from './app-settings.js';
-import { createDirectoryEntry, DirectoryConflictError } from './directory.js';
+import { checkNumber, createDirectoryEntry, DirectoryConflictError } from './directory.js';
 
 /**
  * Refus de la synchronisation, montré tel quel à l'écran : 409 (compte à connecter ou à reconnecter),
@@ -47,7 +47,7 @@ export async function googleContactsPreview(db: AppDb, google: GoogleClient, lab
   const chosen = wanted && labels.some((l) => l.resourceName === wanted) ? wanted : null;
   const kept = chosen ? contacts.filter((c) => c.groups.includes(chosen)) : contacts;
   const rows = db.select().from(clubDirectory).all().map((r) => ({
-    id: r.id, name: r.name, coachName: r.coachName, coachPhone: r.coachPhone, coachEmails: r.coachEmails,
+    id: r.id, name: r.name, coachName: r.coachName, coachPhone: r.coachPhone, coachEmails: r.coachEmails, affiliationNumber: r.affiliationNumber,
     googleContactId: r.googleContactId, version: r.version, archived: r.archived,
   }));
   return { state: 'ok', account: sender.email, labels, label: chosen, total: kept.length, preview: syncPreview(kept, rows, getAppSettings(db).googleContacts.pending) };
@@ -62,7 +62,9 @@ export function applyGoogleContacts(db: AppDb, input: SyncApply): { updated: num
       if (!row || row.archived || row.version !== item.version) throw new DirectoryConflictError(DIRECTORY_CHANGED);
     }
     // Les adresses Google s'ajoutent à celles de la fiche telle qu'elle est à ce moment (une mise à jour puis un lien peuvent viser la même).
+    // Un numéro d'affiliation déjà porté par une autre fiche annule tout (l'aperçu ne le propose pas : l'annuaire a changé entre-temps).
     const columns = (clubId: string, { addEmails, ...set }: CoachSet) => {
+      checkNumber(t, set.affiliationNumber, clubId);
       if (!addEmails?.length) return set;
       const current = t.select({ coachEmails: clubDirectory.coachEmails }).from(clubDirectory).where(eq(clubDirectory.id, clubId)).get()!.coachEmails;
       return { ...set, coachEmails: [...current, ...missingEmails(current, addEmails)] };
@@ -73,7 +75,7 @@ export function applyGoogleContacts(db: AppDb, input: SyncApply): { updated: num
     }
     for (const l of input.links) t.update(clubDirectory).set({ ...columns(l.clubId, l.set), googleContactId: l.contact }).where(eq(clubDirectory.id, l.clubId)).run();
     for (const c of input.creates) {
-      const entry = createDirectoryEntry(t, { name: c.name, affiliationNumber: null, coachName: c.coachName, coachPhone: c.coachPhone, coachEmails: c.coachEmails, notes: null });
+      const entry = createDirectoryEntry(t, { name: c.name, affiliationNumber: c.affiliationNumber, coachName: c.coachName, coachPhone: c.coachPhone, coachEmails: c.coachEmails, notes: null });
       t.update(clubDirectory).set({ googleContactId: c.contact }).where(eq(clubDirectory.id, entry.id)).run();
     }
     const done = new Set([...input.links.map((l) => l.contact), ...input.creates.map((c) => c.contact)]);
