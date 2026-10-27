@@ -6,7 +6,7 @@ import type { Club, Fighter, Registration } from '../../src/domain/registration.
 const grid = ffkDefaultGrid();
 
 function club(id: string, name: string, ffkEntity: string | null = null): Club {
-  return { id, competitionId: 'c', name, ffkEntity, coachName: null, coachPhone: null, coachEmail: null, preApproval: false };
+  return { id, competitionId: 'c', name, ffkEntity, coachName: null, coachPhone: null, coachEmails: [], preApproval: false };
 }
 function fighter(id: string, clubId: string | null, lastName: string, firstName: string, over: Partial<Fighter> = {}): Fighter {
   return { id, competitionId: 'c', clubId, lastName, firstName, sex: 'F', ageBandCode: 'cadet', licence: null, grade: null, ...over };

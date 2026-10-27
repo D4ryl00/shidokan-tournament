@@ -1,4 +1,5 @@
-import { fieldDiffs, isAcceptableCoachValue, type CoachField, type FieldDiff, type GoogleContact, type SyncApply, type SyncClub, type SyncPreview } from '../domain/google-contacts.js';
+import { applyDiff, contactEmails, fieldDiffs, fillsEmpty, isAcceptableCoachValue, type CoachField, type FieldDiff, type GoogleContact, type SyncApply, type SyncClub, type SyncPreview, type TextField } from '../domain/google-contacts.js';
+import { EMAIL_LIMITS } from '../domain/emails.js';
 import { plural } from '../domain/plural.js';
 import { DIRECTORY_LIMITS } from '../domain/registration.js';
 
@@ -47,7 +48,7 @@ export function initialChoices(p: SyncPreview): SyncChoices {
 /** Sous un club choisi : les champs qui diffèrent (une case chacun) et ceux que Google remplit dans une fiche vide. */
 export function linkFields(contact: GoogleContact, club: SyncClub): { boxes: FieldDiff[]; fills: FieldDiff[] } {
   const all = fieldDiffs(contact, club);
-  return { boxes: all.filter((f) => f.directory !== null), fills: all.filter((f) => f.directory === null) };
+  return { boxes: all.filter((f) => !fillsEmpty(f)), fills: all.filter(fillsEmpty) };
 }
 
 /** Clubs à lier pour ce contact : listes remplies, sans doublon, sans ceux auxquels il est déjà lié. */
@@ -75,7 +76,7 @@ export function buildApply(p: SyncPreview, choices: SyncChoices): ApplyPlan {
     for (const f of d.fields) {
       if (choices.keptDiffs.includes(diffKey(d.clubId, f.field))) kept++;
       else {
-        set[f.field] = f.google;
+        applyDiff(set, f);
         diffs++;
       }
     }
@@ -93,17 +94,17 @@ export function buildApply(p: SyncPreview, choices: SyncChoices): ApplyPlan {
       if (!club) continue;
       const set: SyncApply['links'][number]['set'] = {};
       const { boxes, fills } = linkFields(contact, club);
-      for (const f of fills) set[f.field] = f.google;
+      for (const f of fills) applyDiff(set, f);
       for (const f of boxes) {
         if (plan.kept.includes(diffKey(clubId, f.field))) kept++;
-        else set[f.field] = f.google;
+        else applyDiff(set, f);
       }
       apply.links.push({ clubId, version: club.version, contact: contact.resourceName, set });
     }
     if (plan.mode === 'create') {
       const name = plan.name.trim();
       if (!name) missingName = true;
-      else apply.creates.push({ contact: contact.resourceName, name, coachName: filled('coachName', contact.name), coachPhone: filled('coachPhone', contact.phone), coachEmail: filled('coachEmail', contact.email) });
+      else apply.creates.push({ contact: contact.resourceName, name, coachName: filled('coachName', contact.name), coachPhone: filled('coachPhone', contact.phone), coachEmails: contactEmails(contact).slice(0, EMAIL_LIMITS.count) });
     }
     if (plan.mode === 'later' && newIds.has(contact.resourceName)) apply.later.push(contact.resourceName);
   }
@@ -113,7 +114,7 @@ export function buildApply(p: SyncPreview, choices: SyncChoices): ApplyPlan {
 }
 
 /** Valeur reprise dans un nouveau club : vide ou refusée par l'annuaire (voir `rejectedValues`) → rien. */
-const filled = (field: CoachField, v: string | null): string | null => (v && isAcceptableCoachValue(field, v) ? v.trim() : null);
+const filled = (field: TextField, v: string | null): string | null => (v && isAcceptableCoachValue(field, v) ? v.trim() : null);
 const countUnnamed = (c: SyncChoices): number => Object.values(c.plans).filter((p) => p.mode === 'create' && !p.name.trim()).length;
 
 /** « Appliquer : 3 différences, 1 lien, 1 nouveau club, 2 contacts en attente, 1 gardée » ; les éléments à zéro sont omis. */

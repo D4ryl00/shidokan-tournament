@@ -126,7 +126,7 @@ test('grade : enregistré sur le combattant, conservé si absent', async () => {
   expect(cleared.json().fighter.grade).toBeNull();
 });
 
-const ENTRY_HEADER = { club: 'Tani Dojo', coachName: 'Jean', coachPhone: null, coachEmail: null, preApproval: false };
+const ENTRY_HEADER = { club: 'Tani Dojo', coachName: 'Jean', coachPhone: null, coachEmails: [], preApproval: false };
 const ENTRY_LINE = {
   lastName: 'MARTIN', firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', weightKg: 53.5, combat: 'karate', kata: true, grade: '1er kyu',
   ruleset: 'jiyu', prefs: { 'shido-mix': 1 }, shobuKeep: null,

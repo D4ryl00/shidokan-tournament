@@ -169,6 +169,13 @@
       "when": 1793055406909,
       "tag": "0023_contacts_google",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1793097706468,
+      "tag": "0024_plusieurs_adresses",
+      "breakpoints": true
     }
   ]
 }

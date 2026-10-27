@@ -29,9 +29,14 @@ test('inscription en ligne : annuaire → invitation → le coach inscrit, modif
   await page.getByTestId('nav-directory').click();
   await page.getByTestId('directory-new').click();
   await page.getByTestId('directory-name').fill(club);
-  await page.getByTestId('directory-email').fill('coach@dojo.example');
+  // Deux adresses ; le clic sur « Enregistrer » suit directement la frappe.
+  await page.getByTestId('directory-email').fill('coach@dojo.example, président pas une adresse');
+  await page.getByTestId('directory-email').blur();
+  await expect(page.getByText('Adresse invalide : président, pas, une, adresse')).toBeVisible();
+  await page.getByTestId('directory-email').fill('coach@dojo.example, president@dojo.example');
   await page.getByTestId('directory-save').click();
-  await expect(page.getByTestId('directory-row').filter({ hasText: club })).toBeVisible();
+  await expect(page.getByTestId('directory-row').filter({ hasText: club })).toContainText('coach@dojo.example');
+  await expect(page.getByTestId('directory-row').filter({ hasText: club })).toContainText('president@dojo.example');
   await shot(page, '1-annuaire');
   const id = await createCompetition(page, 'Coupe en ligne');
 
@@ -95,7 +100,7 @@ test('inscription en ligne : annuaire → invitation → le coach inscrit, modif
 
 test('catégorie fermée : non proposée au club', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe fermée en ligne');
-  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmail: null, notes: null };
+  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
   const entry = (await (await request.post('/api/club-directory', { data: { ...EMPTY, name: `Dojo fermé ${Date.now()}` } })).json()) as { id: string };
   const [link] = (await (await request.post(`/api/competitions/${id}/invitations`, { data: { directoryIds: [entry.id] } })).json()) as { token: string }[];
   await request.patch(`/api/competitions/${id}/club-entry`, { data: { status: 'open', deadline: '2026-11-15' } });
@@ -123,4 +128,62 @@ test('catégorie fermée : non proposée au club', async ({ page, request }) => 
   await expect(page.getByText('catégorie non ouverte à cette compétition')).toHaveCount(0);
   // Page du club : le résumé de ce qui n'est pas ouvert.
   await expect(page.getByTestId('club-entry-closed')).toContainText('Cadets (F) : pas de Shido-mix-martial');
+});
+
+test('envoi du lien : une case par adresse pour un club qui en a plusieurs ; seules les adresses cochées partent', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plusieurs adresses');
+  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
+  const add = async (name: string, coachEmails: string[]) => ((await (await request.post('/api/club-directory', { data: { ...EMPTY, name, coachEmails } })).json()) as { id: string }).id;
+  const stamp = Date.now();
+  const multi = `Dojo multi ${stamp}`;
+  const solo = `Dojo solo ${stamp}`;
+  await request.post(`/api/competitions/${id}/invitations`, {
+    data: { directoryIds: [await add(multi, ['coach@multi.fr', 'pres@multi.fr', 'secr@multi.fr']), await add(solo, ['coach@solo.fr'])] },
+  });
+  // Pas de serveur d'envoi ici : l'envoi est intercepté, on regarde ce qui part.
+  const bodies: unknown[] = [];
+  await page.route(`**/api/competitions/${id}/invitations/send`, async (route) => {
+    bodies.push(route.request().postDataJSON());
+    await route.fulfill({ json: [] });
+  });
+  await page.route(`**/api/competitions/${id}/invitations/*/mailto`, async (route) => {
+    bodies.push(route.request().postDataJSON());
+    await route.fulfill({ status: 400, json: { error: 'intercepté' } });
+  });
+
+  await page.goto(`/competitions/${id}/fiche-club`);
+  const row = page.getByTestId('invitation-row').filter({ hasText: multi });
+  await expect(row).toContainText('pres@multi.fr');
+  await page.getByRole('checkbox', { name: 'Tout cocher' }).check();
+  await page.getByTestId('send-invitations').click();
+  const dialog = page.getByRole('dialog', { name: 'Envoyer le lien par mail' });
+  const recipients = dialog.getByTestId('send-recipients').filter({ hasText: multi });
+  for (const e of ['coach@multi.fr', 'pres@multi.fr', 'secr@multi.fr']) await expect(recipients.getByRole('checkbox', { name: e })).toBeChecked();
+  await expect(dialog.getByTestId('send-recipients').filter({ hasText: solo })).toContainText('coach@solo.fr');
+  await recipients.getByRole('checkbox', { name: 'pres@multi.fr' }).uncheck();
+  await dialog.getByTestId('send-confirm').click();
+  // L'envoi fini ferme la fenêtre et vide la sélection : attendre avant de recocher.
+  await expect(dialog).toBeHidden();
+  await expect(page.getByTestId('send-invitations')).toBeDisabled();
+  expect(bodies).toHaveLength(1);
+  const ids = (await (await request.get(`/api/competitions/${id}/invitations`)).json()) as { clubId: string; clubName: string }[];
+  const idOf = (name: string) => ids.find((i) => i.clubName === name)!.clubId;
+  expect(bodies[0]).toEqual({ clubs: [{ clubId: idOf(multi), emails: ['coach@multi.fr', 'secr@multi.fr'] }, { clubId: idOf(solo) }] });
+
+  // Toutes décochées : « Envoyer » bloqué. La fenêtre repart avec toutes les cases cochées.
+  await page.getByRole('checkbox', { name: 'Tout cocher' }).check();
+  await page.getByTestId('send-invitations').click();
+  for (const e of ['coach@multi.fr', 'pres@multi.fr', 'secr@multi.fr']) await recipients.getByRole('checkbox', { name: e }).uncheck();
+  await expect(dialog.getByText('Cochez au moins une adresse.')).toBeVisible();
+  await expect(dialog.getByTestId('send-confirm')).toBeDisabled();
+  await dialog.getByRole('button', { name: 'Annuler' }).click();
+
+  // « Ouvrir dans ma messagerie » : le même choix.
+  await row.getByRole('button', { name: 'Ouvrir dans ma messagerie' }).click();
+  const mailto = page.getByRole('dialog', { name: 'Ouvrir dans ma messagerie' });
+  await expect(mailto.getByRole('checkbox', { name: 'secr@multi.fr' })).toBeChecked();
+  await mailto.getByRole('checkbox', { name: 'coach@multi.fr' }).uncheck();
+  await mailto.getByRole('button', { name: 'Ouvrir ma messagerie' }).click();
+  await expect.poll(() => bodies.length).toBe(2);
+  expect(bodies[1]).toEqual({ emails: ['pres@multi.fr', 'secr@multi.fr'] });
 });

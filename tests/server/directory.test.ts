@@ -12,7 +12,7 @@ beforeEach(async () => {
 });
 afterEach(async () => app.close());
 
-const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmail: null, notes: null };
+const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
 const create = (payload: object) => app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, ...payload } });
 const list = async () => (await app.inject({ method: 'GET', url: '/api/club-directory' })).json() as { id: string; name: string; archived: boolean; competitions: number; coachPhone: string | null; affiliationNumber: string | null; googleContactId: string | null }[];
 
@@ -56,11 +56,20 @@ test('entrée inconnue → 404', async () => {
   expect((await app.inject({ method: 'POST', url: '/api/club-directory/merge', payload: { keepId: 'a', mergeId: 'b' } })).statusCode).toBe(404);
 });
 
-test('e-mail invalide (liste) refusé dans l’annuaire et dans les clubs d’une compétition', async () => {
-  expect((await create({ name: 'Liste', coachEmail: 'a@x.fr, b@y.fr' })).statusCode).toBe(400);
+test('plusieurs e-mails par fiche : gardés dans l’ordre, doublons retirés ; à la fusion, les adresses manquantes s’ajoutent', async () => {
+  const keep = (await create({ name: 'Tani Dojo', coachEmails: ['coach@tani.fr', 'Coach@Tani.fr', 'pres@tani.fr'] })).json();
+  expect(keep.coachEmails).toEqual(['coach@tani.fr', 'pres@tani.fr']);
+  const other = (await create({ name: 'Tani Dojo bis', coachEmails: ['PRES@tani.fr', 'secretaire@tani.fr'] })).json();
+  const merged = (await app.inject({ method: 'POST', url: '/api/club-directory/merge', payload: { keepId: keep.id, mergeId: other.id } })).json();
+  expect(merged.coachEmails).toEqual(['coach@tani.fr', 'pres@tani.fr', 'secretaire@tani.fr']);
+  expect((await app.inject({ method: 'PATCH', url: `/api/club-directory/${keep.id}`, payload: { coachEmails: [] } })).json().coachEmails).toEqual([]);
+});
+
+test('e-mail invalide (deux adresses dans une case) refusé dans l’annuaire et dans les clubs d’une compétition', async () => {
+  expect((await create({ name: 'Liste', coachEmails: ['a@x.fr, b@y.fr'] })).statusCode).toBe(400);
   const c = (await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22' } })).json().id;
-  expect((await app.inject({ method: 'POST', url: `/api/competitions/${c}/clubs`, payload: { name: 'Club', coachEmail: 'a@x.fr, b@y.fr' } })).statusCode).toBe(400);
-  expect((await app.inject({ method: 'POST', url: `/api/competitions/${c}/clubs`, payload: { name: 'Club', coachEmail: 'a@x.fr' } })).statusCode).toBe(201);
+  expect((await app.inject({ method: 'POST', url: `/api/competitions/${c}/clubs`, payload: { name: 'Club', coachEmails: ['a@x.fr, b@y.fr'] } })).statusCode).toBe(400);
+  expect((await app.inject({ method: 'POST', url: `/api/competitions/${c}/clubs`, payload: { name: 'Club', coachEmails: ['a@x.fr'] } })).statusCode).toBe(201);
 });
 
 test('lien Google : retiré à la main, effacé à l’archivage, gardé à la fusion', async () => {

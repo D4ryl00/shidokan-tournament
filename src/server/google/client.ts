@@ -60,11 +60,18 @@ function primary(entries: PeopleEntry[] | undefined, field: (x: PeopleEntry) => 
   return best ? field(best)!.trim() : null;
 }
 
+/** Toutes les valeurs, la principale en premier ; une valeur qui contient plusieurs adresses (« a@x.fr, b@y.fr ») est découpée. */
+function allEmails(entries: PeopleEntry[] | undefined): string[] {
+  const filled = (entries ?? []).filter((x) => x.value?.trim());
+  const ordered = [...filled.filter((x) => x.metadata?.primary), ...filled.filter((x) => !x.metadata?.primary)];
+  return ordered.flatMap((x) => x.value!.split(/[,;]/)).map((v) => v.trim()).filter(Boolean);
+}
+
 function toContact(p: Person): GoogleContact {
   return {
     resourceName: p.resourceName!,
     name: primary(p.names, (e) => e.displayName),
-    email: primary(p.emailAddresses, (e) => e.value),
+    emails: allEmails(p.emailAddresses),
     phone: primary(p.phoneNumbers, (e) => e.value),
     organization: primary(p.organizations, (e) => e.name),
     groups: (p.memberships ?? []).map((m) => m.contactGroupMembership?.contactGroupResourceName).filter((g): g is string => !!g),

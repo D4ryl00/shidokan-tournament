@@ -20,7 +20,7 @@ afterEach(async () => {
   app = null;
 });
 
-interface Entry { id: string; name: string; affiliation_number: string | null; ffk_entity: string | null; coach_phone: string | null; coach_email: string | null }
+interface Entry { id: string; name: string; affiliation_number: string | null; ffk_entity: string | null; coach_phone: string | null; coach_emails: string }
 const entryOf = (d: AppDb, clubId: string) =>
   d.$client.prepare('select e.* from clubs c join club_directory e on e.id = c.directory_club_id where c.id = ?').get(clubId) as Entry | undefined;
 const entries = (d: AppDb) => d.$client.prepare('select * from club_directory order by name').all() as Entry[];
@@ -67,8 +67,8 @@ test("même nom, numéros d'affiliation différents → deux entrées", async ()
 test("une fiche importée ne change pas un téléphone déjà présent dans l'annuaire, mais remplit un e-mail vide", async () => {
   const { d, a, b } = await twoCompetitions();
   await upsertClub(d, a, { name: 'Tani Dojo', coachPhone: '0600000001' });
-  const later = await upsertClub(d, b, { name: 'Tani Dojo', coachPhone: '0600000002', coachEmail: 'coach@example.org' });
-  expect(entryOf(d, later.id)).toMatchObject({ coach_phone: '0600000001', coach_email: 'coach@example.org' });
+  const later = await upsertClub(d, b, { name: 'Tani Dojo', coachPhone: '0600000002', coachEmails: ['coach@example.org'] });
+  expect(entryOf(d, later.id)).toMatchObject({ coach_phone: '0600000001', coach_emails: '["coach@example.org"]' });
 });
 
 test('renommer un club de compétition garde son entrée', async () => {

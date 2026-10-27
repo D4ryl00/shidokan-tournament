@@ -83,8 +83,9 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'L’annuaire ne dépend d’aucune compétition. Il se remplit tout seul avec les clubs des fiches, de l’import FFK et des saisies ; vous pouvez aussi y créer des clubs à l’avance.',
       [
         'Le numéro d’affiliation FFK (les chiffres en tête du club dans l’export FFK) reconnaît un club à coup sûr, même si son nom est écrit autrement.',
-        '« Modifier » change le nom, le numéro d’affiliation, le coach ou les notes ; « Archiver » cache un club qui ne vient plus, sans rien effacer.',
-        '« Fusionner avec… » réunit deux fiches du même club : les compétitions de l’une passent à l’autre, puis la première est supprimée.',
+        '« Modifier » change le nom, le numéro d’affiliation, le coach, les adresses e-mail ou les notes ; « Archiver » cache un club qui ne vient plus, sans rien effacer.',
+        'Un club peut avoir plusieurs adresses e-mail (coach, président, secrétariat…) : tapez-les dans « E-mails », Entrée ou virgule entre deux. À l’envoi des liens, vous choisissez lesquelles reçoivent le mail.',
+        '« Fusionner avec… » réunit deux fiches du même club : les compétitions de l’une passent à l’autre, la fiche gardée reçoit les adresses e-mail qu’elle n’avait pas, puis la première est supprimée.',
         '« Synchroniser avec Google » (sur le serveur en ligne, avec un compte Google connecté) compare les coachs de l’annuaire aux contacts Google ; un club lié porte la marque « Google ». « Ne plus synchroniser avec Google » retire ce lien sans rien effacer.',
       ],
     ],
@@ -95,12 +96,13 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     details: [
       'Choisissez un libellé de vos contacts Google (par exemple « Coachs »), ou « Tous les contacts ». Le dernier libellé choisi est repris la fois suivante.',
       [
-        'Différences avec l’annuaire : pour chaque club lié à un contact, le coach, le téléphone et le mail qui diffèrent. Google l’emporte : chaque ligne est cochée.',
+        'Différences avec l’annuaire : pour chaque club lié à un contact, le coach, le téléphone et les adresses e-mail qui diffèrent. Google l’emporte : chaque ligne est cochée.',
+        'Toutes les adresses e-mail d’un contact sont lues. Celles qui manquent dans l’annuaire sont proposées en ajout (« + adresse ») : une adresse de l’annuaire absente de Google n’est jamais retirée.',
         'Décochez une ligne pour garder la valeur de l’annuaire. Cela ne vaut que cette fois : la même différence revient à la synchronisation suivante, tant que Google et l’annuaire ne concordent pas.',
-        'Un champ vide dans Google n’efface jamais l’annuaire ; deux numéros écrits autrement (espaces, +33) ne sont pas une différence.',
+        'Un champ vide dans Google n’efface jamais l’annuaire ; deux numéros écrits autrement (espaces, +33) ne sont pas une différence ; une adresse que l’annuaire refuserait est signalée « valeur Google non reprise ».',
       ],
       [
-        'Nouveaux contacts : « Lier à un club » choisit le club de l’annuaire de ce coach. Le club de même mail, sinon de même téléphone, est déjà choisi ; un nom qui ressemble est seulement proposé (« Peut-être : … ? »).',
+        'Nouveaux contacts : « Lier à un club » choisit le club de l’annuaire de ce coach. Le club qui a une adresse e-mail en commun, sinon le même téléphone, est déjà choisi ; un nom qui ressemble est seulement proposé (« Peut-être : … ? »).',
         '« Nouveau club » crée une fiche avec le nom saisi et les coordonnées du contact. « + Lier aussi à un autre club » sert au coach qui tient deux clubs.',
         '« Plus tard » : à l’application, le contact est rangé dans « En attente d’un rattachement », repliée, où les mêmes choix restent possibles.',
         '« Contacts déjà liés » permet de lier un contact à un club de plus. Pour retirer un lien : « Ne plus synchroniser avec Google » dans l’annuaire.',
@@ -228,7 +230,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     details: [
       'Les clubs sont créés par l’import des fiches club, par l’import FFK ou par la saisie des inscriptions.',
       [
-        'Coach : nom, téléphone et e-mail, pour le joindre le jour J.',
+        'Coach : nom, téléphone et adresses e-mail (une ou plusieurs), pour le joindre le jour J.',
         'Pré-accord : le coach accepte d’avance qu’on réaffecte ses combattants. Les déplacements d’âge et de poids portent alors la mention « pré-accord coach » (une indication : ils se valident toujours à la main).',
       ],
     ],
@@ -250,6 +252,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Choisissez des clubs de l’annuaire dans « Clubs à inviter » puis « Inviter les clubs choisis » : un lien est créé pour chacun. Copiez-les tout de suite : pour des raisons de sécurité, un lien ne s’affiche qu’une seule fois.',
         '« Régénérer le lien » crée un nouveau lien et désactive l’ancien (lien perdu, mauvais destinataire) ; « Révoquer » désactive le lien sans en créer d’autre.',
         '« Ouvrir les inscriptions » rend les pages des clubs modifiables ; la date limite est seulement affichée aux clubs.',
+        '« Envoyer le lien par mail » : un seul mail par club. Pour un club qui a plusieurs adresses, chacune a sa case, toutes cochées : décochez celles qui ne doivent pas recevoir ce mail (cela ne vaut que pour cet envoi). « Ouvrir dans ma messagerie » propose le même choix.',
         '« Figer les inscriptions » met toutes les pages des clubs en lecture seule ; les changements suivants se font par l’organisation. On peut rouvrir.',
         'Les mails envoyés par l’application portent aussi en pièces jointes la fiche à imprimer (PDF) et le tableur (.ods) : un club peut inscrire ses élèves par l’un ou l’autre. « Ouvrir dans ma messagerie » ne peut pas joindre de fichier : joignez-les vous-même (ils sont proposés au téléchargement).',
       ],

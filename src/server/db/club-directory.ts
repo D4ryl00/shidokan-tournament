@@ -47,7 +47,7 @@ export function linkClub(db: AppDb, clubId: string): string {
   if (!entry) {
     const id = crypto.randomUUID();
     db.insert(clubDirectory)
-      .values({ id, name: club.name, nameKey: club.nameKey, affiliationNumber: number, ffkEntity: entity, coachName: club.coachName, coachPhone: club.coachPhone, coachEmail: club.coachEmail })
+      .values({ id, name: club.name, nameKey: club.nameKey, affiliationNumber: number, ffkEntity: entity, coachName: club.coachName, coachPhone: club.coachPhone, coachEmails: club.coachEmails })
       .run();
     db.update(clubs).set({ directoryClubId: id }).where(eq(clubs.id, clubId)).run();
     return id;
@@ -58,7 +58,7 @@ export function linkClub(db: AppDb, clubId: string): string {
     ...(entity && !entry.ffkEntity ? { ffkEntity: entity } : {}),
     ...(club.coachName && !entry.coachName ? { coachName: club.coachName } : {}),
     ...(club.coachPhone && !entry.coachPhone ? { coachPhone: club.coachPhone } : {}),
-    ...(club.coachEmail && !entry.coachEmail ? { coachEmail: club.coachEmail } : {}),
+    ...(club.coachEmails.length && !entry.coachEmails.length ? { coachEmails: club.coachEmails } : {}),
   };
   if (Object.keys(fill).length) db.update(clubDirectory).set(fill).where(eq(clubDirectory.id, entry.id)).run();
   if (!linked) db.update(clubs).set({ directoryClubId: entry.id }).where(eq(clubs.id, clubId)).run();

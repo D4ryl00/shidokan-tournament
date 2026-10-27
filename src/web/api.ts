@@ -856,7 +856,7 @@ export interface ClubInvitationRow {
   clubId: string;
   clubName: string;
   directoryClubId: string | null;
-  coachEmail: string | null;
+  coachEmails: string[];
   invited: boolean;
   invitedAt: string | null;
   lastUsedAt: string | null;
@@ -891,7 +891,7 @@ export const useUpdateClubEntrySettings = (id: string) =>
 /** Refus après lesquels la page du club est rechargée et le formulaire fermé. */
 export const RELOAD_STATUSES = new Set([403, 404, 409]);
 export interface ClubLine { fighterId: string; version: string; line: ClubFormLine; editable: boolean; reason: string | null; notices: string[] }
-export interface ClubEntryHeader { coachName: string | null; coachPhone: string | null; coachEmail: string | null; preApproval: boolean; affiliationNumber: string | null }
+export interface ClubEntryHeader { coachName: string | null; coachPhone: string | null; coachEmails: string[]; preApproval: boolean; affiliationNumber: string | null }
 export interface ClubEntryView {
   competition: { name: string; date: string; location: string | null; deadline: string | null; status: 'closed' | 'open' | 'frozen' };
   editable: boolean;
@@ -992,11 +992,13 @@ export function useGoogleDisconnect() {
 }
 
 // Envoi des liens par mail (un nouveau lien à chaque envoi).
+/** Club à qui envoyer le lien ; `emails` : les adresses choisies (absent : toutes celles du club). */
+export interface SendTarget { clubId: string; emails?: string[] }
 export interface SendResult { clubId: string; clubName: string; email: string | null; status: 'sent' | 'error'; error: string | null }
 export const useSendInvitations = (id: string) =>
-  useOnlineEntryMutation(id, (clubIds: string[]) => api<SendResult[]>('POST', `/api/competitions/${id}/invitations/send`, { clubIds }));
+  useOnlineEntryMutation(id, (clubs: SendTarget[]) => api<SendResult[]>('POST', `/api/competitions/${id}/invitations/send`, { clubs }));
 export const useMailtoInvitation = (id: string) =>
-  useOnlineEntryMutation(id, (clubId: string) => api<{ to: string | null; subject: string; body: string }>('POST', `/api/competitions/${id}/invitations/${clubId}/mailto`));
+  useOnlineEntryMutation(id, ({ clubId, emails }: SendTarget) => api<{ to: string | null; subject: string; body: string }>('POST', `/api/competitions/${id}/invitations/${clubId}/mailto`, emails ? { emails } : {}));
 export const useInvitationPreview = (id: string, clubId: string | null, version: string) =>
   useQuery({
     queryKey: ['invitation-preview', id, clubId, version],

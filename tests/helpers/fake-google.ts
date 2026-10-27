@@ -143,7 +143,8 @@ export function fakeGoogle(): FakeGoogle {
             connections: items.map((c) => ({
               resourceName: c.resourceName,
               names: c.name ? [{ displayName: c.name, metadata: { primary: true } }] : undefined,
-              emailAddresses: c.email ? [{ value: 'secondaire@example.org' }, { value: c.email, metadata: { primary: true } }] : undefined,
+              // La principale (la première du contact) est donnée en dernier : le client doit la remettre en tête.
+              emailAddresses: c.emails.length ? [...c.emails.slice(1).map((value) => ({ value })), { value: c.emails[0], metadata: { primary: true } }] : undefined,
               phoneNumbers: c.phone ? [{ value: c.phone, metadata: { primary: true } }] : undefined,
               organizations: c.organization ? [{ name: c.organization }] : undefined,
               memberships: c.groups.map((g) => ({ contactGroupMembership: { contactGroupResourceName: g } })),

@@ -4,7 +4,8 @@ import { currentInvitationMail, GOOGLE_NOT_CONFIGURED, GOOGLE_NOT_SENT, GOOGLE_R
 import { buildClubFormPdf } from './club-form-pdf.js';
 import { buildClubFormTemplate } from './club-form-template.js';
 import { writeOds } from './spreadsheet/ods.js';
-import { frenchDate, isSingleEmail, renderTemplate, type MailValues } from '../domain/mail-template.js';
+import { isAcceptableEmail, joinEmails, sameEmail } from '../domain/emails.js';
+import { frenchDate, renderTemplate, type MailValues } from '../domain/mail-template.js';
 import type { AppDb } from './db/client.js';
 import { clubs, mailLog } from './db/schema.js';
 import { getAppSettings, markGoogleRevoked } from './repositories/app-settings.js';
@@ -20,7 +21,7 @@ export interface MailAddress {
 }
 export interface OutgoingMail {
   from: MailAddress;
-  to: MailAddress;
+  to: MailAddress[];
   subject: string;
   text: string;
   attachments?: MailAttachment[];
@@ -133,13 +134,32 @@ export async function clubFormAttachments(db: AppDb, competitionId: string): Pro
 
 export const linkUrl = (baseUrl: string, token: string) => `${baseUrl.replace(/\/+$/, '')}/inscription/${token}`;
 
+/** Un club à qui envoyer le lien ; `emails` : les adresses choisies parmi celles du club (absent : toutes). */
+export interface SendTarget {
+  clubId: string;
+  emails?: string[];
+}
+
+/** Adresses du club à qui écrire, ou l'erreur à noter pour ce club. */
+function recipientsOf(club: { coachEmails: string[] }, chosen: string[] | undefined): { emails: string[] } | { error: string } {
+  const all = club.coachEmails;
+  if (!all.length) return { error: 'Pas d’e-mail pour ce club.' };
+  const unknown = (chosen ?? []).find((e) => !all.some((a) => sameEmail(a, e)));
+  if (unknown) return { error: `« ${unknown} » n’est plus une adresse de ce club : rechargez la page.` };
+  const emails = chosen ? all.filter((a) => chosen.some((e) => sameEmail(a, e))) : all;
+  if (!emails.length) return { error: 'Aucune adresse choisie pour ce club.' };
+  const invalid = emails.find((e) => !isAcceptableEmail(e));
+  if (invalid) return { error: `Adresse e-mail invalide pour ce club : ${invalid}` };
+  return { emails };
+}
+
 /**
- * Envoie le lien de chaque club par mail. Le serveur d'envoi est vérifié d'abord : s'il ne répond pas, rien n'est envoyé et aucun
- * lien ne change. Pour chaque club, un nouveau lien est créé ; l'ancien n'est désactivé que si le mail part (sinon c'est le nouveau
+ * Envoie le lien de chaque club par mail : un seul mail par club, adressé à toutes les adresses choisies. Le serveur d'envoi est
+ * vérifié d'abord : s'il ne répond pas, rien n'est envoyé et aucun lien ne change. Pour chaque club, un nouveau lien est créé ; l'ancien n'est désactivé que si le mail part (sinon c'est le nouveau
  * qui est désactivé). Chaque envoi est noté ; une erreur ne concerne que son club. Si Google retire l'accès en cours de route, l'envoi
  * s'arrête : le club en cours et les suivants sont notés « non envoyé », sans nouveau lien.
  */
-export async function sendInvitations(db: AppDb, transport: MailTransport, competitionId: string, clubIds: string[], baseUrl: string, pauseMs = 300): Promise<SendResult[]> {
+export async function sendInvitations(db: AppDb, transport: MailTransport, competitionId: string, targets: SendTarget[], baseUrl: string, pauseMs = 300): Promise<SendResult[]> {
   const sender = senderOf(db);
   const mailer = transport(sender);
   try {
@@ -153,7 +173,7 @@ export async function sendInvitations(db: AppDb, transport: MailTransport, compe
   const results: SendResult[] = [];
   let sentBefore = false;
   let accessRevoked = false;
-  for (const clubId of clubIds) {
+  for (const { clubId, emails: chosen } of targets) {
     let club: ReturnType<typeof clubOf>;
     try {
       club = clubOf(db, competitionId, clubId);
@@ -161,14 +181,15 @@ export async function sendInvitations(db: AppDb, transport: MailTransport, compe
       results.push({ clubId, clubName: 'Club inconnu', email: null, status: 'error', error: errorText(e) });
       continue;
     }
-    const email = club.coachEmail?.trim() ?? '';
+    const recipients = recipientsOf(club, chosen);
+    const email = 'emails' in recipients ? joinEmails(recipients.emails) : joinEmails(club.coachEmails);
     if (accessRevoked) {
       db.insert(mailLog).values({ id: crypto.randomUUID(), competitionId, clubId, email, status: 'error', error: GOOGLE_NOT_SENT }).run();
-      results.push({ clubId, clubName: club.name, email: club.coachEmail, status: 'error', error: GOOGLE_NOT_SENT });
+      results.push({ clubId, clubName: club.name, email: email || null, status: 'error', error: GOOGLE_NOT_SENT });
       continue;
     }
-    if (!email || !isSingleEmail(email)) {
-      results.push({ clubId, clubName: club.name, email: club.coachEmail, status: 'error', error: email ? 'Adresse e-mail invalide pour ce club.' : 'Pas d’e-mail pour ce club.' });
+    if ('error' in recipients) {
+      results.push({ clubId, clubName: club.name, email: email || null, status: 'error', error: recipients.error });
       continue;
     }
     if (sentBefore && pauseMs) await new Promise((r) => setTimeout(r, pauseMs));
@@ -177,7 +198,7 @@ export async function sendInvitations(db: AppDb, transport: MailTransport, compe
     let error: string | null = null;
     try {
       const message = await invitationMessage(db, competitionId, clubId, linkUrl(baseUrl, link.token));
-      await mailer.sendMail({ from: fromOf(sender), to: { name: club.name, address: email }, subject: message.subject, text: message.body, attachments });
+      await mailer.sendMail({ from: fromOf(sender), to: recipients.emails.map((address) => ({ name: club.name, address })), subject: message.subject, text: message.body, attachments });
       keepOnlyLink(db, competitionId, clubId, link.token);
     } catch (e) {
       revokeLink(db, link.token);
@@ -193,18 +214,23 @@ export async function sendInvitations(db: AppDb, transport: MailTransport, compe
   return results;
 }
 
-/** Message tout prêt pour la messagerie de l'organisateur (lien `mailto:`), avec un nouveau lien. */
-export async function mailtoInvitation(db: AppDb, competitionId: string, clubId: string, baseUrl: string): Promise<{ to: string | null; subject: string; body: string }> {
+/**
+ * Message tout prêt pour la messagerie de l'organisateur (lien `mailto:`), avec un nouveau lien. `to` : les adresses choisies parmi
+ * celles du club (`emails` absent : toutes), séparées par des virgules ; null si le club n'en a pas.
+ */
+export async function mailtoInvitation(db: AppDb, competitionId: string, clubId: string, baseUrl: string, emails?: string[]): Promise<{ to: string | null; subject: string; body: string }> {
   const club = clubOf(db, competitionId, clubId);
+  const recipients = club.coachEmails.length ? recipientsOf(club, emails) : { emails: [] };
+  if ('error' in recipients) throw new MailError(recipients.error);
   const link = regenerateInvitation(db, competitionId, clubId);
   const message = await invitationMessage(db, competitionId, clubId, linkUrl(baseUrl, link.token));
-  return { to: club.coachEmail, subject: message.subject, body: message.body };
+  return { to: recipients.emails.length ? recipients.emails.join(',') : null, subject: message.subject, body: message.body };
 }
 
 export async function sendTestMail(db: AppDb, transport: MailTransport, to: string): Promise<void> {
   const sender = senderOf(db);
   try {
-    await transport(sender).sendMail({ from: fromOf(sender), to: { name: to, address: to }, subject: 'Mail d’essai — Shidokan France', text: 'Les réglages d’envoi des mails fonctionnent.' });
+    await transport(sender).sendMail({ from: fromOf(sender), to: [{ name: to, address: to }], subject: 'Mail d’essai — Shidokan France', text: 'Les réglages d’envoi des mails fonctionnent.' });
   } catch (e) {
     if (e instanceof GoogleAccessRevokedError) {
       if (sender.kind === 'google') markGoogleRevoked(db, sender.google.refreshToken);

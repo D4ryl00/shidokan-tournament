@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { GOOGLE_CONNECT_FIRST, GOOGLE_RECONNECT, hasContactsScope } from '../../domain/app-settings.js';
-import { DIRECTORY_CHANGED, syncPreview, type ContactLabel, type GoogleContact, type GoogleContactsView, type SyncApply } from '../../domain/google-contacts.js';
+import { missingEmails } from '../../domain/emails.js';
+import { DIRECTORY_CHANGED, syncPreview, type CoachSet, type ContactLabel, type GoogleContact, type GoogleContactsView, type SyncApply } from '../../domain/google-contacts.js';
 import type { AppDb } from '../db/client.js';
 import { clubDirectory } from '../db/schema.js';
 import { ContactsScopeMissingError, GoogleAccessRevokedError, type GoogleClient } from '../google/client.js';
@@ -46,7 +47,7 @@ export async function googleContactsPreview(db: AppDb, google: GoogleClient, lab
   const chosen = wanted && labels.some((l) => l.resourceName === wanted) ? wanted : null;
   const kept = chosen ? contacts.filter((c) => c.groups.includes(chosen)) : contacts;
   const rows = db.select().from(clubDirectory).all().map((r) => ({
-    id: r.id, name: r.name, coachName: r.coachName, coachPhone: r.coachPhone, coachEmail: r.coachEmail,
+    id: r.id, name: r.name, coachName: r.coachName, coachPhone: r.coachPhone, coachEmails: r.coachEmails,
     googleContactId: r.googleContactId, version: r.version, archived: r.archived,
   }));
   return { state: 'ok', account: sender.email, labels, label: chosen, total: kept.length, preview: syncPreview(kept, rows, getAppSettings(db).googleContacts.pending) };
@@ -60,10 +61,19 @@ export function applyGoogleContacts(db: AppDb, input: SyncApply): { updated: num
       const row = t.select().from(clubDirectory).where(eq(clubDirectory.id, item.clubId)).get();
       if (!row || row.archived || row.version !== item.version) throw new DirectoryConflictError(DIRECTORY_CHANGED);
     }
-    for (const u of input.updates) if (Object.keys(u.set).length) t.update(clubDirectory).set(u.set).where(eq(clubDirectory.id, u.clubId)).run();
-    for (const l of input.links) t.update(clubDirectory).set({ ...l.set, googleContactId: l.contact }).where(eq(clubDirectory.id, l.clubId)).run();
+    // Les adresses Google s'ajoutent à celles de la fiche telle qu'elle est à ce moment (une mise à jour puis un lien peuvent viser la même).
+    const columns = (clubId: string, { addEmails, ...set }: CoachSet) => {
+      if (!addEmails?.length) return set;
+      const current = t.select({ coachEmails: clubDirectory.coachEmails }).from(clubDirectory).where(eq(clubDirectory.id, clubId)).get()!.coachEmails;
+      return { ...set, coachEmails: [...current, ...missingEmails(current, addEmails)] };
+    };
+    for (const u of input.updates) {
+      const set = columns(u.clubId, u.set);
+      if (Object.keys(set).length) t.update(clubDirectory).set(set).where(eq(clubDirectory.id, u.clubId)).run();
+    }
+    for (const l of input.links) t.update(clubDirectory).set({ ...columns(l.clubId, l.set), googleContactId: l.contact }).where(eq(clubDirectory.id, l.clubId)).run();
     for (const c of input.creates) {
-      const entry = createDirectoryEntry(t, { name: c.name, affiliationNumber: null, coachName: c.coachName, coachPhone: c.coachPhone, coachEmail: c.coachEmail, notes: null });
+      const entry = createDirectoryEntry(t, { name: c.name, affiliationNumber: null, coachName: c.coachName, coachPhone: c.coachPhone, coachEmails: c.coachEmails, notes: null });
       t.update(clubDirectory).set({ googleContactId: c.contact }).where(eq(clubDirectory.id, entry.id)).run();
     }
     const done = new Set([...input.links.map((l) => l.contact), ...input.creates.map((c) => c.contact)]);

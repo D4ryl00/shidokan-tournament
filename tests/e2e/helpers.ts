@@ -76,12 +76,12 @@ export async function clipped(page: Page): Promise<string[]> {
 
 /** Contacts Google simulés pour l'écran de synchronisation : un compte connecté avec le droit sur les contacts, et un aperçu. */
 export const GOOGLE_PREVIEW = (() => {
-  const club = (id: string, name: string, extra: object) => ({ id, name, coachName: null, coachPhone: null, coachEmail: null, googleContactId: null, version: 1, ...extra });
-  const contact = (id: string, name: string, extra: object) => ({ resourceName: `people/${id}`, name, email: null, phone: null, organization: null, groups: ['contactGroups/coachs'], ...extra });
+  const club = (id: string, name: string, extra: object) => ({ id, name, coachName: null, coachPhone: null, coachEmails: [], googleContactId: null, version: 1, ...extra });
+  const contact = (id: string, name: string, extra: object) => ({ resourceName: `people/${id}`, name, emails: [], phone: null, organization: null, groups: ['contactGroups/coachs'], ...extra });
   const marc = contact('marc', 'Marc Durand', { phone: '06 55 66 77 88' });
-  const paul = contact('paul', 'Paul Martin', { email: 'paul.martin@exemple.fr' });
+  const paul = contact('paul', 'Paul Martin', { emails: ['paul.martin@exemple.fr'] });
   const sophie = contact('sophie', 'Sophie Leroy', { phone: '07 12 34 56 78' });
-  const ali = contact('ali', 'Ali Benali', { email: 'ali@exemple.fr' });
+  const ali = contact('ali', 'Ali Benali', { emails: ['ali@exemple.fr'] });
   return {
     state: 'ok',
     account: 'orga@gmail.com',
@@ -98,7 +98,7 @@ export const GOOGLE_PREVIEW = (() => {
       linked: [{ contact: marc, clubIds: ['c-lilas'] }],
       clubs: [
         club('c-lilas', 'Dojo des Lilas', { coachName: 'Marc Durand', coachPhone: '06 11 22 33 44', googleContactId: 'people/marc', version: 3 }),
-        club('c-est', 'Shidokan Est', { coachName: 'Paul Martin', coachEmail: 'paul.martin@exemple.fr', version: 5 }),
+        club('c-est', 'Shidokan Est', { coachName: 'Paul Martin', coachEmails: ['paul.martin@exemple.fr'], version: 5 }),
       ],
     },
   };

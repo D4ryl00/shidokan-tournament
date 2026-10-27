@@ -47,7 +47,7 @@ test('fiche correcte', () => {
     grid,
   );
   expect(r.header).toEqual({
-    club: 'Tani Dojo', coachName: 'Jean Coach', coachPhone: '06 00 00 00 00', coachEmail: 'coach@example.org', preApproval: true,
+    club: 'Tani Dojo', coachName: 'Jean Coach', coachPhone: '06 00 00 00 00', coachEmails: ['coach@example.org'], preApproval: true,
   });
   expect(r.rows.map((x) => x.errors)).toEqual([[], []]);
   expect(r.rows[0]!.line).toBe(12);
@@ -56,6 +56,12 @@ test('fiche correcte', () => {
     weightClassId: 'cadet:F:-54', otherDisciplines: ['shido-mix', 'shido-boxing'], approxWeightKg: 52.5, source: 'club_form',
   });
   expect(r.rows[1]!.input).toMatchObject({ ruleset: 'shobu', acceptsJiyuFirst: true, weightClassId: 'senior:M:-75' });
+});
+
+test('case E-mail : plusieurs adresses séparées par virgule, point-virgule ou espace ; doublons retirés ; vide → aucune', () => {
+  const header = (email: string | null) => parseClubForm(sheet(['Tani Dojo', 'Jean', null, email, 'non'], []), grid).header.coachEmails;
+  expect(header('coach@tani.fr; pres@tani.fr, COACH@tani.fr secr@tani.fr')).toEqual(['coach@tani.fr', 'pres@tani.fr', 'secr@tani.fr']);
+  expect(header(null)).toEqual([]);
 });
 
 test('lignes vides au milieu ignorées, numéros de ligne conservés', () => {

@@ -61,6 +61,10 @@ const FIELD_LABELS: Record<string, string> = {
   settings: 'réglages',
   mixSexes: 'mixité',
   ageBandCodes: "tranches d'âge",
+  coachName: 'coach',
+  coachPhone: 'téléphone',
+  coachEmails: 'e-mails',
+  addEmails: 'e-mails',
 };
 
 /** Messages d'erreur Zod en français, préfixés par le champ concerné. */

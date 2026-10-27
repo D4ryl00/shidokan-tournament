@@ -2,6 +2,7 @@ import { columnLabel, isEntryClosed } from './closed-categories.js';
 import { DISCIPLINES, disciplineFromLabel } from './disciplines.js';
 
 export { disciplineFromLabel };
+import { cleanEmails, splitEmails } from './emails.js';
 import { normalizeName, parseSex, parseYesNo } from './names.js';
 import { parsePreferences, validateRegistration, type RegistrationInput } from './registration.js';
 import type { CategoryGrid, DisciplineId, Ruleset, Sex } from './types.js';
@@ -58,7 +59,7 @@ export interface ClubFormHeader {
   club: string;
   coachName: string | null;
   coachPhone: string | null;
-  coachEmail: string | null;
+  coachEmails: string[];
   preApproval: boolean;
 }
 export interface ClubFormRow {
@@ -288,7 +289,7 @@ function parseHeader(cells: unknown[][], headerRows: Map<string, number>): ClubF
     club,
     coachName: textOrNull(value(1)),
     coachPhone: textOrNull(value(2)),
-    coachEmail: textOrNull(value(3)),
+    coachEmails: cleanEmails(splitEmails(textOrNull(value(3)))),
     preApproval: parseYesNo(value(4)) ?? false,
   };
 }

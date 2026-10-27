@@ -201,7 +201,7 @@ test('reconnexion : mode d’envoi gardé ; première connexion après « Décon
 
 test('reconnexion avec un autre compte : liens et attente effacés ; même compte : rien ne change', async () => {
   await connectGoogle(app);
-  const add = async (name: string) => (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { name, affiliationNumber: null, coachName: null, coachPhone: null, coachEmail: null, notes: null } })).json().id as string;
+  const add = async (name: string) => (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { name, affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null } })).json().id as string;
   const club = await add('Tani Dojo');
   // Un club sans lien n'est pas touché (sa version ne bouge pas) quand les liens sont effacés.
   const free = await add('Dojo Libre');

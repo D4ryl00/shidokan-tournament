@@ -9,11 +9,12 @@ import { useUnsaved } from '../unsaved.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { ClubFormPreviewTable } from './ClubFormPreviewTable.js';
 import { plural } from '../../domain/plural.js';
+import { EmailsInput } from './EmailsInput.js';
 
 const emptyLine = (): ClubFormLine => ({
   lastName: '', firstName: '', sex: null, ageBandCode: null, weightKg: null, combat: null, kata: false, grade: null, ruleset: null, prefs: {}, shobuKeep: null,
 });
-const EMPTY_HEADER: ClubFormHeader = { club: '', coachName: null, coachPhone: null, coachEmail: null, preApproval: false };
+const EMPTY_HEADER: ClubFormHeader = { club: '', coachName: null, coachPhone: null, coachEmails: [], preApproval: false };
 export const COMBATS: [CombatDiscipline, string][] = [['karate', 'Karaté'], ['shido-boxing', 'Boxing'], ['shido-mix', 'Mix'], ['triathlon', 'Triathlon']];
 export const PREFS: [PrefDiscipline, string, string][] = [['karate', 'Karaté', 'Ka'], ['shido-boxing', 'Boxing', 'Bx'], ['shido-mix', 'Mix', 'Mx']];
 
@@ -75,7 +76,7 @@ export function PaperEntryTable({ competitionId, grid }: { competitionId: string
         <TextInput data-testid="paper-entry-club" label="Club" required value={header.club} onChange={(e) => setH({ club: e.currentTarget.value })} />
         <TextInput label="Coach" value={header.coachName ?? ''} onChange={(e) => setH({ coachName: e.currentTarget.value || null })} />
         <TextInput label="Téléphone" value={header.coachPhone ?? ''} onChange={(e) => setH({ coachPhone: e.currentTarget.value || null })} />
-        <TextInput label="E-mail" value={header.coachEmail ?? ''} onChange={(e) => setH({ coachEmail: e.currentTarget.value || null })} />
+        <EmailsInput compact placeholder="a@club.fr, b@club.fr" value={header.coachEmails} onChange={(coachEmails) => setH({ coachEmails })} />
         <Checkbox mt="lg" label="Le coach accepte d’avance les reclassements" checked={header.preApproval} onChange={(e) => setH({ preApproval: e.currentTarget.checked })} />
       </SimpleGrid>
       <ScrollArea type="auto" offsetScrollbars="x">

@@ -1,14 +1,21 @@
 import { Anchor, Button, Checkbox, CloseButton, Group, Paper, Radio, Select, Stack, Text, TextInput } from '@mantine/core';
 import { normalizeName } from '../../domain/names.js';
-import { rejectedValues, type CoachField, type ContactChoice, type GoogleContact, type SyncClub } from '../../domain/google-contacts.js';
+import { joinEmails } from '../../domain/emails.js';
+import { rejectedValues, type CoachField, type ContactChoice, type FieldDiff, type GoogleContact, type SyncClub } from '../../domain/google-contacts.js';
 import { DIRECTORY_LIMITS } from '../../domain/registration.js';
 import { diffKey, linkFields, type ContactMode, type ContactPlan } from '../googleSync.js';
 
-export const FIELD_LABEL: Record<CoachField, string> = { coachName: 'Coach', coachPhone: 'Téléphone', coachEmail: 'E-mail' };
+export const FIELD_LABEL: Record<CoachField, string> = { coachName: 'Coach', coachPhone: 'Téléphone', coachEmails: 'E-mails' };
 const REASON = { email: 'même mail', phone: 'même téléphone' } as const;
 
 /** Nom d'un contact pour l'écran : son nom, sinon ce qu'il a. */
-export const contactName = (c: GoogleContact): string => c.name ?? c.organization ?? c.email ?? c.phone ?? 'Contact sans nom';
+export const contactName = (c: GoogleContact): string => c.name ?? c.organization ?? c.emails[0] ?? c.phone ?? 'Contact sans nom';
+
+/** Une différence à l'écran : valeur de l'annuaire (null si vide) et valeur Google ; pour les e-mails, « + » devant les adresses ajoutées. */
+export function diffText(f: FieldDiff): { directory: string | null; google: string } {
+  if (f.field !== 'coachEmails') return { directory: f.directory, google: f.google };
+  return { directory: f.directory.length ? joinEmails(f.directory) : null, google: `+ ${joinEmails(f.google)}` };
+}
 
 /** « E-mail — valeur Google non reprise : a@x.fr, b@y.fr » : une valeur que l'annuaire refuserait, jamais reprise. */
 export const rejectedText = (r: { field: CoachField; value: string }): string => `${FIELD_LABEL[r.field]} — valeur Google non reprise : ${r.value}`;
@@ -34,7 +41,7 @@ export function GoogleContactCard({ contact, choice, linkedTo, plan, onChange, c
   const maybe = (choice?.maybe ?? []).map((id) => byId.get(id)).filter((c): c is SyncClub => !!c);
   const linking = plan.mode === 'link' || plan.mode === null;
   const sameName = plan.mode === 'create' && plan.name.trim() ? clubs.find((c) => normalizeName(c.name) === normalizeName(plan.name)) : undefined;
-  const details = [contact.email, contact.phone].filter((x): x is string => !!x && x !== contactName(contact));
+  const details = [...contact.emails, contact.phone].filter((x): x is string => !!x && x !== contactName(contact));
 
   const linkedName = (c: SyncClub): string | null =>
     c.googleContactId && c.googleContactId !== contact.resourceName ? names.get(c.googleContactId) ?? 'un autre contact' : null;
@@ -56,7 +63,7 @@ export function GoogleContactCard({ contact, choice, linkedTo, plan, onChange, c
           {details.length > 0 && <Text span c="dimmed" size="sm"> · {details.join(' · ')}</Text>}
           {contact.organization && contact.name && <Text size="xs" c="dimmed">Entreprise : {contact.organization}</Text>}
           {rejected.map((r) => (
-            <Text key={r.field} size="xs" c="var(--sk-warn-text)" style={{ overflowWrap: 'anywhere' }}>{rejectedText(r)}</Text>
+            <Text key={`${r.field}:${r.value}`} size="xs" c="var(--sk-warn-text)" style={{ overflowWrap: 'anywhere' }}>{rejectedText(r)}</Text>
           ))}
         </div>
         {linkedTo && <Text size="sm">Lié à : {linkedTo.map((id) => byId.get(id)?.name ?? '—').join(', ')}</Text>}
@@ -132,13 +139,16 @@ function LinkFields({ contact, club, plan, onChange }: { contact: GoogleContact;
       {boxes.map((f) => {
         const key = diffKey(club.id, f.field);
         const keep = plan.kept.includes(key);
+        const t = diffText(f);
         return (
           <Checkbox key={key} size="xs" checked={!keep} aria-label={`Prendre Google : ${club.name}, ${FIELD_LABEL[f.field]}`}
             onChange={(e) => onChange({ ...plan, kept: e.currentTarget.checked ? plan.kept.filter((k) => k !== key) : [...plan.kept, key] })}
-            label={<>{FIELD_LABEL[f.field]} : {keep ? <b>{f.directory}</b> : <s>{f.directory}</s>} → {keep ? <s>{f.google}</s> : <b>{f.google}</b>}{keep && ' (gardé)'}</>} />
+            label={f.field === 'coachEmails'
+              ? <>{FIELD_LABEL[f.field]} : {t.directory} {keep ? <s>{t.google}</s> : <b>{t.google}</b>}{keep && ' (pas ajoutée)'}</>
+              : <>{FIELD_LABEL[f.field]} : {keep ? <b>{t.directory}</b> : <s>{t.directory}</s>} → {keep ? <s>{t.google}</s> : <b>{t.google}</b>}{keep && ' (gardé)'}</>} />
         );
       })}
-      {fills.map((f) => <Text key={f.field} size="xs" c="dimmed">{FIELD_LABEL[f.field]} rempli : {f.google}</Text>)}
+      {fills.map((f) => <Text key={f.field} size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{FIELD_LABEL[f.field]} rempli : {f.field === 'coachEmails' ? joinEmails(f.google) : f.google}</Text>)}
     </Stack>
   );
 }

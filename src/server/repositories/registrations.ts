@@ -75,7 +75,7 @@ function upsertClubSync(db: AppDb, competitionId: string, data: ClubUpsert): Clu
   }
   const id = crypto.randomUUID();
   db.insert(clubs)
-    .values({ id, competitionId, nameKey, name: data.name.trim(), ffkEntity: null, coachName: null, coachPhone: null, coachEmail: null, preApproval: false, ...defined })
+    .values({ id, competitionId, nameKey, name: data.name.trim(), ffkEntity: null, coachName: null, coachPhone: null, coachEmails: [], preApproval: false, ...defined })
     .run();
   linkClub(db, id);
   return toClub(db.select().from(clubs).where(eq(clubs.id, id)).get()!);

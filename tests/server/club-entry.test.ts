@@ -16,7 +16,7 @@ beforeEach(async () => {
   dbPath = tmpDbPath();
   app = await buildApp({ dbPath });
   base = `/api/competitions/${(await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22', location: 'Nice' } })).json().id}`;
-  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmail: null, notes: null };
+  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
   entryId = (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, name: 'Tani Dojo', coachPhone: '0600000000' } })).json().id;
   const [link] = (await app.inject({ method: 'POST', url: `${base}/invitations`, payload: { directoryIds: [entryId] } })).json();
   token = link.token;
@@ -32,7 +32,7 @@ const LINE: ClubFormLine = {
 const url = (path = '') => `/api/inscription/${token}${path}`;
 type View = {
   competition: { name: string; status: string; deadline: string | null }; editable: boolean;
-  club: { name: string; coachPhone: string | null; affiliationNumber: string | null };
+  club: { name: string; coachPhone: string | null; coachEmails: string[]; affiliationNumber: string | null };
   ageBands: { code: string }[];
   lines: { fighterId: string; version: string; line: ClubFormLine; editable: boolean; reason: string | null }[];
 };
@@ -169,7 +169,7 @@ test('inscriptions figées, fermées ou gérées ailleurs → lecture seule ; to
       await add({ ...LINE, lastName: 'NOUVEAU' }),
       await put(line!.fighterId, LINE, line!.version),
       await app.inject({ method: 'DELETE', url: url(`/lines/${line!.fighterId}?version=${encodeURIComponent(line!.version)}`) }),
-      await app.inject({ method: 'PATCH', url: url('/club'), payload: { coachName: 'X', coachPhone: null, coachEmail: null, preApproval: false, affiliationNumber: null } }),
+      await app.inject({ method: 'PATCH', url: url('/club'), payload: { coachName: 'X', coachPhone: null, coachEmails: [], preApproval: false, affiliationNumber: null } }),
     ]) {
       expect(res.statusCode).toBe(403);
       expect(res.json().error).toBe('Les inscriptions sont closes : contactez l’organisateur.');
@@ -183,7 +183,7 @@ test('inscriptions figées, fermées ou gérées ailleurs → lecture seule ; to
 });
 
 test('en-tête : club et annuaire mis à jour ; n° d’affiliation libre, ou en conflit avec le numéro déjà connu', async () => {
-  const header = { coachName: 'Jean', coachPhone: '0611111111', coachEmail: 'jean@tani.example', preApproval: true, affiliationNumber: '0060893' };
+  const header = { coachName: 'Jean', coachPhone: '0611111111', coachEmails: ['jean@tani.example'], preApproval: true, affiliationNumber: '0060893' };
   const res = await app.inject({ method: 'PATCH', url: url('/club'), payload: header });
   expect(res.statusCode).toBe(200);
   expect(res.json()).toMatchObject({ ...header, name: 'Tani Dojo' });
@@ -219,18 +219,18 @@ test('combattant confirmé par l’export FFK : sexe et catégorie d’âge non 
 });
 
 test('en-tête : n° d’affiliation d’une autre fiche de l’annuaire → 400, rien n’est relié ni écrasé', async () => {
-  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmail: null, notes: null };
-  await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, name: 'Autre Club', affiliationNumber: '0069999', coachEmail: 'autre@club.example' } });
-  const res = await app.inject({ method: 'PATCH', url: url('/club'), payload: { coachName: 'Jean', coachPhone: null, coachEmail: 'jean@tani.example', preApproval: false, affiliationNumber: '0069999' } });
+  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
+  await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, name: 'Autre Club', affiliationNumber: '0069999', coachEmails: ['autre@club.example'] } });
+  const res = await app.inject({ method: 'PATCH', url: url('/club'), payload: { coachName: 'Jean', coachPhone: null, coachEmails: ['jean@tani.example'], preApproval: false, affiliationNumber: '0069999' } });
   expect(res.statusCode).toBe(400);
   expect(res.json().error).toBe('Ce numéro d’affiliation est celui d’un autre club de l’annuaire : contactez l’organisateur.');
-  const dir = (await app.inject({ method: 'GET', url: '/api/club-directory' })).json() as { name: string; coachEmail: string | null }[];
-  expect(dir.find((e) => e.name === 'Autre Club')!.coachEmail).toBe('autre@club.example');
+  const dir = (await app.inject({ method: 'GET', url: '/api/club-directory' })).json() as { name: string; coachEmails: string[] }[];
+  expect(dir.find((e) => e.name === 'Autre Club')!.coachEmails).toEqual(['autre@club.example']);
   expect(((await app.inject({ method: 'GET', url: `${base}/invitations` })).json() as { directoryClubId: string }[])[0]!.directoryClubId).toBe(entryId);
 });
 
 test('en-tête : n° d’affiliation de 7 chiffres exactement', async () => {
-  const header = { coachName: null, coachPhone: null, coachEmail: null, preApproval: false };
+  const header = { coachName: null, coachPhone: null, coachEmails: [], preApproval: false };
   expect((await app.inject({ method: 'PATCH', url: url('/club'), payload: { ...header, affiliationNumber: '123' } })).statusCode).toBe(400);
   expect((await app.inject({ method: 'PATCH', url: url('/club'), payload: { ...header, affiliationNumber: '0060893' } })).statusCode).toBe(200);
 });
@@ -253,12 +253,16 @@ test('la vue contient la mention sur les données ; sans adresse de contact, pas
   expect(withContact.endsWith('exercer vos droits sur ces données : rgpd@shidokanfrance.com.')).toBe(true);
 });
 
-test('en-tête : e-mail du coach = une seule adresse (pas de liste) → sinon 400', async () => {
+test('en-tête : plusieurs e-mails, une seule adresse valide par élément (sinon 400), au plus 10, doublons retirés', async () => {
   const header = { coachName: null, coachPhone: null, preApproval: false, affiliationNumber: null };
-  for (const coachEmail of ['a@x.fr, b@y.fr', 'a@x.fr;b@y.fr', 'pas une adresse', '"A" <a@x.fr>']) {
-    expect((await app.inject({ method: 'PATCH', url: url('/club'), payload: { ...header, coachEmail } })).statusCode, coachEmail).toBe(400);
-  }
-  expect((await app.inject({ method: 'PATCH', url: url('/club'), payload: { ...header, coachEmail: 'coach@tani.example' } })).statusCode).toBe(200);
+  const patch = (coachEmails: unknown) => app.inject({ method: 'PATCH', url: url('/club'), payload: { ...header, coachEmails } });
+  for (const bad of ['a@x.fr, b@y.fr', 'a@x.fr;b@y.fr', 'pas une adresse', '"A" <a@x.fr>']) expect((await patch([bad])).statusCode, bad).toBe(400);
+  expect((await patch(['ok@tani.example', 'pres@tani'])).json().issues).toEqual(['e-mails : Adresse e-mail invalide : pres@tani']);
+  expect((await patch(Array.from({ length: 11 }, (_, i) => `c${i}@tani.example`))).statusCode).toBe(400);
+  expect((await patch('coach@tani.example')).statusCode).toBe(400);
+  const res = await patch(['coach@tani.example', ' presidente@tani.example ', 'COACH@tani.example', '']);
+  expect(res.statusCode).toBe(200);
+  expect((await view()).club.coachEmails).toEqual(['coach@tani.example', 'presidente@tani.example']);
 });
 
 test('pages publiques : corps de requête limité à 64 Ko (413 au-delà)', async () => {

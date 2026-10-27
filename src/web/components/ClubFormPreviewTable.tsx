@@ -3,6 +3,7 @@ import type { ClubFormPreview } from '../api.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import { ageBandLabel, disciplineLabel, prefsLabel, rulesetShort, weightLabel } from '../labels.js';
 import { plural } from '../../domain/plural.js';
+import { joinEmails } from '../../domain/emails.js';
 import { CLOSED_WARNING_START } from '../../domain/club-form.js';
 
 /** Aperçu d'une fiche club (fichier importé ou fiche papier saisie) : une ligne par inscription, erreurs, remarques et retraits. */
@@ -11,7 +12,7 @@ export function ClubFormPreviewTable({ parse, grid }: { parse: ClubFormPreview; 
   return (
     <Stack>
       <Alert title={`Club : ${parse.header.club}`} color="blue">
-        Coach : {parse.header.coachName ?? '—'} · {parse.header.coachPhone ?? '—'} · {parse.header.coachEmail ?? '—'} · Pré-accord :{' '}
+        Coach : {parse.header.coachName ?? '—'} · {parse.header.coachPhone ?? '—'} · {parse.header.coachEmails.length ? joinEmails(parse.header.coachEmails) : '—'} · Pré-accord :{' '}
         {parse.header.preApproval ? 'oui' : 'non'}
       </Alert>
       {closedRows > 0 && (

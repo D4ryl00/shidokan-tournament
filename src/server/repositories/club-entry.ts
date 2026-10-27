@@ -32,7 +32,7 @@ export interface ClubLine {
 export interface ClubEntryHeader {
   coachName: string | null;
   coachPhone: string | null;
-  coachEmail: string | null;
+  coachEmails: string[];
   preApproval: boolean;
   affiliationNumber: string | null;
 }
@@ -113,7 +113,7 @@ function lineOf(db: AppDb, fighter: typeof fighters.$inferSelect): ClubLine {
 function headerOf(db: AppDb, club: typeof clubs.$inferSelect): ClubEntryView['club'] {
   const entry = club.directoryClubId ? db.select().from(clubDirectory).where(eq(clubDirectory.id, club.directoryClubId)).get() : undefined;
   return {
-    name: club.name, coachName: club.coachName, coachPhone: club.coachPhone, coachEmail: club.coachEmail, preApproval: club.preApproval,
+    name: club.name, coachName: club.coachName, coachPhone: club.coachPhone, coachEmails: club.coachEmails, preApproval: club.preApproval,
     affiliationNumber: entry?.affiliationNumber ?? null,
   };
 }
@@ -154,7 +154,11 @@ export async function updateClubEntryHeader(db: AppDb, access: ClubAccess, heade
     const { affiliationNumber, ...fields } = header;
     t.update(clubs).set(fields).where(eq(clubs.id, club.id)).run();
     const entryId = club.directoryClubId ?? linkClub(t, club.id);
-    const coords = Object.fromEntries(Object.entries({ coachName: fields.coachName, coachPhone: fields.coachPhone, coachEmail: fields.coachEmail }).filter(([, v]) => v));
+    const coords = {
+      ...(fields.coachName ? { coachName: fields.coachName } : {}),
+      ...(fields.coachPhone ? { coachPhone: fields.coachPhone } : {}),
+      ...(fields.coachEmails.length ? { coachEmails: fields.coachEmails } : {}),
+    };
     if (Object.keys(coords).length) t.update(clubDirectory).set(coords).where(eq(clubDirectory.id, entryId)).run();
     if (affiliationNumber) assignAffiliationNumber(t, club.id, affiliationNumber);
   });

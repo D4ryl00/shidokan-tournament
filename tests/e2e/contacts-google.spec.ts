@@ -43,7 +43,7 @@ test('annuaire : synchroniser avec Google — différences, lien suggéré, nouv
   expect(applied).toEqual([{
     updates: [],
     links: [{ clubId: 'c-est', version: 5, contact: 'people/paul', set: {} }],
-    creates: [{ contact: 'people/sophie', name: 'Kyokushin Sud', coachName: 'Sophie Leroy', coachPhone: '07 12 34 56 78', coachEmail: null }],
+    creates: [{ contact: 'people/sophie', name: 'Kyokushin Sud', coachName: 'Sophie Leroy', coachPhone: '07 12 34 56 78', coachEmails: [] }],
     later: [],
   }]);
   // Nouvel aperçu après l'application.
@@ -152,9 +152,9 @@ test('annuaire : nouveau club sans nom, le bouton bloqué dit pourquoi, même re
 test('annuaire : club déjà lié proposé « peut-être », valeur Google refusée signalée et non envoyée', async ({ page }) => {
   const base = GOOGLE_PREVIEW.preview;
   const paul = base.newContacts[0]!.contact;
-  const bad = { ...paul, resourceName: 'people/bad', name: 'Bruno Double', email: 'a@x.fr, b@y.fr', phone: '06 00 00 00 00' };
+  const bad = { ...paul, resourceName: 'people/bad', name: 'Bruno Double', emails: ['"Bruno" <b@x.fr>'], phone: '06 00 00 00 00' };
   const marc = base.linked[0]!.contact;
-  const marcBad = { ...marc, email: 'm1@x.fr; m2@y.fr' };
+  const marcBad = { ...marc, emails: ['m1 chez x.fr'] };
   const preview = {
     ...GOOGLE_PREVIEW,
     preview: {
@@ -171,8 +171,8 @@ test('annuaire : club déjà lié proposé « peut-être », valeur Google refus
   const card = page.getByTestId('contact-card').filter({ hasText: 'Bruno Double' });
   await expect(card.getByRole('radio', { name: 'Plus tard' })).toBeChecked();
   await expect(card.getByRole('button', { name: 'Peut-être : Dojo des Lilas ? (déjà lié à Marc Durand)' })).toBeVisible();
-  await expect(card.getByText('E-mail — valeur Google non reprise : a@x.fr, b@y.fr')).toBeVisible();
-  await expect(page.getByTestId('google-rejected-diff')).toHaveText('Dojo des Lilas · E-mail — valeur Google non reprise : m1@x.fr; m2@y.fr');
+  await expect(card.getByText('E-mails — valeur Google non reprise : "Bruno" <b@x.fr>')).toBeVisible();
+  await expect(page.getByTestId('google-rejected-diff')).toHaveText('Dojo des Lilas · E-mails — valeur Google non reprise : m1 chez x.fr');
   await card.getByRole('radio', { name: 'Nouveau club' }).check();
   await card.getByRole('textbox', { name: 'Nom du club' }).fill('Dojo Bruno');
   await page.getByTestId('google-apply').click();
@@ -180,7 +180,7 @@ test('annuaire : club déjà lié proposé « peut-être », valeur Google refus
   expect(applied).toEqual([{
     updates: [{ clubId: 'c-lilas', version: 3, set: { coachPhone: '06 55 66 77 88' } }],
     links: [],
-    creates: [{ contact: 'people/bad', name: 'Dojo Bruno', coachName: 'Bruno Double', coachPhone: '06 00 00 00 00', coachEmail: null }],
+    creates: [{ contact: 'people/bad', name: 'Dojo Bruno', coachName: 'Bruno Double', coachPhone: '06 00 00 00 00', coachEmails: [] }],
     later: [],
   }]);
 });
@@ -206,4 +206,28 @@ test('annuaire : en revenant sur la page, pas d’ancien aperçu avant la relect
   release();
   await expect(page.getByTestId('google-apply')).toBeVisible();
   await expect(page.getByTestId('google-sync-loading')).toHaveCount(0);
+});
+
+test('annuaire : adresses Google en plus → proposées en ajout, rien de retiré ; décochées → gardées', async ({ page }) => {
+  const base = GOOGLE_PREVIEW.preview;
+  const marc = { ...base.linked[0]!.contact, emails: ['marc@lilas.fr', 'club@lilas.fr', 'president@lilas.fr'] };
+  const preview = {
+    ...GOOGLE_PREVIEW,
+    preview: {
+      ...base,
+      diffs: [{ ...base.diffs[0], contact: marc, fields: [{ field: 'coachEmails', directory: ['marc@lilas.fr'], google: ['club@lilas.fr', 'president@lilas.fr'] }] }],
+      linked: [{ contact: marc, clubIds: ['c-lilas'] }],
+      newContacts: [],
+      pending: [],
+    },
+  };
+  const { applied } = await mockGoogleContacts(page, preview);
+  await page.goto('/annuaire/google');
+  const row = page.getByTestId('google-diff');
+  await expect(row).toContainText('E-mails');
+  await expect(row).toContainText('marc@lilas.fr');
+  await expect(row).toContainText('+ club@lilas.fr, president@lilas.fr');
+  await page.getByTestId('google-apply').click();
+  await expect(page.getByText('Annuaire mis à jour.')).toBeVisible();
+  expect(applied).toEqual([{ updates: [{ clubId: 'c-lilas', version: 3, set: { addEmails: ['club@lilas.fr', 'president@lilas.fr'] } }], links: [], creates: [], later: [] }]);
 });

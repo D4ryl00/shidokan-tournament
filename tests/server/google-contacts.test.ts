@@ -17,12 +17,12 @@ afterEach(async () => {
   await app.close();
 });
 
-const contact = (n: string, extra: Partial<GoogleContact> = {}): GoogleContact => ({ resourceName: `people/${n}`, name: null, email: null, phone: null, organization: null, groups: [], ...extra });
+const contact = (n: string, extra: Partial<GoogleContact> = {}): GoogleContact => ({ resourceName: `people/${n}`, name: null, emails: [], phone: null, organization: null, groups: [], ...extra });
 const preview = (payload: object = {}) => app.inject({ method: 'POST', url: '/api/club-directory/google/preview', payload });
 const apply = (payload: object) => app.inject({ method: 'POST', url: '/api/club-directory/google/apply', payload });
 const directory = async () => (await app.inject({ method: 'GET', url: '/api/club-directory' })).json() as any[];
 const addClub = async (name: string, extra: object = {}) =>
-  (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { name, affiliationNumber: null, coachName: null, coachPhone: null, coachEmail: null, notes: null, ...extra } })).json();
+  (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { name, affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null, ...extra } })).json();
 const none = { updates: [], links: [], creates: [], later: [] };
 const settingsPending = async () => {
   const p = (await preview()).json().preview;
@@ -92,7 +92,7 @@ test('appliquer : différences, lien, création, plus tard', async () => {
   fake.contacts = [
     contact('c1', { name: 'Paul Martin', phone: '06 22 22 22 22' }),
     contact('c2', { name: 'Marc Est' }),
-    contact('c3', { name: 'Sophie Leroy', email: 's@ex.fr' }),
+    contact('c3', { name: 'Sophie Leroy', emails: ['s@ex.fr'] }),
     contact('c4', { name: 'Plus Tard' }),
   ];
   const [lilas] = (await directory()).filter((c) => c.name === 'Dojo des Lilas');
@@ -108,14 +108,14 @@ test('appliquer : différences, lien, création, plus tard', async () => {
   const res = await apply({
     updates: [{ clubId: lilas.id, version: lilasNow.version, set: { coachPhone: '06 22 22 22 22' } }],
     links: [{ clubId: est.id, version: est.version, contact: 'people/c2', set: {} }],
-    creates: [{ contact: 'people/c3', name: 'Kyokushin Sud', coachName: 'Sophie Leroy', coachPhone: null, coachEmail: 's@ex.fr' }],
+    creates: [{ contact: 'people/c3', name: 'Kyokushin Sud', coachName: 'Sophie Leroy', coachPhone: null, coachEmails: ['s@ex.fr'] }],
     later: ['people/c4'],
   });
   expect(res.json()).toEqual({ updated: 1, linked: 1, created: 1 });
   const dir = await directory();
   expect(dir.find((c) => c.name === 'Dojo des Lilas')).toMatchObject({ coachPhone: '06 22 22 22 22', googleContactId: 'people/c1' });
   expect(dir.find((c) => c.name === 'Shidokan Est')).toMatchObject({ googleContactId: 'people/c2' });
-  expect(dir.find((c) => c.name === 'Kyokushin Sud')).toMatchObject({ googleContactId: 'people/c3', coachName: 'Sophie Leroy', coachPhone: null, coachEmail: 's@ex.fr' });
+  expect(dir.find((c) => c.name === 'Kyokushin Sud')).toMatchObject({ googleContactId: 'people/c3', coachName: 'Sophie Leroy', coachPhone: null, coachEmails: ['s@ex.fr'] });
   const after = (await preview()).json().preview;
   expect(after.diffs.filter((d: any) => d.clubId === lilas.id)).toEqual([]);
   expect(after.pending.map((c: any) => c.contact.resourceName)).toEqual(['people/c4']);
@@ -134,6 +134,26 @@ test('appliquer : ligne décochée → valeur gardée, différence reproposée',
   expect((await directory())[0].coachPhone).toBe('0111111111');
 });
 
+test('e-mails : toutes les adresses du contact ; celles qui manquent s’ajoutent à la fiche, rien n’est retiré', async () => {
+  await connectGoogle(app);
+  const club = await addClub('Dojo des Lilas', { coachEmails: ['coach@lilas.fr', 'club@lilas.fr'] });
+  fake.contacts = [contact('c1', { name: 'Paul', emails: ['COACH@lilas.fr', 'pres@lilas.fr', 'pas une adresse'] })];
+  const first = (await preview()).json().preview;
+  // Même mail (une adresse en commun) : proposé d'office.
+  expect(first.newContacts[0].exact).toEqual({ clubId: club.id, reason: 'email' });
+  const v = first.clubs[0].version;
+  await apply({ ...none, links: [{ clubId: club.id, version: v, contact: 'people/c1', set: {} }] });
+  const p = (await preview()).json().preview;
+  expect(p.diffs[0].fields).toEqual([
+    { field: 'coachName', directory: null, google: 'Paul' },
+    { field: 'coachEmails', directory: ['coach@lilas.fr', 'club@lilas.fr'], google: ['pres@lilas.fr'] },
+  ]);
+  const res = await apply({ ...none, updates: [{ clubId: club.id, version: p.diffs[0].version, set: { addEmails: ['pres@lilas.fr', 'Club@lilas.fr'] } }] });
+  expect(res.statusCode).toBe(200);
+  expect((await directory())[0].coachEmails).toEqual(['coach@lilas.fr', 'club@lilas.fr', 'pres@lilas.fr']);
+  expect((await preview()).json().preview.diffs[0].fields.map((f: any) => f.field)).toEqual(['coachName']);
+});
+
 test('appliquer : annuaire modifié entre-temps → 409, rien d’écrit', async () => {
   await connectGoogle(app);
   const club = await addClub('Dojo des Lilas');
@@ -143,7 +163,7 @@ test('appliquer : annuaire modifié entre-temps → 409, rien d’écrit', async
   const res = await apply({
     updates: [{ clubId: club.id, version: v, set: { coachName: 'Paul' } }],
     links: [],
-    creates: [{ contact: 'people/c1', name: 'Nouveau', coachName: null, coachPhone: null, coachEmail: null }],
+    creates: [{ contact: 'people/c1', name: 'Nouveau', coachName: null, coachPhone: null, coachEmails: [] }],
     later: ['people/c9'],
   });
   expect(res.statusCode).toBe(409);
@@ -185,13 +205,13 @@ test('appliquer : valeurs trop longues ou mail invalide refusés', async () => {
   await connectGoogle(app);
   const club = await addClub('Dojo des Lilas');
   expect((await apply({ ...none, updates: [{ clubId: club.id, version: 1, set: { coachName: 'x'.repeat(121) } }] })).statusCode).toBe(400);
-  expect((await apply({ ...none, updates: [{ clubId: club.id, version: 1, set: { coachEmail: 'pas un mail' } }] })).statusCode).toBe(400);
+  expect((await apply({ ...none, updates: [{ clubId: club.id, version: 1, set: { addEmails: ['pas un mail'] } }] })).statusCode).toBe(400);
   expect((await apply({ ...none, extra: 1 })).statusCode).toBe(400);
 });
 
 test('un contact sans mail ni téléphone : le nouveau club ne reçoit que les champs remplis', async () => {
   await connectGoogle(app);
-  const res = await apply({ ...none, creates: [{ contact: 'people/c1', name: 'Solo', coachName: 'Seul', coachPhone: null, coachEmail: null }] });
+  const res = await apply({ ...none, creates: [{ contact: 'people/c1', name: 'Solo', coachName: 'Seul', coachPhone: null, coachEmails: [] }] });
   expect(res.statusCode).toBe(200);
-  expect((await directory())[0]).toMatchObject({ name: 'Solo', coachName: 'Seul', coachPhone: null, coachEmail: null, googleContactId: 'people/c1' });
+  expect((await directory())[0]).toMatchObject({ name: 'Solo', coachName: 'Seul', coachPhone: null, coachEmails: [], googleContactId: 'people/c1' });
 });

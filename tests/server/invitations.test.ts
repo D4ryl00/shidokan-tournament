@@ -17,7 +17,7 @@ beforeEach(async () => {
 });
 afterEach(async () => app.close());
 
-const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmail: null, notes: null };
+const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
 const entry = async (name: string, extra: object = {}) =>
   (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, name, ...extra } })).json().id as string;
 const invite = (directoryIds: string[]) => app.inject({ method: 'POST', url: `${base}/invitations`, payload: { directoryIds } });
@@ -32,15 +32,15 @@ const resolves = async (token: string) => {
 type Link = { clubId: string; clubName: string; token: string };
 
 test('inviter deux entrées : clubs créés, reliés, coordonnées copiées ; deux liens ; réinviter → aucun nouveau lien', async () => {
-  const tani = await entry('Tani Dojo', { coachEmail: 'coach@tani.example', coachPhone: '0600000000' });
+  const tani = await entry('Tani Dojo', { coachEmails: ['coach@tani.example'], coachPhone: '0600000000' });
   const budo = await entry('Budo Collines');
   const res = await invite([tani, budo]);
   expect(res.statusCode).toBe(200);
   const links = res.json() as Link[];
   expect(links.map((l) => l.clubName).sort()).toEqual(['Budo Collines', 'Tani Dojo']);
   expect(links.every((l) => /^[A-Za-z0-9_-]{32}$/.test(l.token))).toBe(true);
-  const clubs = (await app.inject({ method: 'GET', url: `${base}/clubs` })).json() as { name: string; coachEmail: string | null; coachPhone: string | null }[];
-  expect(clubs.find((c) => c.name === 'Tani Dojo')).toMatchObject({ coachEmail: 'coach@tani.example', coachPhone: '0600000000' });
+  const clubs = (await app.inject({ method: 'GET', url: `${base}/clubs` })).json() as { name: string; coachEmails: string[]; coachPhone: string | null }[];
+  expect(clubs.find((c) => c.name === 'Tani Dojo')).toMatchObject({ coachEmails: ['coach@tani.example'], coachPhone: '0600000000' });
   const rows = (await app.inject({ method: 'GET', url: `${base}/invitations` })).json() as { clubName: string; invited: boolean; directoryClubId: string }[];
   expect(rows.map((r) => [r.clubName, r.invited, r.directoryClubId])).toEqual([['Budo Collines', true, budo], ['Tani Dojo', true, tani]]);
   expect((await invite([tani])).json()).toEqual([]);

@@ -200,3 +200,21 @@ test('paquet d’une version d’avant les catégories fermées : les tranches n
   expect(rows).toHaveLength(18);
   expect(rows.every((r) => r.age_band_code === 'senior')).toBe(true);
 });
+
+test('paquet d’une version d’avant les listes d’adresses : l’adresse unique (coach_email) devient la liste', async () => {
+  const a = await seeded();
+  const b = openDb(tmpDbPath());
+  opened.push(b);
+  const pkg = buildPackage(a.db, a.id, { handOver: false, role: 'local' });
+  const old = (r: Record<string, unknown>, email: string | null): Record<string, unknown> => {
+    const { coach_emails: _l, ...rest } = r;
+    return { ...rest, coach_email: email };
+  };
+  const clubs = pkg.tables.clubs!.map((r, i) => old(r, i === 0 ? ' coach@tani.fr ' : null));
+  const directory = pkg.directory.map((e) => old(e, e.id === clubs[0]!.directory_club_id ? 'fiche@tani.fr' : null));
+  await importPackage(b, tmpDbPath(), { ...pkg, tables: { ...pkg.tables, clubs }, directory, migrations: 24 }, null, new Date(), { backup: false });
+  const emails = (table: string, id: unknown) => JSON.parse((b.$client.prepare(`select coach_emails as e from ${table} where id = ?`).get(id) as { e: string }).e);
+  expect(emails('clubs', clubs[0]!.id)).toEqual(['coach@tani.fr']);
+  expect(emails('clubs', clubs[1]!.id)).toEqual([]);
+  expect(emails('club_directory', clubs[0]!.directory_club_id)).toEqual(['fiche@tani.fr']);
+});

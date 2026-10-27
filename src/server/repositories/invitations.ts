@@ -16,7 +16,7 @@ export interface ClubInvitationRow {
   clubId: string;
   clubName: string;
   directoryClubId: string | null;
-  coachEmail: string | null;
+  coachEmails: string[];
   invited: boolean;
   invitedAt: string | null;
   lastUsedAt: string | null;
@@ -71,7 +71,7 @@ export function listInvitations(db: AppDb, competitionId: string): ClubInvitatio
       const n = db.select({ n: count() }).from(fighters).where(eq(fighters.clubId, c.id)).get()!.n;
       const mail = db.select().from(mailLog).where(eq(mailLog.clubId, c.id)).orderBy(desc(mailLog.sentAt)).get();
       return {
-        clubId: c.id, clubName: c.name, directoryClubId: c.directoryClubId, coachEmail: c.coachEmail,
+        clubId: c.id, clubName: c.name, directoryClubId: c.directoryClubId, coachEmails: c.coachEmails,
         invited: !!link, invitedAt: link?.createdAt ?? null, lastUsedAt: link?.lastUsedAt ?? null, fighters: n,
         lastMail: mail ? { sentAt: mail.sentAt, status: mail.status, error: mail.error } : null,
       };
@@ -106,7 +106,7 @@ export function inviteClubs(db: AppDb, competitionId: string, directoryIds: stri
           ...(!club.ffkEntity && entry.ffkEntity ? { ffkEntity: entry.ffkEntity } : {}),
           ...(!club.coachName && entry.coachName ? { coachName: entry.coachName } : {}),
           ...(!club.coachPhone && entry.coachPhone ? { coachPhone: entry.coachPhone } : {}),
-          ...(!club.coachEmail && entry.coachEmail ? { coachEmail: entry.coachEmail } : {}),
+          ...(!club.coachEmails.length && entry.coachEmails.length ? { coachEmails: entry.coachEmails } : {}),
         };
         t.update(clubs).set(fill).where(eq(clubs.id, club.id)).run();
       } else {
@@ -114,7 +114,7 @@ export function inviteClubs(db: AppDb, competitionId: string, directoryIds: stri
         t.insert(clubs)
           .values({
             id, competitionId, name: entry.name, nameKey: entry.nameKey, ffkEntity: entry.ffkEntity, coachName: entry.coachName,
-            coachPhone: entry.coachPhone, coachEmail: entry.coachEmail, preApproval: false, directoryClubId: entry.id,
+            coachPhone: entry.coachPhone, coachEmails: entry.coachEmails, preApproval: false, directoryClubId: entry.id,
           })
           .run();
         club = t.select().from(clubs).where(eq(clubs.id, id)).get()!;

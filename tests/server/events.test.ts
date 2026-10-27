@@ -51,11 +51,11 @@ test('une écriture réussie sur la compétition → change ; refusée (400) →
 });
 
 test('écriture depuis la page du club → change', async () => {
-  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmail: null, notes: null };
+  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
   const entry = (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, name: 'Tani Dojo' } })).json().id;
   const [link] = (await app.inject({ method: 'POST', url: `/api/competitions/${id}/invitations`, payload: { directoryIds: [entry] } })).json();
   await app.inject({ method: 'PATCH', url: `/api/competitions/${id}/club-entry`, payload: { status: 'open' } });
-  const header = { coachName: 'Jean', coachPhone: null, coachEmail: null, preApproval: false, affiliationNumber: null };
+  const header = { coachName: 'Jean', coachPhone: null, coachEmails: [], preApproval: false, affiliationNumber: null };
   expect(await changesDuring(id, () => app.inject({ method: 'PATCH', url: `/api/inscription/${link.token}/club`, payload: header }))).toBeGreaterThanOrEqual(1);
 });
 
@@ -86,7 +86,7 @@ test('arrêt du serveur avec un flux ouvert : il se ferme au lieu d’attendre',
 });
 
 test('aperçus (routes …/preview) : aucun change (sinon les postes se rechargent en boucle)', async () => {
-  const pkg = { header: { club: 'Tani Dojo', coachName: null, coachPhone: null, coachEmail: null, preApproval: false }, lines: [] };
+  const pkg = { header: { club: 'Tani Dojo', coachName: null, coachPhone: null, coachEmails: [], preApproval: false }, lines: [] };
   expect(await changesDuring(id, () => app.inject({ method: 'POST', url: `/api/competitions/${id}/club-forms/entry/preview`, payload: pkg }))).toBe(0);
 });
 

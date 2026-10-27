@@ -5,14 +5,15 @@ import { plural } from '../../domain/plural.js';
 import type { Club } from '../../domain/registration.js';
 import { useClubs, useRegistrations, useUpdateClub } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { EmailsInput, EmailsList } from '../components/EmailsInput.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { IconEdit } from '../components/ui/icons.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
 import { TableCard } from '../components/ui/TableCard.js';
 
-type Field = 'name' | 'coachName' | 'coachPhone' | 'coachEmail';
+type Field = 'name' | 'coachName' | 'coachPhone';
 const FIELDS: { field: Field; label: string }[] = [
-  { field: 'name', label: 'Club' }, { field: 'coachName', label: 'Coach' }, { field: 'coachPhone', label: 'Téléphone' }, { field: 'coachEmail', label: 'E-mail' },
+  { field: 'name', label: 'Club' }, { field: 'coachName', label: 'Coach' }, { field: 'coachPhone', label: 'Téléphone' },
 ];
 
 /** Fenêtre de modification d'un club : seuls les champs changés sont envoyés (le nom ne peut pas être vidé). */
@@ -20,12 +21,16 @@ function ClubModal({ competitionId, club, onClose }: { competitionId: string; cl
   const update = useUpdateClub(competitionId);
   // Le parent remonte la fenêtre (key) pour chaque club : l'état part du club ouvert.
   const [form, setForm] = useState<Record<Field, string>>({
-    name: club?.name ?? '', coachName: club?.coachName ?? '', coachPhone: club?.coachPhone ?? '', coachEmail: club?.coachEmail ?? '',
+    name: club?.name ?? '', coachName: club?.coachName ?? '', coachPhone: club?.coachPhone ?? '',
   });
+  const [emails, setEmails] = useState<string[]>(club?.coachEmails ?? []);
   if (!club) return null;
-  const patch = Object.fromEntries(
-    FIELDS.map(({ field }) => [field, form[field].trim()]).filter(([field, v]) => v !== (club[field as Field] ?? '')).map(([field, v]) => [field, v || null]),
-  );
+  const patch = {
+    ...Object.fromEntries(
+      FIELDS.map(({ field }) => [field, form[field].trim()]).filter(([field, v]) => v !== (club[field as Field] ?? '')).map(([field, v]) => [field, v || null]),
+    ),
+    ...(emails.join('\n') !== club.coachEmails.join('\n') ? { coachEmails: emails } : {}),
+  };
   return (
     <Modal opened onClose={onClose} title="Modifier le club">
       <Stack>
@@ -33,6 +38,7 @@ function ClubModal({ competitionId, club, onClose }: { competitionId: string; cl
           <TextInput key={field} label={label} required={field === 'name'} value={form[field]} data-testid={`club-edit-${field}`}
             onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, [field]: v })); }} />
         ))}
+        <EmailsInput value={emails} onChange={setEmails} data-testid="club-edit-coachEmails" />
         <ApiErrorAlert error={update.error} />
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>Annuler</Button>
@@ -65,7 +71,7 @@ export function ClubsPage() {
           <Table>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Club</Table.Th><Table.Th>Coach</Table.Th><Table.Th>Téléphone</Table.Th><Table.Th>E-mail</Table.Th>
+                <Table.Th>Club</Table.Th><Table.Th>Coach</Table.Th><Table.Th>Téléphone</Table.Th><Table.Th>E-mails</Table.Th>
                 <Table.Th>Pré-accord</Table.Th><Table.Th ta="right">Inscriptions</Table.Th><Table.Th />
               </Table.Tr>
             </Table.Thead>
@@ -75,7 +81,7 @@ export function ClubsPage() {
                   <Table.Td fw={600}>{c.name}</Table.Td>
                   <Table.Td>{c.coachName ?? <Text span c="dimmed" size="sm">—</Text>}</Table.Td>
                   <Table.Td className="num" style={{ whiteSpace: 'nowrap' }}>{c.coachPhone ?? <Text span c="dimmed" size="sm">—</Text>}</Table.Td>
-                  <Table.Td>{c.coachEmail ?? <Text span c="dimmed" size="sm">—</Text>}</Table.Td>
+                  <Table.Td><EmailsList emails={c.coachEmails} /></Table.Td>
                   <Table.Td>
                     <Checkbox data-testid="club-preapproval" aria-label={`Pré-accord de ${c.name}`} checked={c.preApproval}
                       onChange={(e) => update.mutate({ clubId: c.id, preApproval: e.currentTarget.checked })} />

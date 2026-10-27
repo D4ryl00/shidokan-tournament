@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { EMAIL_LIMITS } from '../../domain/emails.js';
 import type { AppDb } from '../db/client.js';
 import type { InstanceRole } from '../auth/guard.js';
 import { invitationMessage, mailtoInvitation, sendInvitations, type MailTransport } from '../mail.js';
@@ -14,6 +15,9 @@ import {
 } from '../repositories/invitations.js';
 
 type P = { Params: { id: string } };
+
+/** Adresses choisies parmi celles du club (le serveur vérifie qu'elles en sont). */
+const chosenEmails = z.array(z.string().trim().max(EMAIL_LIMITS.length)).min(1, 'Choisissez au moins une adresse.').max(EMAIL_LIMITS.count);
 
 class PublicUrlMissingError extends Error {
   readonly statusCode = 400;
@@ -51,10 +55,13 @@ export async function invitationRoutes(app: FastifyInstance, { db, mailTransport
   });
 
   app.post<P>('/api/competitions/:id/invitations/send', async (req) => {
-    const { clubIds } = z.object({ clubIds: z.array(z.string()).min(1).max(500) }).parse(req.body);
-    return sendInvitations(db, mailTransport, req.params.id, clubIds, baseUrl(req), mailPauseMs);
+    const { clubs } = z.object({ clubs: z.array(z.object({ clubId: z.string(), emails: chosenEmails.optional() }).strict()).min(1).max(500) }).strict().parse(req.body);
+    return sendInvitations(db, mailTransport, req.params.id, clubs, baseUrl(req), mailPauseMs);
   });
-  app.post<PC>('/api/competitions/:id/invitations/:clubId/mailto', async (req) => mailtoInvitation(db, req.params.id, req.params.clubId, baseUrl(req)));
+  app.post<PC>('/api/competitions/:id/invitations/:clubId/mailto', async (req) => {
+    const { emails } = z.object({ emails: chosenEmails.optional() }).strict().parse(req.body ?? {});
+    return mailtoInvitation(db, req.params.id, req.params.clubId, baseUrl(req), emails);
+  });
   app.get<P & { Querystring: { clubId?: string } }>('/api/competitions/:id/invitations/preview', async (req) => {
     const { clubId } = z.object({ clubId: z.string().min(1) }).parse(req.query);
     return invitationMessage(db, req.params.id, clubId, '{lien}');

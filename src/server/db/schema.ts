@@ -88,7 +88,8 @@ export const clubDirectory = sqliteTable(
     ffkEntity: text('ffk_entity'),
     coachName: text('coach_name'),
     coachPhone: text('coach_phone'),
-    coachEmail: text('coach_email'),
+    /** Adresses e-mail du club (liste JSON, la première est la principale). */
+    coachEmails: text('coach_emails', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
     notes: text('notes'),
     archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
     /** Contact Google relié (nom de ressource `people/…`) ; effacé à l'archivage. */
@@ -254,7 +255,7 @@ export const clubs = sqliteTable('clubs', {
   ffkEntity: text('ffk_entity'),
   coachName: text('coach_name'),
   coachPhone: text('coach_phone'),
-  coachEmail: text('coach_email'),
+  coachEmails: text('coach_emails', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
   preApproval: integer('pre_approval', { mode: 'boolean' }).notNull().default(false),
   directoryClubId: text('directory_club_id').references(() => clubDirectory.id, { onDelete: 'set null' }),
   ...rowMeta(),

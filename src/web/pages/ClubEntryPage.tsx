@@ -10,6 +10,7 @@ import { ClubLineForm } from '../components/ClubLineForm.js';
 import { Logo } from '../components/Logo.js';
 import { clubEntryStatusText } from '../components/OnlineEntryPanel.js';
 import { ThemeToggle } from '../components/ThemeToggle.js';
+import { EmailsInput } from '../components/EmailsInput.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { disciplineLabel } from '../labels.js';
@@ -27,7 +28,7 @@ function summary(line: ClubFormLine, ageBands: ClubEntryView['ageBands']): [stri
 /** Coordonnées du club et pré-accord, enregistrés d'un bouton. */
 function HeaderForm({ token, view }: { token: string; view: ClubEntryView }) {
   const save = useSaveClubHeader(token);
-  const initial: ClubEntryHeader = { coachName: view.club.coachName, coachPhone: view.club.coachPhone, coachEmail: view.club.coachEmail, preApproval: view.club.preApproval, affiliationNumber: view.club.affiliationNumber };
+  const initial: ClubEntryHeader = { coachName: view.club.coachName, coachPhone: view.club.coachPhone, coachEmails: view.club.coachEmails, preApproval: view.club.preApproval, affiliationNumber: view.club.affiliationNumber };
   const [form, setForm] = useState(initial);
   const set = (patch: Partial<ClubEntryHeader>) => setForm((f) => ({ ...f, ...patch }));
   const orNull = (v: string) => v.trim() || null;
@@ -39,7 +40,7 @@ function HeaderForm({ token, view }: { token: string; view: ClubEntryView }) {
         <SimpleGrid cols={{ base: 1, xs: 2 }}>
           <TextInput label="Coach" readOnly={ro} value={form.coachName ?? ''} onChange={(e) => set({ coachName: orNull(e.currentTarget.value) })} />
           <TextInput label="Téléphone" readOnly={ro} inputMode="tel" value={form.coachPhone ?? ''} onChange={(e) => set({ coachPhone: orNull(e.currentTarget.value) })} />
-          <TextInput label="E-mail" readOnly={ro} inputMode="email" value={form.coachEmail ?? ''} onChange={(e) => set({ coachEmail: orNull(e.currentTarget.value) })} />
+          <EmailsInput readOnly={ro} value={form.coachEmails} onChange={(coachEmails) => set({ coachEmails })} />
           <TextInput data-testid="club-affiliation" label="N° d’affiliation FFK (facultatif)" readOnly={ro} inputMode="numeric" value={form.affiliationNumber ?? ''}
             onChange={(e) => set({ affiliationNumber: orNull(e.currentTarget.value) })} />
         </SimpleGrid>

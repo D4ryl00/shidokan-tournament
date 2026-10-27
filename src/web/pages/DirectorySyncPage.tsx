@@ -7,7 +7,7 @@ import { plural } from '../../domain/plural.js';
 import { ApiError, useApplyGoogleContacts, useGoogleContactsPreview } from '../api.js';
 import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
-import { contactName, FIELD_LABEL, GoogleContactCard, rejectedText } from '../components/GoogleContactCard.js';
+import { contactName, diffText, FIELD_LABEL, GoogleContactCard, rejectedText } from '../components/GoogleContactCard.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
 import { TableCard } from '../components/ui/TableCard.js';
@@ -93,14 +93,14 @@ function SyncForm({ preview: p, busy, pending, onApply, error }: { preview: Sync
   const clubName = new Map(p.clubs.map((c) => [c.id, c.name]));
   // Valeurs Google des contacts liés que l'annuaire refuserait : jamais reprises, signalées sous les différences.
   const rejected = p.linked.flatMap((l) => rejectedValues(l.contact).map((r) => ({
-    key: `${l.contact.resourceName}:${r.field}`, text: `${l.clubIds.map((id) => clubName.get(id) ?? '—').join(', ')} · ${rejectedText(r)}`,
+    key: `${l.contact.resourceName}:${r.field}:${r.value}`, text: `${l.clubIds.map((id) => clubName.get(id) ?? '—').join(', ')} · ${rejectedText(r)}`,
   })));
   const unnamed = Object.entries(choices.plans).filter(([, pl]) => pl.mode === 'create' && !pl.name.trim()).map(([id]) => names.get(id) ?? 'Contact sans nom');
 
   return (
     <Stack gap="lg">
       <SectionCard title={`Différences avec l’annuaire (${rows.length})`}
-        description="Google l’emporte : décochez une ligne pour garder la valeur de l’annuaire, cette fois seulement.">
+        description="Google l’emporte, et ses adresses e-mail s’ajoutent à celles de l’annuaire : décochez une ligne pour garder l’annuaire tel quel, cette fois seulement.">
         {rejected.map((r) => (
           <Text key={r.key} size="sm" c="var(--sk-warn-text)" mb="xs" data-testid="google-rejected-diff" style={{ overflowWrap: 'anywhere' }}>{r.text}</Text>
         ))}
@@ -113,6 +113,9 @@ function SyncForm({ preview: p, busy, pending, onApply, error }: { preview: Sync
               <Table.Tbody>
                 {rows.map(({ d, f, key }) => {
                   const keep = choices.keptDiffs.includes(key);
+                  const t = diffText(f);
+                  // Plusieurs adresses : elles passent à la ligne au lieu d'élargir le tableau.
+                  const wrap = f.field === 'coachEmails' ? { overflowWrap: 'anywhere' as const } : { whiteSpace: 'nowrap' as const };
                   return (
                     <Table.Tr key={key} data-testid="google-diff" bg={keep ? 'var(--sk-row)' : undefined}>
                       <Table.Td>
@@ -120,8 +123,8 @@ function SyncForm({ preview: p, busy, pending, onApply, error }: { preview: Sync
                       </Table.Td>
                       <Table.Td fw={500}>{d.clubName}</Table.Td>
                       <Table.Td>{FIELD_LABEL[f.field]}</Table.Td>
-                      <Table.Td c={keep ? undefined : 'dimmed'} style={{ whiteSpace: 'nowrap' }}>{keep ? <><b>{f.directory ?? '—'}</b> (gardé)</> : f.directory ?? '—'}</Table.Td>
-                      <Table.Td c={keep ? 'dimmed' : undefined} style={{ whiteSpace: 'nowrap' }}>{keep ? <s>{f.google}</s> : f.google}</Table.Td>
+                      <Table.Td c={keep ? undefined : 'dimmed'} style={wrap}>{keep ? <><b>{t.directory ?? '—'}</b> (gardé)</> : t.directory ?? '—'}</Table.Td>
+                      <Table.Td c={keep ? 'dimmed' : undefined} style={wrap}>{keep ? <s>{t.google}</s> : t.google}</Table.Td>
                     </Table.Tr>
                   );
                 })}

@@ -168,6 +168,13 @@ export function validatePackage(db: AppDb, raw: unknown): SyncPackage {
   return pkg as SyncPackage;
 }
 
+/** Ligne d'un paquet d'avant la migration 0024 : son adresse unique (`coach_email`) devient la liste `coach_emails`. */
+function withEmailList(row: Record<string, unknown>): Record<string, unknown> {
+  if ('coach_emails' in row || !('coach_email' in row)) return row;
+  const { coach_email: email, ...rest } = row;
+  return { ...rest, coach_emails: JSON.stringify(typeof email === 'string' && email.trim() ? [email.trim()] : []) };
+}
+
 /** Fiche d'annuaire locale qui correspond à une fiche reçue (id, puis numéro d'affiliation, puis nom sans autre numéro) ; sinon ajoutée. */
 function localEntry(db: AppDb, entry: Record<string, unknown>): string {
   const byId = db.$client.prepare('select id from club_directory where id = ?').get(entry.id) as { id: string } | undefined;
@@ -209,10 +216,10 @@ export async function importPackage(
   try {
     client.transaction(() => {
       client.pragma('defer_foreign_keys = ON');
-      const entryOf = new Map(pkg.directory.filter((e) => linked.has(e.id)).map((e) => [e.id as string, localEntry(db, e)]));
+      const entryOf = new Map(pkg.directory.filter((e) => linked.has(e.id)).map((e) => [e.id as string, localEntry(db, withEmailList(e))]));
 
       for (const t of PACKAGE_TABLES) {
-        const rows = (pkg.tables[t] ?? []).map((r) => (t === 'clubs' ? { ...r, directory_club_id: r.directory_club_id ? (entryOf.get(r.directory_club_id as string) ?? null) : null } : r));
+        const rows = (pkg.tables[t] ?? []).map((r) => (t === 'clubs' ? { ...withEmailList(r), directory_club_id: r.directory_club_id ? (entryOf.get(r.directory_club_id as string) ?? null) : null } : r));
         if (t === 'age_links') {
           client.prepare('delete from age_links where competition_id = ?').run(id);
           const cols = columnsOf(db, t).map((c) => c.name).filter((c) => c !== 'id');

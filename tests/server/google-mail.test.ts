@@ -10,7 +10,7 @@ let fake: FakeGoogle;
 let dbPath: string;
 let base: string;
 const PUBLIC_URL = 'https://competitions.example.org';
-const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmail: null, notes: null };
+const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
 const build = (withGoogle = true) =>
   buildApp({ dbPath, publicUrl: PUBLIC_URL, mailPauseMs: 0, google: withGoogle ? { clientId: 'id', clientSecret: 's', fetch: fake.fetch } : undefined });
 
@@ -26,10 +26,10 @@ afterEach(async () => app.close());
 
 async function invited(...emails: string[]) {
   const ids: string[] = [];
-  for (const [i, coachEmail] of emails.entries()) ids.push((await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, name: `Club ${i + 1}`, coachEmail } })).json().id);
+  for (const [i, coachEmail] of emails.entries()) ids.push((await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, name: `Club ${i + 1}`, coachEmails: [coachEmail] } })).json().id);
   return (await app.inject({ method: 'POST', url: `${base}/invitations`, payload: { directoryIds: ids } })).json() as { clubId: string; clubName: string; token: string }[];
 }
-const send = (clubIds: string[]) => app.inject({ method: 'POST', url: `${base}/invitations/send`, payload: { clubIds } });
+const send = (clubIds: string[]) => app.inject({ method: 'POST', url: `${base}/invitations/send`, payload: { clubs: clubIds.map((clubId) => ({ clubId })) } });
 const testMail = () => app.inject({ method: 'POST', url: '/api/app-settings/test-mail', payload: { to: 'moi@example.org' } });
 const linkStatus = async (token: string) => (await app.inject({ method: 'GET', url: `/api/inscription/${token}` })).statusCode;
 const settings = async () => (await app.inject({ method: 'GET', url: '/api/app-settings' })).json();

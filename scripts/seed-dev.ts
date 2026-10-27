@@ -99,7 +99,7 @@ export async function seedDev(app: FastifyInstance, opts: { seed?: number } = {}
 
   const clubIds: string[] = [];
   for (const [i, c] of CLUBS.entries()) {
-    const club = await call<{ id: string }>(app, 'POST', `${base}/clubs`, { ...c, coachPhone: `06 00 00 00 0${i + 1}`, coachEmail: `coach${i + 1}@example.org` });
+    const club = await call<{ id: string }>(app, 'POST', `${base}/clubs`, { ...c, coachPhone: `06 00 00 00 0${i + 1}`, coachEmails: [`coach${i + 1}@example.org`] });
     clubIds.push(club.id);
   }
 

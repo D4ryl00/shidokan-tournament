@@ -1,12 +1,12 @@
 import { z } from 'zod';
-import { isSingleEmail } from '../../domain/mail-template.js';
-import { DIRECTORY_LIMITS } from '../../domain/registration.js';
+import { EMAIL_LIMITS, TOO_MANY_EMAILS, cleanEmails, isAcceptableEmail } from '../../domain/emails.js';
 
-/** Champ e-mail facultatif : une seule adresse ; vide → null. */
-export const optionalEmail = z
-  .string()
-  .trim()
-  .max(DIRECTORY_LIMITS.coachEmail)
-  .refine((v) => v === '' || isSingleEmail(v), 'Adresse e-mail invalide (une seule adresse).')
-  .transform((v) => v || null)
-  .nullable();
+/** Adresses e-mail d'un club : une adresse valide par élément ; espaces, vides et doublons retirés. L'erreur cite l'adresse refusée. */
+export const emailList = z
+  .array(z.string().max(1000))
+  .transform(cleanEmails)
+  .superRefine((list, ctx) => {
+    const invalid = list.filter((e) => !isAcceptableEmail(e));
+    if (invalid.length) ctx.addIssue({ code: 'custom', message: `${invalid.length > 1 ? 'Adresses e-mail invalides' : 'Adresse e-mail invalide'} : ${invalid.join(', ')}` });
+    else if (list.length > EMAIL_LIMITS.count) ctx.addIssue({ code: 'custom', message: TOO_MANY_EMAILS });
+  });

@@ -1,4 +1,5 @@
 import { count, eq } from 'drizzle-orm';
+import { missingEmails } from '../../domain/emails.js';
 import type { DirectoryEntry, DirectoryInput } from '../../domain/registration.js';
 import { normalizeName } from '../../domain/names.js';
 import type { AppDb } from '../db/client.js';
@@ -15,7 +16,7 @@ function toEntry(db: AppDb, row: Row): DirectoryEntry {
   const competitions = db.select({ n: count() }).from(clubs).where(eq(clubs.directoryClubId, row.id)).get()!.n;
   return {
     id: row.id, name: row.name, affiliationNumber: row.affiliationNumber, ffkEntity: row.ffkEntity, coachName: row.coachName,
-    coachPhone: row.coachPhone, coachEmail: row.coachEmail, notes: row.notes, archived: row.archived, googleContactId: row.googleContactId, createdAt: row.createdAt, competitions,
+    coachPhone: row.coachPhone, coachEmails: row.coachEmails, notes: row.notes, archived: row.archived, googleContactId: row.googleContactId, createdAt: row.createdAt, competitions,
   };
 }
 
@@ -51,7 +52,10 @@ export function updateDirectoryEntry(db: AppDb, id: string, patch: Partial<Direc
   return toEntry(db, getRow(db, id));
 }
 
-/** Fusionne deux fiches : les clubs de compétition de `mergeId` passent à `keepId`, dont les champs vides sont complétés ; `mergeId` est supprimée. */
+/**
+ * Fusionne deux fiches : les clubs de compétition de `mergeId` passent à `keepId`, dont les champs vides sont complétés et qui reçoit
+ * aussi les adresses e-mail qu'elle n'a pas ; `mergeId` est supprimée.
+ */
 export function mergeDirectoryEntries(db: AppDb, keepId: string, mergeId: string): DirectoryEntry {
   const keep = getRow(db, keepId);
   const merged = getRow(db, mergeId);
@@ -60,8 +64,10 @@ export function mergeDirectoryEntries(db: AppDb, keepId: string, mergeId: string
     const t = tx as unknown as AppDb;
     t.update(clubs).set({ directoryClubId: keepId }).where(eq(clubs.directoryClubId, mergeId)).run();
     t.delete(clubDirectory).where(eq(clubDirectory.id, mergeId)).run(); // avant de reprendre son numéro (unique)
-    const fields = ['affiliationNumber', 'ffkEntity', 'coachName', 'coachPhone', 'coachEmail', 'notes'] as const;
+    const fields = ['affiliationNumber', 'ffkEntity', 'coachName', 'coachPhone', 'notes'] as const;
     const fill = Object.fromEntries(fields.filter((f) => !keep[f] && merged[f]).map((f) => [f, merged[f]]));
+    const emails = missingEmails(keep.coachEmails, merged.coachEmails);
+    if (emails.length) Object.assign(fill, { coachEmails: [...keep.coachEmails, ...emails] });
     if (!keep.googleContactId && merged.googleContactId) Object.assign(fill, { googleContactId: merged.googleContactId });
     if (Object.keys(fill).length) t.update(clubDirectory).set(fill).where(eq(clubDirectory.id, keepId)).run();
   });

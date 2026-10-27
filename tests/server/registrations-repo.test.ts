@@ -28,12 +28,12 @@ const input = (over: Partial<RegistrationInput> = {}): RegistrationInput => ({
 });
 
 const form = (club: string, names: string[], preApproval = false): ClubFormParse => ({
-  header: { club, coachName: 'Coach', coachPhone: '0600', coachEmail: null, preApproval },
+  header: { club, coachName: 'Coach', coachPhone: '0600', coachEmails: [], preApproval },
   rows: names.map((n, i) => ({ line: 12 + i, label: n, input: input({ lastName: n, source: 'club_form' }), errors: [], warnings: [] })),
 });
 
 test('karaté + kata pour le même combattant : un seul combattant', async () => {
-  const club = await upsertClub(db, cid, { name: 'Tani Dojo', ffkEntity: null, coachName: null, coachPhone: null, coachEmail: null, preApproval: false });
+  const club = await upsertClub(db, cid, { name: 'Tani Dojo', ffkEntity: null, coachName: null, coachPhone: null, coachEmails: [], preApproval: false });
   await createRegistration(db, cid, input({ clubId: club.id }));
   await createRegistration(db, cid, input({ clubId: club.id, discipline: 'kata', ruleset: null, weightClassId: null, firstName: 'léa ' }));
   const rows = await listRegistrations(db, cid);
@@ -119,7 +119,7 @@ test('réimport : identifiants, licence et entité FFK conservés', async () => 
 });
 
 test('upsertClub ne remplace pas les coordonnées existantes par des champs absents', async () => {
-  await upsertClub(db, cid, { name: 'Tani', ffkEntity: null, coachName: 'Jean', coachPhone: '06', coachEmail: null, preApproval: true });
+  await upsertClub(db, cid, { name: 'Tani', ffkEntity: null, coachName: 'Jean', coachPhone: '06', coachEmails: [], preApproval: true });
   const again = await upsertClub(db, cid, { name: 'TANI' });
   expect(again).toMatchObject({ coachName: 'Jean', coachPhone: '06', preApproval: true });
 });

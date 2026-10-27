@@ -7,12 +7,13 @@ import type { DirectoryEntry, DirectoryInput } from '../../domain/registration.j
 import { useAppSettings, useCreateDirectoryEntry, useDirectory, useMergeDirectoryEntries, useUpdateDirectoryEntry } from '../api.js';
 import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { EmailsInput, EmailsList } from '../components/EmailsInput.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { TableCard } from '../components/ui/TableCard.js';
 
-const EMPTY: DirectoryInput = { name: '', affiliationNumber: null, coachName: null, coachPhone: null, coachEmail: null, notes: null };
+const EMPTY: DirectoryInput = { name: '', affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
 const orNull = (v: string) => v.trim() || null;
 
 /** Fenêtre de saisie d'une fiche (création ou modification). */
@@ -21,7 +22,7 @@ function EntryModal({ entry, onClose }: { entry: DirectoryEntry | 'new' | null; 
   const update = useUpdateDirectoryEntry();
   // Le parent remonte la fenêtre (key) pour chaque fiche : l'état part de la fiche ouverte.
   const [form, setForm] = useState<DirectoryInput>(
-    entry && entry !== 'new' ? { name: entry.name, affiliationNumber: entry.affiliationNumber, coachName: entry.coachName, coachPhone: entry.coachPhone, coachEmail: entry.coachEmail, notes: entry.notes } : EMPTY,
+    entry && entry !== 'new' ? { name: entry.name, affiliationNumber: entry.affiliationNumber, coachName: entry.coachName, coachPhone: entry.coachPhone, coachEmails: entry.coachEmails, notes: entry.notes } : EMPTY,
   );
   const set = (patch: Partial<DirectoryInput>) => setForm((f) => ({ ...f, ...patch }));
   const save = () => {
@@ -37,7 +38,7 @@ function EntryModal({ entry, onClose }: { entry: DirectoryEntry | 'new' | null; 
           value={form.affiliationNumber ?? ''} onChange={(e) => set({ affiliationNumber: orNull(e.currentTarget.value) })} />
         <TextInput label="Coach" value={form.coachName ?? ''} onChange={(e) => set({ coachName: orNull(e.currentTarget.value) })} />
         <TextInput label="Téléphone" value={form.coachPhone ?? ''} onChange={(e) => set({ coachPhone: orNull(e.currentTarget.value) })} />
-        <TextInput data-testid="directory-email" label="E-mail" value={form.coachEmail ?? ''} onChange={(e) => set({ coachEmail: orNull(e.currentTarget.value) })} />
+        <EmailsInput data-testid="directory-email" value={form.coachEmails} onChange={(coachEmails) => set({ coachEmails })} />
         <Textarea label="Notes" autosize minRows={2} value={form.notes ?? ''} onChange={(e) => set({ notes: orNull(e.currentTarget.value) })} />
         <ApiErrorAlert error={create.error ?? update.error} />
         <Group justify="flex-end">
@@ -119,7 +120,7 @@ export function DirectoryPage() {
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Club</Table.Th><Table.Th>N° d’affiliation</Table.Th><Table.Th>Coach</Table.Th><Table.Th>Téléphone</Table.Th>
-                <Table.Th>E-mail</Table.Th><Table.Th ta="right">Compétitions</Table.Th><Table.Th />
+                <Table.Th>E-mails</Table.Th><Table.Th ta="right">Compétitions</Table.Th><Table.Th />
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -135,7 +136,7 @@ export function DirectoryPage() {
                   <Table.Td className="num">{e.affiliationNumber ?? '—'}</Table.Td>
                   <Table.Td>{e.coachName ?? '—'}</Table.Td>
                   <Table.Td className="num" style={{ whiteSpace: 'nowrap' }}>{e.coachPhone ?? '—'}</Table.Td>
-                  <Table.Td>{e.coachEmail ?? '—'}</Table.Td>
+                  <Table.Td><EmailsList emails={e.coachEmails} /></Table.Td>
                   <Table.Td ta="right" className="num">{e.competitions}</Table.Td>
                   <Table.Td>
                     <Group gap={4} justify="flex-end" wrap="nowrap">

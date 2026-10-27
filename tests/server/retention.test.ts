@@ -18,7 +18,7 @@ const NOW = new Date('2027-12-31T12:00:00Z');
 function seedCompetition(d: AppDb, id: string, date: string) {
   d.$client.exec(`
     INSERT INTO competitions (id, name, date, settings_json) VALUES ('${id}', 'Coupe ${id}', '${date}', '{}');
-    INSERT INTO clubs (id, competition_id, name, name_key, coach_name, coach_phone, coach_email, pre_approval) VALUES ('${id}-k', '${id}', 'Tani Dojo', 'TANI DOJO', 'Jean', '0600000000', 'jean@tani.example', 0);
+    INSERT INTO clubs (id, competition_id, name, name_key, coach_name, coach_phone, coach_emails, pre_approval) VALUES ('${id}-k', '${id}', 'Tani Dojo', 'TANI DOJO', 'Jean', '0600000000', '["jean@tani.example"]', 0);
     INSERT INTO fighters (id, competition_id, club_id, last_name, first_name, name_key, sex, age_band_code, licence, grade, weigh_in_kg)
       VALUES ('${id}-f', '${id}', '${id}-k', 'MARTIN', 'Léa', 'MARTIN LEA', 'F', 'cadet', 'L001', '1er kyu', 53.8);
     INSERT INTO registrations (id, competition_id, fighter_id, discipline, source, approx_weight_kg) VALUES ('${id}-r', '${id}', '${id}-f', 'karate', 'online', 54);
@@ -40,7 +40,7 @@ test('compétition de plus de 13 mois : données d’organisation effacées, pal
   expect(report.competitions).toBe(1);
   expect(one(db, "select weigh_in_kg, licence, grade, last_name, first_name from fighters where id = 'old-f'")).toEqual({ weigh_in_kg: null, licence: null, grade: null, last_name: 'MARTIN', first_name: 'Léa' });
   expect(one(db, "select approx_weight_kg, discipline from registrations where id = 'old-r'")).toEqual({ approx_weight_kg: null, discipline: 'karate' });
-  expect(one(db, "select coach_phone, coach_email, name from clubs where id = 'old-k'")).toEqual({ coach_phone: null, coach_email: null, name: 'Tani Dojo' });
+  expect(one(db, "select coach_phone, coach_emails, name from clubs where id = 'old-k'")).toEqual({ coach_phone: null, coach_emails: '[]', name: 'Tani Dojo' });
   for (const t of ['club_invitations', 'mail_log', 'uploads']) expect(count(db, t, 'old'), t).toBe(0);
   for (const t of ['match_results', 'kata_scores']) expect(count(db, t, 'old'), t).toBe(1);
   expect(one(db, "select purged_at from competitions where id = 'old'").purged_at).not.toBeNull();
@@ -67,18 +67,18 @@ test('annuaire : fiche sans compétition depuis 3 ans → archivée et vidée ; 
   const dbPath = tmpDbPath();
   db = openDb(dbPath);
   db.$client.exec(`
-    INSERT INTO club_directory (id, name, name_key, coach_name, coach_phone, coach_email, notes, created_at) VALUES
-      ('ancien', 'Ancien club', 'ANCIEN CLUB', 'A', '01', 'a@x.example', 'note', '2020-01-01T00:00:00.000Z'),
-      ('actif', 'Club actif', 'CLUB ACTIF', 'B', '02', 'b@x.example', null, '2020-01-01T00:00:00.000Z'),
-      ('jeune', 'Jeune club', 'JEUNE CLUB', 'C', '03', 'c@x.example', null, '2026-06-01T00:00:00.000Z');
+    INSERT INTO club_directory (id, name, name_key, coach_name, coach_phone, coach_emails, notes, created_at) VALUES
+      ('ancien', 'Ancien club', 'ANCIEN CLUB', 'A', '01', '["a@x.example"]', 'note', '2020-01-01T00:00:00.000Z'),
+      ('actif', 'Club actif', 'CLUB ACTIF', 'B', '02', '["b@x.example"]', null, '2020-01-01T00:00:00.000Z'),
+      ('jeune', 'Jeune club', 'JEUNE CLUB', 'C', '03', '["c@x.example"]', null, '2026-06-01T00:00:00.000Z');
     INSERT INTO competitions (id, name, date, settings_json) VALUES ('c2023', 'Coupe 2023', '2023-11-22', '{}'), ('c2027', 'Coupe 2027', '2027-11-22', '{}');
     INSERT INTO clubs (id, competition_id, name, name_key, pre_approval, directory_club_id) VALUES
       ('k1', 'c2023', 'Ancien club', 'ANCIEN CLUB', 0, 'ancien'), ('k2', 'c2023', 'Club actif', 'CLUB ACTIF', 0, 'actif'), ('k3', 'c2027', 'Club actif', 'CLUB ACTIF', 0, 'actif');
   `);
   expect(purgeExpiredData(db, dbPath, NOW).directoryEntries).toBe(1);
-  expect(one(db, "select archived, coach_name, coach_phone, coach_email, notes from club_directory where id = 'ancien'")).toEqual({ archived: 1, coach_name: null, coach_phone: null, coach_email: null, notes: null });
-  expect(one(db, "select archived, coach_email from club_directory where id = 'actif'")).toEqual({ archived: 0, coach_email: 'b@x.example' });
-  expect(one(db, "select archived, coach_email from club_directory where id = 'jeune'")).toEqual({ archived: 0, coach_email: 'c@x.example' });
+  expect(one(db, "select archived, coach_name, coach_phone, coach_emails, notes from club_directory where id = 'ancien'")).toEqual({ archived: 1, coach_name: null, coach_phone: null, coach_emails: '[]', notes: null });
+  expect(one(db, "select archived, coach_emails from club_directory where id = 'actif'")).toEqual({ archived: 0, coach_emails: '["b@x.example"]' });
+  expect(one(db, "select archived, coach_emails from club_directory where id = 'jeune'")).toEqual({ archived: 0, coach_emails: '["c@x.example"]' });
 });
 
 test('sauvegardes plus anciennes que 13 mois supprimées, sauf la plus récente', () => {

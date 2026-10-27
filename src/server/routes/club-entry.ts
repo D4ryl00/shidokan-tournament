@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { optionalEmail } from './fields.js';
+import { emailList } from './fields.js';
 import type { AppDb } from '../db/client.js';
 import { competitionChanged } from '../events.js';
 import { syncCategories } from '../repositories/categories.js';
@@ -24,7 +24,7 @@ const headerSchema = z
   .object({
     coachName: text(120),
     coachPhone: text(40),
-    coachEmail: optionalEmail,
+    coachEmails: emailList,
     preApproval: z.boolean(),
     affiliationNumber: z.string().trim().regex(/^(\d{7})?$/, 'Le numéro d’affiliation FFK a 7 chiffres.').transform((v) => v || null).nullable(),
   })
