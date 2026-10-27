@@ -86,6 +86,8 @@ Trois niveaux :
 ## 4. L'écran du plan d'ensemble
 
 ### 4.1 La liste et son diagramme ✅
+> ✅ (2026-10-27) Remplacé en partie par `2026-10-27-plan-reaffectation-lisible-design.md` : tableau avec en-tête, barres « casés · restent seuls » qui se remplissent, ligne de départ « Au départ, corrections imposées » (le retour n'est plus numéroté) à la place de « Sans rien changer », page en deux blocs, refus du plan gardés sur le poste, « Recommencer le plan », coche « Tenir compte des décisions prises sur les cartes ».
+
 Dans l'onglet **Réaffectation**, en haut, pour la **session choisie** (comme les boutons actuels) : une seule liste, une ligne par règle (maquette `pyramide-v2.html`).
 - Chaque ligne : poignée, numéro, nom de la règle (avec « à valider » si elle l'est), interrupteur, **barre « restent seuls »**, et ce que ça demande (« 17 déplacements · 6 à valider »).
 - Une première ligne « Sans rien changer » donne le nombre de seuls au départ.
@@ -158,6 +160,8 @@ Pour un ensemble de règles autorisées (actives et au-dessus de la ligne), parm
 Chaque déplacement du plan doit être une proposition que les cartes pourraient faire (mêmes vérifications que `evaluate` dans `src/domain/replacement/propose.ts`), **évaluée dans l'état où le plan l'applique** (les catégories ont déjà reçu les déplacements précédents du plan). Deux combattants seuls peuvent se rejoindre (fusion), comme aujourd'hui.
 
 ### 5.3 Les barres
+> ✅ (2026-10-27) Le calcul ne change pas ; l'affichage (casés à gauche, seuls à droite, à l'échelle de la ligne de départ) est décrit dans `2026-10-27-plan-reaffectation-lisible-design.md` §3.
+
 La barre de la ligne k = l'optimum du §5.2 (critère 1) avec les règles actives 1 à k. Le plan affiché = l'optimum complet avec les règles jusqu'à la ligne de coupure, en tenant compte des épingles, des choix « Modifier » et des refus.
 
 ### 5.4 Fiabilité
