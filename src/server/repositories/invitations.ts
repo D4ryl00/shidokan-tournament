@@ -2,7 +2,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { and, count, desc, eq, isNull } from 'drizzle-orm';
 import type { AppDb } from '../db/client.js';
 import { clubDirectory, clubInvitations, clubs, competitions, fighters, mailLog } from '../db/schema.js';
-import { NotFoundError } from './registrations.js';
+import type { Club } from '../../domain/registration.js';
+import { NotFoundError, toClub } from './registrations.js';
 
 export const newToken = (): string => randomBytes(24).toString('base64url');
 export const hashToken = (token: string): string => createHash('sha256').update(token).digest('hex');
@@ -79,50 +80,75 @@ export function listInvitations(db: AppDb, competitionId: string): ClubInvitatio
 }
 
 /**
- * Invite des clubs de l'annuaire : chacun reçoit un club de compétition (celui déjà relié à la fiche, sinon celui de même nom, sinon
- * un nouveau, avec les coordonnées de la fiche) et un lien personnel. Un club qui a déjà un lien actif n'en reçoit pas d'autre.
+ * Club de compétition d'une fiche de l'annuaire : celui déjà relié à la fiche, sinon celui de même nom, sinon un nouveau, avec les
+ * coordonnées de la fiche (celles qui manquent au club existant sont complétées).
  */
+function clubForEntry(t: AppDb, competitionId: string, entry: typeof clubDirectory.$inferSelect): typeof clubs.$inferSelect {
+  const inCompetition = (cond: ReturnType<typeof eq>) => t.select().from(clubs).where(and(eq(clubs.competitionId, competitionId), cond)).get();
+  let club = inCompetition(eq(clubs.directoryClubId, entry.id));
+  if (!club) {
+    // Club de même nom : repris, sauf s'il est relié à une autre fiche qui porte un autre numéro d'affiliation (deux clubs distincts).
+    const sameName = inCompetition(eq(clubs.nameKey, entry.nameKey));
+    const other = sameName?.directoryClubId ? t.select().from(clubDirectory).where(eq(clubDirectory.id, sameName.directoryClubId)).get() : undefined;
+    if (other && other.id !== entry.id && other.affiliationNumber && entry.affiliationNumber && other.affiliationNumber !== entry.affiliationNumber) {
+      throw new InvitationConflictError(`« ${entry.name} » : un club du même nom, relié à une autre fiche de l’annuaire, est déjà dans cette compétition. Fusionnez les fiches ou renommez-en une.`);
+    }
+    club = sameName;
+  }
+  if (club) {
+    const fill = {
+      directoryClubId: entry.id,
+      ...(!club.ffkEntity && entry.ffkEntity ? { ffkEntity: entry.ffkEntity } : {}),
+      ...(!club.coachName && entry.coachName ? { coachName: entry.coachName } : {}),
+      ...(!club.coachPhone && entry.coachPhone ? { coachPhone: entry.coachPhone } : {}),
+      ...(!club.coachEmails.length && entry.coachEmails.length ? { coachEmails: entry.coachEmails } : {}),
+    };
+    t.update(clubs).set(fill).where(eq(clubs.id, club.id)).run();
+    return t.select().from(clubs).where(eq(clubs.id, club.id)).get()!;
+  }
+  const id = crypto.randomUUID();
+  t.insert(clubs)
+    .values({
+      id, competitionId, name: entry.name, nameKey: entry.nameKey, ffkEntity: entry.ffkEntity, coachName: entry.coachName,
+      coachPhone: entry.coachPhone, coachEmails: entry.coachEmails, preApproval: false, directoryClubId: entry.id,
+    })
+    .run();
+  return t.select().from(clubs).where(eq(clubs.id, id)).get()!;
+}
+
+const directoryEntry = (t: AppDb, entryId: string) => {
+  const entry = t.select().from(clubDirectory).where(eq(clubDirectory.id, entryId)).get();
+  if (!entry) throw new NotFoundError('Club introuvable dans l’annuaire');
+  return entry;
+};
+
+/** Invite des clubs de l'annuaire : chacun reçoit son club de compétition et un lien personnel, sauf s'il a déjà un lien actif. */
 export function inviteClubs(db: AppDb, competitionId: string, directoryIds: string[]): InvitationLink[] {
   return db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     const links: InvitationLink[] = [];
     for (const entryId of directoryIds) {
-      const entry = t.select().from(clubDirectory).where(eq(clubDirectory.id, entryId)).get();
-      if (!entry) throw new NotFoundError('Club introuvable dans l’annuaire');
-      const inCompetition = (cond: ReturnType<typeof eq>) => t.select().from(clubs).where(and(eq(clubs.competitionId, competitionId), cond)).get();
-      let club = inCompetition(eq(clubs.directoryClubId, entry.id));
-      if (!club) {
-        // Club de même nom : repris, sauf s'il est relié à une autre fiche qui porte un autre numéro d'affiliation (deux clubs distincts).
-        const sameName = inCompetition(eq(clubs.nameKey, entry.nameKey));
-        const other = sameName?.directoryClubId ? t.select().from(clubDirectory).where(eq(clubDirectory.id, sameName.directoryClubId)).get() : undefined;
-        if (other && other.id !== entry.id && other.affiliationNumber && entry.affiliationNumber && other.affiliationNumber !== entry.affiliationNumber) {
-          throw new InvitationConflictError(`« ${entry.name} » : un club du même nom, relié à une autre fiche de l’annuaire, est déjà dans cette compétition. Fusionnez les fiches ou renommez-en une.`);
-        }
-        club = sameName;
-      }
-      if (club) {
-        const fill = {
-          directoryClubId: entry.id,
-          ...(!club.ffkEntity && entry.ffkEntity ? { ffkEntity: entry.ffkEntity } : {}),
-          ...(!club.coachName && entry.coachName ? { coachName: entry.coachName } : {}),
-          ...(!club.coachPhone && entry.coachPhone ? { coachPhone: entry.coachPhone } : {}),
-          ...(!club.coachEmails.length && entry.coachEmails.length ? { coachEmails: entry.coachEmails } : {}),
-        };
-        t.update(clubs).set(fill).where(eq(clubs.id, club.id)).run();
-      } else {
-        const id = crypto.randomUUID();
-        t.insert(clubs)
-          .values({
-            id, competitionId, name: entry.name, nameKey: entry.nameKey, ffkEntity: entry.ffkEntity, coachName: entry.coachName,
-            coachPhone: entry.coachPhone, coachEmails: entry.coachEmails, preApproval: false, directoryClubId: entry.id,
-          })
-          .run();
-        club = t.select().from(clubs).where(eq(clubs.id, id)).get()!;
-      }
+      const club = clubForEntry(t, competitionId, directoryEntry(t, entryId));
       if (!t.select().from(clubInvitations).where(active(competitionId, club.id)).get()) links.push(createLink(t, competitionId, club.id, club.name));
     }
     return links;
   });
+}
+
+/** Club de compétition d'une fiche de l'annuaire, pour la saisie d'une inscription (sans lien d'inscription). */
+export function clubFromDirectory(db: AppDb, competitionId: string, entryId: string): Club {
+  return db.transaction((tx) => {
+    const t = tx as unknown as AppDb;
+    return toClub(clubForEntry(t, competitionId, directoryEntry(t, entryId)));
+  });
+}
+
+/** Fiches de l'annuaire (non archivées) qui n'ont pas encore de club dans la compétition, par ordre alphabétique. */
+export function directoryChoices(db: AppDb, competitionId: string): { id: string; name: string }[] {
+  const linked = new Set(db.select({ id: clubs.directoryClubId }).from(clubs).where(eq(clubs.competitionId, competitionId)).all().map((c) => c.id));
+  return db.select({ id: clubDirectory.id, name: clubDirectory.name }).from(clubDirectory).where(eq(clubDirectory.archived, false)).all()
+    .filter((e) => !linked.has(e.id))
+    .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
 }
 
 const NOW = () => new Date().toISOString();

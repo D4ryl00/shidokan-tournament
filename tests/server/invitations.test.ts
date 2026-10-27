@@ -102,3 +102,22 @@ test('inviter une fiche de même nom qu’un club déjà relié à une autre fic
   const rows = (await app.inject({ method: 'GET', url: `${base}/invitations` })).json() as { directoryClubId: string; invited: boolean }[];
   expect(rows).toEqual([expect.objectContaining({ directoryClubId: a, invited: true })]);
 });
+
+test('saisie d’une inscription : fiches de l’annuaire proposées, club créé depuis une fiche sans lien d’inscription, puis plus proposée', async () => {
+  const tani = await entry('Tani Dojo', { coachEmails: ['coach@tani.example'] });
+  const budo = await entry('Budo Collines');
+  const old = await entry('Ancien club');
+  await app.inject({ method: 'PATCH', url: `/api/club-directory/${old}`, payload: { archived: true } });
+  const choices = async () => (await app.inject({ method: 'GET', url: `${base}/directory-clubs` })).json() as { id: string; name: string }[];
+  expect(await choices()).toEqual([{ id: budo, name: 'Budo Collines' }, { id: tani, name: 'Tani Dojo' }]);
+
+  const res = await app.inject({ method: 'POST', url: `${base}/clubs/from-directory`, payload: { directoryId: tani } });
+  expect(res.statusCode).toBe(201);
+  expect(res.json()).toMatchObject({ name: 'Tani Dojo', coachEmails: ['coach@tani.example'] });
+  // Même fiche une seconde fois : le même club.
+  expect((await app.inject({ method: 'POST', url: `${base}/clubs/from-directory`, payload: { directoryId: tani } })).json().id).toBe(res.json().id);
+  expect(await choices()).toEqual([{ id: budo, name: 'Budo Collines' }]);
+  const rows = (await app.inject({ method: 'GET', url: `${base}/invitations` })).json() as { clubName: string; invited: boolean }[];
+  expect(rows.find((r) => r.clubName === 'Tani Dojo')).toMatchObject({ invited: false });
+  expect((await app.inject({ method: 'POST', url: `${base}/clubs/from-directory`, payload: { directoryId: 'inconnu' } })).statusCode).toBe(404);
+});

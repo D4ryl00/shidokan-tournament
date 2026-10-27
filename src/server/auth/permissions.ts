@@ -20,7 +20,7 @@ const ZONE_WRITES = new Set([
 /** Écritures de la Table centrale : inscriptions, clubs, pesée, réaffectations, tableaux, lancement des sessions, et toutes les saisies. */
 const TABLE_WRITES = new Set([
   ...[
-    'POST /registrations', 'PUT /registrations/:rid', 'DELETE /registrations/:rid', 'POST /clubs', 'PATCH /clubs/:clubId',
+    'POST /registrations', 'PUT /registrations/:rid', 'DELETE /registrations/:rid', 'POST /clubs', 'PATCH /clubs/:clubId', 'POST /clubs/from-directory',
     'PUT /weigh-in/:fighterId', 'POST /weigh-in/close',
     'POST /replacement/preview', 'POST /replacement/apply', 'POST /replacement/plan', 'POST /replacement/plan/apply', 'POST /replacement/refuse', 'POST /replacement/unrefuse', 'POST /replacement/undo', 'POST /replacement/move', 'POST /replacement/withdraw', 'POST /replacement/set-aside', 'POST /replacement/resume',
     'PUT /replacement/rules', 'POST /replacement/rules/reset', 'POST /replacement/reset',

@@ -9,6 +9,7 @@ import type { AppDb } from '../db/client.js';
 import { checkRev, registrationRev } from '../revisions.js';
 import { getCompetition, getGrid } from '../repositories/competitions.js';
 import { closedSet } from '../repositories/closed-categories.js';
+import { clubFromDirectory, directoryChoices } from '../repositories/invitations.js';
 import {
   createRegistration,
   deleteRegistration,
@@ -122,6 +123,13 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
     const data = clubSchema.parse(req.body);
     const club = await upsertClub(db, req.params.id, data);
     return reply.status(201).send(club);
+  });
+
+  // Saisie d'une inscription : un club de l'annuaire, choisi parmi les fiches qui n'ont pas encore de club dans la compétition.
+  app.get<P>('/api/competitions/:id/directory-clubs', async (req) => directoryChoices(db, req.params.id));
+  app.post<P>('/api/competitions/:id/clubs/from-directory', async (req, reply) => {
+    const { directoryId } = z.object({ directoryId: z.string() }).strict().parse(req.body);
+    return reply.status(201).send(clubFromDirectory(db, req.params.id, directoryId));
   });
 
   app.patch<{ Params: { id: string; clubId: string } }>('/api/competitions/:id/clubs/:clubId', async (req) =>

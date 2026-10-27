@@ -220,6 +220,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         '« Sans inscription FFK » : inscriptions pas encore confirmées par l’export FFK (fiche club, saisie, inscription sur place).',
         'Le crayon modifie une inscription, la croix la supprime (impossible si sa catégorie a déjà commencé).',
         'Une inscription sur place le jour J se saisit ici, avec la case « Inscription sur place ».',
+        'Club : choisissez-le dans la liste (clubs de la compétition et de l’annuaire) ou laissez vide. Un club absent de la liste s’ajoute avec l’option « Ajouter le club « … » », proposée quand le nom tapé n’y est pas.',
       ],
       'La colonne « Origine » indique d’où vient la ligne : fiche club, export FFK ou saisie.',
     ],

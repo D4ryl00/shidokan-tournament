@@ -1,6 +1,6 @@
 import { notifications } from '@mantine/notifications';
 import {
-  Alert, Autocomplete, Button, Checkbox, Group, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput,
+  Alert, Button, Checkbox, Group, Input, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput,
 } from '@mantine/core';
 import { useRef, useState, type FormEvent } from 'react';
 import { DISCIPLINES } from '../../domain/disciplines.js';
@@ -8,12 +8,18 @@ import { weightClassesFor } from '../../domain/grid.js';
 import { normalizeName } from '../../domain/names.js';
 import { parsePreferences, type RegistrationInput, type RegistrationRow } from '../../domain/registration.js';
 import type { DisciplineId, Ruleset, Sex } from '../../domain/types.js';
-import { ApiError, useClubs, useCreateRegistration, useGrid, useUpdateRegistration, useUpsertClub } from '../api.js';
+import { ApiError, useClubFromDirectory, useClubs, useCreateRegistration, useDirectoryClubs, useGrid, useUpdateRegistration, useUpsertClub } from '../api.js';
 import { DISCIPLINE_OPTIONS, prefsLabel, prefsToCodes } from '../labels.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 
+/**
+ * Club choisi : `club:<id>` (club de la compétition), `dir:<id>` (fiche de l'annuaire, sans club dans la compétition), `new:<nom>`
+ * (nouveau club, ajouté aussi à l'annuaire) ; null : sans club.
+ */
+type ClubChoice = `club:${string}` | `dir:${string}` | `new:${string}`;
+
 interface FormState {
-  club: string;
+  club: ClubChoice | null;
   lastName: string;
   firstName: string;
   sex: Sex;
@@ -30,7 +36,7 @@ interface FormState {
 
 function fromRow(row: RegistrationRow): FormState {
   return {
-    club: row.club?.name ?? '',
+    club: row.club ? `club:${row.club.id}` : null,
     lastName: row.fighter.lastName,
     firstName: row.fighter.firstName,
     sex: row.fighter.sex,
@@ -47,7 +53,7 @@ function fromRow(row: RegistrationRow): FormState {
 }
 
 const EMPTY: FormState = {
-  club: '', lastName: '', firstName: '', sex: 'F', ageBandCode: null, discipline: 'karate', ruleset: 'jiyu',
+  club: null, lastName: '', firstName: '', sex: 'F', ageBandCode: null, discipline: 'karate', ruleset: 'jiyu',
   weightClassId: null, prefs: '', acceptsJiyuFirst: false, approxWeightKg: '', onsite: false, grade: '',
 };
 
@@ -55,7 +61,10 @@ const EMPTY: FormState = {
 export function RegistrationForm({ competitionId, edit, onDone }: { competitionId: string; edit?: RegistrationRow; onDone?: () => void }) {
   const { data: grid } = useGrid(competitionId);
   const { data: clubs = [] } = useClubs(competitionId);
+  const { data: directoryClubs = [] } = useDirectoryClubs(competitionId);
   const upsertClub = useUpsertClub(competitionId);
+  const fromDirectory = useClubFromDirectory(competitionId);
+  const [clubSearch, setClubSearch] = useState('');
   const create = useCreateRegistration(competitionId);
   const update = useUpdateRegistration(competitionId);
   const [f, setF] = useState<FormState>(edit ? fromRow(edit) : EMPTY);
@@ -70,16 +79,24 @@ export function RegistrationForm({ competitionId, edit, onDone }: { competitionI
   const hasWeight = DISCIPLINES[f.discipline].hasWeight;
   const weightOptions = f.ageBandCode ? weightClassesFor(grid, f.ageBandCode, f.sex).map((w) => ({ value: w.id, label: w.label })) : [];
   const prefs = parsePreferences(f.prefs, f.discipline);
+  const clubOptions = [
+    ...clubs.map((c) => ({ value: `club:${c.id}`, label: c.name })),
+    ...directoryClubs.map((d) => ({ value: `dir:${d.id}`, label: d.name })),
+    ...(f.club?.startsWith('new:') ? [{ value: f.club, label: `${f.club.slice(4)} (nouveau club)` }] : []),
+  ].sort((a, b) => a.label.localeCompare(b.label, 'fr'));
+  // Un nom introuvable dans la liste : le nouveau club est un choix explicite, pas l'effet d'une faute de frappe.
+  const typed = clubSearch.trim();
+  if (typed && !clubOptions.some((o) => o.value === `new:${typed}` || normalizeName(o.label) === normalizeName(typed))) clubOptions.push({ value: `new:${typed}`, label: `Ajouter le club « ${typed} »` });
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setWarning(null);
     setSaved(null);
-    let clubId: string | null = null;
-    if (f.club.trim()) {
-      const existing = clubs.find((c) => normalizeName(c.name) === normalizeName(f.club));
-      clubId = existing ? existing.id : (await upsertClub.mutateAsync({ name: f.club.trim() })).id;
-    }
+    const [kind, value] = f.club ? [f.club.slice(0, f.club.indexOf(':')), f.club.slice(f.club.indexOf(':') + 1)] : [null, ''];
+    const clubId = kind === 'club' ? value
+      : kind === 'dir' ? (await fromDirectory.mutateAsync(value)).id
+      : kind === 'new' ? (await upsertClub.mutateAsync({ name: value })).id
+      : null;
     const input: RegistrationInput = {
       clubId,
       lastName: f.lastName,
@@ -112,7 +129,7 @@ export function RegistrationForm({ competitionId, edit, onDone }: { competitionI
     const res = await create.mutateAsync(input);
     setWarning(res.warning);
     setSaved(`${res.row.fighter.lastName} ${res.row.fighter.firstName} : inscription enregistrée.`);
-    setF((s) => ({ ...s, lastName: '', firstName: '', prefs: '', approxWeightKg: '', acceptsJiyuFirst: false, grade: '' }));
+    setF((s) => ({ ...s, club: clubId ? `club:${clubId}` : null, lastName: '', firstName: '', prefs: '', approxWeightKg: '', acceptsJiyuFirst: false, grade: '' }));
     lastNameRef.current?.focus();
   };
 
@@ -120,29 +137,28 @@ export function RegistrationForm({ competitionId, edit, onDone }: { competitionI
     <form onSubmit={(e) => void submit(e).catch(() => undefined)}>
       <Stack>
         <SimpleGrid cols={{ base: 1, sm: 3 }}>
-          <Autocomplete data-testid="reg-club" label="Club" data={clubs.map((c) => c.name)} value={f.club} onChange={(club) => set({ club })} />
+          <Select data-testid="reg-club" label="Club" placeholder="Sans club" searchable clearable nothingFoundMessage="Aucun club"
+            data={clubOptions} value={f.club} onChange={(club) => set({ club: club as ClubChoice | null })} searchValue={clubSearch} onSearchChange={setClubSearch} />
           <TextInput data-testid="reg-lastname" ref={lastNameRef} label="Nom" required value={f.lastName}
             onChange={(e) => set({ lastName: e.currentTarget.value })} data-autofocus />
           <TextInput data-testid="reg-firstname" label="Prénom" value={f.firstName} onChange={(e) => set({ firstName: e.currentTarget.value })} />
         </SimpleGrid>
         <SimpleGrid cols={{ base: 1, sm: 3 }}>
-          <div>
-            <Text size="sm" fw={500} mb={4}>Sexe</Text>
+          <Input.Wrapper label="Sexe" required labelElement="div">
             <SegmentedControl data-testid="reg-sex" fullWidth value={f.sex} onChange={(v) => set({ sex: v as Sex, weightClassId: null })}
               data={[{ value: 'F', label: 'Féminin' }, { value: 'M', label: 'Masculin' }]} />
-          </div>
+          </Input.Wrapper>
           <Select data-testid="reg-age" label="Catégorie d'âge" required searchable data={grid.ageBands.map((b) => ({ value: b.code, label: b.label }))}
             value={f.ageBandCode} onChange={(v) => set({ ageBandCode: v, weightClassId: null })} />
-          <Select data-testid="reg-discipline" label="Discipline" data={DISCIPLINE_OPTIONS} value={f.discipline} allowDeselect={false}
+          <Select data-testid="reg-discipline" label="Discipline" required data={DISCIPLINE_OPTIONS} value={f.discipline} allowDeselect={false}
             onChange={(v) => v && set({ discipline: v as DisciplineId })} />
         </SimpleGrid>
         {hasWeight && (
           <SimpleGrid cols={{ base: 1, sm: 3 }}>
-            <div>
-              <Text size="sm" fw={500} mb={4}>Règlement</Text>
+            <Input.Wrapper label="Règlement" required labelElement="div">
               <SegmentedControl data-testid="reg-ruleset" fullWidth value={f.ruleset} onChange={(v) => set({ ruleset: v as Ruleset })}
                 data={[{ value: 'jiyu', label: 'Jiyu' }, { value: 'shobu', label: 'Shobu' }]} />
-            </div>
+            </Input.Wrapper>
             <Select data-testid="reg-weight" label="Catégorie de poids" required searchable data={weightOptions} value={f.weightClassId}
               onChange={(v) => set({ weightClassId: v })} disabled={!f.ageBandCode} />
             <NumberInput label="Poids actuel approx." suffix=" kg" decimalScale={1} value={f.approxWeightKg}
@@ -170,7 +186,7 @@ export function RegistrationForm({ competitionId, edit, onDone }: { competitionI
         </Group>
         {warning && <Alert color="yellow" data-testid="registration-warning">{warning}</Alert>}
         {saved && <Text c="green" size="sm">{saved}</Text>}
-        <ApiErrorAlert error={create.error ?? update.error ?? upsertClub.error} />
+        <ApiErrorAlert error={create.error ?? update.error ?? upsertClub.error ?? fromDirectory.error} />
         <Group justify="flex-end">
           <Button data-testid="reg-submit" type="submit" loading={create.isPending || update.isPending}>
             {edit ? 'Enregistrer' : 'Ajouter (Entrée)'}

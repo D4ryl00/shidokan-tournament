@@ -55,10 +55,14 @@ async function pick(page: Page, testId: string, option: string) {
 
 test('saisie rapide au clavier, sur place, avertissement, kata', async ({ page }) => {
   const id = await createCompetition(page, 'Coupe saisie');
+  const directoryClub = `Dojo annuaire ${Date.now()}`;
+  await page.request.post('/api/club-directory', { data: { name: directoryClub, affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null } });
   await page.goto(`/competitions/${id}/inscriptions`);
   await page.getByTestId('registration-add').click();
 
+  // Club absent de l'annuaire : ajouté seulement par l'option explicite.
   await page.getByTestId('reg-club').fill('Shinsengumi');
+  await page.getByRole('option', { name: 'Ajouter le club « Shinsengumi »' }).click();
   await page.getByTestId('reg-lastname').fill('ALPHA');
   await page.getByTestId('reg-firstname').fill('Anna');
   await pick(page, 'reg-age', 'Cadets');
@@ -86,16 +90,25 @@ test('saisie rapide au clavier, sur place, avertissement, kata', async ({ page }
   await page.getByTestId('reg-firstname').press('Enter');
   await expect(page.getByTestId('registration-warning')).toContainText('une seule discipline de combat');
 
-  // Kata : ni règlement ni poids.
+  // Kata : ni règlement ni poids. Club choisi dans l'annuaire.
   await pick(page, 'reg-discipline', 'Kata');
   await expect(page.getByTestId('reg-ruleset')).toHaveCount(0);
   await expect(page.getByTestId('reg-weight')).toHaveCount(0);
+  await page.getByTestId('reg-club').fill(directoryClub.toUpperCase());
+  await expect(page.getByRole('option', { name: /^Ajouter le club/ })).toHaveCount(0);
+  await page.getByRole('option', { name: directoryClub, exact: true }).click();
+  await page.getByTestId('reg-lastname').fill('CHARLIE');
+  await page.getByTestId('reg-firstname').fill('Cy');
+  await page.getByTestId('reg-firstname').press('Enter');
+  await expect(page.getByText('CHARLIE Cy : inscription enregistrée.')).toBeVisible();
+  await expect(page.getByTestId('reg-club')).toHaveValue(directoryClub);
 
   await page.keyboard.press('Escape');
-  await expect(page.getByTestId('registration-row')).toHaveCount(3);
+  await expect(page.getByTestId('registration-row')).toHaveCount(4);
   await expect(page.getByTestId('registration-row').filter({ hasText: 'BRAVO' })).toContainText('Sur place');
+  await expect(page.getByTestId('registration-row').filter({ hasText: 'CHARLIE' })).toContainText(directoryClub);
   await page.goto(`/competitions/${id}/clubs`);
-  await expect(page.getByTestId('club-row')).toHaveCount(1);
+  await expect(page.getByTestId('club-row')).toHaveCount(2);
 });
 
 test('fiche papier : le bouton télécharge le PDF (une page)', async ({ page }) => {

@@ -119,6 +119,21 @@ export function useUpsertClub(id: string) {
   });
 }
 
+/** Fiches de l'annuaire qui n'ont pas encore de club dans la compétition (choix du club d'une inscription). */
+export const useDirectoryClubs = (id: string) =>
+  useQuery({ queryKey: ['directory-clubs', id], queryFn: () => api<{ id: string; name: string }[]>('GET', `/api/competitions/${id}/directory-clubs`) });
+
+/** Club de compétition d'une fiche de l'annuaire (créé au besoin, avec ses coordonnées). */
+export function useClubFromDirectory(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (directoryId: string) => api<Club>('POST', `/api/competitions/${id}/clubs/from-directory`, { directoryId }),
+    onSuccess: () => {
+      for (const key of ['clubs', 'directory-clubs']) qc.invalidateQueries({ queryKey: [key, id] });
+    },
+  });
+}
+
 export function useUpdateClub(id: string) {
   const qc = useQueryClient();
   return useMutation({

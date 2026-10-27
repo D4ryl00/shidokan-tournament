@@ -47,7 +47,7 @@ type ClubUpsert = { name: string } & Partial<Omit<ClubData, 'name'>>;
 
 const fighterKey = (lastName: string, firstName: string) => normalizeName(`${lastName} ${firstName}`);
 
-function toClub(row: typeof clubs.$inferSelect): Club {
+export function toClub(row: typeof clubs.$inferSelect): Club {
   const { nameKey: _k, directoryClubId: _d, ...club } = withoutRowMeta(row);
   return club;
 }
