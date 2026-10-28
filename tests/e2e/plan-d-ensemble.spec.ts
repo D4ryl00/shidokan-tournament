@@ -112,7 +112,7 @@ async function openPlan(page: Page, id: string) {
   await page.getByTestId('plan-show').click();
   const view = page.getByTestId('plan-view');
   await expect(view).toBeVisible();
-  return { view, moveOf: (name: string) => view.getByTestId('plan-move').filter({ hasText: name }) };
+  return { view, moveOf: (name: string) => view.getByTestId('plan-move').filter({ has: page.getByTestId('plan-move-name').filter({ hasText: name }) }) };
 }
 
 test('le diagramme baisse règle par règle ; déplacer la ligne change le plan', async ({ page, request }) => {
@@ -161,7 +161,7 @@ test('le diagramme baisse règle par règle ; déplacer la ligne change le plan'
   await expect(bands.nth(2)).toContainText('Sans validation');
   await expect(bands.nth(2)).toContainText('règles 1–2 · 1 déplacement');
   await expect(bands.nth(2)).toContainText('SEULE Léa');
-  await expect(view.getByTestId('plan-move').filter({ hasText: 'SEULE Léa' }).getByTestId('plan-move-validate')).toHaveCount(0);
+  await expect(view.getByTestId('plan-move').filter({ has: page.getByTestId('plan-move-name').filter({ hasText: 'SEULE Léa' }) }).getByTestId('plan-move-validate')).toHaveCount(0);
 
   // La ligne remonte sous « Tranche d’âge au-dessus » : VETE n’est plus déplacé, MINI change de couleur.
   await ladder.locator('[data-testid="ladder-row"][data-rule="ageUp"]').getByText('Tranche d’âge au-dessus').click();
@@ -406,7 +406,7 @@ test('annuler un calcul long : le plan affiché est signalé périmé, « Relanc
   await request.post(`/api/competitions/${id}/registrations`, {
     data: { clubId: null, lastName: 'TARDIVE', firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54', approxWeightKg: 50, source: 'onsite' },
   });
-  await expect(page.getByTestId('replacement-case').filter({ hasText: 'TARDIVE' })).toBeVisible();
+  await expect(page.getByTestId('replacement-case').filter({ has: page.getByTestId('case-name').filter({ hasText: 'TARDIVE' }) })).toBeVisible();
   await page.waitForTimeout(500);
   expect(sent.length).toBe(before);
   await expect(message).toBeVisible();
@@ -432,7 +432,7 @@ test('annuler un calcul long : le plan affiché est signalé périmé, « Relanc
   await page.route('**/replacement/plan', slow);
   await mix.click({ force: true });
   await expect(page.getByTestId('plan-progress')).toBeVisible();
-  const mini = view.getByTestId('plan-move').filter({ hasText: 'MINI Léa' });
+  const mini = view.getByTestId('plan-move').filter({ has: page.getByTestId('plan-move-name').filter({ hasText: 'MINI Léa' }) });
   const n = sent.length;
   await mini.getByTestId('plan-move-validate').click({ timeout: 1000 });
   await expect(mini.getByTestId('plan-move-unvalidate')).toBeVisible({ timeout: 1000 });
@@ -549,7 +549,7 @@ test('appliquer : la confirmation montre ce qui diffère de l’écran', async (
   await request.put(`/api/competitions/${id}/weigh-in/${w.fighterId}`, { data: { weighInKg: 59 } });
   const { view, moveOf } = await openPlan(page, id);
   await expect(moveOf('YANIS Paul')).toBeVisible();
-  await expect(view.getByTestId('plan-move').filter({ hasText: 'CADA Léa' })).toHaveCount(0);
+  await expect(view.getByTestId('plan-move').filter({ has: page.getByTestId('plan-move-name').filter({ hasText: 'CADA Léa' }) })).toHaveCount(0);
   await view.getByTestId('plan-apply').click();
   const dialog = page.getByRole('dialog');
   await expect(page.getByTestId('plan-apply-confirm')).toHaveText('Confirmer (1)');
@@ -572,7 +572,8 @@ test('valider un déplacement qui suit une correction de poids : gardé, puis ap
   for (const [n, kg] of [['JADE', 52], ['JULIA', 52.5]] as const) await reg({ lastName: n, ageBandCode: 'junior', weightClassId: 'junior:F:-53', approxWeightKg: kg });
   await request.put(`/api/competitions/${id}/weigh-in/${w.fighterId}`, { data: { weighInKg: 58 } });
   const { view: rules } = await (await request.post(`/api/competitions/${id}/replacement/plan`, { data: { choices: [] } })).json();
-  await request.put(`/api/competitions/${id}/replacement/rules`, { data: { ...rules, on: { ...rules.on, weightGap: false } } });
+  // Sans split : sinon SOFIA viendrait rejoindre YVETTE.
+  await request.put(`/api/competitions/${id}/replacement/rules`, { data: { ...rules, on: { ...rules.on, weightGap: false, split: false } } });
   const { view, moveOf } = await openPlan(page, id);
   await moveOf('YVETTE Léa').getByTestId('plan-move-validate').click();
   await expect(moveOf('YVETTE Léa').getByTestId('plan-move-unvalidate')).toBeVisible();
@@ -613,7 +614,7 @@ test('« Modifier » : seulement les catégories de la session choisie', async (
   await page.goto(`/competitions/${id}/reaffectation`);
   await page.getByTestId('replacement-wave').getByText('Après-midi', { exact: true }).click();
   await page.getByTestId('plan-show').click();
-  const seule = page.getByTestId('plan-view').getByTestId('plan-move').filter({ hasText: 'SEULE Léa' });
+  const seule = page.getByTestId('plan-view').getByTestId('plan-move').filter({ has: page.getByTestId('plan-move-name').filter({ hasText: 'SEULE Léa' }) });
   await seule.getByTestId('plan-move-modify').click();
   await seule.getByTestId('plan-move-target').click();
   await expect(page.getByRole('option', { name: /Cadets F · \+61 kg/ })).toBeVisible();
@@ -638,14 +639,13 @@ test('cartes : correction de poids au-delà de l’écart à confirmer comme une
   for (const [n, kg] of [['BENA', 37], ['BENB', 38]] as const) await reg({ lastName: n, ageBandCode: 'benjamin', weightClassId: 'benjamin:F:-40', approxWeightKg: kg });
   await page.goto(`/competitions/${id}/reaffectation`);
   const correction = page.getByTestId('replacement-case').filter({ hasText: 'WANDA' }).getByTestId('replacement-proposal').filter({ hasText: 'validation manuelle' }).first();
-  await expect(correction.getByTestId('replacement-badge')).toContainText('⚖ Poids');
+  await expect(correction.getByTestId('plan-rule').first()).toHaveText('Correction de pesée · imposée');
   await correction.getByTestId('proposal-apply').click();
   await expect(page.getByTestId('proposal-confirm')).toHaveText('Confirmer la validation');
   await page.keyboard.press('Escape');
-  const down = page.getByTestId('replacement-case').filter({ hasText: 'MINA' }).getByTestId('replacement-proposal').filter({ hasText: 'une tranche au-dessous' });
-  await expect(down.getByTestId('replacement-badge')).toHaveText('↓ Âge');
-  await expect(down).toContainText('âge : une tranche au-dessous');
-  await expect(down).not.toContainText('une tranche au-dessus');
+  const down = page.getByTestId('replacement-case').filter({ hasText: 'MINA' }).getByTestId('replacement-proposal').filter({ hasText: 'Tranche d’âge au-dessous' }).first();
+  await expect(down.getByTestId('plan-rule').filter({ hasText: 'Tranche d’âge au-dessous' })).toContainText('Minimes → Benjamins');
+  await expect(down).not.toContainText('Tranche d’âge au-dessus');
 });
 
 test('réglages : enregistrer garde la liste des règles changée entre-temps dans Réaffectation', async ({ page, request }) => {
@@ -725,14 +725,14 @@ test('plan : les choix sont gardés par session', async ({ page, request }) => {
   const session = (name: string) => openSession(page, name);
   await session('Matin');
   const view = page.getByTestId('plan-view');
-  const moveOf = (name: string) => view.getByTestId('plan-move').filter({ hasText: name });
+  const moveOf = (name: string) => view.getByTestId('plan-move').filter({ has: page.getByTestId('plan-move-name').filter({ hasText: name }) });
   await moveOf('MINI Léa').getByTestId('plan-move-validate').click();
   await expect(moveOf('MINI Léa').getByTestId('plan-move-unvalidate')).toBeVisible();
   await expect(view).toContainText('Validés 1 / 1');
   // L’après-midi a ses propres choix (aucun).
   await session('Après-midi');
   await expect(moveOf('VETE Paul').getByTestId('plan-move-validate')).toBeVisible();
-  await expect(view.getByTestId('plan-move').filter({ hasText: 'MINI Léa' })).toHaveCount(0);
+  await expect(view.getByTestId('plan-move').filter({ has: page.getByTestId('plan-move-name').filter({ hasText: 'MINI Léa' }) })).toHaveCount(0);
   await expect(view).toContainText('Validés 0 / 1');
   await moveOf('VETE Paul').getByTestId('plan-move-validate').click();
   await expect(view).toContainText('Validés 1 / 1');
@@ -751,7 +751,7 @@ test('plan : un choix devenu impossible est retiré et nommé, dans sa session s
   const session = (name: string) => openSession(page, name);
   await session('Matin');
   const view = page.getByTestId('plan-view');
-  const moveOf = (name: string) => view.getByTestId('plan-move').filter({ hasText: name });
+  const moveOf = (name: string) => view.getByTestId('plan-move').filter({ has: page.getByTestId('plan-move-name').filter({ hasText: name }) });
   await moveOf('MINI Léa').getByTestId('plan-move-validate').click();
   await expect(view).toContainText('Validés 1 / 1');
   // Un autre poste pointe MINI absente : son déplacement épinglé n’existe plus.

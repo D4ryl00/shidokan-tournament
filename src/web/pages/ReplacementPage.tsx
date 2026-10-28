@@ -40,7 +40,9 @@ import { PlanProgress, PROGRESS_HEIGHT } from '../components/replacement/PlanPro
 import { RuleLadder } from '../components/replacement/RuleLadder.js';
 import { PlanView, WARN_ALERT, type PlanFighter } from '../components/replacement/PlanView.js';
 import type { RuleId } from '../../domain/settings.js';
-import { ruleNumber, rulesView } from '../../domain/replacement/rules.js';
+import { applyRulesView, ruleNumber, ruleRank, rulesView } from '../../domain/replacement/rules.js';
+import { defaultSettings } from '../../domain/settings.js';
+import { MoveBlocks } from '../components/replacement/MoveBlocks.js';
 import { clearPlanChoices, usePlanCardDecisions, usePlanChoices } from '../usePlanChoices.js';
 import { useSelectedWave } from '../useSelectedWave.js';
 import type { CategoryGrid } from '../../domain/types.js';
@@ -156,6 +158,7 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
   if (shownPlan && !isPlaceholderData && loadedWave !== waveId) setLoadedWave(waveId);
   const plan = loadedWave === waveId ? shownPlan : undefined;
   const { data: competition } = useCompetition(id);
+  const { data: grid } = useGrid(id);
   const setRules = useSetRules(id);
   const reset = useResetRules(id);
   // Un choix qui n'est plus possible (données changées ailleurs) est retiré ; on dit lesquels.
@@ -194,7 +197,7 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
         </Alert>
       )}
       <Checkbox data-testid="plan-card-decisions" label="Tenir compte des décisions prises sur les cartes"
-        description="Décochée : le plan reprend les propositions refusées sur les cartes et les cartes mises de côté (les cartes ne changent pas)."
+        description="Décochée : le plan ignore vos refus et vos mises de côté sur les cartes, et peut donc vous reproposer ces déplacements (les cartes, elles, restent telles quelles)."
         checked={cardDecisions} onChange={(e) => setCardDecisions(e.currentTarget.checked)} />
       <RuleLadder view={view} rows={ladderRows} fresh={fresh} busy={saving} onChange={(v) => setRules.mutate(v)} />
       <ApiErrorAlert error={setRules.error ?? reset.error ?? error} />
@@ -210,9 +213,9 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
           <Button data-testid="plan-restart-choices" variant="default" disabled={choices.length === 0} onClick={() => choose([])}>Recommencer le plan</Button>
         </Group>
       )}
-      {plan && open && (
+      {plan && grid && open && (
         <Box style={{ opacity: isFetching ? 0.5 : 1 }}>
-          <PlanView key={waveId ?? ''} id={id} waveId={waveId} data={plan} choices={choices} onChoices={choose} cardDecisions={cardDecisions}
+          <PlanView key={waveId ?? ''} id={id} waveId={waveId} data={plan} grid={grid} choices={choices} onChoices={choose} cardDecisions={cardDecisions}
             dropped={dropped.waveId === waveId ? dropped.names : []} computing={isFetching || saving} cancelled={cancelled} fighter={fighter} targets={targets} />
         </Box>
       )}
@@ -247,6 +250,16 @@ export function ReplacementPage() {
   const [moveTarget, setMoveTarget] = useState<Record<string, string | null>>({});
   const [allTargets, setAllTargets] = useState<Record<string, boolean>>({});
   const { data: grid } = useGrid(id);
+  const { data: competition } = useCompetition(id);
+  const rules = competition ? rulesView(competition.settings) : null;
+  /** Règle la plus coûteuse d'une proposition de carte (sa pastille en gras), comme dans le plan. */
+  const costRuleOf = (ruleIds: RuleId[], registrationId: string): RuleId | null => {
+    if (!rules) return null;
+    const settings = applyRulesView(defaultSettings(), rules);
+    const f = data?.fighters[registrationId];
+    const m = { ruleset: f?.ruleset ?? null, acceptsJiyuFirst: f?.acceptsJiyuFirst ?? null };
+    return ruleIds.reduce<RuleId | null>((best, r) => (best === null || ruleRank(settings, r, m) > ruleRank(settings, best, m) ? r : best), null);
+  };
   const [kinds, setKinds] = useState<string[]>([]);
   const [logState, setLogState] = useState<'all' | 'validated' | 'undone'>('all');
   const [logType, setLogType] = useState<string | null>(null);
@@ -352,32 +365,24 @@ export function ReplacementPage() {
             return (
               <Group key={p.id} justify="space-between" wrap="wrap" data-testid="replacement-proposal" p="xs"
                 style={{ border: '1px solid var(--sk-line)', borderRadius: 'var(--mantine-radius-md)', background: 'var(--sk-bg)' }}>
-                <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
-                  <Box style={{ flexShrink: 0 }}><ReplacementBadge type={p.type} state="proposed" gapKg={'newKey' in p.target ? undefined : p.checks.weightGapKg} checks={p.checks} /></Box>
-                  <div>
-                    <Text size="sm">{p.reason}</Text>
-                    <Text size="xs" c="dimmed">
-                      {'newKey' in p.target ? 'Catégorie de son poids réel (encore vide)' : PROPOSAL_TYPES[p.type].title}
-                      {!('newKey' in p.target) && (p.type === 'A' || p.type === 'B' || p.checks.weightGapKg > 0)
-                        ? ` · écart de poids ${kg(p.checks.weightGapKg)} kg entre le plus léger et le plus lourd (max ${kg(p.checks.threshold)} kg)`
-                        : ''}
-                      {p.checks.ageMove !== 'same' ? (p.checks.ageDirections.includes('down') ? ' · âge : une tranche au-dessous' : ' · âge : une tranche au-dessus') : ''}
-                      {p.checks.mixedSex ? ' · mixte' : ''}
-                      {p.manual ? ' · validation manuelle' : ' · cas simple'}
-                    </Text>
-                  </div>
-                  {p.preApproved && <StatusBadge tone="ok" size="sm">Pré-accord coach</StatusBadge>}
-                  {p.waveChange && (
-                    <StatusBadge tone="accent" size="sm" data-testid="wave-change">
-                      ↪ Change de session : {waveName(p.waveChange.from)} → {waveName(p.waveChange.to)}
-                    </StatusBadge>
-                  )}
-                  {p.waveShifts.length > 0 && (
-                    <StatusBadge tone="accent" size="sm" data-testid="wave-shift">
-                      ↪ Emmène {plural(p.waveShifts.length, 'autre combattant', 'autres combattants')} dans une autre session
-                    </StatusBadge>
-                  )}
-                </Group>
+                {grid && rules ? (
+                  <MoveBlocks view={p.view} grid={grid} rules={rules} costRule={costRuleOf(p.rules, c.registrationId)}>
+                    <Text span size="xs" c="dimmed">{p.manual ? 'validation manuelle' : 'cas simple'}</Text>
+                    {p.preApproved && <StatusBadge tone="ok" size="sm">Pré-accord coach</StatusBadge>}
+                    {p.waveChange && (
+                      <StatusBadge tone="accent" size="sm" data-testid="wave-change">
+                        ↪ Change de session : {waveName(p.waveChange.from)} → {waveName(p.waveChange.to)}
+                      </StatusBadge>
+                    )}
+                    {p.waveShifts.length > 0 && (
+                      <StatusBadge tone="accent" size="sm" data-testid="wave-shift">
+                        ↪ Emmène {plural(p.waveShifts.length, 'autre combattant', 'autres combattants')} dans une autre session
+                      </StatusBadge>
+                    )}
+                  </MoveBlocks>
+                ) : (
+                  <Text size="sm">{p.reason}</Text>
+                )}
                 <Group gap={4} wrap="nowrap">
                   <Button size="xs" variant="default" data-testid="proposal-preview" onClick={() => openProposal(p, false)}>Aperçu</Button>
                   <Button size="xs" data-testid="proposal-apply" onClick={() => openProposal(p, true)}>Valider</Button>

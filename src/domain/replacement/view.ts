@@ -2,6 +2,7 @@ import { categoryLabel, type CategoryKey } from '../categories.js';
 import { DISCIPLINES } from '../disciplines.js';
 import type { RuleId } from '../settings.js';
 import { applyAll } from './move.js';
+import { ruleProfile } from './propose.js';
 import type { CaseKind, Proposal, State } from './types.js';
 import { activeMembers, categoryWeightGap, gapThreshold } from './weights.js';
 
@@ -10,7 +11,7 @@ export type MoveWhy =
   | { kind: 'weight_out'; weighInKg: number; limitLabel: string; toleranceKg: number }
   | { kind: 'alone' }
   | { kind: 'weight_gap' }
-  | { kind: 'split'; forLabel: string; forCategoryLabel: string; count: number }
+  | { kind: 'split'; forLabel: string; forSex: 'F' | 'M'; forCategoryLabel: string; count: number }
   | { kind: 'return' }
   | { kind: 'closed' }
   | { kind: 'manual' };
@@ -31,6 +32,8 @@ export interface MoveView {
   /** Écart de poids de la catégorie d'arrivée et son maximum ; `null` : discipline sans poids. */
   gap: { kg: number; max: number } | null;
   details: { rule: RuleId; detail: string }[];
+  /** Correction qui s'impose (retour, pesée vers la catégorie de son poids réel) : pastille neutre « imposée ». */
+  forced: boolean;
 }
 
 const kg = (x: number) => String(Math.round(x * 100) / 100).replace('.', ',');
@@ -91,6 +94,7 @@ export function moveView(before: State, p: Proposal, after: State = applyAll(bef
     opponents: merged.filter((x) => !movers.has(x.registrationId)).map((x) => x.label),
     gap: DISCIPLINES[to.discipline].hasWeight ? { kg: gapKg, max } : null,
     details: detailsOf(before, p, p.rules, gapKg, max),
+    forced: p.type !== 'M' && ruleProfile(before, p).forced,
   };
 }
 
@@ -102,7 +106,7 @@ function whyOf(before: State, p: Proposal): MoveWhy {
   const subject = before.members.find((x) => x.registrationId === caseReg);
   if (kind === 'alone' && caseReg !== p.registrationId && subject) {
     const cat = before.categories.find((c) => c.id === subject.categoryId);
-    return { kind: 'split', forLabel: subject.label, forCategoryLabel: cat ? categoryLabel(cat.key, before.grid) : '—', count: 1 + (p.alsoMoved?.length ?? 0) };
+    return { kind: 'split', forLabel: subject.label, forSex: subject.sex, forCategoryLabel: cat ? categoryLabel(cat.key, before.grid) : '—', count: 1 + (p.alsoMoved?.length ?? 0) };
   }
   if (kind === 'weight_out' && subject?.weighInKg !== null && subject?.weighInKg !== undefined) {
     const limit = before.grid.weightClasses.find((w) => w.id === subject.weightClassId)?.label ?? '?';

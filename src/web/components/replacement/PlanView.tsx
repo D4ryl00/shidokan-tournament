@@ -2,12 +2,14 @@ import { Alert, Box, Button, Group, Modal, Select, Stack, Text, type ComboboxDat
 import { notifications } from '@mantine/notifications';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { plural } from '../../../domain/plural.js';
-import { applyRulesView, COST_BAND_LABELS, costBand, NO_VALIDATION_RULES, RULE_LABELS, ruleNumber, type CostBand } from '../../../domain/replacement/rules.js';
+import { applyRulesView, COST_BAND_LABELS, costBand, NO_VALIDATION_RULES, ruleNumber, type CostBand } from '../../../domain/replacement/rules.js';
 import { defaultSettings, type RuleId } from '../../../domain/settings.js';
 import { useApplyPlan, usePlanForApply, type PlanChoice, type PlanMove, type PlanResponse } from '../../api.js';
 import { ApiErrorAlert } from '../ApiErrorAlert.js';
 import { ProposalPreview } from '../ProposalPreview.js';
 import { BAND_COLOR } from './RuleLadder.js';
+import { MoveBlocks } from './MoveBlocks.js';
+import type { CategoryGrid } from '../../../domain/types.js';
 
 export interface PlanFighter {
   name: string;
@@ -55,24 +57,16 @@ function diff(before: PlanMove[], after: PlanMove[], name: (rid: string) => stri
   return out;
 }
 
-const pillStyle = (color: string, main: boolean): CSSProperties => ({
-  display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, padding: '2px 7px', borderRadius: 10,
-  border: `1.5px solid ${color}`, fontWeight: main ? 700 : 400, maxWidth: '100%', overflowWrap: 'anywhere',
-});
-const numberStyle = (color: string): CSSProperties => ({
-  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 16, height: 16, borderRadius: 8,
-  background: color, color: ON_COLOR, fontSize: 10, fontWeight: 700, flex: 'none',
-});
-
 /**
  * Le plan d'ensemble de la session : résumé, ce que le dernier recalcul a changé, les déplacements par groupe de coût
  * (Valider, Refuser, Modifier, et leurs annulations), les refus, qui reste seul ; puis « Appliquer le plan ».
  * Les choix (épingles, « Modifier » et refus) sont des données du poste : ils ne valent que pour le plan, les cartes n'en voient rien.
  */
 export function PlanView({
-  id, waveId, data, choices, onChoices, cardDecisions, dropped, computing, cancelled, fighter, targets,
+  id, waveId, data, grid, choices, onChoices, cardDecisions, dropped, computing, cancelled, fighter, targets,
 }: {
   id: string;
+  grid: CategoryGrid;
   waveId: string | null;
   data: PlanResponse;
   choices: PlanChoice[];
@@ -174,29 +168,17 @@ export function PlanView({
     return (
       <Box key={m.id} data-testid="plan-move" data-registration={m.registrationId}
         style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 12px', padding: '8px', borderTop: '1px solid var(--sk-line)', background: highlight }}>
-        <Box style={{ flex: '1 1 220px', minWidth: 0 }}>
-          <Text size="sm" fw={600} style={{ overflowWrap: 'anywhere' }}>
+        <Box style={{ flex: '1 1 100%', minWidth: 0 }}>
+          <Text size="sm" fw={600} style={{ overflowWrap: 'anywhere' }} data-testid="plan-move-name">
             {f.name}
             {(m.alsoMoved ?? []).map((r) => ` + ${name(r)}`).join('')}
             {f.club && <Text span size="xs" c="dimmed" fw={400}> · {f.club}</Text>}
           </Text>
-          <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{withoutName(m.reason, f.name)}</Text>
-          {m.type === 'M' && <Text size="xs" style={{ overflowWrap: 'anywhere' }}>→ {m.toLabel}</Text>}
         </Box>
-        <Box style={{ flex: '1 1 220px', minWidth: 0, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-          {m.details.map((d) => {
-            const color = BAND_COLOR[bandOf(d.rule)]!;
-            return (
-              <span key={d.rule} data-testid="plan-rule" style={pillStyle(color, d.rule === m.costRule)}>
-                {number(d.rule) !== null && <span style={numberStyle(color)} className="num">{number(d.rule)}</span>}
-                {RULE_LABELS[d.rule]}
-                {d.detail && <Text span size="xs" c="dimmed" fw={400}>{d.detail}</Text>}
-              </span>
-            );
-          })}
+        <MoveBlocks view={m.view} grid={grid} rules={view} costRule={m.costRule}>
           {m.preApproved && <Text span size="xs" c="dimmed">pré-accord coach</Text>}
           {m.outside && <Text span size="xs" fw={600} c="var(--sk-warn-text)">{OUTSIDE[m.outside]}</Text>}
-        </Box>
+        </MoveBlocks>
         <Group gap={4} style={{ flex: '0 1 auto', maxWidth: '100%' }}>
           {pinned ? (
             <Button size="compact-xs" variant="default" data-testid="plan-move-unvalidate" onClick={() => choose(without((c) => c === pinned))}>

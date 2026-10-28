@@ -15,7 +15,7 @@ test('pesée hors catégorie vers une catégorie encore vide', () => {
   const p = caseProps(s, `weight_out:${girard.registrationId}`).find((x) => 'newKey' in x.target)!;
   const v = moveView(s, p);
   expect(v.why).toEqual({ kind: 'weight_out', weighInKg: 41, limitLabel: '-40', toleranceKg: 0.5 });
-  expect(v).toMatchObject({ sex: 'F', fromCount: 2, fromRemaining: 1, opponents: [] });
+  expect(v).toMatchObject({ sex: 'F', fromCount: 2, fromRemaining: 1, opponents: [], forced: true });
   expect(v.from?.weightClassIds).toEqual(['minime:F:-40']);
   expect(v.to.weightClassIds).toEqual(['minime:F:-45']);
 });
@@ -26,8 +26,8 @@ test('split de la démo : GARNIER Sacha vers ROUSSEAU Tom', () => {
   const s = makeState([rousseau, ...boys]);
   const p = caseProps(s, `alone:${rousseau.registrationId}`).find((x) => x.registrationId === boys[0]!.registrationId)!;
   const v = moveView(s, p);
-  expect(v.why).toEqual({ kind: 'split', forLabel: 'ROUSSEAU Tom', forCategoryLabel: 'Karaté · Jiyu · Minimes M · -50 kg', count: 1 });
-  expect(v).toMatchObject({ sex: 'M', fromCount: 3, fromRemaining: 2, opponents: ['ROUSSEAU Tom'], gap: { kg: 5, max: 5 } });
+  expect(v.why).toEqual({ kind: 'split', forLabel: 'ROUSSEAU Tom', forSex: 'M', forCategoryLabel: 'Karaté · Jiyu · Minimes M · -50 kg', count: 1 });
+  expect(v).toMatchObject({ sex: 'M', fromCount: 3, fromRemaining: 2, opponents: ['ROUSSEAU Tom'], gap: { kg: 5, max: 5 }, forced: false });
   expect(v.from).toMatchObject({ ageBandCodes: ['benjamin'], weightClassIds: ['benjamin:M:-40'] });
   expect(v.to).toMatchObject({ ageBandCodes: ['benjamin', 'minime'], weightClassIds: ['benjamin:M:-40', 'minime:M:-50'] });
   expect(v.details.map((d) => d.rule)).toEqual(['split', 'ageUp']);

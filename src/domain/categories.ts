@@ -43,15 +43,28 @@ const weightOf = (grid: CategoryGrid, id: string) => {
 const bands = (k: CategoryKey, grid: CategoryGrid) => [...k.ageBandCodes].sort((a, b) => bandIndex(grid, a) - bandIndex(grid, b));
 const weights = (k: CategoryKey, grid: CategoryGrid) => [...k.weightClassIds].sort((a, b) => weightOf(grid, a) - weightOf(grid, b));
 
+/** Morceaux du libellé d'une catégorie (discipline, règlement, tranches, sexe, poids), pour les comparer un à un. */
+export interface CategoryLabelParts {
+  discipline: string;
+  ruleset: string | null;
+  ages: string;
+  sex: string;
+  weights: string | null;
+}
+
+export function categoryLabelParts(k: CategoryKey, grid: CategoryGrid): CategoryLabelParts {
+  return {
+    discipline: DISCIPLINES[k.discipline].label,
+    ruleset: k.ruleset ? RULESETS[k.ruleset].label.split(' ')[0]! : null,
+    ages: bands(k, grid).map((c) => grid.ageBands.find((b) => b.code === c)?.label ?? c).join(' / '),
+    sex: k.sex === 'X' ? 'F/M' : k.sex,
+    weights: k.weightClassIds.length ? `${weights(k, grid).map((id) => grid.weightClasses.find((w) => w.id === id)?.label ?? '?').join(' / ')} kg` : null,
+  };
+}
+
 export function categoryLabel(k: CategoryKey, grid: CategoryGrid): string {
-  const parts = [DISCIPLINES[k.discipline].label];
-  if (k.ruleset) parts.push(RULESETS[k.ruleset].label.split(' ')[0]!);
-  const ageLabels = bands(k, grid).map((c) => grid.ageBands.find((b) => b.code === c)?.label ?? c);
-  parts.push(`${ageLabels.join(' / ')} ${k.sex === 'X' ? 'F/M' : k.sex}`);
-  if (k.weightClassIds.length) {
-    parts.push(`${weights(k, grid).map((id) => grid.weightClasses.find((w) => w.id === id)?.label ?? '?').join(' / ')} kg`);
-  }
-  return parts.join(' · ');
+  const p = categoryLabelParts(k, grid);
+  return [p.discipline, ...(p.ruleset ? [p.ruleset] : []), `${p.ages} ${p.sex}`, ...(p.weights ? [p.weights] : [])].join(' · ');
 }
 
 const DISCIPLINE_ORDER: DisciplineId[] = ['karate', 'shido-boxing', 'shido-mix', 'triathlon', 'kata'];

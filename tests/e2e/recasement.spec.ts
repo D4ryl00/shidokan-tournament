@@ -58,8 +58,9 @@ test('pesée puis réaffectation : aperçu, validation, refus, plan d’ensemble
   const martin = caseOf(page, 'MARTIN Léa');
   await expect(martin).toBeVisible();
   const simple = martin.getByTestId('replacement-proposal').filter({ hasText: '-54' }).first();
-  await expect(simple.getByTestId('replacement-badge')).toHaveText('⚖ Poids 4,5 kg');
-  await expect(simple).toContainText('écart de poids 4,5 kg');
+  await expect(simple.getByTestId('move-why')).toHaveText('Seule dans sa catégorie');
+  await expect(simple.getByTestId('move-to')).toContainText('-47 / -54 kg');
+  await expect(simple).toContainText('avec BERNARD Léa · écart 4,5 kg (max 5)');
   await simple.getByTestId('proposal-apply').click();
   await expect(page.getByTestId('preview-content')).toContainText('MARTIN Léa contre BERNARD Léa');
   await page.getByTestId('proposal-confirm').click();
@@ -115,7 +116,8 @@ test('pesée puis réaffectation : aperçu, validation, refus, plan d’ensemble
   });
   await page.reload();
   const ret = caseOf(page, 'MARTIN Léa');
-  await expect(ret.getByTestId('replacement-badge')).toHaveText('↩ Retour');
+  await expect(ret.getByTestId('move-why')).toHaveText('Retour dans sa catégorie d’origine (elle a de nouveau des combattants)');
+  await expect(ret.getByTestId('plan-rule')).toHaveText(['Retour · imposé']);
   await ret.getByTestId('proposal-apply').click();
   await page.getByTestId('proposal-confirm').click();
   await expect(page.getByText('Réaffectation validée.')).toBeVisible();
@@ -172,4 +174,26 @@ test('repartir de zéro refusé : le motif se lit dans la confirmation', async (
   await dialog.getByRole('button', { name: 'Tout annuler' }).click();
   await expect(dialog).toContainText(refusal);
   await expect(page.getByTestId('recasement-row')).toHaveCount(1);
+});
+
+test('carte : pourquoi, de et vers lisibles, pastille de la correction imposée', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe cartes lisibles');
+  const reg = async (data: object) =>
+    (await (await request.post(`/api/competitions/${id}/registrations`, {
+      data: { clubId: null, firstName: 'Emma', sex: 'F', ageBandCode: 'minime', discipline: 'karate', ruleset: 'jiyu', weightClassId: 'minime:F:-40', source: 'manual', ...data },
+    })).json()).row as { fighterId: string };
+  const girard = await reg({ lastName: 'GIRARD' });
+  const jade = await reg({ lastName: 'RICHARD', firstName: 'Jade' });
+  await request.put(`/api/competitions/${id}/weigh-in/${girard.fighterId}`, { data: { weighInKg: 41 } });
+  await request.put(`/api/competitions/${id}/weigh-in/${jade.fighterId}`, { data: { weighInKg: 39 } });
+  await page.goto(`/competitions/${id}/reaffectation`);
+  const card = caseOf(page, 'GIRARD Emma');
+  const alone = card.getByTestId('replacement-proposal').filter({ hasText: 'vide' });
+  await expect(alone.getByTestId('move-why')).toHaveText('Pesée à 41 kg : trop lourde pour -40 kg (tolérance 0,5 kg)');
+  await expect(alone.getByTestId('move-from')).toHaveText('Karaté · Jiyu · Minimes F · -40 kg');
+  await expect(alone.getByTestId('move-from').locator('[data-changed="true"]')).toHaveText('-40 kg');
+  await expect(alone.getByTestId('move-to').locator('[data-changed="true"]')).toHaveText('-45 kg');
+  await expect(alone).toContainText('2 combattants → il en restera 1');
+  await expect(alone).toContainText('vide : elle y sera seule, à réaffecter ensuite');
+  await expect(alone.getByTestId('plan-rule')).toHaveText(['Correction de pesée · imposée']);
 });
