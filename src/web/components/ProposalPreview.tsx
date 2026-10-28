@@ -1,5 +1,7 @@
 import { Group, List, Paper, SimpleGrid, Stack, Text, Title } from '@mantine/core';
+import { Fragment } from 'react';
 import type { PreviewData } from '../api.js';
+import { FighterName, useFighterActive, WithFighterHighlight } from './FighterHighlight.js';
 import { ReplacementBadge } from './ReplacementBadge.js';
 
 function Lineup({ title, pairs }: { title: string; pairs: string[][] }) {
@@ -11,7 +13,12 @@ function Lineup({ title, pairs }: { title: string; pairs: string[][] }) {
       ) : (
         <List size="sm">
           {pairs.map((p, i) => (
-            <List.Item key={i}>{p.length === 1 ? `${p[0]} (sans adversaire)` : p.length === 2 ? `${p[0]} contre ${p[1]}` : p.join(' · ')}</List.Item>
+            <List.Item key={i}>
+              {p.map((n, j) => (
+                <Fragment key={j}>{j > 0 && (p.length === 2 ? ' contre ' : ' · ')}<FighterName name={n} /></Fragment>
+              ))}
+              {p.length === 1 && ' (sans adversaire)'}
+            </List.Item>
           ))}
         </List>
       )}
@@ -19,8 +26,30 @@ function Lineup({ title, pairs }: { title: string; pairs: string[][] }) {
   );
 }
 
-/** Aperçu avant validation : qui bouge, quels tableaux changent, qui rencontre qui. */
+/** Un tableau modifié : encadré de la couleur d'accent quand il contient le combattant mis en valeur. */
+function CategoryChange({ c }: { c: PreviewData['categories'][number] }) {
+  const isActive = useFighterActive();
+  const active = [...c.before, ...c.after].some((pair) => pair.some(isActive));
+  return (
+    <Paper withBorder p="xs" data-testid="preview-category" data-active={active || undefined} style={active ? { borderColor: 'var(--sk-accent)' } : undefined}>
+      <Text fw={500} size="sm" mb={4}>{c.label}</Text>
+      <SimpleGrid cols={2}>
+        <Lineup title="Avant" pairs={c.before} />
+        <Lineup title="Après" pairs={c.after} />
+      </SimpleGrid>
+    </Paper>
+  );
+}
+
+/**
+ * Aperçu avant validation : qui bouge, quels tableaux changent, qui rencontre qui. Un nom survolé ou cliqué s'allume partout
+ * (avec la liste des déplacements au-dessus, quand elle est dans le même `FighterHighlight`).
+ */
 export function ProposalPreview({ data }: { data: PreviewData }) {
+  return <WithFighterHighlight><PreviewContent data={data} /></WithFighterHighlight>;
+}
+
+function PreviewContent({ data }: { data: PreviewData }) {
   const simple = data.steps.filter((s) => !s.manual);
   const manual = data.steps.filter((s) => s.manual);
   return (
@@ -43,15 +72,7 @@ export function ProposalPreview({ data }: { data: PreviewData }) {
       )}
       {data.steps.length === 1 && <Text size="sm">{data.steps[0]!.proposal.reason}</Text>}
       <Title order={6}>Tableaux modifiés</Title>
-      {data.categories.map((c) => (
-        <Paper key={c.label} withBorder p="xs">
-          <Text fw={500} size="sm" mb={4}>{c.label}</Text>
-          <SimpleGrid cols={2}>
-            <Lineup title="Avant" pairs={c.before} />
-            <Lineup title="Après" pairs={c.after} />
-          </SimpleGrid>
-        </Paper>
-      ))}
+      {data.categories.map((c) => <CategoryChange key={c.label} c={c} />)}
       {data.unresolved !== undefined && data.unresolved > 0 && <Text size="sm" c="orange">{data.unresolved} cas resteront sans solution automatique.</Text>}
     </Stack>
   );

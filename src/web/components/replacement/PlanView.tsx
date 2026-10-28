@@ -6,6 +6,7 @@ import { applyRulesView, COST_BAND_LABELS, costBand, NO_VALIDATION_RULES, ruleNu
 import { defaultSettings, type RuleId } from '../../../domain/settings.js';
 import { useApplyPlan, usePlanForApply, type PlanChoice, type PlanMove, type PlanResponse } from '../../api.js';
 import { ApiErrorAlert } from '../ApiErrorAlert.js';
+import { FighterHighlight, FighterName } from '../FighterHighlight.js';
 import { ProposalPreview } from '../ProposalPreview.js';
 import { BAND_COLOR } from './RuleLadder.js';
 import { MoveBlocks } from './MoveBlocks.js';
@@ -305,7 +306,8 @@ export function PlanView({
           {forApply.isPending && <Text size="sm">Calcul du plan à appliquer…</Text>}
           <ApiErrorAlert error={forApply.error ?? apply.error} />
           {toApply && !forApply.isPending && (
-            <>
+            // Un nom survolé ou cliqué s'allume dans la liste et dans les tableaux : d'où il vient, où il va.
+            <FighterHighlight>
               <Text size="sm">
                 {toApply.plan.moves.length === 0
                   ? 'Aucun déplacement à appliquer : les déplacements à valider doivent d’abord être validés.'
@@ -317,7 +319,7 @@ export function PlanView({
                     const onScreen = plan.moves.find((x) => x.registrationId === m.registrationId);
                     return (
                       <Text key={m.id} size="sm" data-testid="plan-apply-move" style={{ overflowWrap: 'anywhere' }}>
-                        <b>{name(m.registrationId)}</b> → {m.toLabel}
+                        <FighterName name={name(m.registrationId)} bold /> → {m.toLabel}
                         {m.validated ? ' · validé à la main' : ' · sans validation'}
                         {!onScreen && <Text span size="sm" c="var(--sk-warn-text)"> (pas à l’écran)</Text>}
                         {onScreen && onScreen.toLabel !== m.toLabel && <Text span size="sm" c="var(--sk-warn-text)"> (à l’écran : {onScreen.toLabel})</Text>}
@@ -331,7 +333,7 @@ export function PlanView({
                   <Text size="sm">Ne {skipped.length > 1 ? 'seront' : 'sera'} pas {skipped.length > 1 ? 'appliqués' : 'appliqué'}, sans les déplacements à valider non validés :</Text>
                   {skipped.map((m) => (
                     <Text key={m.id} size="sm" c="var(--sk-warn-text)" style={{ overflowWrap: 'anywhere' }}>
-                      <b>{name(m.registrationId)}</b> → {m.toLabel}
+                      <FighterName name={name(m.registrationId)} bold /> → {m.toLabel}
                       {m.validated ? ' · validé à la main, attend un déplacement à valider' : ' · sans validation'}
                     </Text>
                   ))}
@@ -343,7 +345,7 @@ export function PlanView({
                 </Text>
               )}
               {toApply.categories && toApply.categories.length > 0 && <ProposalPreview data={{ steps: [], categories: toApply.categories }} />}
-            </>
+            </FighterHighlight>
           )}
           <Group justify="flex-end">
             <Button variant="default" onClick={() => closeApply()}>Annuler</Button>

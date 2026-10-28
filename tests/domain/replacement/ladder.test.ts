@@ -80,7 +80,8 @@ test('nœuds par ligne : nodeBudget 0 rend toujours les rejeux, et deux appels i
   expect(a.plan.hash).toBe(b.plan.hash);
 });
 
-test('la ligne de coupure n’est jamais moins bonne que le plan calculé seul', { timeout: 60_000 }, () => {
+// Environ 45 s seul depuis le split élargi (étape 31), plus avec les autres fichiers en parallèle : la limite n'est qu'une sécurité.
+test('la ligne de coupure n’est jamais moins bonne que le plan calculé seul', { timeout: 180_000 }, () => {
   for (const seed of [4, 6, 8]) {
     const s = randomState(seed, 250);
     const alone = computePlan(s, { waveId: null, level: s.settings.replacementRules.cutAfter, choices: [] }).aloneAfter.length;

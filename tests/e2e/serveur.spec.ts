@@ -57,11 +57,13 @@ test('serveur : envoi des mails — choix Google, bouton vers Google ; compte co
   await page.getByText('Compte Google', { exact: true }).click();
   await expect(page.getByText('Google affichera « application non validée »', { exact: false })).toBeVisible();
   let googleUrl = '';
+  // Une page factice plutôt qu'un abandon : la page d'erreur de Chrome arrivait parfois après coup et interrompait la navigation suivante.
   await page.route('https://accounts.google.com/**', (route) => {
     googleUrl = route.request().url();
-    return route.abort();
+    return route.fulfill({ status: 200, contentType: 'text/html', body: '<p>Google (factice)</p>' });
   });
   await page.getByRole('button', { name: 'Se connecter avec Google' }).click();
+  await page.waitForURL(/^https:\/\/accounts\.google\.com\//);
   await expect.poll(() => googleUrl).not.toBe('');
   expect(googleUrl).toContain('client_id=e2e-client');
   expect(googleUrl).toContain('redirect_uri=http%3A%2F%2Flocalhost%3A3101%2Fapi%2Fapp-settings%2Fgoogle%2Fcallback');

@@ -213,6 +213,43 @@ test('valider un déplacement à valider, appliquer : seuls lui et les cas simpl
   await expect(view).toContainText('Validés 0 / 1');
 });
 
+test('appliquer le plan : un nom survolé ou cliqué est mis en valeur partout dans la fenêtre', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan surligner');
+  await seedPlan(request, id);
+  const { view, moveOf } = await openPlan(page, id);
+  await moveOf('MINI Léa').getByTestId('plan-move-validate').click();
+  await expect(moveOf('MINI Léa').getByTestId('plan-move-unvalidate')).toBeVisible();
+  await view.getByTestId('plan-apply').click();
+  const dialog = page.getByRole('dialog');
+  await expect(page.getByTestId('plan-apply-confirm')).toHaveText('Confirmer (2)');
+  const mini = dialog.locator('[data-fighter="MINI Léa"]');
+  const lit = dialog.locator('[data-fighter="MINI Léa"][data-active]');
+  const others = dialog.locator('[data-fighter][data-active]:not([data-fighter="MINI Léa"])');
+  // Dans la liste des déplacements, puis avant et après dans les tableaux.
+  await expect(mini).toHaveCount(3);
+  await expect(lit).toHaveCount(0);
+  // Survol : partout, et les tableaux où il est sont encadrés.
+  await mini.first().hover();
+  await expect(lit).toHaveCount(3);
+  await expect(others).toHaveCount(0);
+  await expect(dialog.locator('[data-testid="preview-category"][data-active]')).toHaveCount(2);
+  await dialog.getByText('Tableaux modifiés').hover();
+  await expect(lit).toHaveCount(0);
+  // Clic : reste en valeur sans la souris ; un autre clic sur lui l'éteint.
+  await mini.nth(1).click();
+  await dialog.getByText('Tableaux modifiés').hover();
+  await expect(lit).toHaveCount(3);
+  await expect(mini.first()).toHaveAttribute('aria-pressed', 'true');
+  await mini.nth(2).click();
+  await dialog.getByText('Tableaux modifiés').hover();
+  await expect(lit).toHaveCount(0);
+  // Clic ailleurs : éteint.
+  await mini.first().click();
+  await expect(lit).toHaveCount(3);
+  await dialog.getByText('Tableaux modifiés').click();
+  await expect(lit).toHaveCount(0);
+});
+
 test('valider, appliquer, repartir de zéro, puis valider le même déplacement : la validation tient', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe plan revalider');
   await seedPlan(request, id);
