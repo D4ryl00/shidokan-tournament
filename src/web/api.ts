@@ -8,7 +8,7 @@ import type { ClubFormHeader, ClubFormLine, ClubFormParse } from '../domain/club
 import type { ClosedCategoriesView, EntryCell } from '../domain/closed-categories.js';
 import type { ColumnMapping, FfkChoices, FfkImportPlan } from '../domain/ffk-import.js';
 import type { Club, DirectoryEntry, DirectoryInput, RegistrationInput, RegistrationRow } from '../domain/registration.js';
-import type { Case, Presence, Proposal, ProposalType } from '../domain/replacement/index.js';
+import type { Case, MoveView, Presence, Proposal, ProposalType } from '../domain/replacement/index.js';
 import type { CategoryGrid, DisciplineId } from '../domain/types.js';
 import type { LadderProgress, LadderRow, PlanChoice, PlanMove } from '../domain/replacement/plan.js';
 import { fetchPlanStream } from './planStream.js';
@@ -384,7 +384,7 @@ export interface ReplacementData {
   /** Par cas : catégories où le déplacer à la main, avec les règles enfreintes (aucune : déplacement cohérent). */
   moveTargets: Record<string, { categoryId: string; warnings: string[] }[]>;
   /** Les propositions refusées suivent les autres, marquées `refused`. */
-  proposals: Record<string, (Proposal & { refused?: true })[]>;
+  proposals: Record<string, (Proposal & { refused?: true; view: MoveView })[]>;
   /** Cartes mises de côté (de la session affichée), avec leur note. */
   setAside: Record<string, { note: string; createdAt: string }>;
   summary: { present: number; absent: number; unknown: number; cases: number; setAside: number; closed: number; alone: number; withoutProposal: number; readyCategories: number; startedCategories: number };

@@ -9,6 +9,7 @@ import { DEFAULT_NODE_BUDGET, aloneRegistrations, compareScores, costRank, mover
 import { proposalsFor, rulesForMove } from './propose.js';
 import { allowedAt, costBand, isRuleOn, NO_VALIDATION_RULES, ruleRank, withAllRules, type CostBand } from './rules.js';
 import type { Proposal, State } from './types.js';
+import { detailsOf, moveView, type MoveView } from './view.js';
 import { casesOfWave, memberWave } from './waves.js';
 import { activeMembers, categoryWeightGap, gapThreshold } from './weights.js';
 
@@ -35,9 +36,11 @@ export interface PlanMove extends Proposal {
   validated: boolean;
   /** Choix hors des règles actuelles : règle désactivée, sous la ligne, ou déplacement qui enfreint les règles. */
   outside: 'disabled' | 'below-cut' | 'breaks-rules' | null;
-  details: { rule: RuleId; detail: string }[];
+  details: MoveView['details'];
   /** Libellé de la catégorie du combattant une fois le déplacement fait. */
   toLabel: string;
+  /** Pourquoi, d'où, où, avec qui : la présentation « De ➜ Vers » de la ligne. */
+  view: MoveView;
 }
 
 export interface PlanOptions {
@@ -64,43 +67,6 @@ export interface PlanResult {
   proven: boolean;
   final: State;
   hash: string;
-}
-
-const kg = (x: number) => String(Math.round(x * 100) / 100).replace('.', ',');
-
-/** Pastilles : le détail de chaque règle d'un déplacement (« écart 2,5 kg », « Cadets → Juniors »…). */
-function detailsOf(before: State, p: Proposal, rules: RuleId[], gap: number, threshold: number): PlanMove['details'] {
-  const m = before.members.find((x) => x.registrationId === p.registrationId);
-  const { ageBands } = before.grid;
-  const bandLabel = (code: string) => ageBands.find((b) => b.code === code)?.label ?? code;
-  const bandIndex = (code: string) => ageBands.findIndex((b) => b.code === code);
-  const targetKey: CategoryKey | undefined =
-    'newKey' in p.target ? p.target.newKey : before.categories.find((c) => c.id === (p.target as { categoryId: string }).categoryId)?.key;
-  return rules.map((rule) => {
-    switch (rule) {
-      case 'weight':
-      case 'split':
-        return { rule, detail: `écart ${kg(gap)} kg` };
-      case 'weightGap':
-        return { rule, detail: `${kg(gap)} kg (max ${kg(threshold)})` };
-      case 'ageUp':
-      case 'ageDown':
-      case 'minorsAdults': {
-        if (!m) return { rule, detail: '' };
-        const bands = targetKey?.ageBandCodes ?? [];
-        const others = bands.filter((b) => b !== m.ageBandCode);
-        const to = (others.length ? others : bands).slice().sort((a, b) => bandIndex(a) - bandIndex(b));
-        return { rule, detail: `${bandLabel(m.ageBandCode)} → ${to.map(bandLabel).join(' / ')}` };
-      }
-      case 'discipline': {
-        if (!m) return { rule, detail: '' };
-        const to = p.changes.discipline ?? targetKey?.discipline ?? m.discipline;
-        return { rule, detail: `${DISCIPLINES[m.discipline].label} → ${DISCIPLINES[to].label}` };
-      }
-      default:
-        return { rule, detail: '' };
-    }
-  });
 }
 
 /** Ligne du plan pour la proposition `p`, appliquée à `before` (qui donne `after`). */
@@ -132,6 +98,7 @@ function planMove(
     outside: o.outside,
     details: detailsOf(before, p, p.rules, gap, threshold),
     toLabel: arrival ? categoryLabel(arrival.key, after.grid) : '—',
+    view: moveView(before, p, after),
   };
 }
 

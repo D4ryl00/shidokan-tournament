@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { PassThrough } from 'node:stream';
 import { z } from 'zod';
-import { applyAll, applyProposal, casesOfWave, categoryWave, detectCases, isClosedTarget, isLocked, memberWave, stateFingerprint } from '../../domain/replacement/index.js';
+import { applyAll, applyProposal, casesOfWave, categoryWave, detectCases, isClosedTarget, isLocked, memberWave, moveView, stateFingerprint } from '../../domain/replacement/index.js';
 import type { AppDb } from '../db/client.js';
 import { applyRulesView, rulesView, rulesViewSchema } from '../../domain/replacement/rules.js';
 import { getAppSettings } from '../repositories/app-settings.js';
@@ -120,7 +120,8 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
       cases,
       fighters,
       moveTargets,
-      proposals: Object.fromEntries(shown),
+      // Chaque proposition avec sa vue (pourquoi, départ, arrivée) : la carte la présente en « De ➜ Vers ».
+      proposals: Object.fromEntries([...shown].map(([caseId, ps]) => [caseId, ps.map((p) => ({ ...p, view: moveView(state, p) }))])),
       setAside: setAsideNotes(db, req.params.id, cases.filter((c) => aside.has(c.id)).map((c) => c.id)),
       summary: {
         present: presence.filter((p) => p === 'present').length,

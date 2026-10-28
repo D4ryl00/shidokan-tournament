@@ -29,7 +29,7 @@ async function reg(over: object = {}) {
 }
 type Replacement = {
   cases: { id: string; kind: string; registrationId: string }[];
-  proposals: Record<string, { id: string; type: string; manual: boolean; reason: string; refused?: boolean }[]>;
+  proposals: Record<string, { id: string; type: string; manual: boolean; reason: string; refused?: boolean; view: { why: { kind: string }; opponents: string[]; fromCount: number } }[]>;
   summary: Record<string, number>;
   fingerprint: string;
   recasements: { id: string; registrationId: string; type: string; status: string; reason: string }[];
@@ -108,6 +108,14 @@ test('fusion de deux seules, journal, plus de cas ; retour quand un adversaire a
   const cat47 = cats.find((c) => c.registrationIds.includes(a.id))!;
   await call('PATCH', `/categories/${cat47.id}`, { status: 'started' });
   expect((await call('POST', '/replacement/undo', { recasementId: first.id })).statusCode).toBe(409);
+});
+
+test('propositions des cartes : avec leur vue (pourquoi, départ, arrivée)', async () => {
+  const a = await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  await reg({ lastName: 'BRUNO', weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
+  const r = await replacement();
+  const prop = r.proposals[r.cases.find((x) => x.registrationId === a.id)!.id]![0]!;
+  expect(prop.view).toMatchObject({ why: { kind: 'alone' }, fromCount: 1, opponents: ['BRUNO x'] });
 });
 
 test('annulation : remet l’inscription en place', async () => {
