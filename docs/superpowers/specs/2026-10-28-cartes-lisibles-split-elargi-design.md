@@ -113,6 +113,11 @@ Si une de ces règles est désactivée, le split n'est pas proposé.
 ✅ Libellé de la règle : « Split (autre catégorie) » au lieu de « Split de la catégorie du dessous » ; 💡 l'aide (ⓘ) est
 mise à jour.
 
+**Réalisé (2026-10-28).** Au plus 2 candidats par catégorie de départ (`SPLIT_CANDIDATES_PER_SOURCE`), un candidat trop lourd
+(pesée) pour la catégorie du seul est écarté. Mesures : 150 inscriptions ≈ 1,5 à 1,9 s (≈ 0,4 s avant), et moins de seuls
+(« autre discipline » : 9 au lieu de 12 sur l'exemple aléatoire) ; 500 inscriptions ≈ 6 s, la ligne « autre discipline » s'arrête
+sur le meilleur plan trouvé (non prouvé). Le test de durée de 500 inscriptions est passé à 10 s, prouvé jusqu'aux seniors / vétérans.
+
 **Coût du calcul.** Beaucoup plus de candidats possibles : le calcul a une limite fixe de nœuds (`DEFAULT_NODE_BUDGET`).
 💡 Vérifier avec `npm run test:perf` que la durée et la qualité du plan ne se dégradent pas sur les jeux existants ; si oui,
 limiter les candidats (par exemple garder, par catégorie source, les candidats les plus proches en poids) plutôt que de
