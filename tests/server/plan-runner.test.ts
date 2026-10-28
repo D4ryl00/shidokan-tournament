@@ -121,7 +121,8 @@ describe('par la route', () => {
     await app.listen({ port: 0, host: '127.0.0.1' });
     url = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
     const create = async (name: string) => (await app.inject({ method: 'POST', url: '/api/competitions', payload: { name, date: '2026-11-22' } })).json().id as string;
-    // Calcul lourd : 500 inscriptions tirées comme dans les tests du diagramme (réglages par défaut : environ 2 s).
+    // Calcul lourd : 500 inscriptions tirées comme dans les tests du diagramme (réglages par défaut : environ 10 s depuis le
+    // split élargi, bien plus sur la CI quand les autres fichiers tournent en même temps).
     base = `/api/competitions/${await create('Lourde')}`;
     const s = randomState(42, 500);
     for (const [i, m] of s.members.entries()) {
@@ -144,7 +145,8 @@ describe('par la route', () => {
   }, 120_000);
   afterAll(async () => app.close());
 
-  test('le serveur répond pendant un calcul lourd', async () => {
+  // Il attend la fin du calcul lourd : plus de 30 s sur la CI chargée.
+  test('le serveur répond pendant un calcul lourd', { timeout: 120_000 }, async () => {
     await idle();
     let finished = false;
     const job = app.inject({ method: 'POST', url: `${base}/replacement/plan`, payload: { choices: [] } }).then((r) => {
