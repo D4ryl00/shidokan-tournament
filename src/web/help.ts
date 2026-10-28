@@ -413,7 +413,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'L’historique des déplacements ; vous pouvez annuler le plus récent d’un combattant.',
     details: [
       'Annuler remet le combattant dans sa catégorie d’avant. Impossible si sa catégorie a déjà commencé.',
-      'Repartir de zéro annule tout d’un coup, dans toutes les sessions, et efface l’historique (impossible si une catégorie concernée a commencé ou si sa session est lancée).',
+      'Repartir de zéro annule d’un coup ce qui a été décidé depuis la session choisie (réaffectations, refus, cartes mises de côté) et efface cet historique ; les autres sessions ne bougent pas. Un combattant placé dans une session lancée ou une catégorie commencée reste où il est ; impossible si la session choisie est lancée.',
     ],
   },
   tableaux: {

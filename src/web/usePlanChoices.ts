@@ -35,12 +35,11 @@ function write(key: string, choices: PlanChoice[]): void {
   }
 }
 
-/** Oublie les choix du plan de toutes les sessions de la compétition sur ce poste (après « Repartir de zéro »). */
-export function clearPlanChoices(competitionId: string): void {
+/** Oublie les choix du plan et la coche d'une session (`null` : sans sessions) sur ce poste, après « Repartir de zéro ». */
+export function clearPlanChoices(competitionId: string, waveId: string | null): void {
   try {
-    const prefix = `plan-choices:${competitionId}:`;
-    const keys = Array.from({ length: sessionStorage.length }, (_, i) => sessionStorage.key(i)).filter((k): k is string => k?.startsWith(prefix) ?? false);
-    for (const k of keys) sessionStorage.removeItem(k);
+    sessionStorage.removeItem(keyOf(competitionId, waveId));
+    sessionStorage.removeItem(`plan-card-decisions:${competitionId}:${waveId ?? ''}`);
   } catch {
     // Stockage indisponible : rien à oublier.
   }

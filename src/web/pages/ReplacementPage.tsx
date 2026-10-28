@@ -260,6 +260,15 @@ export function ReplacementPage() {
     const m = { ruleset: f?.ruleset ?? null, acceptsJiyuFirst: f?.acceptsJiyuFirst ?? null };
     return ruleIds.reduce<RuleId | null>((best, r) => (best === null || ruleRank(settings, r, m) > ruleRank(settings, best, m) ? r : best), null);
   };
+  const sessionName = waveId ? (waves.find((w) => w.id === waveId)?.name ?? null) : null;
+  const resetBlocked = !data
+    ? null
+    : data.reset.locked
+      ? 'La session est lancée : rouvrez-la pour repartir de zéro.'
+      : data.reset.undo + data.reset.clears === 0
+        ? 'Rien à défaire dans cette session.'
+        : null;
+  const canReset = resetBlocked === null;
   const [kinds, setKinds] = useState<string[]>([]);
   const [logState, setLogState] = useState<'all' | 'validated' | 'undone'>('all');
   const [logType, setLogType] = useState<string | null>(null);
@@ -501,7 +510,7 @@ export function ReplacementPage() {
       </SectionCard>
 
       <SectionCard title={HELP['recasement.valides'].title} help="recasement.valides"
-        actions={(data.recasements.length > 0 || data.resettable) && (
+        actions={(data.recasements.length > 0 || data.reset.undo + data.reset.clears + data.reset.kept.length > 0) && (
           <Group gap="xs">
             {data.recasements.length > 0 && (
               <Group gap="xs" data-testid="recasement-filters">
@@ -511,9 +520,11 @@ export function ReplacementPage() {
                   data={[...new Set(data.recasements.map((r) => r.type))].map((t) => ({ value: t, label: `${PROPOSAL_TYPES[t as ProposalType].label} — ${PROPOSAL_TYPES[t as ProposalType].title}` }))} />
               </Group>
             )}
-            <Button size="compact-sm" variant="subtle" color="red" data-testid="replacement-reset" onClick={() => { resetAll.reset(); setDialog({ kind: 'reset' }); }}>
-              Repartir de zéro
+            <Button size="compact-sm" variant="light" color="red" data-testid="replacement-reset" disabled={!canReset}
+              title={resetBlocked ?? undefined} onClick={() => { resetAll.reset(); setDialog({ kind: 'reset' }); }}>
+              {sessionName ? `Repartir de zéro (session ${sessionName})` : 'Repartir de zéro'}
             </Button>
+            {resetBlocked && <Text size="xs" c="dimmed" data-testid="replacement-reset-why">{resetBlocked}</Text>}
           </Group>
         )}>
       {data.recasements.length === 0 ? (
@@ -604,19 +615,36 @@ export function ReplacementPage() {
       </Modal>
       <Modal opened={dialog?.kind === 'reset'} onClose={() => setDialog(null)} title="Repartir de zéro ?">
         <Stack>
-          <Text>Toutes les réaffectations validées de la compétition, toutes sessions confondues, sont annulées : chaque combattant retrouve sa catégorie d’origine. Les refus, les cartes mises de côté et l’historique sont effacés. Les règles ne changent pas.</Text>
+          <Text>
+            {plural(data.reset.undo, 'réaffectation validée est annulée', 'réaffectations validées sont annulées')}
+            {sessionName ? ` dans la session ${sessionName} (celles décidées depuis cette session)` : ''} : chaque combattant retrouve sa catégorie d’avant.
+            {' '}Les refus, les cartes mises de côté et l’historique sont effacés. Les règles ne changent pas.
+          </Text>
+          {data.reset.kept.length > 0 && (
+            <Stack gap={2} data-testid="replacement-reset-kept">
+              <Text size="sm" fw={600}>Restent en place :</Text>
+              {data.reset.kept.map((k) => (
+                <Text size="sm" key={k.name}>{k.name} reste en {k.toLabel} : {k.why === 'frozen' ? 'sa session est lancée' : 'sa catégorie a commencé'}.</Text>
+              ))}
+            </Stack>
+          )}
+          {data.reset.blockedBy && (
+            <Alert color="red" data-testid="replacement-reset-blocked">
+              {data.reset.blockedBy} a été réaffecté ensuite depuis une autre session : annulez d’abord ce déplacement-là dans l’historique.
+            </Alert>
+          )}
           <ApiErrorAlert error={resetAll.error} />
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setDialog(null)}>Non</Button>
-            <Button color="red" data-testid="replacement-reset-confirm" loading={resetAll.isPending}
-              onClick={() => resetAll.mutate({}, {
+            <Button color="red" data-testid="replacement-reset-confirm" loading={resetAll.isPending} disabled={data.reset.blockedBy !== null}
+              onClick={() => resetAll.mutate(waveId ? { waveId } : {}, {
                 onSuccess: () => {
-                  clearPlanChoices(id);
+                  clearPlanChoices(id, waveId);
                   setResets((n) => n + 1);
                   done('Réaffectation remise à zéro.');
                 },
               })}>
-              Tout annuler
+              {sessionName ? 'Tout annuler dans cette session' : 'Tout annuler'}
             </Button>
           </Group>
         </Stack>

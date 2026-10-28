@@ -147,11 +147,11 @@ test('repartir de zéro remet la réaffectation à l’état d’avant', async (
   await expect(page.getByTestId('recasement-row')).toHaveCount(1);
   await expect(martin).toHaveCount(0);
 
+  await expect(page.getByTestId('replacement-reset')).toHaveText('Repartir de zéro');
   await page.getByTestId('replacement-reset').click();
   const dialog = page.getByRole('dialog', { name: 'Repartir de zéro ?' });
-  await expect(dialog).toContainText(
-    'Toutes les réaffectations validées de la compétition, toutes sessions confondues, sont annulées : chaque combattant retrouve sa catégorie d’origine. Les refus, les cartes mises de côté et l’historique sont effacés. Les règles ne changent pas.',
-  );
+  await expect(dialog).toContainText('1 réaffectation validée est annulée');
+  await expect(dialog).toContainText('Les refus, les cartes mises de côté et l’historique sont effacés. Les règles ne changent pas.');
   await dialog.getByRole('button', { name: 'Tout annuler' }).click();
   await expect(page.getByTestId('recasement-row')).toHaveCount(0);
   await expect(page.getByText('Aucune pour l’instant.')).toBeVisible();
@@ -196,4 +196,38 @@ test('carte : pourquoi, de et vers lisibles, pastille de la correction imposée'
   await expect(alone).toContainText('2 combattants → il en restera 1');
   await expect(alone).toContainText('vide : elle y sera seule, à réaffecter ensuite');
   await expect(alone.getByTestId('plan-rule')).toHaveText(['Correction de pesée · imposée']);
+});
+
+test('repartir de zéro : session choisie seulement, bouton rouge', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe repartir par session');
+  const api = `/api/competitions/${id}`;
+  const reg = (data: object) => request.post(`${api}/registrations`, {
+    data: { clubId: null, firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', source: 'manual', ...data },
+  });
+  await reg({ lastName: 'MINA', ageBandCode: 'minime', weightClassId: 'minime:F:-40', approxWeightKg: 39 });
+  await reg({ lastName: 'MILA', ageBandCode: 'minime', weightClassId: 'minime:F:-45', approxWeightKg: 42 });
+  await reg({ lastName: 'CARA', weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  await reg({ lastName: 'CLEO', weightClassId: 'cadet:F:-54', approxWeightKg: 49 });
+  const waves = (await (await request.put(`${api}/waves`, { data: [
+    { name: 'Matin', rules: { ageBandCodes: ['poussin', 'pupille', 'benjamin', 'minime'], disciplines: [] } },
+    { name: 'Après-midi', rules: { ageBandCodes: ['cadet', 'junior', 'senior'], disciplines: [] } },
+  ] })).json()) as { id: string }[];
+  for (const w of waves) {
+    const r = await (await request.get(`${api}/replacement?vague=${w.id}`)).json();
+    await request.post(`${api}/replacement/apply`, { data: { proposalId: r.proposals[r.cases[0].id][0].id } });
+  }
+  await page.goto(`/competitions/${id}/reaffectation`);
+  await page.getByTestId('replacement-wave').getByText('Matin').click();
+  const button = page.getByTestId('replacement-reset');
+  await expect(button).toHaveText('Repartir de zéro (session Matin)');
+  const [r, g, b] = (await button.evaluate((e) => getComputedStyle(e).color)).match(/\d+/g)!.map(Number);
+  expect(r! - Math.max(g!, b!)).toBeGreaterThan(60);
+  await button.click();
+  const dialog = page.getByRole('dialog', { name: 'Repartir de zéro ?' });
+  await expect(dialog).toContainText('1 réaffectation validée est annulée');
+  await dialog.getByRole('button', { name: 'Tout annuler dans cette session' }).click();
+  await expect(page.getByText('Réaffectation remise à zéro.')).toBeVisible();
+  // L'historique de l'après-midi est toujours là.
+  await expect(page.getByTestId('recasement-row')).toHaveCount(1);
+  await expect(page.getByTestId('recasement-row')).toContainText('Cadets');
 });

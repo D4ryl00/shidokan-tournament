@@ -390,8 +390,8 @@ export interface ReplacementData {
   summary: { present: number; absent: number; unknown: number; cases: number; setAside: number; closed: number; alone: number; withoutProposal: number; readyCategories: number; startedCategories: number };
   fingerprint: string;
   recasements: RecasementEntry[];
-  /** Historique, refus ou carte de côté dans toute la compétition : « Repartir de zéro » a quelque chose à défaire. */
-  resettable: boolean;
+  /** Ce que « Repartir de zéro » ferait dans la session affichée. */
+  reset: { undo: number; kept: { name: string; toLabel: string; why: 'frozen' | 'started' }[]; blockedBy: string | null; clears: number; locked: boolean };
 }
 export interface PreviewData {
   steps: { proposal: Proposal; manual: boolean }[];
@@ -428,7 +428,7 @@ export const useManualMove = (id: string) => useReplacementAction<{ registration
 export const useSetAsideCase = (id: string) => useReplacementAction<{ caseId: string; note?: string }>(id, 'set-aside');
 export const useResumeCase = (id: string) => useReplacementAction<{ caseId: string }>(id, 'resume');
 export const useWithdrawRegistration = (id: string) => useReplacementAction<{ registrationId: string; fingerprint: string }>(id, 'withdraw');
-export const useResetReplacement = (id: string) => useReplacementAction<Record<string, never>>(id, 'reset');
+export const useResetReplacement = (id: string) => useReplacementAction<{ waveId?: string }>(id, 'reset');
 
 export type { LadderProgress, LadderRow, PlanChoice, PlanMove, RulesView };
 /** Réponse de `POST /replacement/plan` (voir `planResponse`, côté serveur). */
