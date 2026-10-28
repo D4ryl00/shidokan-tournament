@@ -33,7 +33,6 @@ type Replacement = {
   summary: Record<string, number>;
   fingerprint: string;
   recasements: { id: string; registrationId: string; type: string; status: string; reason: string }[];
-  resettable: boolean;
 };
 type Choice =
   | { kind: 'validate'; proposalId: string; caseId: string }
@@ -795,11 +794,13 @@ describe('réaffectation par session', () => {
     expect(wavesIn('recasements', 'registration_id').map((x) => x.w)).toEqual([aprem]);
   });
 
-  test('repartir de zéro possible d’après toute la compétition, pas la session affichée', async () => {
-    const { alone, matin } = await setup();
-    expect((await ofWave(matin)).resettable).toBe(false);
+  test('repartir de zéro : ce qu’il ferait, d’après la session affichée seulement', async () => {
+    const { alone, matin, aprem } = await setup();
+    type R = { reset: { clears: number } };
+    expect(((await ofWave(aprem)) as unknown as R).reset.clears).toBe(0);
     expect((await call('POST', '/replacement/set-aside', { caseId: `alone:${alone.id}` })).statusCode).toBe(200);
-    expect((await ofWave(matin)).resettable).toBe(true);
+    expect(((await ofWave(aprem)) as unknown as R).reset.clears).toBe(1);
+    expect(((await ofWave(matin)) as unknown as R).reset.clears).toBe(0);
   });
 
   test('sessions : waveId obligatoire, inconnu 404, une seule session traitée', async () => {
@@ -1150,7 +1151,7 @@ describe('repartir de zéro', () => {
 
     const res = await reset();
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true, undone: validated });
+    expect(res.json()).toEqual({ ok: true, undone: validated, kept: [] });
     expect(await layout()).toEqual(before);
     r = await replacement();
     expect(r.recasements).toEqual([]);
@@ -1168,7 +1169,7 @@ describe('repartir de zéro', () => {
       const target = (await categories()).find((c) => !c.registrationIds.includes(a.id))!;
       await call('POST', '/replacement/move', { registrationId: a.id, categoryId: target.id });
     }
-    expect((await reset()).json()).toEqual({ ok: true, undone: 2 });
+    expect((await reset()).json()).toEqual({ ok: true, undone: 2, kept: [] });
     expect(await layout()).toEqual(before);
     expect((await regs()).find((x) => x.id === a.id)!.weightClassId).toBe('cadet:F:-54');
   });
@@ -1193,7 +1194,7 @@ describe('repartir de zéro', () => {
     expect((await app.inject({ method: 'DELETE', url: `${base}/registrations/${a.id}` })).statusCode).toBeLessThan(300);
     const res = await reset();
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true, undone: 0 });
+    expect(res.json()).toEqual({ ok: true, undone: 0, kept: [] });
     expect((await replacement()).recasements).toEqual([]);
   });
 
@@ -1260,5 +1261,128 @@ describe('repartir de zéro', () => {
     expect(res.body).toContain('Une catégorie concernée a déjà commencé ou sa session est lancée : rouvrez-la pour repartir de zéro.');
     expect(await layout()).toEqual(before.layout);
     expect((await replacement()).recasements).toEqual(before.log);
+  });
+});
+
+describe('repartir de zéro par session', () => {
+  type Preview = { undo: number; kept: { name: string; toLabel: string; why: string }[]; blockedBy: string | null; clears: number; locked: boolean };
+  const layout = async () => (await categories()).map((c) => `${c.label} : ${[...c.registrationIds].sort().join(',')}`).sort();
+  const log = async () => (await replacement()).recasements.map((x) => x.registrationId).sort();
+  const preview = async (wave: string) => ((await call('GET', `/replacement?vague=${wave}`)).json() as { reset: Preview }).reset;
+  const reset = (waveId: string) => call('POST', '/replacement/reset', { waveId });
+  /** Matin : deux minimes seules, voisines ; après-midi : deux cadettes seules, voisines. */
+  async function setup() {
+    const m1 = await reg({ lastName: 'MINA', ageBandCode: 'minime', weightClassId: 'minime:F:-40', approxWeightKg: 39 });
+    const m2 = await reg({ lastName: 'MILA', ageBandCode: 'minime', weightClassId: 'minime:F:-45', approxWeightKg: 42 });
+    const c1 = await reg({ lastName: 'CARA', weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+    const c2 = await reg({ lastName: 'CLEO', weightClassId: 'cadet:F:-54', approxWeightKg: 49 });
+    const [matin, aprem] = (await call('PUT', '/waves', [
+      { name: 'Matin', rules: { ageBandCodes: ['poussin', 'pupille', 'benjamin', 'minime'], disciplines: [] } },
+      { name: 'Après-midi', rules: { ageBandCodes: ['cadet', 'junior', 'senior'], disciplines: [] } },
+    ])).json() as { id: string }[];
+    return { m1, m2, c1, c2, matin: matin!.id, aprem: aprem!.id };
+  }
+  /** Valide la première proposition de la carte de `regId` dans la session `wave`. */
+  const validate = async (wave: string, regId: string) => {
+    const r = (await call('GET', `/replacement?vague=${wave}`)).json() as Replacement;
+    const c = r.cases.find((x) => x.registrationId === regId)!;
+    expect((await call('POST', '/replacement/apply', { proposalId: r.proposals[c.id]![0]!.id })).statusCode).toBe(200);
+  };
+  const launch = async (wave: string) => {
+    const [zone] = (await call('GET', '/zones')).json() as { id: string }[];
+    const cats = (await call('GET', '/categories')).json() as { id: string; waveId: string | null }[];
+    for (const c of cats.filter((x) => x.waveId === wave)) await call('PATCH', `/categories/${c.id}`, { status: 'ready', zoneId: zone!.id });
+    const res = await call('POST', '/launch', { waveId: wave });
+    expect(res.statusCode, res.body).toBe(204);
+  };
+
+  test('seulement les actions décidées depuis la session choisie (réaffectations, refus, mises de côté)', async () => {
+    const { m1, c1, matin, aprem } = await setup();
+    await validate(matin, m1.id);
+    await validate(aprem, c1.id);
+    const before = await log();
+    expect(await preview(matin)).toEqual({ undo: 1, kept: [], blockedBy: null, clears: 0, locked: false });
+    const res = await reset(matin);
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true, undone: 1, kept: [] });
+    expect(await log()).toEqual(before.filter((r) => r === c1.id));
+    // Les cartes de la session reviennent ; celle de l'après-midi reste réglée.
+    expect((await call('GET', `/replacement?vague=${matin}`)).json().cases).toHaveLength(2);
+    expect((await call('GET', `/replacement?vague=${aprem}`)).json().cases).toHaveLength(0);
+  });
+
+  test('refus et mises de côté effacés dans la session choisie seulement', async () => {
+    const { m1, c1, matin, aprem } = await setup();
+    const am = (await call('GET', `/replacement?vague=${aprem}`)).json() as Replacement;
+    const cCase = am.cases.find((x) => x.registrationId === c1.id)!;
+    await call('POST', '/replacement/refuse', { proposalId: am.proposals[cCase.id]![0]!.id });
+    await call('POST', '/replacement/set-aside', { caseId: `alone:${m1.id}` });
+    expect((await preview(matin)).clears).toBe(1);
+    expect((await reset(matin)).statusCode).toBe(200);
+    const after = (await call('GET', `/replacement?vague=${aprem}`)).json() as Replacement;
+    expect(after.proposals[cCase.id]!.some((p) => p.refused)).toBe(true);
+    expect((await call('GET', `/replacement?vague=${matin}`)).json().summary.setAside).toBe(0);
+  });
+
+  test('un combattant placé dans une session lancée reste en place, le reste est annulé', async () => {
+    const { m1, c1, matin, aprem } = await setup();
+    const cora = await reg({ lastName: 'CORA', weightClassId: 'cadet:F:-61', approxWeightKg: 58 });
+    await validate(aprem, c1.id);
+    // CORA, décidée depuis l'après-midi, va chez les minimes (matin), puis le matin est lancé.
+    const minimes = (await categories()).find((c) => c.registrationIds.includes(m1.id))!;
+    expect((await call('POST', '/replacement/move', { registrationId: cora.id, categoryId: minimes.id })).statusCode).toBe(200);
+    await launch(matin);
+    const p = await preview(aprem);
+    expect(p).toMatchObject({ undo: 1, blockedBy: null, locked: false });
+    expect(p.kept).toEqual([{ name: 'CORA x', toLabel: expect.stringContaining('Minimes') as unknown as string, why: 'frozen' }]);
+    expect((await reset(aprem)).json()).toMatchObject({ ok: true, undone: 1 });
+    expect((await categories()).find((c) => c.registrationIds.includes(cora.id))!.id).toBe(minimes.id);
+    expect(await log()).toEqual([cora.id]);
+  });
+
+  test('catégorie commencée : la réaffectation reste, avec ses plus anciennes', async () => {
+    const { m1, matin } = await setup();
+    await validate(matin, m1.id);
+    const cat = (await categories()).find((c) => c.registrationIds.includes(m1.id))!;
+    await call('PATCH', `/categories/${cat.id}`, { status: 'started' });
+    expect((await preview(matin)).kept).toMatchObject([{ name: 'MINA x', why: 'started' }]);
+    const before = await layout();
+    expect((await reset(matin)).json()).toEqual({ ok: true, undone: 0, kept: [{ name: 'MINA x', toLabel: expect.any(String) as unknown as string, why: 'started' }] });
+    expect(await layout()).toEqual(before);
+    expect(await log()).toEqual([m1.id]);
+  });
+
+  test('réaffecté ensuite depuis une autre session : refus en entier, avec son nom', async () => {
+    const { m2, c1, c2, matin } = await setup();
+    const cadets = (await categories()).find((c) => c.registrationIds.includes(c1.id))!;
+    await call('POST', '/replacement/move', { registrationId: m2.id, categoryId: cadets.id });
+    // MILA est maintenant dans l'après-midi : ce second déplacement est décidé depuis l'après-midi.
+    const other = (await categories()).find((c) => c.registrationIds.includes(c2.id))!;
+    await call('POST', '/replacement/move', { registrationId: m2.id, categoryId: other.id });
+    expect((await preview(matin)).blockedBy).toBe('MILA x');
+    const before = await layout();
+    const res = await reset(matin);
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toContain('MILA x');
+    expect(await layout()).toEqual(before);
+  });
+
+  test('session choisie lancée : verrouillée, 409', async () => {
+    const { m1, matin } = await setup();
+    await validate(matin, m1.id);
+    await launch(matin);
+    expect((await preview(matin)).locked).toBe(true);
+    expect((await reset(matin)).statusCode).toBe(409);
+  });
+
+  test('ligne d’avant la migration (sans session) : rangée par sa catégorie de départ', async () => {
+    const { m1, c1, matin, aprem } = await setup();
+    await validate(matin, m1.id);
+    await validate(aprem, c1.id);
+    const raw = new Database(dbPath);
+    raw.prepare('UPDATE recasements SET wave_id = NULL').run();
+    raw.close();
+    expect((await reset(matin)).json()).toMatchObject({ undone: 1 });
+    expect(await log()).toEqual([c1.id]);
   });
 });

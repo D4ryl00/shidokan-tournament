@@ -18,7 +18,7 @@ import {
   findProposal,
   listRecasements,
   resetReplacement,
-  hasReplacementTrace,
+  resetPreview,
   loadState,
   manualMove,
   manualProposal,
@@ -137,8 +137,8 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
       },
       fingerprint: stateFingerprint(state),
       recasements: await listRecasements(db, req.params.id),
-      /** « Repartir de zéro » vaut pour toute la compétition, pas seulement la session affichée. */
-      resettable: hasReplacementTrace(db, req.params.id),
+      /** Ce que « Repartir de zéro » ferait dans la session affichée. */
+      reset: await resetPreview(db, req.params.id, waveId),
     };
   });
 
@@ -237,7 +237,11 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
     return { ok: true };
   });
 
-  app.post<P>('/api/competitions/:id/replacement/reset', async (req) => ({ ok: true, ...(await resetReplacement(db, req.params.id)) }));
+  app.post<P>('/api/competitions/:id/replacement/reset', async (req) => {
+    const { waveId } = z.object({ waveId: z.string().optional() }).strict().parse(req.body ?? {});
+    const state = await loadState(db, req.params.id);
+    return { ok: true, ...(await resetReplacement(db, req.params.id, knownWave(state.waves, waveId))) };
+  });
 
   app.post<P>('/api/competitions/:id/replacement/move', async (req) => {
     const { registrationId, categoryId } = z.object({ registrationId: z.string(), categoryId: z.string() }).parse(req.body);
