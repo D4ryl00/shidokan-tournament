@@ -23,8 +23,9 @@ function Label({ view, grid, side }: { view: MoveView; grid: CategoryGrid; side:
       {keyParts(key, side === 'from' ? view.to : view.from, grid).map((p, i) => (
         <span key={i}>
           {p.sep}
+          {/* Un morceau ne se coupe jamais (« -45 kg » sur une ligne) : on passe à la ligne entre les morceaux. */}
           <span data-changed={p.changed ? 'true' : undefined}
-            style={p.changed ? { fontWeight: 700, background: 'var(--sk-chip)', color: 'var(--sk-chip-text)', borderRadius: 4, padding: '0 4px' } : undefined}>
+            style={p.changed ? { whiteSpace: 'nowrap', fontWeight: 700, background: 'var(--sk-chip)', color: 'var(--sk-chip-text)', borderRadius: 4, padding: '0 4px' } : { whiteSpace: 'nowrap' }}>
             {p.text}
           </span>
         </span>
