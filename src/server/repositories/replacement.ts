@@ -18,6 +18,7 @@ import {
   type State,
   categoryWave,
   categoryWaves,
+  keyWave,
   memberWave,
   waveMoves,
 } from '../../domain/replacement/index.js';
@@ -440,10 +441,12 @@ const snapshotTouches = (currentCategoryId: string | null, snapshot: RecasementS
  * (export FFK, fiche club : elles ne changent que `originalJson` d'une inscription réaffectée) sont gardées.
  */
 function restoreSnapshot(t: AppDb, registrationId: string, snapshot: RecasementSnapshot): void {
-  for (const c of snapshot.categories) {
+  // Instantané incomplet (ligne écrite à la main, ancienne) : seulement ce qu'il contient.
+  for (const c of snapshot.categories ?? []) {
     const { id, ...values } = c;
     t.update(categories).set(values).where(eq(categories.id, id)).run();
   }
+  if (!snapshot.registration) return;
   const previous = { ...snapshot.registration };
   const current = t
     .select({ originalJson: registrations.originalJson, discipline: registrations.discipline, ruleset: registrations.ruleset, weightClassId: registrations.weightClassId })
@@ -513,6 +516,10 @@ export interface ResetPreview {
   blockedBy: string | null;
   /** Refus et cartes mises de côté effacés. */
   clears: number;
+  /** Lignes d'historique effacées (annulées maintenant, ou déjà annulées une à une). */
+  history: number;
+  /** Refus prévu (un combattant retournerait dans une catégorie commencée ou d'une session lancée) ; `null` : aucun. */
+  refusal: string | null;
   /** La session choisie (ou, sans sessions, la compétition) est lancée. */
   locked: boolean;
 }
@@ -525,9 +532,9 @@ const RESET_LOCKED = 'Une catégorie concernée a déjà commencé ou sa session
  * ancienne, une réaffectation qui touche une catégorie d'une session lancée ou commencée reste, avec les plus anciennes du
  * même combattant ; une réaffectation plus récente du même combattant décidée depuis une autre session bloque tout.
  */
-async function resetSorting(db: AppDb, competitionId: string, waveId: string | null) {
+async function resetSorting(db: AppDb, competitionId: string, waveId: string | null, loaded?: State) {
   // D'abord la synchronisation (faite par `loadState`) : les catégories lues ensuite sont à jour.
-  const state = await loadState(db, competitionId);
+  const state = loaded ?? (await loadState(db, competitionId));
   const launched = launchedWaveKeys(db, competitionId);
   const locked = state.waves.length === 0 ? launched.has('') : waveId !== null && launched.has(waveId);
   const byId = new Map(state.categories.map((c) => [c.id, c]));
@@ -543,6 +550,17 @@ async function resetSorting(db: AppDb, competitionId: string, waveId: string | n
       .innerJoin(fighters, eq(fighters.id, registrations.fighterId)).where(eq(registrations.competitionId, competitionId)).all()
       .map((r) => [r.id, `${r.last} ${r.first}`]),
   );
+  const departureWave = (registrationId: string, snapshot: RecasementSnapshot) => {
+    const m = state.members.find((x) => x.registrationId === registrationId);
+    if (!m) return waveOfCategory(current.get(registrationId));
+    const r = snapshot.registration ?? {};
+    const before = {
+      discipline: r.discipline ?? m.discipline,
+      ruleset: r.ruleset !== undefined ? r.ruleset : m.ruleset,
+      weightClassId: r.weightClassId !== undefined ? r.weightClassId : m.weightClassId,
+    };
+    return keyWave(state, naturalKey(before, m));
+  };
   const rows = db
     .select({ row: recasements, n: sql<number>`rowid` })
     .from(recasements)
@@ -551,8 +569,9 @@ async function resetSorting(db: AppDb, competitionId: string, waveId: string | n
     .sort((a, b) => b.n - a.n)
     .map(({ row, n }) => {
       const snapshot = JSON.parse(row.snapshotJson) as RecasementSnapshot;
-      // Ligne d'avant la migration 0025 : la session de sa catégorie de départ (disparue : celle de la catégorie actuelle).
-      const wave = row.waveId ?? waveOfCategory(snapshot.registration?.categoryId) ?? waveOfCategory(current.get(row.registrationId)) ?? null;
+      // Ligne d'avant la migration 0025 : la session de sa catégorie de départ ; disparue, celle de la clé qu'avait le combattant
+      // avant le déplacement (valeurs de l'instantané) ; inscription supprimée : celle de sa catégorie actuelle.
+      const wave = row.waveId ?? waveOfCategory(snapshot.registration?.categoryId) ?? departureWave(row.registrationId, snapshot) ?? null;
       return { row, n, snapshot, inScope: state.waves.length === 0 || waveId === null || wave === waveId };
     });
   const isStarted = (id: string) => ['started', 'finished'].includes(byId.get(id)?.status ?? '');
@@ -560,11 +579,18 @@ async function resetSorting(db: AppDb, competitionId: string, waveId: string | n
   const undo: typeof rows = [];
   const kept: ResetPreview['kept'] = [];
   const keptRegs = new Set<string>();
+  // Lignes gardées dans l'historique : celle laissée en place et les plus anciennes du même combattant (jamais une plus
+  // récente déjà annulée par cette remise à zéro).
+  const keptRows = new Set<string>();
   let blockedBy: string | null = null;
   for (const e of rows) {
-    if (!e.inScope || e.row.status !== 'validated') continue;
+    if (!e.inScope) continue;
     const reg = e.row.registrationId;
-    if (keptRegs.has(reg)) continue;
+    if (keptRegs.has(reg)) {
+      keptRows.add(e.row.id);
+      continue;
+    }
+    if (e.row.status !== 'validated') continue;
     if (rows.some((o) => o.n > e.n && !o.inScope && o.row.status === 'validated' && o.row.registrationId === reg)) {
       blockedBy ??= names.get(reg) ?? reg;
       continue;
@@ -573,13 +599,14 @@ async function resetSorting(db: AppDb, competitionId: string, waveId: string | n
     const why = touched.some(isFrozen) ? 'frozen' : touched.some(isStarted) ? 'started' : null;
     if (why) {
       keptRegs.add(reg);
+      keptRows.add(e.row.id);
       if (current.has(reg)) kept.push({ name: names.get(reg) ?? reg, toLabel: e.row.toLabel, why });
       continue;
     }
     undo.push(e);
   }
   // Historique effacé : les lignes de la session, sauf celles des combattants laissés en place.
-  const erase = rows.filter((e) => e.inScope && !keptRegs.has(e.row.registrationId)).map((e) => e.row.id);
+  const erase = rows.filter((e) => e.inScope && !keptRows.has(e.row.id)).map((e) => e.row.id);
   const sessionOf = (registrationId: string) => {
     const m = state.members.find((x) => x.registrationId === registrationId);
     return m ? memberWave(state, m) : null;
@@ -590,14 +617,55 @@ async function resetSorting(db: AppDb, competitionId: string, waveId: string | n
   const refusalRows = scoped(db.select().from(refusals).where(eq(refusals.competitionId, competitionId)).all(), (x) => proposalReg(x.proposalId));
   const asideRows = scoped(db.select().from(setAsideCases).where(eq(setAsideCases.competitionId, competitionId)).all(), (x) => x.caseId.slice(x.caseId.indexOf(':') + 1));
   const preview: ResetPreview = {
-    undo: undo.filter((e) => current.has(e.row.registrationId)).length, kept, blockedBy, clears: refusalRows.length + asideRows.length, locked,
+    undo: undo.filter((e) => current.has(e.row.registrationId)).length, kept, blockedBy, clears: refusalRows.length + asideRows.length,
+    history: erase.length, refusal: null, locked,
   };
-  return { preview, undo, erase, refusalRows, asideRows, current };
+  const sorting = { preview, undo, erase, refusalRows, asideRows, current, state };
+  // Essai à blanc (transaction annulée) : un combattant qui retournerait dans une catégorie commencée ou d'une session lancée.
+  if (!locked && !blockedBy && undo.length > 0) {
+    const dryRun = new Error('essai à blanc');
+    try {
+      db.transaction((tx) => {
+        applyReset(tx as unknown as AppDb, competitionId, sorting);
+        throw dryRun;
+      });
+    } catch (e) {
+      if (e instanceof CategoryLockedError) preview.refusal = e.message;
+      else if (e !== dryRun) throw e;
+    }
+  }
+  return sorting;
+}
+
+/** Les écritures de « Repartir de zéro » (dans une transaction de l'appelant) ; lève `CategoryLockedError` si un combattant retournerait dans une catégorie fermée. */
+function applyReset(t: AppDb, competitionId: string, sorting: Pick<Awaited<ReturnType<typeof resetSorting>>, 'undo' | 'erase' | 'refusalRows' | 'asideRows' | 'current' | 'state'>): void {
+  const { undo, erase, refusalRows, asideRows, current, state } = sorting;
+  const frozen = new Set(state.categories.filter((c) => c.frozen).map((c) => c.id));
+  const isLocked = (c: { id: string; status: string }) => c.status === 'started' || c.status === 'finished' || frozen.has(c.id);
+  const restored = new Set(undo.map((e) => e.row.registrationId).filter((id) => current.has(id)));
+  const fs = new Map(t.select().from(fighters).where(eq(fighters.competitionId, competitionId)).all().map((f) => [f.id, f]));
+  for (const e of undo) restoreSnapshot(t, e.row.registrationId, e.snapshot);
+  // Un combattant dont la catégorie d'avant a disparu sera rangé d'après sa clé (même choix que `syncCategories` : clé exacte
+  // avant alias, catégorie non commencée avant commencée) : refus si c'est une catégorie commencée ou d'une session lancée.
+  const cats = t.select().from(categories).where(eq(categories.competitionId, competitionId)).all();
+  const regs = t.select().from(registrations).where(inArray(registrations.id, [...restored])).all();
+  for (const r of regs) {
+    if (r.withdrawnReason || (r.placementLocked && r.categoryId)) continue;
+    const ks = keyString(naturalKey(r, fs.get(r.fighterId)!));
+    const rank = (c: (typeof cats)[number]) => (c.keyString === ks ? 0 : 2) + (c.status === 'started' || c.status === 'finished' ? 1 : 0);
+    const target = cats
+      .filter((c) => c.keyString === ks || (JSON.parse(c.aliasKeys) as string[]).includes(ks))
+      .sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id))[0];
+    if (target && isLocked(target)) throw new CategoryLockedError(RESET_LOCKED);
+  }
+  if (erase.length) t.delete(recasements).where(inArray(recasements.id, erase)).run();
+  for (const r of refusalRows) t.delete(refusals).where(and(eq(refusals.competitionId, competitionId), eq(refusals.proposalId, r.proposalId))).run();
+  for (const r of asideRows) t.delete(setAsideCases).where(and(eq(setAsideCases.competitionId, competitionId), eq(setAsideCases.caseId, r.caseId))).run();
 }
 
 /** Ce que « Repartir de zéro » ferait dans la session `waveId` (`null` : toutes). */
-export async function resetPreview(db: AppDb, competitionId: string, waveId: string | null): Promise<ResetPreview> {
-  return (await resetSorting(db, competitionId, waveId)).preview;
+export async function resetPreview(db: AppDb, competitionId: string, waveId: string | null, state?: State): Promise<ResetPreview> {
+  return (await resetSorting(db, competitionId, waveId, state)).preview;
 }
 
 /**
@@ -608,39 +676,17 @@ export async function resetPreview(db: AppDb, competitionId: string, waveId: str
  * retournerait dans une catégorie commencée ou d'une session lancée.
  */
 export async function resetReplacement(db: AppDb, competitionId: string, waveId: string | null): Promise<{ undone: number; kept: ResetPreview['kept'] }> {
-  const { preview, undo, erase, refusalRows, asideRows, current } = await resetSorting(db, competitionId, waveId);
+  const sorting = await resetSorting(db, competitionId, waveId);
+  const { preview, undo, current } = sorting;
   if (preview.locked) throw new CategoryLockedError(RESET_LOCKED);
   if (preview.blockedBy) {
     throw new StaleProposalError(`${preview.blockedBy} a été réaffecté ensuite depuis une autre session : annulez d’abord ce déplacement-là (historique), puis recommencez.`);
   }
-  const state = await loadState(db, competitionId);
-  const frozen = new Set(state.categories.filter((c) => c.frozen).map((c) => c.id));
-  const isLocked = (c: { id: string; status: string }) => c.status === 'started' || c.status === 'finished' || frozen.has(c.id);
+  if (preview.refusal) throw new CategoryLockedError(preview.refusal);
   // Une inscription supprimée depuis : sa ligne est rejouée quand même (clés des catégories, présences emmenées) ; l'inscription
   // elle-même n'existe plus et n'est pas comptée.
   const touched = [...new Set(undo.flatMap((e) => snapshotTouches(current.get(e.row.registrationId) ?? null, e.snapshot)))];
-  const restored = new Set(undo.map((e) => e.row.registrationId).filter((id) => current.has(id)));
-  const fs = new Map(db.select().from(fighters).where(eq(fighters.competitionId, competitionId)).all().map((f) => [f.id, f]));
-  db.transaction((tx) => {
-    const t = tx as unknown as AppDb;
-    for (const e of undo) restoreSnapshot(t, e.row.registrationId, e.snapshot);
-    // Un combattant dont la catégorie d'avant a disparu sera rangé d'après sa clé (même choix que `syncCategories` : clé exacte
-    // avant alias, catégorie non commencée avant commencée) : refus si c'est une catégorie commencée ou d'une session lancée.
-    const cats = t.select().from(categories).where(eq(categories.competitionId, competitionId)).all();
-    const regs = t.select().from(registrations).where(inArray(registrations.id, [...restored])).all();
-    for (const r of regs) {
-      if (r.withdrawnReason || (r.placementLocked && r.categoryId)) continue;
-      const ks = keyString(naturalKey(r, fs.get(r.fighterId)!));
-      const rank = (c: (typeof cats)[number]) => (c.keyString === ks ? 0 : 2) + (c.status === 'started' || c.status === 'finished' ? 1 : 0);
-      const target = cats
-        .filter((c) => c.keyString === ks || (JSON.parse(c.aliasKeys) as string[]).includes(ks))
-        .sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id))[0];
-      if (target && isLocked(target)) throw new CategoryLockedError(RESET_LOCKED);
-    }
-    if (erase.length) t.delete(recasements).where(inArray(recasements.id, erase)).run();
-    for (const r of refusalRows) t.delete(refusals).where(and(eq(refusals.competitionId, competitionId), eq(refusals.proposalId, r.proposalId))).run();
-    for (const r of asideRows) t.delete(setAsideCases).where(and(eq(setAsideCases.competitionId, competitionId), eq(setAsideCases.caseId, r.caseId))).run();
-  });
+  db.transaction((tx) => applyReset(tx as unknown as AppDb, competitionId, sorting));
   await recomputeKeys(db, competitionId, () => touched);
   return { undone: preview.undo, kept: preview.kept };
 }

@@ -272,7 +272,8 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
       const names = pull.moved.map((x) => x.label).join(' et ');
       const k = pull.moved.length;
       const built = withRules(state, pull.moved, {
-        id: `${pull.type}:${pull.moved.map((x) => x.registrationId).join('+')}>${pull.target.categoryId}`,
+        // Suffixe du combattant seul : jamais le même identifiant que la proposition du venu lui-même vers cette catégorie.
+        id: `${pull.type}:${pull.moved.map((x) => x.registrationId).join('+')}>${pull.target.categoryId}~${m.registrationId}`,
         caseId: c.id,
         type: pull.type,
         registrationId: pull.moved[0]!.registrationId,

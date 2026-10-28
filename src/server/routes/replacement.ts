@@ -138,7 +138,7 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
       fingerprint: stateFingerprint(state),
       recasements: await listRecasements(db, req.params.id),
       /** Ce que « Repartir de zéro » ferait dans la session affichée. */
-      reset: await resetPreview(db, req.params.id, waveId),
+      reset: await resetPreview(db, req.params.id, waveId, state),
     };
   });
 

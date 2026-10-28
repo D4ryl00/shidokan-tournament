@@ -1224,6 +1224,10 @@ describe('repartir de zéro', () => {
     const fresh = (await categories()).find((c) => c.label.endsWith('-47 kg'))!;
     await call('PATCH', `/categories/${fresh.id}`, { status: 'started' });
     const before = await layout();
+    // L'aperçu le dit déjà, sans rien changer.
+    const preview = ((await call('GET', '/replacement')).json() as { reset: { refusal: string | null } }).reset;
+    expect(preview.refusal).toBe('Une catégorie concernée a déjà commencé ou sa session est lancée : rouvrez-la pour repartir de zéro.');
+    expect(await layout()).toEqual(before);
     const res = await reset();
     expect(res.statusCode).toBe(409);
     expect(res.body).toContain('Une catégorie concernée a déjà commencé ou sa session est lancée : rouvrez-la pour repartir de zéro.');
@@ -1247,6 +1251,24 @@ describe('repartir de zéro', () => {
     expect((await regs()).find((x) => x.id === light.id)!.weightClassId).toBe('cadet:F:-61');
   });
 
+  test('plus récente annulée, plus ancienne laissée (catégorie commencée) : l’annulée sort de l’historique', async () => {
+    const r = await reg({ lastName: 'ROVER', weightClassId: 'cadet:F:-54' });
+    for (let i = 0; i < 2; i++) await reg({ weightClassId: 'cadet:F:-54' });
+    await reg({ weightClassId: 'cadet:F:-61' });
+    await reg({ weightClassId: 'cadet:F:+61' });
+    const home = (await categories()).find((c) => c.registrationIds.includes(r.id))!;
+    const b = (await categories()).find((c) => c.label.includes('-61'))!;
+    await call('POST', '/replacement/move', { registrationId: r.id, categoryId: b.id });
+    const c = (await categories()).find((x) => x.label.includes('+61'))!;
+    await call('POST', '/replacement/move', { registrationId: r.id, categoryId: c.id });
+    await call('PATCH', `/categories/${home.id}`, { status: 'started' });
+    const res = await reset();
+    expect(res.json()).toMatchObject({ undone: 1, kept: [{ name: 'ROVER x', why: 'started' }] });
+    expect((await categories()).find((x) => x.registrationIds.includes(r.id))!.id).toBe(b.id);
+    const rows = (await replacement()).recasements.filter((x) => x.registrationId === r.id);
+    expect(rows.map((x) => x.status)).toEqual(['validated']);
+  });
+
   test('session lancée : 409 et rien ne change', async () => {
     const a = await reg({ weightClassId: 'cadet:F:-54' });
     await reg({ weightClassId: 'cadet:F:-61' });
@@ -1265,7 +1287,7 @@ describe('repartir de zéro', () => {
 });
 
 describe('repartir de zéro par session', () => {
-  type Preview = { undo: number; kept: { name: string; toLabel: string; why: string }[]; blockedBy: string | null; clears: number; locked: boolean };
+  type Preview = { undo: number; kept: { name: string; toLabel: string; why: string }[]; blockedBy: string | null; clears: number; history: number; refusal: string | null; locked: boolean };
   const layout = async () => (await categories()).map((c) => `${c.label} : ${[...c.registrationIds].sort().join(',')}`).sort();
   const log = async () => (await replacement()).recasements.map((x) => x.registrationId).sort();
   const preview = async (wave: string) => ((await call('GET', `/replacement?vague=${wave}`)).json() as { reset: Preview }).reset;
@@ -1301,7 +1323,7 @@ describe('repartir de zéro par session', () => {
     await validate(matin, m1.id);
     await validate(aprem, c1.id);
     const before = await log();
-    expect(await preview(matin)).toEqual({ undo: 1, kept: [], blockedBy: null, clears: 0, locked: false });
+    expect(await preview(matin)).toEqual({ undo: 1, kept: [], blockedBy: null, clears: 0, history: 1, refusal: null, locked: false });
     const res = await reset(matin);
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true, undone: 1, kept: [] });
@@ -1367,6 +1389,16 @@ describe('repartir de zéro par session', () => {
     expect(await layout()).toEqual(before);
   });
 
+  test('seulement des lignes déjà annulées : il reste l’historique à effacer', async () => {
+    const { m1, matin } = await setup();
+    await validate(matin, m1.id);
+    const entry = (await replacement()).recasements[0]!;
+    await call('POST', '/replacement/undo', { recasementId: entry.id });
+    expect(await preview(matin)).toMatchObject({ undo: 0, clears: 0, history: 1 });
+    expect((await reset(matin)).statusCode).toBe(200);
+    expect((await replacement()).recasements).toEqual([]);
+  });
+
   test('session choisie lancée : verrouillée, 409', async () => {
     const { m1, matin } = await setup();
     await validate(matin, m1.id);
@@ -1375,14 +1407,17 @@ describe('repartir de zéro par session', () => {
     expect((await reset(matin)).statusCode).toBe(409);
   });
 
-  test('ligne d’avant la migration (sans session) : rangée par sa catégorie de départ', async () => {
+  test('ligne d’avant la migration (sans session) : rangée par sa catégorie de départ, pas par l’actuelle', async () => {
     const { m1, c1, matin, aprem } = await setup();
-    await validate(matin, m1.id);
-    await validate(aprem, c1.id);
+    // MINA (matin) part chez les cadettes (après-midi) : départ dans le matin, catégorie actuelle dans l'après-midi.
+    const cadets = (await categories()).find((c) => c.registrationIds.includes(c1.id))!;
+    await call('POST', '/replacement/move', { registrationId: m1.id, categoryId: cadets.id });
     const raw = new Database(dbPath);
     raw.prepare('UPDATE recasements SET wave_id = NULL').run();
     raw.close();
+    expect((await reset(aprem)).json()).toMatchObject({ undone: 0 });
+    expect(await log()).toEqual([m1.id]);
     expect((await reset(matin)).json()).toMatchObject({ undone: 1 });
-    expect(await log()).toEqual([c1.id]);
+    expect(await log()).toEqual([]);
   });
 });

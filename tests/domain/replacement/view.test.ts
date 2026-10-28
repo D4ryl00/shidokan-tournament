@@ -31,6 +31,7 @@ test('split de la démo : GARNIER Sacha vers ROUSSEAU Tom', () => {
   expect(v.from).toMatchObject({ ageBandCodes: ['benjamin'], weightClassIds: ['benjamin:M:-40'] });
   expect(v.to).toMatchObject({ ageBandCodes: ['benjamin', 'minime'], weightClassIds: ['benjamin:M:-40', 'minime:M:-50'] });
   expect(v.details.map((d) => d.rule)).toEqual(['split', 'ageUp']);
+  expect(v.costRule).toBe('ageUp');
 });
 
 test('déplacement manuel : « choisi à la main »', () => {

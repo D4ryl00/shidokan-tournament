@@ -3,6 +3,7 @@ import { DISCIPLINES } from '../disciplines.js';
 import type { RuleId } from '../settings.js';
 import { applyAll } from './move.js';
 import { ruleProfile } from './propose.js';
+import { ruleRank } from './rules.js';
 import type { CaseKind, Proposal, State } from './types.js';
 import { activeMembers, categoryWeightGap, gapThreshold } from './weights.js';
 
@@ -34,6 +35,8 @@ export interface MoveView {
   details: { rule: RuleId; detail: string }[];
   /** Correction qui s'impose (retour, pesée vers la catégorie de son poids réel) : pastille neutre « imposée ». */
   forced: boolean;
+  /** Règle la plus coûteuse (pour le combattant qui bouge, comme le plan) : sa pastille en gras. */
+  costRule: RuleId | null;
 }
 
 const kg = (x: number) => String(Math.round(x * 100) / 100).replace('.', ',');
@@ -95,6 +98,10 @@ export function moveView(before: State, p: Proposal, after: State = applyAll(bef
     gap: DISCIPLINES[to.discipline].hasWeight ? { kg: gapKg, max } : null,
     details: detailsOf(before, p, p.rules, gapKg, max),
     forced: p.type !== 'M' && ruleProfile(before, p).forced,
+    costRule: p.rules.reduce<RuleId | null>((best, r) => {
+      const who = m ?? { ruleset: null, acceptsJiyuFirst: null };
+      return best === null || ruleRank(before.settings, r, who) > ruleRank(before.settings, best, who) ? r : best;
+    }, null),
   };
 }
 

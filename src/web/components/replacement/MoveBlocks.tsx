@@ -69,11 +69,13 @@ export function MoveBlocks({ view, grid, rules, costRule, children }: {
           <Label view={view} grid={grid} side="from" />
           {view.from && (
             <Text size="sm" c="var(--sk-muted)">
-              {plural(view.fromCount, 'combattant', 'combattants')} → il en restera {view.fromRemaining}
+              {plural(view.fromCount, 'combattant', 'combattants')} → {view.fromRemaining === 0 ? 'il n’en restera aucun' : `il en restera ${view.fromRemaining}`}
             </Text>
           )}
         </Box>
-        <Box aria-hidden style={{ alignSelf: 'center', color: 'var(--sk-accent)', fontSize: 20, padding: '0 2px' }}>➜</Box>
+        {/* Écran étroit : les blocs passent l'un sous l'autre, la flèche descend. */}
+        <Box aria-hidden visibleFrom="sm" style={{ alignSelf: 'center', color: 'var(--sk-accent)', fontSize: 20, padding: '0 2px' }}>➜</Box>
+        <Box aria-hidden hiddenFrom="sm" style={{ flex: '1 1 100%', textAlign: 'center', color: 'var(--sk-accent)', fontSize: 20, lineHeight: 1 }}>⬇</Box>
         <Box style={block(true)}>
           <div style={tag}>Vers</div>
           <Label view={view} grid={grid} side="to" />

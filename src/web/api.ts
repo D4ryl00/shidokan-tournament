@@ -391,7 +391,7 @@ export interface ReplacementData {
   fingerprint: string;
   recasements: RecasementEntry[];
   /** Ce que « Repartir de zéro » ferait dans la session affichée. */
-  reset: { undo: number; kept: { name: string; toLabel: string; why: 'frozen' | 'started' }[]; blockedBy: string | null; clears: number; locked: boolean };
+  reset: { undo: number; kept: { name: string; toLabel: string; why: 'frozen' | 'started' }[]; blockedBy: string | null; clears: number; history: number; refusal: string | null; locked: boolean };
 }
 export interface PreviewData {
   steps: { proposal: Proposal; manual: boolean }[];

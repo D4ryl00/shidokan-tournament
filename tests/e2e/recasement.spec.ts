@@ -231,3 +231,21 @@ test('repartir de zéro : session choisie seulement, bouton rouge', async ({ pag
   await expect(page.getByTestId('recasement-row')).toHaveCount(1);
   await expect(page.getByTestId('recasement-row')).toContainText('Cadets');
 });
+
+test('carte d’un split : le nom de celui qui vient, et d’où il vient', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe carte split');
+  const reg = (data: object) => request.post(`/api/competitions/${id}/registrations`, {
+    data: { clubId: null, sex: 'M', ageBandCode: 'benjamin', discipline: 'karate', ruleset: 'jiyu', weightClassId: 'benjamin:M:-40', source: 'manual', ...data },
+  });
+  await reg({ lastName: 'ROUSSEAU', firstName: 'Tom', ageBandCode: 'minime', weightClassId: 'minime:M:-50', approxWeightKg: 45 });
+  await reg({ lastName: 'GARNIER', firstName: 'Sacha', approxWeightKg: 40 });
+  await reg({ lastName: 'GUERIN', firstName: 'Louis', approxWeightKg: 39 });
+  await reg({ lastName: 'RICHARD', firstName: 'Tom', approxWeightKg: 39 });
+  await page.goto(`/competitions/${id}/reaffectation`);
+  const split = caseOf(page, 'ROUSSEAU Tom').getByTestId('replacement-proposal').filter({ has: page.getByTestId('move-mover') }).first();
+  await expect(split.getByTestId('move-mover')).toContainText('GARNIER Sacha');
+  await expect(split.getByTestId('move-why')).toHaveText('Donner un adversaire à ROUSSEAU Tom, seul en Karaté · Jiyu · Minimes M · -50 kg');
+  await expect(split.getByTestId('move-from')).toHaveText('Karaté · Jiyu · Benjamins M · -40 kg');
+  await expect(split).toContainText('3 combattants → il en restera 2');
+  await expect(split.getByTestId('plan-rule')).toHaveCount(2);
+});

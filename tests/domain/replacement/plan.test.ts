@@ -522,3 +522,13 @@ test('élargissement : un déplacement remplit une catégorie, qui peut alors do
   expect(r.aloneAfter).toEqual([]);
   expect(r.proven).toBe(true);
 });
+
+test('split : jamais un combattant dont la carte est mise de côté (coche cochée)', () => {
+  const boy = (label: string, kg: number, wc: string) => member({ label, sex: 'M', ageBandCode: 'minime', weightClassId: wc, weighInKg: kg, presence: 'present' });
+  const alone = boy('ALONE', 44, 'minime:M:-45');
+  const y = boy('Y', 41.8, 'minime:M:-40');
+  const s = makeState([alone, y, boy('A', 39, 'minime:M:-40'), boy('B', 38, 'minime:M:-40'), boy('C', 37, 'minime:M:-40')]);
+  const yCase = detectCases(s).find((c) => c.registrationId === y.registrationId)!;
+  const aside = { ...s, setAside: [yCase.id] };
+  expect(movedIds(plan(aside))).not.toContain(y.registrationId);
+});

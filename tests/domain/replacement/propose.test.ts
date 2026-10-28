@@ -377,6 +377,16 @@ describe('split : le combattant seul reçoit un combattant d’une autre catégo
     const s = makeState([alone, boy(53, 'minime:M:-55'), boy(54, 'minime:M:-55'), boy(55, 'minime:M:-55')]);
     expect(pulled(s, alone)).toEqual([]);
   });
+  test('identifiant d’un split distinct de la proposition du venu lui-même', () => {
+    const boy = (label: string, kg: number, wc: string) => member({ label, sex: 'M', ageBandCode: 'minime', weightClassId: wc, weighInKg: kg, presence: 'present' });
+    const alone = boy('ALONE', 44, 'minime:M:-45');
+    const y = boy('Y', 41.8, 'minime:M:-40');
+    const s = makeState([alone, y, boy('A', 39, 'minime:M:-40'), boy('B', 38, 'minime:M:-40'), boy('C', 37, 'minime:M:-40')]);
+    const own = props(s, y.registrationId).map((p) => p.id);
+    const splits = pulled(s, alone).map((p) => p.id);
+    expect(splits.length).toBeGreaterThan(0);
+    expect(splits.filter((id) => own.includes(id))).toEqual([]);
+  });
   test('kata : jamais de split', () => {
     const kata = (band: string) => member({ discipline: 'kata', ruleset: null, weightClassId: null, sex: 'M', ageBandCode: band });
     const alone = kata('minime');

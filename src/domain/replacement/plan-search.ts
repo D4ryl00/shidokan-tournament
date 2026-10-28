@@ -81,9 +81,11 @@ export function costRank(s: State, p: Pick<Proposal, 'registrationId' | 'rules'>
 /** Options d'un cas dans l'état `s` : les propositions permises, sans changement de session, de la moins coûteuse à la plus coûteuse. */
 export function optionsOf(s: State, c: Case, ctx: SearchContext, decided: ReadonlySet<string>): SearchMove[] {
   const out: SearchMove[] = [];
-  for (const p of proposalsFor(reachable(s, c.registrationId), c)) {
+  for (const p of proposalsFor(reachable(s, c), c)) {
     if (p.waveChange || p.waveShifts.length > 0) continue;
     if (moversOf(p).some((r) => r !== c.registrationId && (decided.has(r) || ctx.excluded.has(r)))) continue;
+    // Split : jamais un combattant dont la carte est mise de côté (vide quand la coche des décisions des cartes est décochée).
+    if (moversOf(p).some((r) => r !== c.registrationId && s.setAside.some((id) => id.slice(id.indexOf(':') + 1) === r))) continue;
     // Retour et correction de poids s'imposent : seule la validation compte (pour appliquer, jamais un déplacement à valider).
     const ok = ruleProfile(s, p).forced ? !ctx.forApply || !p.manual : p.rules.every((r) => ctx.allowed.has(r));
     if (!ok) continue;
@@ -150,13 +152,14 @@ function makeNear(s: State) {
  * La partie de l'état où les propositions d'une inscription peuvent se trouver (sa catégorie, et celles qu'elle peut
  * atteindre) : `proposalsFor` y rend exactement les mêmes propositions, dans le même ordre, sans parcourir tout l'état.
  */
-function reachable(s: State, registrationId: string): State {
-  const m = s.members.find((x) => x.registrationId === registrationId);
+function reachable(s: State, c: Case): State {
+  const m = s.members.find((x) => x.registrationId === c.registrationId);
   if (!m) return s;
   const near = makeNear(s);
   const ids = new Set(s.categories.filter((c) => c.id === m.categoryId || near(m, c.key)).map((c) => c.id));
   // « Split » : les catégories d'où un combattant pourrait venir rejoindre `m` (sa discipline, ses préférences, son âge).
-  const own = s.categories.find((c) => c.id === m.categoryId);
+  // Seul un cas « seul » reçoit un split.
+  const own = c.kind === 'alone' ? s.categories.find((x) => x.id === m.categoryId) : undefined;
   if (own) for (const y of s.members) if (y.categoryId && !ids.has(y.categoryId) && near(y, own.key)) ids.add(y.categoryId);
   return ids.size === s.categories.length ? s : subState(s, ids);
 }
@@ -350,7 +353,9 @@ function opensOption(after: State, y: Member, c: Case, ctx: SearchContext, near:
     if (activeMembers(after, t.id).every((m) => m.registrationId === y.registrationId)) continue;
     const rules = rulesForMove(withY, y.registrationId, t.id);
     if (rules && rules.every((r) => ctx.allowed.has(r))) return true;
-    // « Split » : la catégorie touchée, plus fournie, peut donner son plus lourd au seul.
+    // « Split », déclencheur partiel et bon marché : le cas d'origine (la catégorie touchée, plus fournie, peut donner un
+    // combattant de la catégorie de poids juste en dessous, même tranche). Depuis l'étape 31 un split peut venir de n'importe
+    // quelle catégorie ; les autres cas sont rattrapés par le point fixe des cas en puissance (test « élargissement » du plan).
     if (c.kind !== 'alone' || !ctx.allowed.has('split') || !y.weightClassId || activeMembers(after, t.id).length < 3) continue;
     const wc = after.grid.weightClasses.find((w) => w.id === y.weightClassId);
     const lighter = wc ? neighborWeightClasses(after.grid, wc).lighter : null;

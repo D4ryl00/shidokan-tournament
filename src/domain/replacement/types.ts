@@ -76,7 +76,7 @@ export interface Case {
 }
 
 export interface Proposal {
-  /** Déterministe : `${type}:${registrationId}>${cible}`. */
+  /** Déterministe : `${type}:${registrationId}>${cible}` (split : `${type}:${venus}>${cible}~${combattant seul}`). */
   id: string;
   caseId: string;
   type: ProposalType;

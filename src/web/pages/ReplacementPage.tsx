@@ -40,8 +40,7 @@ import { PlanProgress, PROGRESS_HEIGHT } from '../components/replacement/PlanPro
 import { RuleLadder } from '../components/replacement/RuleLadder.js';
 import { PlanView, WARN_ALERT, type PlanFighter } from '../components/replacement/PlanView.js';
 import type { RuleId } from '../../domain/settings.js';
-import { applyRulesView, ruleNumber, ruleRank, rulesView } from '../../domain/replacement/rules.js';
-import { defaultSettings } from '../../domain/settings.js';
+import { ruleNumber, rulesView } from '../../domain/replacement/rules.js';
 import { MoveBlocks } from '../components/replacement/MoveBlocks.js';
 import { clearPlanChoices, usePlanCardDecisions, usePlanChoices } from '../usePlanChoices.js';
 import { useSelectedWave } from '../useSelectedWave.js';
@@ -252,20 +251,12 @@ export function ReplacementPage() {
   const { data: grid } = useGrid(id);
   const { data: competition } = useCompetition(id);
   const rules = competition ? rulesView(competition.settings) : null;
-  /** Règle la plus coûteuse d'une proposition de carte (sa pastille en gras), comme dans le plan. */
-  const costRuleOf = (ruleIds: RuleId[], registrationId: string): RuleId | null => {
-    if (!rules) return null;
-    const settings = applyRulesView(defaultSettings(), rules);
-    const f = data?.fighters[registrationId];
-    const m = { ruleset: f?.ruleset ?? null, acceptsJiyuFirst: f?.acceptsJiyuFirst ?? null };
-    return ruleIds.reduce<RuleId | null>((best, r) => (best === null || ruleRank(settings, r, m) > ruleRank(settings, best, m) ? r : best), null);
-  };
   const sessionName = waveId ? (waves.find((w) => w.id === waveId)?.name ?? null) : null;
   const resetBlocked = !data
     ? null
     : data.reset.locked
       ? 'La session est lancée : rouvrez-la pour repartir de zéro.'
-      : data.reset.undo + data.reset.clears === 0
+      : data.reset.undo + data.reset.clears + data.reset.history === 0
         ? 'Rien à défaire dans cette session.'
         : null;
   const canReset = resetBlocked === null;
@@ -374,8 +365,14 @@ export function ReplacementPage() {
             return (
               <Group key={p.id} justify="space-between" wrap="wrap" data-testid="replacement-proposal" p="xs"
                 style={{ border: '1px solid var(--sk-line)', borderRadius: 'var(--mantine-radius-md)', background: 'var(--sk-bg)' }}>
+                {/* Split : un autre que le combattant de la carte bouge, son nom (et son club) d'abord. */}
+                {p.registrationId !== c.registrationId && (
+                  <Text size="sm" fw={600} data-testid="move-mover" style={{ flex: '1 1 100%', overflowWrap: 'anywhere' }}>
+                    {[p.registrationId, ...(p.alsoMoved ?? [])].map(name).join(' + ')}
+                  </Text>
+                )}
                 {grid && rules ? (
-                  <MoveBlocks view={p.view} grid={grid} rules={rules} costRule={costRuleOf(p.rules, c.registrationId)}>
+                  <MoveBlocks view={p.view} grid={grid} rules={rules} costRule={p.view.costRule}>
                     <Text span size="xs" c="dimmed">{p.manual ? 'validation manuelle' : 'cas simple'}</Text>
                     {p.preApproved && <StatusBadge tone="ok" size="sm">Pré-accord coach</StatusBadge>}
                     {p.waveChange && (
@@ -510,7 +507,7 @@ export function ReplacementPage() {
       </SectionCard>
 
       <SectionCard title={HELP['recasement.valides'].title} help="recasement.valides"
-        actions={(data.recasements.length > 0 || data.reset.undo + data.reset.clears + data.reset.kept.length > 0) && (
+        actions={(data.recasements.length > 0 || data.reset.undo + data.reset.clears + data.reset.history + data.reset.kept.length > 0) && (
           <Group gap="xs">
             {data.recasements.length > 0 && (
               <Group gap="xs" data-testid="recasement-filters">
@@ -623,8 +620,8 @@ export function ReplacementPage() {
           {data.reset.kept.length > 0 && (
             <Stack gap={2} data-testid="replacement-reset-kept">
               <Text size="sm" fw={600}>Restent en place :</Text>
-              {data.reset.kept.map((k) => (
-                <Text size="sm" key={k.name}>{k.name} reste en {k.toLabel} : {k.why === 'frozen' ? 'sa session est lancée' : 'sa catégorie a commencé'}.</Text>
+              {data.reset.kept.map((k, i) => (
+                <Text size="sm" key={i}>{k.name} reste en {k.toLabel} : {k.why === 'frozen' ? 'sa session est lancée' : 'sa catégorie a commencé'}.</Text>
               ))}
             </Stack>
           )}
@@ -633,10 +630,11 @@ export function ReplacementPage() {
               {data.reset.blockedBy} a été réaffecté ensuite depuis une autre session : annulez d’abord ce déplacement-là dans l’historique.
             </Alert>
           )}
+          {data.reset.refusal && <Alert color="red" data-testid="replacement-reset-refusal">{data.reset.refusal}</Alert>}
           <ApiErrorAlert error={resetAll.error} />
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setDialog(null)}>Non</Button>
-            <Button color="red" data-testid="replacement-reset-confirm" loading={resetAll.isPending} disabled={data.reset.blockedBy !== null}
+            <Button color="red" data-testid="replacement-reset-confirm" loading={resetAll.isPending} disabled={data.reset.blockedBy !== null || data.reset.refusal !== null}
               onClick={() => resetAll.mutate(waveId ? { waveId } : {}, {
                 onSuccess: () => {
                   clearPlanChoices(id, waveId);
