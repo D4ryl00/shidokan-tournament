@@ -85,12 +85,14 @@ export function CompetitionLayout() {
       <Box
         className="no-print"
         style={{
-          position: 'sticky', top: 0, zIndex: 100, height: COMPETITION_BAR_HEIGHT, margin: 'calc(-1 * var(--app-shell-padding)) calc(-1 * var(--app-shell-padding)) 0',
-          padding: '0 var(--mantine-spacing-lg)', background: 'var(--sk-bar)', borderBottom: '1px solid var(--sk-line)', display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-md)',
+          position: 'sticky', top: 0, zIndex: 100, minHeight: COMPETITION_BAR_HEIGHT, margin: 'calc(-1 * var(--app-shell-padding)) calc(-1 * var(--app-shell-padding)) 0',
+          padding: '6px var(--mantine-spacing-lg)', background: 'var(--sk-bar)', borderBottom: '1px solid var(--sk-line)', display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-xs) var(--mantine-spacing-md)',
+          // Sur un téléphone, les étapes puis le groupe de droite passent à la ligne au lieu de faire défiler la page de côté.
+          flexWrap: 'wrap',
         }}
       >
         <Brand compact />
-        <Stack gap={0} style={{ minWidth: 0, flex: '1 1 0' }}>
+        <Stack gap={0} style={{ minWidth: 0, flex: '1 1 120px' }}>
           <Title order={1} fz="md" fw={700} className="sk-ellipsis" title={data.name} data-testid="competition-title">{data.name}</Title>
           <Text size="xs" c="dimmed" className="sk-ellipsis">{when}{data.location ? ` · ${data.location}` : ''}</Text>
         </Stack>
@@ -107,15 +109,16 @@ export function CompetitionLayout() {
             })}
           </Group>
         )}
-        {/* À droite, rien ne rétrécit : c'est le nom de la compétition qui se coupe (points de suspension) quand la place manque. */}
-        <Group gap="xs" wrap="nowrap" justify="flex-end" style={{ flex: '0 0 auto', marginLeft: 'auto' }}>
+        {/* À droite, rien ne rétrécit : c'est le nom de la compétition qui se coupe (points de suspension) quand la place manque,
+            puis la barre passe à la ligne. Seul sur sa ligne et encore trop large (téléphone), le groupe passe lui aussi à la ligne. */}
+        <Group gap="xs" wrap="wrap" justify="flex-end" style={{ flex: '0 1 auto', minWidth: 0, marginLeft: 'auto' }}>
           <ManagementChip competitionId={id} />
           {imposed ? (
             <Text size="sm" fw={600} className="sk-ellipsis" data-testid="poste-account" title="Poste imposé par le compte">
               Poste : {poste.kind === 'table' ? 'Table centrale' : `Zone : ${zones.find((z) => poste.kind === 'zone' && z.id === poste.zoneId)?.name ?? '?'}`}
             </Text>
           ) : (
-            <Select size="xs" w={160} style={{ flexShrink: 0 }} aria-label="Poste" data-testid="poste-select" allowDeselect={false} value={posteValue} onChange={choosePoste} comboboxProps={{ width: 260 }}
+            <Select size="xs" w={{ base: 140, sm: 160 }} style={{ flexShrink: 0 }} aria-label="Poste" data-testid="poste-select" allowDeselect={false} value={posteValue} onChange={choosePoste} comboboxProps={{ width: 260 }}
               title={`Poste de ce navigateur : ${posteOptions.find((o) => o.value === posteValue)?.label ?? ''}`} styles={{ input: { textOverflow: 'ellipsis' } }}
               data={posteOptions} />
           )}

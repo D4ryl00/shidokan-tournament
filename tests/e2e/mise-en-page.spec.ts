@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { clipped, createCompetition, ellipsized, mockGoogleContacts } from './helpers.js';
+import { chooseTheme, clipped, createCompetition, ellipsized, mockGoogleContacts } from './helpers.js';
 
 test('petit portable (1024 px) : inscriptions et pesée aux noms longs entièrement visibles (défilement si besoin)', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe mise en page');
@@ -62,6 +62,27 @@ test('Combats : « Noter » amène le panneau de la catégorie à l’écran', a
   await page.goto(`/competitions/${id}/combats`);
   await page.getByRole('button', { name: 'Noter', exact: true }).first().click();
   await expect(page.getByTestId('selected-category')).toBeInViewport();
+});
+
+test('téléphone (375 px), thème sombre : la Réaffectation ne défile pas de côté et « Refuser » reste rouge', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Mobile sombre');
+  const reg = async (data: object) => expect((await request.post(`/api/competitions/${id}/registrations`, {
+    data: { clubId: null, sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', source: 'manual', ...data },
+  })).status()).toBe(201);
+  await reg({ lastName: 'DE LA FONTAINE-MARTIN', firstName: 'Marie-Charlotte', weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  await reg({ lastName: 'BERNARD', firstName: 'Léa', weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto(`/competitions/${id}/reaffectation`);
+  await chooseTheme(page, 'Sombre');
+  const proposal = page.getByTestId('replacement-case').filter({ hasText: 'DE LA FONTAINE-MARTIN' }).getByTestId('replacement-proposal').first();
+  // Rouge du texte coloré en sombre (teinte 4 de Mantine), pas la teinte 0 presque blanche.
+  expect(await proposal.getByTestId('proposal-refuse').evaluate((el) => getComputedStyle(el).color)).toBe('rgb(255, 135, 135)');
+  await proposal.getByTestId('proposal-apply').click();
+  await page.getByTestId('proposal-confirm').click();
+  await expect(page.getByTestId('recasement-row')).toHaveCount(1);
+  // Ni la barre du haut ni le tableau de l'historique ne font défiler la page de côté ; rien n'est coupé.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+  expect(await clipped(page)).toEqual([]);
 });
 
 test('synchronisation avec Google (aperçu simulé) : rien de coupé sur un petit portable ni sur un téléphone', async ({ page }) => {

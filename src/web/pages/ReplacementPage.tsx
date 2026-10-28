@@ -527,6 +527,8 @@ export function ReplacementPage() {
       {data.recasements.length === 0 ? (
         <Text size="sm" c="dimmed">Aucune pour l’instant.</Text>
       ) : (
+        // Sur un écran étroit, le tableau défile de côté dans la carte au lieu d'élargir la page.
+        <Box style={{ overflowX: 'auto' }}>
         <Table>
           <Table.Tbody>
             {data.recasements.filter((r) => (logState === 'all' || r.status === logState) && (!logType || r.type === logType)).map((r) => (
@@ -549,6 +551,7 @@ export function ReplacementPage() {
             ))}
           </Table.Tbody>
         </Table>
+        </Box>
       )}
       </SectionCard>
 

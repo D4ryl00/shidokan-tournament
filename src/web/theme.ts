@@ -3,6 +3,7 @@ import {
   Button,
   Card,
   createTheme,
+  DEFAULT_THEME,
   localStorageColorSchemeManager,
   Modal,
   Paper,
@@ -51,10 +52,19 @@ const dark: MantineColorsTuple = ['#f1edf5', '#d6cfdd', '#b9b1c2', '#8d8497', '#
 // Gris légèrement violets du thème clair (3 et 4 bordures, 6 texte discret).
 const gray: MantineColorsTuple = ['#faf8fb', '#f3f0f5', '#ebe6ef', '#e0d9e5', '#cdc4d4', '#a89eb2', '#72687d', '#4b4354', '#2e2835', '#1d1622'];
 
+// En sombre, Mantine prend le texte des variantes light et subtle à la teinte primaryShade − 5, et le contour des variantes
+// outline à primaryShade − 4 : avec la teinte 4 du violet, ce serait la teinte 0, presque blanche, pour toutes les couleurs
+// (« Refuser » blanc au lieu de rouge). On les ramène à la teinte 4, celle du texte coloré (`c="red"`). Le violet garde les siennes.
+const hueTexts = Object.fromEntries(
+  Object.keys(DEFAULT_THEME.colors)
+    .filter((c) => c !== 'dark' && c !== 'gray')
+    .flatMap((c) => [[`--mantine-color-${c}-light-color`, `var(--mantine-color-${c}-4)`], [`--mantine-color-${c}-outline`, `var(--mantine-color-${c}-4)`]]),
+);
+
 export const cssVariablesResolver: CSSVariablesResolver = () => ({
   variables: {},
   light: { ...variablesOf(TOKENS.light), '--mantine-color-body': TOKENS.light.bg, '--mantine-color-text': TOKENS.light.text, '--mantine-color-dimmed': TOKENS.light.muted },
-  dark: { ...variablesOf(TOKENS.dark), '--mantine-color-body': TOKENS.dark.bg, '--mantine-color-text': TOKENS.dark.text, '--mantine-color-dimmed': TOKENS.dark.muted },
+  dark: { ...variablesOf(TOKENS.dark), ...hueTexts, '--mantine-color-body': TOKENS.dark.bg, '--mantine-color-text': TOKENS.dark.text, '--mantine-color-dimmed': TOKENS.dark.muted },
 });
 
 const surface = { backgroundColor: 'var(--sk-card)', borderColor: 'var(--sk-card-line)' };
