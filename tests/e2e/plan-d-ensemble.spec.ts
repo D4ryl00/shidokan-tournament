@@ -213,6 +213,29 @@ test('valider un déplacement à valider, appliquer : seuls lui et les cas simpl
   await expect(view).toContainText('Validés 0 / 1');
 });
 
+test('valider, appliquer, repartir de zéro, puis valider le même déplacement : la validation tient', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan revalider');
+  await seedPlan(request, id);
+  const { view, moveOf } = await openPlan(page, id);
+  await moveOf('MINI Léa').getByTestId('plan-move-validate').click();
+  await expect(moveOf('MINI Léa').getByTestId('plan-move-unvalidate')).toBeVisible();
+  await view.getByTestId('plan-apply').click();
+  await page.getByTestId('plan-apply-confirm').click();
+  await expect(page.getByText('2 réaffectations appliquées.')).toBeVisible();
+  await expect(moveOf('MINI Léa')).toHaveCount(0);
+  await page.getByTestId('replacement-reset').click();
+  await page.getByTestId('replacement-reset-confirm').click();
+  await expect(page.getByTestId('recasement-row')).toHaveCount(0);
+  await page.getByTestId('plan-show').click();
+  // Même déplacement, même choix qu'avant l'application : le plan gardé pour ce choix (où il n'était plus possible) ne doit pas l'effacer.
+  await moveOf('MINI Léa').getByTestId('plan-move-validate').click();
+  await expect(moveOf('MINI Léa').getByTestId('plan-move-unvalidate')).toBeVisible();
+  await expect(view).toContainText('Validés 1 / 2');
+  await expect(view.getByTestId('plan-dropped')).toHaveCount(0);
+  // Valider ne change aucune destination : rien à signaler comme changé par le recalcul.
+  await expect(view.getByTestId('plan-changes')).toHaveCount(0);
+});
+
 test('modifier puis annuler le choix : le plan revient', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe plan modifier');
   await seedPlan(request, id);

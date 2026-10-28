@@ -321,6 +321,15 @@ export function useWeighIn(id: string, waveId?: string | null) {
 export const PLAN_KEY = 'replacement-plan';
 
 /**
+ * Après une écriture, les plans gardés pour d'autres choix (ou une autre session) que ceux affichés sont oubliés : calculés sur
+ * l'état d'avant, ils ressortiraient le temps du recalcul quand l'organisateur revient à ces choix (même « Valider » qu'avant
+ * « Appliquer le plan » puis « Repartir de zéro ») : choix dit impossible et retiré, faux changements signalés.
+ */
+function forgetHiddenPlans(qc: QueryClient, id?: string): void {
+  qc.removeQueries({ queryKey: id === undefined ? [PLAN_KEY] : [PLAN_KEY, id], type: 'inactive' });
+}
+
+/**
  * Pesée et recasement changent les catégories, les vagues, l'ordre de passage… : toutes les données de la compétition sont rechargées.
  * Les calculs du plan en cours sont d'abord arrêtés : ils dataient d'avant l'écriture, et un calcul encore sans résultat ne serait
  * pas relancé par la seule invalidation (TanStack ne réutilise alors que la demande en cours). Ce n'est pas une annulation de
@@ -330,6 +339,7 @@ function useInvalidateDay(id: string) {
   const qc = useQueryClient();
   return async () => {
     await qc.cancelQueries({ queryKey: [PLAN_KEY, id] });
+    forgetHiddenPlans(qc, id);
     return qc.invalidateQueries({ predicate: (q) => q.queryKey[1] === id });
   };
 }
@@ -462,6 +472,7 @@ const currentPlanRun = new Map<string, symbol>();
  * est seulement marqué périmé — seuls un geste de ce poste ou « Relancer le calcul » le relancent ; les autres sont relus.
  */
 export function refreshPlansLive(qc: QueryClient): void {
+  forgetHiddenPlans(qc);
   for (const q of qc.getQueryCache().findAll({ queryKey: [PLAN_KEY] })) {
     if (q.state.fetchStatus === 'fetching') refreshAfterPlan.add(q.queryHash);
     else if (q.meta?.cancelledAt === q.state.dataUpdatedAt) q.invalidate();

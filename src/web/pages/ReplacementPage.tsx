@@ -160,14 +160,16 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
   const { data: grid } = useGrid(id);
   const setRules = useSetRules(id);
   const reset = useResetRules(id);
-  // Un choix qui n'est plus possible (données changées ailleurs) est retiré ; on dit lesquels.
+  // Un choix qui n'est plus possible (données changées ailleurs) est retiré ; on dit lesquels. Seulement d'après un plan à jour :
+  // le plan gardé pour ces mêmes choix peut dater d'avant une écriture (même « Valider » qu'avant « Appliquer le plan » puis
+  // « Repartir de zéro ») et dire le choix impossible alors que le recalcul en cours le trouve.
   useEffect(() => {
-    if (!plan || isPlaceholderData || plan.plan.dropped.length === 0) return;
+    if (!plan || isPlaceholderData || isFetching || cancelled || plan.plan.dropped.length === 0) return;
     const gone = plan.plan.dropped;
     setDropped({ waveId, names: gone.map((c) => choiceRegistrations(c).map((r) => fighter(r).name).join(' + ')) });
     setChoices(choices.filter((c) => !gone.some((d) => sameChoice(c, d))));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan, isPlaceholderData]);
+  }, [plan, isPlaceholderData, isFetching, cancelled]);
   const choose = (c: PlanChoice[]) => { setDropped({ waveId, names: [] }); setChoices(c); };
   // La liste affichée : celle qui s'enregistre (le geste se voit aussitôt), sinon celle du plan affiché ; pendant un calcul, après
   // une annulation ou avec le plan d'autres choix, le plan date d'avant le dernier changement : la liste suit les réglages enregistrés.
