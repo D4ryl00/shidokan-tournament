@@ -176,6 +176,13 @@
       "when": 1793097706468,
       "tag": "0024_plusieurs_adresses",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1793147924830,
+      "tag": "0025_session_des_actions",
+      "breakpoints": true
     }
   ]
 }

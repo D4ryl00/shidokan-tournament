@@ -17,6 +17,7 @@ import {
   type Proposal,
   type State,
   categoryWaves,
+  memberWave,
   waveMoves,
 } from '../../domain/replacement/index.js';
 import { manualProposal as domainManualProposal } from '../../domain/replacement/manual.js';
@@ -133,7 +134,7 @@ export function setAsideNotes(db: AppDb, competitionId: string, caseIds: string[
 export async function setAsideCase(db: AppDb, competitionId: string, caseId: string, note: string): Promise<void> {
   const state = await loadState(db, competitionId);
   if (!detectCases(state).some((c) => c.id === caseId)) throw new StaleProposalError('Cette carte n’existe plus : rechargez.');
-  db.insert(setAsideCases).values({ competitionId, caseId, note: note.trim() }).onConflictDoUpdate({ target: [setAsideCases.competitionId, setAsideCases.caseId], set: { note: note.trim() } }).run();
+  db.insert(setAsideCases).values({ competitionId, caseId, note: note.trim(), waveId: actionWave(state, caseId, caseId) }).onConflictDoUpdate({ target: [setAsideCases.competitionId, setAsideCases.caseId], set: { note: note.trim() } }).run();
 }
 
 /** Reprend une carte mise de côté. */
@@ -159,7 +160,7 @@ type CategoryRow = typeof categories.$inferSelect;
  * Écrit en base le passage de `before` à `after` pour l'inscription déplacée par `p`, et journalise.
  * Une inscription qui change de vague repasse « non pesé » : elle se pointe dans sa nouvelle vague (le poids reste).
  */
-function persist(db: AppDb, competitionId: string, before: State, after: State, p: Proposal, opts: { bulk: boolean }): void {
+function persist(db: AppDb, competitionId: string, before: State, after: State, p: Proposal, opts: { bulk: boolean; waveId: string | null }): void {
   const m0 = before.members.find((m) => m.registrationId === p.registrationId)!;
   const m1 = after.members.find((m) => m.registrationId === p.registrationId)!;
   const fromCat = before.categories.find((c) => c.id === m0.categoryId);
@@ -230,6 +231,7 @@ function persist(db: AppDb, competitionId: string, before: State, after: State, 
         preApproved: p.preApproved,
         bulk: opts.bulk,
         snapshotJson: JSON.stringify(snapshot),
+        waveId: opts.waveId,
       })
       .run();
   });
@@ -253,7 +255,7 @@ export async function withdrawRegistration(db: AppDb, competitionId: string, reg
       .values({
         id: crypto.randomUUID(), competitionId, registrationId, proposalId: `W:${registrationId}`, type: 'W',
         fromLabel: from ? categoryLabel(from.key, state.grid) : '—', toLabel: 'Ne combat pas', reason: 'Catégorie non ouverte à cette compétition',
-        manual: true, preApproved: false, bulk: false, snapshotJson: JSON.stringify(snapshot),
+        manual: true, preApproved: false, bulk: false, snapshotJson: JSON.stringify(snapshot), waveId: actionWave(state, registrationId, registrationId),
       })
       .run();
   });
@@ -264,12 +266,24 @@ export async function applyProposalById(db: AppDb, competitionId: string, propos
   const state = await loadState(db, competitionId);
   if (opts.fingerprint !== undefined && stateFingerprint(state) !== opts.fingerprint) throw new StaleProposalError();
   const p = findProposal(state, proposalId);
-  persistAll(db, competitionId, state, p, { bulk: opts.bulk ?? false });
+  persistAll(db, competitionId, state, p, { bulk: opts.bulk ?? false, waveId: actionWave(state, p.caseId, p.registrationId) });
   await syncCategories(db, competitionId);
 }
 
+/**
+ * Session d'où une action est décidée : celle du combattant de la carte (pour un split, le combattant seul, pas celui qui
+ * vient), dans l'état d'avant l'action ; `null` sans sessions (ou combattant en attente de session).
+ */
+export function actionWave(before: State, caseId: string, registrationId: string): string | null {
+  if (before.waves.length === 0) return null;
+  const at = caseId.indexOf(':');
+  const subject = at < 0 ? registrationId : caseId.slice(at + 1);
+  const m = before.members.find((x) => x.registrationId === subject);
+  return m ? memberWave(before, m) : null;
+}
+
 /** Écrit chaque déplacement d'une proposition (plusieurs pour un « split »), un recasement par inscription. */
-function persistAll(db: AppDb, competitionId: string, state: State, p: Proposal, opts: { bulk: boolean }): void {
+function persistAll(db: AppDb, competitionId: string, state: State, p: Proposal, opts: { bulk: boolean; waveId: string | null }): void {
   let current = state;
   for (const step of proposalMoves(p)) {
     const next = applyProposal(current, step);
@@ -359,7 +373,7 @@ export async function applyPlan(
         if (!categoryId) throw new StaleProposalError('Le plan a changé depuis l’affichage : relisez-le avant de l’appliquer.');
         p = { ...move, target: { categoryId } };
       }
-      persistAll(db, competitionId, state, p, { bulk: true });
+      persistAll(db, competitionId, state, p, { bulk: true, waveId });
       applied++;
     }
     raw.exec('COMMIT');
@@ -371,7 +385,11 @@ export async function applyPlan(
 }
 
 export async function refuseProposal(db: AppDb, competitionId: string, proposalId: string): Promise<void> {
-  db.insert(refusals).values({ competitionId, proposalId }).onConflictDoNothing().run();
+  // Session de la carte où la proposition s'affiche (refus d'une proposition qui n'existe plus : sans session).
+  const state = await loadState(db, competitionId);
+  const p = [...allProposals({ ...state, refused: [] }).values()].flat().find((x) => x.id === proposalId);
+  const waveId = p ? actionWave(state, p.caseId, p.registrationId) : null;
+  db.insert(refusals).values({ competitionId, proposalId, waveId }).onConflictDoNothing().run();
 }
 
 export async function unrefuseProposal(db: AppDb, competitionId: string, proposalId: string): Promise<void> {
@@ -393,7 +411,7 @@ export function manualProposal(state: State, registrationId: string, categoryId:
 export async function manualMove(db: AppDb, competitionId: string, registrationId: string, categoryId: string): Promise<{ warnings: string[] }> {
   const state = await loadState(db, competitionId);
   const { p, warnings } = manualProposal(state, registrationId, categoryId);
-  persist(db, competitionId, state, applyProposal(state, p), p, { bulk: false });
+  persist(db, competitionId, state, applyProposal(state, p), p, { bulk: false, waveId: actionWave(state, p.caseId, p.registrationId) });
   await syncCategories(db, competitionId);
   return { warnings };
 }

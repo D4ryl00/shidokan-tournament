@@ -765,6 +765,36 @@ describe('réaffectation par session', () => {
     expect(await waveOfReg(mini.id)).toBe(matin);
   });
 
+  const wavesIn = (table: string, key: string) => {
+    const raw = new Database(dbPath, { readonly: true });
+    try {
+      return raw.prepare(`select ${key} as k, wave_id as w from ${table}`).all() as { k: string; w: string | null }[];
+    } finally {
+      raw.close();
+    }
+  };
+
+  test('session de chaque action : carte validée (même vers une autre session), refus, mise de côté', async () => {
+    const { mini, alone, matin, aprem } = await setup();
+    await call('PUT', `/weigh-in/${mini.fighterId}`, { presence: 'present', weighInKg: 45, waveId: matin });
+    const m = await ofWave(matin);
+    // La minime part dans l'après-midi : l'action reste décidée depuis le matin.
+    await call('POST', '/replacement/apply', { proposalId: m.proposals[m.cases[0]!.id]![0]!.id });
+    expect(wavesIn('recasements', 'registration_id')).toEqual([{ k: mini.id, w: matin }]);
+    const a = await ofWave(aprem);
+    const seule = a.cases.find((c) => c.registrationId === alone.id)!;
+    await call('POST', '/replacement/refuse', { proposalId: a.proposals[seule.id]![0]!.id });
+    expect(wavesIn('refusals', 'proposal_id')).toEqual([{ k: a.proposals[seule.id]![0]!.id, w: aprem }]);
+    await call('POST', '/replacement/set-aside', { caseId: seule.id });
+    expect(wavesIn('set_aside_cases', 'case_id')).toEqual([{ k: seule.id, w: aprem }]);
+  });
+
+  test('session de chaque action : plan appliqué', async () => {
+    const { aprem } = await setup();
+    expect((await applyPlan({ waveId: aprem })).json()).toEqual({ applied: 1 });
+    expect(wavesIn('recasements', 'registration_id').map((x) => x.w)).toEqual([aprem]);
+  });
+
   test('repartir de zéro possible d’après toute la compétition, pas la session affichée', async () => {
     const { alone, matin } = await setup();
     expect((await ofWave(matin)).resettable).toBe(false);

@@ -411,6 +411,8 @@ export const recasements = sqliteTable('recasements', {
   bulk: integer('bulk', { mode: 'boolean' }).notNull(),
   status: text('status', { enum: ['validated', 'undone'] }).notNull().default('validated'),
   snapshotJson: text('snapshot_json').notNull(),
+  /** Session d'où l'action a été décidée (« Repartir de zéro » par session) ; nulle : avant la migration 0025, ou sans sessions. */
+  waveId: text('wave_id'),
   createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
   ...rowMeta(),
 });
@@ -422,6 +424,8 @@ export const refusals = sqliteTable(
       .notNull()
       .references(() => competitions.id, { onDelete: 'cascade' }),
     proposalId: text('proposal_id').notNull(),
+    /** Session d'où le refus a été décidé (nulle : avant la migration 0025, ou sans sessions). */
+    waveId: text('wave_id'),
     ...rowMeta(),
   },
   (t) => [primaryKey({ columns: [t.competitionId, t.proposalId] })],
@@ -437,6 +441,8 @@ export const setAsideCases = sqliteTable(
     caseId: text('case_id').notNull(),
     note: text('note').notNull().default(''),
     createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+    /** Session d'où la carte a été mise de côté (nulle : avant la migration 0025, ou sans sessions). */
+    waveId: text('wave_id'),
     ...rowMeta(),
   },
   (t) => [primaryKey({ columns: [t.competitionId, t.caseId] })],
