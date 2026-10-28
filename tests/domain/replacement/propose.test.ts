@@ -283,21 +283,24 @@ describe('déplacement manuel : âge', () => {
   });
 });
 
-describe('split : le combattant seul reçoit les plus lourds de la catégorie du dessous', () => {
+describe('split : le combattant seul reçoit un combattant d’une autre catégorie', () => {
   const sen = (kg: number, wc = 'senior:M:-84') => member({ ageBandCode: 'senior', sex: 'M', weightClassId: wc, approxWeightKg: kg });
   test('poule de 3 d’abord, puis un seul adversaire ; jamais en cas simple', () => {
     const alone = sen(85, 'senior:M:+84');
     const below = [sen(72), sen(78), sen(83), sen(84)];
     const s = makeState([alone, ...below]);
-    const pulls = props(s, alone.registrationId).filter((p) => p.registrationId !== alone.registrationId);
+    const all = props(s, alone.registrationId);
+    const pulls = all.filter((p) => p.registrationId !== alone.registrationId && p.type === 'A');
     expect(pulls.map((p) => [p.type, [p.registrationId, ...(p.alsoMoved ?? [])]])).toEqual([
       ['A', [below[3]!.registrationId, below[2]!.registrationId]],
       ['A', [below[3]!.registrationId]],
+      ['A', [below[2]!.registrationId]],
     ]);
     expect(pulls.every((p) => !p.manual && p.rules.join() === 'split' && p.target && 'categoryId' in p.target && p.target.categoryId === alone.categoryId)).toBe(true);
     expect(pulls[0]!.reason).toContain('pour donner une poule');
-    // Le déplacement du combattant seul lui-même (écart 13 kg, B) passe après.
-    expect(props(s, alone.registrationId).at(-1)).toMatchObject({ type: 'B', registrationId: alone.registrationId });
+    // Le déplacement du combattant seul lui-même (écart 13 kg, B) passe après les splits A.
+    const self = all.findIndex((p) => p.type === 'B' && p.registrationId === alone.registrationId);
+    expect(self).toBeGreaterThan(all.indexOf(pulls.at(-1)!));
 
     const after = applyAll(s, pulls[0]!);
     expect(after.members.filter((m) => m.categoryId === alone.categoryId)).toHaveLength(3);
@@ -311,16 +314,79 @@ describe('split : le combattant seul reçoit les plus lourds de la catégorie du
     expect(applied.aloneAfter).toEqual([]);
     expect(computePlan(s, { waveId: null, level: 'minorsAdults', choices: [] }).aloneAfter).toEqual([]);
   });
-  test('il en reste au moins deux dans la catégorie du dessous ; jamais vers le bas', () => {
+  test('il en reste au moins deux dans la catégorie de départ', () => {
     const alone = sen(85, 'senior:M:+84');
     const s = makeState([alone, sen(83), sen(84)]);
     expect(props(s, alone.registrationId).some((p) => p.registrationId !== alone.registrationId)).toBe(false);
-    const light = sen(74, 'senior:M:-75');
-    const s2 = makeState([light, sen(76), sen(77), sen(80)]);
-    expect(props(s2, light.registrationId).some((p) => p.registrationId !== light.registrationId)).toBe(false);
     const alone3 = sen(85, 'senior:M:+84');
     const s3 = makeState([alone3, sen(83), sen(84), sen(84)]);
-    expect(props(s3, alone3.registrationId).filter((p) => p.registrationId !== alone3.registrationId).map((p) => 1 + (p.alsoMoved?.length ?? 0))).toEqual([1]);
+    // Trois au départ : pas de poule (il n'en resterait qu'un), un split par candidat (les deux plus proches).
+    expect(props(s3, alone3.registrationId).filter((p) => p.registrationId !== alone3.registrationId).map((p) => 1 + (p.alsoMoved?.length ?? 0))).toEqual([1, 1]);
+  });
+  const pulled = (s: State, alone: Member) => props(s, alone.registrationId).filter((p) => p.registrationId !== alone.registrationId);
+  /** Démo : ROUSSEAU Tom, minime pesé 45 seul en -50 ; Benjamins -40 : GARNIER Sacha 40, GUERIN Louis 39, RICHARD Tom 39. */
+  const demo = (aloneKg = 45, benjamins: [number, Partial<Member>?][] = [[40], [39], [39]]) => {
+    const rousseau = member({ label: 'ROUSSEAU Tom', sex: 'M', ageBandCode: 'minime', weightClassId: 'minime:M:-50', weighInKg: aloneKg, presence: 'present' });
+    const boys = benjamins.map(([kg, over], i) => member({ label: `BENJAMIN${i}`, sex: 'M', ageBandCode: 'benjamin', weightClassId: 'benjamin:M:-40', weighInKg: kg, presence: 'present', ...over }));
+    return { rousseau, garnier: boys[0]!, s: makeState([rousseau, ...boys]) };
+  };
+  test('démo : GARNIER Sacha (benjamin 40) rejoint ROUSSEAU Tom (minime 45)', () => {
+    const { rousseau, garnier, s } = demo();
+    const ps = pulled(s, rousseau);
+    expect(ps.map((p) => p.registrationId)).toEqual([garnier.registrationId]);
+    expect(ps[0]).toMatchObject({ target: { categoryId: rousseau.categoryId }, rules: ['split', 'ageUp'], manual: true });
+    expect(ps[0]!.reason).toContain(`pour donner un adversaire à ${rousseau.label}`);
+  });
+  test('règle du déplacement désactivée : pas de split', () => {
+    const { rousseau, s } = demo();
+    s.settings.replacementRules.off = ['ageUp'];
+    expect(pulled(s, rousseau)).toEqual([]);
+  });
+  test('écart mesuré sur toute la catégorie d’arrivée', () => {
+    const { rousseau, s } = demo(46);
+    expect(pulled(s, rousseau)).toEqual([]);
+  });
+  test('il reste au moins deux actifs au départ (absents non comptés)', () => {
+    const { rousseau, s } = demo(45, [[40], [39], [39, { presence: 'absent' }]]);
+    expect(pulled(s, rousseau)).toEqual([]);
+  });
+  test('descente vers une catégorie plus légère permise', () => {
+    const boy = (kg: number, wc: string) => member({ sex: 'M', ageBandCode: 'minime', weightClassId: wc, weighInKg: kg, presence: 'present' });
+    const alone = boy(47, 'minime:M:-50');
+    const heavier = [boy(49, 'minime:M:-55'), boy(54, 'minime:M:-55'), boy(55, 'minime:M:-55')];
+    const s = makeState([alone, ...heavier]);
+    s.settings.replacementRules.off = ['weightGap'];
+    const ps = pulled(s, alone);
+    expect(ps.map((p) => p.registrationId)).toEqual([heavier[0]!.registrationId]);
+    expect(ps[0]).toMatchObject({ rules: ['split'], manual: false });
+  });
+  test('un par candidat permis (les deux plus proches de chaque catégorie), du moins coûteux au plus coûteux puis du poids le plus proche', () => {
+    // Candidats non pesés (poids déclaré) : la limite de la catégorie du seul ne les écarte pas.
+    const boy = (kg: number, band: string, wc: string) => member({ label: `B${kg}`, sex: 'M', ageBandCode: band, weightClassId: wc, approxWeightKg: kg, presence: 'present' });
+    const alone = boy(47, 'minime', 'minime:M:-50');
+    const minimes = [boy(49, 'minime', 'minime:M:-55'), boy(52, 'minime', 'minime:M:-55'), boy(53, 'minime', 'minime:M:-55')];
+    const benjamins = [boy(48, 'benjamin', 'benjamin:M:-50'), boy(45, 'benjamin', 'benjamin:M:-50'), boy(44, 'benjamin', 'benjamin:M:-50')];
+    const ps = pulled(makeState([alone, ...minimes, ...benjamins]), alone);
+    expect(ps.every((p) => !p.alsoMoved?.length)).toBe(true);
+    expect(ps.map((p) => p.registrationId)).toEqual([minimes[0], minimes[1], benjamins[0], benjamins[1]].map((m) => m!.registrationId));
+    expect(ps.map((p) => p.rules)).toEqual([['split'], ['split'], ['split', 'ageUp'], ['split', 'ageUp']]);
+  });
+  test('trop lourd (pesée) pour la catégorie du seul : jamais pris', () => {
+    const boy = (kg: number, wc: string) => member({ sex: 'M', ageBandCode: 'minime', weightClassId: wc, weighInKg: kg, presence: 'present' });
+    const alone = boy(49, 'minime:M:-50');
+    const s = makeState([alone, boy(53, 'minime:M:-55'), boy(54, 'minime:M:-55'), boy(55, 'minime:M:-55')]);
+    expect(pulled(s, alone)).toEqual([]);
+  });
+  test('kata : jamais de split', () => {
+    const kata = (band: string) => member({ discipline: 'kata', ruleset: null, weightClassId: null, sex: 'M', ageBandCode: band });
+    const alone = kata('minime');
+    const s = makeState([alone, kata('benjamin'), kata('benjamin'), kata('benjamin')]);
+    expect(pulled(s, alone)).toEqual([]);
+  });
+  test('combattant déjà déplacé pour de vrai : jamais pris', () => {
+    const { rousseau, s } = demo();
+    for (const m of s.members) if (m.ageBandCode === 'benjamin') m.placementLocked = true;
+    expect(pulled(s, rousseau)).toEqual([]);
   });
 });
 
@@ -388,8 +454,8 @@ describe('règles des propositions', () => {
     const sen = (kg: number, wc = 'senior:M:-84') => member({ ageBandCode: 'senior', sex: 'M', weightClassId: wc, approxWeightKg: kg });
     const alone = sen(85, 'senior:M:+84');
     const s = makeState([alone, sen(72), sen(78), sen(83), sen(84)]);
-    const pulls = props(s, alone.registrationId).filter((p) => p.registrationId !== alone.registrationId);
-    expect(pulls).toHaveLength(2);
+    const pulls = props(s, alone.registrationId).filter((p) => p.registrationId !== alone.registrationId && p.rules.join() === 'split');
+    expect(pulls.map((p) => [p.registrationId, ...(p.alsoMoved ?? [])].length)).toEqual([2, 1, 1]);
     for (const p of pulls) expect(p).toMatchObject({ manual: false, rules: ['split'] });
   });
   test('correction de poids au-dessus de l’écart : à valider, jamais retirée', () => {

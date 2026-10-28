@@ -45,7 +45,7 @@ export const PRE_APPROVAL_RULES: ReadonlySet<RuleId> = new Set<RuleId>([
 export const RULE_LABELS: Record<RuleId, string> = {
   return: 'Retour dans la catégorie d’origine',
   weight: 'Catégorie de poids voisine',
-  split: 'Split de la catégorie du dessous',
+  split: 'Split (autre catégorie)',
   weightGap: 'Écart de poids au-dessus du réglage',
   ageUp: 'Tranche d’âge au-dessus',
   ageDown: 'Tranche d’âge au-dessous',

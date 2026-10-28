@@ -97,8 +97,10 @@ export interface Proposal {
   reason: string;
   rank: number;
   /**
-   * « Split » : autres inscriptions déplacées avec `registrationId` vers la même cible (le combattant seul reçoit
-   * les plus lourds de la catégorie du dessous). Elles n'étaient pas des cas : le déplacement reste manuel.
+   * « Split » : autres inscriptions déplacées avec `registrationId` vers la même cible (le combattant seul reçoit les deux
+   * candidats les plus proches en poids d'une même catégorie, pour une poule). Elles n'étaient pas des cas.
    */
   alsoMoved?: string[];
+  /** « Split » : règles du déplacement des combattants venus, comme s'ils étaient déplacés seuls (sans « weight » ni « weightGap »). */
+  pulledRules?: RuleId[];
 }

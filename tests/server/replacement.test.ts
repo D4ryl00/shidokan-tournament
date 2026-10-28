@@ -262,14 +262,15 @@ test('plan en flux : en-têtes contre la mise en tampon (Caddy encode gzip), com
 });
 
 test('valider un déplacement qui n’existe qu’après une correction de poids : gardé, appliqué après elle', async () => {
-  // W (pesée 58 kg) quitte les -54 pour les -61 : Y y reste seule, et sa seule issue est la tranche au-dessus.
+  // W (pesée 58 kg) quitte les -54 pour les -61 : Y y reste seule, et sa seule issue est la tranche au-dessus
+  // (split désactivé : sinon une -61 viendrait la rejoindre).
   const w = await reg({ lastName: 'W', approxWeightKg: 52 });
   const y = await reg({ lastName: 'Y', approxWeightKg: 53 });
   for (const kg of [58, 58.5]) await reg({ weightClassId: 'cadet:F:-61', approxWeightKg: kg });
   for (const kg of [52, 52.5]) await reg({ ageBandCode: 'junior', weightClassId: 'junior:F:-53', approxWeightKg: kg });
   await call('PUT', `/weigh-in/${w.fighterId}`, { weighInKg: 58 });
   const def = rulesView(defaultSettings());
-  expect((await call('PUT', '/replacement/rules', { ...def, on: { ...def.on, weightGap: false } })).statusCode).toBe(200);
+  expect((await call('PUT', '/replacement/rules', { ...def, on: { ...def.on, weightGap: false, split: false } })).statusCode).toBe(200);
   const shown = await plan();
   expect(shown.plan.moves.map((m) => [m.registrationId, m.manual])).toEqual([[w.id, false], [y.id, true]]);
   const yMove = shown.plan.moves[1] as unknown as { id: string; caseId: string };

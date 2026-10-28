@@ -3,9 +3,9 @@ import type { RuleId } from '../settings.js';
 import { categoryLabel, keyString, naturalKey, type CategoryKey } from '../categories.js';
 import { DISCIPLINES } from '../disciplines.js';
 import { neighborWeightClasses } from '../weights.js';
-import { categoryForKey, isClosedTarget, isLocked, originalCategory } from './detect.js';
+import { categoryForKey, isClosedMember, isClosedTarget, isLocked, originalCategory } from './detect.js';
 import type { Case, CategoryState, Member, Proposal, ProposalType, State } from './types.js';
-import { isRuleOn, NO_VALIDATION_RULES, PRE_APPROVAL_RULES } from './rules.js';
+import { isRuleOn, NO_VALIDATION_RULES, PRE_APPROVAL_RULES, ruleRank } from './rules.js';
 import { waveEffects } from './waves.js';
 import { applyProposal } from './move.js';
 import { activeMembers, categoryWeightGap, effectiveWeight, gapThreshold, weighInClass } from './weights.js';
@@ -68,7 +68,7 @@ interface Evaluation {
 }
 
 /** Compatibilité d'un déplacement de `m` vers la catégorie `t` (null = interdit). */
-function evaluate(state: State, m: Member, t: CategoryState): Evaluation | null {
+function evaluate(state: State, m: Member, t: CategoryState, targetActive?: Member[]): Evaluation | null {
   const { settings, grid } = state;
   const tk = t.key;
   const changes: Proposal['changes'] = {};
@@ -102,7 +102,7 @@ function evaluate(state: State, m: Member, t: CategoryState): Evaluation | null 
   crossesMinorAdult = ages.crossesMinorAdult;
   const ageDirections = ages.directions;
 
-  const merged = [...activeMembers(state, t.id).filter((x) => x.registrationId !== m.registrationId), m];
+  const merged = [...(targetActive ?? activeMembers(state, t.id)).filter((x) => x.registrationId !== m.registrationId), m];
   const hasWeight = DISCIPLINES[tk.discipline].hasWeight;
   const gap = hasWeight ? categoryWeightGap(merged, grid) : 0;
   const threshold = gapThreshold(merged, state);
@@ -133,7 +133,7 @@ export function ruleProfile(state: State, p: ProfileInput): { rules: RuleId[]; f
   if (p.type === 'R') return { rules: ['return'], forced: true };
   const m = state.members.find((x) => x.registrationId === p.registrationId);
   const caseReg = p.caseId.slice(p.caseId.indexOf(':') + 1);
-  if (p.caseId.startsWith('alone:') && p.registrationId !== caseReg) return { rules: over ? ['split', 'weightGap'] : ['split'], forced: false };
+  if (p.caseId.startsWith('alone:') && p.registrationId !== caseReg) return { rules: ['split', ...(p.pulledRules ?? []), ...(over ? (['weightGap'] as const) : [])], forced: false };
   if (m && p.caseId.startsWith('weight_out:') && p.changes.weightClassId !== undefined) {
     const wic = weighInClass(m, state);
     if (wic) {
@@ -266,8 +266,9 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
   }
 
   if (c.kind === 'alone') {
+    const costOf = (rules: RuleId[], mover: Member) => rules.reduce((best, r) => Math.max(best, ruleRank(state.settings, r, mover)), -1);
     for (const pull of pullProposals(state, m)) {
-      const waves = waveEffects(state, { caseId: c.id, type: pull.type, registrationId: pull.moved[0]!.registrationId, target: pull.target, changes: {} });
+      const waves = waveEffects(state, { caseId: c.id, type: pull.type, registrationId: pull.moved[0]!.registrationId, target: pull.target, changes: pull.changes });
       const names = pull.moved.map((x) => x.label).join(' et ');
       const k = pull.moved.length;
       const built = withRules(state, pull.moved, {
@@ -277,13 +278,15 @@ export function proposalsFor(state: State, c: Case): Proposal[] {
         registrationId: pull.moved[0]!.registrationId,
         alsoMoved: pull.moved.slice(1).map((x) => x.registrationId),
         target: pull.target,
-        changes: {},
+        changes: pull.changes,
         checks: pull.checks,
+        pulledRules: pull.pulledRules,
         ...waves,
         reason: `${names} : ${labelOf(pull.from)} → ${labelOf(pull.to)}, pour donner ${k > 1 ? 'une poule' : 'un adversaire'} à ${m.label}`,
       });
-      // Après les déplacements du combattant lui-même (de même type) : la poule de 3 d'abord.
-      if (built) out.push({ ...built, sortKey: [order(m).indexOf(pull.type), 0, k > 1 ? 2 : 3, pull.checks.weightGapKg, labelOf(pull.to)] });
+      // Après les déplacements du combattant lui-même (de même type) : la poule de 3 d'abord, puis du moins coûteux au
+      // plus coûteux, puis du poids le plus proche.
+      if (built) out.push({ ...built, sortKey: [order(m).indexOf(pull.type), 0, k > 1 ? 2 : 3, costOf(built.rules, pull.moved[0]!), Math.round(pull.distance * 100), names] });
     }
   }
 
@@ -338,40 +341,80 @@ function acceptsWeight(state: State, m: Member, t: CategoryState): boolean {
 }
 
 /**
- * « Split » : le combattant seul `m` reçoit le plus lourd (ou les deux plus lourds, pour une poule) d'une catégorie de la
- * catégorie de poids juste en dessous (même discipline, règlement, sexe et tranche d'âge), s'il y en reste au moins deux.
- * On ne fait jamais descendre un combattant vers une catégorie plus légère.
+ * Candidats d'un « split » gardés par catégorie de départ (les plus proches en poids) : au-delà, le calcul du plan a trop de
+ * combinaisons à essayer (500 inscriptions : plus de 4 s), sans meilleur résultat en pratique.
  */
-function pullProposals(state: State, m: Member): { type: 'A' | 'B'; moved: Member[]; target: { categoryId: string }; from: CategoryKey; to: CategoryKey; checks: Proposal['checks'] }[] {
+export const SPLIT_CANDIDATES_PER_SOURCE = 2;
+
+/** Rang d'un type de proposition, du plus simple au plus coûteux (un split à deux combattants prend le plus coûteux). */
+const TYPE_ORDER: ProposalType[] = ['R', 'A', 'B', 'C', 'D', 'G', 'H', 'E', 'F'];
+
+/**
+ * « Split » : le combattant seul `m` reçoit un combattant (ou deux, pour une poule) d'une autre catégorie, dans les règles :
+ * chaque venu doit pouvoir rejoindre la catégorie de `m` comme s'il y était déplacé seul (`evaluate`), et il reste au moins
+ * deux actifs dans sa catégorie de départ. Jamais un combattant déjà déplacé pour de vrai, ni d'une catégorie fermée, ni
+ * trop lourd (pesée) pour la catégorie du seul ; au plus `SPLIT_CANDIDATES_PER_SOURCE` candidats par catégorie de départ ;
+ * seulement les disciplines avec poids (pas de kata). Un candidat par proposition ; une poule prend les deux candidats les
+ * plus proches en poids de la même catégorie de départ, à changements identiques.
+ */
+function pullProposals(state: State, m: Member): {
+  type: ProposalType; moved: Member[]; target: { categoryId: string }; from: CategoryKey; to: CategoryKey; checks: Proposal['checks'];
+  changes: Proposal['changes']; pulledRules: RuleId[]; distance: number;
+}[] {
   const t = state.categories.find((x) => x.id === m.categoryId);
-  if (!t || isLocked(t) || !m.weightClassId || !DISCIPLINES[m.discipline].hasWeight) return [];
-  const wc = state.grid.weightClasses.find((w) => w.id === m.weightClassId);
-  const lighter = wc ? neighborWeightClasses(state.grid, wc).lighter : null;
-  if (!lighter) return [];
+  if (!t || isLocked(t) || !DISCIPLINES[m.discipline].hasWeight) return [];
+  const own = effectiveWeight(m, state.grid) ?? 0;
+  // Calculés une fois : `evaluate` les reprendrait pour chaque candidat (le plan appelle ceci des milliers de fois).
+  const tActive = activeMembers(state, t.id);
+  const byCategory = new Map<string, Member[]>();
+  for (const x of state.members) if (x.categoryId && x.presence !== 'absent') byCategory.set(x.categoryId, [...(byCategory.get(x.categoryId) ?? []), x]);
   const out: ReturnType<typeof pullProposals> = [];
   for (const source of state.categories) {
-    if (source.id === t.id || isLocked(source)) continue;
-    const active = activeMembers(state, source.id);
+    if (source.id === t.id || isLocked(source) || !DISCIPLINES[source.key.discipline].hasWeight) continue;
+    const active = byCategory.get(source.id) ?? [];
+    if (active.length < 3) continue;
+    const distance = (y: Member) => Math.abs((effectiveWeight(y, state.grid) ?? 0) - own);
     const candidates = active
-      .filter((y) => !y.placementLocked && y.weightClassId === lighter.id && y.discipline === m.discipline && y.ruleset === m.ruleset && y.sex === m.sex && y.ageBandCode === m.ageBandCode)
-      .sort((a, b) => (effectiveWeight(b, state.grid) ?? 0) - (effectiveWeight(a, state.grid) ?? 0) || a.label.localeCompare(b.label));
-    for (const k of [2, 1]) {
-      if (candidates.length < k || active.length - k < 2) continue;
+      .filter((y) => !y.placementLocked && !isClosedMember(state, y) && acceptsWeight(state, y, t) && evaluate(state, y, t, tActive) !== null)
+      .sort((a, b) => distance(a) - distance(b) || a.label.localeCompare(b.label))
+      .slice(0, SPLIT_CANDIDATES_PER_SOURCE);
+    const groups = [...(active.length - 2 >= 2 && candidates.length >= 2 ? [candidates.slice(0, 2)] : []), ...candidates.map((y) => [y])];
+    for (const moved of groups) {
       let current = state;
-      let type: 'A' | 'B' = 'A';
-      const moved = candidates.slice(0, k);
+      let type: ProposalType = 'A';
+      const rules = new Set<RuleId>();
+      let changes: Proposal['changes'] | null = null;
+      const flags = { ageMove: 'same' as 'same' | 'C' | 'D', crossesMinorAdult: false, mixedSex: false, ageDirections: new Set<'up' | 'down'>() };
       const ok = moved.every((y) => {
         const target = current.categories.find((x) => x.id === t.id)!;
         const ev = evaluate(current, y, target);
-        if (!ev || (ev.type !== 'A' && ev.type !== 'B')) return false;
-        if (ev.type === 'B') type = 'B';
-        current = applyProposal(current, { type: ev.type, registrationId: y.registrationId, target: { categoryId: t.id }, changes: {}, caseId: `alone:${m.registrationId}` });
+        if (!ev) return false;
+        // Une poule : les deux venus changent de la même façon (un seul `changes` par proposition).
+        if (changes !== null && JSON.stringify(changes) !== JSON.stringify(ev.changes)) return false;
+        changes = ev.changes;
+        if (TYPE_ORDER.indexOf(ev.type) > TYPE_ORDER.indexOf(type)) type = ev.type;
+        for (const r of rulesForMove(current, y.registrationId, t.id) ?? []) if (r !== 'weight' && r !== 'weightGap') rules.add(r);
+        if (ev.checks.ageMove === 'D' || (ev.checks.ageMove === 'C' && flags.ageMove === 'same')) flags.ageMove = ev.checks.ageMove;
+        flags.crossesMinorAdult ||= ev.checks.crossesMinorAdult;
+        flags.mixedSex ||= ev.checks.mixedSex;
+        for (const d of ev.checks.ageDirections) flags.ageDirections.add(d);
+        current = applyProposal(current, { type: ev.type, registrationId: y.registrationId, target: { categoryId: t.id }, changes: ev.changes, caseId: `alone:${m.registrationId}` });
         return true;
       });
       if (!ok) continue;
       const merged = activeMembers(current, t.id);
-      const checks = { weightGapKg: Math.round(categoryWeightGap(merged, state.grid) * 100) / 100, threshold: gapThreshold(merged, state), ageMove: 'same' as const, crossesMinorAdult: false, mixedSex: false, ageDirections: [] };
-      out.push({ type, moved, target: { categoryId: t.id }, from: source.key, to: current.categories.find((x) => x.id === t.id)!.key, checks });
+      const checks: Proposal['checks'] = {
+        weightGapKg: Math.round(categoryWeightGap(merged, state.grid) * 100) / 100,
+        threshold: gapThreshold(merged, state),
+        ageMove: flags.ageMove,
+        crossesMinorAdult: flags.crossesMinorAdult,
+        mixedSex: flags.mixedSex,
+        ageDirections: (['up', 'down'] as const).filter((d) => flags.ageDirections.has(d)),
+      };
+      out.push({
+        type, moved, target: { categoryId: t.id }, from: source.key, to: current.categories.find((x) => x.id === t.id)!.key, checks,
+        changes: changes ?? {}, pulledRules: [...rules], distance: Math.max(...moved.map(distance)),
+      });
     }
   }
   return out;

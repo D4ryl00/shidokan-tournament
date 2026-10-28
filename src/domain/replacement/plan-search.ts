@@ -130,7 +130,8 @@ const linksOf = new WeakMap<object, Set<string>>();
 /**
  * Le combattant `m` pourrait-il avoir une proposition vers une catégorie de clé `key` : discipline qu'il pratique, accepte
  * ou avait au départ (retour), et même tranche ou une tranche reliée dans la grille. C'est une condition nécessaire de
- * `evaluate`, du « split », du retour et de la correction de poids : une sur-approximation bon marché, sans le poids.
+ * `evaluate` (donc du « split », pour le combattant venu), du retour et de la correction de poids : une sur-approximation
+ * bon marché, sans le poids.
  */
 function makeNear(s: State) {
   let links = linksOf.get(s.grid);
@@ -154,6 +155,9 @@ function reachable(s: State, registrationId: string): State {
   if (!m) return s;
   const near = makeNear(s);
   const ids = new Set(s.categories.filter((c) => c.id === m.categoryId || near(m, c.key)).map((c) => c.id));
+  // « Split » : les catégories d'où un combattant pourrait venir rejoindre `m` (sa discipline, ses préférences, son âge).
+  const own = s.categories.find((c) => c.id === m.categoryId);
+  if (own) for (const y of s.members) if (y.categoryId && !ids.has(y.categoryId) && near(y, own.key)) ids.add(y.categoryId);
   return ids.size === s.categories.length ? s : subState(s, ids);
 }
 

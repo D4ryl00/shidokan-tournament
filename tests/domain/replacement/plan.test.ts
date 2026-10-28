@@ -227,7 +227,8 @@ function leftAlone(s1Kg = 58) {
   const j1 = member({ label: 'J1', ageBandCode: 'junior', weightClassId: 'junior:F:-53', approxWeightKg: 52 });
   const j2 = member({ label: 'J2', ageBandCode: 'junior', weightClassId: 'junior:F:-53', approxWeightKg: 52.5 });
   const s = makeState([w, y, s1, s2, j1, j2]);
-  s.settings.replacementRules.off = ['weightGap'];
+  // Sans split : Y ne peut que monter chez les juniors (sinon S1 viendrait le rejoindre).
+  s.settings.replacementRules.off = ['weightGap', 'split'];
   return { s, w, y };
 }
 
@@ -486,4 +487,38 @@ test('budget épuisé : pas prouvé', () => {
   // Toujours un plan valable : jamais plus de seuls qu'au départ.
   expect(r.aloneAfter.length).toBeLessThanOrEqual(r.aloneBefore.length);
   expect(plan(s).proven).toBe(true);
+});
+
+test('le plan trouve le split de la démo à la ligne « tranche au-dessus », pas avant', () => {
+  const rousseau = member({ label: 'ROUSSEAU Tom', sex: 'M', ageBandCode: 'minime', weightClassId: 'minime:M:-50', weighInKg: 45, presence: 'present' });
+  const boys = [40, 39, 39].map((kg, i) => member({ label: `BENJAMIN${i}`, sex: 'M', ageBandCode: 'benjamin', weightClassId: 'benjamin:M:-40', weighInKg: kg, presence: 'present' }));
+  const s = makeState([rousseau, ...boys]);
+  expect(plan(s, { level: 'weightGap' }).aloneAfter).toEqual([rousseau.registrationId]);
+  const r = plan(s, { level: 'ageUp' });
+  expect(r.aloneAfter).toEqual([]);
+  expect(r.moves.map((m) => [m.registrationId, m.rules])).toEqual([[boys[0]!.registrationId, ['split', 'ageUp']]]);
+});
+
+test('le plan trouve un split venu d’une autre discipline (préférences du venu)', () => {
+  const sen = (label: string, discipline: Member['discipline'], kg: number, other: Member['otherDisciplines'] = []) =>
+    member({ label, sex: 'M', ageBandCode: 'senior', discipline, ruleset: 'jiyu', weightClassId: 'senior:M:-75', approxWeightKg: kg, otherDisciplines: other });
+  const alone = sen('SEUL', 'karate', 74);
+  const boxers = [sen('B1', 'shido-boxing', 73, ['karate']), sen('B2', 'shido-boxing', 74), sen('B3', 'shido-boxing', 75)];
+  const s = makeState([alone, ...boxers]);
+  const r = plan(s, { level: 'discipline' });
+  expect(r.aloneAfter).toEqual([]);
+  expect(r.moves.map((m) => [m.registrationId, m.rules])).toEqual([[boxers[0]!.registrationId, ['split', 'discipline']]]);
+});
+
+test('élargissement : un déplacement remplit une catégorie, qui peut alors donner un split à un autre seul', () => {
+  const m = (label: string, band: string, wc: string, kg: number) => member({ label, sex: 'M', ageBandCode: band, weightClassId: wc, approxWeightKg: kg });
+  const x = m('X', 'senior', 'senior:M:-67', 70);
+  const t = [m('T1', 'senior', 'senior:M:-75', 74), m('T2', 'senior', 'senior:M:-75', 75)];
+  const y = m('Y', 'espoir', 'espoir:M:-75', 74);
+  const s = makeState([x, ...t, y]);
+  // Y ne peut pas monter lui-même chez les seniors : seul un senior qui descend chez les espoirs le sauve.
+  s.settings.replacementRules.off = ['ageUp'];
+  const r = plan(s, { level: 'ageDown' });
+  expect(r.aloneAfter).toEqual([]);
+  expect(r.proven).toBe(true);
 });
