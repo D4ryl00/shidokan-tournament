@@ -432,7 +432,8 @@ type RecasementSnapshot = {
 
 /** Catégories qu'une annulation touche : la catégorie actuelle, celle d'avant et celles dont la clé avait changé. */
 const snapshotTouches = (currentCategoryId: string | null, snapshot: RecasementSnapshot): string[] =>
-  [...new Set([currentCategoryId, snapshot.registration.categoryId, ...snapshot.categories.map((c) => c.id)].filter((x): x is string => !!x))];
+  // Instantané incomplet (ligne écrite à la main, ancienne) : seulement ce qu'il contient.
+  [...new Set([currentCategoryId, snapshot.registration?.categoryId, ...(snapshot.categories ?? []).map((c) => c.id)].filter((x): x is string => !!x))];
 
 /**
  * Réécrit l'état d'avant une réaffectation (dans une transaction de l'appelant). Les valeurs d'origine corrigées depuis
@@ -551,7 +552,7 @@ async function resetSorting(db: AppDb, competitionId: string, waveId: string | n
     .map(({ row, n }) => {
       const snapshot = JSON.parse(row.snapshotJson) as RecasementSnapshot;
       // Ligne d'avant la migration 0025 : la session de sa catégorie de départ (disparue : celle de la catégorie actuelle).
-      const wave = row.waveId ?? waveOfCategory(snapshot.registration.categoryId) ?? waveOfCategory(current.get(row.registrationId)) ?? null;
+      const wave = row.waveId ?? waveOfCategory(snapshot.registration?.categoryId) ?? waveOfCategory(current.get(row.registrationId)) ?? null;
       return { row, n, snapshot, inScope: state.waves.length === 0 || waveId === null || wave === waveId };
     });
   const isStarted = (id: string) => ['started', 'finished'].includes(byId.get(id)?.status ?? '');
