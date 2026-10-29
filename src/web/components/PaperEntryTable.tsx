@@ -12,7 +12,7 @@ import { plural } from '../../domain/plural.js';
 import { EmailsInput } from './EmailsInput.js';
 
 const emptyLine = (): ClubFormLine => ({
-  lastName: '', firstName: '', sex: null, ageBandCode: null, weightKg: null, combat: null, kata: false, grade: null, ruleset: null, prefs: {}, shobuKeep: null,
+  lastName: '', firstName: '', sex: null, ageBandCode: null, weightClassId: null, weightKg: null, combat: null, kata: false, grade: null, ruleset: null, prefs: {}, shobuKeep: null,
 });
 const EMPTY_HEADER: ClubFormHeader = { club: '', coachName: null, coachPhone: null, coachEmails: [], preApproval: false };
 export const COMBATS: [CombatDiscipline, string][] = [['karate', 'Karaté'], ['shido-boxing', 'Boxing'], ['shido-mix', 'Mix'], ['triathlon', 'Triathlon']];

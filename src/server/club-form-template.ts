@@ -13,6 +13,7 @@ import type { Competition } from '../domain/competition.js';
 import { DISCIPLINES, RULESETS } from '../domain/disciplines.js';
 import type { CategoryGrid } from '../domain/types.js';
 import { closedSummary, offeredAgeBands } from '../domain/closed-categories.js';
+import { ageRangeText } from '../domain/grid.js';
 import type { OdsCell, OdsSheet } from './spreadsheet/ods.js';
 
 const c = (value: string | number | null, extra: Partial<OdsCell> = {}): OdsCell => ({ value, ...extra });
@@ -90,7 +91,7 @@ export function buildClubFormTemplate(competition: Competition, grid: CategoryGr
     ...Object.values(RULESETS).map((r) => [c(`${r.label} : ${r.ko ? 'avec KO, adultes uniquement' : 'sans KO, mineurs et adultes'}`)]),
     [],
     [c("Catégories d'âge", { bold: true })],
-    ...offered.map((b) => [c(b.label), c(b.maxAge === null ? `${b.minAge} ans et plus` : `${b.minAge} à ${b.maxAge} ans`)]),
+    ...offered.map((b) => [c(b.label), c(ageRangeText(b))]),
     ...(summary.length ? [[], [c('Catégories non ouvertes à cette compétition', { bold: true })], ...summary.map((phrase) => [c(phrase)])] : []),
   ];
   const logo = logoPng();

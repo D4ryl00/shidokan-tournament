@@ -6,7 +6,7 @@ import { cleanEmails, splitEmails } from './emails.js';
 import { normalizeName, parseSex, parseYesNo } from './names.js';
 import { parsePreferences, validateRegistration, type RegistrationInput } from './registration.js';
 import type { CategoryGrid, DisciplineId, Ruleset, Sex } from './types.js';
-import { resolveWeightCell, weightClassForWeight } from './weights.js';
+import { pickWeightClass, resolveWeightCell, weightClassForWeight } from './weights.js';
 
 export const CLUB_FORM_TITLE = 'FICHE DE PRÉ-INSCRIPTION CLUB';
 /** Libellés en colonne A, valeurs en colonne B, lignes 4 à 8 du tableur. */
@@ -87,6 +87,8 @@ export interface ClubFormLine {
   firstName: string;
   sex: Sex | null;
   ageBandCode: string | null;
+  /** Catégorie de poids choisie (en ligne) ; null : déduite du poids actuel (fiche papier, tableur). */
+  weightClassId: string | null;
   weightKg: number | null;
   combat: CombatDiscipline | null;
   kata: boolean;
@@ -139,6 +141,27 @@ function warnClosed(rows: ClubFormRow[], closed: ReadonlySet<string>): ClubFormR
   return rows;
 }
 
+/** « 52,5 ». */
+export const kgText = (kg: number): string => String(kg).replace('.', ',');
+
+/**
+ * Avertissement non bloquant (page du club) : le poids actuel n'est pas dans la catégorie de poids choisie
+ * (bornes de la grille, sans tolérance). `weightClasses` : de la plus légère à l'ouverte.
+ */
+export function weightWarning(
+  line: Pick<ClubFormLine, 'ageBandCode' | 'sex' | 'weightClassId' | 'weightKg' | 'combat'>,
+  weightClasses: { id: string; ageBandCode: string; sex: Sex; label: string; maxKg: number | null }[],
+): string | null {
+  if (line.weightKg === null || !line.weightClassId || !line.combat) return null;
+  const classes = weightClasses.filter((w) => w.ageBandCode === line.ageBandCode && w.sex === line.sex);
+  const chosen = classes.find((w) => w.id === line.weightClassId);
+  const fits = pickWeightClass(classes, line.weightKg, 0);
+  if (!chosen || !fits || fits.id === chosen.id) return null;
+  return `Le poids actuel (${kgText(line.weightKg)} kg) est en dehors de la catégorie ${chosen.label} kg : il correspond à ${fits.label} kg.`;
+}
+
+export const WEIGHT_MISSING = 'Poids actuel manquant (nécessaire pour la catégorie de poids).';
+
 /** Une ligne → une ou deux lignes d'inscription (combat puis kata), avec le même numéro de ligne. */
 export function lineToRows(line: ClubFormLine, lineNumber: number, grid: CategoryGrid, tolerance: WeighInTolerance, closed: ReadonlySet<string> = new Set()): ClubFormRow[] {
   const label = `${line.lastName.trim()} ${line.firstName.trim()}`.trim();
@@ -157,9 +180,10 @@ export function lineToRows(line: ClubFormLine, lineNumber: number, grid: Categor
     const warnings: string[] = [];
     const combat = line.combat;
     if (!line.ruleset) errors.push('Règlement manquant (Jiyu ou Shobu).');
-    let weightClassId: string | null = null;
-    if (line.weightKg === null) errors.push('Poids actuel manquant (nécessaire pour la catégorie de poids).');
-    else {
+    // La catégorie choisie fait foi (validateRegistration vérifie l'âge et le sexe) ; à défaut, celle du poids actuel.
+    let weightClassId: string | null = line.weightClassId;
+    if (weightClassId === null && line.weightKg === null) errors.push(WEIGHT_MISSING);
+    else if (weightClassId === null && line.weightKg !== null) {
       const wc = weightClassForWeight(grid, line.ageBandCode, line.sex, line.weightKg, tolerance[line.sex]);
       if (wc) weightClassId = wc.id;
       else errors.push("Pas de catégorie de poids pour cet âge et ce sexe dans la grille.");
@@ -222,7 +246,7 @@ function cellsToLine(row: unknown[], grid: CategoryGrid): { line: ClubFormLine; 
   if (keep && !shobuKeep) warnings.push(`Priorité shobu incompréhensible : « ${text(keepCell)} ».`);
   return {
     line: {
-      lastName: text(lastName), firstName: text(firstName), sex, ageBandCode,
+      lastName: text(lastName), firstName: text(firstName), sex, ageBandCode, weightClassId: null,
       weightKg, combat, kata: kataYes === true || kataInCombat, grade: textOrNull(gradeCell), ruleset: rulesetFromLabel(rulesetCell), prefs, shobuKeep,
     },
     warnings,

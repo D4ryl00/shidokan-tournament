@@ -7,14 +7,18 @@ const shot = async (page: Page, name: string) => {
   if (process.env.E2E_SCREENSHOTS) await page.screenshot({ path: path.join(process.env.E2E_SCREENSHOTS, `${name}.png`), fullPage: true });
 };
 
-async function fillFighter(page: Page, f: { last: string; first: string; sex: 'Féminin' | 'Masculin'; age: string; kg: string; combat?: string; ruleset?: string; kata?: boolean; grade?: string }) {
+async function fillFighter(page: Page, f: { last: string; first: string; sex: 'Féminin' | 'Masculin'; age: string; weightClass?: string; kg?: string; combat?: string; ruleset?: string; kata?: boolean; grade?: string }) {
   const form = page.getByTestId('club-line-form');
   await form.getByTestId('line-last-name').fill(f.last);
   await form.getByTestId('line-first-name').fill(f.first);
   await form.getByRole('group', { name: 'Sexe' }).getByText(f.sex, { exact: true }).click();
   await form.getByTestId('line-age').click();
   await page.getByRole('option', { name: f.age, exact: true }).click();
-  await form.getByTestId('line-weight').fill(f.kg);
+  if (f.weightClass) {
+    await form.getByTestId('line-weight-class').click();
+    await page.getByRole('option', { name: f.weightClass, exact: true }).click();
+  }
+  if (f.kg) await form.getByTestId('line-weight').fill(f.kg);
   if (f.combat) await form.getByRole('group', { name: 'Discipline de combat' }).getByText(f.combat, { exact: true }).click();
   if (f.ruleset) await form.getByRole('group', { name: 'Règlement' }).getByText(f.ruleset, { exact: true }).click();
   if (f.kata) await form.getByTestId('line-kata').check();
@@ -59,21 +63,28 @@ test('inscription en ligne : annuaire → invitation → le coach inscrit, modif
   await coach.goto(url);
   await expect(coach.getByTestId('club-entry-state')).toHaveText('Inscriptions ouvertes');
   await coach.getByTestId('add-fighter').click();
-  await fillFighter(coach, { last: 'MARTIN', first: 'Léa', sex: 'Féminin', age: 'Cadets', kg: '54', combat: 'Karaté', ruleset: 'Jiyu', kata: true, grade: '1er kyu' });
+  // Tranche d'âge avec ses âges ; catégorie de poids choisie, poids actuel laissé vide (facultatif).
+  await fillFighter(coach, { last: 'MARTIN', first: 'Léa', sex: 'Féminin', age: 'Cadets (14 à 15 ans)', weightClass: '-54 kg', combat: 'Karaté', ruleset: 'Jiyu', kata: true, grade: '1er kyu' });
   await shot(coach, '3-formulaire');
   await coach.getByTestId('line-save').click();
   await coach.reload();
   await expect(coach.getByTestId('club-line')).toHaveCount(1);
+  await expect(coach.getByTestId('club-line')).toContainText('F · Cadets · -54 kg');
   await expect(coach.getByTestId('club-line-disciplines')).toHaveText('Karaté (jiyu) + Kata');
   await shot(coach, '4-liste');
 
   // 4. Modifier (Boxing), ajouter puis supprimer un second combattant.
   await coach.getByTestId('club-line').getByRole('button', { name: 'Modifier' }).click();
   await coach.getByTestId('club-line-form').getByRole('group', { name: 'Discipline de combat' }).getByText('Boxing', { exact: true }).click();
+  // Poids actuel hors de la catégorie choisie : avertissement, l'enregistrement passe quand même.
+  await coach.getByTestId('line-weight').fill('58');
+  const outside = 'Le poids actuel (58 kg) est en dehors de la catégorie -54 kg : il correspond à -61 kg.';
+  await expect(coach.getByTestId('line-weight-warning')).toHaveText(outside);
   await coach.getByTestId('line-save').click();
   await expect(coach.getByTestId('club-line-disciplines')).toHaveText('Shido-boxing (jiyu) + Kata');
+  await expect(coach.getByTestId('line-notice')).toHaveText(outside);
   await coach.getByTestId('add-fighter').click();
-  await fillFighter(coach, { last: 'DURAND', first: 'Hugo', sex: 'Masculin', age: 'Seniors', kg: '75', kata: true });
+  await fillFighter(coach, { last: 'DURAND', first: 'Hugo', sex: 'Masculin', age: 'Seniors (18 à 34 ans)', kg: '75', kata: true });
   await coach.getByTestId('line-save').click();
   await expect(coach.getByTestId('club-line')).toHaveCount(2);
   await coach.getByTestId('club-line').filter({ hasText: 'DURAND' }).getByRole('button', { name: 'Modifier' }).click();
@@ -112,7 +123,7 @@ test('catégorie fermée : non proposée au club', async ({ page, request }) => 
 
   await page.goto(`/inscription/${link!.token}`);
   await page.getByTestId('add-fighter').click();
-  await fillFighter(page, { last: 'PETIT', first: 'Zoé', sex: 'Féminin', age: 'Cadets', kg: '50' });
+  await fillFighter(page, { last: 'PETIT', first: 'Zoé', sex: 'Féminin', age: 'Cadets (14 à 15 ans)', kg: '50' });
   const combats = page.getByTestId('club-line-form').getByRole('group', { name: 'Discipline de combat' });
   await expect(combats.getByText('Karaté', { exact: true })).toBeVisible();
   await expect(combats.getByText('Mix', { exact: true })).toHaveCount(0);

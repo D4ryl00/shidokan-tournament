@@ -11,7 +11,7 @@ const AGE_BANDS: Omit<AgeBand, 'sortOrder'>[] = [
   { code: 'cadet', label: 'Cadets', minAge: 14, maxAge: 15, isMinor: true },
   { code: 'junior', label: 'Juniors', minAge: 16, maxAge: 17, isMinor: true },
   { code: 'espoir', label: 'Espoirs', minAge: 18, maxAge: 20, isMinor: false },
-  { code: 'senior', label: 'Seniors', minAge: 18, maxAge: null, isMinor: false },
+  { code: 'senior', label: 'Seniors', minAge: 18, maxAge: 34, isMinor: false },
   { code: 'v1', label: 'Vétérans 1', minAge: 35, maxAge: 45, isMinor: false },
   { code: 'v2', label: 'Vétérans 2', minAge: 46, maxAge: 55, isMinor: false },
   { code: 'v3', label: 'Vétérans 3', minAge: 56, maxAge: 65, isMinor: false },

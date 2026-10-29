@@ -9,7 +9,7 @@ import type { ClosedCategoriesView, EntryCell } from '../domain/closed-categorie
 import type { ColumnMapping, FfkChoices, FfkImportPlan } from '../domain/ffk-import.js';
 import type { Club, DirectoryEntry, DirectoryInput, RegistrationInput, RegistrationRow } from '../domain/registration.js';
 import type { Case, MoveView, Presence, Proposal, ProposalType } from '../domain/replacement/index.js';
-import type { CategoryGrid, DisciplineId } from '../domain/types.js';
+import type { CategoryGrid, DisciplineId, Sex } from '../domain/types.js';
 import type { LadderProgress, LadderRow, PlanChoice, PlanMove } from '../domain/replacement/plan.js';
 import { fetchPlanStream } from './planStream.js';
 import { applyRulesView, type RulesView } from '../domain/replacement/rules.js';
@@ -921,7 +921,10 @@ export interface ClubEntryView {
   competition: { name: string; date: string; location: string | null; deadline: string | null; status: 'closed' | 'open' | 'frozen' };
   editable: boolean;
   club: ClubEntryHeader & { name: string };
-  ageBands: { code: string; label: string; isMinor: boolean }[];
+  /** `ages` : « 14 à 15 ans ». */
+  ageBands: { code: string; label: string; ages: string; isMinor: boolean }[];
+  /** De la plus légère à l'ouverte. */
+  weightClasses: { id: string; ageBandCode: string; sex: Sex; label: string; maxKg: number | null }[];
   /** Cases fermées (`entryKey`). */
   closed: string[];
   closedSummary: string[];

@@ -26,14 +26,14 @@ beforeEach(async () => {
 afterEach(async () => app.close());
 
 const LINE: ClubFormLine = {
-  lastName: 'MARTIN', firstName: 'Léa', sex: 'F', ageBandCode: 'senior', weightKg: 53.5, combat: 'karate', kata: true, grade: '1er kyu',
+  lastName: 'MARTIN', firstName: 'Léa', sex: 'F', ageBandCode: 'senior', weightClassId: 'senior:F:-55', weightKg: 53.5, combat: 'karate', kata: true, grade: '1er kyu',
   ruleset: 'jiyu', prefs: { 'shido-mix': 1 }, shobuKeep: null,
 };
 const url = (path = '') => `/api/inscription/${token}${path}`;
 type View = {
   competition: { name: string; status: string; deadline: string | null }; editable: boolean;
   club: { name: string; coachPhone: string | null; coachEmails: string[]; affiliationNumber: string | null };
-  ageBands: { code: string }[];
+  ageBands: { code: string; ages: string }[];
   lines: { fighterId: string; version: string; line: ClubFormLine; editable: boolean; reason: string | null }[];
 };
 const view = async () => (await app.inject({ method: 'GET', url: url() })).json() as View;
@@ -69,14 +69,31 @@ test('lien inconnu → 404 « Lien inconnu ou expiré. » ; révoqué → 410', 
   expect((await app.inject({ method: 'GET', url: url() })).statusCode).toBe(410); // lien révoqué : « remplacé »
 });
 
-test('ajouter une ligne combat + kata → deux inscriptions « online », catégorie de poids déduite ; GET la renvoie identique', async () => {
+test('ajouter une ligne combat + kata → deux inscriptions « online », catégorie de poids choisie ; GET la renvoie identique', async () => {
   const res = await add();
   expect(res.statusCode).toBe(201);
   const regs = await registrations();
   expect(regs.map((r) => [r.discipline, r.source]).sort()).toEqual([['karate', 'online'], ['kata', 'online']]);
-  expect(regs.find((r) => r.discipline === 'karate')!.weightClassId).toMatch(/^senior:F:/);
+  expect(regs.find((r) => r.discipline === 'karate')!.weightClassId).toBe('senior:F:-55');
   expect(regs.every((r) => r.categoryId)).toBe(true);
   expect((await view()).lines[0]!.line).toEqual(LINE);
+});
+
+test('catégorie de poids : obligatoire pour un combat (même avec le poids), pas pour le kata seul ; le poids est facultatif', async () => {
+  const none = await add({ ...LINE, weightClassId: null });
+  expect(none.statusCode).toBe(400);
+  expect(none.json().issues).toEqual(['Catégorie de poids manquante.']);
+  expect((await add({ ...LINE, weightClassId: null, weightKg: null })).json().issues).toEqual(['Catégorie de poids manquante.']);
+  expect((await add({ ...LINE, weightKg: null })).statusCode).toBe(201);
+  expect((await registrations()).find((r) => r.discipline === 'karate')).toMatchObject({ weightClassId: 'senior:F:-55', approxWeightKg: null });
+  expect((await add({ ...LINE, lastName: 'KATA', combat: null, ruleset: null, prefs: {}, weightClassId: null, weightKg: null })).statusCode).toBe(201);
+});
+
+test('la vue donne les âges de chaque tranche et les catégories de poids, de la plus légère à l’ouverte', async () => {
+  const v = (await view()) as View & { weightClasses: { id: string; ageBandCode: string; sex: string; label: string }[] };
+  expect(v.ageBands.find((b) => b.code === 'cadet')!.ages).toBe('14 à 15 ans');
+  expect(v.ageBands.find((b) => b.code === 'senior')!.ages).toBe('18 à 34 ans');
+  expect(v.weightClasses.filter((w) => w.ageBandCode === 'cadet' && w.sex === 'F').map((w) => w.label)).toEqual(['-47', '-54', '-61', '+61']);
 });
 
 test('ligne invalide → 400 avec les messages ; doublon de nom → 400', async () => {
@@ -211,10 +228,10 @@ test('combattant confirmé par l’export FFK : sexe et catégorie d’âge non 
   const [reg] = await registrations();
   raw('update registrations set ffk_confirmed = 1 where id = ?', reg!.id);
   const [line] = (await view()).lines;
-  const res = await put(line!.fighterId, { ...LINE, kata: false, grade: null, sex: 'M', weightKg: 80 }, line!.version);
+  const res = await put(line!.fighterId, { ...LINE, kata: false, grade: null, sex: 'M', weightClassId: 'senior:M:-84', weightKg: 80 }, line!.version);
   expect(res.statusCode).toBe(400);
   expect(res.json().issues).toEqual(['Le sexe et la catégorie d’âge viennent de l’export FFK : contactez l’organisateur pour les changer.']);
-  const again = await put(line!.fighterId, { ...LINE, kata: false, grade: null, ageBandCode: 'junior' }, line!.version);
+  const again = await put(line!.fighterId, { ...LINE, kata: false, grade: null, ageBandCode: 'junior', weightClassId: 'junior:F:-53' }, line!.version);
   expect(again.statusCode).toBe(400);
 });
 
@@ -272,7 +289,7 @@ test('pages publiques : corps de requête limité à 64 Ko (413 au-delà)', asyn
 
 // --- Catégories fermées (étape 23) ---
 
-const CADET_MIX: ClubFormLine = { ...LINE, ageBandCode: 'cadet', weightKg: 50, combat: 'shido-mix', kata: false, grade: null, prefs: {} };
+const CADET_MIX: ClubFormLine = { ...LINE, ageBandCode: 'cadet', weightClassId: 'cadet:F:-54', weightKg: 50, combat: 'shido-mix', kata: false, grade: null, prefs: {} };
 const closeCells = (cells: object[]) => app.inject({ method: 'PUT', url: `${base}/closed-categories`, payload: { cells, closed: true } });
 const cadetMixF = { ageBandCode: 'cadet', sex: 'F', discipline: 'shido-mix', ruleset: 'jiyu' };
 

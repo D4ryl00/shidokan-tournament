@@ -13,6 +13,8 @@ import {
   parseClubForm,
   rulesetFromLabel,
   lineToRows,
+  weightWarning,
+  type ClubFormLine,
 } from '../../src/domain/club-form.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 
@@ -313,9 +315,32 @@ test('relecture (mineurs) : abréviations sans doublon dans une grille', () => {
 });
 
 test("ligne dans une catégorie fermée : avertissement, pas d'erreur", () => {
-  const line = { lastName: 'PETIT', firstName: 'Zoé', sex: 'F' as const, ageBandCode: 'cadet', weightKg: 50, combat: 'shido-mix' as const, kata: false, grade: null, ruleset: 'jiyu' as const, prefs: {}, shobuKeep: null };
+  const line = { lastName: 'PETIT', firstName: 'Zoé', sex: 'F' as const, ageBandCode: 'cadet', weightClassId: null, weightKg: 50, combat: 'shido-mix' as const, kata: false, grade: null, ruleset: 'jiyu' as const, prefs: {}, shobuKeep: null };
   const [row] = lineToRows(line, 1, grid, { M: 0, F: 0 }, new Set(['cadet|F|shido-mix|jiyu']));
   expect(row!.errors).toEqual([]);
   expect(row!.input).not.toBeNull();
   expect(row!.warnings).toContain('Catégorie non ouverte à cette compétition (Shido-mix-martial jiyu) : la ligne ira en Réaffectation.');
+});
+
+test('catégorie de poids choisie (en ligne) : elle fait foi, avec ou sans poids ; une catégorie d’une autre tranche est refusée', () => {
+  const line: ClubFormLine = {
+    lastName: 'PETIT', firstName: 'Zoé', sex: 'F', ageBandCode: 'cadet', weightClassId: 'cadet:F:-61', weightKg: 50, combat: 'karate', kata: false, grade: null,
+    ruleset: 'jiyu', prefs: {}, shobuKeep: null,
+  };
+  expect(lineToRows(line, 1, grid, { M: 0, F: 0 })[0]!.input?.weightClassId).toBe('cadet:F:-61');
+  expect(lineToRows({ ...line, weightKg: null }, 1, grid, { M: 0, F: 0 })[0]).toMatchObject({ errors: [], input: { weightClassId: 'cadet:F:-61', approxWeightKg: null } });
+  expect(lineToRows({ ...line, weightClassId: 'senior:F:-61' }, 1, grid, { M: 0, F: 0 })[0]!.errors).toEqual([
+    'La catégorie de poids « -61 » ne correspond pas à l\'âge et au sexe du combattant.',
+  ]);
+});
+
+test('avertissement de poids : en dehors de la catégorie choisie (au-dessus ou au-dessous), rien sinon ni sans poids', () => {
+  const classes = grid.weightClasses.filter((w) => w.ageBandCode === 'cadet').sort((a, b) => (a.maxKg ?? Infinity) - (b.maxKg ?? Infinity));
+  const line = { ageBandCode: 'cadet', sex: 'F' as const, weightClassId: 'cadet:F:+61', weightKg: 52.5, combat: 'karate' as const };
+  expect(weightWarning(line, classes)).toBe('Le poids actuel (52,5 kg) est en dehors de la catégorie +61 kg : il correspond à -54 kg.');
+  expect(weightWarning({ ...line, weightClassId: 'cadet:F:-47' }, classes)).toBe('Le poids actuel (52,5 kg) est en dehors de la catégorie -47 kg : il correspond à -54 kg.');
+  expect(weightWarning({ ...line, weightClassId: 'cadet:F:-54' }, classes)).toBeNull();
+  expect(weightWarning({ ...line, weightClassId: 'cadet:F:-54', weightKg: 54 }, classes)).toBeNull();
+  expect(weightWarning({ ...line, weightKg: null }, classes)).toBeNull();
+  expect(weightWarning({ ...line, combat: null }, classes)).toBeNull();
 });

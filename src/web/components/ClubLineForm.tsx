@@ -1,24 +1,25 @@
 import { Button, Checkbox, Group, Input, Modal, NativeSelect, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { useState } from 'react';
-import type { ClubFormLine, CombatDiscipline } from '../../domain/club-form.js';
+import { kgText, weightWarning, type ClubFormLine, type CombatDiscipline } from '../../domain/club-form.js';
 import { entryKey } from '../../domain/closed-categories.js';
 import type { DisciplineId, Ruleset } from '../../domain/types.js';
-import { ApiError, RELOAD_STATUSES, useDeleteClubLine, useSaveClubLine, type ClubLine } from '../api.js';
+import { ApiError, RELOAD_STATUSES, useDeleteClubLine, useSaveClubLine, type ClubEntryView, type ClubLine } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { COMBATS, OneOf, PREFS } from './PaperEntryTable.js';
 
 const RULESETS: [Ruleset, string][] = [['jiyu', 'Jiyu'], ['shobu', 'Shobu']];
 
 export const EMPTY_LINE: ClubFormLine = {
-  lastName: '', firstName: '', sex: null, ageBandCode: null, weightKg: null, combat: null, kata: false, grade: null, ruleset: null, prefs: {}, shobuKeep: null,
+  lastName: '', firstName: '', sex: null, ageBandCode: null, weightClassId: null, weightKg: null, combat: null, kata: false, grade: null, ruleset: null, prefs: {}, shobuKeep: null,
 };
 
 /** Formulaire d'un seul combattant de la page du club (création : `line` null). */
-export function ClubLineForm({ token, line, ageBands, closed, opened, onClose }: {
+export function ClubLineForm({ token, line, ageBands, weightClasses, closed, opened, onClose }: {
   token: string;
   line: ClubLine | null;
-  ageBands: { code: string; label: string; isMinor: boolean }[];
+  ageBands: ClubEntryView['ageBands'];
+  weightClasses: ClubEntryView['weightClasses'];
   /** Cases fermées (`entryKey`) : ces choix ne sont pas proposés, sauf la valeur déjà enregistrée. */
   closed: string[];
   opened: boolean;
@@ -29,7 +30,7 @@ export function ClubLineForm({ token, line, ageBands, closed, opened, onClose }:
   const remove = useDeleteClubLine(token);
   // Le parent remonte le formulaire (key) pour chaque combattant : l'état part de la ligne ouverte.
   const [form, setForm] = useState<ClubFormLine>(line?.line ?? EMPTY_LINE);
-  const [weight, setWeight] = useState(line?.line.weightKg != null ? String(line.line.weightKg).replace('.', ',') : '');
+  const [weight, setWeight] = useState(line?.line.weightKg != null ? kgText(line.line.weightKg) : '');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Choix ouverts pour une tranche et un sexe (tout est proposé tant qu'ils ne sont pas choisis).
@@ -42,6 +43,8 @@ export function ClubLineForm({ token, line, ageBands, closed, opened, onClose }:
     setForm((f) => {
       const next = { ...f, ...patch };
       if (patch.ageBandCode === undefined && patch.sex === undefined) return next;
+      // La catégorie de poids dépend de la tranche et du sexe.
+      if (!weightClasses.some((w) => w.id === next.weightClassId && w.ageBandCode === next.ageBandCode && w.sex === next.sex)) next.weightClassId = null;
       // Tranche ou sexe changé : un choix devenu fermé est retiré (le coach le voit, au lieu d'un refus à l'enregistrement).
       const open = openFor(next);
       if (next.combat && !open(next.combat, 'jiyu') && !open(next.combat, 'shobu')) Object.assign(next, { combat: null, ruleset: null });
@@ -50,6 +53,8 @@ export function ClubLineForm({ token, line, ageBands, closed, opened, onClose }:
       return next;
     });
   const band = ageBands.find((b) => b.code === form.ageBandCode);
+  const classes = weightClasses.filter((w) => w.ageBandCode === form.ageBandCode && w.sex === form.sex);
+  const warning = weightWarning(form, weightClasses);
   const isOpen = openFor(form);
   const saved = line?.line;
   const NOT_OPEN = ' (non ouverte)';
@@ -83,9 +88,13 @@ export function ClubLineForm({ token, line, ageBands, closed, opened, onClose }:
           <OneOf value={form.sex} options={[['F', 'Féminin'], ['M', 'Masculin']]} onChange={(sex) => set({ sex })} />
         </Input.Wrapper>
         <SimpleGrid cols={{ base: 1, xs: 2 }}>
-          <Select data-testid="line-age" label="Catégorie d’âge" required data={ageBands.map((b) => ({ value: b.code, label: b.label }))} value={form.ageBandCode}
+          <Select data-testid="line-age" label="Catégorie d’âge" required data={ageBands.map((b) => ({ value: b.code, label: `${b.label} (${b.ages})` }))} value={form.ageBandCode}
             onChange={(ageBandCode) => set({ ageBandCode })} />
-          <TextInput data-testid="line-weight" label="Poids actuel" required={!!form.combat} rightSection={<Text size="xs">kg</Text>} inputMode="decimal" value={weight}
+          {/* Obligatoire pour un combat (le kata n'a pas de catégorie de poids). */}
+          <Select data-testid="line-weight-class" label="Catégorie de poids" required={!!form.combat} disabled={!classes.length}
+            placeholder={classes.length ? undefined : 'Sexe et âge d’abord'}
+            data={classes.map((w) => ({ value: w.id, label: `${w.label} kg` }))} value={form.weightClassId} onChange={(weightClassId) => set({ weightClassId })} />
+          <TextInput data-testid="line-weight" label="Poids actuel (facultatif)" rightSection={<Text size="xs">kg</Text>} inputMode="decimal" value={weight}
             onChange={(e) => {
               const raw = e.currentTarget.value;
               setWeight(raw);
@@ -93,6 +102,7 @@ export function ClubLineForm({ token, line, ageBands, closed, opened, onClose }:
               set({ weightKg: raw.trim() && kg > 0 ? kg : null });
             }} />
         </SimpleGrid>
+        {warning && <Text size="sm" c="var(--sk-warn-text)" data-testid="line-weight-warning">{warning}</Text>}
         {/* Au moins une discipline : un combat, le kata, ou les deux (le poids et le règlement ne sont demandés que pour un combat). */}
         <Input.Wrapper label="Disciplines" required labelElement="div" description={kataShown ? 'Un combat, le kata, ou les deux.' : undefined}>
           <Stack gap="sm" mt={4}>

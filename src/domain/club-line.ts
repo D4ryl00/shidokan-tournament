@@ -5,10 +5,11 @@ import type { DisciplineId, Ruleset, Sex } from './types.js';
 export interface LineRegistration {
   discipline: DisciplineId;
   ruleset: Ruleset | null;
+  weightClassId: string | null;
   approxWeightKg: number | null;
   otherDisciplines: DisciplineId[];
   acceptsJiyuFirst: boolean | null;
-  /** Valeurs d'avant une réaffectation (discipline, règlement), celles du coach. */
+  /** Valeurs d'avant une réaffectation (discipline, règlement, catégorie de poids), celles du coach. */
   originalJson: string | null;
 }
 export interface LineFighter {
@@ -23,11 +24,11 @@ export const TWO_COMBATS_REASON = 'Inscrit dans deux disciplines de combat : con
 
 const PREF_DISCIPLINES = new Set<DisciplineId>(['karate', 'shido-boxing', 'shido-mix']);
 
-/** Discipline et règlement saisis par le coach (ceux d'avant une réaffectation). */
-export function enteredValues(r: LineRegistration): { discipline: DisciplineId; ruleset: Ruleset | null } {
-  if (!r.originalJson) return r;
-  const original = JSON.parse(r.originalJson) as { discipline: DisciplineId; ruleset: Ruleset | null };
-  return { discipline: original.discipline, ruleset: original.ruleset };
+type Entered = { discipline: DisciplineId; ruleset: Ruleset | null; weightClassId: string | null };
+/** Discipline, règlement et catégorie de poids saisis par le coach (ceux d'avant une réaffectation). */
+export function enteredValues(r: LineRegistration): Entered {
+  const { discipline, ruleset, weightClassId } = r.originalJson ? (JSON.parse(r.originalJson) as Entered) : r;
+  return { discipline, ruleset, weightClassId: weightClassId ?? null };
 }
 
 /** Ligne de fiche d'un combattant : l'inverse de `lineToRows`. */
@@ -44,6 +45,7 @@ export function registrationsToLine(fighter: LineFighter, regs: LineRegistration
     firstName: fighter.firstName,
     sex: fighter.sex,
     ageBandCode: fighter.ageBandCode,
+    weightClassId: entered?.weightClassId ?? null,
     weightKg: combat?.approxWeightKg ?? kata?.approxWeightKg ?? null,
     combat: (entered?.discipline as CombatDiscipline | undefined) ?? null,
     kata: !!kata,

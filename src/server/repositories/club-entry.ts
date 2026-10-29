@@ -1,11 +1,12 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import { lineToRows, type ClubFormLine } from '../../domain/club-form.js';
+import { lineToRows, WEIGHT_MISSING, type ClubFormLine } from '../../domain/club-form.js';
 import { closedSummary, columnLabel, entryKey, isEntryClosed, offeredAgeBands } from '../../domain/closed-categories.js';
 import { enteredValues, registrationsToLine } from '../../domain/club-line.js';
 import { renderPrivacyNotice } from '../../domain/app-settings.js';
 import { getAppSettings } from './app-settings.js';
 import { normalizeName } from '../../domain/names.js';
-import type { DisciplineId } from '../../domain/types.js';
+import { ageRangeText } from '../../domain/grid.js';
+import type { DisciplineId, Sex } from '../../domain/types.js';
 import { assignAffiliationNumber, linkClub } from '../db/club-directory.js';
 import type { AppDb } from '../db/client.js';
 import { categories, clubDirectory, clubs, competitions, fighters, registrations } from '../db/schema.js';
@@ -40,7 +41,10 @@ export interface ClubEntryView {
   competition: { name: string; date: string; location: string | null; deadline: string | null; status: 'closed' | 'open' | 'frozen' };
   editable: boolean;
   club: ClubEntryHeader & { name: string };
-  ageBands: { code: string; label: string; isMinor: boolean }[];
+  /** `ages` : « 14 à 15 ans ». */
+  ageBands: { code: string; label: string; ages: string; isMinor: boolean }[];
+  /** Catégories de poids des tranches proposées, de la plus légère à l'ouverte. */
+  weightClasses: { id: string; ageBandCode: string; sex: Sex; label: string; maxKg: number | null }[];
   /** Cases fermées (`entryKey`) : le formulaire ne propose pas ces choix. */
   closed: string[];
   /** Ce qui n'est pas ouvert, en phrases (comme sur les fiches). */
@@ -70,6 +74,7 @@ export const LOCKED_REASON = 'Ses combats ont commencé : contactez l’organisa
 export const CLOSED_ENTRY = (label: string) => `${label} : catégorie non ouverte à cette compétition.`;
 const CLOSED_NOTICE = (label: string) => `${label} : cette catégorie n’est plus ouverte, l’organisateur vous contactera.`;
 const WITHDRAWN_NOTICE = (label: string) => `Ne combattra pas en ${label} : catégorie non ouverte.`;
+export const WEIGHT_CLASS_MISSING = 'Catégorie de poids manquante.';
 export const FFK_IDENTITY = 'Le sexe et la catégorie d’âge viennent de l’export FFK : contactez l’organisateur pour les changer.';
 
 function competitionRow(db: AppDb, access: ClubAccess) {
@@ -96,7 +101,7 @@ function lineOf(db: AppDb, fighter: typeof fighters.$inferSelect): ClubLine {
   const { line, editable, reason } = registrationsToLine(
     fighter,
     regs.map((r) => ({
-      discipline: r.discipline, ruleset: r.ruleset, approxWeightKg: r.approxWeightKg,
+      discipline: r.discipline, ruleset: r.ruleset, weightClassId: r.weightClassId, approxWeightKg: r.approxWeightKg,
       otherDisciplines: JSON.parse(r.otherDisciplinesJson) as DisciplineId[], acceptsJiyuFirst: r.acceptsJiyuFirst, originalJson: r.originalJson,
     })),
   );
@@ -130,14 +135,17 @@ export async function getClubEntry(db: AppDb, access: ClubAccess): Promise<ClubE
     .orderBy(fighters.nameKey)
     .all()
     .map((f) => lineOf(db, f));
+  // Tranches proposées, plus celle d'une ligne déjà enregistrée qui ne l'est plus (sa liste montre la valeur enregistrée).
+  const ageBands = grid.ageBands.filter((b) => offeredAgeBands(grid, closed).includes(b) || lines.some((l) => l.line.ageBandCode === b.code));
   return {
     competition: { name: c.name, date: c.date, location: c.location, deadline: c.clubEntryDeadline, status: c.clubEntryStatus },
     editable: isEditable(c),
     club: headerOf(db, club),
-    // Tranches proposées, plus celle d'une ligne déjà enregistrée qui ne l'est plus (sa liste montre la valeur enregistrée).
-    ageBands: grid.ageBands
-      .filter((b) => offeredAgeBands(grid, closed).includes(b) || lines.some((l) => l.line.ageBandCode === b.code))
-      .map((b) => ({ code: b.code, label: b.label, isMinor: b.isMinor })),
+    ageBands: ageBands.map((b) => ({ code: b.code, label: b.label, ages: ageRangeText(b), isMinor: b.isMinor })),
+    weightClasses: grid.weightClasses
+      .filter((w) => ageBands.some((b) => b.code === w.ageBandCode))
+      .sort((a, b) => (a.maxKg ?? Infinity) - (b.maxKg ?? Infinity))
+      .map(({ id, ageBandCode, sex, label, maxKg }) => ({ id, ageBandCode, sex, label, maxKg })),
     closed: [...closed],
     closedSummary: closedSummary(grid, closed),
     lines,
@@ -192,7 +200,9 @@ export async function saveClubLine(db: AppDb, access: ClubAccess, fighterId: str
   const club = clubRow(db, access);
   const competition = (await getCompetition(db, access.competitionId))!;
   const rows = lineToRows(line, 1, await getGrid(db, access.competitionId), competition.settings.weighInToleranceKg);
-  const errors = rows.flatMap((r) => r.errors);
+  // En ligne, le coach choisit la catégorie de poids : le poids actuel est facultatif.
+  const errors = rows.flatMap((r) => r.errors).filter((e) => e !== WEIGHT_MISSING);
+  if (line.combat && !line.weightClassId) errors.unshift(WEIGHT_CLASS_MISSING);
   if (errors.length || rows.some((r) => !r.input)) throw new RegistrationValidationError(errors);
   const inputs = rows.map((r) => ({ ...r.input!, clubId: club.id, source: 'online' as const }));
   // Une catégorie fermée ne s'ouvre pas en ligne, sauf pour une inscription déjà enregistrée qui y était.

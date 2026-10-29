@@ -1,7 +1,12 @@
-import type { CategoryGrid, Sex, WeightClass } from './types.js';
+import type { AgeBand, CategoryGrid, Sex, WeightClass } from './types.js';
 import { parseWeightLabel } from './weights.js';
 
 const SEX_LABEL: Record<Sex, string> = { M: 'masculins', F: 'féminines' };
+
+/** Âges d'une tranche, en clair : « 14 à 15 ans », « 18 ans et plus ». */
+export function ageRangeText(band: Pick<AgeBand, 'minAge' | 'maxAge'>): string {
+  return band.maxAge === null ? `${band.minAge} ans et plus` : `${band.minAge} à ${band.maxAge} ans`;
+}
 
 /** Catégories de poids d'une tranche et d'un sexe, de la plus légère à l'ouverte. */
 export function weightClassesFor(grid: CategoryGrid, ageBandCode: string, sex: Sex): WeightClass[] {

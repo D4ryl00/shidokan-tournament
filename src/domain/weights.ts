@@ -27,7 +27,11 @@ export function weightClassForWeight(
   weightKg: number,
   toleranceKg: number,
 ): WeightClass | null {
-  const classes = weightClassesFor(grid, ageBandCode, sex);
+  return pickWeightClass(weightClassesFor(grid, ageBandCode, sex), weightKg, toleranceKg);
+}
+
+/** Parmi des catégories triées de la plus légère à l'ouverte, celle d'un poids, tolérance comprise ; l'ouverte sinon. */
+export function pickWeightClass<W extends Pick<WeightClass, 'maxKg'>>(classes: W[], weightKg: number, toleranceKg: number): W | null {
   // Arrondi au gramme pour éviter les erreurs de virgule flottante (67 + 0.3).
   const grams = (kg: number) => Math.round(kg * 1000);
   return (

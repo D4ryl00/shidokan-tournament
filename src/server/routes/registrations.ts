@@ -32,6 +32,8 @@ export const clubFormLineSchema = z.object({
   firstName: z.string().max(80),
   sex: z.enum(['M', 'F']).nullable(),
   ageBandCode: z.string().nullable(),
+  // Absente des fiches papier saisies à l'écran : la catégorie y est déduite du poids.
+  weightClassId: z.string().max(100).nullable().default(null),
   weightKg: z.number().positive().max(250).nullable(),
   combat: z.enum(['karate', 'shido-boxing', 'shido-mix', 'triathlon']).nullable(),
   kata: z.boolean(),

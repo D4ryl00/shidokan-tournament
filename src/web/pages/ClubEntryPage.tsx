@@ -2,7 +2,7 @@ import { Alert, Box, Button, Card, Checkbox, Container, Group, Loader, SimpleGri
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { useParams } from 'react-router';
-import type { ClubFormLine } from '../../domain/club-form.js';
+import { kgText, weightWarning, type ClubFormLine } from '../../domain/club-form.js';
 import { useClubEntry, useSaveClubHeader, type ClubEntryHeader, type ClubEntryView, type ClubLine } from '../api.js';
 import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
@@ -17,10 +17,13 @@ import { disciplineLabel } from '../labels.js';
 
 const RULESET_LABEL = { jiyu: 'jiyu', shobu: 'shobu' } as const;
 
-/** « F · Cadets · 54 kg » et « Shido-boxing (jiyu) + Kata » (nom complet de la discipline, comme chez l'organisateur). */
-function summary(line: ClubFormLine, ageBands: ClubEntryView['ageBands']): [string, string] {
-  const age = ageBands.find((b) => b.code === line.ageBandCode)?.label ?? line.ageBandCode ?? '';
-  const who = [line.sex ?? '', age, line.weightKg !== null ? `${String(line.weightKg).replace('.', ',')} kg` : ''].filter(Boolean).join(' · ');
+/** « F · Cadets · -54 kg (52,5 kg) » et « Shido-boxing (jiyu) + Kata » (nom complet de la discipline, comme chez l'organisateur). */
+function summary(line: ClubFormLine, view: ClubEntryView): [string, string] {
+  const age = view.ageBands.find((b) => b.code === line.ageBandCode)?.label ?? line.ageBandCode ?? '';
+  const weightClass = view.weightClasses.find((w) => w.id === line.weightClassId);
+  const kg = line.weightKg !== null ? `${kgText(line.weightKg)} kg` : '';
+  const weight = weightClass ? `${weightClass.label} kg${kg ? ` (${kg})` : ''}` : kg;
+  const who = [line.sex ?? '', age, weight].filter(Boolean).join(' · ');
   const combat = line.combat ? `${disciplineLabel(line.combat)}${line.ruleset ? ` (${RULESET_LABEL[line.ruleset]})` : ''}` : '';
   return [who, [combat, line.kata ? 'Kata' : ''].filter(Boolean).join(' + ')];
 }
@@ -118,7 +121,7 @@ export function ClubEntryPage() {
               <EmptyState title="Aucun combattant pour l’instant" text={view.editable ? 'Ajoutez-les un par un avec « Ajouter un combattant ».' : undefined} />
             )}
             {view.lines.map((l) => {
-              const [who, what] = summary(l.line, view.ageBands);
+              const [who, what] = summary(l.line, view);
               return (
                 <Card key={l.fighterId} withBorder padding="md" data-testid="club-line">
                   <Group justify="space-between" wrap="nowrap" align="start">
@@ -126,7 +129,7 @@ export function ClubEntryPage() {
                       <Text fw={700}>{l.line.lastName} {l.line.firstName}</Text>
                       <Text size="sm" c="dimmed">{who}</Text>
                       <Text size="sm" data-testid="club-line-disciplines">{what}</Text>
-                      {l.notices.map((n) => <Text key={n} size="xs" c="var(--sk-warn-text)" data-testid="line-notice">{n}</Text>)}
+                      {[...l.notices, weightWarning(l.line, view.weightClasses)].filter((n) => n !== null).map((n) => <Text key={n} size="xs" c="var(--sk-warn-text)" data-testid="line-notice">{n}</Text>)}
                       {!l.editable && (
                         <Group gap={6} mt={4}>
                           <StatusBadge tone="neutral" size="sm">Verrouillé</StatusBadge>
@@ -141,7 +144,7 @@ export function ClubEntryPage() {
             })}
             <Text size="xs" c="dimmed" mt="lg" data-testid="privacy-notice">{view.privacyNotice}</Text>
             <ClubLineForm key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.fighterId} token={token} line={editing === 'new' ? null : editing}
-              ageBands={view.ageBands} closed={view.closed} opened={editing !== null} onClose={close} />
+              ageBands={view.ageBands} weightClasses={view.weightClasses} closed={view.closed} opened={editing !== null} onClose={close} />
           </>
         )}
       </Stack>
