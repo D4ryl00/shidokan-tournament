@@ -21,7 +21,7 @@ test('différences : vide Google ignoré, vide annuaire comblé, écritures équ
   const c = contact({ resourceName: 'people/c1', name: 'Julie Petit', emails: ['JULIE@ex.fr'], phone: '+33 6 11 22 33 44' });
   expect(fieldDiffs(c, { id: 'k1', coachName: 'J. Petit', coachPhone: '06 11 22 33 44', coachEmails: [], affiliationNumber: null })).toEqual([
     { field: 'coachName', directory: 'J. Petit', google: 'Julie Petit' },
-    { field: 'coachEmails', directory: [], google: ['JULIE@ex.fr'] },
+    { field: 'coachEmails', directory: [], add: ['JULIE@ex.fr'], remove: [] },
   ]);
   const vide = contact({ resourceName: 'people/c1' });
   expect(fieldDiffs(vide, { id: 'k1', coachName: 'X', coachPhone: '0611223344', coachEmails: ['a@b.fr'], affiliationNumber: '0060808' })).toEqual([]);
@@ -139,19 +139,30 @@ test('valeur Google que l’annuaire refuserait : ni différence, ni remplissage
   expect(syncPreview([c], [lie], []).diffs[0]!.fields.map((f) => f.field)).toEqual(['coachPhone']);
 });
 
-test('plusieurs adresses : une en commun suffit au rapprochement ; seules celles qui manquent sont proposées, en ajout', () => {
+test('plusieurs adresses : une en commun suffit au rapprochement ; celles qui manquent sont proposées en ajout, celles que Google n’a plus en retrait', () => {
   const c = contact({ resourceName: 'people/c1', emails: ['pres@lilas.fr', 'COACH@lilas.fr', 'pres@lilas.fr', 'invalide'] });
   const k = club({ id: 'k1', name: 'Dojo des Lilas', coachEmails: ['coach@lilas.fr', 'club@lilas.fr'] });
   expect(syncPreview([c], [k], []).newContacts[0]!.exact).toEqual({ clubId: 'k1', reason: 'email' });
   const [diff] = fieldDiffs(c, k);
-  expect(diff).toEqual({ field: 'coachEmails', directory: ['coach@lilas.fr', 'club@lilas.fr'], google: ['pres@lilas.fr'] });
+  expect(diff).toEqual({ field: 'coachEmails', directory: ['coach@lilas.fr', 'club@lilas.fr'], add: ['pres@lilas.fr'], remove: ['club@lilas.fr'] });
   expect(fillsEmpty(diff!)).toBe(false);
   const set: CoachSet = {};
   applyDiff(set, diff!);
-  expect(set).toEqual({ addEmails: ['pres@lilas.fr'] });
-  expect(fieldDiffs(contact({ resourceName: 'people/c2', emails: ['coach@lilas.fr'] }), k)).toEqual([]);
+  expect(set).toEqual({ addEmails: ['pres@lilas.fr'], removeEmails: ['club@lilas.fr'] });
   expect(fillsEmpty(fieldDiffs(c, { ...k, coachEmails: [] })[0]!)).toBe(true);
   expect(contactEmails(c)).toEqual(['pres@lilas.fr', 'COACH@lilas.fr']);
+});
+
+test('adresses retirées de Google : proposées en retrait seulement ; aucune adresse Google (ou toutes refusées) → rien de retiré', () => {
+  const k = club({ id: 'k1', name: 'Dojo des Lilas', coachEmails: ['coach@lilas.fr', 'club@lilas.fr', 'pres@lilas.fr'] });
+  const [diff] = fieldDiffs(contact({ resourceName: 'people/c2', emails: ['Coach@lilas.fr'] }), k);
+  expect(diff).toEqual({ field: 'coachEmails', directory: k.coachEmails, add: [], remove: ['club@lilas.fr', 'pres@lilas.fr'] });
+  const set: CoachSet = {};
+  applyDiff(set, diff!);
+  expect(set).toEqual({ removeEmails: ['club@lilas.fr', 'pres@lilas.fr'] });
+  expect(fieldDiffs(contact({ resourceName: 'people/c2' }), k)).toEqual([]);
+  expect(fieldDiffs(contact({ resourceName: 'people/c2', emails: ['pas une adresse'] }), k)).toEqual([]);
+  expect(fieldDiffs(contact({ resourceName: 'people/c2', emails: ['pres@lilas.fr', 'club@lilas.fr', 'COACH@lilas.fr'] }), k)).toEqual([]);
 });
 
 test('numéro d’affiliation : lu dans le champ personnalisé « Num affiliation FFK » (libellé écrit librement), espaces retirés', () => {

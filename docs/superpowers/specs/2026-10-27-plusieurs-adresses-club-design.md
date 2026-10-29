@@ -42,9 +42,11 @@ disponibles ». L'utilisateur a demandé de démarrer sans questions : tous les 
 - Toutes les adresses d'un contact sont lues (la principale en premier). Un champ Google qui contient plusieurs adresses est
   découpé ; une partie invalide est signalée « valeur Google non reprise », comme avant.
 - Rapprochement « même mail » : une adresse en commun suffit.
-- Différence pour les e-mails : les adresses Google absentes de la fiche sont proposées en **ajout** (« E-mails : + b@y.fr ») ;
-  rien n'est retiré de l'annuaire (une adresse donnée par le club ne disparaît pas parce qu'elle manque dans Google). Fiche sans
-  adresse : remplie d'office, comme les autres champs vides. Au-delà de 10 adresses, les dernières sont laissées de côté.
+- Différence pour les e-mails : les adresses Google absentes de la fiche sont proposées en **ajout** (« E-mails : + b@y.fr ») et,
+  depuis le 2026-10-29, les adresses de la fiche que Google n'a pas en **retrait**, en rouge (« − c@z.fr ») : une seule ligne,
+  cochée (Google l'emporte), qu'on décoche pour garder la fiche telle quelle. Un contact sans adresse valide ne retire rien (un
+  champ vide dans Google n'efface jamais l'annuaire). Fiche sans adresse : remplie d'office, comme les autres champs vides.
+  Au-delà de 10 adresses, les dernières sont laissées de côté.
 - « Nouveau club » depuis un contact : toutes ses adresses valides.
 
 ## Hors périmètre

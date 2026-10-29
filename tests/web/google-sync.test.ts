@@ -14,7 +14,7 @@ const ali = contact('ali', { name: 'Ali' });
 const preview: SyncPreview = {
   diffs: [{ clubId: 'lilas', clubName: 'Lilas', version: 3, contact: marc, fields: [
     { field: 'coachPhone', directory: '06 11 22 33 44', google: '06 55 66 77 88' },
-    { field: 'coachEmails', directory: [], google: ['marc@exemple.fr'] },
+    { field: 'coachEmails', directory: ['vieux@exemple.fr'], add: ['marc@exemple.fr'], remove: ['vieux@exemple.fr'] },
   ] }],
   newContacts: [
     { contact: paul, exact: { clubId: 'est', reason: 'email' }, maybe: [] },
@@ -23,7 +23,7 @@ const preview: SyncPreview = {
   pending: [{ contact: ali, exact: { clubId: 'nord', reason: 'phone' }, maybe: [] }],
   linked: [{ contact: marc, clubIds: ['lilas'] }],
   clubs: [
-    club('lilas', { coachPhone: '06 11 22 33 44', googleContactId: 'people/marc', version: 3 }),
+    club('lilas', { coachPhone: '06 11 22 33 44', coachEmails: ['vieux@exemple.fr'], googleContactId: 'people/marc', version: 3 }),
     // Coach différent (nom), téléphone vide : le nom se coche, le téléphone se remplit.
     club('est', { coachName: 'P. Martin', coachEmails: ['paul@exemple.fr'], version: 5 }),
     club('nord', { version: 7 }),
@@ -41,7 +41,7 @@ test('au départ : différences cochées, lien sur la concordance exacte, sinon 
   const r = buildApply(preview, c);
   expect(r.counts).toEqual({ diffs: 2, links: 1, creates: 0, later: 1, kept: 0 });
   expect(r.apply).toEqual({
-    updates: [{ clubId: 'lilas', version: 3, set: { coachPhone: '06 55 66 77 88', addEmails: ['marc@exemple.fr'] } }],
+    updates: [{ clubId: 'lilas', version: 3, set: { coachPhone: '06 55 66 77 88', addEmails: ['marc@exemple.fr'], removeEmails: ['vieux@exemple.fr'] } }],
     links: [{ clubId: 'est', version: 5, contact: 'people/paul', set: { coachName: 'Paul', coachPhone: '07 00 00 00 00', addEmails: ['paul.perso@exemple.fr'] } }],
     creates: [],
     later: ['people/sophie'],

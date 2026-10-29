@@ -134,10 +134,10 @@ test('appliquer : ligne décochée → valeur gardée, différence reproposée',
   expect((await directory())[0].coachPhone).toBe('0111111111');
 });
 
-test('e-mails : toutes les adresses du contact ; celles qui manquent s’ajoutent à la fiche, rien n’est retiré', async () => {
+test('e-mails : toutes les adresses du contact ; celles qui manquent s’ajoutent à la fiche, celles que Google n’a pas en sont retirées', async () => {
   await connectGoogle(app);
-  const club = await addClub('Dojo des Lilas', { coachEmails: ['coach@lilas.fr', 'club@lilas.fr'] });
-  fake.contacts = [contact('c1', { name: 'Paul', emails: ['COACH@lilas.fr', 'pres@lilas.fr', 'pas une adresse'] })];
+  const club = await addClub('Dojo des Lilas', { coachEmails: ['coach@lilas.fr', 'club@lilas.fr', 'vieux@lilas.fr'] });
+  fake.contacts = [contact('c1', { name: 'Paul', emails: ['COACH@lilas.fr', 'pres@lilas.fr', 'club@lilas.fr', 'pas une adresse'] })];
   const first = (await preview()).json().preview;
   // Même mail (une adresse en commun) : proposé d'office.
   expect(first.newContacts[0].exact).toEqual({ clubId: club.id, reason: 'email' });
@@ -146,12 +146,19 @@ test('e-mails : toutes les adresses du contact ; celles qui manquent s’ajouten
   const p = (await preview()).json().preview;
   expect(p.diffs[0].fields).toEqual([
     { field: 'coachName', directory: null, google: 'Paul' },
-    { field: 'coachEmails', directory: ['coach@lilas.fr', 'club@lilas.fr'], google: ['pres@lilas.fr'] },
+    { field: 'coachEmails', directory: ['coach@lilas.fr', 'club@lilas.fr', 'vieux@lilas.fr'], add: ['pres@lilas.fr'], remove: ['vieux@lilas.fr'] },
   ]);
-  const res = await apply({ ...none, updates: [{ clubId: club.id, version: p.diffs[0].version, set: { addEmails: ['pres@lilas.fr', 'Club@lilas.fr'] } }] });
+  const res = await apply({ ...none, updates: [{ clubId: club.id, version: p.diffs[0].version, set: { addEmails: ['pres@lilas.fr', 'Club@lilas.fr'], removeEmails: ['VIEUX@lilas.fr'] } }] });
   expect(res.statusCode).toBe(200);
   expect((await directory())[0].coachEmails).toEqual(['coach@lilas.fr', 'club@lilas.fr', 'pres@lilas.fr']);
   expect((await preview()).json().preview.diffs[0].fields.map((f: any) => f.field)).toEqual(['coachName']);
+
+  // Retraits seuls : la fiche ne garde que les adresses de Google.
+  fake.contacts = [contact('c1', { name: 'Paul', emails: ['club@lilas.fr'] })];
+  const q = (await preview()).json().preview;
+  expect(q.diffs[0].fields[1]).toEqual({ field: 'coachEmails', directory: ['coach@lilas.fr', 'club@lilas.fr', 'pres@lilas.fr'], add: [], remove: ['coach@lilas.fr', 'pres@lilas.fr'] });
+  expect((await apply({ ...none, updates: [{ clubId: club.id, version: q.diffs[0].version, set: { removeEmails: ['coach@lilas.fr', 'pres@lilas.fr'] } }] })).statusCode).toBe(200);
+  expect((await directory())[0].coachEmails).toEqual(['club@lilas.fr']);
 });
 
 test('appliquer : annuaire modifié entre-temps → 409, rien d’écrit', async () => {
@@ -206,6 +213,7 @@ test('appliquer : valeurs trop longues ou mail invalide refusés', async () => {
   const club = await addClub('Dojo des Lilas');
   expect((await apply({ ...none, updates: [{ clubId: club.id, version: 1, set: { coachName: 'x'.repeat(121) } }] })).statusCode).toBe(400);
   expect((await apply({ ...none, updates: [{ clubId: club.id, version: 1, set: { addEmails: ['pas un mail'] } }] })).statusCode).toBe(400);
+  expect((await apply({ ...none, updates: [{ clubId: club.id, version: 1, set: { removeEmails: [] } }] })).statusCode).toBe(400);
   expect((await apply({ ...none, extra: 1 })).statusCode).toBe(400);
 });
 

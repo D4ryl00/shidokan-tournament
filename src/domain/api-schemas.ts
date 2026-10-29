@@ -65,6 +65,7 @@ const FIELD_LABELS: Record<string, string> = {
   coachPhone: 'téléphone',
   coachEmails: 'e-mails',
   addEmails: 'e-mails',
+  removeEmails: 'e-mails',
 };
 
 /** Messages d'erreur Zod en français, préfixés par le champ concerné. */

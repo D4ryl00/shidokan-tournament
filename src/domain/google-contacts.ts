@@ -17,14 +17,14 @@ export interface SyncClub { id: string; name: string; coachName: string | null; 
 /** Numéros d'affiliation de l'annuaire, fiches archivées comprises (un numéro est unique) : numéro → fiche qui le porte. */
 export type NumberHolders = Record<string, { clubId: string; name: string }>;
 /**
- * Champ qui diffère entre Google et l'annuaire. Pour les e-mails, `google` liste les adresses Google absentes de la fiche, à
- * ajouter : rien n'est retiré de l'annuaire.
+ * Champ qui diffère entre Google et l'annuaire. Pour les e-mails, `add` liste les adresses Google absentes de la fiche, à
+ * ajouter, et `remove` les adresses de la fiche que Google n'a pas, à retirer.
  */
 export type FieldDiff =
   | { field: TextField; directory: string | null; google: string }
-  | { field: 'coachEmails'; directory: string[]; google: string[] };
-/** Ce qu'« Appliquer » change dans une fiche : `addEmails` s'ajoute aux adresses de la fiche. */
-export interface CoachSet { coachName?: string; coachPhone?: string; affiliationNumber?: string; addEmails?: string[] }
+  | { field: 'coachEmails'; directory: string[]; add: string[]; remove: string[] };
+/** Ce qu'« Appliquer » change dans une fiche : `removeEmails` sont retirées des adresses de la fiche, puis `addEmails` s'y ajoutent. */
+export interface CoachSet { coachName?: string; coachPhone?: string; affiliationNumber?: string; addEmails?: string[]; removeEmails?: string[] }
 export interface ClubDiff { clubId: string; clubName: string; version: number | null; contact: GoogleContact; fields: FieldDiff[] }
 export interface ContactChoice { contact: GoogleContact; exact: { clubId: string; reason: 'number' | 'email' | 'phone' } | null; maybe: string[] }
 export interface SyncPreview {
@@ -104,7 +104,7 @@ export function rejectedValues(contact: GoogleContact): { field: CoachField; val
 
 /**
  * Différences à proposer : un champ Google vide, ou que l'annuaire refuserait, n'en est jamais une ; ni un numéro d'affiliation
- * qu'une autre fiche porte déjà (`numberConflict`).
+ * qu'une autre fiche porte déjà (`numberConflict`). Un contact sans adresse acceptable ne retire donc aucune adresse de la fiche.
  */
 export function fieldDiffs(contact: GoogleContact, club: Pick<SyncClub, 'id' | CoachField>, numbers: NumberHolders = {}): FieldDiff[] {
   const out: FieldDiff[] = [];
@@ -116,8 +116,12 @@ export function fieldDiffs(contact: GoogleContact, club: Pick<SyncClub, 'id' | C
   check('coachName', contact.name, club.coachName, (a, b) => normalizeName(a) === normalizeName(b));
   check('coachPhone', contact.phone, club.coachPhone, (a, b) => normalizePhone(a) === normalizePhone(b));
   if (!numberConflict(contact, club.id, numbers)) check('affiliationNumber', contact.affiliationNumber, club.affiliationNumber, (a, b) => a.trim() === b.trim());
-  const added = missingEmails(club.coachEmails, contactEmails(contact));
-  if (added.length) out.push({ field: 'coachEmails', directory: club.coachEmails, google: added });
+  const google = contactEmails(contact);
+  if (google.length) {
+    const remove = club.coachEmails.filter((e) => !google.some((g) => sameEmail(g, e)));
+    const add = missingEmails(club.coachEmails.filter((e) => !remove.includes(e)), google);
+    if (add.length || remove.length) out.push({ field: 'coachEmails', directory: club.coachEmails, add, remove });
+  }
   return out;
 }
 
@@ -126,8 +130,11 @@ export const fillsEmpty = (f: FieldDiff): boolean => (f.field === 'coachEmails' 
 
 /** Reporte une différence acceptée dans ce qu'« Appliquer » envoie. */
 export function applyDiff(set: CoachSet, f: FieldDiff): void {
-  if (f.field === 'coachEmails') set.addEmails = f.google;
-  else set[f.field] = f.google;
+  if (f.field !== 'coachEmails') set[f.field] = f.google;
+  else {
+    if (f.add.length) set.addEmails = f.add;
+    if (f.remove.length) set.removeEmails = f.remove;
+  }
 }
 
 const byName = (a: { name: string }, b: { name: string }): number =>

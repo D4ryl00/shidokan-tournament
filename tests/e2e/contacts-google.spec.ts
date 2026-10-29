@@ -211,14 +211,14 @@ test('annuaire : en revenant sur la page, pas d’ancien aperçu avant la relect
   await expect(page.getByTestId('google-sync-loading')).toHaveCount(0);
 });
 
-test('annuaire : adresses Google en plus → proposées en ajout, rien de retiré ; décochées → gardées', async ({ page }) => {
+test('annuaire : adresses Google en plus proposées en ajout, adresses absentes de Google en retrait (en rouge) ; décochées → gardées', async ({ page }) => {
   const base = GOOGLE_PREVIEW.preview;
   const marc = { ...base.linked[0]!.contact, emails: ['marc@lilas.fr', 'club@lilas.fr', 'president@lilas.fr'] };
   const preview = {
     ...GOOGLE_PREVIEW,
     preview: {
       ...base,
-      diffs: [{ ...base.diffs[0], contact: marc, fields: [{ field: 'coachEmails', directory: ['marc@lilas.fr'], google: ['club@lilas.fr', 'president@lilas.fr'] }] }],
+      diffs: [{ ...base.diffs[0], contact: marc, fields: [{ field: 'coachEmails', directory: ['marc@lilas.fr', 'ancien@lilas.fr'], add: ['club@lilas.fr', 'president@lilas.fr'], remove: ['ancien@lilas.fr'] }] }],
       linked: [{ contact: marc, clubIds: ['c-lilas'] }],
       newContacts: [],
       pending: [],
@@ -228,9 +228,25 @@ test('annuaire : adresses Google en plus → proposées en ajout, rien de retir�
   await page.goto('/annuaire/google');
   const row = page.getByTestId('google-diff');
   await expect(row).toContainText('E-mails');
-  await expect(row).toContainText('marc@lilas.fr');
+  await expect(row).toContainText('marc@lilas.fr, ancien@lilas.fr');
   await expect(row).toContainText('+ club@lilas.fr, president@lilas.fr');
+  const removed = row.getByTestId('email-removed');
+  await expect(removed).toHaveText('− ancien@lilas.fr');
+  const red = await page.evaluate(() => {
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--mantine-color-red-text)';
+    document.body.append(probe);
+    const c = getComputedStyle(probe).color;
+    probe.remove();
+    return c;
+  });
+  await expect(removed).toHaveCSS('color', red);
+  // Ligne décochée : rien ne sera retiré, plus de rouge.
+  const box = page.getByRole('checkbox', { name: 'Prendre Google : Dojo des Lilas, E-mails' });
+  await box.uncheck();
+  await expect(removed).not.toHaveCSS('color', red);
+  await box.check();
   await page.getByTestId('google-apply').click();
   await expect(page.getByText('Annuaire mis à jour.')).toBeVisible();
-  expect(applied).toEqual([{ updates: [{ clubId: 'c-lilas', version: 3, set: { addEmails: ['club@lilas.fr', 'president@lilas.fr'] } }], links: [], creates: [], later: [] }]);
+  expect(applied).toEqual([{ updates: [{ clubId: 'c-lilas', version: 3, set: { addEmails: ['club@lilas.fr', 'president@lilas.fr'], removeEmails: ['ancien@lilas.fr'] } }], links: [], creates: [], later: [] }]);
 });

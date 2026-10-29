@@ -11,7 +11,7 @@ import { emailList } from './fields.js';
 const coach = (field: TextField) => z.string().trim().refine((v) => isAcceptableCoachValue(field, v), 'Valeur invalide.');
 const number = z.string().trim().regex(AFFILIATION_PATTERN, 'Le numéro d’affiliation FFK a 7 chiffres.');
 const set = z
-  .object({ coachName: coach('coachName'), coachPhone: coach('coachPhone'), affiliationNumber: number, addEmails: emailList.refine((l) => l.length > 0, 'Aucune adresse à ajouter.') })
+  .object({ coachName: coach('coachName'), coachPhone: coach('coachPhone'), affiliationNumber: number, addEmails: emailList.refine((l) => l.length > 0, 'Aucune adresse à ajouter.'), removeEmails: emailList.refine((l) => l.length > 0, 'Aucune adresse à retirer.') })
   .partial()
   .strict();
 const text = (max: number) => z.string().trim().max(max).transform((v) => v || null).nullable();

@@ -106,7 +106,7 @@ function SyncForm({ preview: p, busy, pending, onApply, error }: { preview: Sync
   return (
     <Stack gap="lg">
       <SectionCard title={`Différences avec l’annuaire (${rows.length})`}
-        description="Google l’emporte, et ses adresses e-mail s’ajoutent à celles de l’annuaire : décochez une ligne pour garder l’annuaire tel quel, cette fois seulement.">
+        description="Google l’emporte, adresses e-mail comprises : celles qui manquent s’ajoutent, celles que Google n’a pas (en rouge) sont retirées. Décochez une ligne pour garder l’annuaire tel quel, cette fois seulement.">
         {rejected.map((r) => (
           <Text key={r.key} size="sm" c="var(--sk-warn-text)" mb="xs" data-testid="google-rejected-diff" style={{ overflowWrap: 'anywhere' }}>{r.text}</Text>
         ))}
@@ -119,7 +119,7 @@ function SyncForm({ preview: p, busy, pending, onApply, error }: { preview: Sync
               <Table.Tbody>
                 {rows.map(({ d, f, key }) => {
                   const keep = choices.keptDiffs.includes(key);
-                  const t = diffText(f);
+                  const t = diffText(f, keep);
                   // Plusieurs adresses : elles passent à la ligne au lieu d'élargir le tableau.
                   const wrap = f.field === 'coachEmails' ? { overflowWrap: 'anywhere' as const } : { whiteSpace: 'nowrap' as const };
                   return (

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Anchor, Button, Checkbox, CloseButton, Group, Paper, Radio, Select, Stack, Text, TextInput } from '@mantine/core';
 import { normalizeName } from '../../domain/names.js';
 import { joinEmails } from '../../domain/emails.js';
@@ -11,10 +12,24 @@ const REASON = { number: 'même n° d’affiliation', email: 'même mail', phone
 /** Nom d'un contact pour l'écran : son nom, sinon ce qu'il a. */
 export const contactName = (c: GoogleContact): string => c.name ?? c.organization ?? c.emails[0] ?? c.phone ?? 'Contact sans nom';
 
-/** Une différence à l'écran : valeur de l'annuaire (null si vide) et valeur Google ; pour les e-mails, « + » devant les adresses ajoutées. */
-export function diffText(f: FieldDiff): { directory: string | null; google: string } {
+/**
+ * Une différence à l'écran : valeur de l'annuaire (null si vide) et valeur Google ; pour les e-mails, ce qui change (`EmailChanges`).
+ * `kept` : ligne décochée, rien ne sera retiré.
+ */
+export function diffText(f: FieldDiff, kept = false): { directory: string | null; google: ReactNode } {
   if (f.field !== 'coachEmails') return { directory: f.directory, google: f.google };
-  return { directory: f.directory.length ? joinEmails(f.directory) : null, google: `+ ${joinEmails(f.google)}` };
+  return { directory: f.directory.length ? joinEmails(f.directory) : null, google: <EmailChanges f={f} kept={kept} /> };
+}
+
+/** « + a@x.fr, b@y.fr » pour les adresses ajoutées, « − c@z.fr » pour les adresses retirées, en rouge si elles le seront. */
+function EmailChanges({ f, kept }: { f: Extract<FieldDiff, { field: 'coachEmails' }>; kept: boolean }) {
+  return (
+    <>
+      {f.add.length > 0 && <span data-testid="email-added">+ {joinEmails(f.add)}</span>}
+      {f.add.length > 0 && f.remove.length > 0 && ' '}
+      {f.remove.length > 0 && <Text span inherit c={kept ? undefined : 'red'} data-testid="email-removed">− {joinEmails(f.remove)}</Text>}
+    </>
+  );
 }
 
 /** « E-mail — valeur Google non reprise : a@x.fr, b@y.fr » : une valeur que l'annuaire refuserait, jamais reprise. */
@@ -149,16 +164,16 @@ function LinkFields({ contact, club, numbers, plan, onChange }: { contact: Googl
       {boxes.map((f) => {
         const key = diffKey(club.id, f.field);
         const keep = plan.kept.includes(key);
-        const t = diffText(f);
+        const t = diffText(f, keep);
         return (
           <Checkbox key={key} size="xs" checked={!keep} aria-label={`Prendre Google : ${club.name}, ${FIELD_LABEL[f.field]}`}
             onChange={(e) => onChange({ ...plan, kept: e.currentTarget.checked ? plan.kept.filter((k) => k !== key) : [...plan.kept, key] })}
             label={f.field === 'coachEmails'
-              ? <>{FIELD_LABEL[f.field]} : {t.directory} {keep ? <s>{t.google}</s> : <b>{t.google}</b>}{keep && ' (pas ajoutée)'}</>
+              ? <>{FIELD_LABEL[f.field]} : {t.directory} {keep ? <s>{t.google}</s> : <b>{t.google}</b>}{keep && ' (gardé)'}</>
               : <>{FIELD_LABEL[f.field]} : {keep ? <b>{t.directory}</b> : <s>{t.directory}</s>} → {keep ? <s>{t.google}</s> : <b>{t.google}</b>}{keep && ' (gardé)'}</>} />
         );
       })}
-      {fills.map((f) => <Text key={f.field} size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{FIELD_LABEL[f.field]} rempli : {f.field === 'coachEmails' ? joinEmails(f.google) : f.google}</Text>)}
+      {fills.map((f) => <Text key={f.field} size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{FIELD_LABEL[f.field]} rempli : {f.field === 'coachEmails' ? joinEmails(f.add) : f.google}</Text>)}
       {conflict && <Text size="xs" {...warn}>{conflictText(contact, conflict)}</Text>}
     </Stack>
   );

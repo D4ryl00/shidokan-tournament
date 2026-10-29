@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { GOOGLE_CONNECT_FIRST, GOOGLE_RECONNECT, hasContactsScope } from '../../domain/app-settings.js';
-import { missingEmails } from '../../domain/emails.js';
+import { missingEmails, sameEmail } from '../../domain/emails.js';
 import { DIRECTORY_CHANGED, syncPreview, type CoachSet, type ContactLabel, type GoogleContact, type GoogleContactsView, type SyncApply } from '../../domain/google-contacts.js';
 import type { AppDb } from '../db/client.js';
 import { clubDirectory } from '../db/schema.js';
@@ -61,13 +61,14 @@ export function applyGoogleContacts(db: AppDb, input: SyncApply): { updated: num
       const row = t.select().from(clubDirectory).where(eq(clubDirectory.id, item.clubId)).get();
       if (!row || row.archived || row.version !== item.version) throw new DirectoryConflictError(DIRECTORY_CHANGED);
     }
-    // Les adresses Google s'ajoutent à celles de la fiche telle qu'elle est à ce moment (une mise à jour puis un lien peuvent viser la même).
+    // Les adresses retirées puis ajoutées le sont sur la fiche telle qu'elle est à ce moment (une mise à jour puis un lien peuvent viser la même).
     // Un numéro d'affiliation déjà porté par une autre fiche annule tout (l'aperçu ne le propose pas : l'annuaire a changé entre-temps).
-    const columns = (clubId: string, { addEmails, ...set }: CoachSet) => {
+    const columns = (clubId: string, { addEmails = [], removeEmails = [], ...set }: CoachSet) => {
       checkNumber(t, set.affiliationNumber, clubId);
-      if (!addEmails?.length) return set;
+      if (!addEmails.length && !removeEmails.length) return set;
       const current = t.select({ coachEmails: clubDirectory.coachEmails }).from(clubDirectory).where(eq(clubDirectory.id, clubId)).get()!.coachEmails;
-      return { ...set, coachEmails: [...current, ...missingEmails(current, addEmails)] };
+      const kept = current.filter((e) => !removeEmails.some((r) => sameEmail(r, e)));
+      return { ...set, coachEmails: [...kept, ...missingEmails(kept, addEmails)] };
     };
     for (const u of input.updates) {
       const set = columns(u.clubId, u.set);
