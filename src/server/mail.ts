@@ -5,6 +5,7 @@ import { buildClubFormPdf } from './club-form-pdf.js';
 import { buildClubFormTemplate } from './club-form-template.js';
 import { writeOds } from './spreadsheet/ods.js';
 import { isAcceptableEmail, joinEmails, sameEmail } from '../domain/emails.js';
+import { clubFormFileNames } from '../domain/mail-attachments.js';
 import { frenchDate, renderTemplate, textToHtml, type MailValues } from '../domain/mail-template.js';
 import type { AppDb } from './db/client.js';
 import { clubs, mailLog } from './db/schema.js';
@@ -13,6 +14,7 @@ import { GoogleAccessRevokedError, type GoogleClient } from './google/client.js'
 import { closedSet } from './repositories/closed-categories.js';
 import { getCompetition, getGrid } from './repositories/competitions.js';
 import { addInvitationLink, keepOnlyLink, regenerateInvitation, revokeLink } from './repositories/invitations.js';
+import { listMailAttachments, readMailAttachment } from './repositories/mail-attachments.js';
 import { NotFoundError } from './repositories/registrations.js';
 
 export interface MailAddress {
@@ -122,16 +124,28 @@ export async function invitationMessage(db: AppDb, competitionId: string, clubId
   return { subject: renderTemplate(template.subject, values), body: renderTemplate(template.body, values) };
 }
 
-/** Fiches d'inscription jointes au mail : la fiche à imprimer (PDF) et le tableur (.ods), les mêmes que dans l'onglet Fiche club. */
-export async function clubFormAttachments(db: AppDb, competitionId: string): Promise<MailAttachment[]> {
+/**
+ * Pièces jointes du mail aux clubs, celles qui sont cochées : les fiches d'inscription (la fiche à imprimer en PDF puis le tableur .ods,
+ * les mêmes que dans l'onglet Fiche club), puis les fichiers ajoutés par l'organisateur, dans l'ordre d'ajout. Un fichier coché qui
+ * manque dans le dossier : refus, pour que rien ne parte sans lui.
+ */
+export async function invitationAttachments(db: AppDb, dbPath: string, competitionId: string): Promise<MailAttachment[]> {
   const competition = await getCompetition(db, competitionId);
   if (!competition) throw new NotFoundError('Compétition introuvable');
-  const grid = await getGrid(db, competitionId);
-  const closed = closedSet(db, competitionId);
-  return [
-    { filename: `fiche-club-${competition.date}.pdf`, content: await buildClubFormPdf(competition, grid, closed), contentType: 'application/pdf' },
-    { filename: `fiche-club-${competition.date}.ods`, content: await writeOds(buildClubFormTemplate(competition, grid, closed)), contentType: 'application/vnd.oasis.opendocument.spreadsheet' },
-  ];
+  const added = listMailAttachments(db, dbPath, competitionId).filter((a) => a.included);
+  const missing = added.find((a) => a.missing);
+  if (missing) throw new MailError(`Pièce jointe introuvable : ${missing.fileName}. Supprimez-la ou ajoutez-la de nouveau.`);
+  const { pdf, ods } = competition.settings.clubFormAttachments;
+  const names = clubFormFileNames(competition.date);
+  const out: MailAttachment[] = [];
+  if (pdf || ods) {
+    const grid = await getGrid(db, competitionId);
+    const closed = closedSet(db, competitionId);
+    if (pdf) out.push({ filename: names.pdf, content: await buildClubFormPdf(competition, grid, closed), contentType: 'application/pdf' });
+    if (ods) out.push({ filename: names.ods, content: await writeOds(buildClubFormTemplate(competition, grid, closed)), contentType: 'application/vnd.oasis.opendocument.spreadsheet' });
+  }
+  for (const a of added) out.push({ filename: a.fileName, content: readMailAttachment(db, dbPath, competitionId, a.id).data, contentType: a.contentType });
+  return out;
 }
 
 export const linkUrl = (baseUrl: string, token: string) => `${baseUrl.replace(/\/+$/, '')}/inscription/${token}`;
@@ -161,8 +175,10 @@ function recipientsOf(club: { coachEmails: string[] }, chosen: string[] | undefi
  * qui est désactivé). Chaque envoi est noté ; une erreur ne concerne que son club. Si Google retire l'accès en cours de route, l'envoi
  * s'arrête : le club en cours et les suivants sont notés « non envoyé », sans nouveau lien.
  */
-export async function sendInvitations(db: AppDb, transport: MailTransport, competitionId: string, targets: SendTarget[], baseUrl: string, pauseMs = 300): Promise<SendResult[]> {
+export async function sendInvitations(db: AppDb, dbPath: string, transport: MailTransport, competitionId: string, targets: SendTarget[], baseUrl: string, pauseMs = 300): Promise<SendResult[]> {
   const sender = senderOf(db);
+  // Les mêmes pièces jointes pour chaque club : préparées une fois, avant tout (une pièce manquante arrête l'envoi sans rien changer).
+  const attachments = await invitationAttachments(db, dbPath, competitionId);
   const mailer = transport(sender);
   try {
     await mailer.verify?.();
@@ -170,8 +186,6 @@ export async function sendInvitations(db: AppDb, transport: MailTransport, compe
     if (e instanceof GoogleAccessRevokedError && sender.kind === 'google') markGoogleRevoked(db, sender.google.refreshToken);
     throw new MailError(`Envoi impossible, aucun lien n’a changé : ${e instanceof GoogleAccessRevokedError ? GOOGLE_RECONNECT : errorText(e)}`);
   }
-  // Les mêmes fiches pour chaque club : préparées une fois, avant le premier envoi.
-  const attachments = await clubFormAttachments(db, competitionId);
   const results: SendResult[] = [];
   let sentBefore = false;
   let accessRevoked = false;

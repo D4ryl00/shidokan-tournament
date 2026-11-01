@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { cleanEmails } from '../../domain/emails.js';
 import { emailList } from './fields.js';
+import { clubFormFileNames } from '../../domain/mail-attachments.js';
 import { NotAClubFormError, parseClubForm, parseClubFormLines } from '../../domain/club-form.js';
 import { buildClubFormTemplate } from '../club-form-template.js';
 import { buildClubFormPdf } from '../club-form-pdf.js';
@@ -162,7 +163,7 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
     const pdf = await buildClubFormPdf(competition, await getGrid(db, req.params.id), closedSet(db, req.params.id));
     return reply
       .header('Content-Type', 'application/pdf')
-      .header('Content-Disposition', `attachment; filename="fiche-club-${competition.date}.pdf"`)
+      .header('Content-Disposition', `attachment; filename="${clubFormFileNames(competition.date).pdf}"`)
       .send(pdf);
   });
 
@@ -171,7 +172,7 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
     const buf = await writeOds(buildClubFormTemplate(competition, await getGrid(db, req.params.id), closedSet(db, req.params.id)));
     return reply
       .header('Content-Type', 'application/vnd.oasis.opendocument.spreadsheet')
-      .header('Content-Disposition', `attachment; filename="fiche-club-${competition.date}.ods"`)
+      .header('Content-Disposition', `attachment; filename="${clubFormFileNames(competition.date).ods}"`)
       .send(buf);
   });
 

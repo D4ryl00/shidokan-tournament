@@ -29,8 +29,8 @@ const TABLE_WRITES = new Set([
   ].map((r) => r.replace(' ', ` ${C}`)),
   ...ZONE_WRITES,
 ]);
-/** Lectures d'une compétition réservées à l'organisateur (liens des clubs, copies reçues, export entier). */
-const ORGANISER_GETS = new Set(['/invitations', '/invitations/preview', '/received-copies', '/export.json'].map((p) => `${C}${p}`));
+/** Lectures d'une compétition réservées à l'organisateur (liens des clubs, pièces jointes des mails, copies reçues, export entier). */
+const ORGANISER_GETS = new Set(['/invitations', '/invitations/preview', '/mail-attachments', '/mail-attachments/:attachmentId', '/received-copies', '/export.json'].map((p) => `${C}${p}`));
 /** Hors d'une compétition : sa liste, la déconnexion et son mot de passe. */
 const COMMON = new Set(['GET /api/competitions', 'POST /api/auth/logout', 'PUT /api/users/me/password']);
 

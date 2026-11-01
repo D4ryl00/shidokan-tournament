@@ -1,7 +1,10 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
 import type { MailTransport } from '../../src/server/mail.js';
+import { attachmentDir } from '../../src/server/repositories/mail-attachments.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 type Sent = { from: { name: string; address: string }; to: { name: string; address: string }[]; subject: string; text: string; html?: string; attachments?: { filename: string; content: Buffer; contentType: string }[] };
@@ -245,6 +248,62 @@ test('pièces jointes : la fiche à imprimer (PDF) et le tableur (.ods), à chaq
     expect(m.text).toContain('Vous pouvez aussi inscrire vos élèves avec les fiches jointes à ce mail');
     expect(m.text).toContain('avant le 15/11/2026');
   }
+});
+
+const PNG = Buffer.from('\x89PNG affiche');
+const REGLEMENT = Buffer.from('%PDF-1.4 règlement');
+const attach = async (name: string, data: Buffer) =>
+  (await app.inject({ method: 'POST', url: `${base}/mail-attachments`, payload: data, headers: { 'content-type': 'application/octet-stream', 'x-file-name': encodeURIComponent(name) } })).json() as { id: string };
+const include = (id: string, included: boolean) => app.inject({ method: 'PATCH', url: `${base}/mail-attachments/${id}`, payload: { included } });
+const names = (m: Pick<Sent, 'attachments'>) => (m.attachments ?? []).map((a) => a.filename);
+
+test('pièces ajoutées : jointes après les fiches, dans l’ordre d’ajout, avec leur type et leur contenu', async () => {
+  await smtp();
+  await attach('affiche.png', PNG);
+  await attach('reglement.pdf', REGLEMENT);
+  const [tani] = await invited({ name: 'Tani Dojo', coachEmails: ['tani@example.org'] });
+  await send([tani!.clubId]);
+  expect(names(sent[0]!)).toEqual(['fiche-club-2026-11-22.pdf', 'fiche-club-2026-11-22.ods', 'affiche.png', 'reglement.pdf']);
+  expect(sent[0]!.attachments![2]).toMatchObject({ contentType: 'image/png', content: PNG });
+  expect(sent[0]!.attachments![3]).toMatchObject({ contentType: 'application/pdf', content: REGLEMENT });
+});
+
+test('seulement les pièces cochées ; aucune cochée : le mail part sans pièce jointe', async () => {
+  await smtp();
+  const affiche = await attach('affiche.png', PNG);
+  const reglement = await attach('reglement.pdf', REGLEMENT);
+  const [tani] = await invited({ name: 'Tani Dojo', coachEmails: ['tani@example.org'] });
+  await app.inject({ method: 'PATCH', url: base, payload: { settings: { clubFormAttachments: { pdf: false } } } });
+  await include(affiche.id, false);
+  await send([tani!.clubId]);
+  expect(names(sent[0]!)).toEqual(['fiche-club-2026-11-22.ods', 'reglement.pdf']);
+  await app.inject({ method: 'PATCH', url: base, payload: { settings: { clubFormAttachments: { ods: false } } } });
+  await include(reglement.id, false);
+  const res = await send([tani!.clubId]);
+  expect(res.json()[0].status).toBe('sent');
+  expect(sent[1]!.attachments).toEqual([]);
+});
+
+test('pièce cochée dont le fichier manque : rien n’est envoyé, aucun lien ne change ; décochée : envoi normal', async () => {
+  await smtp();
+  const reglement = await attach('reglement.pdf', REGLEMENT);
+  const [tani] = await invited({ name: 'Tani Dojo', coachEmails: ['tani@example.org'] });
+  fs.rmSync(path.join(attachmentDir(dbPathOf), reglement.id));
+  const res = await send([tani!.clubId]);
+  expect(res.statusCode).toBe(400);
+  expect(res.json().error).toBe('Pièce jointe introuvable : reglement.pdf. Supprimez-la ou ajoutez-la de nouveau.');
+  expect(sent).toEqual([]);
+  expect((await app.inject({ method: 'GET', url: `/api/inscription/${tani!.token}` })).statusCode).toBe(200);
+  await include(reglement.id, false);
+  expect((await send([tani!.clubId])).json()[0].status).toBe('sent');
+  expect(names(sent[0]!)).toEqual(['fiche-club-2026-11-22.pdf', 'fiche-club-2026-11-22.ods']);
+});
+
+test('mail d’essai : sans pièce jointe', async () => {
+  await smtp();
+  await attach('affiche.png', PNG);
+  expect((await app.inject({ method: 'POST', url: '/api/app-settings/test-mail', payload: { to: 'moi@example.org' } })).statusCode).toBe(204);
+  expect(sent[0]!.attachments ?? []).toEqual([]);
 });
 
 test('message enregistré identique à l’ancien message par défaut : remplacé par le nouveau ; un message personnalisé reste tel quel', async () => {

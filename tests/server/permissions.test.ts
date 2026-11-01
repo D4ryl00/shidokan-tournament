@@ -33,7 +33,7 @@ const TABLE_WRITES = [
 const ZONE_WRITES = [
   'PUT /categories/:cid/results/:matchId', 'DELETE /categories/:cid/results/:matchId', 'PUT /categories/:cid/kata/:rid/:round', 'PUT /categories/:cid/tie-break',
 ].map((r) => r.replace(' ', ' /api/competitions/:id'));
-const DENIED_GETS = ['/invitations', '/invitations/preview', '/received-copies', '/export.json'].map((p) => `/api/competitions/:id${p}`);
+const DENIED_GETS = ['/invitations', '/invitations/preview', '/mail-attachments', '/mail-attachments/:attachmentId', '/received-copies', '/export.json'].map((p) => `/api/competitions/:id${p}`);
 const COMMON = ['GET /api/competitions', 'POST /api/auth/logout', 'PUT /api/users/me/password'];
 const PUBLIC = [/^\/api\/health$/, /^\/api\/auth\/me$/, /^\/api\/auth\/login$/, /^\/api\/inscription(\/|$)/, /^\/api\/sync\/remote\//];
 

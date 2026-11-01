@@ -232,7 +232,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   const googleConfig = googleConfigFrom({ ...opts.google, publicUrl: opts.publicUrl });
   const google = googleConfig ? googleClient(googleConfig) : null;
   const mailTransport = opts.mailTransport ?? defaultMailTransport(google);
-  await app.register(invitationRoutes, { db, mailTransport, publicUrl: opts.publicUrl, mailPauseMs: opts.mailPauseMs, role });
+  await app.register(invitationRoutes, { db, dbPath: opts.dbPath, mailTransport, publicUrl: opts.publicUrl, mailPauseMs: opts.mailPauseMs, role });
   await app.register(clubEntryRoutes, { db });
   await app.register(authRoutes, { db, role });
   // Échanges de compétitions : les routes du serveur en ligne et celles du PC ne tournent que dans leur rôle.
