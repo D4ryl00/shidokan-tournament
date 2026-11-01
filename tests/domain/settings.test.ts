@@ -20,8 +20,14 @@ test('réglages par défaut (spec §9.2, §8, §11.1, §12, §4.1)', () => {
     finalsZoneId: null,
     kataFinalsOnFinalsZone: false,
     invitationMail: null,
+    clubFormAttachments: { pdf: true, ods: true },
     replacementRules: { order: [...RULE_IDS], off: [], cutAfter: 'discipline' },
   });
+});
+
+test('fiches club jointes au mail : les deux par défaut, aussi pour une compétition enregistrée avant ce réglage', () => {
+  expect(readStoredSettings({}).clubFormAttachments).toEqual({ pdf: true, ods: true });
+  expect(mergeSettings({ clubFormAttachments: { pdf: false } }).clubFormAttachments).toEqual({ pdf: false, ods: true });
 });
 
 test('fusion d’un objet partiel avec les défauts', () => {

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import { closeDb, openDb, type AppDb } from '../../src/server/db/client.js';
 import { backupDir } from '../../src/server/repositories/backups.js';
+import { attachmentDir } from '../../src/server/repositories/mail-attachments.js';
 import { purgeExpiredData } from '../../src/server/repositories/retention.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
@@ -25,6 +26,7 @@ function seedCompetition(d: AppDb, id: string, date: string) {
     INSERT INTO club_invitations (id, competition_id, club_id, token_hash) VALUES ('${id}-i', '${id}', '${id}-k', 'hash-${id}');
     INSERT INTO mail_log (id, competition_id, club_id, email, status) VALUES ('${id}-m', '${id}', '${id}-k', 'jean@tani.example', 'sent');
     INSERT INTO uploads (id, competition_id, file_name, data) VALUES ('${id}-u', '${id}', 'fiche.ods', x'00');
+    INSERT INTO mail_attachments (id, competition_id, file_name, content_type, size) VALUES ('${id}-pj', '${id}', 'affiche.png', 'image/png', 1);
     INSERT INTO match_results (competition_id, category_id, match_id, winner, method, entrant_a, entrant_b) VALUES ('${id}', 'cat-${id}', 'w1-0', 'a', 'ko', '${id}-r', 'x');
     INSERT INTO kata_scores (competition_id, category_id, registration_id, round, notes_json) VALUES ('${id}', 'kata-${id}', '${id}-r', 'round1', '[8,8,8]');
   `);
@@ -36,12 +38,18 @@ test('compétition de plus de 13 mois : données d’organisation effacées, pal
   const dbPath = tmpDbPath();
   db = openDb(dbPath);
   seedCompetition(db, 'old', '2026-11-22');
+  seedCompetition(db, 'kept', '2027-06-01');
+  fs.mkdirSync(attachmentDir(dbPath), { recursive: true });
+  for (const f of ['old-pj', 'kept-pj']) fs.writeFileSync(path.join(attachmentDir(dbPath), f), 'x');
   const report = purgeExpiredData(db, dbPath, NOW);
   expect(report.competitions).toBe(1);
   expect(one(db, "select weigh_in_kg, licence, grade, last_name, first_name from fighters where id = 'old-f'")).toEqual({ weigh_in_kg: null, licence: null, grade: null, last_name: 'MARTIN', first_name: 'Léa' });
   expect(one(db, "select approx_weight_kg, discipline from registrations where id = 'old-r'")).toEqual({ approx_weight_kg: null, discipline: 'karate' });
   expect(one(db, "select coach_phone, coach_emails, name from clubs where id = 'old-k'")).toEqual({ coach_phone: null, coach_emails: '[]', name: 'Tani Dojo' });
-  for (const t of ['club_invitations', 'mail_log', 'uploads']) expect(count(db, t, 'old'), t).toBe(0);
+  for (const t of ['club_invitations', 'mail_log', 'uploads', 'mail_attachments']) expect(count(db, t, 'old'), t).toBe(0);
+  expect(count(db, 'mail_attachments', 'kept')).toBe(1);
+  // Le fichier de la pièce jointe effacée part aussi ; celui de la compétition gardée reste.
+  expect(fs.readdirSync(attachmentDir(dbPath))).toEqual(['kept-pj']);
   for (const t of ['match_results', 'kata_scores']) expect(count(db, t, 'old'), t).toBe(1);
   expect(one(db, "select purged_at from competitions where id = 'old'").purged_at).not.toBeNull();
 });

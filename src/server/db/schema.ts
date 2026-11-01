@@ -139,6 +139,24 @@ export const mailLog = sqliteTable('mail_log', {
   ...rowMeta(),
 });
 
+/**
+ * Fichiers ajoutés par l'organisateur au mail aux clubs (affiche, règlement…) : métadonnées seulement, le contenu est dans le dossier
+ * `pieces-jointes/` à côté de la base (un fichier par id). Propres à l'installation : ni dans le paquet, ni (le contenu) dans les sauvegardes.
+ */
+export const mailAttachments = sqliteTable('mail_attachments', {
+  id: text('id').primaryKey(),
+  competitionId: text('competition_id')
+    .notNull()
+    .references(() => competitions.id, { onDelete: 'cascade' }),
+  fileName: text('file_name').notNull(),
+  contentType: text('content_type').notNull(),
+  size: integer('size').notNull(),
+  /** Coché : joint aux mails envoyés. */
+  included: integer('included', { mode: 'boolean' }).notNull().default(true),
+  createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  ...rowMeta(),
+});
+
 /** Lien personnel d'un club pour une compétition (seule l'empreinte du jeton est gardée). */
 export const clubInvitations = sqliteTable('club_invitations', {
   id: text('id').primaryKey(),

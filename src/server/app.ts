@@ -58,6 +58,7 @@ import { startGoogleKeepAlive } from './google/keepalive.js';
 import { defaultMailTransport, type MailTransport } from './mail.js';
 import { RestoreError, backupNow, startAutoBackup } from './repositories/backups.js';
 import { ensureInstance } from './repositories/instance.js';
+import { sweepAttachmentFiles } from './repositories/mail-attachments.js';
 import { startRetention } from './repositories/retention.js';
 import { ffkImportRoutes } from './routes/ffk-import.js';
 import { registrationRoutes } from './routes/registrations.js';
@@ -92,6 +93,8 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   const trustProxy = role === 'serveur' ? (_addr: string, hop: number) => hop < 1 : false;
   const app = Fastify({ logger: loggerOptions(opts.logger ?? false), bodyLimit: 20 * 1024 * 1024, trustProxy });
   const db = openDb(opts.dbPath);
+  // Fichiers de pièces jointes sans ligne (supprimées pendant un arrêt, base restaurée à la main…).
+  sweepAttachmentFiles(db, opts.dbPath);
   registerGuard(app, db, role);
   registerPermissions(app, db, role);
   registerReadOnlyGuard(app, db, role);
@@ -190,6 +193,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     }
     await backupNow(db, opts.dbPath);
     await deleteCompetition(db, req.params.id);
+    sweepAttachmentFiles(db, opts.dbPath);
     // La copie suivie (serveur ou PC principal) ne revient pas : le suivi s'arrête.
     if (getFollow(db)?.competitionId === c.id) {
       setFollow(db, null);

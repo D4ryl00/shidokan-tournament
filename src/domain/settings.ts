@@ -59,6 +59,8 @@ export const competitionSettingsSchema = z
     kataFinalsOnFinalsZone: z.boolean(),
     /** Message envoyé aux clubs pour cette compétition (null : celui des réglages de l'application). */
     invitationMail: mailTemplateSchema.nullable(),
+    /** Fiches club jointes au mail aux clubs (décochées : non jointes, mais toujours téléchargeables). */
+    clubFormAttachments: z.object({ pdf: z.boolean(), ods: z.boolean() }).strict(),
     /** Liste ordonnée des règles du plan d'ensemble, interrupteurs propres et ligne de coupure. */
     replacementRules: z
       .object({
@@ -90,6 +92,7 @@ export function defaultSettings(): CompetitionSettings {
     finalsZoneId: null,
     kataFinalsOnFinalsZone: false,
     invitationMail: null,
+    clubFormAttachments: { pdf: true, ods: true },
     replacementRules: { order: [...RULE_IDS], off: [], cutAfter: 'discipline' },
   };
 }

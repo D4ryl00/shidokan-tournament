@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
 import { everythingChanged } from '../events.js';
+import { sweepAttachmentFiles } from '../repositories/mail-attachments.js';
 import { RestoreError, backupFile, backupNow, freshCopy, listBackups, restoreFrom } from '../repositories/backups.js';
 import { createCompetition, getCompetition } from '../repositories/competitions.js';
 import { listTemplates, loadTemplate, saveTemplate, templateGrid } from '../repositories/templates.js';
@@ -24,6 +25,7 @@ export async function backupRoutes(app: FastifyInstance, { db, dbPath }: { db: A
   app.post('/api/restore', async (req, reply) => {
     if (!Buffer.isBuffer(req.body)) throw new RestoreError();
     await restoreFrom(db, req.body, () => backupNow(db, dbPath)); // filet de sécurité avant d'écraser
+    sweepAttachmentFiles(db, dbPath); // pièces jointes absentes de la sauvegarde
     everythingChanged();
     return reply.status(204).send();
   });
