@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
+import nodemailer from 'nodemailer';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
 import type { MailTransport } from '../../src/server/mail.js';
@@ -266,6 +267,21 @@ test('pièces ajoutées : jointes après les fiches, dans l’ordre d’ajout, a
   expect(names(sent[0]!)).toEqual(['fiche-club-2026-11-22.pdf', 'fiche-club-2026-11-22.ods', 'affiche.png', 'reglement.pdf']);
   expect(sent[0]!.attachments![2]).toMatchObject({ contentType: 'image/png', content: PNG });
   expect(sent[0]!.attachments![3]).toMatchObject({ contentType: 'application/pdf', content: REGLEMENT });
+});
+
+test('nom accentué avec guillemets : gardé tel quel dans le mail, encodé proprement dans le message MIME', async () => {
+  await smtp();
+  await attach('Règlement "2026" été.pdf', REGLEMENT);
+  const [tani] = await invited({ name: 'Tani Dojo', coachEmails: ['tani@example.org'] });
+  await send([tani!.clubId]);
+  expect(names(sent[0]!)[2]).toBe('Règlement "2026" été.pdf');
+  const { message } = await nodemailer.createTransport({ streamTransport: true, buffer: true }).sendMail({ ...sent[0]!, to: sent[0]!.to });
+  const mime = (message as Buffer).toString();
+  const header = mime.split(/\r?\n(?=\S)/).find((h) => /^Content-Disposition: attachment/i.test(h) && /R%C3%A8glement|=\?UTF-8\?/i.test(h))!;
+  const params = Object.fromEntries([...header.replace(/\r?\n\s+/g, ' ').matchAll(/(filename\*?\d*\*?)=("[^"]*"|[^;\s]+)/g)].map((m) => [m[1]!, m[2]!]));
+  const star = Object.keys(params).filter((k) => k.startsWith('filename*')).sort((a, b) => Number(a.match(/\d+/)?.[0] ?? 0) - Number(b.match(/\d+/)?.[0] ?? 0));
+  const decoded = decodeURIComponent(star.map((k) => params[k]!.replace(/^"|"$/g, '')).join('').replace(/^utf-8''/i, ''));
+  expect(decoded).toBe('Règlement "2026" été.pdf');
 });
 
 test('seulement les pièces cochées ; aucune cochée : le mail part sans pièce jointe', async () => {

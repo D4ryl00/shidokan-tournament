@@ -130,7 +130,7 @@ export function MailAttachments({ competitionId }: { competitionId: string }) {
         </FileButton>
         <Text size="xs" c="dimmed">PDF, images, documents, tableurs, présentations, texte : 10 fichiers, 10 Mo chacun, 15 Mo en tout.</Text>
       </Group>
-      {refusals.map((r) => <Text key={r} size="sm" c="red">{r}</Text>)}
+      {refusals.map((r, i) => <Text key={i} size="sm" c="red">{r}</Text>)}
       <ApiErrorAlert error={setIncluded.error ?? remove.error ?? updateCompetition.error} />
       <Text size="sm" c="dimmed">Si le texte du message cite les pièces jointes, pensez à l’adapter.</Text>
     </Stack>

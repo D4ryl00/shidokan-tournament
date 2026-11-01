@@ -37,17 +37,24 @@ export function attachmentContentType(fileName: string): string | null {
   return Object.hasOwn(CONTENT_TYPES, extensionOf(fileName)) ? CONTENT_TYPES[extensionOf(fileName)]! : null;
 }
 
-/** Nom du fichier de l'ordinateur : sans chemin ni caractères de contrôle, espaces autour retirés, raccourci en gardant l'extension. */
+const graphemes = (s: string): string[] => Array.from(new Intl.Segmenter('fr', { granularity: 'grapheme' }).segment(s), (g) => g.segment);
+
+/**
+ * Nom du fichier de l'ordinateur : sans chemin ni caractères de contrôle, espaces autour retirés, en forme composée (NFC : « é » d'un
+ * seul caractère, comme l'écrit Windows), raccourci à 150 caractères visibles en gardant l'extension, sans couper un émoji ni un accent.
+ */
 export function cleanAttachmentName(raw: string): string {
-  const name = (raw.split(/[/\\]/).pop() ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  const name = (raw.split(/[/\\]/).pop() ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim().normalize('NFC');
   const max = MAIL_ATTACHMENT_LIMITS.nameLength;
-  if (name.length <= max) return name;
+  const chars = graphemes(name);
+  if (chars.length <= max) return name;
   const ext = extensionOf(name);
-  const suffix = ext && ext.length < 20 ? name.slice(name.length - ext.length - 1) : '';
-  return name.slice(0, max - suffix.length) + suffix;
+  const suffix = ext && ext.length < 20 ? graphemes(name.slice(name.length - ext.length - 1)) : [];
+  return [...chars.slice(0, max - suffix.length), ...suffix].join('');
 }
 
-const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+/** Même nom : casse ignorée, « é » composé ou « e » + accent confondus. */
+const sameName = (a: string, b: string) => a.normalize('NFC').toLowerCase() === b.normalize('NFC').toLowerCase();
 
 /** Fichier ajouté dont le contenu manque, du même nom (casse ignorée) : celui que le nouveau fichier remplace. */
 export function replacedMissing<T extends { fileName: string; missing?: boolean }>(fileName: string, existing: T[]): T | undefined {

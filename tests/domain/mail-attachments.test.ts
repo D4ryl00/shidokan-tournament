@@ -53,6 +53,26 @@ test('un fichier manquant du même nom ne compte plus : son remplaçant prend sa
   expect(checkNewAttachment({ fileName: 'f2.pdf', size: 10 }, ten.slice(0, 9), [])).toBe('Une pièce jointe porte déjà ce nom.');
 });
 
+test('même nom écrit sous deux formes Unicode (é composé ou e + accent) : doublon ; nom nettoyé en forme composée', () => {
+  const composed = 'R\u00e8glement.pdf';
+  const decomposed = 'Re\u0300glement.pdf';
+  expect(cleanAttachmentName(decomposed)).toBe(composed);
+  expect(checkNewAttachment({ fileName: decomposed, size: 10 }, [{ fileName: composed, size: 10 }], [])).toBe('Une pièce jointe porte déjà ce nom.');
+  expect(checkNewAttachment({ fileName: composed, size: 10 }, [{ fileName: decomposed, size: 10 }], [])).toBe('Une pièce jointe porte déjà ce nom.');
+});
+
+test('nom raccourci sans couper un émoji ni une lettre accentuée', () => {
+  const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+  for (let pad = 0; pad < 4; pad++) {
+    const name = cleanAttachmentName(`${'x'.repeat(pad)}${'🥋'.repeat(200)}.pdf`);
+    expect(name).not.toMatch(lone);
+    expect(name.endsWith('🥋.pdf')).toBe(true);
+    expect([...new Intl.Segmenter('fr', { granularity: 'grapheme' }).segment(name)]).toHaveLength(MAIL_ATTACHMENT_LIMITS.nameLength);
+  }
+  const family = cleanAttachmentName(`${'👨‍👩‍👧'.repeat(160)}.pdf`);
+  expect(family).toBe(`${'👨‍👩‍👧'.repeat(146)}.pdf`);
+});
+
 test('noms des fiches club', () => {
   expect(clubFormFileNames('2026-11-22')).toEqual({ pdf: 'fiche-club-2026-11-22.pdf', ods: 'fiche-club-2026-11-22.ods' });
 });

@@ -21,3 +21,13 @@ export function settingsPatch(loaded: CompetitionSettings, edited: CompetitionSe
   const { replacementRules: _ignored, ...rest } = edited;
   return (diff(loaded, rest) ?? {}) as Partial<CompetitionSettings>;
 }
+
+/**
+ * Requêtes à recharger après une modification de la compétition : les réglages changent les tableaux et l'ordre de passage, sauf
+ * les cases des fiches club jointes au mail, qui ne touchent que la compétition.
+ */
+export function queriesAfterCompetitionPatch(id: string, patch: { settings?: unknown } & Record<string, unknown>): unknown[][] {
+  const { settings, ...rest } = patch;
+  const onlyAttachments = Object.keys(rest).length === 0 && isObject(settings) && Object.keys(settings).every((k) => k === 'clubFormAttachments');
+  return onlyAttachments ? [['competitions']] : [['competitions'], ['categories', id], ['schedule', id]];
+}

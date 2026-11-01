@@ -6,6 +6,7 @@ import { buildApp } from '../../src/server/app.js';
 import { createUser } from '../../src/server/auth/sessions.js';
 import { closeDb, openDb } from '../../src/server/db/client.js';
 import { backupDir } from '../../src/server/repositories/backups.js';
+import { attachmentDir } from '../../src/server/repositories/mail-attachments.js';
 import { mirrorOnce } from '../../src/server/mirror.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
@@ -54,6 +55,18 @@ test('PC principal éteint → erreur notée, aucun fichier ; pas de fichier pro
   expect(res).toEqual({ error: expect.stringMatching(/injoignable/) });
   expect(fs.existsSync(copiesDir()) ? fs.readdirSync(copiesDir()) : []).toEqual([]);
   main = await buildApp({ dbPath: tmpDbPath() });
+});
+
+test('restaurer une copie : les pièces jointes absentes de la copie sont effacées du dossier', async () => {
+  await setMirror(mainUrl);
+  const { file } = (await withDb((db) => mirrorOnce(db, secondPath))) as { file: string };
+  const id = (await second.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe du secours', date: '2026-11-29' } })).json().id as string;
+  const added = (
+    await second.inject({ method: 'POST', url: `/api/competitions/${id}/mail-attachments`, payload: Buffer.from('%PDF-1.4'), headers: { 'content-type': 'application/octet-stream', 'x-file-name': 'reglement.pdf' } })
+  ).json() as { id: string };
+  expect(fs.existsSync(path.join(attachmentDir(secondPath), added.id))).toBe(true);
+  expect((await second.inject({ method: 'POST', url: `/api/mirror/copies/${file}/restore` })).statusCode).toBe(204);
+  expect(fs.existsSync(path.join(attachmentDir(secondPath), added.id))).toBe(false);
 });
 
 test('100 copies au plus', async () => {

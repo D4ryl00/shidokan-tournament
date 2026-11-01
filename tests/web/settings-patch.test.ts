@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { applyRulesView, rulesView } from '../../src/domain/replacement/rules.js';
 import { defaultSettings, mergeSettings } from '../../src/domain/settings.js';
-import { settingsPatch } from '../../src/web/settingsPatch.js';
+import { queriesAfterCompetitionPatch, settingsPatch } from '../../src/web/settingsPatch.js';
 
 test('réglages : seuls les changements de la page partent, jamais la liste des règles', () => {
   const loaded = defaultSettings();
@@ -16,4 +16,12 @@ test('réglages : seuls les changements de la page partent, jamais la liste des 
   expect(saved.replacementRules).toEqual(table.replacementRules);
   expect(saved.mixSexes).toEqual({ enabled: true, ageBandCodes: ['cadet'] });
   expect(saved.shobuToJiyu).toBe(true);
+});
+
+test('après modification de la compétition : cocher une fiche club ne recharge que la compétition', () => {
+  expect(queriesAfterCompetitionPatch('c1', { settings: { clubFormAttachments: { pdf: false } } })).toEqual([['competitions']]);
+  const all = [['competitions'], ['categories', 'c1'], ['schedule', 'c1']];
+  expect(queriesAfterCompetitionPatch('c1', { settings: { shobuToJiyu: true } })).toEqual(all);
+  expect(queriesAfterCompetitionPatch('c1', { settings: { clubFormAttachments: { pdf: false }, shobuToJiyu: true } })).toEqual(all);
+  expect(queriesAfterCompetitionPatch('c1', { date: '2026-12-01' })).toEqual(all);
 });

@@ -12,6 +12,7 @@ import type { Case, MoveView, Presence, Proposal, ProposalType } from '../domain
 import type { CategoryGrid, DisciplineId, Sex } from '../domain/types.js';
 import type { LadderProgress, LadderRow, PlanChoice, PlanMove } from '../domain/replacement/plan.js';
 import { fetchPlanStream } from './planStream.js';
+import { queriesAfterCompetitionPatch } from './settingsPatch.js';
 import { applyRulesView, type RulesView } from '../domain/replacement/rules.js';
 import type { Wave, WaveInput } from '../domain/waves.js';
 import type { AppSettingsPatch, PublicAppSettings } from '../domain/app-settings.js';
@@ -70,10 +71,9 @@ export function useUpdateCompetition(id: string) {
   return useMutation({
     mutationFn: (patch: Partial<CompetitionInput> & { settings?: unknown }) =>
       api<Competition>('PATCH', `/api/competitions/${id}`, patch),
-    onSuccess: (c) => {
+    onSuccess: (c, patch) => {
       qc.setQueryData(['competitions', id], c);
-      // Les réglages changent les tableaux et l'ordre de passage.
-      return Promise.all(['competitions', ['categories', id], ['schedule', id]].map((k) => qc.invalidateQueries({ queryKey: Array.isArray(k) ? k : [k] })));
+      return Promise.all(queriesAfterCompetitionPatch(id, patch).map((queryKey) => qc.invalidateQueries({ queryKey })));
     },
   });
 }
