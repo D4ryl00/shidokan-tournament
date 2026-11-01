@@ -1034,6 +1034,32 @@ export const useInvitationPreview = (id: string, clubId: string | null, version:
     enabled: !!clubId,
   });
 
+// Pièces jointes ajoutées au mail aux clubs (les fiches club se cochent dans les réglages de la compétition).
+export interface MailAttachmentInfo { id: string; fileName: string; contentType: string; size: number; included: boolean; createdAt: string; missing: boolean }
+export const mailAttachmentUrl = (id: string, attachmentId: string) => `/api/competitions/${id}/mail-attachments/${attachmentId}`;
+export const useMailAttachments = (id: string) =>
+  useQuery({ queryKey: ['mail-attachments', id], queryFn: () => api<MailAttachmentInfo[]>('GET', `/api/competitions/${id}/mail-attachments`) });
+function useMailAttachmentMutation<V, R>(id: string, fn: (v: V) => Promise<R>) {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries({ queryKey: ['mail-attachments', id] }) });
+}
+export const useAddMailAttachment = (id: string) =>
+  useMailAttachmentMutation(id, async (file: File) => {
+    const res = await fetch(`/api/competitions/${id}/mail-attachments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name), 'X-Poste-Id': TAB_ID },
+      body: await file.arrayBuffer(),
+    });
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { error?: string; issues?: string[] };
+      throw new ApiError(res.status, data.error ?? `Erreur ${res.status}`, data.issues ?? []);
+    }
+    return (await res.json()) as MailAttachmentInfo;
+  });
+export const useSetMailAttachmentIncluded = (id: string) =>
+  useMailAttachmentMutation(id, ({ attachmentId, included }: { attachmentId: string; included: boolean }) => api<void>('PATCH', mailAttachmentUrl(id, attachmentId), { included }));
+export const useDeleteMailAttachment = (id: string) => useMailAttachmentMutation(id, (attachmentId: string) => api<void>('DELETE', mailAttachmentUrl(id, attachmentId)));
+
 // Passage de main entre le serveur et le PC.
 export interface Management { managedHere: boolean; ownerName: string | null; ownerSince: string | null; lastSyncAt: string | null; copyOfServer: boolean; rescueSince: string | null; copyOfMain: boolean }
 export interface ServerCompetition { id: string; name: string; date: string; managedHere: boolean; ownerName: string | null; clubEntryStatus: 'closed' | 'open' | 'frozen' }

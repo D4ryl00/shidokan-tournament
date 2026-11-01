@@ -198,3 +198,46 @@ test('envoi du lien : une case par adresse pour un club qui en a plusieurs ; seu
   await expect.poll(() => bodies.length).toBe(2);
   expect(bodies[1]).toEqual({ emails: ['pres@multi.fr', 'secr@multi.fr'] });
 });
+
+test('pièces jointes du mail : ajouter, refuser un type, décocher la fiche PDF (gardé), aperçu et messagerie, supprimer', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe pièces jointes');
+  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
+  const club = `Dojo pièces ${Date.now()}`;
+  const directoryId = ((await (await request.post('/api/club-directory', { data: { ...EMPTY, name: club, coachEmails: ['coach@pieces.fr'] } })).json()) as { id: string }).id;
+  await request.post(`/api/competitions/${id}/invitations`, { data: { directoryIds: [directoryId] } });
+  const date = ((await (await request.get(`/api/competitions/${id}`)).json()) as { date: string }).date;
+  const pdfName = `fiche-club-${date}.pdf`;
+
+  await page.goto(`/competitions/${id}/fiche-club`);
+  await page.getByRole('button', { name: /Message aux clubs de cette compétition/ }).click();
+  const box = page.getByTestId('mail-attachments');
+  await expect(box.getByRole('checkbox', { name: `Joindre ${pdfName}` })).toBeChecked();
+  await box.getByTestId('mail-attachment-input').setInputFiles({ name: 'affiche.png', mimeType: 'image/png', buffer: Buffer.from('\x89PNG affiche') });
+  await expect(box.getByRole('checkbox', { name: 'Joindre affiche.png' })).toBeChecked();
+  await box.getByTestId('mail-attachment-input').setInputFiles({ name: 'virus.exe', mimeType: 'application/octet-stream', buffer: Buffer.from('MZ') });
+  await expect(box).toContainText('virus.exe : Type de fichier non accepté : .exe');
+  await expect(box).toContainText('Si le texte du message cite les pièces jointes, pensez à l’adapter.');
+
+  await page.getByRole('checkbox', { name: `Choisir ${club}` }).check();
+  await expect(page.getByTestId('invitation-attachments')).toContainText('affiche.png');
+  await expect(page.getByTestId('invitation-attachments')).toContainText(pdfName);
+  await box.getByRole('checkbox', { name: `Joindre ${pdfName}` }).uncheck();
+  await expect(page.getByTestId('invitation-attachments')).not.toContainText(pdfName);
+
+  // Enregistré avec la compétition.
+  await page.reload();
+  await page.getByRole('button', { name: /Message aux clubs de cette compétition/ }).click();
+  await expect(box.getByRole('checkbox', { name: `Joindre ${pdfName}` })).not.toBeChecked();
+  await expect(box.getByRole('checkbox', { name: 'Joindre affiche.png' })).toBeChecked();
+
+  // « Ouvrir dans ma messagerie » : seulement les pièces cochées, à télécharger.
+  await page.getByTestId('invitation-row').filter({ hasText: club }).getByRole('button', { name: 'Ouvrir dans ma messagerie' }).click();
+  const mailto = page.getByRole('dialog', { name: 'Ouvrir dans ma messagerie' });
+  await expect(mailto.getByTestId('mailto-attachments')).toContainText('affiche.png');
+  await expect(mailto.getByTestId('mailto-attachments')).not.toContainText('fiche à imprimer');
+  await mailto.getByRole('button', { name: 'Annuler' }).click();
+
+  await box.getByRole('button', { name: 'Supprimer affiche.png' }).click();
+  await expect(box.getByRole('checkbox', { name: 'Joindre affiche.png' })).toHaveCount(0);
+  expect(await (await request.get(`/api/competitions/${id}/mail-attachments`)).json()).toEqual([]);
+});

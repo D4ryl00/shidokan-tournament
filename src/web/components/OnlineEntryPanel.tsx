@@ -19,6 +19,7 @@ import {
 import { EmailsList } from './EmailsInput.js';
 import { sameEmail } from '../../domain/emails.js';
 import { CompetitionMessage, NEW_LINK_WARNING, SendResultsModal } from './InvitationMail.js';
+import { sentLines, useAttachmentLines } from './MailAttachments.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { HELP } from '../help.js';
 import { DateField } from './ui/DateField.js';
@@ -106,6 +107,8 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
   const [results, setResults] = useState<SendResult[]>([]);
   const [mailtoClub, setMailtoClub] = useState<ClubInvitationRow | null>(null);
   const [excluded, setExcluded] = useState<Excluded>({});
+  // Pièces cochées : celles que la messagerie ne recevra pas, proposées au téléchargement.
+  const attachments = sentLines(useAttachmentLines(competitionId) ?? []);
   if (!settings) return null;
 
   // Tableau : seulement les clubs invités ; les autres se choisissent dans l'annuaire (qui contient tous les clubs passés).
@@ -238,11 +241,18 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
         <Stack>
           <Text>Un nouveau lien est créé pour {mailtoClub?.clubName} et l’ancien ne fonctionnera plus : envoyez bien ce mail depuis votre messagerie.</Text>
           {mailtoClub && mailtoClub.coachEmails.length > 1 && <Recipients club={mailtoClub} excluded={excluded} onChange={setExcluded} />}
-          <Text size="sm" data-testid="mailto-attachments">
-            Votre messagerie ne recevra pas les pièces jointes : joignez-y vous-même la{' '}
-            <Anchor href={`/api/competitions/${competitionId}/club-form.pdf`} download>fiche à imprimer (PDF)</Anchor> et le{' '}
-            <Anchor href={`/api/competitions/${competitionId}/club-form.ods`} download>tableur (.ods)</Anchor>.
-          </Text>
+          {attachments.length > 0 && (
+            <Text size="sm" data-testid="mailto-attachments">
+              Votre messagerie ne recevra pas les pièces jointes, joignez-les vous-même :{' '}
+              {attachments.map((l, i) => (
+                <span key={l.key}>
+                  {i > 0 && (i === attachments.length - 1 ? ' et ' : ', ')}
+                  <Anchor href={l.href} download={l.fileName}>{l.label ?? l.fileName}</Anchor>
+                </span>
+              ))}
+              .
+            </Text>
+          )}
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setMailtoClub(null)}>Annuler</Button>
             <Button disabled={!!mailtoClub && noneChosen(mailtoClub, excluded)}

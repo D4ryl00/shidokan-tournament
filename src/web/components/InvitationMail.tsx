@@ -3,6 +3,7 @@ import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { useAppSettings, useCompetition, useInvitationPreview, useUpdateCompetition, type SendResult } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
+import { MailAttachments, sentLines, useAttachmentLines } from './MailAttachments.js';
 import { plural } from '../../domain/plural.js';
 import { GOOGLE_NOT_SENT } from '../../domain/app-settings.js';
 
@@ -18,6 +19,7 @@ export function CompetitionMessage({ competitionId, previewClubId }: { competiti
   const [form, setForm] = useState<{ subject: string; body: string } | null>(null);
   const shown = form ?? current;
   const preview = useInvitationPreview(competitionId, previewClubId, JSON.stringify(current));
+  const lines = useAttachmentLines(competitionId);
   if (!shown) return null;
   const save = (invitationMail: { subject: string; body: string } | null) =>
     update.mutate({ settings: { invitationMail } }, { onSuccess: () => { setForm(null); notifications.show({ color: 'green', message: 'Message enregistré.' }); } });
@@ -35,14 +37,15 @@ export function CompetitionMessage({ competitionId, previewClubId }: { competiti
               {own && <Button size="xs" variant="subtle" onClick={() => save(null)}>Revenir au message de l’application</Button>}
             </Group>
             <ApiErrorAlert error={update.error} />
+            <MailAttachments competitionId={competitionId} />
             {preview.data && (
               <Stack gap={4}>
                 <Text size="sm" fw={600}>Aperçu pour le premier club coché (le lien sera créé à l’envoi)</Text>
                 <Text size="sm">Objet : {preview.data.subject}</Text>
                 <Text size="sm" style={{ whiteSpace: 'pre-wrap' }} p="xs" bg="var(--mantine-color-default-hover)">{preview.data.body}</Text>
-                {competition && (
+                {lines && (
                   <Text size="sm" data-testid="invitation-attachments">
-                    Pièces jointes : fiche-club-{competition.date}.pdf (fiche à imprimer) et fiche-club-{competition.date}.ods (tableur)
+                    Pièces jointes : {sentLines(lines).map((l) => l.fileName).join(', ') || 'aucune'}
                   </Text>
                 )}
               </Stack>
