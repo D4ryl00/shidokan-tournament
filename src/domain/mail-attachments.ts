@@ -49,12 +49,20 @@ export function cleanAttachmentName(raw: string): string {
 
 const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
+/** Fichier ajouté dont le contenu manque, du même nom (casse ignorée) : celui que le nouveau fichier remplace. */
+export function replacedMissing<T extends { fileName: string; missing?: boolean }>(fileName: string, existing: T[]): T | undefined {
+  return existing.find((e) => e.missing && sameName(e.fileName, fileName));
+}
+
 /**
  * Premier refus pour un nouveau fichier (`fileName` déjà nettoyé), null s'il est accepté. `existing` : les fichiers déjà ajoutés à la
- * compétition (cochés ou non) ; `reserved` : les noms des fiches club.
+ * compétition (cochés ou non) ; un fichier manquant du même nom ne compte pas (le nouveau prend sa place). `reserved` : les noms des
+ * fiches club.
  */
-export function checkNewAttachment(file: { fileName: string; size: number }, existing: { fileName: string; size: number }[], reserved: string[]): string | null {
+export function checkNewAttachment(file: { fileName: string; size: number }, all: { fileName: string; size: number; missing?: boolean }[], reserved: string[]): string | null {
   const L = MAIL_ATTACHMENT_LIMITS;
+  const replaced = replacedMissing(file.fileName, all);
+  const existing = all.filter((e) => e !== replaced);
   if (file.size <= 0) return 'Fichier vide.';
   if (!attachmentContentType(file.fileName)) {
     const ext = extensionOf(file.fileName);

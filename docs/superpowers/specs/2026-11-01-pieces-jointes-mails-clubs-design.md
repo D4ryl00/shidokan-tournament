@@ -78,9 +78,12 @@ envoi. Il veut aussi pouvoir **ne plus joindre** l'une ou l'autre des fiches clu
 - Fichiers sans ligne (pièce supprimée, compétition supprimée, purge, restauration d'une sauvegarde plus ancienne) : effacés du dossier
   au démarrage et après chacune de ces opérations (un balayage « fichiers dont l'id n'est plus dans la table »).
 - Ligne sans fichier (restauration d'une sauvegarde plus récente que le dossier, fichier effacé à la main) : la liste l'affiche
-  « Fichier manquant » (en rouge, sans lien de téléchargement, case « Joindre » désactivée, bouton « Supprimer » disponible). Si une
-  pièce **cochée** manque au moment d'un envoi groupé, l'envoi est refusé avant le premier mail, sans changer aucun lien :
-  « Pièce jointe introuvable : <nom>. Supprimez-la ou ajoutez-la de nouveau. »
+  « Fichier manquant » (en rouge, sans lien de téléchargement ; la case garde sa valeur et reste modifiable ; bouton « Supprimer »
+  disponible). L'aperçu cite une pièce cochée manquante « <nom> (manquante : l’envoi sera refusé) ». Si une pièce **cochée** manque au
+  moment d'un envoi groupé, l'envoi est refusé avant le premier mail, sans changer aucun lien : « Pièce jointe introuvable : <nom>.
+  Décochez-la, supprimez-la ou ajoutez-la de nouveau. » Ajouter de nouveau un fichier du même nom (casse ignorée) qu'une pièce manquante
+  remplace son contenu : même pièce, même case, même place ; il ne compte qu'une fois dans les limites. (Ajusté après la relecture
+  finale : la case désactivée cachait si l'envoi serait refusé, et l'ajout conseillé était refusé pour nom déjà pris.)
 - Conséquence acceptée : les sauvegardes ne contiennent pas les fichiers ajoutés ; après une restauration, il faut les rajouter s'ils
   manquent. L'aide le dit.
 - Les cases des fiches club : nouveau réglage de compétition `clubFormAttachments: { pdf: boolean; ods: boolean }` dans

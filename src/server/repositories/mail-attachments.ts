@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { and, asc, eq, sql } from 'drizzle-orm';
-import { attachmentContentType, checkNewAttachment, cleanAttachmentName, clubFormFileNames } from '../../domain/mail-attachments.js';
+import { attachmentContentType, checkNewAttachment, cleanAttachmentName, clubFormFileNames, replacedMissing } from '../../domain/mail-attachments.js';
 import type { AppDb } from '../db/client.js';
 import { mailAttachments } from '../db/schema.js';
 import { getCompetition } from './competitions.js';
@@ -62,16 +62,25 @@ export async function addMailAttachment(db: AppDb, dbPath: string, competitionId
   if (!competition) throw new NotFoundError('Compétition introuvable');
   const fileName = cleanAttachmentName(rawName);
   const forms = clubFormFileNames(competition.date);
-  const existing = db.select({ fileName: mailAttachments.fileName, size: mailAttachments.size }).from(mailAttachments).where(eq(mailAttachments.competitionId, competitionId)).all();
+  const existing = db
+    .select({ id: mailAttachments.id, fileName: mailAttachments.fileName, size: mailAttachments.size })
+    .from(mailAttachments)
+    .where(eq(mailAttachments.competitionId, competitionId))
+    .all()
+    .map((r) => ({ ...r, missing: !fs.existsSync(fileOf(dbPath, r.id)) }));
   const refusal = checkNewAttachment({ fileName, size: data.length }, existing, [forms.pdf, forms.ods]);
   if (refusal) throw new AttachmentError(refusal);
-  const id = crypto.randomUUID();
+  // Fichier manquant du même nom (après une restauration…) : le nouveau contenu reprend sa ligne, sa case et sa place.
+  const replaced = replacedMissing(fileName, existing);
+  const id = replaced?.id ?? crypto.randomUUID();
   fs.mkdirSync(attachmentDir(dbPath), { recursive: true });
   const tmp = `${fileOf(dbPath, id)}.tmp`;
   fs.writeFileSync(tmp, data);
   fs.renameSync(tmp, fileOf(dbPath, id));
+  const contentType = attachmentContentType(fileName)!;
   try {
-    db.insert(mailAttachments).values({ id, competitionId, fileName, contentType: attachmentContentType(fileName)!, size: data.length }).run();
+    if (replaced) db.update(mailAttachments).set({ fileName, contentType, size: data.length }).where(eq(mailAttachments.id, id)).run();
+    else db.insert(mailAttachments).values({ id, competitionId, fileName, contentType, size: data.length }).run();
   } catch (e) {
     fs.rmSync(fileOf(dbPath, id), { force: true });
     throw e;
@@ -100,7 +109,7 @@ export function deleteMailAttachment(db: AppDb, dbPath: string, competitionId: s
 
 /**
  * Efface du dossier les fichiers qui n'ont plus de ligne (pièce ou compétition supprimée, purge, restauration d'une sauvegarde plus
- * ancienne, écriture interrompue `.tmp`). Renvoie le nombre de fichiers effacés.
+ * ancienne, écriture interrompue `.tmp`). Renvoie le nombre de fichiers effacés ; ceux qu'on ne peut pas effacer restent.
  */
 export function sweepAttachmentFiles(db: AppDb, dbPath: string): number {
   const dir = attachmentDir(dbPath);
@@ -109,8 +118,13 @@ export function sweepAttachmentFiles(db: AppDb, dbPath: string): number {
   let removed = 0;
   for (const name of fs.readdirSync(dir)) {
     if (known.has(name)) continue;
-    fs.rmSync(path.join(dir, name), { force: true, recursive: true });
-    removed++;
+    // Un fichier qu'on ne peut pas effacer (droits, fichier verrouillé) reste : un nettoyage ne doit jamais empêcher l'application de démarrer.
+    try {
+      fs.rmSync(path.join(dir, name), { force: true, recursive: true });
+      removed++;
+    } catch {
+      // essayé de nouveau au prochain balayage
+    }
   }
   return removed;
 }

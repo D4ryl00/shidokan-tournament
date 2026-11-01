@@ -87,6 +87,43 @@ test('balayage : fichiers sans ligne (et .tmp) effacés, les autres gardés ; do
   expect(fs.readdirSync(attachmentDir(dbPath))).toEqual([a.id]);
 });
 
+test('fichier manquant ajouté de nouveau sous le même nom (casse ignorée) : même pièce, même case, même place, nouveau contenu', async () => {
+  const { dbPath, d, id } = await setup();
+  const a = await addMailAttachment(d, dbPath, id, 'reglement.pdf', PDF);
+  const b = await addMailAttachment(d, dbPath, id, 'affiche.png', PDF);
+  setMailAttachmentIncluded(d, id, a.id, false);
+  fs.rmSync(path.join(attachmentDir(dbPath), a.id));
+  const fresh = Buffer.from('%PDF-1.4 nouveau règlement');
+  const again = await addMailAttachment(d, dbPath, id, 'Reglement.PDF', fresh);
+  expect(again).toMatchObject({ id: a.id, fileName: 'Reglement.PDF', size: fresh.length, included: false, missing: false });
+  expect(listMailAttachments(d, dbPath, id).map((x) => x.id)).toEqual([a.id, b.id]);
+  expect(readMailAttachment(d, dbPath, id, a.id).data).toEqual(fresh);
+  // Présent : toujours refusé.
+  await expect(addMailAttachment(d, dbPath, id, 'affiche.png', PDF)).rejects.toThrow('Une pièce jointe porte déjà ce nom.');
+});
+
+test('fichier manquant remplacé : les limites comptent le nouveau fichier à sa place (10 pièces dont une manquante → accepté)', async () => {
+  const { dbPath, d, id } = await setup();
+  const all = [];
+  for (let i = 0; i < 10; i++) all.push(await addMailAttachment(d, dbPath, id, `f${i}.pdf`, PDF));
+  fs.rmSync(path.join(attachmentDir(dbPath), all[3]!.id));
+  expect((await addMailAttachment(d, dbPath, id, 'f3.pdf', PDF)).id).toBe(all[3]!.id);
+  await expect(addMailAttachment(d, dbPath, id, 'f10.pdf', PDF)).rejects.toThrow('Au plus 10 pièces jointes.');
+});
+
+test('balayage : un fichier impossible à effacer est laissé, sans erreur (le démarrage ne doit pas échouer)', async () => {
+  const { dbPath, d } = await setup();
+  fs.mkdirSync(attachmentDir(dbPath), { recursive: true });
+  fs.writeFileSync(path.join(attachmentDir(dbPath), 'orphelin'), 'x');
+  fs.chmodSync(attachmentDir(dbPath), 0o500);
+  try {
+    expect(sweepAttachmentFiles(d, dbPath)).toBe(0);
+  } finally {
+    fs.chmodSync(attachmentDir(dbPath), 0o700);
+  }
+  expect(sweepAttachmentFiles(d, dbPath)).toBe(1);
+});
+
 test('table propre à l’installation : classée, absente du paquet', async () => {
   const { d, id } = await setup();
   expect(unclassifiedTables(d)).toEqual([]);

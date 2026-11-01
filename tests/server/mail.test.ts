@@ -291,9 +291,15 @@ test('pièce cochée dont le fichier manque : rien n’est envoyé, aucun lien n
   fs.rmSync(path.join(attachmentDir(dbPathOf), reglement.id));
   const res = await send([tani!.clubId]);
   expect(res.statusCode).toBe(400);
-  expect(res.json().error).toBe('Pièce jointe introuvable : reglement.pdf. Supprimez-la ou ajoutez-la de nouveau.');
+  expect(res.json().error).toBe('Pièce jointe introuvable : reglement.pdf. Décochez-la, supprimez-la ou ajoutez-la de nouveau.');
   expect(sent).toEqual([]);
   expect((await app.inject({ method: 'GET', url: `/api/inscription/${tani!.token}` })).statusCode).toBe(200);
+  // Ajoutée de nouveau, comme le conseille le message : elle part.
+  expect((await attach('reglement.pdf', REGLEMENT)).id).toBe(reglement.id);
+  expect((await send([tani!.clubId])).json()[0].status).toBe('sent');
+  expect(names(sent[0]!)).toEqual(['fiche-club-2026-11-22.pdf', 'fiche-club-2026-11-22.ods', 'reglement.pdf']);
+  sent = [];
+  fs.rmSync(path.join(attachmentDir(dbPathOf), reglement.id));
   await include(reglement.id, false);
   expect((await send([tani!.clubId])).json()[0].status).toBe('sent');
   expect(names(sent[0]!)).toEqual(['fiche-club-2026-11-22.pdf', 'fiche-club-2026-11-22.ods']);

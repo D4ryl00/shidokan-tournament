@@ -45,7 +45,7 @@ export function CompetitionMessage({ competitionId, previewClubId }: { competiti
                 <Text size="sm" style={{ whiteSpace: 'pre-wrap' }} p="xs" bg="var(--mantine-color-default-hover)">{preview.data.body}</Text>
                 {lines && (
                   <Text size="sm" data-testid="invitation-attachments">
-                    Pièces jointes : {sentLines(lines).map((l) => l.fileName).join(', ') || 'aucune'}
+                    Pièces jointes : {sentLines(lines).map((l) => (l.missing ? `${l.fileName} (manquante : l’envoi sera refusé)` : l.fileName)).join(', ') || 'aucune'}
                   </Text>
                 )}
               </Stack>

@@ -108,7 +108,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
   const [mailtoClub, setMailtoClub] = useState<ClubInvitationRow | null>(null);
   const [excluded, setExcluded] = useState<Excluded>({});
   // Pièces cochées : celles que la messagerie ne recevra pas, proposées au téléchargement.
-  const attachments = sentLines(useAttachmentLines(competitionId) ?? []);
+  const attachments = sentLines(useAttachmentLines(competitionId) ?? []).filter((l) => !l.missing);
   if (!settings) return null;
 
   // Tableau : seulement les clubs invités ; les autres se choisissent dans l'annuaire (qui contient tous les clubs passés).

@@ -134,7 +134,7 @@ export async function invitationAttachments(db: AppDb, dbPath: string, competiti
   if (!competition) throw new NotFoundError('Compétition introuvable');
   const added = listMailAttachments(db, dbPath, competitionId).filter((a) => a.included);
   const missing = added.find((a) => a.missing);
-  if (missing) throw new MailError(`Pièce jointe introuvable : ${missing.fileName}. Supprimez-la ou ajoutez-la de nouveau.`);
+  if (missing) throw new MailError(`Pièce jointe introuvable : ${missing.fileName}. Décochez-la, supprimez-la ou ajoutez-la de nouveau.`);
   const { pdf, ods } = competition.settings.clubFormAttachments;
   const names = clubFormFileNames(competition.date);
   const out: MailAttachment[] = [];

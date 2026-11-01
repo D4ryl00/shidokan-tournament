@@ -1,6 +1,6 @@
 import { ActionIcon, Anchor, Button, Checkbox, FileButton, Group, Stack, Text } from '@mantine/core';
 import { useRef, useState } from 'react';
-import { checkNewAttachment, cleanAttachmentName, clubFormFileNames, formatBytes } from '../../domain/mail-attachments.js';
+import { checkNewAttachment, cleanAttachmentName, clubFormFileNames, formatBytes, replacedMissing } from '../../domain/mail-attachments.js';
 import {
   ApiError,
   mailAttachmentUrl,
@@ -42,8 +42,8 @@ export function useAttachmentLines(competitionId: string): AttachmentLine[] | nu
   ];
 }
 
-/** Pièces qui partiront avec le mail (cochées et présentes). */
-export const sentLines = (lines: AttachmentLine[]) => lines.filter((l) => l.included && !l.missing);
+/** Pièces cochées : celles qui partiront avec le mail (une manquante fait refuser l'envoi). */
+export const sentLines = (lines: AttachmentLine[]) => lines.filter((l) => l.included);
 
 /** Gestion des pièces jointes du mail aux clubs : fiches décochables, fichiers ajoutés cochables et supprimables. */
 export function MailAttachments({ competitionId }: { competitionId: string }) {
@@ -74,7 +74,7 @@ export function MailAttachments({ competitionId }: { competitionId: string }) {
     setRefusals([]);
     setAdding(true);
     const reserved = lines.filter((l) => !l.attachmentId).map((l) => l.fileName);
-    const existing = lines.filter((l) => l.attachmentId).map((l) => ({ fileName: l.fileName, size: l.size ?? 0 }));
+    const existing = lines.filter((l) => l.attachmentId).map((l) => ({ fileName: l.fileName, size: l.size ?? 0, missing: l.missing }));
     const refused: string[] = [];
     for (const file of files) {
       const fileName = cleanAttachmentName(file.name);
@@ -85,7 +85,10 @@ export function MailAttachments({ competitionId }: { competitionId: string }) {
       }
       try {
         await add.mutateAsync(file);
-        existing.push({ fileName, size: file.size });
+        // Un fichier manquant du même nom a été remplacé : il ne compte plus qu'une fois.
+        const replaced = replacedMissing(fileName, existing);
+        if (replaced) replaced.missing = false;
+        else existing.push({ fileName, size: file.size, missing: false });
       } catch (err) {
         refused.push(`${file.name} : ${err instanceof ApiError ? err.message : String(err)}`);
       }
@@ -102,8 +105,8 @@ export function MailAttachments({ competitionId }: { competitionId: string }) {
           <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
             <Checkbox
               aria-label={`Joindre ${l.fileName}`}
-              checked={(pending[l.key] ?? l.included) && !l.missing}
-              disabled={readOnly || l.missing}
+              checked={pending[l.key] ?? l.included}
+              disabled={readOnly}
               onChange={(e) => toggle(l, e.currentTarget.checked)}
             />
             <Text size="sm" style={{ overflowWrap: 'anywhere' }} c={l.missing ? 'red' : undefined}>

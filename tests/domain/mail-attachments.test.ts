@@ -46,6 +46,13 @@ test('refus dans l’ordre : vide, type, taille, nombre, total, nom pris', () =>
   expect(checkNewAttachment({ fileName: 'b.pdf', size: 5 * MB }, [{ fileName: 'a.pdf', size: 10 * MB }], [])).toBeNull();
 });
 
+test('un fichier manquant du même nom ne compte plus : son remplaçant prend sa place', () => {
+  const ten = Array.from({ length: 10 }, (_, i) => ({ fileName: `f${i}.pdf`, size: 10, missing: i === 3 }));
+  expect(checkNewAttachment({ fileName: 'F3.pdf', size: 10 }, ten, [])).toBeNull();
+  expect(checkNewAttachment({ fileName: 'f10.pdf', size: 10 }, ten, [])).toBe('Au plus 10 pièces jointes.');
+  expect(checkNewAttachment({ fileName: 'f2.pdf', size: 10 }, ten.slice(0, 9), [])).toBe('Une pièce jointe porte déjà ce nom.');
+});
+
 test('noms des fiches club', () => {
   expect(clubFormFileNames('2026-11-22')).toEqual({ pdf: 'fiche-club-2026-11-22.pdf', ods: 'fiche-club-2026-11-22.ods' });
 });

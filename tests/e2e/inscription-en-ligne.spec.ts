@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { createCompetition } from './helpers.js';
@@ -237,7 +238,25 @@ test('pièces jointes du mail : ajouter, refuser un type, décocher la fiche PDF
   await expect(mailto.getByTestId('mailto-attachments')).not.toContainText('fiche à imprimer');
   await mailto.getByRole('button', { name: 'Annuler' }).click();
 
+  // Fichier disparu du disque (restauration…) : signalé, sa case garde sa valeur, l'aperçu prévient ; l'ajouter de nouveau le répare.
+  await box.getByTestId('mail-attachment-input').setInputFiles({ name: 'reglement.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4') });
+  await expect(box.getByRole('checkbox', { name: 'Joindre reglement.pdf' })).toBeChecked();
+  const listed = (await (await request.get(`/api/competitions/${id}/mail-attachments`)).json()) as { id: string; fileName: string }[];
+  fs.rmSync(path.join('tmp/e2e/pieces-jointes', listed.find((a) => a.fileName === 'reglement.pdf')!.id));
+  await page.reload();
+  await page.getByRole('button', { name: /Message aux clubs de cette compétition/ }).click();
+  await expect(box).toContainText('reglement.pdf — Fichier manquant');
+  await expect(box.getByRole('checkbox', { name: 'Joindre reglement.pdf' })).toBeChecked();
+  await expect(box.getByRole('checkbox', { name: 'Joindre reglement.pdf' })).toBeEnabled();
+  await page.getByRole('checkbox', { name: `Choisir ${club}` }).check();
+  await expect(page.getByTestId('invitation-attachments')).toContainText('reglement.pdf (manquante : l’envoi sera refusé)');
+  await box.getByTestId('mail-attachment-input').setInputFiles({ name: 'reglement.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 bis') });
+  await expect(box).not.toContainText('Fichier manquant');
+  await expect(page.getByTestId('invitation-attachments')).not.toContainText('manquante');
+
   await box.getByRole('button', { name: 'Supprimer affiche.png' }).click();
   await expect(box.getByRole('checkbox', { name: 'Joindre affiche.png' })).toHaveCount(0);
+  await box.getByRole('button', { name: 'Supprimer reglement.pdf' }).click();
+  await expect(box.getByRole('checkbox', { name: 'Joindre reglement.pdf' })).toHaveCount(0);
   expect(await (await request.get(`/api/competitions/${id}/mail-attachments`)).json()).toEqual([]);
 });
