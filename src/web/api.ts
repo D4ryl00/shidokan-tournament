@@ -883,12 +883,16 @@ export interface ClubInvitationRow {
   directoryClubId: string | null;
   coachEmails: string[];
   invited: boolean;
+  /** Nombre de liens actifs. */
+  links: number;
   invitedAt: string | null;
   lastUsedAt: string | null;
   fighters: number;
   lastMail: { sentAt: string; status: 'sent' | 'error'; error: string | null } | null;
 }
 export interface InvitationLink { clubId: string; clubName: string; token: string }
+/** Un lien actif d'un club (accès), sans son jeton. */
+export interface ClubAccess { id: string; createdAt: string; sentAt: string | null; sentVia: 'mail' | 'messagerie' | null; lastUsedAt: string | null }
 export interface ClubEntrySettings { status: 'closed' | 'open' | 'frozen'; deadline: string | null; managedHere: boolean }
 
 export const useInvitations = (id: string) =>
@@ -900,13 +904,21 @@ function useOnlineEntryMutation<V, R>(id: string, fn: (v: V) => Promise<R>) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
-    onSuccess: () => Promise.all([['invitations', id], ['club-entry', id], ['clubs', id], ['club-directory']].map((queryKey) => qc.invalidateQueries({ queryKey }))),
+    onSuccess: () => Promise.all([['invitations', id], ['club-accesses', id], ['club-entry', id], ['clubs', id], ['club-directory']].map((queryKey) => qc.invalidateQueries({ queryKey }))),
   });
 }
 export const useInviteClubs = (id: string) =>
   useOnlineEntryMutation(id, (directoryIds: string[]) => api<InvitationLink[]>('POST', `/api/competitions/${id}/invitations`, { directoryIds }));
-export const useRegenerateInvitation = (id: string) =>
-  useOnlineEntryMutation(id, (clubId: string) => api<InvitationLink>('POST', `/api/competitions/${id}/invitations/${clubId}/regenerate`));
+export const useClubAccesses = (id: string, clubId: string | null) =>
+  useQuery({
+    queryKey: ['club-accesses', id, clubId],
+    queryFn: () => api<ClubAccess[]>('GET', `/api/competitions/${id}/invitations/${clubId}/links`),
+    enabled: clubId !== null,
+  });
+export const useCreateClubAccess = (id: string) =>
+  useOnlineEntryMutation(id, (clubId: string) => api<InvitationLink & { id: string }>('POST', `/api/competitions/${id}/invitations/${clubId}/links`));
+export const useDeleteClubAccess = (id: string) =>
+  useOnlineEntryMutation(id, ({ clubId, linkId }: { clubId: string; linkId: string }) => api<void>('DELETE', `/api/competitions/${id}/invitations/${clubId}/links/${linkId}`));
 export const useRevokeInvitation = (id: string) =>
   useOnlineEntryMutation(id, (clubId: string) => api<void>('DELETE', `/api/competitions/${id}/invitations/${clubId}`));
 export const useUpdateClubEntrySettings = (id: string) =>

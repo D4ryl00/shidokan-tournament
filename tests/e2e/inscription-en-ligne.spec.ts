@@ -260,3 +260,46 @@ test('pièces jointes du mail : ajouter, refuser un type, décocher la fiche PDF
   await expect(box.getByRole('checkbox', { name: 'Joindre reglement.pdf' })).toHaveCount(0);
   expect(await (await request.get(`/api/competitions/${id}/mail-attachments`)).json()).toEqual([]);
 });
+
+test('accès d’un club : pastille « 1 lien », créer un lien (affiché une fois), supprimer un lien avec confirmation, puis le dernier', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe accès des clubs');
+  const club = `Dojo accès ${Date.now()}`;
+  const entry = ((await (await request.post('/api/club-directory', { data: { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: ['coach@acces.fr'], notes: null, name: club } })).json()) as { id: string }).id;
+  const [first] = (await (await request.post(`/api/competitions/${id}/invitations`, { data: { directoryIds: [entry] } })).json()) as { token: string }[];
+
+  await page.goto(`/competitions/${id}/fiche-club`);
+  const row = page.getByTestId('invitation-row').filter({ hasText: club });
+  await row.getByRole('button', { name: `Accès de ${club} : 1 lien` }).click();
+  const dialog = page.getByRole('dialog', { name: `Accès de ${club}` });
+  await expect(dialog.getByTestId('club-access')).toHaveCount(1);
+  await expect(dialog.getByTestId('club-access').first()).toContainText('Jamais envoyé');
+
+  // Un lien de plus : affiché une seule fois, en haut ; l'ancien reste.
+  await dialog.getByRole('button', { name: 'Créer un lien' }).click();
+  await expect(dialog.getByTestId('new-access-url')).toContainText('/inscription/');
+  await expect(dialog.getByTestId('club-access')).toHaveCount(2);
+  await expect(dialog.getByTestId('club-access').first()).toContainText('Nouveau');
+  await shot(page, 'acces-club');
+  await page.keyboard.press('Escape');
+  await expect(row.getByRole('button', { name: `Accès de ${club} : 2 liens` })).toBeVisible();
+  expect((await request.get(`/api/inscription/${first!.token}`)).status()).toBe(200);
+
+  // Supprimer le plus ancien : confirmation dans sa carte ; « Annuler » ne change rien.
+  await row.getByRole('button', { name: `Accès de ${club} : 2 liens` }).click();
+  await expect(dialog.getByTestId('new-access-url')).toHaveCount(0);
+  const oldest = dialog.getByTestId('club-access').last();
+  await oldest.getByRole('button', { name: 'Supprimer' }).click();
+  await expect(oldest).toContainText('Ce lien ne marchera plus.');
+  await oldest.getByRole('button', { name: 'Annuler' }).click();
+  await expect(dialog.getByTestId('club-access')).toHaveCount(2);
+  await oldest.getByRole('button', { name: 'Supprimer' }).click();
+  await oldest.getByRole('button', { name: 'Supprimer' }).click();
+  await expect(dialog.getByTestId('club-access')).toHaveCount(1);
+  expect((await request.get(`/api/inscription/${first!.token}`)).status()).toBe(410);
+
+  // « Supprimer tous les accès » : la fenêtre se ferme, le club redevient « à inviter ».
+  await dialog.getByRole('button', { name: 'Supprimer tous les accès' }).click();
+  await dialog.getByRole('button', { name: 'Oui, tout supprimer' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(row).toHaveCount(0);
+});

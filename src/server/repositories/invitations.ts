@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { and, count, desc, eq, isNull } from 'drizzle-orm';
+import { and, count, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { AppDb } from '../db/client.js';
 import { clubDirectory, clubInvitations, clubs, competitions, fighters, mailLog } from '../db/schema.js';
 import type { Club } from '../../domain/registration.js';
@@ -19,11 +19,22 @@ export interface ClubInvitationRow {
   directoryClubId: string | null;
   coachEmails: string[];
   invited: boolean;
+  /** Nombre de liens actifs du club. */
+  links: number;
   invitedAt: string | null;
+  /** Dernière visite, tous liens actifs confondus. */
   lastUsedAt: string | null;
   fighters: number;
   /** Dernier mail envoyé au club pour cette compétition. */
   lastMail: { sentAt: string; status: 'sent' | 'error'; error: string | null } | null;
+}
+/** Un lien actif d'un club, sans son jeton (seule son empreinte est gardée). */
+export interface ClubAccess {
+  id: string;
+  createdAt: string;
+  sentAt: string | null;
+  sentVia: 'mail' | 'messagerie' | null;
+  lastUsedAt: string | null;
 }
 export type ClubEntryStatus = 'closed' | 'open' | 'frozen';
 export interface ClubEntrySettings {
@@ -53,11 +64,17 @@ function competitionClub(db: AppDb, competitionId: string, clubId: string) {
   return club;
 }
 
-function createLink(db: AppDb, competitionId: string, clubId: string, clubName: string): InvitationLink {
+function createLink(db: AppDb, competitionId: string, clubId: string, clubName: string): InvitationLink & { id: string } {
   const token = newToken();
-  db.insert(clubInvitations).values({ id: crypto.randomUUID(), competitionId, clubId, tokenHash: hashToken(token) }).run();
-  return { clubId, clubName, token };
+  const id = crypto.randomUUID();
+  db.insert(clubInvitations).values({ id, competitionId, clubId, tokenHash: hashToken(token) }).run();
+  return { id, clubId, clubName, token };
 }
+
+/** Liens actifs d'un club, du plus récent au plus ancien. */
+const activeLinks = (db: AppDb, competitionId: string, clubId: string) =>
+  db.select().from(clubInvitations).where(active(competitionId, clubId)).orderBy(desc(clubInvitations.createdAt), sql`rowid desc`).all();
+const latest = (dates: (string | null)[]) => dates.reduce<string | null>((a, d) => (d && (!a || d > a) ? d : a), null);
 
 /** Tous les clubs de la compétition, avec l'état de leur lien personnel. */
 export function listInvitations(db: AppDb, competitionId: string): ClubInvitationRow[] {
@@ -68,12 +85,13 @@ export function listInvitations(db: AppDb, competitionId: string): ClubInvitatio
     .orderBy(clubs.nameKey)
     .all()
     .map((c) => {
-      const link = db.select().from(clubInvitations).where(active(competitionId, c.id)).get();
+      const links = activeLinks(db, competitionId, c.id);
       const n = db.select({ n: count() }).from(fighters).where(eq(fighters.clubId, c.id)).get()!.n;
       const mail = db.select().from(mailLog).where(eq(mailLog.clubId, c.id)).orderBy(desc(mailLog.sentAt)).get();
       return {
         clubId: c.id, clubName: c.name, directoryClubId: c.directoryClubId, coachEmails: c.coachEmails,
-        invited: !!link, invitedAt: link?.createdAt ?? null, lastUsedAt: link?.lastUsedAt ?? null, fighters: n,
+        invited: links.length > 0, links: links.length, invitedAt: links.at(-1)?.createdAt ?? null,
+        lastUsedAt: latest(links.map((l) => l.lastUsedAt)), fighters: n,
         lastMail: mail ? { sentAt: mail.sentAt, status: mail.status, error: mail.error } : null,
       };
     });
@@ -153,36 +171,37 @@ export function directoryChoices(db: AppDb, competitionId: string): { id: string
 
 const NOW = () => new Date().toISOString();
 
-/** Nouveau lien pour le club ; l'ancien ne fonctionne plus. */
-export function regenerateInvitation(db: AppDb, competitionId: string, clubId: string): InvitationLink {
-  const club = competitionClub(db, competitionId, clubId);
-  return db.transaction((tx) => {
-    const t = tx as unknown as AppDb;
-    t.update(clubInvitations).set({ revokedAt: NOW() }).where(active(competitionId, clubId)).run();
-    return createLink(t, competitionId, clubId, club.name);
-  });
+/** Liens actifs d'un club (accès), du plus récent au plus ancien. */
+export function listClubAccesses(db: AppDb, competitionId: string, clubId: string): ClubAccess[] {
+  competitionClub(db, competitionId, clubId);
+  return activeLinks(db, competitionId, clubId).map((l) => ({ id: l.id, createdAt: l.createdAt, sentAt: l.sentAt, sentVia: l.sentVia, lastUsedAt: l.lastUsedAt }));
 }
 
+/** Désactive tous les liens du club (« Supprimer tous les accès »). */
 export function revokeInvitation(db: AppDb, competitionId: string, clubId: string): void {
   competitionClub(db, competitionId, clubId);
   db.update(clubInvitations).set({ revokedAt: NOW() }).where(active(competitionId, clubId)).run();
 }
 
-/** Nouveau lien pour le club, sans désactiver l'actuel (envoi par mail : l'ancien n'est désactivé que si le mail part). */
-export function addInvitationLink(db: AppDb, competitionId: string, clubId: string): InvitationLink {
+/** Désactive un lien actif du club ; 404 s'il n'est pas à lui. */
+export function revokeClubAccess(db: AppDb, competitionId: string, clubId: string, linkId: string): void {
+  competitionClub(db, competitionId, clubId);
+  const done = db.update(clubInvitations).set({ revokedAt: NOW() }).where(and(active(competitionId, clubId), eq(clubInvitations.id, linkId))).run();
+  if (done.changes === 0) throw new NotFoundError('Lien introuvable');
+}
+
+/** Nouveau lien pour le club, qui s'ajoute aux autres (« Créer un lien », envoi par mail ou par la messagerie). */
+export function addInvitationLink(db: AppDb, competitionId: string, clubId: string): InvitationLink & { id: string } {
   const club = competitionClub(db, competitionId, clubId);
   return createLink(db, competitionId, clubId, club.name);
 }
 
-/** Garde seulement ce lien actif pour le club (les autres sont désactivés). */
-export function keepOnlyLink(db: AppDb, competitionId: string, clubId: string, token: string): void {
-  const keep = hashToken(token);
-  for (const l of db.select().from(clubInvitations).where(active(competitionId, clubId)).all()) {
-    if (l.tokenHash !== keep) db.update(clubInvitations).set({ revokedAt: NOW() }).where(eq(clubInvitations.id, l.id)).run();
-  }
+/** Note l'envoi d'un lien : mail parti, ou préparé dans la messagerie de l'organisateur. */
+export function markLinkSent(db: AppDb, token: string, via: 'mail' | 'messagerie'): void {
+  db.update(clubInvitations).set({ sentAt: NOW(), sentVia: via }).where(eq(clubInvitations.tokenHash, hashToken(token))).run();
 }
 
-/** Désactive un lien (envoi raté : le lien précédent reste celui qui fonctionne). */
+/** Désactive un lien (envoi raté : les liens d'avant restent ceux qui fonctionnent). */
 export function revokeLink(db: AppDb, token: string): void {
   db.update(clubInvitations).set({ revokedAt: NOW() }).where(eq(clubInvitations.tokenHash, hashToken(token))).run();
 }

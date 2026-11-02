@@ -1,12 +1,10 @@
-import { Alert, Anchor, Button, Checkbox, Chip, CopyButton, Group, Menu, Modal, MultiSelect, ScrollArea, Stack, Table, Text } from '@mantine/core';
+import { Alert, Anchor, Button, Checkbox, Chip, CopyButton, Group, Modal, MultiSelect, ScrollArea, Stack, Table, Text } from '@mantine/core';
 import { useState } from 'react';
 import {
   useClubEntrySettings,
   useDirectory,
   useInvitations,
   useInviteClubs,
-  useRegenerateInvitation,
-  useRevokeInvitation,
   useAppSettings,
   useMailtoInvitation,
   useSendInvitations,
@@ -16,6 +14,7 @@ import {
   type SendResult,
   type SendTarget,
 } from '../api.js';
+import { ClubAccessModal } from './ClubAccessModal.js';
 import { EmailsList } from './EmailsInput.js';
 import { sameEmail } from '../../domain/emails.js';
 import { CompetitionMessage, NEW_LINK_WARNING, SendResultsModal } from './InvitationMail.js';
@@ -25,6 +24,7 @@ import { HELP } from '../help.js';
 import { DateField } from './ui/DateField.js';
 import { SectionCard } from './ui/SectionCard.js';
 import { StatusBadge } from './ui/StatusBadge.js';
+import { IconLink } from './ui/icons.js';
 import { plural } from '../../domain/plural.js';
 
 const day = (iso: string | null) => (iso ? new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString('fr-FR') : '—');
@@ -94,8 +94,6 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
   const { data: directory = [] } = useDirectory();
   const updateSettings = useUpdateClubEntrySettings(competitionId);
   const invite = useInviteClubs(competitionId);
-  const regenerate = useRegenerateInvitation(competitionId);
-  const revoke = useRevokeInvitation(competitionId);
   const { data: appSettings } = useAppSettings();
   const send = useSendInvitations(competitionId);
   const mailto = useMailtoInvitation(competitionId);
@@ -106,6 +104,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
   const [confirmSend, setConfirmSend] = useState(false);
   const [results, setResults] = useState<SendResult[]>([]);
   const [mailtoClub, setMailtoClub] = useState<ClubInvitationRow | null>(null);
+  const [accessClubId, setAccessClubId] = useState<string | null>(null);
   const [excluded, setExcluded] = useState<Excluded>({});
   // Pièces cochées : celles que la messagerie ne recevra pas, proposées au téléchargement.
   const attachments = sentLines(useAttachmentLines(competitionId) ?? []).filter((l) => !l.missing);
@@ -147,7 +146,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
           onClick={() => updateSettings.mutate({ status: action.status })}>{action.label}</Button>
       </Group>
       {!settings.managedHere && <Text size="sm" c="dimmed">Cette compétition est gérée par une autre installation : les inscriptions en ligne s’y règlent.</Text>}
-      <ApiErrorAlert error={updateSettings.error ?? invite.error ?? regenerate.error ?? revoke.error} />
+      <ApiErrorAlert error={updateSettings.error ?? invite.error} />
       <Group align="end">
         <MultiSelect data-testid="invite-select" label="Clubs à inviter" placeholder={candidates.length ? 'Chercher un club de l’annuaire' : 'Tous les clubs de l’annuaire sont invités'}
           searchable clearable data={candidates} value={chosen} onChange={setChosen} w={420} maw="100%" nothingFoundMessage="Aucun club : ajoutez-le dans l’Annuaire des clubs." />
@@ -176,7 +175,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
                   <Checkbox aria-label="Tout cocher" checked={shown.length > 0 && selected.length === shown.length}
                     onChange={(e) => setChecked(e.currentTarget.checked ? new Set(shown.map((i) => i.clubId)) : new Set())} />
                 </Table.Th>
-                <Table.Th>Club invité</Table.Th><Table.Th>E-mails</Table.Th><Table.Th>Dernier mail</Table.Th><Table.Th>Dernière visite</Table.Th><Table.Th ta="right">Combattants</Table.Th><Table.Th />
+                <Table.Th>Club invité</Table.Th><Table.Th>E-mails</Table.Th><Table.Th>Dernier mail</Table.Th><Table.Th>Dernière visite</Table.Th><Table.Th ta="right">Combattants</Table.Th><Table.Th>Accès</Table.Th><Table.Th />
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -195,16 +194,14 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
                   <Table.Td className="num">{day(i.lastUsedAt)}</Table.Td>
                   <Table.Td ta="right" className="num">{i.fighters}</Table.Td>
                   <Table.Td>
-                    <Group gap={4} justify="flex-end" wrap="nowrap">
-                      <Button size="compact-sm" variant="subtle" loading={mailto.isPending && mailto.variables?.clubId === i.clubId} onClick={() => { setExcluded({}); setMailtoClub(i); }}>Ouvrir dans ma messagerie</Button>
-                      <Menu position="bottom-end">
-                        <Menu.Target><Button size="compact-sm" variant="subtle" color="gray" aria-label={`Autres actions pour ${i.clubName}`}>…</Button></Menu.Target>
-                        <Menu.Dropdown>
-                          <Menu.Item onClick={() => regenerate.mutate(i.clubId, { onSuccess: (l) => setLinks([l]) })}>Régénérer le lien</Menu.Item>
-                          <Menu.Item color="red" onClick={() => revoke.mutate(i.clubId)}>Révoquer</Menu.Item>
-                        </Menu.Dropdown>
-                      </Menu>
-                    </Group>
+                    <Button size="compact-sm" radius="xl" leftSection={<IconLink size={14} />}
+                      styles={{ root: { backgroundColor: 'var(--sk-chip)', color: 'var(--sk-chip-text)', whiteSpace: 'nowrap' } }} aria-label={`Accès de ${i.clubName} : ${plural(i.links, 'lien')}`}
+                      onClick={() => setAccessClubId(i.clubId)}>
+                      {plural(i.links, 'lien')}
+                    </Button>
+                  </Table.Td>
+                  <Table.Td ta="right">
+                    <Button size="compact-sm" variant="subtle" loading={mailto.isPending && mailto.variables?.clubId === i.clubId} onClick={() => { setExcluded({}); setMailtoClub(i); }}>Ouvrir dans ma messagerie</Button>
                   </Table.Td>
                 </Table.Tr>
               ))}
@@ -239,7 +236,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
       <SendResultsModal results={results} onClose={() => setResults([])} />
       <Modal opened={mailtoClub !== null} onClose={() => setMailtoClub(null)} title="Ouvrir dans ma messagerie">
         <Stack>
-          <Text>Un nouveau lien est créé pour {mailtoClub?.clubName} et l’ancien ne fonctionnera plus : envoyez bien ce mail depuis votre messagerie.</Text>
+          <Text>Un nouveau lien est créé pour {mailtoClub?.clubName} ; ses liens d’avant restent valables. Envoyez bien ce mail depuis votre messagerie.</Text>
           {mailtoClub && mailtoClub.coachEmails.length > 1 && <Recipients club={mailtoClub} excluded={excluded} onChange={setExcluded} />}
           {attachments.length > 0 && (
             <Text size="sm" data-testid="mailto-attachments">
@@ -261,6 +258,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
         </Stack>
       </Modal>
       <LinksModal links={links} onClose={() => setLinks([])} />
+      <ClubAccessModal competitionId={competitionId} club={invited.find((i) => i.clubId === accessClubId) ?? null} onClose={() => setAccessClubId(null)} />
     </SectionCard>
   );
 }

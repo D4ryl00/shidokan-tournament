@@ -14,7 +14,7 @@ type T = { Params: { token: string } };
 class ReplacedLinkError extends Error {
   readonly statusCode = 410;
   constructor() {
-    super('Ce lien a été remplacé : utilisez celui du dernier mail reçu.');
+    super('Ce lien n’est plus valable : utilisez celui d’un mail plus récent ou contactez l’organisateur.');
   }
 }
 type TF = { Params: { token: string; fighterId: string } };

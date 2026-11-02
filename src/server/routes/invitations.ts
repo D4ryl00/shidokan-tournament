@@ -11,7 +11,9 @@ import {
   getClubEntrySettings,
   inviteClubs,
   listInvitations,
-  regenerateInvitation,
+  addInvitationLink,
+  listClubAccesses,
+  revokeClubAccess,
   revokeInvitation,
   updateClubEntrySettings,
 } from '../repositories/invitations.js';
@@ -58,7 +60,13 @@ export async function invitationRoutes(
     const { directoryIds } = z.object({ directoryIds: z.array(z.string()).max(500) }).parse(req.body);
     return inviteClubs(db, req.params.id, directoryIds);
   });
-  app.post<PC>('/api/competitions/:id/invitations/:clubId/regenerate', async (req) => regenerateInvitation(db, req.params.id, req.params.clubId));
+  // Accès d'un club : ses liens actifs, un lien de plus, un lien en moins.
+  app.get<PC>('/api/competitions/:id/invitations/:clubId/links', async (req) => listClubAccesses(db, req.params.id, req.params.clubId));
+  app.post<PC>('/api/competitions/:id/invitations/:clubId/links', async (req) => addInvitationLink(db, req.params.id, req.params.clubId));
+  app.delete<PC & { Params: { linkId: string } }>('/api/competitions/:id/invitations/:clubId/links/:linkId', async (req, reply) => {
+    revokeClubAccess(db, req.params.id, req.params.clubId, req.params.linkId);
+    return reply.status(204).send();
+  });
   app.delete<PC>('/api/competitions/:id/invitations/:clubId', async (req, reply) => {
     revokeInvitation(db, req.params.id, req.params.clubId);
     return reply.status(204).send();

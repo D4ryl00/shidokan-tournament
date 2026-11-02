@@ -13,7 +13,7 @@ import { getAppSettings, markGoogleRevoked } from './repositories/app-settings.j
 import { GoogleAccessRevokedError, type GoogleClient } from './google/client.js';
 import { closedSet } from './repositories/closed-categories.js';
 import { getCompetition, getGrid } from './repositories/competitions.js';
-import { addInvitationLink, keepOnlyLink, regenerateInvitation, revokeLink } from './repositories/invitations.js';
+import { addInvitationLink, markLinkSent, revokeLink } from './repositories/invitations.js';
 import { listMailAttachments, readMailAttachment } from './repositories/mail-attachments.js';
 import { NotFoundError } from './repositories/registrations.js';
 
@@ -171,8 +171,8 @@ function recipientsOf(club: { coachEmails: string[] }, chosen: string[] | undefi
 
 /**
  * Envoie le lien de chaque club par mail : un seul mail par club, adressé à toutes les adresses choisies. Le serveur d'envoi est
- * vérifié d'abord : s'il ne répond pas, rien n'est envoyé et aucun lien ne change. Pour chaque club, un nouveau lien est créé ; l'ancien n'est désactivé que si le mail part (sinon c'est le nouveau
- * qui est désactivé). Chaque envoi est noté ; une erreur ne concerne que son club. Si Google retire l'accès en cours de route, l'envoi
+ * vérifié d'abord : s'il ne répond pas, rien n'est envoyé et aucun lien ne change. Pour chaque club, un nouveau lien s'ajoute aux siens (ceux
+ * d'avant restent valables) ; si le mail ne part pas, ce nouveau lien est désactivé. Chaque envoi est noté ; une erreur ne concerne que son club. Si Google retire l'accès en cours de route, l'envoi
  * s'arrête : le club en cours et les suivants sont notés « non envoyé », sans nouveau lien.
  */
 export async function sendInvitations(db: AppDb, dbPath: string, transport: MailTransport, competitionId: string, targets: SendTarget[], baseUrl: string, pauseMs = 300): Promise<SendResult[]> {
@@ -215,7 +215,7 @@ export async function sendInvitations(db: AppDb, dbPath: string, transport: Mail
     try {
       const message = await invitationMessage(db, competitionId, clubId, linkUrl(baseUrl, link.token));
       await mailer.sendMail({ from: fromOf(sender), to: recipients.emails.map((address) => ({ name: club.name, address })), subject: message.subject, text: message.body, html: textToHtml(message.body), attachments });
-      keepOnlyLink(db, competitionId, clubId, link.token);
+      markLinkSent(db, link.token, 'mail');
     } catch (e) {
       revokeLink(db, link.token);
       if (e instanceof GoogleAccessRevokedError) {
@@ -231,14 +231,15 @@ export async function sendInvitations(db: AppDb, dbPath: string, transport: Mail
 }
 
 /**
- * Message tout prêt pour la messagerie de l'organisateur (lien `mailto:`), avec un nouveau lien. `to` : les adresses choisies parmi
+ * Message tout prêt pour la messagerie de l'organisateur (lien `mailto:`), avec un nouveau lien qui s'ajoute aux autres. `to` : les adresses choisies parmi
  * celles du club (`emails` absent : toutes), séparées par des virgules ; null si le club n'en a pas.
  */
 export async function mailtoInvitation(db: AppDb, competitionId: string, clubId: string, baseUrl: string, emails?: string[]): Promise<{ to: string | null; subject: string; body: string }> {
   const club = clubOf(db, competitionId, clubId);
   const recipients = club.coachEmails.length ? recipientsOf(club, emails) : { emails: [] };
   if ('error' in recipients) throw new MailError(recipients.error);
-  const link = regenerateInvitation(db, competitionId, clubId);
+  const link = addInvitationLink(db, competitionId, clubId);
+  markLinkSent(db, link.token, 'messagerie');
   const message = await invitationMessage(db, competitionId, clubId, linkUrl(baseUrl, link.token));
   return { to: recipients.emails.length ? recipients.emails.join(',') : null, subject: message.subject, body: message.body };
 }

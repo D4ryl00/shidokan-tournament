@@ -7,7 +7,7 @@ import { MailAttachments, sentLines, useAttachmentLines } from './MailAttachment
 import { plural } from '../../domain/plural.js';
 import { GOOGLE_NOT_SENT } from '../../domain/app-settings.js';
 
-export const NEW_LINK_WARNING = 'Un nouveau lien est créé à chaque envoi ; les liens envoyés avant ne fonctionnent plus.';
+export const NEW_LINK_WARNING = 'Un nouveau lien est ajouté à chaque envoi ; les liens déjà envoyés restent valables.';
 
 /** Message aux clubs propre à cette compétition (sinon celui des réglages de l'application), avec un aperçu. */
 export function CompetitionMessage({ competitionId, previewClubId }: { competitionId: string; previewClubId: string | null }) {
@@ -70,7 +70,7 @@ export function SendResultsModal({ results, onClose }: { results: SendResult[]; 
           </Alert>
         )}
         <Alert color={errors.length ? 'orange' : 'green'}>
-          {plural(results.length - errors.length, 'mail envoyé', 'mails envoyés')} : leur ancien lien ne fonctionne plus.{errors.length ? ` ${errors.length} en erreur : le lien de ces clubs n’a pas changé ; corrigez puis renvoyez.` : ''}
+          {plural(results.length - errors.length, 'mail envoyé', 'mails envoyés')} : les liens déjà envoyés restent valables.{errors.length ? ` ${errors.length} en erreur : aucun lien n’a été ajouté à ces clubs ; corrigez puis renvoyez.` : ''}
         </Alert>
         {results.map((r) => (
           <Group key={r.clubId} justify="space-between" wrap="nowrap">

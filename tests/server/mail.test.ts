@@ -69,9 +69,12 @@ test('envoi à deux clubs : mails rendus, liens neufs qui fonctionnent, journal 
   expect(tani.html).toContain('<p>Les inscriptions à la compétition « Coupe 2026 » (22/11/2026, Nice) sont ouvertes.<br>');
   expect(tani.html).toContain(`<a href="https://competitions.example.org/inscription/${tokenOf(tani.text)}">`);
   expect((await app.inject({ method: 'GET', url: `/api/inscription/${tokenOf(tani.text)}` })).statusCode).toBe(200);
-  const old = await app.inject({ method: 'GET', url: `/api/inscription/${links.find((l) => l.clubName === 'Tani Dojo')!.token}` });
-  expect(old.statusCode).toBe(410);
-  expect(old.json().error).toBe('Ce lien a été remplacé : utilisez celui du dernier mail reçu.');
+  // Le lien d'avant marche toujours : les liens s'ajoutent.
+  const taniClub = links.find((l) => l.clubName === 'Tani Dojo')!;
+  expect((await app.inject({ method: 'GET', url: `/api/inscription/${taniClub.token}` })).statusCode).toBe(200);
+  const access = (await app.inject({ method: 'GET', url: `${base}/invitations/${taniClub.clubId}/links` })).json() as { sentAt: string | null; sentVia: string | null }[];
+  expect(access.map((a) => a.sentVia)).toEqual(['mail', null]);
+  expect(access[0]!.sentAt).toEqual(expect.any(String));
   const rows = (await app.inject({ method: 'GET', url: `${base}/invitations` })).json() as { clubName: string; lastMail: { status: string } | null }[];
   expect(rows.map((r) => [r.clubName, r.lastMail?.status])).toEqual([['Budo', 'sent'], ['Tani Dojo', 'sent']]);
 });
@@ -108,6 +111,10 @@ test('mailto : destinataire, objet et corps avec un lien neuf', async () => {
   expect(res).toMatchObject({ to: 'tani@example.org', subject: 'Inscriptions — Coupe 2026' });
   expect(tokenOf(res.body)).not.toBe(link!.token);
   expect((await app.inject({ method: 'GET', url: `/api/inscription/${tokenOf(res.body)}` })).statusCode).toBe(200);
+  expect((await app.inject({ method: 'GET', url: `/api/inscription/${link!.token}` })).statusCode).toBe(200);
+  const access = (await app.inject({ method: 'GET', url: `${base}/invitations/${link!.clubId}/links` })).json() as { sentAt: string | null; sentVia: string | null }[];
+  expect(access.map((a) => a.sentVia)).toEqual(['messagerie', null]);
+  expect(access[0]!.sentAt).toEqual(expect.any(String));
 });
 
 test('plusieurs adresses : un seul mail, adressé à toutes ; noté dans le journal', async () => {
@@ -170,7 +177,9 @@ test('jeton inconnu → 404, révoqué → 410', async () => {
   const [link] = await invited({ name: 'Tani Dojo', coachEmails: ['tani@example.org'] });
   expect((await app.inject({ method: 'GET', url: '/api/inscription/inconnu' })).statusCode).toBe(404);
   await app.inject({ method: 'DELETE', url: `${base}/invitations/${link!.clubId}` });
-  expect((await app.inject({ method: 'GET', url: `/api/inscription/${link!.token}` })).statusCode).toBe(410);
+  const revoked = await app.inject({ method: 'GET', url: `/api/inscription/${link!.token}` });
+  expect(revoked.statusCode).toBe(410);
+  expect(revoked.json().error).toBe('Ce lien n’est plus valable : utilisez celui d’un mail plus récent ou contactez l’organisateur.');
 });
 
 test('SMTP indisponible (vérification en échec) → 400, aucun lien changé, aucun mail', async () => {
@@ -190,6 +199,8 @@ test('club en erreur : son ancien lien fonctionne toujours', async () => {
   const links = await invited({ name: 'Budo', coachEmails: ['budo@example.org'] });
   await send([links[0]!.clubId]);
   expect((await app.inject({ method: 'GET', url: `/api/inscription/${links[0]!.token}` })).statusCode).toBe(200);
+  // Le lien créé pour le mail raté est retiré : seul l'ancien reste.
+  expect((await app.inject({ method: 'GET', url: `${base}/invitations/${links[0]!.clubId}/links` })).json()).toHaveLength(1);
   const rows = (await app.inject({ method: 'GET', url: `${base}/invitations` })).json() as { invited: boolean }[];
   expect(rows[0]!.invited).toBe(true);
 });

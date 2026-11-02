@@ -168,7 +168,9 @@ export const clubInvitations = sqliteTable('club_invitations', {
     .references(() => clubs.id, { onDelete: 'cascade' }),
   tokenHash: text('token_hash').notNull().unique(),
   createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  /** Date d'envoi : mail parti (`mail`) ou préparé dans la messagerie de l'organisateur (`messagerie`) ; null : jamais envoyé. */
   sentAt: text('sent_at'),
+  sentVia: text('sent_via', { enum: ['mail', 'messagerie'] }),
   revokedAt: text('revoked_at'),
   lastUsedAt: text('last_used_at'),
   ...rowMeta(),

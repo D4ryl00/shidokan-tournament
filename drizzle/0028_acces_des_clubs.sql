@@ -1,0 +1,1 @@
+ALTER TABLE `club_invitations` ADD `sent_via` text;
