@@ -1,7 +1,7 @@
 import { ActionIcon, Button, Checkbox, Group, Modal, Stack, Table, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
 import { useParams } from 'react-router';
-import { plural } from '../../domain/plural.js';
+import { ofName, plural } from '../../domain/plural.js';
 import type { Club } from '../../domain/registration.js';
 import { useClubs, useRegistrations, useUpdateClub } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
@@ -83,7 +83,7 @@ export function ClubsPage() {
                   <Table.Td className="num" style={{ whiteSpace: 'nowrap' }}>{c.coachPhone ?? <Text span c="dimmed" size="sm">—</Text>}</Table.Td>
                   <Table.Td><EmailsList emails={c.coachEmails} /></Table.Td>
                   <Table.Td>
-                    <Checkbox data-testid="club-preapproval" aria-label={`Pré-accord de ${c.name}`} checked={c.preApproval}
+                    <Checkbox data-testid="club-preapproval" aria-label={`Pré-accord ${ofName(c.name)}`} checked={c.preApproval}
                       onChange={(e) => update.mutate({ clubId: c.id, preApproval: e.currentTarget.checked })} />
                   </Table.Td>
                   <Table.Td ta="right" className="num">{count(c.id)}</Table.Td>

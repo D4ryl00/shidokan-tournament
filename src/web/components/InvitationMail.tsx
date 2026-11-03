@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useAppSettings, useCompetition, useInvitationPreview, useUpdateCompetition, type SendResult } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { MailAttachments, sentLines, useAttachmentLines } from './MailAttachments.js';
-import { plural } from '../../domain/plural.js';
+import { sendSummary } from '../send-summary.js';
 import { GOOGLE_NOT_SENT } from '../../domain/app-settings.js';
 
 export const NEW_LINK_WARNING = 'Un nouveau lien est ajouté à chaque envoi ; les liens déjà envoyés restent valables.';
@@ -70,7 +70,7 @@ export function SendResultsModal({ results, onClose }: { results: SendResult[]; 
           </Alert>
         )}
         <Alert color={errors.length ? 'orange' : 'green'}>
-          {plural(results.length - errors.length, 'mail envoyé', 'mails envoyés')} : les liens déjà envoyés restent valables.{errors.length ? ` ${errors.length} en erreur : aucun lien n’a été ajouté à ces clubs ; corrigez puis renvoyez.` : ''}
+          {sendSummary(results.length - errors.length, errors.length)}
         </Alert>
         {results.map((r) => (
           <Group key={r.clubId} justify="space-between" wrap="nowrap">

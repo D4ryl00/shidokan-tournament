@@ -25,7 +25,7 @@ import { DateField } from './ui/DateField.js';
 import { SectionCard } from './ui/SectionCard.js';
 import { StatusBadge } from './ui/StatusBadge.js';
 import { IconLink } from './ui/icons.js';
-import { plural } from '../../domain/plural.js';
+import { ofName, plural } from '../../domain/plural.js';
 
 const day = (iso: string | null) => (iso ? new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString('fr-FR') : '—');
 export const clubEntryUrl = (token: string) => `${window.location.origin}/inscription/${token}`;
@@ -91,7 +91,7 @@ function LinksModal({ links, onClose }: { links: InvitationLink[]; onClose: () =
 export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
   const { data: settings } = useClubEntrySettings(competitionId);
   const { data: invitations = [] } = useInvitations(competitionId);
-  const { data: directory = [] } = useDirectory();
+  const { data: directory } = useDirectory();
   const updateSettings = useUpdateClubEntrySettings(competitionId);
   const invite = useInviteClubs(competitionId);
   const { data: appSettings } = useAppSettings();
@@ -126,7 +126,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
       onSuccess: (m) => { window.location.href = `mailto:${(m.to ?? '').split(',').map(encodeURIComponent).join(',')}?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.body)}`; },
     });
   const invitedEntries = new Set(invited.map((i) => i.directoryClubId));
-  const candidates = directory
+  const candidates = (directory ?? [])
     .filter((e) => !e.archived && !invitedEntries.has(e.id))
     .map((e) => ({ value: e.id, label: e.affiliationNumber ? `${e.name} (${e.affiliationNumber})` : e.name }));
   const action = settings.status === 'open' ? { label: 'Figer les inscriptions', status: 'frozen' as const } :
@@ -148,7 +148,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
       {!settings.managedHere && <Text size="sm" c="dimmed">Cette compétition est gérée par une autre installation : les inscriptions en ligne s’y règlent.</Text>}
       <ApiErrorAlert error={updateSettings.error ?? invite.error} />
       <Group align="end">
-        <MultiSelect data-testid="invite-select" label="Clubs à inviter" placeholder={candidates.length ? 'Chercher un club de l’annuaire' : 'Tous les clubs de l’annuaire sont invités'}
+        <MultiSelect data-testid="invite-select" label="Clubs à inviter" placeholder={!directory ? 'Chargement de l’annuaire…' : candidates.length ? 'Chercher un club de l’annuaire' : 'Tous les clubs de l’annuaire sont invités'}
           searchable clearable data={candidates} value={chosen} onChange={setChosen} w={420} maw="100%" nothingFoundMessage="Aucun club : ajoutez-le dans l’Annuaire des clubs." />
         <Button data-testid="invite-clubs" disabled={chosen.length === 0} loading={invite.isPending}
           onClick={() => invite.mutate(chosen, { onSuccess: (l) => { setChosen([]); setLinks(l); } })}>
@@ -168,45 +168,48 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
               <Chip size="xs" value="email">Avec e-mail</Chip>
             </Chip.Group>
           </Group>
-          <Table>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th w={40}>
-                  <Checkbox aria-label="Tout cocher" checked={shown.length > 0 && selected.length === shown.length}
-                    onChange={(e) => setChecked(e.currentTarget.checked ? new Set(shown.map((i) => i.clubId)) : new Set())} />
-                </Table.Th>
-                <Table.Th>Club invité</Table.Th><Table.Th>E-mails</Table.Th><Table.Th>Dernier mail</Table.Th><Table.Th>Dernière visite</Table.Th><Table.Th ta="right">Combattants</Table.Th><Table.Th>Accès</Table.Th><Table.Th />
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {shown.map((i) => (
-                <Table.Tr key={i.clubId} data-testid="invitation-row">
-                  <Table.Td><Checkbox aria-label={`Choisir ${i.clubName}`} checked={checked.has(i.clubId)} onChange={(e) => toggle(i.clubId, e.currentTarget.checked)} /></Table.Td>
-                  <Table.Td fw={600}>{i.clubName}</Table.Td>
-                  <Table.Td><EmailsList emails={i.coachEmails} /></Table.Td>
-                  <Table.Td>
-                    {i.lastMail ? (
-                      <Text size="sm" c={i.lastMail.status === 'sent' ? undefined : 'red'}>
-                        {i.lastMail.status === 'sent' ? `Envoyé le ${day(i.lastMail.sentAt)}` : `Erreur : ${i.lastMail.error}`}
-                      </Text>
-                    ) : '—'}
-                  </Table.Td>
-                  <Table.Td className="num">{day(i.lastUsedAt)}</Table.Td>
-                  <Table.Td ta="right" className="num">{i.fighters}</Table.Td>
-                  <Table.Td>
-                    <Button size="compact-sm" radius="xl" leftSection={<IconLink size={14} />}
-                      styles={{ root: { backgroundColor: 'var(--sk-chip)', color: 'var(--sk-chip-text)', whiteSpace: 'nowrap' } }} aria-label={`Accès de ${i.clubName} : ${plural(i.links, 'lien')}`}
-                      onClick={() => setAccessClubId(i.clubId)}>
-                      {plural(i.links, 'lien')}
-                    </Button>
-                  </Table.Td>
-                  <Table.Td ta="right">
-                    <Button size="compact-sm" variant="subtle" loading={mailto.isPending && mailto.variables?.clubId === i.clubId} onClick={() => { setExcluded({}); setMailtoClub(i); }}>Ouvrir dans ma messagerie</Button>
-                  </Table.Td>
+          {/* Écran étroit : le tableau défile de côté (au lieu de couper les adresses), « Accès » et « Ouvrir dans ma messagerie » restent atteignables. */}
+          <ScrollArea type="auto">
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th w={40}>
+                    <Checkbox aria-label="Tout cocher" checked={shown.length > 0 && selected.length === shown.length}
+                      onChange={(e) => setChecked(e.currentTarget.checked ? new Set(shown.map((i) => i.clubId)) : new Set())} />
+                  </Table.Th>
+                  <Table.Th miw={160}>Club invité</Table.Th><Table.Th miw={190}>E-mails</Table.Th><Table.Th miw={170}>Dernier mail</Table.Th><Table.Th>Dernière visite</Table.Th><Table.Th ta="right">Combattants</Table.Th><Table.Th>Accès</Table.Th><Table.Th />
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+              </Table.Thead>
+              <Table.Tbody>
+                {shown.map((i) => (
+                  <Table.Tr key={i.clubId} data-testid="invitation-row">
+                    <Table.Td><Checkbox aria-label={`Choisir ${i.clubName}`} checked={checked.has(i.clubId)} onChange={(e) => toggle(i.clubId, e.currentTarget.checked)} /></Table.Td>
+                    <Table.Td fw={600}>{i.clubName}</Table.Td>
+                    <Table.Td><EmailsList emails={i.coachEmails} /></Table.Td>
+                    <Table.Td>
+                      {i.lastMail ? (
+                        <Text size="sm" c={i.lastMail.status === 'sent' ? undefined : 'red'}>
+                          {i.lastMail.status === 'sent' ? `Envoyé le ${day(i.lastMail.sentAt)}` : `Erreur : ${i.lastMail.error}`}
+                        </Text>
+                      ) : '—'}
+                    </Table.Td>
+                    <Table.Td className="num">{day(i.lastUsedAt)}</Table.Td>
+                    <Table.Td ta="right" className="num">{i.fighters}</Table.Td>
+                    <Table.Td>
+                      <Button size="compact-sm" radius="xl" leftSection={<IconLink size={14} />}
+                        styles={{ root: { backgroundColor: 'var(--sk-chip)', color: 'var(--sk-chip-text)', whiteSpace: 'nowrap' } }} aria-label={`Accès ${ofName(i.clubName)} : ${plural(i.links, 'lien')}`}
+                        onClick={() => setAccessClubId(i.clubId)}>
+                        {plural(i.links, 'lien')}
+                      </Button>
+                    </Table.Td>
+                    <Table.Td ta="right">
+                      <Button size="compact-sm" variant="subtle" loading={mailto.isPending && mailto.variables?.clubId === i.clubId} onClick={() => { setExcluded({}); setMailtoClub(i); }}>Ouvrir dans ma messagerie</Button>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </ScrollArea>
           <Group>
             <Button data-testid="send-invitations" disabled={selected.length === 0} loading={send.isPending} onClick={() => { setExcluded({}); setConfirmSend(true); }}>
               Envoyer le lien par mail ({selected.length})

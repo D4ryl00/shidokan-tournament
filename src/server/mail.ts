@@ -97,7 +97,28 @@ function senderOf(db: AppDb): MailSender {
 const fromOf = (sender: MailSender): MailAddress =>
   sender.kind === 'google' ? { name: sender.google.fromName, address: sender.google.email } : { name: sender.smtp.fromName, address: sender.smtp.fromEmail };
 
-const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 500);
+/** Erreurs du serveur d'envoi (codes de nodemailer), en français ; la réponse du serveur (ou le message d'origine) reste en détail. */
+const SMTP_ERRORS: Record<string, string> = {
+  EENVELOPE: 'Le serveur d’envoi a refusé l’adresse',
+  EAUTH: 'Identifiant ou mot de passe refusé par le serveur d’envoi : vérifiez les Réglages de l’application.',
+  ENOAUTH: 'Le serveur d’envoi demande un identifiant et un mot de passe : complétez les Réglages de l’application.',
+  ECONNECTION: 'Serveur d’envoi injoignable : vérifiez son adresse et son port dans les Réglages de l’application, et la connexion Internet.',
+  ESOCKET: 'Serveur d’envoi injoignable : vérifiez son adresse et son port dans les Réglages de l’application, et la connexion Internet.',
+  EDNS: 'Serveur d’envoi injoignable : vérifiez son adresse et son port dans les Réglages de l’application, et la connexion Internet.',
+  ETIMEDOUT: 'Serveur d’envoi injoignable : vérifiez son adresse et son port dans les Réglages de l’application, et la connexion Internet.',
+  ETLS: 'Connexion sécurisée impossible avec le serveur d’envoi : vérifiez la sécurité (TLS ou STARTTLS) et le port dans les Réglages de l’application.',
+  EMESSAGE: 'Le serveur d’envoi a refusé le message (pièces jointes trop lourdes ?)',
+  EPROTOCOL: 'Réponse inattendue du serveur d’envoi',
+};
+export function mailErrorText(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  const { code, response } = (err ?? {}) as { code?: unknown; response?: unknown };
+  const french = typeof code === 'string' ? SMTP_ERRORS[code] : undefined;
+  if (!french) return message.slice(0, 500);
+  const detail = typeof response === 'string' && response ? `réponse du serveur : ${response}` : message;
+  return `${french} (${detail})`.slice(0, 500);
+}
+const errorText = mailErrorText;
 
 function clubOf(db: AppDb, competitionId: string, clubId: string) {
   const club = db.select().from(clubs).where(and(eq(clubs.id, clubId), eq(clubs.competitionId, competitionId))).get();

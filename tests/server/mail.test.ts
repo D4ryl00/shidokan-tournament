@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import nodemailer from 'nodemailer';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
-import type { MailTransport } from '../../src/server/mail.js';
+import { mailErrorText, type MailTransport } from '../../src/server/mail.js';
 import { attachmentDir } from '../../src/server/repositories/mail-attachments.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
@@ -12,6 +12,8 @@ type Sent = { from: { name: string; address: string }; to: { name: string; addre
 let sent: (Omit<Sent, 'to'> & { to: string })[];
 let failFor: Set<string>;
 let verifyError: string | null;
+/** Échec à la façon de nodemailer (code et réponse du serveur) pour une adresse. */
+let failCode: { address: string; code: string; response?: string } | null;
 const transport: MailTransport = () => ({
   verify: async () => {
     if (verifyError) throw new Error(verifyError);
@@ -19,6 +21,7 @@ const transport: MailTransport = () => ({
   },
   sendMail: async (m: Sent) => {
     if (m.to.some((a) => failFor.has(a.address))) throw new Error('550 Adresse refusée');
+    if (failCode && m.to.some((a) => a.address === failCode!.address)) throw Object.assign(new Error(`SMTP ${failCode.code}`), { code: failCode.code, response: failCode.response });
     sent.push({ ...m, to: m.to.map((a) => a.address).join(', ') });
     return {};
   },
@@ -34,6 +37,7 @@ beforeEach(async () => {
   sent = [];
   failFor = new Set();
   verifyError = null;
+  failCode = null;
   dbPathOf = tmpDbPath();
   app = await buildApp({ dbPath: dbPathOf, mailTransport: transport, publicUrl: 'https://competitions.example.org' });
   base = `/api/competitions/${(await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe 2026', date: '2026-11-22', location: 'Nice' } })).json().id}`;
@@ -365,3 +369,25 @@ const LEGACY_BODY = [
   'Sportivement,',
   'Shidokan France',
 ].join('\n');
+
+test('erreurs du serveur d’envoi en français, avec la réponse du serveur en détail', () => {
+  const smtp = (message: string, code: string, response?: string) => Object.assign(new Error(message), { code, response });
+  expect(mailErrorText(smtp('Can\'t send mail - all recipients were rejected: 550 refused', 'EENVELOPE', '550 refused')))
+    .toBe('Le serveur d’envoi a refusé l’adresse (réponse du serveur : 550 refused)');
+  expect(mailErrorText(smtp('Invalid login: 535 bad', 'EAUTH', '535 bad'))).toMatch(/^Identifiant ou mot de passe refusé par le serveur d’envoi : vérifiez les Réglages de l’application\. \(réponse du serveur : 535 bad\)$/);
+  expect(mailErrorText(smtp('connect ECONNREFUSED 127.0.0.1:2525', 'ESOCKET'))).toMatch(/^Serveur d’envoi injoignable.*\(connect ECONNREFUSED 127\.0\.0\.1:2525\)$/);
+  expect(mailErrorText(smtp('Greeting never received', 'ETIMEDOUT'))).toMatch(/^Serveur d’envoi injoignable/);
+  expect(mailErrorText(smtp('wrong version number', 'ETLS'))).toMatch(/^Connexion sécurisée impossible/);
+  expect(mailErrorText(smtp('Message failed: 552 too big', 'EMESSAGE', '552 too big'))).toMatch(/^Le serveur d’envoi a refusé le message.*\(réponse du serveur : 552 too big\)$/);
+  // Messages déjà en français (Gmail, contrôles de l'application) : tels quels.
+  expect(mailErrorText(new Error('Gmail a refusé l’envoi (403) : quota'))).toBe('Gmail a refusé l’envoi (403) : quota');
+  expect(mailErrorText('texte')).toBe('texte');
+});
+
+test('club en erreur SMTP : l’erreur notée et renvoyée est en français', async () => {
+  await smtp();
+  const [a] = await invited({ name: 'Arts Martiaux', coachEmails: ['refuse@club.fr'] });
+  failCode = { address: 'refuse@club.fr', code: 'EENVELOPE', response: '550 refused' };
+  const res = await send([a!.clubId]);
+  expect(res.json()[0].error).toBe('Le serveur d’envoi a refusé l’adresse (réponse du serveur : 550 refused)');
+});

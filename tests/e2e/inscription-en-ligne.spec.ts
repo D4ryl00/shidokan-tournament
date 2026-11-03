@@ -303,3 +303,19 @@ test('accès d’un club : pastille « 1 lien », créer un lien (affiché une f
   await expect(dialog).toBeHidden();
   await expect(row).toHaveCount(0);
 });
+
+test('clubs à inviter : pendant le chargement de l’annuaire, le champ ne dit pas que tous les clubs sont invités', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe annuaire lent');
+  await request.post('/api/club-directory', { data: { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null, name: `Dojo lent ${Date.now()}` } });
+  let release!: () => void;
+  const released = new Promise<void>((r) => (release = r));
+  await page.route('**/api/club-directory', async (route) => {
+    await released;
+    await route.continue();
+  });
+  await page.goto(`/competitions/${id}/fiche-club`);
+  const select = page.getByTestId('invite-select');
+  await expect(select).toHaveAttribute('placeholder', 'Chargement de l’annuaire…');
+  release();
+  await expect(select).toHaveAttribute('placeholder', 'Chercher un club de l’annuaire');
+});

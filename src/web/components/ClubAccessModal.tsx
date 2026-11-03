@@ -1,12 +1,13 @@
 import { Box, Button, CopyButton, Group, Loader, Modal, Paper, Stack, Text } from '@mantine/core';
 import { useState } from 'react';
 import { useClubAccesses, useCreateClubAccess, useDeleteClubAccess, useRevokeInvitation, type ClubAccess, type ClubInvitationRow } from '../api.js';
+import { ofName } from '../../domain/plural.js';
+import { accessTimes } from '../access-labels.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { StatusBadge } from './ui/StatusBadge.js';
 import { IconPlus, IconTrash } from './ui/icons.js';
 
 const date = (iso: string) => new Date(iso).toLocaleDateString('fr-FR');
-const time = (iso: string) => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 
 const SENT: Record<'mail' | 'messagerie' | 'none', { badge: string; tone: 'ok' | 'neutral'; fact: string }> = {
   mail: { badge: 'Envoyé par mail', tone: 'ok', fact: 'Envoyé le' },
@@ -20,7 +21,7 @@ const Fact = ({ label, at, none }: { label: string; at: string | null; none: str
     : <Text size="sm" c="dimmed" fs="italic">{none}</Text>;
 
 /** Carte d'un lien : quand il a été créé, envoyé, visité ; « Supprimer » demande confirmation dans la carte. */
-function AccessCard({ access, isNew, deleting, onDelete }: { access: ClubAccess; isNew: boolean; deleting: boolean; onDelete: () => void }) {
+function AccessCard({ access, time, isNew, deleting, onDelete }: { access: ClubAccess; time: string; isNew: boolean; deleting: boolean; onDelete: () => void }) {
   const [confirm, setConfirm] = useState(false);
   const sent = SENT[access.sentVia ?? 'none'];
   return (
@@ -28,7 +29,7 @@ function AccessCard({ access, isNew, deleting, onDelete }: { access: ClubAccess;
       <Group justify="space-between" wrap="nowrap" gap="md">
         <Stack gap={4} style={{ minWidth: 0 }}>
           <Group gap="xs">
-            <Text fw={600}>Lien du {date(access.createdAt)} <Text span c="dimmed" fw={400} size="sm">à {time(access.createdAt)}</Text></Text>
+            <Text fw={600}>Lien du {date(access.createdAt)} <Text span c="dimmed" fw={400} size="sm">à {time}</Text></Text>
             {isNew ? <StatusBadge tone="accent">Nouveau</StatusBadge> : <StatusBadge tone={sent.tone}>{sent.badge}</StatusBadge>}
           </Group>
           <Group gap="lg" style={{ rowGap: 2 }}>
@@ -37,7 +38,7 @@ function AccessCard({ access, isNew, deleting, onDelete }: { access: ClubAccess;
           </Group>
         </Stack>
         {!confirm && (
-          <Button size="compact-sm" variant="subtle" color="red" leftSection={<IconTrash size={14} />} onClick={() => setConfirm(true)}>Supprimer</Button>
+          <Button size="compact-sm" variant="subtle" color="red" leftSection={<IconTrash size={14} />} style={{ flexShrink: 0 }} onClick={() => setConfirm(true)}>Supprimer</Button>
         )}
       </Group>
       {confirm && (
@@ -71,6 +72,7 @@ export function ClubAccessModal({ competitionId, club, onClose }: { competitionI
   };
   if (!club) return <Modal opened={false} onClose={close} />;
   const list = accesses ?? [];
+  const times = accessTimes(list);
   const deleteOne = (linkId: string) =>
     remove.mutate({ clubId: club.clubId, linkId }, {
       // Le dernier lien supprimé : le club n'est plus invité, la fenêtre n'a plus rien à montrer.
@@ -78,7 +80,7 @@ export function ClubAccessModal({ competitionId, club, onClose }: { competitionI
     });
 
   return (
-    <Modal opened onClose={close} size="lg" title={`Accès de ${club.clubName}`}>
+    <Modal opened onClose={close} size="lg" title={`Accès ${ofName(club.clubName)}`}>
       <Stack gap="md">
         <Text size="sm" c="var(--sk-soft)">Chaque lien ouvre la même page d’inscription du club. Un lien ne s’affiche qu’à sa création.</Text>
         {created && (
@@ -98,7 +100,7 @@ export function ClubAccessModal({ competitionId, club, onClose }: { competitionI
         {accesses === undefined ? <Group justify="center" py="lg"><Loader size="sm" /></Group> : (
           <Stack gap="sm">
             {list.map((a) => (
-              <AccessCard key={a.id} access={a} isNew={created?.id === a.id} deleting={remove.isPending && remove.variables?.linkId === a.id} onDelete={() => deleteOne(a.id)} />
+              <AccessCard key={a.id} access={a} time={times.get(a.id) ?? ''} isNew={created?.id === a.id} deleting={remove.isPending && remove.variables?.linkId === a.id} onDelete={() => deleteOne(a.id)} />
             ))}
           </Stack>
         )}

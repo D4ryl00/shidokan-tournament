@@ -1,6 +1,7 @@
 import { Alert, Button, Card, FileButton, Group, SimpleGrid, Stack, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useAuthMe, useDecideZoneCard, useImportZoneJournal, useManagement, useZoneCards, type AuthMe, type JournalReport } from '../api.js';
+import { ofName } from '../../domain/plural.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { StatusBadge } from './ui/StatusBadge.js';
 
@@ -12,7 +13,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : 
 export function journalReportText(zoneName: string, r: JournalReport): string {
   const parts = [plural(r.applied, 'appliquée', 'appliquées'), plural(r.present, 'déjà présente', 'déjà présentes'), `${r.conflicts + r.waiting} à trancher`];
   if (r.alreadyReceived > 0) parts.push(plural(r.alreadyReceived, 'déjà reçue avant', 'déjà reçues avant'));
-  return `${plural(r.received, 'saisie reçue', 'saisies reçues')} de ${zoneName} : ${parts.join(', ')}`;
+  return `${plural(r.received, 'saisie reçue', 'saisies reçues')} ${ofName(zoneName)} : ${parts.join(', ')}`;
 }
 
 /** « Importer un journal de zone (fichier) » : clé USB venue d'un portable de zone. Rangé dans la barre de session de Combats. */
