@@ -1,8 +1,8 @@
-import { Alert, Box, Button, Card, Checkbox, Container, Group, Loader, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core';
+import { Accordion, Alert, Box, Button, Card, Checkbox, Container, Group, Loader, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { useParams } from 'react-router';
-import { kgText, weightWarning, type ClubFormLine } from '../../domain/club-form.js';
+import { PRE_APPROVAL_TEXT, kgText, orderedPrefs, weightWarning, type ClubFormLine } from '../../domain/club-form.js';
 import { useClubEntry, useSaveClubHeader, type ClubEntryHeader, type ClubEntryView, type ClubLine } from '../api.js';
 import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
@@ -28,6 +28,12 @@ function summary(line: ClubFormLine, view: ClubEntryView): [string, string] {
   return [who, [combat, line.kata ? 'Kata' : ''].filter(Boolean).join(' + ')];
 }
 
+/** « Si sans adversaire : Shido-boxing, puis Shido-mix-martial » ou « … : reste en karaté ». */
+function reclassText(line: ClubFormLine): string {
+  const choices = orderedPrefs(line.prefs).map(disciplineLabel);
+  return `Si sans adversaire : ${choices.length ? choices.join(', puis ') : `reste en ${disciplineLabel(line.combat!).toLowerCase()}`}`;
+}
+
 /** Coordonnées du club et pré-accord, enregistrés d'un bouton. */
 function HeaderForm({ token, view }: { token: string; view: ClubEntryView }) {
   const save = useSaveClubHeader(token);
@@ -47,7 +53,7 @@ function HeaderForm({ token, view }: { token: string; view: ClubEntryView }) {
           <TextInput data-testid="club-affiliation" label="N° d’affiliation FFK (facultatif)" readOnly={ro} inputMode="numeric" value={form.affiliationNumber ?? ''}
             onChange={(e) => set({ affiliationNumber: orNull(e.currentTarget.value) })} />
         </SimpleGrid>
-        <Checkbox label="Le coach accepte d’avance les reclassements de ses combattants" disabled={ro} checked={form.preApproval}
+        <Checkbox label="Pré-accord du coach" description={`Pour trouver un adversaire à vos combattants, ${PRE_APPROVAL_TEXT} Le changement de discipline se choisit combattant par combattant.`} disabled={ro} checked={form.preApproval}
           onChange={(e) => set({ preApproval: e.currentTarget.checked })} />
         <ApiErrorAlert error={save.error} />
         {!ro && (
@@ -113,9 +119,16 @@ export function ClubEntryPage() {
               {view.editable && <Button data-testid="add-fighter" onClick={() => setEditing('new')}>Ajouter un combattant</Button>}
             </Group>
             {view.closedSummary.length > 0 && (
-              <Alert color="gray" title="Non ouvert à cette compétition" data-testid="club-entry-closed">
-                <Stack gap={2}>{view.closedSummary.map((l) => <Text key={l} size="sm">{l}</Text>)}</Stack>
-              </Alert>
+              <Accordion variant="contained" radius="md" data-testid="club-entry-closed">
+                <Accordion.Item value="closed">
+                  <Accordion.Control>
+                    <Text size="sm" fw={500}>Catégories non ouvertes à cette compétition</Text>
+                  </Accordion.Control>
+                  <Accordion.Panel>
+                    <Stack gap={2}>{view.closedSummary.map((l) => <Text key={l} size="sm">{l}</Text>)}</Stack>
+                  </Accordion.Panel>
+                </Accordion.Item>
+              </Accordion>
             )}
             {view.lines.length === 0 && (
               <EmptyState title="Aucun combattant pour l’instant" text={view.editable ? 'Ajoutez-les un par un avec « Ajouter un combattant ».' : undefined} />
@@ -129,6 +142,7 @@ export function ClubEntryPage() {
                       <Text fw={700}>{l.line.lastName} {l.line.firstName}</Text>
                       <Text size="sm" c="dimmed">{who}</Text>
                       <Text size="sm" data-testid="club-line-disciplines">{what}</Text>
+                      {l.line.combat && <Text size="xs" c="dimmed" data-testid="club-line-reclass">{reclassText(l.line)}</Text>}
                       {[...l.notices, weightWarning(l.line, view.weightClasses)].filter((n) => n !== null).map((n) => <Text key={n} size="xs" c="var(--sk-warn-text)" data-testid="line-notice">{n}</Text>)}
                       {!l.editable && (
                         <Group gap={6} mt={4}>

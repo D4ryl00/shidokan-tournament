@@ -18,7 +18,7 @@ export const CLUB_FORM_HEADER_FIELDS = [
   'Pré-accord du coach (Oui/Non)',
 ] as const;
 export const CLUB_FORM_HEADER_FIRST_ROW = 4;
-/** En-tête du tableau des combattants, ligne 11 du tableur : une ligne par combattant (ordre de la fiche papier). */
+/** En-tête du tableau des combattants, ligne 13 du tableur : une ligne par combattant (ordre de la fiche papier). */
 export const CLUB_FORM_COLUMNS = [
   'Nom',
   'Prénom',
@@ -33,11 +33,14 @@ export const CLUB_FORM_COLUMNS = [
   'Karaté',
   'Boxing',
   'Mix',
-  'Shobu : si reclassement, garder en priorité',
+  'Triathlon',
+  'Shobu : si seul, d’abord…',
 ] as const;
-export const CLUB_FORM_RECLASS_HEADER = 'Si reclassement : autres disciplines, numéroter 1, 2';
-/** Valeurs de la dernière colonne (fiche papier : « 1. les règles shobu », « 2. la discipline »). */
-export const SHOBU_KEEP_LABELS = { ruleset: 'Les règles shobu', discipline: 'La discipline' } as const;
+export const CLUB_FORM_RECLASS_HEADER = 'Si seul : autre discipline ? 1, 2, 3, vide = non';
+/** Valeurs de la dernière colonne : ce qu'on propose d'abord à un combattant shobu qui a accepté une autre discipline. */
+export const SHOBU_KEEP_LABELS = { ruleset: 'Autre discipline', discipline: 'Passer en jiyu' } as const;
+/** Ce que couvre le pré-accord du coach (le même texte sur la fiche PDF, le tableur et la page en ligne). */
+export const PRE_APPROVAL_TEXT = 'vous acceptez d’avance un écart de poids plus grand ou une tranche d’âge voisine, sans qu’on vous rappelle.';
 /** Ancien format (une ligne par inscription, catégorie de poids) : les fiches déjà renvoyées restent lisibles. */
 export const CLUB_FORM_LEGACY_COLUMNS = [
   'Nom',
@@ -51,8 +54,8 @@ export const CLUB_FORM_LEGACY_COLUMNS = [
   'Si shobu : jiyu en priorité (Oui/Non)',
   'Poids actuel approx. (kg)',
 ] as const;
-export const CLUB_FORM_COLUMNS_ROW = 11;
-export const CLUB_FORM_FIRST_ROW = 12;
+export const CLUB_FORM_COLUMNS_ROW = 13;
+export const CLUB_FORM_FIRST_ROW = 14;
 export const CLUB_FORM_ROWS = 80;
 
 export interface ClubFormHeader {
@@ -80,7 +83,9 @@ export interface ClubFormParse {
 export class NotAClubFormError extends Error {}
 
 export type CombatDiscipline = 'karate' | 'shido-boxing' | 'shido-mix' | 'triathlon';
-export type PrefDiscipline = 'karate' | 'shido-boxing' | 'shido-mix';
+export type PrefDiscipline = 'karate' | 'shido-boxing' | 'shido-mix' | 'triathlon';
+export type PrefRank = 1 | 2 | 3;
+export const PREF_DISCIPLINES: readonly PrefDiscipline[] = ['karate', 'shido-boxing', 'shido-mix', 'triathlon'];
 /** Une ligne de fiche telle que remplie (papier, .ods ou saisie) : un combattant. */
 export interface ClubFormLine {
   lastName: string;
@@ -94,10 +99,40 @@ export interface ClubFormLine {
   kata: boolean;
   grade: string | null;
   ruleset: Ruleset | null;
-  prefs: Partial<Record<PrefDiscipline, 1 | 2>>;
+  prefs: ClubFormPrefs;
   shobuKeep: 'ruleset' | 'discipline' | null;
 }
+export type ClubFormPrefs = Partial<Record<PrefDiscipline, PrefRank>>;
 export type WeighInTolerance = { M: number; F: number };
+
+/** Disciplines acceptées, de la préférée à la moins préférée. */
+export function orderedPrefs(prefs: ClubFormPrefs): PrefDiscipline[] {
+  return (Object.entries(prefs) as [PrefDiscipline, PrefRank][]).sort((a, b) => a[1] - b[1]).map(([d]) => d);
+}
+const prefsFrom = (list: PrefDiscipline[]): ClubFormPrefs => Object.fromEntries(list.map((d, i) => [d, i + 1]));
+
+/**
+ * Choix d'un rang (page du club). `null` retire ce rang et les suivants : il n'y a jamais de 2e choix sans 1er.
+ * Une discipline déjà choisie à un autre rang échange sa place avec celle qu'elle remplace.
+ */
+export function choosePref(prefs: ClubFormPrefs, rank: PrefRank, discipline: PrefDiscipline | null): ClubFormPrefs {
+  const list = orderedPrefs(prefs);
+  if (discipline === null) return prefsFrom(list.slice(0, rank - 1));
+  const at = list.indexOf(discipline);
+  const replaced = list[rank - 1];
+  list[rank - 1] = discipline;
+  if (at >= 0 && at !== rank - 1) {
+    if (replaced) list[at] = replaced;
+    else list.splice(at, 1);
+  }
+  return prefsFrom(list);
+}
+
+/** Retire sa propre discipline, recalcule les rangs ; la priorité shobu ne sert qu'en shobu, avec une autre discipline acceptée. */
+export function tidyReclass<T extends Pick<ClubFormLine, 'combat' | 'ruleset' | 'prefs' | 'shobuKeep'>>(line: T): T {
+  const prefs = prefsFrom(orderedPrefs(line.prefs).filter((d) => d !== line.combat));
+  return { ...line, prefs, shobuKeep: line.ruleset === 'shobu' && Object.keys(prefs).length ? line.shobuKeep : null };
+}
 
 const ABBREVIATIONS: Record<string, string> = {
   'mini-poussin': 'MP', poussin: 'P', pupille: 'Pu', benjamin: 'B', minime: 'Mi', cadet: 'C', junior: 'J', espoir: 'E', senior: 'S',
@@ -188,14 +223,9 @@ export function lineToRows(line: ClubFormLine, lineNumber: number, grid: Categor
       if (wc) weightClassId = wc.id;
       else errors.push("Pas de catégorie de poids pour cet âge et ce sexe dans la grille.");
     }
-    const ordered = (Object.entries(line.prefs) as [PrefDiscipline, 1 | 2][]).sort((a, b) => a[1] - b[1]).map(([d]) => d as DisciplineId);
-    let otherDisciplines: DisciplineId[] = [];
-    if (ordered.length && !DISCIPLINES[combat].inPreferences) {
-      warnings.push(`Pas de reclassement vers une autre discipline pour le ${DISCIPLINES[combat].label.toLowerCase()} : préférences ignorées.`);
-    } else {
-      if (ordered.includes(combat)) warnings.push('Reclassement vers sa propre discipline ignoré.');
-      otherDisciplines = ordered.filter((d) => d !== combat);
-    }
+    const ordered: DisciplineId[] = orderedPrefs(line.prefs);
+    if (ordered.includes(combat)) warnings.push('Reclassement vers sa propre discipline ignoré.');
+    const otherDisciplines = ordered.filter((d) => d !== combat);
     let acceptsJiyuFirst: boolean | null = null;
     if (line.ruleset === 'shobu') acceptsJiyuFirst = line.shobuKeep === 'discipline' ? true : line.shobuKeep === 'ruleset' ? false : null;
     else if (line.shobuKeep) warnings.push('« Garder en priorité » ignoré : le combattant n\'est pas inscrit en shobu.');
@@ -216,8 +246,11 @@ export function lineToRows(line: ClubFormLine, lineNumber: number, grid: Categor
 }
 
 const COMBAT_LABELS = new Set<DisciplineId>(['karate', 'shido-boxing', 'shido-mix', 'triathlon']);
-function cellsToLine(row: unknown[], grid: CategoryGrid): { line: ClubFormLine; warnings: string[]; errors: string[] } {
-  const [lastName, firstName, sexCell, ageCell, weightCell, combatCell, kataCell, gradeCell, rulesetCell, prefK, prefB, prefM, keepCell] = row;
+function cellsToLine(row: unknown[], grid: CategoryGrid, triathlonColumn: boolean): { line: ClubFormLine; warnings: string[]; errors: string[] } {
+  const [lastName, firstName, sexCell, ageCell, weightCell, combatCell, kataCell, gradeCell, rulesetCell, prefK, prefB, prefM] = row;
+  // Les fiches envoyées avant l'ajout du triathlon ont une colonne de moins.
+  const prefT = triathlonColumn ? row[12] : null;
+  const keepCell = triathlonColumn ? row[13] : row[12];
   const warnings: string[] = [];
   const errors: string[] = [];
   const sex = parseSex(sexCell);
@@ -236,13 +269,14 @@ function cellsToLine(row: unknown[], grid: CategoryGrid): { line: ClubFormLine; 
   const weightKg = weightText && Number(weightText) > 0 ? Number(weightText) : null;
   if (weightText && weightKg === null) errors.push(`Poids actuel incompréhensible : « ${text(weightCell)} ».`);
   const prefs: ClubFormLine['prefs'] = {};
-  for (const [d, cell] of [['karate', prefK], ['shido-boxing', prefB], ['shido-mix', prefM]] as const) {
+  for (const [d, cell] of [['karate', prefK], ['shido-boxing', prefB], ['shido-mix', prefM], ['triathlon', prefT]] as const) {
     const n = text(cell);
-    if (n === '1' || n === '2') prefs[d] = Number(n) as 1 | 2;
-    else if (n) warnings.push(`Ordre de reclassement « ${n} » ignoré (1 ou 2).`);
+    if (n === '1' || n === '2' || n === '3') prefs[d] = Number(n) as PrefRank;
+    else if (n) warnings.push(`Ordre de reclassement « ${n} » ignoré (1, 2 ou 3).`);
   }
   const keep = normalizeName(text(keepCell));
-  const shobuKeep = !keep ? null : keep.includes('REGLE') || keep === '1' ? 'ruleset' : keep.includes('DISCIPLINE') || keep === '2' ? 'discipline' : null;
+  // « Autre discipline » (ou « changer de discipline ») contient « discipline » mais veut dire l'inverse de l'ancien « La discipline » : à tester d'abord.
+  const shobuKeep = !keep ? null : keep.includes('JIYU') ? 'discipline' : /AUTRE|CHANGER|REGLE/.test(keep) || keep === '1' ? 'ruleset' : keep.includes('DISCIPLINE') || keep === '2' ? 'discipline' : null;
   if (keep && !shobuKeep) warnings.push(`Priorité shobu incompréhensible : « ${text(keepCell)} ».`);
   return {
     line: {
@@ -384,7 +418,8 @@ export function parseClubForm(cells: unknown[][], grid: CategoryGrid, tolerance:
   const header = parseHeader(cells, headerRows);
   // Nouveau format reconnu à sa 5e colonne (« Poids actuel ») ; sinon, ancien format.
   const isNew = normalizeName(text(cells[columnsRow]?.[4])).startsWith('POIDS ACTUEL');
-  const width = isNew ? CLUB_FORM_COLUMNS.length : CLUB_FORM_LEGACY_COLUMNS.length;
+  const triathlonColumn = isNew && normalizeName(text(cells[columnsRow]?.[12])) === 'TRIATHLON';
+  const width = !isNew ? CLUB_FORM_LEGACY_COLUMNS.length : triathlonColumn ? CLUB_FORM_COLUMNS.length : CLUB_FORM_COLUMNS.length - 1;
   const rows: ClubFormRow[] = [];
   const seen = new Map<string, number>();
   const combatByFighter = new Map<string, Set<DisciplineId>>();
@@ -393,7 +428,7 @@ export function parseClubForm(cells: unknown[][], grid: CategoryGrid, tolerance:
     if (row.slice(0, width).every((c) => text(c) === '')) continue;
     const parsedRows = isNew
       ? (() => {
-          const { line, warnings, errors } = cellsToLine(row, grid);
+          const { line, warnings, errors } = cellsToLine(row, grid, triathlonColumn);
           // Une valeur illisible prime sur « manquant » (même ligne, un seul message par case).
           if (errors.length) return [{ line: r + 1, label: `${line.lastName} ${line.firstName}`.trim(), input: null, errors, warnings }];
           const out = lineToRows(line, r + 1, grid, tolerance, closed);

@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
 
 /** Présentations de cellule (fiche club) : titre encadré, en-têtes grisés, cases à remplir bordées, notes. */
-export type OdsCellStyle = 'title' | 'subtitle' | 'label' | 'header' | 'input' | 'note';
+export type OdsCellStyle = 'title' | 'subtitle' | 'label' | 'header' | 'input' | 'note' | 'noteTitle' | 'noteText';
 
 export interface OdsCell {
   value: string | number | null;
@@ -54,6 +54,8 @@ const CELL_STYLES: Record<OdsCellStyle, string> = {
   label: `<style:table-cell-properties ${BORDER} fo:background-color="#f2f2f2" fo:wrap-option="wrap" ${MIDDLE}/><style:text-properties fo:font-size="9pt" fo:font-weight="bold"/>`,
   header: `<style:table-cell-properties ${BORDER} fo:background-color="#f2f2f2" fo:wrap-option="wrap" ${MIDDLE}/><style:paragraph-properties fo:text-align="center"/><style:text-properties fo:font-size="9pt" fo:font-weight="bold"/>`,
   input: `<style:table-cell-properties ${BORDER} ${MIDDLE}/>`,
+  noteTitle: `<style:table-cell-properties fo:background-color="#f2f2f2" fo:wrap-option="wrap" ${MIDDLE}/><style:text-properties fo:font-size="9pt" fo:font-weight="bold"/>`,
+  noteText: `<style:table-cell-properties fo:background-color="#f2f2f2" fo:wrap-option="wrap" ${MIDDLE}/><style:text-properties fo:font-size="9pt"/>`,
   note: `<style:table-cell-properties fo:wrap-option="wrap" ${MIDDLE}/><style:text-properties fo:font-size="9pt" fo:font-style="italic"/>`,
 };
 

@@ -21,12 +21,16 @@ describe('parsePreferences', () => {
     expect(r.value).toEqual(['shido-boxing']);
     expect(r.errors.join(' ')).toContain('discipline principale');
   });
-  test('code inconnu', () => expect(parsePreferences('4', 'karate').errors.join(' ')).toContain('code inconnu'));
+  test('code inconnu', () => expect(parsePreferences('5', 'karate').errors.join(' ')).toContain('code inconnu'));
   test('doublon ignoré sans erreur', () => expect(parsePreferences('22', 'karate')).toEqual({ value: ['shido-boxing'], errors: [] }));
-  test.each(['kata', 'triathlon'] as const)('pas de préférences pour %s', (d) => {
-    const r = parsePreferences('2', d);
+  test('pas de préférences pour le kata', () => {
+    const r = parsePreferences('2', 'kata');
     expect(r.value).toEqual([]);
     expect(r.errors.join(' ')).toContain('pas de préférences');
+  });
+  test('triathlon : code 4, comme choix et comme discipline principale', () => {
+    expect(parsePreferences('41', 'karate')).toEqual({ value: ['triathlon'], errors: [expect.stringContaining('discipline principale')] });
+    expect(parsePreferences('12', 'triathlon')).toEqual({ value: ['karate', 'shido-boxing'], errors: [] });
   });
 });
 

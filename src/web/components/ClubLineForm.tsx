@@ -1,12 +1,13 @@
-import { Button, Checkbox, Group, Input, Modal, NativeSelect, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
+import { Button, Checkbox, Group, Input, Modal, NativeSelect, Paper, Radio, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { useState } from 'react';
-import { kgText, weightWarning, type ClubFormLine, type CombatDiscipline } from '../../domain/club-form.js';
+import { PREF_DISCIPLINES, choosePref, kgText, orderedPrefs, tidyReclass, weightWarning, type ClubFormLine, type CombatDiscipline, type PrefDiscipline, type PrefRank } from '../../domain/club-form.js';
+import { DISCIPLINES } from '../../domain/disciplines.js';
 import { entryKey } from '../../domain/closed-categories.js';
 import type { DisciplineId, Ruleset } from '../../domain/types.js';
 import { ApiError, RELOAD_STATUSES, useDeleteClubLine, useSaveClubLine, type ClubEntryView, type ClubLine } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
-import { COMBATS, OneOf, PREFS } from './PaperEntryTable.js';
+import { COMBATS, OneOf } from './PaperEntryTable.js';
 
 const RULESETS: [Ruleset, string][] = [['jiyu', 'Jiyu'], ['shobu', 'Shobu']];
 
@@ -42,7 +43,7 @@ export function ClubLineForm({ token, line, ageBands, weightClasses, closed, ope
   const set = (patch: Partial<ClubFormLine>) =>
     setForm((f) => {
       const next = { ...f, ...patch };
-      if (patch.ageBandCode === undefined && patch.sex === undefined) return next;
+      if (patch.ageBandCode === undefined && patch.sex === undefined) return tidyReclass(next);
       // La catégorie de poids dépend de la tranche et du sexe.
       if (!weightClasses.some((w) => w.id === next.weightClassId && w.ageBandCode === next.ageBandCode && w.sex === next.sex)) next.weightClassId = null;
       // Tranche ou sexe changé : un choix devenu fermé est retiré (le coach le voit, au lieu d'un refus à l'enregistrement).
@@ -50,7 +51,8 @@ export function ClubLineForm({ token, line, ageBands, weightClasses, closed, ope
       if (next.combat && !open(next.combat, 'jiyu') && !open(next.combat, 'shobu')) Object.assign(next, { combat: null, ruleset: null });
       if (next.combat && next.ruleset && !open(next.combat, next.ruleset)) next.ruleset = null;
       if (next.kata && !open('kata', null)) next.kata = false;
-      return next;
+      next.prefs = Object.fromEntries(orderedPrefs(next.prefs).filter((d) => open(d, 'jiyu') || open(d, 'shobu')).map((d, i) => [d, i + 1]));
+      return tidyReclass(next);
     });
   const band = ageBands.find((b) => b.code === form.ageBandCode);
   const classes = weightClasses.filter((w) => w.ageBandCode === form.ageBandCode && w.sex === form.sex);
@@ -67,6 +69,15 @@ export function ClubLineForm({ token, line, ageBands, weightClasses, closed, ope
     return saved?.combat === form.combat && saved.ruleset === r ? [[r, label + NOT_OPEN]] : [];
   });
   const kataOpen = isOpen('kata', null);
+  const otherChoices = PREF_DISCIPLINES.filter((d) => d !== form.combat).flatMap((d): [PrefDiscipline, string][] => {
+    const { label } = DISCIPLINES[d];
+    if (isOpen(d, 'jiyu') || isOpen(d, 'shobu')) return [[d, label]];
+    return form.prefs[d] ? [[d, label + NOT_OPEN]] : [];
+  });
+  const chosen = orderedPrefs(form.prefs);
+  // Un rang de plus s'affiche quand le précédent est choisi et qu'il reste une discipline à proposer.
+  const shownRanks = ([1, 2, 3] as PrefRank[]).filter((rank) => rank === 1 || (chosen.length >= rank - 1 && otherChoices.length >= rank));
+  const ownLabel = form.combat ? DISCIPLINES[form.combat].label.toLowerCase() : '';
   const kataShown = kataOpen || !!saved?.kata;
   const nothingOpen = !!band && !!form.sex && combats.length === 0 && !kataShown;
   // Un refus parce que la ligne a changé ou disparu entre-temps (ou que les inscriptions sont closes) ferme le formulaire : la liste est rechargée.
@@ -121,29 +132,34 @@ export function ClubLineForm({ token, line, ageBands, weightClasses, closed, ope
           </Input.Wrapper>
         )}
         {form.kata && <TextInput data-testid="line-grade" label="Grade (pour le kata)" value={form.grade ?? ''} onChange={(e) => set({ grade: e.currentTarget.value || null })} />}
-        {form.combat && (
-          <Stack gap={4}>
-            <Text size="sm" fw={500}>Si reclassement : autres disciplines acceptées, par ordre de préférence</Text>
-            <Group gap="xs">
-              {PREFS.map(([d, label]) => (
-                <NativeSelect key={d} size="xs" w={110} aria-label={`Reclassement ${label}`} label={label} data={['', '1', '2']}
-                  value={form.prefs[d] ? String(form.prefs[d]) : ''}
-                  onChange={(e) => {
-                    const v = e.currentTarget.value;
-                    const prefs = { ...form.prefs };
-                    if (v === '1' || v === '2') prefs[d] = Number(v) as 1 | 2;
-                    else delete prefs[d];
-                    set({ prefs });
-                  }} />
-              ))}
-            </Group>
-          </Stack>
-        )}
-        {form.ruleset === 'shobu' && (
-          <Stack gap={4} role="group" aria-label="Shobu : garder en priorité">
-            <Text size="sm" fw={500}>Shobu : en cas de reclassement, garder en priorité</Text>
-            <OneOf value={form.shobuKeep} options={[['ruleset', 'Les règles shobu'], ['discipline', 'La discipline']]} onChange={(shobuKeep) => set({ shobuKeep })} />
-          </Stack>
+        {form.combat && otherChoices.length > 0 && (
+          <Paper withBorder p="md" radius="md" data-testid="line-reclass" style={{ background: 'var(--sk-bg)' }}>
+            <Stack gap="sm">
+              <div>
+                <Text fw={600} size="sm">Reclassement : si {form.firstName.trim() || 'ce combattant'} se retrouve sans adversaire</Text>
+                <Text size="sm" c="dimmed" mt={2}>Le jour de la compétition, un combattant peut se retrouver seul dans sa catégorie. L’organisation cherche alors à lui trouver un adversaire. Peut-on lui proposer une autre discipline ?</Text>
+              </div>
+              <SimpleGrid cols={{ base: 1, xs: shownRanks.length > 1 ? 2 : 1 }}>
+                {shownRanks.map((rank) => (
+                  <NativeSelect key={rank} label={rank === 1 ? '1er choix' : `${rank}e choix`} value={chosen[rank - 1] ?? ''}
+                    data={[
+                      { value: '', label: rank === 1 ? `Non, rester en ${ownLabel}` : `Pas de ${rank}e choix` },
+                      // Les rangs précédents ne sont plus proposés ; le 1er choix peut reprendre une discipline choisie plus loin.
+                      ...otherChoices.filter(([d]) => !chosen.slice(0, rank - 1).includes(d)).map(([value, label]) => ({ value, label })),
+                    ]}
+                    onChange={(e) => set({ prefs: choosePref(form.prefs, rank, (e.currentTarget.value || null) as PrefDiscipline | null) })} />
+                ))}
+              </SimpleGrid>
+              {form.ruleset === 'shobu' && (chosen.length > 0 ? (
+                <Radio.Group label="Que lui proposer d’abord ?" value={form.shobuKeep} onChange={(v) => set({ shobuKeep: v as 'ruleset' | 'discipline' })}>
+                  <Stack gap={6} mt={6}>
+                    <Radio value="ruleset" label="Changer de discipline, rester en shobu" />
+                    <Radio value="discipline" label={`Rester en ${ownLabel}, passer en jiyu`} />
+                  </Stack>
+                </Radio.Group>
+              ) : <Text size="xs" c="dimmed">Sans autre discipline, on pourra seulement lui proposer de passer en jiyu.</Text>)}
+            </Stack>
+          </Paper>
         )}
         <ApiErrorAlert error={save.error ?? remove.error} />
         <Group justify="space-between">

@@ -170,14 +170,14 @@ export function RegistrationForm({ competitionId, edit, onDone }: { competitionI
             onChange={(e) => set({ grade: e.currentTarget.value })} />
         )}
         {DISCIPLINES[f.discipline].inPreferences && (
-          <TextInput data-testid="reg-prefs" label="Autres disciplines par ordre de préférence (1 karaté, 2 shido-boxing, 3 shido-mix)"
+          <TextInput data-testid="reg-prefs" label="Autres disciplines par ordre de préférence (1 karaté, 2 shido-boxing, 3 shido-mix, 4 triathlon)"
             placeholder="ex. 32" value={f.prefs} onChange={(e) => set({ prefs: e.currentTarget.value })}
             description={prefs.value.length ? prefsLabel(prefs.value) : 'Vide : ne change pas de discipline'}
             error={prefs.errors.length ? prefs.errors.join(' ') : undefined} />
         )}
         <Group>
           {hasWeight && f.ruleset === 'shobu' && (
-            <Checkbox data-testid="reg-jiyu-first" label="Si reclassement, garder en priorité la discipline (passer en jiyu plutôt que changer de discipline)"
+            <Checkbox data-testid="reg-jiyu-first" label="Si sans adversaire, proposer d’abord le jiyu (plutôt qu’une autre discipline)"
               checked={f.acceptsJiyuFirst} onChange={(e) => set({ acceptsJiyuFirst: e.currentTarget.checked })} />
           )}
           {(!edit || edit.source === 'manual' || edit.source === 'onsite') && (

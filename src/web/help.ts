@@ -241,7 +241,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     title: 'Fiche club',
     short: 'Envoyez la fiche aux clubs (tableur ou papier), puis importez ou saisissez chaque fiche qu’ils vous renvoient.',
     details: [
-      'La fiche club apporte ce que l’export FFK n’a pas : le poids actuel, les disciplines acceptées en cas de reclassement, la priorité en shobu, le grade pour le kata et le coach.',
+      'La fiche club apporte ce que l’export FFK n’a pas : le poids actuel, les autres disciplines acceptées si le combattant se retrouve seul (triathlon compris, jamais le kata), ce qu’on propose d’abord en shobu, le grade pour le kata et le coach.',
       'Elle part plusieurs semaines avant la compétition ; l’export FFK n’arrive qu’à la clôture des inscriptions.',
     ],
   },
@@ -270,7 +270,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Le modèle .ods s’ouvre avec LibreOffice ou Excel ; il contient des listes déroulantes (sexe, catégorie d’âge, discipline de combat, kata, règlement, reclassement, priorité shobu).',
       '« Télécharger la fiche papier (PDF) » donne une fiche A4 paysage à cocher, 10 combattants par feuille, à envoyer aux clubs ou à imprimer telle quelle (une page, sans réglage).',
       'Une ligne par combattant : kata et combat sur la même ligne. Le coach donne le poids actuel ; la catégorie de poids en est déduite.',
-      'Seules les tranches d’âge cochées « Fiche club » dans la grille sont proposées.',
+      'Seules les tranches d’âge qui ont au moins une catégorie ouverte sont proposées. Les fichiers n’indiquent pas les fermetures partielles (par exemple pas de kata chez les seniors F) : à l’import, l’aperçu signale ces lignes et elles vont en Réaffectation. La page en ligne, elle, ne propose que ce qui est ouvert et en donne le détail dans un champ repliable.',
     ],
   },
   'fiche-club.importer': {
@@ -633,7 +633,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
   },
   'grille.ouvertes': {
     title: 'Catégories ouvertes',
-    short: 'Décochez une case pour ne pas ouvrir cette catégorie : elle disparaît de la fiche club et de l’inscription en ligne.',
+    short: 'Décochez une case pour ne pas ouvrir cette catégorie : elle disparaît de l’inscription en ligne, et de la fiche club si toute la tranche d’âge est fermée.',
     details: [
       'Une case = une tranche d’âge, un sexe, une discipline et son règlement. Le réglage vaut pour cette compétition seulement ; tout est ouvert au départ.',
       'Les combattants déjà inscrits dans une catégorie que vous fermez apparaissent en Réaffectation : vous les déplacez ou choisissez « Ne combat pas ».',

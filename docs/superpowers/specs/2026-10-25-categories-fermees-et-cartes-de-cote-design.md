@@ -53,6 +53,7 @@ Conséquence à connaître : les combattants déjà inscrits dans une tranche no
   - Si l'organisateur a choisi « ne combat pas » (§4.2), la ligne affiche « Ne combattra pas dans cette catégorie (catégorie non ouverte) ».
 - **Fiche .ods :** les listes déroulantes ne peuvent pas dépendre de la tranche choisie. La liste des tranches ne garde donc que celles qui ont au moins une case ouverte. L'onglet « Aide » liste **les catégories non ouvertes** (ex. « Benjamins F et M : pas de shido-mix-martial »).
 - **Fiche PDF papier :** même liste de tranches. Un encadré sous l'en-tête indique « Non ouvert à cette compétition : … » ; il disparaît s'il n'y a rien de fermé.
+- ✅ (remplacé le 2026-11-04) **Ni le PDF ni le .ods ne parlent plus des catégories non ouvertes**, pour rester simples : seules les tranches entièrement fermées disparaissent de leurs listes ; une fermeture partielle est signalée à l'import. La page en ligne donne le détail dans un champ repliable, fermé par défaut. Voir `docs/superpowers/specs/2026-10-22-fiche-club-papier-design.md` §7.
 - 🔧 Le texte qui résume les catégories fermées est produit par une seule fonction du domaine, partagée par le .ods, le PDF et la page en ligne.
 
 ### 2.4 Ce qui arrive par d'autres chemins 💡

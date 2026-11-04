@@ -125,6 +125,15 @@ describe('propositions', () => {
     const kp = props(makeState([k, kc]), k.registrationId);
     expect(kp.map((p) => p.type)).toEqual(['C']);
   });
+  test('triathlon : reclassement dans les deux sens, si la discipline est acceptée', () => {
+    const tri = member({ discipline: 'triathlon', otherDisciplines: ['karate'] });
+    const ka = member({ discipline: 'karate', otherDisciplines: ['triathlon'] });
+    const s = makeState([tri, ka]);
+    expect(props(s, tri.registrationId).map((p) => [p.type, p.changes.discipline])).toEqual([['H', 'karate']]);
+    expect(props(s, ka.registrationId).map((p) => [p.type, p.changes.discipline])).toEqual([['H', 'triathlon']]);
+    const refused = makeState([member({ discipline: 'triathlon', otherDisciplines: [] }), member({ discipline: 'karate', otherDisciplines: [] })]);
+    expect(detectCases(refused).flatMap((c) => proposalsFor(refused, c))).toEqual([]);
+  });
   test('pré-accord sur B et C, pas sur A', () => {
     const a = member({ weightClassId: 'cadet:F:-47', approxWeightKg: 44, clubPreApproval: true });
     const b = member({ weightClassId: 'cadet:F:-54', approxWeightKg: 53 });

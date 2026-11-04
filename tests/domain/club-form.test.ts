@@ -12,7 +12,10 @@ import {
   disciplineFromLabel,
   parseClubForm,
   rulesetFromLabel,
+  choosePref,
   lineToRows,
+  orderedPrefs,
+  tidyReclass,
   weightWarning,
   type ClubFormLine,
 } from '../../src/domain/club-form.js';
@@ -52,7 +55,7 @@ test('fiche correcte', () => {
     club: 'Tani Dojo', coachName: 'Jean Coach', coachPhone: '06 00 00 00 00', coachEmails: ['coach@example.org'], preApproval: true,
   });
   expect(r.rows.map((x) => x.errors)).toEqual([[], []]);
-  expect(r.rows[0]!.line).toBe(12);
+  expect(r.rows[0]!.line).toBe(14);
   expect(r.rows[0]!.input).toMatchObject({
     lastName: 'MARTIN', firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu',
     weightClassId: 'cadet:F:-54', otherDisciplines: ['shido-mix', 'shido-boxing'], approxWeightKg: 52.5, source: 'club_form',
@@ -75,7 +78,7 @@ test('lignes vides au milieu ignorées, numéros de ligne conservés', () => {
     ]),
     grid,
   );
-  expect(r.rows.map((x) => x.line)).toEqual([12, 14]);
+  expect(r.rows.map((x) => x.line)).toEqual([14, 16]);
 });
 
 test('variantes de saisie', () => {
@@ -117,7 +120,7 @@ test('kata : règlement et poids vides', () => {
 });
 
 test('préférences douteuses : avertissement, la ligne reste valide', () => {
-  const r = parseClubForm(sheet(HEADER, [['A', 'a', 'F', 'Cadets', '-54', 'Karaté', 'Jiyu', '14', null, null]]), grid);
+  const r = parseClubForm(sheet(HEADER, [['A', 'a', 'F', 'Cadets', '-54', 'Karaté', 'Jiyu', '15', null, null]]), grid);
   expect(r.rows[0]!.errors).toEqual([]);
   expect(r.rows[0]!.warnings.length).toBe(2);
   expect(r.rows[0]!.input!.otherDisciplines).toEqual([]);
@@ -177,7 +180,7 @@ describe('corrections reportées', () => {
     ]), grid);
     expect(r.rows[0]!.errors).toEqual([]);
     expect(r.rows[1]!.input).toBeNull();
-    expect(r.rows[1]!.errors.join(' ')).toContain('ligne 12');
+    expect(r.rows[1]!.errors.join(' ')).toContain('ligne 14');
   });
   test('deux disciplines de combat pour le même combattant : remarque', () => {
     const r = parseClubForm(sheet(HEADER, [
@@ -202,7 +205,7 @@ describe('corrections reportées', () => {
     cells.splice(2, 0, ['Ligne ajoutée par le coach'], []);
     const r = parseClubForm(cells, grid);
     expect(r.header.club).toBe('Tani Dojo');
-    expect(r.rows.map((x) => x.line)).toEqual([14]);
+    expect(r.rows.map((x) => x.line)).toEqual([16]);
   });
   test('fichier sans en-tête : message explicite', () => {
     expect(() => parseClubForm([[CLUB_FORM_TITLE], ['x']], grid)).toThrow(/Nom, Prénom/);
@@ -211,9 +214,9 @@ describe('corrections reportées', () => {
 
 describe('nouveau format (une ligne par combattant)', () => {
   const tol = { M: 0.3, F: 0.5 };
-  //                 Nom       Prénom  Sexe       Âge       Poids   Combat    Kata   Grade      Règl.   Rk  Rb   Rm   Priorité shobu
+  //                 Nom       Prénom  Sexe       Âge       Poids   Combat    Kata   Grade      Règl.   Rk  Rb   Rm   Rt  Priorité shobu
   const line = (over: Partial<Record<number, string | number | null>> = {}): Line => {
-    const l: Line = ['MARTIN', 'Léa', 'Féminin', 'Cadets', '53,5', 'Karaté', 'Oui', '1er kyu', 'Jiyu', '', '2', '1', ''];
+    const l: Line = ['MARTIN', 'Léa', 'Féminin', 'Cadets', '53,5', 'Karaté', 'Oui', '1er kyu', 'Jiyu', '', '2', '1', '', ''];
     for (const [k, v] of Object.entries(over)) l[Number(k)] = v ?? null;
     return l;
   };
@@ -221,7 +224,7 @@ describe('nouveau format (une ligne par combattant)', () => {
   test('kata et karaté sur une ligne → deux inscriptions', () => {
     const r = parseClubForm(sheetNew([line()]), grid, tol);
     expect(r.rows.map((x) => x.errors)).toEqual([[], []]);
-    expect(r.rows.map((x) => x.line)).toEqual([12, 12]);
+    expect(r.rows.map((x) => x.line)).toEqual([14, 14]);
     const [combat, kata] = r.rows.map((x) => x.input!);
     expect(combat).toMatchObject({ discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54', approxWeightKg: 53.5, otherDisciplines: ['shido-mix', 'shido-boxing'], acceptsJiyuFirst: null });
     expect(kata).toMatchObject({ discipline: 'kata', ruleset: null, weightClassId: null, otherDisciplines: [], grade: '1er kyu' });
@@ -245,10 +248,12 @@ describe('nouveau format (une ligne par combattant)', () => {
   });
 
   test('priorité shobu', () => {
-    const shobu = (keep: string) => parseClubForm(sheetNew([line({ 3: 'Seniors', 4: '60', 6: 'Non', 8: 'Shobu', 12: keep })]), grid, tol).rows[0]!;
-    expect(shobu('Les règles shobu').input!.acceptsJiyuFirst).toBe(false);
-    expect(shobu('La discipline').input!.acceptsJiyuFirst).toBe(true);
-    const jiyu = parseClubForm(sheetNew([line({ 6: 'Non', 12: 'La discipline' })]), grid, tol).rows[0]!;
+    const shobu = (keep: string) => parseClubForm(sheetNew([line({ 3: 'Seniors', 4: '60', 6: 'Non', 8: 'Shobu', 13: keep })]), grid, tol).rows[0]!;
+    expect(shobu('Autre discipline').input!.acceptsJiyuFirst).toBe(false);
+    expect(shobu('Passer en jiyu').input!.acceptsJiyuFirst).toBe(true);
+    // Écrit à la main : « changer de discipline » ne doit pas être lu comme « la discipline ».
+    expect(shobu('changer de discipline').input!.acceptsJiyuFirst).toBe(false);
+    const jiyu = parseClubForm(sheetNew([line({ 6: 'Non', 13: 'Passer en jiyu' })]), grid, tol).rows[0]!;
     expect(jiyu.input!.acceptsJiyuFirst).toBeNull();
     expect(jiyu.warnings.join(' ')).toMatch(/shobu/i);
   });
@@ -276,6 +281,52 @@ describe('nouveau format (une ligne par combattant)', () => {
     expect(r.input!.otherDisciplines).toEqual([]);
     expect(r.warnings.length).toBe(1);
   });
+});
+
+test('colonne Triathlon : numérotée comme les autres, jusqu’à 3 choix', () => {
+  const row: Line = ['MARTIN', 'Léa', 'Féminin', 'Cadets', '53,5', 'Karaté', 'Non', null, 'Jiyu', null, '2', '3', '1', null];
+  const r = parseClubForm(sheetNew([row]), grid, { M: 0, F: 0 }).rows[0]!;
+  expect(r.warnings).toEqual([]);
+  expect(r.input!.otherDisciplines).toEqual(['triathlon', 'shido-boxing', 'shido-mix']);
+});
+
+test('inscrit en triathlon : ses autres disciplines sont gardées', () => {
+  const row: Line = ['MARTIN', 'Léa', 'Féminin', 'Cadets', '53,5', 'Triathlon', 'Non', null, 'Jiyu', '1', null, '2', null, null];
+  const r = parseClubForm(sheetNew([row]), grid, { M: 0, F: 0 }).rows[0]!;
+  expect(r.warnings).toEqual([]);
+  expect(r.input!.otherDisciplines).toEqual(['karate', 'shido-mix']);
+});
+
+test('fiche déjà envoyée (sans colonne Triathlon) : toujours lue, avec ses anciens libellés', () => {
+  const cells = sheet(HEADER_NEW, []);
+  cells[10] = ['Nom', 'Prénom', 'Sexe', "Catégorie d'âge", 'Poids actuel (kg)', 'Discipline de combat', 'Kata (Oui/Non)', 'Grade (si kata)', 'Règlement', 'Karaté', 'Boxing', 'Mix', 'Shobu : si reclassement, garder en priorité'];
+  const row = (keep: string): Line => ['DURAND', 'Hugo', 'Masculin', 'Seniors', '74', 'Karaté', 'Non', null, 'Shobu', null, '1', '2', keep];
+  const read = (keep: string) => {
+    cells[CLUB_FORM_FIRST_ROW - 1] = row(keep);
+    return parseClubForm(cells, grid, { M: 0, F: 0 }).rows[0]!;
+  };
+  expect(read('Les règles shobu').input).toMatchObject({ otherDisciplines: ['shido-boxing', 'shido-mix'], acceptsJiyuFirst: false });
+  expect(read('La discipline').input).toMatchObject({ acceptsJiyuFirst: true });
+  expect(read('La discipline').warnings).toEqual([]);
+});
+
+test('choix de reclassement : ordre, choix, retrait', () => {
+  expect(orderedPrefs({ 'shido-mix': 2, karate: 1, triathlon: 3 })).toEqual(['karate', 'shido-mix', 'triathlon']);
+  // 1er, puis 2e, puis 3e choix
+  expect(choosePref({}, 1, 'karate')).toEqual({ karate: 1 });
+  expect(choosePref({ karate: 1 }, 2, 'triathlon')).toEqual({ karate: 1, triathlon: 2 });
+  // Reprendre une discipline déjà choisie plus loin : les deux échangent leur rang.
+  expect(choosePref({ karate: 1, triathlon: 2 }, 1, 'triathlon')).toEqual({ triathlon: 1, karate: 2 });
+  // Retirer un choix retire aussi les suivants : il n'y a jamais de 2e sans 1er.
+  expect(choosePref({ karate: 1, triathlon: 2, 'shido-mix': 3 }, 2, null)).toEqual({ karate: 1 });
+  expect(choosePref({ karate: 1, triathlon: 2 }, 1, null)).toEqual({});
+});
+
+test('reclassement rangé : sa propre discipline retirée, rangs recalculés, priorité shobu seulement si elle sert', () => {
+  const line = { combat: 'karate' as const, ruleset: 'shobu' as const, shobuKeep: 'discipline' as const };
+  expect(tidyReclass({ ...line, prefs: { karate: 1, 'shido-mix': 2 } })).toEqual({ ...line, prefs: { 'shido-mix': 1 } });
+  expect(tidyReclass({ ...line, prefs: { karate: 1 } })).toEqual({ ...line, prefs: {}, shobuKeep: null });
+  expect(tidyReclass({ ...line, ruleset: 'jiyu', prefs: { 'shido-mix': 1 } })).toEqual({ ...line, ruleset: 'jiyu', prefs: { 'shido-mix': 1 }, shobuKeep: null });
 });
 
 test('ancien format toujours lu', () => {

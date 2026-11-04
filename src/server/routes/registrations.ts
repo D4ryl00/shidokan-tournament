@@ -26,7 +26,7 @@ import { UnreadableFileError, readWorkbook } from '../spreadsheet/read.js';
 import { writeOds } from '../spreadsheet/ods.js';
 
 const discipline = z.enum(['karate', 'shido-boxing', 'shido-mix', 'triathlon', 'kata']);
-const pref = z.union([z.literal(1), z.literal(2)]).optional();
+const pref = z.union([z.literal(1), z.literal(2), z.literal(3)]).optional();
 /** Une ligne de fiche (un combattant), saisie à l'écran. */
 export const clubFormLineSchema = z.object({
   lastName: z.string().max(80),
@@ -40,7 +40,7 @@ export const clubFormLineSchema = z.object({
   kata: z.boolean(),
   grade: z.string().trim().max(30).nullable(),
   ruleset: z.enum(['jiyu', 'shobu']).nullable(),
-  prefs: z.object({ karate: pref, 'shido-boxing': pref, 'shido-mix': pref }),
+  prefs: z.object({ karate: pref, 'shido-boxing': pref, 'shido-mix': pref, triathlon: pref }),
   shobuKeep: z.enum(['ruleset', 'discipline']).nullable(),
 });
 

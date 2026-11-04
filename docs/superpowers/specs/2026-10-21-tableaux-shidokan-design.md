@@ -189,7 +189,7 @@ Inscription sur place ✅ : on peut ajouter un combattant à tout moment, jusqu'
 | Si shobu : accepte le **jiyu en priorité**, avant de changer de discipline | Oui / Non | ✅ |
 | Poids actuel approximatif | kg, facultatif | 💡 |
 
-Kata et triathlon : inscription possible sur la fiche ✅, mais **jamais dans les préférences** de recasement ✅.
+Kata et triathlon : inscription possible sur la fiche ✅, mais **jamais dans les préférences** de recasement ✅. ✅ (remplacé le 2026-11-04) Le **triathlon** est désormais une préférence comme les autres, dans les deux sens (code 4) ; seul le kata reste exclu. Détail : `docs/superpowers/specs/2026-10-22-fiche-club-papier-design.md` §7.
 
 ### 7.3 Rapprochement avec l'export FFK 💡
 - Faute de licence sur la fiche, le rapprochement se fait par **nom + prénom + club**, complétés par le sexe et la catégorie d'âge.
@@ -455,7 +455,7 @@ Hypothèses à faire confirmer (🟡) :
 | 2026-10-21 | Tableau de bord uniquement à l'écran (badges couleur + icône + texte). Impressions : tableaux simples pour le gymnase. |
 | 2026-10-21 | Catégories FFK par défaut, entièrement modifiables, avec répercussion dans toute l'app. |
 | 2026-10-21 | Formats de type Smoothcomp, y compris pour le kata ; poule pour 3 ; repêchage désactivé par défaut ; repêchage et 3e place réglables pour la compétition ou pour un tableau. |
-| 2026-10-21 | Triathlon : 3 ou 6 rounds ; exclu du recasement. |
+| 2026-10-21 | Triathlon : 3 ou 6 rounds ; exclu du recasement (remplacé le 2026-11-04 : reclassement possible dans les deux sens, si le coach l'accepte). |
 | 2026-10-21 | Kata : individuel, noté par les juges, inscription à part, cumulable avec le combat. |
 | 2026-10-21 | Import de l'export FFK indispensable (.xlsx / .ods / .csv, indépendant des noms d'onglets). |
 | 2026-10-21 | Fiche de pré-inscription club générée par l'app, reçue **avant** l'export FFK, simple, sans licence, importable en un clic ; préférences codées 1/2/3 ; choix shobu → jiyu en priorité ; pré-accord du coach en une case globale. |

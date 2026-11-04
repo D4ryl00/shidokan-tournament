@@ -138,8 +138,56 @@ test('catégorie fermée : non proposée au club', async ({ page, request }) => 
   await page.getByTestId('line-save').click();
   await expect(page.getByText('Aucune discipline cochée.')).toBeVisible();
   await expect(page.getByText('catégorie non ouverte à cette compétition')).toHaveCount(0);
-  // Page du club : le résumé de ce qui n'est pas ouvert.
-  await expect(page.getByTestId('club-entry-closed')).toContainText('Cadets (F) : pas de Shido-mix-martial');
+  // Page du club : le détail de ce qui n'est pas ouvert est replié.
+  await page.getByRole('button', { name: 'Annuler' }).click();
+  const closedDetail = page.getByText('Cadets (F) : pas de Shido-mix-martial');
+  await expect(closedDetail).toBeHidden();
+  await page.getByTestId('club-entry-closed').getByRole('button', { name: 'Catégories non ouvertes à cette compétition' }).click();
+  await expect(closedDetail).toBeVisible();
+});
+
+test('reclassement en ligne : sa discipline n’est pas proposée, triathlon compris, choix résumé sur la carte', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe reclassement lisible');
+  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
+  const entry = (await (await request.post('/api/club-directory', { data: { ...EMPTY, name: `Dojo reclassement ${Date.now()}` } })).json()) as { id: string };
+  const [link] = (await (await request.post(`/api/competitions/${id}/invitations`, { data: { directoryIds: [entry.id] } })).json()) as { token: string }[];
+  await request.patch(`/api/competitions/${id}/club-entry`, { data: { status: 'open', deadline: '2026-11-15' } });
+
+  await page.goto(`/inscription/${link!.token}`);
+  await page.getByTestId('add-fighter').click();
+  const form = page.getByTestId('club-line-form');
+  const block = form.getByTestId('line-reclass');
+  await fillFighter(page, { last: 'MARTIN', first: 'Léa', sex: 'Féminin', age: 'Seniors (18 à 34 ans)', weightClass: '-55 kg', ruleset: undefined });
+  await expect(block).toHaveCount(0);
+  await form.getByRole('group', { name: 'Discipline de combat' }).getByText('Karaté', { exact: true }).click();
+  await form.getByRole('group', { name: 'Règlement' }).getByText('Shobu', { exact: true }).click();
+  await expect(block).toContainText('si Léa se retrouve sans adversaire');
+
+  // Sa propre discipline n'est pas dans la liste ; le triathlon, si.
+  const first = block.getByLabel('1er choix');
+  await expect(first.locator('option')).toHaveText(['Non, rester en karaté', 'Shido-boxing', 'Shido-mix-martial', 'Triathlon']);
+  // Sans autre discipline : pas de question shobu, pas de 2e choix.
+  await expect(block.getByLabel('2e choix')).toHaveCount(0);
+  await expect(block.getByText('Que lui proposer d’abord ?')).toHaveCount(0);
+  await first.selectOption('triathlon');
+  await expect(block.getByLabel('2e choix').locator('option')).toHaveText(['Pas de 2e choix', 'Shido-boxing', 'Shido-mix-martial']);
+  await block.getByLabel('2e choix').selectOption('shido-mix');
+  await expect(block.getByLabel('3e choix').locator('option')).toHaveText(['Pas de 3e choix', 'Shido-boxing']);
+  await block.getByRole('radio', { name: 'Rester en karaté, passer en jiyu' }).check();
+  await page.getByTestId('line-save').click();
+  const card = page.getByTestId('club-line');
+  await expect(card.getByTestId('club-line-reclass')).toHaveText('Si sans adversaire : Triathlon, puis Shido-mix-martial');
+
+  // Changer pour une discipline déjà choisie la retire de la liste et renumérote.
+  await card.getByRole('button', { name: 'Modifier' }).click();
+  await expect(block.getByRole('radio', { name: 'Rester en karaté, passer en jiyu' })).toBeChecked();
+  await form.getByRole('group', { name: 'Discipline de combat' }).getByText('Triathlon', { exact: true }).click();
+  await expect(first).toHaveValue('shido-mix');
+  await expect(first.locator('option')).toHaveText(['Non, rester en triathlon', 'Karaté', 'Shido-boxing', 'Shido-mix-martial']);
+  await first.selectOption('');
+  await expect(block.getByText('on pourra seulement lui proposer de passer en jiyu')).toBeVisible();
+  await page.getByTestId('line-save').click();
+  await expect(card.getByTestId('club-line-reclass')).toHaveText('Si sans adversaire : reste en triathlon');
 });
 
 test('envoi du lien : une case par adresse pour un club qui en a plusieurs ; seules les adresses cochées partent', async ({ page, request }) => {

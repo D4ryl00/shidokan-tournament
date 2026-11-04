@@ -1,7 +1,7 @@
 import { Button, Checkbox, Chip, Group, NativeSelect, ScrollArea, SimpleGrid, Stack, Table, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
-import { ageBandAbbreviations, type ClubFormHeader, type ClubFormLine, type CombatDiscipline, type PrefDiscipline } from '../../domain/club-form.js';
+import { SHOBU_KEEP_LABELS, ageBandAbbreviations, type ClubFormHeader, type ClubFormLine, type CombatDiscipline, type PrefDiscipline, type PrefRank } from '../../domain/club-form.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import { useClosedCategories, useImportPaperEntry, usePreviewPaperEntry } from '../api.js';
 import { entryKey, offeredAgeBands } from '../../domain/closed-categories.js';
@@ -16,7 +16,7 @@ const emptyLine = (): ClubFormLine => ({
 });
 const EMPTY_HEADER: ClubFormHeader = { club: '', coachName: null, coachPhone: null, coachEmails: [], preApproval: false };
 export const COMBATS: [CombatDiscipline, string][] = [['karate', 'Karaté'], ['shido-boxing', 'Boxing'], ['shido-mix', 'Mix'], ['triathlon', 'Triathlon']];
-export const PREFS: [PrefDiscipline, string, string][] = [['karate', 'Karaté', 'Ka'], ['shido-boxing', 'Boxing', 'Bx'], ['shido-mix', 'Mix', 'Mx']];
+export const PREFS: [PrefDiscipline, string, string][] = [['karate', 'Karaté', 'Ka'], ['shido-boxing', 'Boxing', 'Bx'], ['shido-mix', 'Mix', 'Mx'], ['triathlon', 'Triathlon', 'Tri']];
 
 /** Cases à choix unique, comme sur la fiche : un second clic décoche. */
 export function OneOf<T extends string>({ value, options, onChange }: { value: T | null; options: [T, string][]; onChange: (v: T | null) => void }) {
@@ -77,15 +77,15 @@ export function PaperEntryTable({ competitionId, grid }: { competitionId: string
         <TextInput label="Coach" value={header.coachName ?? ''} onChange={(e) => setH({ coachName: e.currentTarget.value || null })} />
         <TextInput label="Téléphone" value={header.coachPhone ?? ''} onChange={(e) => setH({ coachPhone: e.currentTarget.value || null })} />
         <EmailsInput compact placeholder="a@club.fr, b@club.fr" value={header.coachEmails} onChange={(coachEmails) => setH({ coachEmails })} />
-        <Checkbox mt="lg" label="Le coach accepte d’avance les reclassements" checked={header.preApproval} onChange={(e) => setH({ preApproval: e.currentTarget.checked })} />
+        <Checkbox mt="lg" label="Pré-accord du coach (poids et âge)" checked={header.preApproval} onChange={(e) => setH({ preApproval: e.currentTarget.checked })} />
       </SimpleGrid>
       <ScrollArea type="auto" offsetScrollbars="x">
-        <Table withTableBorder withColumnBorders miw={1350} verticalSpacing={4}>
+        <Table withTableBorder withColumnBorders miw={1440} verticalSpacing={4}>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Nom</Table.Th><Table.Th>Prénom</Table.Th><Table.Th>Sexe</Table.Th><Table.Th>Catégorie d’âge</Table.Th>
               <Table.Th>Poids actuel</Table.Th><Table.Th>Disciplines</Table.Th><Table.Th>Grade</Table.Th><Table.Th>Règlement</Table.Th>
-              <Table.Th>Si reclassement (1, 2) : Karaté · Boxing · Mix</Table.Th><Table.Th>Shobu : garder en priorité</Table.Th>
+              <Table.Th>Si seul : autre discipline ? (1, 2, 3)</Table.Th><Table.Th>Shobu : si seul, d’abord…</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -112,23 +112,23 @@ export function PaperEntryTable({ competitionId, grid }: { competitionId: string
                 </Table.Td>
                 <Table.Td w={100}><TextInput size="xs" aria-label="Grade" value={l.grade ?? ''} onChange={(e) => setLine(i, { grade: e.currentTarget.value || null })} /></Table.Td>
                 <Table.Td role="group" aria-label={`Ligne ${i + 1} — Règlement`}><OneOf value={l.ruleset} options={[['jiyu', 'Jiyu'], ['shobu', 'Shobu']]} onChange={(ruleset) => setLine(i, { ruleset })} /></Table.Td>
-                <Table.Td role="group" aria-label={`Ligne ${i + 1} — Si reclassement`}>
+                <Table.Td role="group" aria-label={`Ligne ${i + 1} — Si seul : autre discipline`}>
                   <Group gap={4} wrap="nowrap">
                     {PREFS.map(([d, label, short]) => (
-                      <NativeSelect key={d} size="xs" w={78} aria-label={`Reclassement ${label}`} data={['', '1', '2']}
+                      <NativeSelect key={d} size="xs" w={78} aria-label={`Reclassement ${label}`} data={['', '1', '2', '3']} disabled={l.combat === d}
                         leftSection={<Text size="xs" c="dimmed">{short}</Text>}
                         value={l.prefs[d] ? String(l.prefs[d]) : ''}
                         onChange={(e) => {
                           const v = e.currentTarget.value;
                           const prefs = { ...l.prefs };
-                          if (v === '1' || v === '2') prefs[d] = Number(v) as 1 | 2;
+                          if (v === '1' || v === '2' || v === '3') prefs[d] = Number(v) as PrefRank;
                           else delete prefs[d];
                           setLine(i, { prefs });
                         }} />
                     ))}
                   </Group>
                 </Table.Td>
-                <Table.Td role="group" aria-label={`Ligne ${i + 1} — Shobu : garder en priorité`}><OneOf value={l.shobuKeep} options={[['ruleset', 'Règles shobu'], ['discipline', 'Discipline']]} onChange={(shobuKeep) => setLine(i, { shobuKeep })} /></Table.Td>
+                <Table.Td role="group" aria-label={`Ligne ${i + 1} — Shobu : si seul, d’abord`}><OneOf value={l.shobuKeep} options={[['ruleset', SHOBU_KEEP_LABELS.ruleset], ['discipline', SHOBU_KEEP_LABELS.discipline]]} onChange={(shobuKeep) => setLine(i, { shobuKeep })} /></Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>

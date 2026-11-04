@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { describe, expect, test } from 'vitest';
-import { CLUB_FORM_COLUMNS, CLUB_FORM_HEADER_FIELDS, CLUB_FORM_TITLE, parseClubForm } from '../../src/domain/club-form.js';
+import { CLUB_FORM_COLUMNS, CLUB_FORM_COLUMNS_ROW, CLUB_FORM_FIRST_ROW, CLUB_FORM_HEADER_FIELDS, CLUB_FORM_TITLE, PRE_APPROVAL_TEXT, parseClubForm } from '../../src/domain/club-form.js';
 import type { Competition } from '../../src/domain/competition.js';
 import { entryCells, entryKey } from '../../src/domain/closed-categories.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
@@ -26,25 +26,32 @@ describe('modèle de fiche club', () => {
     expect(String(fiche.cells[1]![1])).toContain("Coupe Shidokan – Côte d'Azur");
     expect(String(fiche.cells[1]![1])).toContain('22/11/2026');
     CLUB_FORM_HEADER_FIELDS.forEach((label, i) => expect(fiche.cells[3 + i]![0]).toBe(label));
-    expect(fiche.cells[10]!.slice(0, CLUB_FORM_COLUMNS.length)).toEqual([...CLUB_FORM_COLUMNS]);
+    expect(fiche.cells[CLUB_FORM_COLUMNS_ROW - 1]!.slice(0, CLUB_FORM_COLUMNS.length)).toEqual([...CLUB_FORM_COLUMNS]);
   });
 
-  test('aide : catégories non ouvertes', async () => {
-    const aide = (closed: Set<string>) => (async () => flat(readWorkbook(await writeOds(buildClubFormTemplate(competition, grid, closed))).sheets.find((s) => s.name === 'Aide')!.cells))();
-    const with_ = await aide(new Set(['senior|F|kata|']));
-    expect(with_).toContain('Catégories non ouvertes à cette compétition');
-    expect(with_).toContain('Seniors (F) : pas de Kata');
-    const without = await aide(new Set());
-    expect(without).not.toContain('Catégories non ouvertes à cette compétition');
-    expect(without).not.toContain('Seniors (F) : pas de Kata');
+  test('ni la feuille ni l’aide ne parlent des catégories non ouvertes', async () => {
+    const { sheets } = readWorkbook(await writeOds(buildClubFormTemplate(competition, grid, new Set(['senior|F|kata|']))));
+    const all = sheets.map((s) => flat(s.cells)).join('\n');
+    expect(all).not.toContain('non ouvert');
+    expect(all).not.toContain('Seniors (F) : pas de Kata');
+  });
+
+  test('la note de la feuille explique le reclassement, avec un exemple', async () => {
+    const fiche = flat(readWorkbook(await template()).sheets.find((s) => s.name === 'Fiche club')!.cells);
+    expect(fiche).toContain('si un combattant se retrouve seul dans sa catégorie');
+    expect(fiche).toContain(PRE_APPROVAL_TEXT);
+    expect(fiche).toContain('jamais celle où il est déjà inscrit');
+    expect(fiche).toContain('Boxing 1 et Mix 2');
+    expect(fiche).toContain('« Passer en jiyu »');
   });
 
   test('feuille « Aide » : remplissage, reclassement, âges', async () => {
     const { sheets } = readWorkbook(await template());
     const aide = flat(sheets.find((s) => s.name === 'Aide')!.cells);
     expect(aide).toContain('kata et une discipline de combat');
-    expect(aide).toContain('numérotez 1 puis 2');
-    expect(aide).toContain('« Les règles shobu » = changer de discipline plutôt que passer en jiyu');
+    expect(aide).toContain('numérotez 1, 2, 3 celles qu’il accepte');
+    expect(aide).toContain('« Autre discipline » (il reste en shobu)');
+    expect(aide).toContain('Boxing 1 et Mix 2');
     expect(aide).toContain('Cadets 14 à 15 ans');
     expect(aide).not.toContain('-47 -54 -61');
   });
@@ -105,11 +112,12 @@ describe('modèle de fiche club : présentation et nouveau contenu', () => {
 
   test('modèle rempli au nouveau format puis relu : kata et karaté sur une ligne', async () => {
     const filled = fillClubForm(await template(), ['Tani Dojo', 'Jean', null, null, 'Non'], [
-      ['MARTIN', 'Léa', 'Féminin', 'Cadets', '53,5', 'Karaté', 'Oui', '1er kyu', 'Jiyu', null, '2', '1', null],
+      ['MARTIN', 'Léa', 'Féminin', 'Cadets', '53,5', 'Karaté', 'Oui', '1er kyu', 'Jiyu', null, '2', '1', '3', 'Passer en jiyu'],
     ], 'new');
     const parse = parseClubForm(readWorkbook(filled).sheets[0]!.cells, grid);
     expect(parse.rows.map((r) => r.errors)).toEqual([[], []]);
     expect(parse.rows.map((r) => r.input!.discipline)).toEqual(['karate', 'kata']);
+    expect(parse.rows[0]!.input!.otherDisciplines).toEqual(['shido-mix', 'shido-boxing', 'triathlon']);
   });
 });
 
@@ -138,8 +146,8 @@ test('poids, grade et téléphone en format texte dans le modèle', async () => 
   // ligne 6 (téléphone), colonne B : cellule au format texte
   const rows = content.split(/<table:table-row[ >]/);
   expect(rows[6]).toMatch(/table:style-name="ce_input_txt"/);
-  // 1re ligne de combattant (ligne 12) : poids actuel (E) et grade (H) au format texte
-  expect((rows[12]!.match(/table:style-name="ce_input_txt"/g) ?? []).length).toBe(2);
+  // 1re ligne de combattant : poids actuel (E) et grade (H) au format texte
+  expect((rows[CLUB_FORM_FIRST_ROW]!.match(/table:style-name="ce_input_txt"/g) ?? []).length).toBe(2);
 });
 
 test('relecture (mineurs) : logo trouvé quel que soit le dossier courant', () => {
@@ -154,6 +162,6 @@ test('relecture (mineurs) : logo trouvé quel que soit le dossier courant', () =
 
 test('relecture : en-têtes de reclassement simples, sous un en-tête commun', async () => {
   const fiche = readWorkbook(await template()).sheets.find((s) => s.name === 'Fiche club')!;
-  expect(fiche.cells[10]!.slice(9, 12)).toEqual(['Karaté', 'Boxing', 'Mix']);
-  expect(String(fiche.cells[9]![9])).toBe('Si reclassement : autres disciplines, numéroter 1, 2');
+  expect(fiche.cells[CLUB_FORM_COLUMNS_ROW - 1]!.slice(9, 13)).toEqual(['Karaté', 'Boxing', 'Mix', 'Triathlon']);
+  expect(String(fiche.cells[CLUB_FORM_COLUMNS_ROW - 2]![9])).toBe('Si seul : autre discipline ? 1, 2, 3, vide = non');
 });

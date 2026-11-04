@@ -93,7 +93,7 @@ const BY_CODE = new Map(
 
 /**
  * « 32 », « 3,2 », 32, « boxe, mix », « Shido-mix-martial > Shido-boxing » → préférences ordonnées
- * (codes 1 karaté, 2 shido-boxing, 3 shido-mix).
+ * (codes 1 karaté, 2 shido-boxing, 3 shido-mix, 4 triathlon).
  */
 export function parsePreferences(raw: unknown, main: DisciplineId): { value: DisciplineId[]; errors: string[] } {
   const text = raw === null || raw === undefined ? '' : String(raw).trim();
@@ -111,9 +111,9 @@ export function parsePreferences(raw: unknown, main: DisciplineId): { value: Dis
   for (const token of text.split(/[,;/>›+]+/).map((t) => t.trim()).filter(Boolean)) {
     if (/^[\d\s.-]+$/.test(token)) {
       for (const ch of token.replace(/\D/g, '')) {
-        const d = BY_CODE.get(Number(ch) as 1 | 2 | 3);
+        const d = BY_CODE.get(Number(ch) as 1 | 2 | 3 | 4);
         if (d) add(d, ch);
-        else errors.push(`Préférence « ${ch} » : code inconnu (1 karaté, 2 shido-boxing, 3 shido-mix-martial).`);
+        else errors.push(`Préférence « ${ch} » : code inconnu (1 karaté, 2 shido-boxing, 3 shido-mix-martial, 4 triathlon).`);
       }
     } else {
       const d = disciplineFromLabel(token);

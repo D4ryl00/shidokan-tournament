@@ -81,3 +81,29 @@ Cases encadrées à remplir : **Club**, **Coach**, **Téléphone**, **E-mail**, 
 - Insertion du logo dans le .ods (image dans le fichier) et réglages d'impression du .ods.
 - Migration de base pour le grade et la case « proposée sur la fiche club ».
 - Abréviations des tranches d'âge (P, Pu, B, Mi, C, J, S, V1…V5) : table fixe pour les codes de la grille FFK, et pour une tranche ajoutée à la main, ses premières lettres 💡 ; la légende du bas de page les reprend avec les âges de la grille.
+
+## 7. Reclassement lisible ✅ (2026-11-04)
+
+Remplace les libellés du §2.2, du §2.3 et du §2.5 sur le reclassement et la priorité shobu.
+
+**Pourquoi :** le mot « reclassement » couvrait trois questions sans être expliqué, le pré-accord laissait croire qu'il couvrait tout, et « garder en priorité : les règles shobu / la discipline » demandait de lire une note.
+
+**Décisions de l'organisateur :**
+- Sur la page en ligne, sa propre discipline n'est plus proposée.
+- Le **triathlon** est un choix de reclassement dans les deux sens : un combattant de triathlon peut aller vers karaté, boxing ou mix, et l'inverse si le coach l'accepte. Seul le kata reste exclu.
+- Pré-accord : « vous acceptez d'avance un écart de poids plus grand ou une tranche d'âge voisine, sans qu'on vous rappelle », même texte partout. Le mélange mineurs/adultes n'est pas cité.
+- **Plus de « non ouvert »** dans le PDF ni dans le .ods. En ligne, le détail est dans un champ repliable, fermé par défaut.
+
+**Page en ligne :** un bloc « Reclassement : si <prénom> se retrouve sans adversaire » avec une courte explication, puis des listes « 1er choix » (« Non, rester en <discipline> »), « 2e choix », « 3e choix » ; chacune n'apparaît que si la précédente est remplie. La question shobu « Que lui proposer d'abord ? » n'apparaît qu'en shobu, avec au moins un choix. La carte du combattant résume le choix (« Si sans adversaire : Triathlon, puis Shido-mix-martial »).
+
+**PDF et .ods :** une note explique le reclassement avec un exemple. Colonnes : « Si seul : autre discipline ? » (1, 2, 3, vide = non ; Karaté, Boxing, Mix, Triathlon) et « Shobu : si seul, d'abord… » (« Autre discipline » / « Passer en jiyu »). Une seule page, 10 lignes.
+
+**Fiches déjà envoyées :** le .ods gagne une colonne (Triathlon) et deux lignes de note. L'import reconnaît les trois formats à leurs en-têtes, et lit toujours « Les règles shobu » et « La discipline ».
+
+💡 **Choix du rédacteur :**
+- 3 choix au lieu de 2, sinon un coach ne pourrait pas accepter les trois autres disciplines.
+- Les disciplines fermées pour ce combattant ne sont pas proposées, sauf un choix déjà enregistré, marqué « (non ouverte) » ; un changement d'âge ou de sexe retire le choix devenu fermé.
+- Sans autre discipline choisie, un combattant shobu voit « Sans autre discipline, on pourra seulement lui proposer de passer en jiyu » : le coach ne peut pas refuser le jiyu aujourd'hui.
+- À la saisie d'une fiche papier, la case de sa propre discipline est désactivée.
+
+**Limite connue :** le PDF et le .ods ne peuvent pas masquer une case selon la ligne. Une discipline numérotée par erreur est ignorée à l'import, avec une remarque. Les fermetures partielles ne s'y voient pas non plus : l'aperçu d'import les signale et la ligne part en Réaffectation.

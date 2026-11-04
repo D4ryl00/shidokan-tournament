@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { PDFDocument } from 'pdf-lib';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { entryCells } from '../../src/domain/closed-categories.js';
+import { PRE_APPROVAL_TEXT } from '../../src/domain/club-form.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 import { buildApp } from '../../src/server/app.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
@@ -62,10 +63,20 @@ test('fiche papier PDF : nom long, lieu, 15 tranches → toujours une page, lieu
   expect(pdfText(pdf)).toContain('Jean Médecin, Nice');
 });
 
-test('encadré des catégories non ouvertes, une seule page', async () => {
+test('note de reclassement, sans « non ouvert », une seule page', async () => {
   await app.inject({ method: 'PUT', url: `${base}/closed-categories`, payload: { cells: [{ ageBandCode: 'senior', sex: 'F', discipline: 'kata', ruleset: null }], closed: true } });
   let pdf = (await app.inject({ method: 'GET', url: `${base}/club-form.pdf` })).rawPayload;
-  expect(pdfText(pdf).replace(/\s+/g, ' ')).toContain('Non ouvert à cette compétition : Seniors (F) : pas de Kata');
+  const text = pdfText(pdf).replace(/\s+/g, ' ');
+  expect(text).not.toContain('Non ouvert');
+  expect(text).not.toContain('Seniors (F) : pas de Kata');
+  expect(text).toContain('Reclassement : à quoi ça sert ?');
+  expect(text).toContain(PRE_APPROVAL_TEXT);
+  expect(text).toContain('jamais celle où il est déjà inscrit');
+  expect(text).toContain('Box. 1 et Mix 2');
+  expect(text).toContain('Si seul : autre');
+  expect(text).toContain('Tri.');
+  expect(text).toContain('passer en jiyu');
+  expect(text).not.toContain('les règles shobu');
   expect(await pages(pdf)).toBe(1);
   await offerAll((c) => !['mini-poussin', 'poussin', 'pupille', 'v3', 'v4', 'v5'].includes(c));
   pdf = (await app.inject({ method: 'GET', url: `${base}/club-form.pdf` })).rawPayload;

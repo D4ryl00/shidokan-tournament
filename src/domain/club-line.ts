@@ -1,4 +1,4 @@
-import type { ClubFormLine, CombatDiscipline, PrefDiscipline } from './club-form.js';
+import { PREF_DISCIPLINES, type ClubFormLine, type CombatDiscipline, type PrefDiscipline, type PrefRank } from './club-form.js';
 import type { DisciplineId, Ruleset, Sex } from './types.js';
 
 /** Inscription d'un combattant, vue par la page du club. */
@@ -22,8 +22,6 @@ export interface LineFighter {
 
 export const TWO_COMBATS_REASON = 'Inscrit dans deux disciplines de combat : contactez l’organisateur pour le modifier.';
 
-const PREF_DISCIPLINES = new Set<DisciplineId>(['karate', 'shido-boxing', 'shido-mix']);
-
 type Entered = { discipline: DisciplineId; ruleset: Ruleset | null; weightClassId: string | null };
 /** Discipline, règlement et catégorie de poids saisis par le coach (ceux d'avant une réaffectation). */
 export function enteredValues(r: LineRegistration): Entered {
@@ -38,7 +36,7 @@ export function registrationsToLine(fighter: LineFighter, regs: LineRegistration
   const combat = combats[0];
   const entered = combat ? enteredValues(combat) : null;
   const prefs: ClubFormLine['prefs'] = {};
-  combat?.otherDisciplines.filter((d) => PREF_DISCIPLINES.has(d)).forEach((d, i) => (prefs[d as PrefDiscipline] = (i + 1) as 1 | 2));
+  combat?.otherDisciplines.filter((d) => (PREF_DISCIPLINES as readonly DisciplineId[]).includes(d)).forEach((d, i) => (prefs[d as PrefDiscipline] = (i + 1) as PrefRank));
   const shobuKeep = entered?.ruleset === 'shobu' && combat!.acceptsJiyuFirst !== null ? (combat!.acceptsJiyuFirst ? 'discipline' : 'ruleset') : null;
   const line: ClubFormLine = {
     lastName: fighter.lastName,

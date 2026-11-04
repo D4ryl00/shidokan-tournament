@@ -5,12 +5,12 @@ const text = (v: unknown): string => (v === null || v === undefined ? '' : Strin
 
 export const DISCIPLINES: Record<
   DisciplineId,
-  { label: string; clubFormCode: 1 | 2 | 3 | null; hasWeight: boolean; inPreferences: boolean }
+  { label: string; clubFormCode: 1 | 2 | 3 | 4 | null; hasWeight: boolean; inPreferences: boolean }
 > = {
   karate: { label: 'Karaté', clubFormCode: 1, hasWeight: true, inPreferences: true },
   'shido-boxing': { label: 'Shido-boxing', clubFormCode: 2, hasWeight: true, inPreferences: true },
   'shido-mix': { label: 'Shido-mix-martial', clubFormCode: 3, hasWeight: true, inPreferences: true },
-  triathlon: { label: 'Triathlon', clubFormCode: null, hasWeight: true, inPreferences: false },
+  triathlon: { label: 'Triathlon', clubFormCode: 4, hasWeight: true, inPreferences: true },
   kata: { label: 'Kata', clubFormCode: null, hasWeight: false, inPreferences: false },
 };
 

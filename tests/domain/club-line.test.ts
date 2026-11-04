@@ -29,6 +29,13 @@ test('aller-retour : une ligne combat + kata (prefs, shobu, catégorie et poids,
   expect(roundTrip(line)).toEqual(line);
 });
 
+test('aller-retour : triathlon en choix ou en discipline, jusqu’à 3 choix', () => {
+  const karate: ClubFormLine = { ...BASE, weightClassId: 'senior:F:-61', combat: 'karate', ruleset: 'jiyu', prefs: { triathlon: 1, 'shido-mix': 2, 'shido-boxing': 3 } };
+  expect(roundTrip(karate)).toEqual(karate);
+  const triathlon: ClubFormLine = { ...BASE, weightClassId: 'senior:F:-61', combat: 'triathlon', ruleset: 'jiyu', prefs: { karate: 1 } };
+  expect(roundTrip(triathlon)).toEqual(triathlon);
+});
+
 test('combat seul, kata seul : idem', () => {
   const combat: ClubFormLine = { ...BASE, weightClassId: 'senior:F:-55', weightKg: null, combat: 'shido-boxing', ruleset: 'jiyu', prefs: { karate: 1 } };
   expect(roundTrip(combat)).toEqual(combat);

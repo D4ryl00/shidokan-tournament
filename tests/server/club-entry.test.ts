@@ -338,6 +338,12 @@ test('réenregistrer la ligne garde « ne combat pas »', async () => {
   expect(after.find((r) => r.discipline === 'kata')!.withdrawn).toBe(true);
 });
 
+test('page du club : triathlon en 3e choix, enregistré puis relu', async () => {
+  const res = await app.inject({ method: 'POST', url: url('/lines'), payload: { fighterId: null, version: null, line: { ...LINE, kata: false, grade: null, prefs: { 'shido-mix': 1, 'shido-boxing': 2, triathlon: 3 } } } });
+  expect(res.statusCode).toBe(201);
+  expect(((await view()) as View).lines[0]!.line.prefs).toEqual({ 'shido-mix': 1, 'shido-boxing': 2, triathlon: 3 });
+});
+
 test('page du club : résumé des catégories non ouvertes', async () => {
   expect(((await view()) as View & { closedSummary: string[] }).closedSummary).toEqual([]);
   await closeCells([{ ageBandCode: 'senior', sex: 'F', discipline: 'kata', ruleset: null }]);

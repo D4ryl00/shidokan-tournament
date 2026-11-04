@@ -1,8 +1,8 @@
 import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from 'pdf-lib';
-import { ageBandAbbreviations } from '../domain/club-form.js';
+import { PRE_APPROVAL_TEXT, ageBandAbbreviations } from '../domain/club-form.js';
 import type { Competition } from '../domain/competition.js';
 import type { CategoryGrid } from '../domain/types.js';
-import { closedSummary, offeredAgeBands } from '../domain/closed-categories.js';
+import { offeredAgeBands } from '../domain/closed-categories.js';
 import { logoPng } from './club-form-template.js';
 
 /*
@@ -17,6 +17,12 @@ const BLACK = rgb(0, 0, 0);
 const GREY_LINE = rgb(0.47, 0.47, 0.47);
 const GREY_FILL = rgb(0.95, 0.95, 0.95);
 const COLUMNS = [10.5, 9, 4.5, 18.5, 5.5, 15.5, 6, 6.5, 10.5, 13.5];
+const NOTE: [string, string][] = [
+  ['Reclassement : à quoi ça sert ? ', 'Si un combattant se retrouve seul dans sa catégorie, l’organisation cherche à lui trouver un adversaire. Vos réponses disent ce qu’on peut lui proposer.'],
+  ['Pré-accord : ', PRE_APPROVAL_TEXT],
+  ['Autre discipline : ', 'numérotez 1, 2, 3 celles qu’il accepte, jamais celle où il est déjà inscrit. Vide = il reste dans sa discipline. Exemple : inscrit en karaté, Box. 1 et Mix 2 = d’abord le boxing, sinon le mix.'],
+  ['Shobu : ', 'si vous avez numéroté une discipline, cochez ce qu’on lui propose d’abord : une autre discipline (il reste en shobu) ou passer en jiyu (il reste dans sa discipline).'],
+];
 
 const frDate = (iso: string) =>
   new Date(`${iso}T12:00:00Z`).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
@@ -125,31 +131,32 @@ export async function buildClubFormPdf(competition: Competition, grid: CategoryG
   field(colX[2]!, top, colW[2]!, 'Téléphone :');
   top -= boxH + 1.5 * MM;
   field(colX[0]!, top, colW[0]!, 'E-mail :');
-  const accept = 'Le coach accepte d’avance les reclassements de ses combattants :';
+  const accept = 'Pré-accord (poids et âge, voir la note ci-dessous) :';
   field(colX[1]!, top, colW[1]! + gap + colW[2]!, accept);
   checks(page, f, colX[1]! + 2 * MM + f.bold.widthOfTextAtSize(accept, 9.5) + 2 * MM, top - boxH / 2 - 3, ['Oui', 'Non'], 9.5);
   top -= boxH + 3 * MM;
 
-  // Catégories non ouvertes : un encadré sous l'en-tête du club (rien si tout est ouvert).
-  const summary = closedSummary(grid, closed);
-  if (summary.length) {
-    const lead = 'Non ouvert à cette compétition : ';
+  // Reclassement : l'encadré explicatif, juste au-dessus du tableau.
+  const noteSize = 8;
+  const noteLine = 9.6;
+  const paragraphs = NOTE.map(([lead, body]) => {
     // Coupé en police normale : on retire la largeur gagnée par le début en gras.
-    const boldExtra = f.bold.widthOfTextAtSize(lead, 8.5) - f.regular.widthOfTextAtSize(lead, 8.5);
-    const lines = wrap(f.regular, 8.5, safe(f.regular, `${lead}${summary.join(' · ')}`), width - 4 * MM - boldExtra);
-    const h = lines.length * 10.5 + 2.5 * MM;
-    rect(page, left, top - h, width, h, { border: 1.2 });
-    let ly = top - 1.25 * MM - 8;
+    const boldExtra = f.bold.widthOfTextAtSize(lead, noteSize) - f.regular.widthOfTextAtSize(lead, noteSize);
+    return { lead, lines: wrap(f.regular, noteSize, safe(f.regular, lead + body), width - 4 * MM - boldExtra) };
+  });
+  const noteH = paragraphs.reduce((n, p) => n + p.lines.length, 0) * noteLine + 2.5 * MM;
+  rect(page, left, top - noteH, width, noteH, { border: 1.2, fill: GREY_FILL, color: BLACK });
+  let noteY = top - 1.25 * MM - noteSize;
+  for (const { lead, lines } of paragraphs) {
     lines.forEach((l, i) => {
-      // Le début (« Non ouvert à cette compétition : ») en gras, le reste normal.
-      if (i === 0 && l.startsWith(lead)) {
-        page.drawText(lead, { x: left + 2 * MM, y: ly, size: 8.5, font: f.bold });
-        page.drawText(l.slice(lead.length), { x: left + 2 * MM + f.bold.widthOfTextAtSize(lead, 8.5), y: ly, size: 8.5, font: f.regular });
-      } else page.drawText(l, { x: left + 2 * MM, y: ly, size: 8.5, font: f.regular });
-      ly -= 10.5;
+      if (i === 0) {
+        page.drawText(lead, { x: left + 2 * MM, y: noteY, size: noteSize, font: f.bold, color: BLACK });
+        page.drawText(l.slice(lead.length), { x: left + 2 * MM + f.bold.widthOfTextAtSize(lead, noteSize), y: noteY, size: noteSize, font: f.regular, color: BLACK });
+      } else page.drawText(l, { x: left + 2 * MM, y: noteY, size: noteSize, font: f.regular, color: BLACK });
+      noteY -= noteLine;
     });
-    top -= h + 2 * MM;
   }
+  top -= noteH + 2 * MM;
 
   // Tableau : en-tête sur deux rangées, 10 lignes
   const xs: number[] = [left];
@@ -158,9 +165,9 @@ export async function buildClubFormPdf(competition: Competition, grid: CategoryG
   const h1 = 9 * MM;
   const h2 = 6.5 * MM;
   const both = new Set([0, 1, 2, 4, 6]);
-  const head1 = ['Nom', 'Prénom', 'Sexe', 'Catégorie d’âge', 'Poids actuel (kg)', 'Disciplines', 'Grade (si kata)', 'Règlement', 'Si reclassement', 'Shobu : si reclassement, garder en priorité'];
+  const head1 = ['Nom', 'Prénom', 'Sexe', 'Catégorie d’âge', 'Poids actuel (kg)', 'Disciplines', 'Grade (si kata)', 'Règlement', 'Si seul : autre discipline ?', 'Shobu : si seul, d’abord…'];
   const head2: Record<number, string> = {
-    3: 'une seule case', 5: 'kata et/ou une discipline de combat', 7: 'combat', 8: 'autres disciplines, numéroter 1, 2', 9: 'une seule case',
+    3: 'une seule case', 5: 'kata et/ou une discipline de combat', 7: 'combat', 8: '1, 2, 3 · vide = non', 9: 'une seule case',
   };
   for (let i = 0; i < COLUMNS.length; i++) {
     const h = both.has(i) ? h1 + h2 : h1;
@@ -178,7 +185,7 @@ export async function buildClubFormPdf(competition: Competition, grid: CategoryG
   const ageRows = bands.length > 12 ? 3 : 2;
   const ageCols = Math.max(1, Math.ceil(bands.length / ageRows));
 
-  // Bas de page : légende, priorité shobu, numéro de page à remplir (calculé d'abord : les lignes prennent la place qui reste).
+  // Bas de page : légende, abréviations, numéro de page à remplir (calculé d'abord : les lignes prennent la place qui reste).
   const legend = bands
     .map((b) => {
       const abbr = abbreviations.get(b.code)!;
@@ -190,9 +197,9 @@ export async function buildClubFormPdf(competition: Competition, grid: CategoryG
   const footW = width - f.bold.widthOfTextAtSize(pageLabel, 8) - 6 * MM;
   const foot = [
     ...wrap(f.regular, 8, safe(f.regular, `Âges : ${legend}.`), footW),
-    ...wrap(f.regular, 8, 'Shobu, garder en priorité : « les règles shobu » = changer de discipline plutôt que passer en jiyu ; « la discipline » = passer en jiyu plutôt que changer de discipline. Boxing = shido-boxing, Mix = shido-mix martial.', footW),
+    ...wrap(f.regular, 8, 'Boxing ou Box. = shido-boxing, Mix = shido-mix martial, Tri. = triathlon.', footW),
   ];
-  // Toujours une seule page : les lignes rapetissent si l'encadré des catégories non ouvertes prend de la place.
+  // Toujours une seule page : les lignes rapetissent pour laisser la place à l'encadré et au bas de page.
   const rowH = Math.min(11.5 * MM, (top - MARGIN - 1.5 * MM - foot.length * 9.6) / ROWS);
   for (let r = 0; r < ROWS; r++) {
     const y = top - rowH;
@@ -218,9 +225,9 @@ export async function buildClubFormPdf(competition: Competition, grid: CategoryG
     checks(page, f, xs[7]! + pad, line1, ['Jiyu']);
     checks(page, f, xs[7]! + pad, line2, ['Shobu']);
     checks(page, f, xs[8]! + pad, line1, ['Karaté', 'Box.'], 8.5, 3.6 * MM);
-    checks(page, f, xs[8]! + pad, line2, ['Mix'], 8.5, 3.6 * MM);
-    checks(page, f, xs[9]! + pad, line1, ['1. les règles shobu']);
-    checks(page, f, xs[9]! + pad, line2, ['2. la discipline']);
+    checks(page, f, xs[8]! + pad, line2, ['Mix', 'Tri.'], 8.5, 3.6 * MM);
+    checks(page, f, xs[9]! + pad, line1, ['autre discipline']);
+    checks(page, f, xs[9]! + pad, line2, ['passer en jiyu']);
     top = y;
   }
 
