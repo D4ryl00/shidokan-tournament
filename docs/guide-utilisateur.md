@@ -61,10 +61,20 @@ Les onglets de l'étape **Préparer**, dans l'ordre habituel :
 2. Créez la compétition, puis **Réglages** (zones de combat, formats, ordre de passage…) et **Grille âge / poids** (la grille FFK est déjà remplie). Dans la grille, la section **Catégories ouvertes** ferme ce que vous n’ouvrez pas à cette compétition (par exemple pas de shido-mix chez les benjamins) : ces catégories disparaissent de la fiche club et de l’inscription en ligne. Un combattant déjà inscrit dans une catégorie fermée apparaît en Réaffectation.
 3. **Sessions**, si la compétition se pèse et se lance en plusieurs fois (« Samedi matin », « Dimanche »…).
 4. **Fiche club** — les clubs inscrivent leurs combattants de l'une de ces façons :
-   - **en ligne** (section « Inscriptions en ligne ») : date limite, « Ouvrir les inscriptions », inviter les clubs, puis « Envoyer le lien par mail ». **Chaque envoi crée un nouveau lien** et désactive le précédent. Un seul mail part par club ; pour un club qui a plusieurs adresses, la fenêtre d'envoi montre une case par adresse, toutes cochées : décochez celles qui ne doivent pas le recevoir (pour cet envoi seulement). À la date limite, « Figer les inscriptions ». Les mails partent du compte réglé dans Réglages de l'application → **Envoi des mails** (« Compte Google », voir plus bas, ou « Autre serveur ») ;
+   - **en ligne** (section « Inscriptions en ligne ») : date limite, « Ouvrir les inscriptions », inviter les clubs, puis « Envoyer le lien par mail ». **Chaque envoi ajoute un nouveau lien** au club : les liens déjà envoyés restent valables. Un seul mail part par club ; pour un club qui a plusieurs adresses, la fenêtre d'envoi montre une case par adresse, toutes cochées : décochez celles qui ne doivent pas le recevoir (pour cet envoi seulement). À la date limite, « Figer les inscriptions ». Cette section n'existe que sur le serveur en ligne : un PC ne peut ni envoyer d'invitations ni ouvrir les inscriptions en ligne, et pour envoyer, la main doit être sur le serveur. Les mails partent du compte réglé dans Réglages de l'application → **Envoi des mails** (« Compte Google », voir plus bas, ou « Autre serveur ») ;
    - **par fichier** : envoyer le modèle (.ods) ou la fiche papier (PDF), puis importer ou saisir les fiches renvoyées. Les fiches indiquent les catégories non ouvertes ; une fiche renvoyée qui en contient quand même est acceptée avec un avertissement, et ces combattants passent en Réaffectation.
 5. **Import FFK**, à la clôture : aperçu, rapprochement avec les fiches des clubs, import.
 6. **Inscriptions** et **Clubs** : vérifier, corriger, ajouter sur place.
+
+### Le message aux clubs
+
+Réglages de l'application → **Message aux clubs** (modèle commun) ou, par compétition, « Message aux clubs de cette compétition ». L'éditeur propose gras, italique, souligné, barré, couleur, surlignage, titres, listes, citation, alignement et lien. Il n'y a pas de choix de police ni de taille de texte, ni de tableau.
+
+- **Images** : bouton image, collage ou glisser-déposer ; trois tailles d'affichage (200, 400 ou 600 px). 10 images au plus par message, JPEG, PNG, WebP ou GIF, réduites à 1200 px de large et 2 Mo au plus.
+- **Code HTML** : on peut coller un message tout fait. Ce que le mail ne peut pas porter (scripts, images prises sur internet…) est retiré, et un avis le signale.
+- **Envoi par l'application** : message mis en forme, avec une version sans mise en forme. Un mail pèse 18 Mo au plus (images, fiches et pièces jointes) ; si c'est trop lourd ou si une image manque, rien ne part et aucun lien n'est créé.
+- **« Ouvrir dans ma messagerie »** ne transmet que le texte : ni mise en forme ni images, et les pièces jointes sont à joindre soi-même.
+- **Sur le serveur seulement** : un PC n'a ni cette section ni l'envoi de mails. Pour envoyer, la main doit être sur le serveur. Après l'installation, faites l'essai décrit dans [verification-mail-boites-reelles.md](verification-mail-boites-reelles.md).
 
 ### Le compte Google (mails et contacts)
 
