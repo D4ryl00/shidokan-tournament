@@ -65,3 +65,6 @@ Les étapes 1 à 14 sont réalisées, relues et fusionnées dans `main` (659 tes
 
 ## Étape 35 : éditeur riche du mail aux clubs
 Faite le 2026-11-05 sur la branche `etape-35-editeur-riche` : voir le bilan. Reste le contrôle du rendu dans de vraies boîtes mail, par l'organisateur.
+
+## Étape 36 : coordonnées des clubs entre annuaire et compétitions
+Faite le 2026-11-06 sur la branche `coordonnees-clubs-annuaire` : voir le bilan. Les coordonnées saisies par un club ou dans l'onglet Clubs n'écrivent plus dans l'annuaire : elles deviennent des changements à examiner, et une fiche modifiée peut être reportée vers les compétitions à venir. Migration 0031.
