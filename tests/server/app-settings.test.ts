@@ -127,3 +127,32 @@ test('le message d’une compétition est filtré de la même façon', async () 
   const cleared = await app.inject({ method: 'PATCH', url, payload: { settings: { invitationMail: null } } });
   expect(cleared.statusCode).toBe(200);
 });
+
+test('message d’une compétition : remplacé en entier, filtré tel qu’il sera gardé, ni partiel ni format collant', async () => {
+  const id = (await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe remplace', date: '2026-11-22' } })).json().id as string;
+  const url = `/api/competitions/${id}`;
+  const patchMail = (invitationMail: unknown) => app.inject({ method: 'PATCH', url, payload: { settings: { invitationMail } } });
+  const stored = async () => (await app.inject({ method: 'GET', url })).json().settings.invitationMail;
+  const rich = { subject: 'S', body: '<p>ok</p>', format: 'html' };
+  expect((await patchMail(rich)).statusCode).toBe(200);
+
+  // Partiel : il ne fusionne pas avec l'ancien message, le script n'entre pas.
+  const partial = await patchMail({ body: '<p>ok2</p><script>x()</script>', format: 'html' });
+  expect(partial.statusCode).toBe(400);
+  expect(await stored()).toEqual(rich);
+
+  // Texte sur un message mis en forme : il reste du texte.
+  expect((await patchMail({ subject: 'T', body: 'a < b <b>c</b>' })).statusCode).toBe(200);
+  expect(await stored()).toEqual({ subject: 'T', body: 'a < b <b>c</b>' });
+
+  // Texte de plus de 5000 caractères : refusé par la validation, avec le chemin des réglages.
+  const long = await patchMail({ subject: 'T', body: 'x'.repeat(5001) });
+  expect(long.statusCode).toBe(400);
+  expect(JSON.stringify(long.json())).toContain('5000');
+  expect((await stored()).body).toBe('a < b <b>c</b>');
+
+  // Un autre réglage ne touche pas au message.
+  expect((await patchMail(rich)).statusCode).toBe(200);
+  expect((await app.inject({ method: 'PATCH', url, payload: { settings: { repechage: true } } })).statusCode).toBe(200);
+  expect(await stored()).toEqual(rich);
+});

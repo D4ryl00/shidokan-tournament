@@ -124,7 +124,12 @@ export function readStoredSettings(raw: unknown): CompetitionSettings {
   return out as CompetitionSettings;
 }
 
-/** Fusionne un objet partiel avec `base` (les défauts sinon) puis valide ; lève ZodError si invalide. */
+/**
+ * Fusionne un objet partiel avec `base` (les défauts sinon) puis valide ; lève ZodError si invalide.
+ * Le message aux clubs se remplace en entier : un texte ne doit pas garder le `format` du message précédent.
+ */
 export function mergeSettings(partial: unknown, base: CompetitionSettings = defaultSettings()): CompetitionSettings {
-  return competitionSettingsSchema.parse(deepMerge(base, partial ?? {}));
+  const merged = deepMerge(base, partial ?? {}) as Record<string, unknown>;
+  if (isPlainObject(partial) && partial.invitationMail !== undefined) merged.invitationMail = partial.invitationMail;
+  return competitionSettingsSchema.parse(merged);
 }

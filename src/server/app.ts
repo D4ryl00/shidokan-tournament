@@ -51,8 +51,8 @@ import { zoneJournalRoutes } from './routes/zone-journal.js';
 import { getZoneLink, resetZoneLinkStatus, restartZoneFollow, setZoneLink, startZoneFollow } from './zone/link.js';
 import { registerZoneJournal } from './zone/autonomous.js';
 import { authRoutes } from './routes/auth.js';
-import { cleanTemplate } from './mail-html.js';
-import { mailTemplateSchema } from '../domain/mail-template-schema.js';
+import { SERVER_ONLY } from '../domain/app-settings.js';
+import { sameMailTemplate } from '../domain/mail-template-schema.js';
 import { appSettingsRoutes } from './routes/app-settings.js';
 import { googleRoutes } from './routes/google.js';
 import { googleContactsRoutes } from './routes/google-contacts.js';
@@ -186,12 +186,12 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   });
 
   app.patch<{ Params: { id: string } }>('/api/competitions/:id', async (req, reply) => {
-    if (!(await getCompetition(db, req.params.id))) return reply.status(404).send(NOT_FOUND);
+    const current = await getCompetition(db, req.params.id);
+    if (!current) return reply.status(404).send(NOT_FOUND);
     const patch = competitionPatchSchema.parse(req.body);
-    // Le message aux clubs de la compétition est filtré comme celui de l'application ; un message invalide reste signalé par la validation des réglages.
+    // Sur un PC, le message aux clubs ne change pas, comme dans les réglages de l'application ; les autres réglages restent modifiables.
     const mail = (patch.settings as { invitationMail?: unknown } | null | undefined)?.invitationMail;
-    const parsedMail = mail ? mailTemplateSchema.safeParse(mail) : null;
-    if (parsedMail?.success) patch.settings = { ...(patch.settings as object), invitationMail: cleanTemplate(parsedMail.data) };
+    if (!clubServices && mail !== undefined && !sameMailTemplate(mail, current.settings.invitationMail)) return reply.status(403).send({ error: SERVER_ONLY });
     return await updateCompetition(db, req.params.id, patch);
   });
 

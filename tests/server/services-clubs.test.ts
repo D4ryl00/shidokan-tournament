@@ -63,7 +63,7 @@ test('PC : SERVER_ONLY l’emporte sur la compétition inconnue et sur la main a
 
 test('PC : réglages — mail refusé, confidentialité acceptée, lecture possible', async () => {
   const smtp = { host: 'smtp.example.org', port: 587, security: 'starttls', user: '', password: 'x', fromName: 'A', fromEmail: 'a@example.org' };
-  for (const payload of [{ smtp }, { mailMode: 'smtp' }, { invitationMail: { subject: 'S', body: 'B' } }, { privacyContact: 'a@example.org', mailMode: 'smtp' }]) {
+  for (const payload of [{ smtp }, { mailMode: 'smtp' }, { googleFromName: 'Shidokan' }, { invitationMail: { subject: 'S', body: 'B' } }, { privacyContact: 'a@example.org', mailMode: 'smtp' }]) {
     const res = await app.inject({ method: 'PATCH', url: '/api/app-settings', payload });
     expect([JSON.stringify(payload), res.statusCode, res.json()]).toEqual([JSON.stringify(payload), 403, { error: SERVER_ONLY }]);
   }
@@ -104,6 +104,25 @@ test('serveur en ligne connecté : les invitations répondent 200', async () => 
   } finally {
     await a.close();
   }
+});
+
+test('PC : le message d’une compétition ne change pas ; les autres réglages et une valeur identique passent', async () => {
+  const patch = (settings: unknown) => app.inject({ method: 'PATCH', url: comp(''), payload: { settings } });
+  for (const invitationMail of [{ subject: 'S', body: 'B' }, { subject: 'S', body: '<p>B</p>', format: 'html' }]) {
+    const res = await patch({ invitationMail });
+    expect([res.statusCode, res.json()]).toEqual([403, { error: SERVER_ONLY }]);
+  }
+  expect((await patch({ repechage: true })).statusCode).toBe(200);
+  expect((await patch({ invitationMail: null })).statusCode).toBe(200);
+  // Un message arrivé avec la compétition : le renvoyer tel quel passe, le retirer ou le changer non.
+  const mail = { subject: 'S', body: '<p>Arrivé</p>', format: 'html' };
+  const raw = new Database(dbPath);
+  const row = raw.prepare('select settings_json as s from competitions where id = ?').get(id) as { s: string };
+  raw.prepare('update competitions set settings_json = ? where id = ?').run(JSON.stringify({ ...(JSON.parse(row.s) as object), invitationMail: mail }), id);
+  raw.close();
+  expect((await patch({ invitationMail: { format: 'html', body: mail.body, subject: mail.subject } })).statusCode).toBe(200);
+  expect((await patch({ invitationMail: null })).statusCode).toBe(403);
+  expect((await patch({ invitationMail: { ...mail, body: '<p>Autre</p>' } })).statusCode).toBe(403);
 });
 
 test('main ailleurs : l’envoi aux clubs est refusé, le message et son image restent ; au retour du paquet, l’envoi part avec l’image', async () => {
@@ -153,12 +172,20 @@ test('main ailleurs : l’envoi aux clubs est refusé, le message et son image r
     expect((await srv.inject({ method: 'GET', url: image.url, headers: { cookie } })).statusCode).toBe(200);
 
     // Le paquet revient : la main aussi, et l'envoi part avec l'image dans le mail.
+    // Il revient avec du HTML sale dans le message : le mail et l'aperçu sont filtrés quand même.
+    const row = pkg.tables.competitions[0];
+    const settings = JSON.parse(row.settings_json);
+    settings.invitationMail.body += '<script>alert(1)</script><a href="javascript:x()" onclick="x()">j</a><img src="https://e.fr/a.png">';
+    row.settings_json = JSON.stringify(settings);
     const back = await remote(`/competitions/${cid}/return`, { ...pkg, from: { instanceId: 'pc-1', instanceName: 'PC-SALLE', role: 'local' }, handOver: true });
     expect(back.statusCode).toBe(200);
+    const dirty = /<script|alert|javascript:|onclick|e\.fr/;
+    expect((await orga('GET', `${base}/invitations/preview?clubId=${link!.clubId}`)).json().html).not.toMatch(dirty);
     const res = await orga('POST', `${base}/invitations/send`, { clubs: [{ clubId: link!.clubId }] });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([expect.objectContaining({ status: 'sent' })]);
     expect(sent).toHaveLength(1);
+    expect(sent[0]!.html).not.toMatch(dirty);
     expect(sent[0]!.html).toContain(`cid:image-${image.id}@shidokan`);
     expect(sent[0]!.attachments!.find((a) => a.cid === `image-${image.id}@shidokan`)!.content.equals(png)).toBe(true);
     expect(await linksOf()).toBe(2);

@@ -52,3 +52,14 @@ test('réglages : liste par défaut, et lecture tolérante d’une compétition 
   expect(readStoredSettings({ mixSexes: { enabled: true, ageBandCodes: [] } }).replacementRules.cutAfter).toBe('discipline');
   expect(readStoredSettings({ replacementRules: { order: ['weight'], off: [], cutAfter: 'weight' } }).replacementRules).toEqual(defaultSettings().replacementRules);
 });
+
+test('mergeSettings : le message aux clubs est remplacé en entier, jamais fusionné', () => {
+  const base = mergeSettings({ invitationMail: { subject: 'S', body: '<p>riche</p>', format: 'html' } });
+  // Un message texte sur un message mis en forme : le format ne colle pas.
+  expect(mergeSettings({ invitationMail: { subject: 'T', body: 'a < b' } }, base).invitationMail).toEqual({ subject: 'T', body: 'a < b' });
+  // Un message partiel ne se complète pas avec l'ancien : il est invalide.
+  expect(() => mergeSettings({ invitationMail: { body: '<p>x</p>', format: 'html' } }, base)).toThrow(ZodError);
+  // Un autre réglage ne touche pas au message, et null le retire.
+  expect(mergeSettings({ repechage: true }, base).invitationMail).toEqual(base.invitationMail);
+  expect(mergeSettings({ invitationMail: null }, base).invitationMail).toBeNull();
+});

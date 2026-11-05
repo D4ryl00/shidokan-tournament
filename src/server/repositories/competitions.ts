@@ -6,7 +6,9 @@ import { ffkDefaultGrid } from '../../domain/grid-ffk.js';
 import { defaultZoneNames } from '../../domain/zones.js';
 import { validateGrid } from '../../domain/grid.js';
 import { applyRulesView } from '../../domain/replacement/rules.js';
+import { sameMailTemplate } from '../../domain/mail-template-schema.js';
 import { defaultSettings, mergeSettings, readStoredSettings } from '../../domain/settings.js';
+import { cleanTemplate } from '../mail-html.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
 import { getAppSettings } from './app-settings.js';
@@ -97,6 +99,11 @@ export async function updateCompetition(
       // Chemins d'erreur préfixés par « settings » (affichés « réglages › … »).
       if (e instanceof ZodError) throw new ZodError(e.issues.map((i) => ({ ...i, path: ['settings', ...i.path] })));
       throw e;
+    }
+    // Le message aux clubs est filtré tel qu'il sera gardé, comme celui de l'application. Inchangé (autre réglage, réglages renvoyés en entier), il n'est pas revérifié :
+    // un message arrivé par paquet et refusé par le filtre ne doit pas bloquer le reste ; il sera de toute façon filtré à l'envoi.
+    if (settings.invitationMail && !sameMailTemplate(settings.invitationMail, current.settings.invitationMail)) {
+      settings = { ...settings, invitationMail: cleanTemplate(settings.invitationMail) };
     }
   }
   if (patch.settings !== undefined) {
