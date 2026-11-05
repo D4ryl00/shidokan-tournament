@@ -40,7 +40,7 @@ export type HelpTopicId =
   | 'combats.resultat'
   | 'combats.kata'
   | 'podiums.clubs'
-  | 'podiums.sauvegardes'
+  | 'parametres.sauvegardes'
   | 'reglages.competition'
   | 'reglages.echanges'
   | 'synchronisation'
@@ -533,7 +533,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
   },
   podiums: {
     title: 'Podiums',
-    short: 'Les podiums de chaque catégorie, le classement des clubs, les exports et les sauvegardes.',
+    short: 'Les podiums de chaque catégorie, le classement des clubs et les exports.',
     details: [
       'Un podium s’affiche quand sa catégorie est terminée.',
       [
@@ -548,16 +548,17 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Les médailles par club : or, puis argent, puis bronze.',
     details: ['Les combattants sans club ont leurs médailles dans les podiums, mais ne comptent pas dans ce classement.'],
   },
-  'podiums.sauvegardes': {
+  'parametres.sauvegardes': {
     title: 'Sauvegardes',
-    short: 'Une copie de la base est faite toute seule ; en cas de problème, on peut revenir à une sauvegarde.',
+    short: 'Une copie de toute l’installation est faite toute seule ; en cas de problème, on peut revenir à une sauvegarde.',
     details: [
-      'Une sauvegarde est faite automatiquement toutes les 5 minutes quand quelque chose a changé ; les 200 dernières sont gardées (toute une journée de compétition). La liste montre les 10 plus récentes, la plus récente en haut.',
+      'Une sauvegarde est faite automatiquement quand quelque chose a changé ; les 200 dernières sont gardées (toute une journée de compétition). La liste montre les 10 plus récentes, la plus récente en haut.',
       [
         '« Sauvegarder maintenant » en fait une tout de suite.',
         'Pour revenir en arrière : cliquez « Télécharger » sur la sauvegarde voulue, puis « Restaurer une sauvegarde… » et choisissez ce fichier.',
-        'La restauration remplace toutes les données (toutes les compétitions) par celles du fichier ; une copie de l’état actuel est faite juste avant.',
-        '« Télécharger la base complète » : à garder sur une clé USB en fin de journée.',
+        'Une sauvegarde contient toutes les compétitions, l’annuaire, les comptes, les réglages, les images et les pièces jointes des mails. Elle ne contient ni les sessions, ni les jetons de synchronisation, ni le mot de passe d’envoi des mails, ni la clé du compte Google.',
+        'La restauration remplace toutes ces données par celles du fichier ; une copie de l’état actuel est faite juste avant. Le mot de passe d’envoi et le compte Google restent en place si le fichier désigne le même compte ; sinon, ressaisissez-le ou reconnectez-le.',
+        '« Télécharger une sauvegarde complète » : à garder en lieu sûr, par exemple sur une clé USB en fin de journée. Le fichier contient des données personnelles et les comptes.',
       ],
     ],
   },

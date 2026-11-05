@@ -137,8 +137,11 @@ test('journée complète : tatamis, résultats, correction, poule, kata, podiums
   await expect(page.getByTestId('bracket-podium')).toHaveCount(3);
   await expect(page.getByTestId('replacement-badge')).toHaveCount(0);
 
-  // Sauvegarde
+  // Sauvegarde : dans les réglages de l'application, plus dans les podiums d'une compétition
   await page.goto(`/competitions/${id}/podiums`);
+  await expect(page.getByTestId('podium-card').first()).toBeVisible();
+  await expect(page.getByTestId('backup-now')).toHaveCount(0);
+  await page.goto('/parametres#sauvegardes');
   await page.getByTestId('backup-now').click();
   await expect(page.getByText('Sauvegarde effectuée.')).toBeVisible();
   expect(await page.getByTestId('backup-row').count()).toBeGreaterThan(0);

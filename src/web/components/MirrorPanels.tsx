@@ -19,7 +19,7 @@ export function MirrorSettingsCard() {
   const shownInterval = intervalMin ?? data.intervalMin;
   return (
     <Stack>
-      <Text size="sm">Sur un second PC, gardez une copie récente du PC principal : en cas de panne, restaurez-la ici (section Sauvegardes), puis ouvrez l’application de ce PC sur les autres postes.</Text>
+      <Text size="sm">Sur un second PC, gardez une copie récente du PC principal : en cas de panne, restaurez-la ci-dessous, puis ouvrez l’application de ce PC sur les autres postes.</Text>
       <Group align="end">
         <TextInput data-testid="mirror-url" label="Adresse du PC principal" placeholder="http://192.168.1.10:3000" value={shownUrl} onChange={(e) => setUrl(e.currentTarget.value)} w={300} />
         <NumberInput label="Toutes les (minutes)" min={1} max={60} value={shownInterval} onChange={(v) => setIntervalMin(Number(v) || 5)} w={140} />
@@ -37,7 +37,7 @@ export function MirrorSettingsCard() {
   );
 }
 
-/** Section Sauvegardes : copies du PC principal, restaurables. */
+/** Copies du PC principal, restaurables. */
 export function MirrorCopies() {
   const { data: me } = useAuthMe();
   const local = me?.role === 'local';

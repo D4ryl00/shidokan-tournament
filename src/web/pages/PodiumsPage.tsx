@@ -1,10 +1,6 @@
-import { Alert, Button, Card, Group, Modal, SimpleGrid, Stack, Table, Text } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
-import { useState } from 'react';
+import { Button, Card, Group, SimpleGrid, Stack, Table, Text } from '@mantine/core';
 import { Link, useParams } from 'react-router';
-import { useBackupNow, useBackups, useIsOrganiser, usePodiums, useRestore } from '../api.js';
-import { MirrorCopies } from '../components/MirrorPanels.js';
-import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { usePodiums } from '../api.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
@@ -18,12 +14,6 @@ export function PodiumsPage() {
   const { id = '' } = useParams();
   const { data } = usePodiums(id);
   const entrants = useEntrantInfo(id);
-  // Sauvegardes : réservées à l'organisateur (un compte Table centrale ou Zone ne les voit pas).
-  const organiser = useIsOrganiser();
-  const { data: backups = [] } = useBackups(organiser);
-  const backupNow = useBackupNow();
-  const restore = useRestore();
-  const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const name = (rid: string | null) => (rid ? `${entrants.get(rid)?.name ?? '?'} (${entrants.get(rid)?.club ?? ''})` : '—');
   const done = (data?.categories ?? []).filter((c) => c.complete).length;
 
@@ -94,50 +84,6 @@ export function PodiumsPage() {
         )}
       </SectionCard>
 
-      {organiser && (
-      <SectionCard title={HELP['podiums.sauvegardes'].title} help="podiums.sauvegardes"
-        actions={
-          <Button data-testid="backup-now" loading={backupNow.isPending}
-            onClick={() => backupNow.mutate(undefined, { onSuccess: () => notifications.show({ color: 'green', message: 'Sauvegarde effectuée.' }) })}>
-            Sauvegarder maintenant
-          </Button>
-        }>
-        <Group gap="sm">
-          <Button component="a" href="/api/backup.sqlite" download variant="default">Télécharger la base complète</Button>
-          <Button variant="subtle" color="red" component="label">
-            Restaurer une sauvegarde…
-            <input type="file" accept=".sqlite" hidden data-testid="restore-file" onChange={(e) => setRestoreFile(e.currentTarget.files?.[0] ?? null)} />
-          </Button>
-        </Group>
-        {backups.length > 0 && (
-          <Table maw={640}>
-            <Table.Tbody>
-              {backups.slice(0, 10).map((b) => (
-                <Table.Tr key={b.name} data-testid="backup-row">
-                  <Table.Td className="num">{new Date(b.createdAt).toLocaleString('fr-FR')}</Table.Td>
-                  <Table.Td ta="right" className="num">{Math.round(b.size / 1024).toLocaleString('fr-FR')} Ko</Table.Td>
-                  <Table.Td ta="right"><Button component="a" href={`/api/backups/${b.name}`} download size="compact-sm" variant="subtle">Télécharger</Button></Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        )}
-        <MirrorCopies />
-      </SectionCard>
-      )}
-      <ApiErrorAlert error={restore.error ?? backupNow.error} />
-      <Modal opened={restoreFile !== null} onClose={() => setRestoreFile(null)} title="Restaurer cette sauvegarde ?">
-        <Stack>
-          <Alert color="red">Toutes les données actuelles seront remplacées par celles de « {restoreFile?.name} ». Une sauvegarde de l’état actuel est faite juste avant.</Alert>
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setRestoreFile(null)}>Annuler</Button>
-            <Button color="red" data-testid="restore-confirm" loading={restore.isPending}
-              onClick={() => restoreFile && restore.mutate(restoreFile, { onSuccess: () => { setRestoreFile(null); notifications.show({ color: 'green', message: 'Sauvegarde restaurée.' }); } })}>
-              Restaurer
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
     </Stack>
   );
 }

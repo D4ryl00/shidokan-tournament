@@ -42,9 +42,9 @@ docker compose down            # arrêter
 Puis ouvrir **http://localhost:3000** dans Chrome.
 
 - **Il n'y a pas d'internet au gymnase** : construisez l'image **avant** d'y aller, sur le PC qui servira le jour J, et vérifiez qu'elle démarre.
-- **Les données** sont dans le dossier `data/`, à côté de `compose.yaml` : la base `data/shidokan.sqlite` et les sauvegardes automatiques dans `data/sauvegardes/` (toutes les 5 minutes, les 30 dernières gardées ; `BACKUP_INTERVAL_MIN` dans `compose.yaml`, 0 pour désactiver).
+- **Les données** sont dans le dossier `data/`, à côté de `compose.yaml` : la base `data/shidokan.sqlite` et les sauvegardes automatiques dans `data/sauvegardes/` (toutes les 5 minutes quand quelque chose a changé, les 200 dernières gardées ; `BACKUP_INTERVAL_MIN` dans `compose.yaml`, 0 pour désactiver).
 - **Pour copier `data/`** (clé USB, autre PC), arrêtez d'abord l'application. N'ouvrez jamais la base avec un autre programme pendant qu'elle tourne.
-- Sauvegarder, télécharger la base complète ou restaurer une sauvegarde : onglet **Podiums**, section des sauvegardes.
+- Sauvegarder ou restaurer : voir [Sauvegarder et restaurer](#8-sauvegarder-et-restaurer).
 
 ## 3. Relier le PC au serveur (une fois)
 
@@ -151,7 +151,47 @@ Sans internet : « Exporter la compétition (fichier) » sur le PC, puis sur le 
 
 **PC perdu ou en panne** : sur le serveur, « Échanges avec le serveur » → « Reprendre la main » (à partir de la version du serveur, ou de la dernière copie reçue pendant la journée), et révoquez le jeton du PC. Si un autre PC a continué la compétition, exportez-la en fichier depuis ce PC, puis importez-la en ligne.
 
-**Supprimer une compétition** (une démo, une erreur) : liste des compétitions → « Supprimer », puis retapez son nom. Tout ce qu’elle contient est effacé de cette installation seulement, et une sauvegarde est faite juste avant. Pour revenir en arrière : onglet Podiums d’une autre compétition → Sauvegardes ; la restauration remet toutes les compétitions dans l’état de ce moment-là. La suppression ne se propage jamais : supprimée sur le serveur, la compétition reste sur les PC qui en ont une copie ; supprimée sur le PC principal, elle reste sur les portables de zone. Ces copies ne sont plus mises à jour (« La compétition a été supprimée… ») et se suppriment de la même façon, sauf un portable en zone autonome (repassez d’abord en ligne). Sur le serveur, une compétition dont un PC a la main ne peut pas être supprimée.
+**Supprimer une compétition** (une démo, une erreur) : liste des compétitions → « Supprimer », puis retapez son nom. Tout ce qu’elle contient est effacé de cette installation seulement, et une sauvegarde est faite juste avant. Pour revenir en arrière : Réglages de l'application → Sauvegardes ; la restauration remet toutes les compétitions dans l’état de ce moment-là. La suppression ne se propage jamais : supprimée sur le serveur, la compétition reste sur les PC qui en ont une copie ; supprimée sur le PC principal, elle reste sur les portables de zone. Ces copies ne sont plus mises à jour (« La compétition a été supprimée… ») et se suppriment de la même façon, sauf un portable en zone autonome (repassez d’abord en ligne). Sur le serveur, une compétition dont un PC a la main ne peut pas être supprimée.
+
+## 8. Sauvegarder et restaurer
+
+Une sauvegarde concerne **toute l'installation**, pas une seule compétition. Elle se gère dans **Réglages de l'application → Sauvegardes**, en organisateur.
+
+**Ce qu'elle contient** : toutes les compétitions, l'annuaire, les comptes, les réglages (dont le message aux clubs), les images du message et les pièces jointes des mails.
+
+**Ce qu'elle ne contient pas** : les sessions de connexion, les jetons de synchronisation, le mot de passe d'envoi des mails et la clé du compte Google.
+
+Le fichier contient des données personnelles et les comptes, avec leurs mots de passe chiffrés : gardez-le en lieu sûr.
+
+### Depuis l'écran
+
+- **Sauvegarder** : « Sauvegarder maintenant » ajoute une copie à la liste. Des copies se font aussi toutes seules quand quelque chose a changé ; la liste montre les 10 plus récentes.
+- **Garder une copie ailleurs** : « Télécharger une sauvegarde complète », ou « Télécharger » sur une ligne de la liste.
+- **Restaurer** : « Restaurer une sauvegarde… », choisissez le fichier, puis confirmez. Pour revenir à une copie de la liste, téléchargez-la d'abord.
+
+### En ligne de commande
+
+Ces commandes ne passent ni par le navigateur ni par le serveur web, et n'ont donc pas de limite de taille. Lancez-les dans le dossier de `compose.yaml` :
+
+```sh
+docker compose exec -it app node dist/server/cli.js backup
+docker compose exec -it app node dist/server/cli.js list-backups
+docker compose exec -it app node dist/server/cli.js restore shidokan-20261105-120000-000.sqlite
+docker compose restart app
+```
+
+- `backup` écrit la copie dans `data/sauvegardes/`.
+- `restore` prend le nom d'une copie de ce dossier, ou le chemin d'un fichier vu du conteneur : un fichier posé dans `data/` se trouve à `/data/mon-fichier.sqlite`. La confirmation se fait en tapant `oui` ; ajoutez `--oui` à la fin pour un script.
+- Après `restore`, redémarrez l'application et rechargez les pages ouvertes.
+
+### Ce que fait une restauration
+
+- **Tout est remplacé** par le contenu du fichier : ce qui a été saisi depuis, y compris par les clubs en ligne, n'est plus dans l'application. Une sauvegarde de l'état actuel est faite juste avant : c'est elle qu'il faut restaurer pour annuler.
+- **Comptes** : ceux du fichier remplacent les comptes actuels. Si votre compte n'y est pas, vous êtes déconnecté. Un fichier sans organisateur, comme une sauvegarde d'un PC ou d'une version plus ancienne, laisse les comptes actuels en place.
+- **Mot de passe d'envoi et compte Google** : ils restent en place si le fichier désigne le même compte. Sinon, ressaisissez le mot de passe ou reconnectez le compte Google dans **Envoi des mails**.
+- **Liens de cette machine** (serveur relié, copie suivie, PC principal, portable de zone) : ils ne changent jamais, et les jetons de synchronisation restent ceux de l'installation.
+- **Anciennes sauvegardes** : elles se restaurent toujours, mais sans leurs comptes ni leurs pièces jointes. Une pièce jointe déjà présente sur l'installation est gardée si la sauvegarde la cite encore.
+- **Sauvegarde d'une version plus récente** : refusée ; mettez d'abord l'application à jour.
 
 ## Variante : le jour J tout en ligne, avec le PC en secours
 

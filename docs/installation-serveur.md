@@ -62,7 +62,7 @@ Le mot de passe est demandé deux fois, sans s'afficher (10 caractères au moins
 
 Le serveur refuse ce que le rôle ne permet pas, et l'écran de chacun se règle sur son rôle.
 
-Autres commandes : `… cli.js list-users`, `… cli.js delete-user <e-mail>`.
+Autres commandes : `… cli.js list-users`, `… cli.js delete-user <e-mail>`. Sauvegardes : voir plus bas.
 
 ## 4. Régler l'envoi des mails et la mention sur les données
 
@@ -151,9 +151,10 @@ Les sauvegardes automatiques (toutes les 30 minutes quand quelque chose a chang�
 rsync -a utilisateur@serveur:shidokan/data/sauvegardes/ ~/sauvegardes-shidokan/
 ```
 
-- **Les images du message aux clubs comptent dans chaque sauvegarde.** Chaque copie porte toutes les images : dix images de 2 Mo ajoutent 20 Mo à chacune, et jusqu'à 200 copies sont gardées (soit jusqu'à 4 Go pour ces seules images). Surveillez la place libre du disque et celle de votre copie hors du serveur. Une sauvegarde de 500 Mo au plus se restaure depuis l'application. Une restauration ne supprime aucune image : celles que plus aucun message ne cite sont retirées ensuite par le nettoyage.
-- **Les sauvegardes ne contiennent pas les comptes.** Après une restauration sur un nouveau serveur, recréez-les avec `cli.js add-user`, et refaites les réglages d'envoi des mails (reconnectez le compte Google).
-- **N'ouvrez jamais `data/shidokan.sqlite` avec un autre programme depuis l'hôte** pendant que l'application tourne. Utilisez les fichiers de `data/sauvegardes/` ou « Télécharger la base complète ». La commande `docker compose exec app …` (le CLI des comptes), elle, est sans risque.
+- **Les images et les pièces jointes des mails comptent dans chaque sauvegarde.** Chaque copie les porte toutes : avec 15 Mo de pièces jointes et 20 Mo d'images, jusqu'à 200 copies peuvent atteindre 7 Go pour une seule compétition. Surveillez la place libre du disque et celle de votre copie hors du serveur. Depuis l'écran, une sauvegarde de 500 Mo au plus se restaure. Une restauration ne supprime aucune image : celles que plus aucun message ne cite sont retirées ensuite par le nettoyage.
+- **Contenu d'une sauvegarde** : tout, comptes compris, sauf les sessions, les jetons de synchronisation, le mot de passe d'envoi et la clé Google. Protégez donc ces fichiers : ils contiennent des données personnelles et les mots de passe chiffrés des comptes. Après une restauration sur un nouveau serveur, ressaisissez le mot de passe d'envoi ou reconnectez le compte Google, et recréez les jetons de synchronisation.
+- **Commandes, sans passer par le serveur web ni sa limite de taille** : `… cli.js backup`, `… cli.js list-backups` et `… cli.js restore <fichier>`, puis `docker compose restart app`. Procédure complète : [guide de l'organisateur, partie 8](guide-utilisateur.md#8-sauvegarder-et-restaurer).
+- **N'ouvrez jamais `data/shidokan.sqlite` avec un autre programme depuis l'hôte** pendant que l'application tourne. Utilisez les fichiers de `data/sauvegardes/` ou « Télécharger une sauvegarde complète ». La commande `docker compose exec app …` (le CLI des comptes), elle, est sans risque.
 
 ## Variante : un serveur web existe déjà sur les ports 80 et 443
 

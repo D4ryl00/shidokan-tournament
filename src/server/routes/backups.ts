@@ -3,14 +3,13 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
 import { everythingChanged } from '../events.js';
-import { sweepAttachmentFiles } from '../repositories/mail-attachments.js';
 import { RestoreError, backupFile, backupNow, freshCopy, listBackups, restoreFrom } from '../repositories/backups.js';
 import { createCompetition, getCompetition } from '../repositories/competitions.js';
 import { listTemplates, loadTemplate, saveTemplate, templateGrid } from '../repositories/templates.js';
 import { replaceGrid } from '../repositories/competitions.js';
 import { competitionCreateSchema } from '../../domain/api-schemas.js';
 
-/** Une sauvegarde porte toutes les images du message : elle dépasse vite la limite des autres fichiers (20 Mio). */
+/** Une sauvegarde porte toutes les images et pièces jointes des mails : elle dépasse vite la limite des autres fichiers (20 Mio). */
 const RESTORE_BODY_LIMIT = 500 * 1024 * 1024;
 
 export async function backupRoutes(app: FastifyInstance, { db, dbPath }: { db: AppDb; dbPath: string }) {
@@ -23,12 +22,11 @@ export async function backupRoutes(app: FastifyInstance, { db, dbPath }: { db: A
   });
   app.get('/api/backup.sqlite', async (_req, reply) => {
     const name = `shidokan-${new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '')}.sqlite`;
-    return reply.header('Content-Type', 'application/vnd.sqlite3').header('Content-Disposition', `attachment; filename="${name}"`).send(freshCopy(db));
+    return reply.header('Content-Type', 'application/vnd.sqlite3').header('Content-Disposition', `attachment; filename="${name}"`).send(freshCopy(db, dbPath));
   });
   app.post('/api/restore', { bodyLimit: RESTORE_BODY_LIMIT }, async (req, reply) => {
     if (!Buffer.isBuffer(req.body)) throw new RestoreError();
-    await restoreFrom(db, req.body, () => backupNow(db, dbPath)); // filet de sécurité avant d'écraser
-    sweepAttachmentFiles(db, dbPath); // pièces jointes absentes de la sauvegarde
+    await restoreFrom(db, dbPath, req.body);
     everythingChanged();
     return reply.status(204).send();
   });

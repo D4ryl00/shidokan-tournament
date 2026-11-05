@@ -2,11 +2,12 @@ import { Alert, Button, Divider, Group, Modal, Input, NativeSelect, NumberInput,
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
 import { GOOGLE_NOT_CONFIGURED, GOOGLE_RECONNECT, hasContactsScope, type MailMode, type PublicAppSettings, type SmtpSettings } from '../../domain/app-settings.js';
-import { useAppSettings, useAuthMe, useGoogleDisconnect, useGoogleStart, useSendTestMail, useUpdateAppSettings } from '../api.js';
+import { useAppSettings, useAuthMe, useGoogleDisconnect, useGoogleStart, useIsOrganiser, useSendTestMail, useUpdateAppSettings } from '../api.js';
 import { RECONNECT_OTHER_ACCOUNT } from '../../domain/google-contacts.js';
 import { useDocumentTitle } from '../documentTitle.js';
 import { SyncSettingsCard } from '../components/SyncPanel.js';
 import { MirrorCopies, MirrorSettingsCard } from '../components/MirrorPanels.js';
+import { BackupsCard } from '../components/BackupsCard.js';
 import { DayChecklist } from '../components/DayChecklist.js';
 import { ZoneLinkCard } from '../components/ZoneLinkCard.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
@@ -265,11 +266,13 @@ export function AppSettingsPage() {
   const local = me?.role === 'local';
   // Mails et inscriptions en ligne : serveur en ligne seulement. Tant que le rôle est inconnu, ni l'un ni l'autre n'est affiché.
   const server = me?.role === 'serveur';
+  const organiser = useIsOrganiser();
   const sections = [
     ...(data && server ? [{ id: 'mails', label: 'Envoi des mails' }, { id: 'clubs', label: 'Message aux clubs' }] : []),
     ...(data && local ? [{ id: 'clubs', label: 'Données personnelles' }] : []),
     ...(data ? [{ id: 'regles', label: 'Règles de réaffectation' }] : []),
     ...(me ? [{ id: 'synchronisation', label: HELP.synchronisation.title }] : []),
+    ...(organiser ? [{ id: 'sauvegardes', label: HELP['parametres.sauvegardes'].title }] : []),
     { id: 'jour-j', label: 'Préparer le jour J' },
     ...(local ? [{ id: 'secours', label: 'Copie de secours' }, { id: 'zones-autonomes', label: 'Portable de zone' }] : []),
   ];
@@ -291,6 +294,7 @@ export function AppSettingsPage() {
           <SyncSettingsCard role={me.role} />
         </SectionCard>
       )}
+      <BackupsCard />
       <SectionCard id="jour-j" title={HELP['jour-j'].title} help="jour-j">
         <DayChecklist />
       </SectionCard>

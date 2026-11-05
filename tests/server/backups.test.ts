@@ -202,7 +202,7 @@ test('restauration d’une sauvegarde plus ancienne : le compteur de versions ne
   d.close();
 });
 
-test('une sauvegarde ne contient ni compte, ni session, ni mot de passe SMTP, ni jeton Google', async () => {
+test('une sauvegarde garde les comptes et les réglages, mais ni session, ni jeton, ni mot de passe SMTP, ni clé Google', async () => {
   const { createUser, createSession } = await import('../../src/server/auth/sessions.js');
   await app.close();
   const db = (await import('../../src/server/db/client.js')).openDb(dbPath);
@@ -220,8 +220,9 @@ test('une sauvegarde ne contient ni compte, ni session, ni mot de passe SMTP, ni
     const copy = path.join(path.dirname(dbPath), `copie-${Math.random()}.sqlite`);
     fs.writeFileSync(copy, file);
     const r = new Database(copy, { readonly: true });
-    expect(r.prepare('select count(*) as n from users').get()).toEqual({ n: 0 });
+    expect(r.prepare('select email from users').all()).toEqual([{ email: 'orga@example.org' }]);
     expect(r.prepare('select count(*) as n from sessions').get()).toEqual({ n: 0 });
+    expect(r.prepare('select count(*) as n from sync_tokens').get()).toEqual({ n: 0 });
     expect(JSON.stringify(r.prepare('select * from app_settings').all())).not.toContain('SECRET-SMTP');
     expect(JSON.stringify(r.prepare('select * from app_settings').all())).not.toContain('SECRET-GOOGLE');
     expect(JSON.stringify(r.prepare('select * from app_settings').all())).toContain('x@gmail.com');
@@ -231,27 +232,150 @@ test('une sauvegarde ne contient ni compte, ni session, ni mot de passe SMTP, ni
   }
 });
 
-test('restaurer une sauvegarde d’une autre installation ne touche pas aux comptes, sessions ni réglages', async () => {
+/** Une installation à part, préparée, dont on prend une sauvegarde complète. */
+async function snapshotOf(prepare: (db: Database.Database, createUser: (email: string, role?: 'organisateur' | 'table') => { id: string }) => void): Promise<Buffer> {
   const { createUser } = await import('../../src/server/auth/sessions.js');
+  const client = await import('../../src/server/db/client.js');
   const otherPath = tmpDbPath();
-  const otherDb = (await import('../../src/server/db/client.js')).openDb(otherPath);
-  createUser(otherDb, 'autre@example.org', 'mot-de-passe-long');
-  otherDb.$client.prepare("insert into app_settings (key, value_json) values ('privacyContact', '\"autre@example.org\"')").run();
-  (await import('../../src/server/db/client.js')).closeDb(otherDb);
+  const otherDb = client.openDb(otherPath);
+  prepare(otherDb.$client, (email) => createUser(otherDb, email, 'mot-de-passe-long'));
+  client.closeDb(otherDb);
   const other = await buildApp({ dbPath: otherPath });
   const snapshot = (await other.inject({ method: 'GET', url: '/api/backup.sqlite' })).rawPayload;
   await other.close();
+  return snapshot;
+}
+/** L'installation testée, préparée pendant que l'application est arrêtée. */
+async function prepareLocal(prepare: (db: Database.Database, createUser: (email: string) => { id: string }, createSession: (id: string) => unknown) => void): Promise<void> {
+  const { createUser, createSession } = await import('../../src/server/auth/sessions.js');
+  const client = await import('../../src/server/db/client.js');
   await app.close();
-  const db = (await import('../../src/server/db/client.js')).openDb(dbPath);
-  createUser(db, 'local@example.org', 'mot-de-passe-long');
-  db.$client.prepare("insert into app_settings (key, value_json) values ('privacyContact', '\"local@example.org\"')").run();
-  (await import('../../src/server/db/client.js')).closeDb(db);
+  const db = client.openDb(dbPath);
+  prepare(db.$client, (email) => createUser(db, email, 'mot-de-passe-long'), (id) => createSession(db, id));
+  client.closeDb(db);
   app = await buildApp({ dbPath });
-  expect((await app.inject({ method: 'POST', url: '/api/restore', payload: snapshot, headers: { 'content-type': 'application/octet-stream' } })).statusCode).toBe(204);
+}
+const restored = async (snapshot: Buffer) => (await app.inject({ method: 'POST', url: '/api/restore', payload: snapshot, headers: { 'content-type': 'application/octet-stream' } })).statusCode;
+const setting = (db: Database.Database, key: string, value: unknown) => db.prepare('insert into app_settings (key, value_json) values (?, ?) on conflict (key) do update set value_json = excluded.value_json').run(key, JSON.stringify(value));
+const settingOf = (key: string) => {
+  const r = new Database(dbPath, { readonly: true });
+  const row = r.prepare('select value_json as v from app_settings where key = ?').get(key) as { v: string } | undefined;
+  r.close();
+  return row ? JSON.parse(row.v) : undefined;
+};
+
+test('restaurer reprend les comptes et les réglages du fichier ; un compte absent perd sa session, un compte gardé non', async () => {
+  let keptId = '';
+  const snapshot = await snapshotOf((db, createUser) => {
+    keptId = createUser('garde@example.org').id;
+    createUser('nouveau@example.org');
+    setting(db, 'privacyContact', 'fichier@example.org');
+  });
+  await prepareLocal((db, createUser, createSession) => {
+    const gone = createUser('parti@example.org');
+    createSession(gone.id);
+    db.prepare("insert into users (id, email, password_hash) values (?, 'garde@example.org', 'x')").run(keptId);
+    createSession(keptId);
+    setting(db, 'privacyContact', 'local@example.org');
+    setting(db, 'seulementIci', 'à effacer');
+  });
+  expect(await restored(snapshot)).toBe(204);
+  const r = new Database(dbPath, { readonly: true });
+  expect((r.prepare('select email from users order by email').all() as { email: string }[]).map((u) => u.email)).toEqual(['garde@example.org', 'nouveau@example.org']);
+  expect(r.prepare('select user_id from sessions').all()).toEqual([{ user_id: keptId }]);
+  r.close();
+  expect(settingOf('privacyContact')).toBe('fichier@example.org');
+  expect(settingOf('seulementIci')).toBeUndefined();
+});
+
+test('restaurer un fichier sans organisateur (ancienne sauvegarde, PC) garde les comptes actuels', async () => {
+  const snapshot = await snapshotOf(() => undefined);
+  await prepareLocal((_db, createUser) => { createUser('local@example.org'); });
+  expect(await restored(snapshot)).toBe(204);
   const r = new Database(dbPath, { readonly: true });
   expect(r.prepare('select email from users').all()).toEqual([{ email: 'local@example.org' }]);
-  expect(r.prepare("select value_json from app_settings where key = 'privacyContact'").get()).toEqual({ value_json: '"local@example.org"' });
   r.close();
+});
+
+test('restaurer ne reprend jamais les liens de la machine, ni un secret qui serait dans le fichier', async () => {
+  const smtp = { host: 'smtp.exemple.fr', user: 'moi', port: 465, security: 'tls', fromName: 'X', fromEmail: 'x@exemple.fr' };
+  const google = { email: 'moi@gmail.com', fromName: 'Moi', status: 'ok' };
+  // Fichier fabriqué : il porte un mot de passe, une clé et un lien vers une autre machine.
+  const client = await import('../../src/server/db/client.js');
+  const crafted = tmpDbPath();
+  const craftedDb = client.openDb(crafted);
+  const { createUser } = await import('../../src/server/auth/sessions.js');
+  createUser(craftedDb, 'orga@example.org', 'mot-de-passe-long');
+  setting(craftedDb.$client, 'smtp', { ...smtp, password: 'DU-FICHIER' });
+  setting(craftedDb.$client, 'google', { ...google, refreshToken: 'DU-FICHIER' });
+  setting(craftedDb.$client, 'mirror', { url: 'http://autre-machine', intervalMin: 5 });
+  client.closeDb(craftedDb);
+  await prepareLocal((db) => {
+    setting(db, 'smtp', { ...smtp, password: 'LOCAL-SMTP' });
+    setting(db, 'google', { ...google, refreshToken: 'LOCAL-GOOGLE' });
+    setting(db, 'mirror', { url: 'http://ma-machine', intervalMin: 5 });
+  });
+  expect(await restored(fs.readFileSync(crafted))).toBe(204);
+  expect(settingOf('smtp').password).toBe('LOCAL-SMTP');
+  expect(settingOf('google').refreshToken).toBe('LOCAL-GOOGLE');
+  expect(settingOf('mirror').url).toBe('http://ma-machine');
+});
+
+test('restaurer un autre compte d’envoi : mot de passe à ressaisir, Google à reconnecter ; un fichier sans ces réglages les laisse en place', async () => {
+  const other = await snapshotOf((db) => {
+    setting(db, 'smtp', { host: 'autre.fr', user: 'autre', port: 465, security: 'tls', fromName: 'A', fromEmail: 'a@autre.fr', password: 'A' });
+    setting(db, 'google', { email: 'autre@gmail.com', fromName: 'A', status: 'ok', refreshToken: 'A' });
+  });
+  await prepareLocal((db) => {
+    setting(db, 'smtp', { host: 'smtp.exemple.fr', user: 'moi', port: 465, security: 'tls', fromName: 'X', fromEmail: 'x@exemple.fr', password: 'LOCAL-SMTP' });
+    setting(db, 'google', { email: 'moi@gmail.com', fromName: 'Moi', status: 'ok', refreshToken: 'LOCAL-GOOGLE' });
+  });
+  const empty = await snapshotOf(() => undefined);
+  expect(await restored(empty)).toBe(204);
+  expect(settingOf('smtp').password).toBe('LOCAL-SMTP');
+  expect(settingOf('google').refreshToken).toBe('LOCAL-GOOGLE');
+  expect(await restored(other)).toBe(204);
+  expect(settingOf('smtp')).toMatchObject({ host: 'autre.fr' });
+  expect(settingOf('smtp').password).toBeUndefined();
+  expect(settingOf('google')).toBeUndefined();
+});
+
+test('les pièces jointes sont dans la sauvegarde, reviennent à la restauration ; un identifiant fabriqué n’écrit nulle part', async () => {
+  await app.close();
+  app = await buildApp({ dbPath, clubServices: true });
+  const cid = (await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe pièces', date: '2026-11-22' } })).json().id as string;
+  const add = await app.inject({ method: 'POST', url: `/api/competitions/${cid}/mail-attachments`, payload: Buffer.from('CONTENU-AFFICHE'), headers: { 'content-type': 'application/octet-stream', 'x-file-name': 'affiche.pdf' } });
+  expect(add.statusCode).toBe(201);
+  const id = add.json().id as string;
+  const snapshot = (await app.inject({ method: 'GET', url: '/api/backup.sqlite' })).rawPayload;
+  const onDisk = path.join(path.dirname(dbPath), 'pieces-jointes', id);
+  fs.rmSync(onDisk);
+  expect(await restored(snapshot)).toBe(204);
+  expect(fs.readFileSync(onDisk, 'utf8')).toBe('CONTENU-AFFICHE');
+
+  // Copie modifiée à la main : une ligne au nom piégé ne doit rien créer hors du dossier.
+  const crafted = path.join(path.dirname(dbPath), 'piege.sqlite');
+  fs.writeFileSync(crafted, snapshot);
+  const raw = new Database(crafted);
+  raw.prepare('insert into sauvegarde_pieces_jointes (id, data) values (?, ?)').run('../evade', Buffer.from('X'));
+  raw.prepare("insert into mail_attachments (id, competition_id, file_name, content_type, size) values ('../evade', ?, 'x.pdf', 'application/pdf', 1)").run(cid);
+  raw.close();
+  expect(await restored(fs.readFileSync(crafted))).toBe(204);
+  expect(fs.existsSync(path.join(path.dirname(dbPath), 'evade'))).toBe(false);
+});
+
+test('une ancienne sauvegarde sans contenu de pièce jointe laisse le fichier déjà présent', async () => {
+  await app.close();
+  app = await buildApp({ dbPath, clubServices: true });
+  const cid = (await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe ancienne', date: '2026-11-22' } })).json().id as string;
+  const id = (await app.inject({ method: 'POST', url: `/api/competitions/${cid}/mail-attachments`, payload: Buffer.from('ICI'), headers: { 'content-type': 'application/octet-stream', 'x-file-name': 'a.pdf' } })).json().id as string;
+  const old = path.join(path.dirname(dbPath), 'ancienne.sqlite');
+  fs.writeFileSync(old, (await app.inject({ method: 'GET', url: '/api/backup.sqlite' })).rawPayload);
+  const raw = new Database(old);
+  raw.exec('drop table sauvegarde_pieces_jointes');
+  raw.close();
+  expect(await restored(fs.readFileSync(old))).toBe(204);
+  expect(fs.readFileSync(path.join(path.dirname(dbPath), 'pieces-jointes', id), 'utf8')).toBe('ICI');
 });
 
 test('restauration : les images du message restent, celles de la sauvegarde reviennent (le message de l’application n’est pas restauré)', async () => {

@@ -33,15 +33,15 @@ test('passages d’âge : libellés en clair', () => {
 });
 
 test('sauvegardes : le nombre gardé est celui du serveur', () => {
-  expect(HELP['podiums.sauvegardes'].details.flat().join(' ')).toContain('200');
+  expect(HELP['parametres.sauvegardes'].details.flat().join(' ')).toContain('200');
 });
 
 const all = (id: keyof typeof HELP) => [HELP[id].short, ...HELP[id].details.flat()].join(' ');
 
 test('relecture : sauvegardes — la restauration décrite est celle de l’écran', () => {
-  expect(all('podiums.sauvegardes')).toContain('« Restaurer une sauvegarde… »');
-  expect(all('podiums.sauvegardes')).toContain('« Télécharger »');
-  expect(all('podiums.sauvegardes')).not.toMatch(/restaurez la plus récente|plus d’une journée/);
+  expect(all('parametres.sauvegardes')).toContain('« Restaurer une sauvegarde… »');
+  expect(all('parametres.sauvegardes')).toContain('« Télécharger »');
+  expect(all('parametres.sauvegardes')).not.toMatch(/restaurez la plus récente|plus d’une journée/);
 });
 test('relecture : kata — enregistrer avec ✓ ou Entrée ; notes retirées à partir de 5 arbitres', () => {
   expect(HELP['combats.kata'].short).toContain('✓');

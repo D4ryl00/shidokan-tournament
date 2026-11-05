@@ -5,8 +5,7 @@ import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
 import { everythingChanged } from '../events.js';
 import { copiesDir, getMirror, isCopyName, listCopies, mirrorStatus, setMirror } from '../mirror.js';
-import { backupNow, restoreFrom } from '../repositories/backups.js';
-import { sweepAttachmentFiles } from '../repositories/mail-attachments.js';
+import { restoreFrom } from '../repositories/backups.js';
 import { NotFoundError } from '../repositories/registrations.js';
 
 /** PC de secours (rôle local) : réglage de la copie régulière du PC principal, liste et restauration des copies. */
@@ -29,8 +28,7 @@ export async function mirrorRoutes(app: FastifyInstance, { db, dbPath }: { db: A
   app.post<{ Params: { name: string } }>('/api/mirror/copies/:name/restore', async (req, reply) => {
     const file = path.join(copiesDir(dbPath), req.params.name);
     if (!isCopyName(req.params.name) || !fs.existsSync(file)) throw new NotFoundError('Copie introuvable');
-    await restoreFrom(db, fs.readFileSync(file), () => backupNow(db, dbPath)); // filet de sécurité avant d'écraser
-    sweepAttachmentFiles(db, dbPath); // pièces jointes absentes de la copie
+    await restoreFrom(db, dbPath, fs.readFileSync(file));
     // Ce PC a pris le relais : il ne recopie plus l'ancien PC principal.
     setMirror(db, null);
     everythingChanged();

@@ -32,7 +32,7 @@ export const competitions = sqliteTable('competitions', {
   ...rowMeta(),
 });
 
-/** Comptes des organisateurs (rôle serveur). Propres à l'installation : jamais copiés par une restauration ni gardés dans une sauvegarde. */
+/** Comptes des organisateurs (rôle serveur). Gardés dans les sauvegardes, repris par une restauration si le fichier a un organisateur. */
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
   email: text('email').notNull().unique(),
