@@ -25,6 +25,11 @@ export function textToHtml(text: string): string {
   return text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).map((p) => `<p>${p.split('\n').map(line).join('<br>\n')}</p>`).join('\n');
 }
 
+/** Corps d'un message en HTML : le format html tel quel ; un ancien texte est converti, jamais lu comme du HTML. */
+export function mailBodyToHtml(t: { body: string; format?: 'html' }): string {
+  return t.format === 'html' ? t.body : textToHtml(t.body);
+}
+
 /** « 2026-11-22 » → « 22/11/2026 ». */
 export const frenchDate = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/');
 

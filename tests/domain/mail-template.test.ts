@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import { DEFAULT_INVITATION_MAIL } from '../../src/domain/app-settings.js';
-import { renderTemplate, textToHtml, type MailValues } from '../../src/domain/mail-template.js';
+import { mailBodyToHtml, renderTemplate, textToHtml, type MailValues } from '../../src/domain/mail-template.js';
+import { mailTemplateSchema } from '../../src/domain/mail-template-schema.js';
 
 const VALUES: MailValues = {
   club: 'Tani Dojo', coach: 'Jean', competition: 'Coupe 2026', date: '22/11/2026', lieu: 'Nice', date_limite: '15/11/2026', lien: 'https://x/inscription/abc',
@@ -47,4 +48,19 @@ test('version HTML : ponctuation après un lien laissée hors du lien ; lignes v
   expect(textToHtml('Voir https://x/a. Puis (https://x/b).\n\n\n\nFin\n')).toBe(
     '<p>Voir <a href="https://x/a">https://x/a</a>. Puis (<a href="https://x/b">https://x/b</a>).</p>\n<p>Fin</p>',
   );
+});
+
+test('accepte un ancien message sans format et refuse plus de 5000 caractères', () => {
+  expect(mailTemplateSchema.safeParse({ subject: 'S', body: 'x' }).success).toBe(true);
+  expect(mailTemplateSchema.safeParse({ subject: 'S', body: 'x'.repeat(5001) }).success).toBe(false);
+});
+
+test('accepte le format html jusqu’à 100 000 caractères', () => {
+  expect(mailTemplateSchema.safeParse({ subject: 'S', body: '<p>x</p>', format: 'html' }).success).toBe(true);
+  expect(mailTemplateSchema.safeParse({ subject: 'S', body: 'x'.repeat(100_001), format: 'html' }).success).toBe(false);
+});
+
+test('ouvre un ancien texte sans jamais le lire comme du HTML', () => {
+  expect(mailBodyToHtml({ body: 'a < b & <b>c</b>' })).toBe(textToHtml('a < b & <b>c</b>'));
+  expect(mailBodyToHtml({ body: '<p>x</p>', format: 'html' })).toBe('<p>x</p>');
 });

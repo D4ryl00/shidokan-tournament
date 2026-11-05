@@ -1,8 +1,9 @@
-import { Accordion, Alert, Anchor, Button, Group, Modal, Stack, Text, Textarea, TextInput } from '@mantine/core';
+import { Accordion, Alert, Anchor, Button, Group, Input, Modal, Stack, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { useAppSettings, useCompetition, useInvitationPreview, useUpdateCompetition, type SendResult } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
+import { MailMessageEditor } from './mail-editor/index.js';
 import { MailAttachments, sentLines, useAttachmentLines } from './MailAttachments.js';
 import { sendSummary } from '../send-summary.js';
 import { GOOGLE_NOT_SENT } from '../../domain/app-settings.js';
@@ -16,13 +17,15 @@ export function CompetitionMessage({ competitionId, previewClubId }: { competiti
   const update = useUpdateCompetition(competitionId);
   const own = competition?.settings.invitationMail ?? null;
   const current = own ?? app?.invitationMail;
-  const [form, setForm] = useState<{ subject: string; body: string } | null>(null);
+  const [form, setForm] = useState<{ subject: string; body: string; format?: 'html' } | null>(null);
+  // Remonte l'éditeur (il ne lit son contenu qu'à l'ouverture) après un enregistrement ou un retour au message de l'application.
+  const [editorKey, setEditorKey] = useState(0);
   const shown = form ?? current;
   const preview = useInvitationPreview(competitionId, previewClubId, JSON.stringify(current));
   const lines = useAttachmentLines(competitionId);
   if (!shown) return null;
-  const save = (invitationMail: { subject: string; body: string } | null) =>
-    update.mutate({ settings: { invitationMail } }, { onSuccess: () => { setForm(null); notifications.show({ color: 'green', message: 'Message enregistré.' }); } });
+  const save = (invitationMail: { subject: string; body: string; format?: 'html' } | null) =>
+    update.mutate({ settings: { invitationMail } }, { onSuccess: () => { setForm(null); setEditorKey((k) => k + 1); notifications.show({ color: 'green', message: 'Message enregistré.' }); } });
   return (
     <Accordion variant="contained">
       <Accordion.Item value="message">
@@ -31,7 +34,9 @@ export function CompetitionMessage({ competitionId, previewClubId }: { competiti
           <Stack>
             <Text size="sm" c="dimmed">Variables : {'{club} {coach} {competition} {date} {lieu} {date_limite} {lien}'}.</Text>
             <TextInput label="Objet" value={shown.subject} onChange={(e) => setForm({ ...shown, subject: e.currentTarget.value })} />
-            <Textarea label="Texte" autosize minRows={6} value={shown.body} onChange={(e) => setForm({ ...shown, body: e.currentTarget.value })} />
+            <Input.Wrapper label="Texte">
+              <MailMessageEditor key={editorKey} value={shown} onChange={(v) => setForm({ ...shown, ...v })} />
+            </Input.Wrapper>
             <Group>
               <Button size="xs" disabled={!form} loading={update.isPending} onClick={() => form && save(form)}>Enregistrer pour cette compétition</Button>
               {own && <Button size="xs" variant="subtle" onClick={() => save(null)}>Revenir au message de l’application</Button>}

@@ -1,6 +1,9 @@
 import { expect, type Page } from '@playwright/test';
 import { CONTACTS_SCOPE } from '../../src/domain/app-settings.js';
 
+/** Session de l'organisateur sur le serveur du port 3101, ouverte une fois par `global-setup.ts`. */
+export const SERVER_SESSION = 'tmp/e2e-serveur/session-orga.json';
+
 export async function createCompetition(page: Page, name: string): Promise<string> {
   await page.goto('/');
   await page.getByTestId('new-competition').click();

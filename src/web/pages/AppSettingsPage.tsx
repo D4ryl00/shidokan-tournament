@@ -1,4 +1,4 @@
-import { Alert, Button, Divider, Group, Modal, NativeSelect, NumberInput, PasswordInput, SegmentedControl, SimpleGrid, Stack, Text, Textarea, TextInput, Title } from '@mantine/core';
+import { Alert, Button, Divider, Group, Modal, Input, NativeSelect, NumberInput, PasswordInput, SegmentedControl, SimpleGrid, Stack, Text, Textarea, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
 import { GOOGLE_NOT_CONFIGURED, GOOGLE_RECONNECT, hasContactsScope, type MailMode, type PublicAppSettings, type SmtpSettings } from '../../domain/app-settings.js';
@@ -10,6 +10,7 @@ import { MirrorCopies, MirrorSettingsCard } from '../components/MirrorPanels.js'
 import { DayChecklist } from '../components/DayChecklist.js';
 import { ZoneLinkCard } from '../components/ZoneLinkCard.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { MailMessageEditor } from '../components/mail-editor/index.js';
 import { HELP } from '../help.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
@@ -173,13 +174,13 @@ function MailCard({ settings }: { settings: PublicAppSettings }) {
 function TextsCard({ settings }: { settings: PublicAppSettings }) {
   const update = useUpdateAppSettings();
   const [form, setForm] = useState({
-    subject: settings.invitationMail.subject, body: settings.invitationMail.body, privacyNotice: settings.privacyNotice, privacyContact: settings.privacyContact,
+    subject: settings.invitationMail.subject, body: settings.invitationMail.body, format: settings.invitationMail.format, privacyNotice: settings.privacyNotice, privacyContact: settings.privacyContact,
     retentionMonths: settings.retentionMonths, directoryInactiveYears: settings.directoryInactiveYears,
   });
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
   const save = () =>
     update.mutate(
-      { invitationMail: { subject: form.subject, body: form.body }, privacyNotice: form.privacyNotice, privacyContact: form.privacyContact, retentionMonths: form.retentionMonths, directoryInactiveYears: form.directoryInactiveYears },
+      { invitationMail: { subject: form.subject, body: form.body, format: form.format }, privacyNotice: form.privacyNotice, privacyContact: form.privacyContact, retentionMonths: form.retentionMonths, directoryInactiveYears: form.directoryInactiveYears },
       { onSuccess: saved },
     );
   return (
@@ -189,7 +190,9 @@ function TextsCard({ settings }: { settings: PublicAppSettings }) {
         <Title order={4} fz="md">Message aux clubs</Title>
         <Text size="sm" c="dimmed">Variables : {'{club} {coach} {competition} {date} {lieu} {date_limite} {lien}'}. Chaque compétition peut avoir son propre message (onglet Fiche club).</Text>
         <TextInput label="Objet" value={form.subject} onChange={(e) => set({ subject: e.currentTarget.value })} />
-        <Textarea label="Texte" autosize minRows={8} value={form.body} onChange={(e) => set({ body: e.currentTarget.value })} />
+        <Input.Wrapper label="Texte">
+          <MailMessageEditor value={settings.invitationMail} onChange={(v) => set(v)} />
+        </Input.Wrapper>
       </Stack>
       <Divider color="var(--sk-line)" />
       <Stack gap="xs">

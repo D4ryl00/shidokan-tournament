@@ -37,7 +37,7 @@ internet et n'invite jamais les clubs (décision de l'organisateur, qui ne prév
 - La barre peut passer sur plusieurs lignes, rangée par groupes de fonctions. La disposition A reste valable.
 - Une variable peut être mise en forme comme le reste du texte. Le lien personnel peut rester visible (`{lien}` dans le texte, devient un lien
   cliquable affichant l'adresse) ou être placé derrière un mot (lien dont l'adresse est `{lien}`) : la fenêtre de lien accepte donc `{lien}`.
-- Couleurs : une palette courte et fixe pour le texte et pour le surlignage (choix du concepteur). La zone de texte et l'aperçu restent
+- Couleurs : une palette courte et fixe pour le texte (choix du concepteur) ; le surlignage n'a qu'une couleur (jaune), car le contrôle de Mantine n'en propose pas d'autre. La zone de texte et l'aperçu restent
   sur fond blanc même en thème sombre, pour montrer ce que verront les clubs (choix du concepteur).
 - Coller depuis Gmail ou Word garde ce qui est permis et retire le reste. Coller une image passe par le même ajout qu'une image choisie
   (choix du concepteur).
@@ -151,7 +151,7 @@ guide « Chaque envoi crée un nouveau lien et désactive le précédent » est 
   club de test avec ses propres adresses (au moins Gmail ; Outlook et Apple Mail si possible) et lui envoie le mail depuis le vrai compte. Le constructeur
   fournit une courte liste de points à contrôler : gras, souligné, couleurs, listes, images et leurs tailles, lien personnel cliquable, pièces jointes, version
   sans mise en forme. Tant que cet essai n'est pas fait, le rendu réel est annoncé comme non vérifié ; les défauts trouvés sont corrigés ensuite.
-- Migration SQLite suivante : 0028 si elle est encore libre.
+- Migration SQLite suivante : 0029 (la 0028 est prise par les accès des clubs).
 
 ## Stockage des images (décision de conception)
 
