@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { CONTACTS_SCOPE } from '../../src/domain/app-settings.js';
 
 /** Session de l'organisateur sur le serveur du port 3101, ouverte une fois par `global-setup.ts`. */
@@ -130,4 +130,23 @@ export async function mockGoogleContacts(page: Page, preview: object = GOOGLE_PR
     await route.fulfill({ json: { updated: 0, linked: 1, created: 1 } });
   });
   return { applied, previews };
+}
+
+/** Crée un lien pour un club invité par la colonne « Accès », et renvoie son adresse (elle ne s'affiche qu'à sa création). */
+export async function createClubLink(page: Page, club: string): Promise<string> {
+  await page.getByTestId('invitation-row').filter({ hasText: club }).getByRole('button', { name: /^Accès/ }).click();
+  const dialog = page.getByRole('dialog', { name: /^Accès/ });
+  await dialog.getByRole('button', { name: 'Créer un lien' }).click();
+  const url = await dialog.getByTestId('new-access-url').innerText();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  return url;
+}
+
+/** Invite un club de l'annuaire par l'API, puis lui crée un lien : l'invitation seule n'en crée pas. */
+export async function inviteWithLink(request: APIRequestContext, competitionId: string, directoryId: string): Promise<{ id: string; clubId: string; clubName: string; token: string }> {
+  expect((await request.post(`/api/competitions/${competitionId}/invitations`, { data: { directoryIds: [directoryId] } })).status()).toBe(204);
+  const rows = (await (await request.get(`/api/competitions/${competitionId}/invitations`)).json()) as { clubId: string; directoryClubId: string }[];
+  const clubId = rows.find((r) => r.directoryClubId === directoryId)!.clubId;
+  return (await (await request.post(`/api/competitions/${competitionId}/invitations/${clubId}/links`)).json()) as { id: string; clubId: string; clubName: string; token: string };
 }

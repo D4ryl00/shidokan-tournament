@@ -18,7 +18,9 @@ beforeEach(async () => {
   base = `/api/competitions/${(await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22', location: 'Nice' } })).json().id}`;
   const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
   entryId = (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, name: 'Tani Dojo', coachPhone: '0600000000' } })).json().id;
-  const [link] = (await app.inject({ method: 'POST', url: `${base}/invitations`, payload: { directoryIds: [entryId] } })).json();
+  await app.inject({ method: 'POST', url: `${base}/invitations`, payload: { directoryIds: [entryId] } });
+  const [row] = (await app.inject({ method: 'GET', url: `${base}/invitations` })).json();
+  const link = (await app.inject({ method: 'POST', url: `${base}/invitations/${row.clubId}/links` })).json();
   token = link.token;
   clubId = link.clubId;
   await app.inject({ method: 'PATCH', url: `${base}/club-entry`, payload: { status: 'open', deadline: '2026-11-15' } });

@@ -56,9 +56,10 @@ export async function invitationRoutes(
   });
 
   app.get<P>('/api/competitions/:id/invitations', async (req) => listInvitations(db, req.params.id));
-  app.post<P>('/api/competitions/:id/invitations', async (req) => {
+  app.post<P>('/api/competitions/:id/invitations', async (req, reply) => {
     const { directoryIds } = z.object({ directoryIds: z.array(z.string()).max(500) }).parse(req.body);
-    return inviteClubs(db, req.params.id, directoryIds);
+    inviteClubs(db, req.params.id, directoryIds);
+    return reply.status(204).send();
   });
   // Accès d'un club : ses liens actifs, un lien de plus, un lien en moins.
   app.get<PC>('/api/competitions/:id/invitations/:clubId/links', async (req) => listClubAccesses(db, req.params.id, req.params.clubId));

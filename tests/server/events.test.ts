@@ -53,7 +53,9 @@ test('une écriture réussie sur la compétition → change ; refusée (400) →
 test('écriture depuis la page du club → change', async () => {
   const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
   const entry = (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, name: 'Tani Dojo' } })).json().id;
-  const [link] = (await app.inject({ method: 'POST', url: `/api/competitions/${id}/invitations`, payload: { directoryIds: [entry] } })).json();
+  await app.inject({ method: 'POST', url: `/api/competitions/${id}/invitations`, payload: { directoryIds: [entry] } });
+  const [row] = (await app.inject({ method: 'GET', url: `/api/competitions/${id}/invitations` })).json();
+  const link = (await app.inject({ method: 'POST', url: `/api/competitions/${id}/invitations/${row.clubId}/links` })).json();
   await app.inject({ method: 'PATCH', url: `/api/competitions/${id}/club-entry`, payload: { status: 'open' } });
   const header = { coachName: 'Jean', coachPhone: null, coachEmails: [], preApproval: false, affiliationNumber: null };
   expect(await changesDuring(id, () => app.inject({ method: 'PATCH', url: `/api/inscription/${link.token}/club`, payload: header }))).toBeGreaterThanOrEqual(1);

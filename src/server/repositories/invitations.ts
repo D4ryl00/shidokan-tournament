@@ -90,7 +90,8 @@ export function listInvitations(db: AppDb, competitionId: string): ClubInvitatio
       const mail = db.select().from(mailLog).where(eq(mailLog.clubId, c.id)).orderBy(desc(mailLog.sentAt)).get();
       return {
         clubId: c.id, clubName: c.name, directoryClubId: c.directoryClubId, coachEmails: c.coachEmails,
-        invited: links.length > 0, links: links.length, invitedAt: links.at(-1)?.createdAt ?? null,
+        // Un lien actif vaut invitation, même si la date manque (club revenu d'un paquet qui ne la portait pas).
+        invited: c.invitedAt !== null || links.length > 0, links: links.length, invitedAt: c.invitedAt ?? links.at(-1)?.createdAt ?? null,
         lastUsedAt: latest(links.map((l) => l.lastUsedAt)), fighters: n,
         lastMail: mail ? { sentAt: mail.sentAt, status: mail.status, error: mail.error } : null,
       };
@@ -140,16 +141,14 @@ const directoryEntry = (t: AppDb, entryId: string) => {
   return entry;
 };
 
-/** Invite des clubs de l'annuaire : chacun reçoit son club de compétition et un lien personnel, sauf s'il a déjà un lien actif. */
-export function inviteClubs(db: AppDb, competitionId: string, directoryIds: string[]): InvitationLink[] {
-  return db.transaction((tx) => {
+/** Invite des clubs de l'annuaire : chacun reçoit son club de compétition, sans lien ; le lien se crée à l'envoi ou par « Créer un lien ». */
+export function inviteClubs(db: AppDb, competitionId: string, directoryIds: string[]): void {
+  db.transaction((tx) => {
     const t = tx as unknown as AppDb;
-    const links: InvitationLink[] = [];
     for (const entryId of directoryIds) {
       const club = clubForEntry(t, competitionId, directoryEntry(t, entryId));
-      if (!t.select().from(clubInvitations).where(active(competitionId, club.id)).get()) links.push(createLink(t, competitionId, club.id, club.name));
+      if (!club.invitedAt) t.update(clubs).set({ invitedAt: NOW() }).where(eq(clubs.id, club.id)).run();
     }
-    return links;
   });
 }
 
@@ -177,10 +176,11 @@ export function listClubAccesses(db: AppDb, competitionId: string, clubId: strin
   return activeLinks(db, competitionId, clubId).map((l) => ({ id: l.id, createdAt: l.createdAt, sentAt: l.sentAt, sentVia: l.sentVia, lastUsedAt: l.lastUsedAt }));
 }
 
-/** Désactive tous les liens du club (« Supprimer tous les accès »). */
+/** Désactive tous les liens du club et retire son invitation (« Supprimer tous les accès », « Retirer l'invitation ») : il redevient « à inviter ». */
 export function revokeInvitation(db: AppDb, competitionId: string, clubId: string): void {
   competitionClub(db, competitionId, clubId);
   db.update(clubInvitations).set({ revokedAt: NOW() }).where(active(competitionId, clubId)).run();
+  db.update(clubs).set({ invitedAt: null }).where(eq(clubs.id, clubId)).run();
 }
 
 /** Désactive un lien actif du club ; 404 s'il n'est pas à lui. */
@@ -190,9 +190,10 @@ export function revokeClubAccess(db: AppDb, competitionId: string, clubId: strin
   if (done.changes === 0) throw new NotFoundError('Lien introuvable');
 }
 
-/** Nouveau lien pour le club, qui s'ajoute aux autres (« Créer un lien », envoi par mail ou par la messagerie). */
+/** Nouveau lien pour le club, qui s'ajoute aux autres (« Créer un lien », envoi par mail ou par la messagerie) ; le club devient invité s'il ne l'était pas. */
 export function addInvitationLink(db: AppDb, competitionId: string, clubId: string): InvitationLink & { id: string } {
   const club = competitionClub(db, competitionId, clubId);
+  if (!club.invitedAt) db.update(clubs).set({ invitedAt: NOW() }).where(eq(clubs.id, clubId)).run();
   return createLink(db, competitionId, clubId, club.name);
 }
 

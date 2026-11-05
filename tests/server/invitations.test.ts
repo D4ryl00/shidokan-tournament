@@ -30,33 +30,53 @@ const resolves = async (token: string) => {
   }
 };
 type Link = { clubId: string; clubName: string; token: string };
+const rowsNow = async () => (await app.inject({ method: 'GET', url: `${base}/invitations` })).json() as { clubId: string; clubName: string; invited: boolean; links: number; directoryClubId: string; invitedAt: string | null }[];
+/** Invite des clubs, puis crée un lien pour chacun (comme « Créer un lien » dans la fenêtre Accès). */
+const inviteWithLinks = async (directoryIds: string[]) => {
+  expect((await invite(directoryIds)).statusCode).toBe(204);
+  const rows = await rowsNow();
+  return Promise.all(rows.map(async (r) => (await app.inject({ method: 'POST', url: `${base}/invitations/${r.clubId}/links` })).json() as Link));
+};
 
-test('inviter deux entrées : clubs créés, reliés, coordonnées copiées ; deux liens ; réinviter → aucun nouveau lien', async () => {
+test('inviter deux entrées : clubs créés, reliés, coordonnées copiées ; invités sans aucun lien ; réinviter ne change rien', async () => {
   const tani = await entry('Tani Dojo', { coachEmails: ['coach@tani.example'], coachPhone: '0600000000' });
   const budo = await entry('Budo Collines');
   const res = await invite([tani, budo]);
-  expect(res.statusCode).toBe(200);
-  const links = res.json() as Link[];
-  expect(links.map((l) => l.clubName).sort()).toEqual(['Budo Collines', 'Tani Dojo']);
-  expect(links.every((l) => /^[A-Za-z0-9_-]{32}$/.test(l.token))).toBe(true);
+  expect(res.statusCode).toBe(204);
   const clubs = (await app.inject({ method: 'GET', url: `${base}/clubs` })).json() as { name: string; coachEmails: string[]; coachPhone: string | null }[];
   expect(clubs.find((c) => c.name === 'Tani Dojo')).toMatchObject({ coachEmails: ['coach@tani.example'], coachPhone: '0600000000' });
-  const rows = (await app.inject({ method: 'GET', url: `${base}/invitations` })).json() as { clubName: string; invited: boolean; directoryClubId: string }[];
-  expect(rows.map((r) => [r.clubName, r.invited, r.directoryClubId])).toEqual([['Budo Collines', true, budo], ['Tani Dojo', true, tani]]);
-  expect((await invite([tani])).json()).toEqual([]);
+  const rows = await rowsNow();
+  expect(rows.map((r) => [r.clubName, r.invited, r.links, r.directoryClubId])).toEqual([['Budo Collines', true, 0, budo], ['Tani Dojo', true, 0, tani]]);
+  expect(rows.every((r) => typeof r.invitedAt === 'string')).toBe(true);
+  const raw = new Database(dbPath, { readonly: true });
+  expect((raw.prepare('select count(*) as n from club_invitations').get() as { n: number }).n).toBe(0);
+  raw.close();
+  expect((await invite([tani])).statusCode).toBe(204);
+  expect((await rowsNow()).map((r) => r.links)).toEqual([0, 0]);
+});
+
+test('réinviter un club qui a déjà un lien : son lien reste le seul', async () => {
+  const tani = await entry('Tani Dojo');
+  const [link] = await inviteWithLinks([tani]);
+  expect((await invite([tani])).statusCode).toBe(204);
+  expect((await rowsNow())[0]).toMatchObject({ invited: true, links: 1 });
+  expect(await resolves(link!.token)).toBe(true);
+});
+
+test('un club repris dans la saisie, sans invitation, reste « à inviter »', async () => {
+  await app.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Budo' } });
+  expect((await rowsNow())[0]).toMatchObject({ invited: false, links: 0, invitedAt: null });
 });
 
 test('inviter une entrée dont le club existe déjà dans la compétition (même nom) → ce club est réutilisé et relié', async () => {
   const club = (await app.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'TANI DOJO' } })).json();
   const tani = await entry('Tani Dojo', { affiliationNumber: '0060893' });
-  const links = (await invite([tani])).json() as Link[];
-  expect(links.map((l) => l.clubId)).toEqual([club.id]);
-  const rows = (await app.inject({ method: 'GET', url: `${base}/invitations` })).json() as { clubId: string; directoryClubId: string }[];
-  expect(rows).toEqual([expect.objectContaining({ clubId: club.id, directoryClubId: tani })]);
+  expect((await invite([tani])).statusCode).toBe(204);
+  expect(await rowsNow()).toEqual([expect.objectContaining({ clubId: club.id, directoryClubId: tani, invited: true })]);
 });
 
 test('le jeton n’est pas stocké en clair', async () => {
-  const [link] = (await invite([await entry('Tani Dojo')])).json() as Link[];
+  const [link] = await inviteWithLinks([await entry('Tani Dojo')]);
   const raw = new Database(dbPath, { readonly: true });
   const rows = raw.prepare('select * from club_invitations').all() as Record<string, unknown>[];
   raw.close();
@@ -70,7 +90,7 @@ const accesses = async (clubId: string) => (await app.inject({ method: 'GET', ur
 const rowsOf = async () => (await app.inject({ method: 'GET', url: `${base}/invitations` })).json() as { clubName: string; invited: boolean; links: number; lastUsedAt: string | null }[];
 
 test('accès d’un club : créer un lien l’ajoute (l’ancien marche toujours), liste du plus récent au plus ancien', async () => {
-  const [link] = (await invite([await entry('Tani Dojo')])).json() as Link[];
+  const [link] = await inviteWithLinks([await entry('Tani Dojo')]);
   const created = await app.inject({ method: 'POST', url: `${base}/invitations/${link!.clubId}/links` });
   expect(created.statusCode).toBe(200);
   const added = created.json() as Link & { id: string };
@@ -86,7 +106,7 @@ test('accès d’un club : créer un lien l’ajoute (l’ancien marche toujours
 });
 
 test('dernière visite du club : la plus récente, tous liens confondus', async () => {
-  const [link] = (await invite([await entry('Tani Dojo')])).json() as Link[];
+  const [link] = await inviteWithLinks([await entry('Tani Dojo')]);
   const added = (await app.inject({ method: 'POST', url: `${base}/invitations/${link!.clubId}/links` })).json() as Link;
   await resolves(link!.token);
   await new Promise((r) => setTimeout(r, 5));
@@ -95,8 +115,8 @@ test('dernière visite du club : la plus récente, tous liens confondus', async 
   expect((await rowsOf())[0]!.lastUsedAt).toBe(last);
 });
 
-test('supprimer un lien : lui seul ne marche plus ; supprimer le dernier → le club n’est plus invité', async () => {
-  const [link] = (await invite([await entry('Tani Dojo')])).json() as Link[];
+test('supprimer un lien : lui seul ne marche plus ; supprimer le dernier → le club reste invité, sans lien', async () => {
+  const [link] = await inviteWithLinks([await entry('Tani Dojo')]);
   const added = (await app.inject({ method: 'POST', url: `${base}/invitations/${link!.clubId}/links` })).json() as Link & { id: string };
   const first = (await accesses(link!.clubId)).find((a) => a.id !== added.id)!;
   expect((await app.inject({ method: 'DELETE', url: `${base}/invitations/${link!.clubId}/links/${first.id}` })).statusCode).toBe(204);
@@ -105,11 +125,11 @@ test('supprimer un lien : lui seul ne marche plus ; supprimer le dernier → le 
   expect((await accesses(link!.clubId)).map((a) => a.id)).toEqual([added.id]);
   expect((await app.inject({ method: 'DELETE', url: `${base}/invitations/${link!.clubId}/links/${added.id}` })).statusCode).toBe(204);
   expect(await resolves(added.token)).toBe(false);
-  expect((await rowsOf())[0]).toMatchObject({ invited: false, links: 0 });
+  expect((await rowsOf())[0]).toMatchObject({ invited: true, links: 0 });
 });
 
 test('supprimer un lien d’un autre club, ou inconnu → 404, rien ne change', async () => {
-  const links = (await invite([await entry('Tani Dojo'), await entry('Budo')])).json() as Link[];
+  const links = await inviteWithLinks([await entry('Tani Dojo'), await entry('Budo')]);
   const [tani, budo] = [links.find((l) => l.clubName === 'Tani Dojo')!, links.find((l) => l.clubName === 'Budo')!];
   const taniLink = (await accesses(tani.clubId))[0]!;
   expect((await app.inject({ method: 'DELETE', url: `${base}/invitations/${budo.clubId}/links/${taniLink.id}` })).statusCode).toBe(404);
@@ -118,7 +138,7 @@ test('supprimer un lien d’un autre club, ou inconnu → 404, rien ne change', 
 });
 
 test('supprimer tous les accès : plus aucun lien ne marche, le club n’est plus invité', async () => {
-  const [link] = (await invite([await entry('Tani Dojo')])).json() as Link[];
+  const [link] = await inviteWithLinks([await entry('Tani Dojo')]);
   const added = (await app.inject({ method: 'POST', url: `${base}/invitations/${link!.clubId}/links` })).json() as Link;
   expect((await app.inject({ method: 'DELETE', url: `${base}/invitations/${link!.clubId}` })).statusCode).toBe(204);
   expect(await resolves(link!.token)).toBe(false);
@@ -127,8 +147,15 @@ test('supprimer tous les accès : plus aucun lien ne marche, le club n’est plu
   expect((await rowsOf())[0]!.invited).toBe(false);
 });
 
+test('retirer l’invitation d’un club sans lien : il redevient « à inviter »', async () => {
+  await invite([await entry('Tani Dojo')]);
+  const [row] = await rowsNow();
+  expect((await app.inject({ method: 'DELETE', url: `${base}/invitations/${row!.clubId}` })).statusCode).toBe(204);
+  expect((await rowsNow())[0]).toMatchObject({ invited: false, links: 0, invitedAt: null });
+});
+
 test('l’ancienne route « régénérer » n’existe plus', async () => {
-  const [link] = (await invite([await entry('Tani Dojo')])).json() as Link[];
+  const [link] = await inviteWithLinks([await entry('Tani Dojo')]);
   expect((await app.inject({ method: 'POST', url: `${base}/invitations/${link!.clubId}/regenerate` })).statusCode).toBe(404);
   expect(await resolves(link!.token)).toBe(true);
 });

@@ -75,8 +75,7 @@ export function ClubAccessModal({ competitionId, club, onClose }: { competitionI
   const times = accessTimes(list);
   const deleteOne = (linkId: string) =>
     remove.mutate({ clubId: club.clubId, linkId }, {
-      // Le dernier lien supprimé : le club n'est plus invité, la fenêtre n'a plus rien à montrer.
-      onSuccess: () => { if (list.length <= 1) close(); else if (created?.id === linkId) setCreated(null); },
+      onSuccess: () => { if (created?.id === linkId) setCreated(null); },
     });
 
   return (
@@ -99,6 +98,7 @@ export function ClubAccessModal({ competitionId, club, onClose }: { competitionI
         <ApiErrorAlert error={create.error ?? remove.error ?? revokeAll.error} />
         {accesses === undefined ? <Group justify="center" py="lg"><Loader size="sm" /></Group> : (
           <Stack gap="sm">
+            {list.length === 0 && <Text size="sm" data-testid="no-access">Ce club est invité, mais n’a pas encore de lien : il en recevra un à l’envoi par mail, ou créez-le ici.</Text>}
             {list.map((a) => (
               <AccessCard key={a.id} access={a} time={times.get(a.id) ?? ''} isNew={created?.id === a.id} deleting={remove.isPending && remove.variables?.linkId === a.id} onDelete={() => deleteOne(a.id)} />
             ))}
@@ -107,10 +107,10 @@ export function ClubAccessModal({ competitionId, club, onClose }: { competitionI
         <Box pt="md" style={{ borderTop: '1px solid var(--sk-line)' }}>
           {confirmAll ? (
             <Group justify="space-between" gap="sm" px="sm" py={8} style={{ borderRadius: 8, background: 'var(--mantine-color-red-light)' }}>
-              <Text size="sm" fw={600} c="red">Plus aucun lien de ce club ne marchera ; il redeviendra « à inviter ».</Text>
+              <Text size="sm" fw={600} c="red">{list.length ? 'Plus aucun lien de ce club ne marchera ; il redeviendra « à inviter ».' : 'Ce club redeviendra « à inviter ».'}</Text>
               <Group gap={6} wrap="nowrap">
                 <Button size="compact-sm" variant="default" onClick={() => setConfirmAll(false)}>Annuler</Button>
-                <Button size="compact-sm" color="red" loading={revokeAll.isPending} onClick={() => revokeAll.mutate(club.clubId, { onSuccess: close })}>Oui, tout supprimer</Button>
+                <Button size="compact-sm" color="red" loading={revokeAll.isPending} onClick={() => revokeAll.mutate(club.clubId, { onSuccess: close })}>{list.length ? 'Oui, tout supprimer' : 'Oui, retirer'}</Button>
               </Group>
             </Group>
           ) : (
@@ -119,7 +119,7 @@ export function ClubAccessModal({ competitionId, club, onClose }: { competitionI
                 onClick={() => create.mutate(club.clubId, { onSuccess: (l) => setCreated({ id: l.id, url: `${window.location.origin}/inscription/${l.token}` }) })}>
                 Créer un lien
               </Button>
-              <Button variant="subtle" color="red" onClick={() => setConfirmAll(true)}>Supprimer tous les accès</Button>
+              <Button variant="subtle" color="red" onClick={() => setConfirmAll(true)}>{list.length ? 'Supprimer tous les accès' : 'Retirer l’invitation'}</Button>
             </Group>
           )}
         </Box>

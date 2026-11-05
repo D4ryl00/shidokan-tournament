@@ -290,6 +290,8 @@ export const clubs = sqliteTable('clubs', {
   coachEmails: text('coach_emails', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
   preApproval: integer('pre_approval', { mode: 'boolean' }).notNull().default(false),
   directoryClubId: text('directory_club_id').references(() => clubDirectory.id, { onDelete: 'set null' }),
+  /** Invité aux inscriptions en ligne, à cette date ; le lien personnel se crée à part (envoi ou « Créer un lien »). */
+  invitedAt: text('invited_at'),
   ...rowMeta(),
 });
 

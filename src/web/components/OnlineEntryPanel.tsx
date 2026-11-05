@@ -1,4 +1,5 @@
-import { Alert, Anchor, Button, Checkbox, Chip, CopyButton, Group, Modal, MultiSelect, ScrollArea, Stack, Table, Text } from '@mantine/core';
+import { Alert, Anchor, Button, Checkbox, Chip, Group, Modal, MultiSelect, ScrollArea, Stack, Table, Text } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import {
   useClubEntrySettings,
@@ -10,7 +11,6 @@ import {
   useSendInvitations,
   useUpdateClubEntrySettings,
   type ClubInvitationRow,
-  type InvitationLink,
   type SendResult,
   type SendTarget,
 } from '../api.js';
@@ -66,28 +66,6 @@ function Recipients({ club, excluded, onChange }: { club: ClubInvitationRow; exc
   );
 }
 
-/** Liens tout juste créés : ils ne seront plus affichés ensuite. */
-function LinksModal({ links, onClose }: { links: InvitationLink[]; onClose: () => void }) {
-  return (
-    <Modal opened={links.length > 0} onClose={onClose} title="Liens créés" size="xl">
-      <Stack data-testid="invitation-links">
-        <Alert color="yellow">Copiez ces liens maintenant : pour des raisons de sécurité, ils ne seront plus affichés.</Alert>
-        {links.map((l) => (
-          <Group key={l.clubId} justify="space-between" wrap="nowrap" data-testid="invitation-link">
-            <Stack gap={0} style={{ minWidth: 0 }}>
-              <Text fw={600}>{l.clubName}</Text>
-              <Text size="sm" style={{ wordBreak: 'break-all' }} data-testid="invitation-url">{clubEntryUrl(l.token)}</Text>
-            </Stack>
-            <CopyButton value={clubEntryUrl(l.token)}>
-              {({ copied, copy }) => <Button size="xs" variant={copied ? 'filled' : 'light'} onClick={copy}>{copied ? 'Copié' : 'Copier le lien'}</Button>}
-            </CopyButton>
-          </Group>
-        ))}
-      </Stack>
-    </Modal>
-  );
-}
-
 export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
   const { data: settings } = useClubEntrySettings(competitionId);
   const { data: invitations = [] } = useInvitations(competitionId);
@@ -98,7 +76,6 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
   const send = useSendInvitations(competitionId);
   const mailto = useMailtoInvitation(competitionId);
   const [chosen, setChosen] = useState<string[]>([]);
-  const [links, setLinks] = useState<InvitationLink[]>([]);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState<string[]>([]);
   const [confirmSend, setConfirmSend] = useState(false);
@@ -152,7 +129,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
         <MultiSelect data-testid="invite-select" label="Clubs à inviter" placeholder={!directory ? 'Chargement de l’annuaire…' : candidates.length ? 'Chercher un club de l’annuaire' : 'Tous les clubs de l’annuaire sont invités'}
           searchable clearable data={candidates} value={chosen} onChange={setChosen} w={420} maw="100%" nothingFoundMessage="Aucun club : ajoutez-le dans l’Annuaire des clubs." />
         <Button data-testid="invite-clubs" disabled={chosen.length === 0} loading={invite.isPending}
-          onClick={() => invite.mutate(chosen, { onSuccess: (l) => { setChosen([]); setLinks(l); } })}>
+          onClick={() => invite.mutate(chosen, { onSuccess: () => { notifications.show({ color: 'green', message: `${plural(chosen.length, 'club invité', 'clubs invités')} : envoyez le lien par mail, ou créez-le dans la colonne « Accès ».` }); setChosen([]); } })}>
           Inviter les clubs choisis
         </Button>
       </Group>
@@ -265,7 +242,6 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
           </Group>
         </Stack>
       </Modal>
-      <LinksModal links={links} onClose={() => setLinks([])} />
       <ClubAccessModal competitionId={competitionId} club={invited.find((i) => i.clubId === accessClubId) ?? null} onClose={() => setAccessClubId(null)} />
     </SectionCard>
   );

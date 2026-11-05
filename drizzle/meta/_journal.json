@@ -211,6 +211,13 @@
       "when": 1793876791567,
       "tag": "0029_images_mails",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1793894130072,
+      "tag": "0030_invitation_sans_lien",
+      "breakpoints": true
     }
   ]
 }

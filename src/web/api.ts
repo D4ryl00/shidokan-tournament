@@ -908,7 +908,7 @@ function useOnlineEntryMutation<V, R>(id: string, fn: (v: V) => Promise<R>) {
   });
 }
 export const useInviteClubs = (id: string) =>
-  useOnlineEntryMutation(id, (directoryIds: string[]) => api<InvitationLink[]>('POST', `/api/competitions/${id}/invitations`, { directoryIds }));
+  useOnlineEntryMutation(id, (directoryIds: string[]) => api<void>('POST', `/api/competitions/${id}/invitations`, { directoryIds }));
 export const useClubAccesses = (id: string, clubId: string | null) =>
   useQuery({
     queryKey: ['club-accesses', id, clubId],

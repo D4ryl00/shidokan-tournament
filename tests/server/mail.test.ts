@@ -52,7 +52,9 @@ afterEach(async () => app.close());
 async function invited(...clubs: { name: string; coachEmails: string[]; coachName?: string }[]) {
   const ids: string[] = [];
   for (const c of clubs) ids.push((await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, coachName: c.coachName ?? null, ...c } })).json().id);
-  return (await app.inject({ method: 'POST', url: `${base}/invitations`, payload: { directoryIds: ids } })).json() as { clubId: string; clubName: string; token: string }[];
+  await app.inject({ method: 'POST', url: `${base}/invitations`, payload: { directoryIds: ids } });
+  const rows = (await app.inject({ method: 'GET', url: `${base}/invitations` })).json() as { clubId: string; directoryClubId: string }[];
+  return Promise.all(ids.map(async (id) => (await app.inject({ method: 'POST', url: `${base}/invitations/${rows.find((r) => r.directoryClubId === id)!.clubId}/links` })).json() as { clubId: string; clubName: string; token: string }));
 }
 const smtp = () => app.inject({ method: 'PATCH', url: '/api/app-settings', payload: { smtp: SMTP } });
 const send = (clubIds: string[]) => app.inject({ method: 'POST', url: `${base}/invitations/send`, payload: { clubs: clubIds.map((clubId) => ({ clubId })) } });
@@ -517,4 +519,15 @@ test('aperçu : un script déjà stocké est refiltré', async () => {
   expect(preview.statusCode).toBe(200);
   expect(preview.json().html).toContain('Bonjour Tani Dojo');
   expect(preview.json().html).not.toMatch(/script|alert|onclick|javascript/);
+});
+
+test('invité sans lien : le premier envoi crée son lien ', async () => {
+  const id = (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, name: 'Sans Lien', coachEmails: ['coach@sans-lien.example'] } })).json().id;
+  await app.inject({ method: 'POST', url: `${base}/invitations`, payload: { directoryIds: [id] } });
+  await smtp();
+  const row = async () => ((await app.inject({ method: 'GET', url: `${base}/invitations` })).json() as { clubId: string; directoryClubId: string; invited: boolean; links: number }[]).find((r) => r.directoryClubId === id)!;
+  expect(await row()).toMatchObject({ invited: true, links: 0 });
+  expect((await send([(await row()).clubId])).json()[0]).toMatchObject({ status: 'sent' });
+  expect(await row()).toMatchObject({ invited: true, links: 1 });
+  expect(sent.at(-1)!.text).toMatch(/\/inscription\/[A-Za-z0-9_-]{32}/);
 });

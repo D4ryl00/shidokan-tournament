@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { createCompetition, SERVER_SESSION } from './helpers.js';
+import { createClubLink, createCompetition, inviteWithLink, SERVER_SESSION } from './helpers.js';
 
 // Mails et inscriptions en ligne : serveur en ligne seulement (port 3101), session de l'organisateur ouverte une fois par global-setup.
 test.use({ baseURL: 'http://localhost:3101', storageState: SERVER_SESSION });
@@ -56,10 +56,13 @@ test('inscription en ligne : annuaire → invitation → le coach inscrit, modif
   await page.getByTestId('invite-select').fill(club);
   await page.getByRole('option', { name: club }).click();
   await page.getByTestId('invite-clubs').click();
-  const url = await page.getByTestId('invitation-link').filter({ hasText: club }).getByTestId('invitation-url').innerText();
+  // Inviter ne crée aucun lien : le club rejoint le tableau avec « 0 lien », la fenêtre d'un lien créé ne s'ouvre plus.
+  await expect(page.getByTestId('invitation-row').filter({ hasText: club })).toContainText('0 lien');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const url = await createClubLink(page, club);
   expect(url).toMatch(/\/inscription\/[A-Za-z0-9_-]{32}$/);
+  await expect(page.getByTestId('invitation-row').filter({ hasText: club })).toContainText('1 lien');
   await shot(page, '2-liens-crees');
-  await page.keyboard.press('Escape');
 
   // 3. Le coach, sur téléphone.
   // Le coach n'a pas de compte : contexte sans la session de l'organisateur.
@@ -118,7 +121,7 @@ test('catégorie fermée : non proposée au club', async ({ page, request }) => 
   const id = await createCompetition(page, 'Coupe fermée en ligne');
   const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
   const entry = (await (await request.post('/api/club-directory', { data: { ...EMPTY, name: `Dojo fermé ${Date.now()}` } })).json()) as { id: string };
-  const [link] = (await (await request.post(`/api/competitions/${id}/invitations`, { data: { directoryIds: [entry.id] } })).json()) as { token: string }[];
+  const link = await inviteWithLink(request, id, entry.id);
   await request.patch(`/api/competitions/${id}/club-entry`, { data: { status: 'open', deadline: '2026-11-15' } });
 
   // L'organisateur ferme le shido-mix des cadettes (jiyu seul : pas de shobu chez les mineurs).
@@ -126,7 +129,7 @@ test('catégorie fermée : non proposée au club', async ({ page, request }) => 
   await page.getByTestId('open-cell-cadet|F|shido-mix|jiyu').click();
   await expect(page.getByTestId('open-cell-cadet|F|shido-mix|jiyu')).not.toBeChecked();
 
-  await page.goto(`/inscription/${link!.token}`);
+  await page.goto(`/inscription/${link.token}`);
   await page.getByTestId('add-fighter').click();
   await fillFighter(page, { last: 'PETIT', first: 'Zoé', sex: 'Féminin', age: 'Cadets (14 à 15 ans)', kg: '50' });
   const combats = page.getByTestId('club-line-form').getByRole('group', { name: 'Discipline de combat' });
@@ -154,10 +157,10 @@ test('reclassement en ligne : sa discipline n’est pas proposée, triathlon com
   const id = await createCompetition(page, 'Coupe reclassement lisible');
   const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
   const entry = (await (await request.post('/api/club-directory', { data: { ...EMPTY, name: `Dojo reclassement ${Date.now()}` } })).json()) as { id: string };
-  const [link] = (await (await request.post(`/api/competitions/${id}/invitations`, { data: { directoryIds: [entry.id] } })).json()) as { token: string }[];
+  const link = await inviteWithLink(request, id, entry.id);
   await request.patch(`/api/competitions/${id}/club-entry`, { data: { status: 'open', deadline: '2026-11-15' } });
 
-  await page.goto(`/inscription/${link!.token}`);
+  await page.goto(`/inscription/${link.token}`);
   await page.getByTestId('add-fighter').click();
   const form = page.getByTestId('club-line-form');
   const block = form.getByTestId('line-reclass');
@@ -317,7 +320,7 @@ test('accès d’un club : pastille « 1 lien », créer un lien (affiché une f
   const id = await createCompetition(page, 'Coupe accès des clubs');
   const club = `Dojo accès ${Date.now()}`;
   const entry = ((await (await request.post('/api/club-directory', { data: { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: ['coach@acces.fr'], notes: null, name: club } })).json()) as { id: string }).id;
-  const [first] = (await (await request.post(`/api/competitions/${id}/invitations`, { data: { directoryIds: [entry] } })).json()) as { token: string }[];
+  const first = await inviteWithLink(request, id, entry);
 
   await page.goto(`/competitions/${id}/fiche-club`);
   const row = page.getByTestId('invitation-row').filter({ hasText: club });
@@ -334,7 +337,7 @@ test('accès d’un club : pastille « 1 lien », créer un lien (affiché une f
   await shot(page, 'acces-club');
   await page.keyboard.press('Escape');
   await expect(row.getByRole('button', { name: `Accès de ${club} : 2 liens` })).toBeVisible();
-  expect((await request.get(`/api/inscription/${first!.token}`)).status()).toBe(200);
+  expect((await request.get(`/api/inscription/${first.token}`)).status()).toBe(200);
 
   // Supprimer le plus ancien : confirmation dans sa carte ; « Annuler » ne change rien.
   await row.getByRole('button', { name: `Accès de ${club} : 2 liens` }).click();
@@ -347,7 +350,7 @@ test('accès d’un club : pastille « 1 lien », créer un lien (affiché une f
   await oldest.getByRole('button', { name: 'Supprimer' }).click();
   await oldest.getByRole('button', { name: 'Supprimer' }).click();
   await expect(dialog.getByTestId('club-access')).toHaveCount(1);
-  expect((await request.get(`/api/inscription/${first!.token}`)).status()).toBe(410);
+  expect((await request.get(`/api/inscription/${first.token}`)).status()).toBe(410);
 
   // « Supprimer tous les accès » : la fenêtre se ferme, le club redevient « à inviter ».
   await dialog.getByRole('button', { name: 'Supprimer tous les accès' }).click();
@@ -370,4 +373,37 @@ test('clubs à inviter : pendant le chargement de l’annuaire, le champ ne dit 
   await expect(select).toHaveAttribute('placeholder', 'Chargement de l’annuaire…');
   release();
   await expect(select).toHaveAttribute('placeholder', 'Chercher un club de l’annuaire');
+});
+
+test('invité sans lien : la fenêtre Accès le dit, supprimer le dernier lien garde l’invitation, « Retirer l’invitation » le rend à inviter', async ({ page }) => {
+  const club = `Dojo sans lien ${Date.now()}`;
+  await page.goto('/annuaire');
+  await page.getByRole('button', { name: 'Ajouter un club' }).click();
+  await page.getByTestId('directory-name').fill(club);
+  await page.getByTestId('directory-save').click();
+  const id = await createCompetition(page, `Coupe invitation seule ${Date.now()}`);
+  await page.goto(`/competitions/${id}/fiche-club`);
+  await page.getByTestId('invite-select').click();
+  await page.getByTestId('invite-select').fill(club);
+  await page.getByRole('option', { name: club }).click();
+  await page.getByTestId('invite-clubs').click();
+  const row = page.getByTestId('invitation-row').filter({ hasText: club });
+  await expect(row).toContainText('0 lien');
+  await row.getByRole('button', { name: /^Accès/ }).click();
+  const dialog = page.getByRole('dialog', { name: /^Accès/ });
+  await expect(dialog.getByTestId('no-access')).toBeVisible();
+  // Un lien créé puis supprimé : le club reste invité, la fenêtre reste ouverte.
+  await dialog.getByRole('button', { name: 'Créer un lien' }).click();
+  await expect(dialog.getByTestId('new-access-url')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Supprimer', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Supprimer', exact: true }).last().click();
+  await expect(dialog.getByTestId('no-access')).toBeVisible();
+  await expect(row).toContainText('0 lien');
+  await dialog.getByRole('button', { name: 'Retirer l’invitation' }).click();
+  await dialog.getByRole('button', { name: 'Oui, retirer' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(row).toHaveCount(0);
+  await page.getByTestId('invite-select').click();
+  await page.getByTestId('invite-select').fill(club);
+  await expect(page.getByRole('option', { name: club })).toBeVisible();
 });

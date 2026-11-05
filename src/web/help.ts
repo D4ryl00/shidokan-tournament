@@ -285,7 +285,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     details: [
       'Le coach ouvre son lien sur ordinateur ou sur téléphone. Il voit tous les combattants de son club dans cette compétition, quelle que soit leur origine (fiche, export FFK, saisie), et peut en ajouter, en modifier ou en retirer.',
       [
-        'Choisissez des clubs de l’annuaire dans « Clubs à inviter » puis « Inviter les clubs choisis » : un lien est créé pour chacun. Copiez-les tout de suite : pour des raisons de sécurité, un lien ne s’affiche qu’une seule fois.',
+        'Choisissez des clubs de l’annuaire dans « Clubs à inviter » puis « Inviter les clubs choisis » : ils rejoignent le tableau, sans lien. Le lien se crée à l’envoi par mail ou par la messagerie, ou par « Créer un lien » dans la colonne « Accès ». Dans ce dernier cas, copiez-le tout de suite : pour des raisons de sécurité, un lien ne s’affiche qu’une seule fois.',
         'Chaque envoi (mail ou messagerie) ajoute un nouveau lien au club : les liens déjà envoyés restent valables, un coach peut rouvrir un ancien mail. La pastille de la colonne « Accès » ouvre les liens du club : quand chacun a été créé, envoyé et visité. « Créer un lien » en donne un de plus (affiché une seule fois) ; « Supprimer » désactive un lien (lien perdu, mauvais destinataire) ; « Supprimer tous les accès » les désactive tous et le club redevient « à inviter ».',
         '« Ouvrir les inscriptions » rend les pages des clubs modifiables ; la date limite est seulement affichée aux clubs.',
         'Les mails et les inscriptions en ligne se gèrent sur le serveur en ligne, jamais depuis un PC. Pour envoyer, la main doit être sur le serveur : si un PC l’a, rendez-la d’abord (le bouton d’envoi est alors indisponible).',

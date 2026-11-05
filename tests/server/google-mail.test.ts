@@ -27,7 +27,9 @@ afterEach(async () => app.close());
 async function invited(...emails: string[]) {
   const ids: string[] = [];
   for (const [i, coachEmail] of emails.entries()) ids.push((await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, name: `Club ${i + 1}`, coachEmails: [coachEmail] } })).json().id);
-  return (await app.inject({ method: 'POST', url: `${base}/invitations`, payload: { directoryIds: ids } })).json() as { clubId: string; clubName: string; token: string }[];
+  await app.inject({ method: 'POST', url: `${base}/invitations`, payload: { directoryIds: ids } });
+  const rows = (await app.inject({ method: 'GET', url: `${base}/invitations` })).json() as { clubId: string; directoryClubId: string }[];
+  return Promise.all(ids.map(async (id) => (await app.inject({ method: 'POST', url: `${base}/invitations/${rows.find((r) => r.directoryClubId === id)!.clubId}/links` })).json() as { clubId: string; clubName: string; token: string }));
 }
 const send = (clubIds: string[]) => app.inject({ method: 'POST', url: `${base}/invitations/send`, payload: { clubs: clubIds.map((clubId) => ({ clubId })) } });
 const testMail = () => app.inject({ method: 'POST', url: '/api/app-settings/test-mail', payload: { to: 'moi@example.org' } });

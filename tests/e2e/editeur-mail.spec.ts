@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
-import { createCompetition, SERVER_SESSION } from './helpers.js';
+import { createCompetition, SERVER_SESSION, inviteWithLink } from './helpers.js';
 
 test.use({ baseURL: 'http://localhost:3101', storageState: SERVER_SESSION });
 
@@ -167,12 +167,12 @@ async function openedMessage(page: Page, request: APIRequestContext, name: strin
   const id = await createCompetition(page, name);
   const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
   const directory = (await (await request.post('/api/club-directory', { data: { ...EMPTY, name: `${club} ${Date.now()}`, coachEmails: ['coach@exemple.example'] } })).json()) as { id: string };
-  const [link] = (await (await request.post(`/api/competitions/${id}/invitations`, { data: { directoryIds: [directory.id] } })).json()) as { clubId: string }[];
+  const link = await inviteWithLink(request, id, directory.id);
   await page.goto(`/competitions/${id}/fiche-club`);
   await page.getByRole('button', { name: /Message aux clubs de cette compétition/ }).click();
   const editor = page.getByTestId('mail-editor').locator('.ProseMirror');
   await expect(editor.locator('p').first()).toBeVisible();
-  return { id, clubId: link!.clubId, editor };
+  return { id, clubId: link.clubId, editor };
 }
 
 const pasteHtml = (editor: Locator, html: string) =>

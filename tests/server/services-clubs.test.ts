@@ -153,7 +153,9 @@ test('main ailleurs : l’envoi aux clubs est refusé, le message et son image r
     const body = `<p>Bonjour {coach}</p><img src="${image.url}"><p>{lien}</p>`;
     expect((await orga('PATCH', base, { settings: { invitationMail: { subject: 'Inscriptions', body, format: 'html' } } })).statusCode).toBe(200);
     const directory = (await orga('POST', '/api/club-directory', { name: 'Tani Dojo', affiliationNumber: null, coachName: 'Jean', coachPhone: null, coachEmails: ['tani@example.org'], notes: null })).json().id as string;
-    const [link] = (await orga('POST', `${base}/invitations`, { directoryIds: [directory] })).json() as { clubId: string }[];
+    expect((await orga('POST', `${base}/invitations`, { directoryIds: [directory] })).statusCode).toBe(204);
+    const [link] = (await orga('GET', `${base}/invitations`)).json() as { clubId: string }[];
+    expect((await orga('POST', `${base}/invitations/${link!.clubId}/links`)).statusCode).toBe(200);
     const linksOf = async () => ((await orga('GET', `${base}/invitations/${link!.clubId}/links`)).json() as unknown[]).length;
     expect(await linksOf()).toBe(1);
 
@@ -161,6 +163,8 @@ test('main ailleurs : l’envoi aux clubs est refusé, le message et son image r
     const jeton = (await orga('POST', '/api/sync/tokens', { name: 'PC de la salle' })).json().token as string;
     const remote = (path: string, payload: unknown) => srv.inject({ method: 'POST', url: `/api/sync/remote${path}`, headers: { authorization: `Bearer ${jeton}` }, payload: payload as object });
     const pkg = (await remote(`/competitions/${cid}/take`, { instanceId: 'pc-1', instanceName: 'PC-SALLE' })).json();
+    // L'invitation voyage avec le club : elle survit à l'aller-retour, même sans lien.
+    expect(pkg.tables.clubs[0].invited_at).toEqual(expect.any(String));
 
     // Pendant ce temps : envoi refusé, aucun mail, aucun lien de plus ; le message et son image sont intacts.
     const refused = await orga('POST', `${base}/invitations/send`, { clubs: [{ clubId: link!.clubId }] });

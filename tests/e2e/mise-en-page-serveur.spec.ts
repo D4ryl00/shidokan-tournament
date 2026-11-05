@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { clipped, createCompetition, SERVER_SESSION } from './helpers.js';
+import { clipped, createClubLink, createCompetition, SERVER_SESSION } from './helpers.js';
 
 // Écrans des mails et inscriptions en ligne : serveur en ligne seulement (port 3101), avec la session de l'organisateur.
 test.use({ baseURL: 'http://localhost:3101', storageState: SERVER_SESSION });
@@ -17,7 +17,8 @@ test('téléphone (320 px) : l’état des inscriptions d’un club se lit en en
   await page.getByTestId('invite-select').fill(club);
   await page.getByRole('option', { name: club }).click();
   await page.getByTestId('invite-clubs').click();
-  const url = (await page.getByTestId('invitation-url').textContent())!;
+  await expect(page.getByTestId('invitation-row').filter({ hasText: club })).toContainText('0 lien');
+  const url = await createClubLink(page, club);
   await page.setViewportSize({ width: 320, height: 700 });
   await page.goto(url);
   await expect(page.getByTestId('club-entry-state')).toHaveText('Inscriptions closes : contactez l’organisateur.');
