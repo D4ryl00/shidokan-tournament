@@ -228,3 +228,109 @@ test('compétition gérée ailleurs : « Appliquer aussi » désactivée avec so
   const clubs = (await (await request.get(`/api/competitions/${competitionId}/clubs`)).json()) as { name: string; coachPhone: string | null }[];
   expect(clubs.find((c) => c.name === club)!.coachPhone).toBe('06 77 77 77 77');
 });
+
+/** Ouvre la fiche d'annuaire dans l'annuaire, remplace le téléphone et la troisième adresse, enregistre. */
+async function editEntry(page: Page, club: string, patch: { phone?: string; emails?: string; notes?: string }) {
+  await page.goto('/annuaire');
+  await page.getByTestId('directory-row').filter({ hasText: club }).getByRole('button', { name: 'Modifier' }).click();
+  const form = page.getByRole('dialog', { name: 'Modifier le club' });
+  if (patch.phone) await form.getByLabel('Téléphone').fill(patch.phone);
+  if (patch.emails) await form.getByTestId('directory-email').fill(patch.emails);
+  if (patch.notes) await form.getByLabel('Notes').fill(patch.notes);
+  await form.getByTestId('directory-save').click();
+  await expect(form).toBeHidden();
+}
+const clubIn = async (request: APIRequestContext, competitionId: string, name: string) =>
+  ((await (await request.get(`/api/competitions/${competitionId}/clubs`)).json()) as { name: string; coachPhone: string | null; coachEmails: string[] }[]).find((c) => c.name === name)!;
+
+test('fiche modifiée : fenêtre « Appliquer aux compétitions à venir ? », conflit gardé, passée absente, gérée ailleurs sans choix, résultat par compétition', async ({ page, request, playwright }) => {
+  const a = await setup(page, request, 'report-a');
+  const club = a.club;
+  const b = await newCompetition(page, request, `Coupe report-b ${Date.now()}`);
+  const linkB = await inviteWithLink(request, b, a.entry.id);
+  const past = await newCompetition(page, request, `Coupe report-passée ${Date.now()}`);
+  await inviteWithLink(request, past, a.entry.id);
+  expect((await request.patch(`/api/competitions/${past}`, { data: { date: local(new Date(Date.now() - 3 * 86_400_000)) } })).ok()).toBe(true);
+  const elsewhere = await newCompetition(page, request, `Coupe report-ailleurs ${Date.now()}`);
+  await inviteWithLink(request, elsewhere, a.entry.id);
+  await coachSaves(playwright, linkB.token, { coachPhone: '06 88 88 88 88' });
+
+  // Le serveur du test gère toutes les compétitions : l'une d'elles est présentée comme tenue par un PC.
+  await page.route(`**/api/club-directory/${a.entry.id}`, async (route) => {
+    if (route.request().method() !== 'PATCH') return route.continue();
+    const res = await route.fetch();
+    const body = (await res.json()) as { upcoming: { competitionId: string }[] };
+    await route.fulfill({ response: res, json: { ...body, upcoming: body.upcoming.map((l) => (l.competitionId === elsewhere ? { ...l, managedHere: false, ownerName: 'PC du dojo' } : l)) } });
+  });
+  await editEntry(page, club, { phone: '06 12 12 12 12', emails: 'une@dojo.example, deux@dojo.example, nouveau@dojo.example' });
+
+  const dialog = page.getByRole('dialog', { name: 'Appliquer aux compétitions à venir ?' });
+  await expect(dialog).toBeVisible();
+  const nameA = (await (await request.get(`/api/competitions/${a.competitionId}`)).json() as { name: string }).name;
+  const nameB = (await (await request.get(`/api/competitions/${b}`)).json() as { name: string }).name;
+  const nameP = (await (await request.get(`/api/competitions/${past}`)).json() as { name: string }).name;
+  await expect(dialog).toContainText(nameA);
+  await expect(dialog).not.toContainText(nameP);
+  await expect(dialog.getByTestId(`apply-line-${a.competitionId}-coachPhone`).getByRole('checkbox')).toBeChecked();
+  await expect(dialog.getByTestId(`apply-line-${a.competitionId}-coachEmails`)).toContainText('retire trois@dojo.example');
+  await expect(dialog.getByTestId(`apply-line-${a.competitionId}-coachEmails`)).toContainText('ajoute nouveau@dojo.example');
+  const conflict = dialog.getByTestId(`apply-line-${b}-coachPhone`);
+  await expect(conflict).toContainText('Conflit');
+  await expect(conflict.getByRole('radio', { name: 'Garder le club' })).toBeChecked();
+  await expect(conflict).toContainText('06 88 88 88 88');
+  const foreign = dialog.getByTestId(`apply-line-${elsewhere}-coachPhone`);
+  await expect(foreign.getByRole('checkbox')).toHaveCount(0);
+  await expect(foreign.getByRole('radio')).toHaveCount(0);
+  await expect(dialog).toContainText('Gérée par PC du dojo : à appliquer après le retour de la main.');
+
+  await dialog.getByRole('button', { name: 'Appliquer', exact: true }).click();
+  await expect(dialog.getByTestId('apply-result')).toHaveCount(2);
+  await expect(dialog.getByTestId('apply-result').filter({ hasText: nameA })).toContainText('appliqué');
+  await expect(dialog.getByTestId('apply-result').filter({ hasText: nameB })).toContainText('appliqué');
+  await dialog.getByRole('button', { name: 'Fermer' }).click();
+  await expect(dialog).toBeHidden();
+
+  expect(await clubIn(request, a.competitionId, club)).toMatchObject({ coachPhone: '06 12 12 12 12', coachEmails: ['une@dojo.example', 'deux@dojo.example', 'nouveau@dojo.example'] });
+  expect(await clubIn(request, b, club)).toMatchObject({ coachPhone: '06 88 88 88 88', coachEmails: ['une@dojo.example', 'deux@dojo.example', 'nouveau@dojo.example'] });
+  expect((await clubIn(request, past, club)).coachPhone).toBe('06 11 22 33 44');
+  expect((await clubIn(request, elsewhere, club)).coachPhone).toBe('06 11 22 33 44');
+});
+
+test('« Ne rien appliquer » : aucune requête, clubs inchangés, fiche enregistrée ; sans différence ou en archivant, aucune fenêtre', async ({ page, request }) => {
+  const a = await setup(page, request, 'report-rien');
+  let applied = 0;
+  await page.route('**/apply-to-clubs', async (route) => { applied++; await route.continue(); });
+  await editEntry(page, a.club, { phone: '06 13 13 13 13' });
+  const dialog = page.getByRole('dialog', { name: 'Appliquer aux compétitions à venir ?' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Ne rien appliquer' }).click();
+  await expect(dialog).toBeHidden();
+  expect(applied).toBe(0);
+  expect((await clubIn(request, a.competitionId, a.club)).coachPhone).toBe('06 11 22 33 44');
+  expect((await entryOf(request, a.entry.id)).coachPhone).toBe('06 13 13 13 13');
+
+  // Une note change : aucun champ comparé n'a bougé, aucune fenêtre.
+  await editEntry(page, a.club, { notes: 'Remarque' });
+  await expect(dialog).toHaveCount(0);
+  // Archiver passe par la même requête sans rien proposer.
+  await page.getByTestId('directory-row').filter({ hasText: a.club }).getByRole('button', { name: 'Autres actions' }).click();
+  await page.getByRole('menuitem', { name: 'Archiver' }).click();
+  await expect(page.getByTestId('directory-row').filter({ hasText: a.club })).toHaveCount(0);
+  await expect(dialog).toHaveCount(0);
+});
+
+test('conflit : « Prendre l’annuaire » est envoyé, « Appliquer » est désactivé quand rien n’est choisi', async ({ page, request, playwright }) => {
+  const a = await setup(page, request, 'report-choix');
+  await coachSaves(playwright, a.token, { coachPhone: '06 99 99 99 99' });
+  await editEntry(page, a.club, { phone: '06 14 14 14 14' });
+  const dialog = page.getByRole('dialog', { name: 'Appliquer aux compétitions à venir ?' });
+  const submit = dialog.getByRole('button', { name: 'Appliquer', exact: true });
+  await expect(dialog.getByTestId(`apply-line-${a.competitionId}-coachPhone`)).toContainText('Conflit');
+  await expect(submit).toBeDisabled();
+  await dialog.getByRole('radio', { name: 'Prendre l’annuaire' }).check();
+  await expect(submit).toBeEnabled();
+  await submit.click();
+  await expect(dialog.getByTestId('apply-result')).toContainText('appliqué');
+  await dialog.getByRole('button', { name: 'Fermer' }).click();
+  expect((await clubIn(request, a.competitionId, a.club)).coachPhone).toBe('06 14 14 14 14');
+});

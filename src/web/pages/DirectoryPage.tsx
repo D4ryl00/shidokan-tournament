@@ -4,10 +4,11 @@ import { Link } from 'react-router';
 import { normalizeName } from '../../domain/names.js';
 import { plural } from '../../domain/plural.js';
 import type { DirectoryEntry, DirectoryInput } from '../../domain/registration.js';
-import { useAppSettings, useAuthMe, useClubChanges, useCreateDirectoryEntry, useDirectory, useMergeDirectoryEntries, useUpdateDirectoryEntry } from '../api.js';
+import { useAppSettings, useAuthMe, useClubChanges, useCreateDirectoryEntry, useDirectory, useMergeDirectoryEntries, useUpdateDirectoryEntry, type UpcomingLine } from '../api.js';
 import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { ClubChangePill, DirectoryChangesBanner } from '../components/club-changes/ClubChangeBanners.js';
+import { ApplyToClubsModal } from '../components/club-changes/ApplyToClubsModal.js';
 import { useClubChangeDialog } from '../components/club-changes/ClubChangeModal.js';
 import { EmailsInput, EmailsList } from '../components/EmailsInput.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
@@ -19,7 +20,7 @@ const EMPTY: DirectoryInput = { name: '', affiliationNumber: null, coachName: nu
 const orNull = (v: string) => v.trim() || null;
 
 /** Fenêtre de saisie d'une fiche (création ou modification). */
-function EntryModal({ entry, onClose }: { entry: DirectoryEntry | 'new' | null; onClose: () => void }) {
+function EntryModal({ entry, onClose, onUpcoming }: { entry: DirectoryEntry | 'new' | null; onClose: () => void; onUpcoming: (entryId: string, lines: UpcomingLine[]) => void }) {
   const create = useCreateDirectoryEntry();
   const update = useUpdateDirectoryEntry();
   // Le parent remonte la fenêtre (key) pour chaque fiche : l'état part de la fiche ouverte.
@@ -28,9 +29,9 @@ function EntryModal({ entry, onClose }: { entry: DirectoryEntry | 'new' | null; 
   );
   const set = (patch: Partial<DirectoryInput>) => setForm((f) => ({ ...f, ...patch }));
   const save = () => {
-    const done = { onSuccess: onClose };
-    if (entry === 'new') create.mutate(form, done);
-    else if (entry) update.mutate({ id: entry.id, ...form }, done);
+    if (entry === 'new') create.mutate(form, { onSuccess: onClose });
+    // La fiche est enregistrée : la fenêtre se ferme, puis la page propose de reporter la fiche sur les compétitions à venir s'il y a de quoi.
+    else if (entry) update.mutate({ id: entry.id, ...form }, { onSuccess: (saved) => { onClose(); onUpcoming(saved.id, saved.upcoming); } });
   };
   return (
     <Modal opened={entry !== null} onClose={onClose} title={entry === 'new' ? 'Ajouter un club' : 'Modifier le club'}>
@@ -98,6 +99,7 @@ export function DirectoryPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<DirectoryEntry | 'new' | null>(null);
   const [merging, setMerging] = useState<DirectoryEntry | null>(null);
+  const [applying, setApplying] = useState<{ entryId: string; lines: UpcomingLine[] } | null>(null);
   const key = normalizeName(search);
   const shown = entries.filter((e) => (showArchived || !e.archived) && (!key || normalizeName(e.name).includes(key) || (e.affiliationNumber ?? '').includes(search.trim())));
 
@@ -168,7 +170,9 @@ export function DirectoryPage() {
           </Table>
         </TableCard>
       )}
-      <EntryModal key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.id} entry={editing} onClose={() => setEditing(null)} />
+      <EntryModal key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.id} entry={editing} onClose={() => setEditing(null)}
+        onUpcoming={(entryId, lines) => lines.length > 0 && setApplying({ entryId, lines })} />
+      {applying && <ApplyToClubsModal key={applying.entryId} entryId={applying.entryId} lines={applying.lines} onClose={() => setApplying(null)} />}
       {comparison.element}
       <MergeModal merged={merging} entries={entries} onClose={() => setMerging(null)} />
     </Stack>

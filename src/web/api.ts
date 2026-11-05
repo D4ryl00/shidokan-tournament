@@ -843,7 +843,7 @@ export function useLoadTemplate(id: string) {
 // Annuaire des clubs (indépendant des compétitions).
 export const useDirectory = () => useQuery({ queryKey: ['club-directory'], queryFn: () => api<DirectoryEntry[]>('GET', '/api/club-directory') });
 
-function useDirectoryMutation<V>(fn: (v: V) => Promise<DirectoryEntry>) {
+function useDirectoryMutation<V, R extends DirectoryEntry = DirectoryEntry>(fn: (v: V) => Promise<R>) {
   const qc = useQueryClient();
   return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries({ queryKey: ['club-directory'] }) });
 }
@@ -907,7 +907,33 @@ export const useIgnoreClubChange = () =>
 
 export const useCreateDirectoryEntry = () => useDirectoryMutation((input: DirectoryInput) => api<DirectoryEntry>('POST', '/api/club-directory', input));
 export const useUpdateDirectoryEntry = () =>
-  useDirectoryMutation(({ id, ...patch }: Partial<DirectoryInput> & { id: string; archived?: boolean; googleContactId?: null }) => api<DirectoryEntry>('PATCH', `/api/club-directory/${id}`, patch));
+  useDirectoryMutation(({ id, ...patch }: Partial<DirectoryInput> & { id: string; archived?: boolean; googleContactId?: null }) => api<DirectoryEntry & { upcoming: UpcomingLine[] }>('PATCH', `/api/club-directory/${id}`, patch));
+
+/** Une différence entre une fiche modifiée et le club d'une compétition à venir (voir `upcomingDifferences`). */
+export interface UpcomingLine {
+  clubId: string;
+  competitionId: string;
+  competitionName: string;
+  competitionDate: string;
+  managedHere: boolean;
+  ownerName: string | null;
+  field: ClubField;
+  kind: 'apply' | 'conflict';
+  clubValue: string | string[] | null;
+  directoryValue: string | string[] | null;
+}
+export interface ApplyResult { competitionName: string; status: 'applied' | 'refused'; message: string | null }
+export interface ApplyItem { clubId: string; fields: { field: ClubField; clubValue: UpcomingLine['clubValue']; directoryValue: UpcomingLine['directoryValue'] }[] }
+
+/** Reporte la fiche sur des clubs de compétitions à venir ; relit ensuite changements, annuaire, clubs et invitations. */
+export function useApplyDirectoryToClubs() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entryId, items }: { entryId: string; items: ApplyItem[] }) => api<ApplyResult[]>('POST', `/api/club-directory/${entryId}/apply-to-clubs`, { items }),
+    onSettled: () => Promise.all(['club-changes', 'club-directory', 'directory-clubs', 'clubs', 'invitations'].map((k) => qc.invalidateQueries({ queryKey: [k] }))),
+  });
+}
+
 export const useMergeDirectoryEntries = () =>
   useDirectoryMutation((ids: { keepId: string; mergeId: string }) => api<DirectoryEntry>('POST', '/api/club-directory/merge', ids));
 

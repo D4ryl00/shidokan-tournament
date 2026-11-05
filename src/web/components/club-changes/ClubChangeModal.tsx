@@ -5,7 +5,7 @@ import { defaultChoice, emailChoices, resolvedValues, type ClubField, type ClubV
 import { ApiError, useIgnoreClubChange, useResolveClubChange, type ClubChangeView } from '../../api.js';
 import { ApiErrorAlert } from '../ApiErrorAlert.js';
 
-const LABEL: Record<ClubField, string> = { name: 'Club', coachName: 'Coach', coachPhone: 'Téléphone', coachEmails: 'E-mails', affiliationNumber: 'N° d’affiliation FFK' };
+export const LABEL: Record<ClubField, string> = { name: 'Club', coachName: 'Coach', coachPhone: 'Téléphone', coachEmails: 'E-mails', affiliationNumber: 'N° d’affiliation FFK' };
 const ORIGIN = { both: 'dans les deux', competition: 'ajoutée dans la compétition', directory: 'seulement dans l’annuaire' } as const;
 /** Une valeur longue (adresse) passe à la ligne au lieu d'élargir la fenêtre. */
 const WRAP = { overflowWrap: 'anywhere' } as const;
@@ -13,10 +13,11 @@ const WRAP = { overflowWrap: 'anywhere' } as const;
 export const frDate = (iso: string) => new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString('fr-FR');
 
 /** Valeur affichée d'un champ ; `(vide)` quand il n'y a rien. */
-function shown(field: ClubField, v: ClubValues): string {
-  if (field === 'coachEmails') return v.coachEmails.join(', ') || '(vide)';
-  return (v[field] ?? '').trim() || '(vide)';
+export function shownValue(value: string | string[] | null): string {
+  if (Array.isArray(value)) return value.join(', ') || '(vide)';
+  return (value ?? '').trim() || '(vide)';
 }
+const shown = (field: ClubField, v: ClubValues) => shownValue(v[field]);
 
 interface Props {
   change: ClubChangeView;
