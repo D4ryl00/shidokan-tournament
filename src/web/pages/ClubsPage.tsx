@@ -1,5 +1,5 @@
 import { ActionIcon, Button, Checkbox, Group, Modal, Stack, Table, Text, TextInput } from '@mantine/core';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { notifications } from '@mantine/notifications';
 import { useParams } from 'react-router';
 import { ofName, plural } from '../../domain/plural.js';
@@ -64,6 +64,9 @@ export function ClubsPage() {
   const fetchChanges = useFetchClubChanges(id);
   const comparison = useClubChangeDialog(changes);
   const [editing, setEditing] = useState<Club | null>(null);
+  // Les notifications « Comparer » de cette page disparaissent avec elle : son bouton ouvrirait une fenêtre qui n'est plus là.
+  const shownKeys = useRef(new Set<string>());
+  useEffect(() => { const keys = shownKeys.current; return () => keys.forEach((k) => notifications.hide(k)); }, []);
   const changeOf = (clubId: string) => changes.find((x) => x.clubId === clubId);
   const count = (clubId: string) => rows.filter((r) => r.club?.id === clubId).length;
   // Après un enregistrement : si le club diffère maintenant de l'annuaire, l'organisateur peut comparer tout de suite.
@@ -71,6 +74,7 @@ export function ClubsPage() {
     const change = (await fetchChanges().catch(() => [])).find((c) => c.clubId === clubId);
     if (!change) return;
     const key = `club-change-${clubId}`;
+    shownKeys.current.add(key);
     notifications.show({
       id: key, color: 'yellow', autoClose: 15_000,
       message: (

@@ -845,7 +845,8 @@ export const useDirectory = () => useQuery({ queryKey: ['club-directory'], query
 
 function useDirectoryMutation<V, R extends DirectoryEntry = DirectoryEntry>(fn: (v: V) => Promise<R>) {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries({ queryKey: ['club-directory'] }) });
+  // Une fiche corrigée, fusionnée ou archivée change aussi les différences avec les clubs des compétitions (bandeaux, pastilles, comparaison).
+  return useMutation({ mutationFn: fn, onSuccess: () => Promise.all(['club-directory', 'club-changes'].map((k) => qc.invalidateQueries({ queryKey: [k] }))) });
 }
 // --- Changements de coordonnées entre l'annuaire et les compétitions (organisateur seulement) ---
 
@@ -864,14 +865,23 @@ export interface ClubChangeView {
   values: ClubValues;
   directory: ClubValues;
   fields: ClubField[];
+  /** Champs modifiés par l'enregistrement du changement, et adresses qu'il a ajoutées : les autres valeurs ont l'annuaire pour choix par défaut. */
+  changedFields: ClubField[];
+  addedEmails: string[];
 }
+
+/** Le rôle doit être connu : tant que `/api/auth/me` n'a pas répondu, un compte Table centrale recevrait un 403. */
+const useCanSeeClubChanges = () => {
+  const me = useAuthMe().data;
+  return !!me && isOrganiser(me);
+};
 
 /**
  * Changements à examiner (toutes les compétitions, ou une seule). Un compte Table centrale n'y a pas accès : pas de requête.
  * Relus au retour sur l'onglet (page Annuaire) et, dans une compétition, à chaque événement du flux (voir `useCompetitionEvents`).
  */
 export const useClubChanges = (competitionId?: string) => {
-  const organiser = useIsOrganiser();
+  const organiser = useCanSeeClubChanges();
   return useQuery({
     queryKey: ['club-changes', competitionId ?? null],
     queryFn: () => api<ClubChangeView[]>('GET', `/api/club-changes${competitionId ? `?competitionId=${encodeURIComponent(competitionId)}` : ''}`),
@@ -882,7 +892,7 @@ export const useClubChanges = (competitionId?: string) => {
 /** Changements d'une compétition relus à l'instant (après une modification d'un club) ; rien pour un compte qui n'y a pas accès. */
 export function useFetchClubChanges(competitionId: string) {
   const qc = useQueryClient();
-  const organiser = useIsOrganiser();
+  const organiser = useCanSeeClubChanges();
   return async (): Promise<ClubChangeView[]> =>
     organiser
       ? qc.fetchQuery({ queryKey: ['club-changes', competitionId], queryFn: () => api<ClubChangeView[]>('GET', `/api/club-changes?competitionId=${encodeURIComponent(competitionId)}`), staleTime: 0 })

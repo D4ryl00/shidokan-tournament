@@ -6,7 +6,7 @@ import { ApiError, useIgnoreClubChange, useResolveClubChange, type ClubChangeVie
 import { ApiErrorAlert } from '../ApiErrorAlert.js';
 
 export const LABEL: Record<ClubField, string> = { name: 'Club', coachName: 'Coach', coachPhone: 'Téléphone', coachEmails: 'E-mails', affiliationNumber: 'N° d’affiliation FFK' };
-const ORIGIN = { both: 'dans les deux', competition: 'ajoutée dans la compétition', directory: 'seulement dans l’annuaire' } as const;
+const ORIGIN = { both: 'dans les deux', competition: 'ajoutée dans la compétition', 'competition-only': 'seulement dans la compétition', directory: 'seulement dans l’annuaire' } as const;
 /** Une valeur longue (adresse) passe à la ligne au lieu d'élargir la fenêtre. */
 const WRAP = { overflowWrap: 'anywhere' } as const;
 
@@ -37,14 +37,15 @@ export function ClubChangeModal({ change, onClose, onDone, onStale, notice }: Pr
   const resolve = useResolveClubChange();
   const ignore = useIgnoreClubChange();
   const [choices, setChoices] = useState<Partial<Record<ClubField, Side>>>({});
-  const mailOptions = emailChoices(change.directory.coachEmails, change.values.coachEmails);
+  const mailOptions = emailChoices(change.directory.coachEmails, change.values.coachEmails, change.changedFields, change.addedEmails);
   const [kept, setKept] = useState<Set<string>>(new Set(mailOptions.filter((m) => m.checked).map((m) => m.email)));
   const canApply = change.upcoming && change.managedHere;
   const [applyToClub, setApplyToClub] = useState(true);
   const differs = (f: ClubField) => change.fields.includes(f);
-  const side = (f: ClubField) => choices[f] ?? defaultChoice(f, change.values);
-  const emails = differs('coachEmails') ? mailOptions.filter((m) => kept.has(m.email)).map((m) => m.email) : change.values.coachEmails;
-  const values = resolvedValues(change.directory, change.values, choices, emails);
+  const side = (f: ClubField) => choices[f] ?? defaultChoice(f, change.values, change.changedFields);
+  // Adresses identiques : la liste de la fiche, avec son ordre et son adresse principale, est renvoyée telle quelle.
+  const emails = differs('coachEmails') ? mailOptions.filter((m) => kept.has(m.email)).map((m) => m.email) : change.directory.coachEmails;
+  const values = resolvedValues(change.directory, change.values, choices, emails, change.changedFields);
 
   const error = resolve.error ?? ignore.error;
   // Fiche ou changement modifiés depuis l'ouverture : les listes sont relues (par la décision), le message reste affiché.
@@ -92,7 +93,7 @@ export function ClubChangeModal({ change, onClose, onDone, onStale, notice }: Pr
   return (
     <Modal opened onClose={onClose} size="lg" title={<Text fw={700} style={WRAP}>{change.values.name} : garder quelles informations ?</Text>} styles={{ title: { minWidth: 0 } }}>
       <Stack>
-        <Text size="sm" c="dimmed">{change.competitionName}, le {frDate(change.competitionDate)}</Text>
+        <Text size="sm" c="dimmed">{change.competitionName}, le {frDate(change.competitionDate)} · modifié le {frDate(change.changedAt)}</Text>
         {fields}
         {change.upcoming && (
           <Stack gap={2}>

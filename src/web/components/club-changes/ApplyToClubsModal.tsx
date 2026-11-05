@@ -1,5 +1,6 @@
 import { Badge, Button, Checkbox, Group, Modal, Radio, Stack, Text } from '@mantine/core';
 import { useState } from 'react';
+import { sameEmail } from '../../../domain/emails.js';
 import { useApplyDirectoryToClubs, type ApplyResult, type UpcomingLine } from '../../api.js';
 import { ApiErrorAlert } from '../ApiErrorAlert.js';
 import { frDate, LABEL, shownValue } from './ClubChangeModal.js';
@@ -13,8 +14,8 @@ function summary(l: UpcomingLine): string {
     const club = Array.isArray(l.clubValue) ? l.clubValue : [];
     const directory = Array.isArray(l.directoryValue) ? l.directoryValue : [];
     const parts = [
-      ...club.filter((e) => !directory.includes(e)).map((e) => `retire ${e}`),
-      ...directory.filter((e) => !club.includes(e)).map((e) => `ajoute ${e}`),
+      ...club.filter((e) => !directory.some((d) => sameEmail(d, e))).map((e) => `retire ${e}`),
+      ...directory.filter((e) => !club.some((c) => sameEmail(c, e))).map((e) => `ajoute ${e}`),
     ];
     return parts.join(', ') || shownValue(directory);
   }

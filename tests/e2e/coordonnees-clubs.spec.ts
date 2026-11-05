@@ -71,6 +71,7 @@ test('annuaire et fiche club : bandeaux, pastilles, Plus tard, Ignorer (et retou
   await expect(dialog.getByRole('checkbox', { name: 'trois@dojo.example (seulement dans l’annuaire)' })).not.toBeChecked();
   await expect(dialog.getByRole('checkbox', { name: 'une@dojo.example (dans les deux)' })).toBeChecked();
   await expect(dialog.getByTestId('change-same-coachName')).toContainText('Marc Durand (identique)');
+  await expect(dialog).toContainText(`modifié le ${today()}`);
 
   // « Plus tard » : rien ne change.
   await dialog.getByRole('button', { name: 'Plus tard' }).click();
@@ -123,6 +124,22 @@ test('onglet Clubs : notification « diffère de l’annuaire » avec Comparer, 
   await dialog.getByRole('button', { name: 'Ignorer ce changement' }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByTestId('club-row').filter({ hasText: renamed }).getByTestId('club-change-pill')).toHaveCount(0);
+});
+
+test('onglet Clubs : la notification « Comparer » disparaît quand on quitte la page', async ({ page, request }) => {
+  const { club, competitionId } = await setup(page, request, 'notification');
+  await page.goto(`/competitions/${competitionId}/clubs`);
+  await page.getByRole('button', { name: `Modifier ${club}` }).click();
+  await page.getByTestId('club-edit-name').fill(`${club} bis`);
+  await page.getByTestId('club-edit-save').click();
+  const note = page.locator('.mantine-Notification-root').filter({ hasText: `${club} bis diffère de l’annuaire.` });
+  await expect(note).toBeVisible();
+  await page.getByRole('link', { name: 'Fiche club' }).or(page.getByRole('tab', { name: 'Fiche club' })).first().click();
+  await expect(page.getByTestId('competition-changes-banner')).toBeVisible();
+  await expect(note).toHaveCount(0);
+  // Nettoyage : le changement est ignoré, pour ne pas gêner « Voir les changements » des autres tests.
+  const open = (await (await request.get(`/api/club-changes?competitionId=${competitionId}`)).json()) as { clubId: string; changedAt: string }[];
+  for (const c of open) expect((await request.post(`/api/club-changes/${c.clubId}/ignore`, { data: { changedAt: c.changedAt } })).status()).toBe(204);
 });
 
 test('téléphone effacé par le club : « (vide) », l’annuaire choisi par défaut ; fenêtre lisible à 960 px, en thème sombre, avec une longue adresse', async ({ page, request, playwright }) => {
@@ -333,4 +350,58 @@ test('conflit : « Prendre l’annuaire » est envoyé, « Appliquer » est dés
   await expect(dialog.getByTestId('apply-result')).toContainText('appliqué');
   await dialog.getByRole('button', { name: 'Fermer' }).click();
   expect((await clubIn(request, a.competitionId, a.club)).coachPhone).toBe('06 14 14 14 14');
+});
+
+test('le coach efface téléphone et adresses : les adresses de la fiche restent cochées, Enregistrer ne les vide pas', async ({ page, request, playwright }) => {
+  const { club, entry, competitionId, token } = await setup(page, request, 'tout-effacé');
+  await coachSaves(playwright, token, { coachPhone: null, coachEmails: [] });
+  await page.goto(`/competitions/${competitionId}/fiche-club`);
+  await page.getByTestId('competition-changes-banner').getByRole('button', { name: 'Comparer' }).click();
+  const dialog = page.getByRole('dialog', { name: `${club} : garder quelles informations ?` });
+  await expect(dialog.getByRole('radio', { name: 'Annuaire : 06 11 22 33 44' })).toBeChecked();
+  for (const e of ['une', 'deux', 'trois']) await expect(dialog.getByRole('checkbox', { name: `${e}@dojo.example (seulement dans l’annuaire)` })).toBeChecked();
+  await dialog.getByRole('button', { name: 'Enregistrer dans l’annuaire' }).click();
+  await expect(dialog).toBeHidden();
+  expect(await entryOf(request, entry.id)).toMatchObject({ coachPhone: '06 11 22 33 44', coachEmails: ['une@dojo.example', 'deux@dojo.example', 'trois@dojo.example'] });
+});
+
+test('une ancienne différence ne revient pas dans la fiche : adresse retirée de la fiche, téléphone changé par le coach', async ({ page, request, playwright }) => {
+  const { club, entry, competitionId, token } = await setup(page, request, 'ancienne');
+  // L'organisateur retire « trois » de la fiche ; le club l'a encore. Le coach ne change que son téléphone.
+  expect((await request.patch(`/api/club-directory/${entry.id}`, { data: { coachEmails: ['une@dojo.example', 'deux@dojo.example'] } })).ok()).toBe(true);
+  await coachSaves(playwright, token, { coachPhone: '06 31 31 31 31' });
+  await page.goto(`/competitions/${competitionId}/fiche-club`);
+  await page.getByTestId('competition-changes-banner').getByRole('button', { name: 'Comparer' }).click();
+  const dialog = page.getByRole('dialog', { name: `${club} : garder quelles informations ?` });
+  await expect(dialog.getByRole('checkbox', { name: 'trois@dojo.example (seulement dans la compétition)' })).not.toBeChecked();
+  await dialog.getByRole('button', { name: 'Enregistrer dans l’annuaire' }).click();
+  await expect(dialog).toBeHidden();
+  expect(await entryOf(request, entry.id)).toMatchObject({ coachPhone: '06 31 31 31 31', coachEmails: ['une@dojo.example', 'deux@dojo.example'] });
+});
+
+test('adresses identiques dans un autre ordre : la fiche garde son ordre et son adresse principale', async ({ page, request, playwright }) => {
+  const { club, entry, competitionId, token } = await setup(page, request, 'ordre');
+  await coachSaves(playwright, token, { coachPhone: '06 32 32 32 32', coachEmails: ['trois@dojo.example', 'deux@dojo.example', 'une@dojo.example'] });
+  await page.goto(`/competitions/${competitionId}/fiche-club`);
+  await page.getByTestId('competition-changes-banner').getByRole('button', { name: 'Comparer' }).click();
+  const dialog = page.getByRole('dialog', { name: `${club} : garder quelles informations ?` });
+  await expect(dialog.getByTestId('change-same-coachEmails')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Enregistrer dans l’annuaire' }).click();
+  await expect(dialog).toBeHidden();
+  expect(await entryOf(request, entry.id)).toMatchObject({ coachPhone: '06 32 32 32 32', coachEmails: ['une@dojo.example', 'deux@dojo.example', 'trois@dojo.example'] });
+});
+
+test('fiche corrigée à la main : la pastille et le bandeau disparaissent sans recharger la page', async ({ page, request, playwright }) => {
+  const { club, competitionId, token } = await setup(page, request, 'correction');
+  await coachSaves(playwright, token, { coachPhone: '06 33 33 33 33' });
+  await page.goto('/annuaire');
+  const row = page.getByTestId('directory-row').filter({ hasText: club });
+  await expect(row.getByTestId('club-change-pill')).toBeVisible();
+  await row.getByRole('button', { name: 'Modifier' }).click();
+  const form = page.getByRole('dialog', { name: 'Modifier le club' });
+  await form.getByLabel('Téléphone').fill('06 33 33 33 33');
+  await form.getByTestId('directory-save').click();
+  await expect(form).toBeHidden();
+  await expect(row.getByTestId('club-change-pill')).toHaveCount(0);
+  expect(await changesOf(request, competitionId)).toEqual([]);
 });
