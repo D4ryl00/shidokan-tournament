@@ -1,7 +1,7 @@
 import { Button, Checkbox, Group, Modal, Radio, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState, type ReactNode } from 'react';
-import { defaultChoice, emailChoices, resolvedValues, type ClubField, type ClubValues, type Side } from '../../../domain/club-changes.js';
+import { defaultChoice, differingFields, emailChoices, resolvedValues, type ClubField, type ClubValues, type Side } from '../../../domain/club-changes.js';
 import { ApiError, useIgnoreClubChange, useResolveClubChange, type ClubChangeView } from '../../api.js';
 import { ApiErrorAlert } from '../ApiErrorAlert.js';
 
@@ -53,15 +53,19 @@ export function ClubChangeModal({ change, onClose, onDone, onStale, notice }: Pr
     if (error instanceof ApiError && error.status === 409) onStale?.(error.message);
   }, [error, onStale]);
   const busy = resolve.isPending || ignore.isPending;
-  const save = () =>
-    resolve.mutate({ clubId: change.clubId, directoryVersion: change.directoryVersion, changedAt: change.changedAt, values, applyToClub: canApply && applyToClub }, {
-      onSuccess: () => {
-        // Compétition gérée ailleurs : seul l'annuaire est enregistré, le club suivra après le retour de la main.
-        if (!change.managedHere) notifications.show({ color: 'yellow', message: `Annuaire enregistré. Le club de ${change.competitionName} reste à mettre à jour après le retour de la main.` });
-        onDone();
-      },
-    });
-  const skip = () => ignore.mutate({ clubId: change.clubId, changedAt: change.changedAt }, { onSuccess: onDone });
+  // `mutateAsync` et non les rappels de `mutate` : la relecture des listes remonte la fenêtre (sa clé change) avant la fin de la mutation, et un
+  // rappel de `mutate` est alors perdu. Cette promesse survit au remontage.
+  const save = () => {
+    resolve.mutateAsync({ clubId: change.clubId, directoryVersion: change.directoryVersion, changedAt: change.changedAt, values, applyToClub: canApply && applyToClub }).then(() => {
+      // Compétition gérée ailleurs : seul l'annuaire est enregistré. Le club suivra après le retour de la main, s'il diffère encore de ce qui est enregistré
+      // (valeur de la compétition choisie partout : la ligne est supprimée, rien à mettre à jour).
+      if (!change.managedHere && differingFields(values, change.values).length > 0) {
+        notifications.show({ color: 'yellow', message: `Annuaire enregistré. Le club de ${change.competitionName} reste à mettre à jour après le retour de la main.` });
+      }
+      onDone();
+    }, () => { /* refus : affiché dans la fenêtre (erreur de la mutation) */ });
+  };
+  const skip = () => { ignore.mutateAsync({ clubId: change.clubId, changedAt: change.changedAt }).then(onDone, () => { /* refus affiché dans la fenêtre */ }); };
 
   const fields: ReactNode[] = (['name', 'coachName', 'coachPhone', 'coachEmails', 'affiliationNumber'] as const).map((f) => {
     if (!differs(f)) {

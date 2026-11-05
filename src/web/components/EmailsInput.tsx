@@ -30,6 +30,7 @@ export function EmailsInput({ value, onChange, compact = false, ...props }: { va
 /** Adresses d'un club dans un tableau : une par ligne, « — » s'il n'y en a pas. */
 export function EmailsList({ emails }: { emails: string[] }) {
   if (!emails.length) return <Text span c="dimmed" size="sm">—</Text>;
-  // Largeur minimale : une adresse ne se coupe pas en plein mot quand le tableau est serré (il défile de côté au besoin).
-  return <Stack gap={0} style={{ minWidth: 'min(16rem, 100%)' }}>{emails.map((e) => <Text key={e} size="sm" style={{ overflowWrap: 'anywhere' }}>{e}</Text>)}</Stack>;
+  // Largeur minimale fixe (un pourcentage ne donne aucune largeur à une cellule de tableau) : une adresse ordinaire tient sur une ligne, le tableau
+  // défile de côté au besoin. Une adresse plus large que la colonne passe à la ligne au lieu de déborder.
+  return <Stack gap={0} style={{ minWidth: '16rem' }}>{emails.map((e) => <Text key={e} size="sm" style={{ overflowWrap: 'anywhere' }}>{e}</Text>)}</Stack>;
 }

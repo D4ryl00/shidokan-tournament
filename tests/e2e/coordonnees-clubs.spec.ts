@@ -435,19 +435,100 @@ test('960 px : l’étiquette « Conflit » ne rétrécit pas, les adresses de l
   for (const c of open) expect((await request.post(`/api/club-changes/${c.clubId}/ignore`, { data: { changedAt: c.changedAt } })).status()).toBe(204);
 });
 
-test('compétition gérée ailleurs : « Voir les changements » ne rouvre pas la même fenêtre, et une notification dit ce qui reste à faire', async ({ page, request, playwright }) => {
-  const a = await setup(page, request, 'chaîne-ailleurs');
-  await coachSaves(playwright, a.token, { coachPhone: '06 36 36 36 36' });
-  const [change] = (await (await request.get(`/api/club-changes?competitionId=${a.competitionId}`)).json()) as Record<string, unknown>[];
-  // Réponse simulée : la compétition est tenue par un PC, le changement reste listé après la décision.
-  await page.route(/\/api\/club-changes(\?|$)/, (route) => route.fulfill({ json: [{ ...change, managedHere: false, ownerName: 'PC du dojo' }] }));
+/** Compétitions tenues par un PC : le vrai serveur répond (version de l'annuaire comprise), seul « géré ici » est changé et la liste est limitée à ces compétitions. */
+async function managedElsewhere(page: Page, competitionIds: string[]) {
+  // Les autres listes relues après la décision arrivent en retard (cas du réseau réel) : la liste des changements, plus rapide, remonte la fenêtre avant elles.
+  let decided = false;
+  page.on('request', (r) => { if (r.method() === 'POST' && /\/api\/club-changes\/.+\/resolve$/.test(r.url())) decided = true; });
+  await page.route(/\/api\/(club-directory|competitions\/[^/]+\/(clubs|invitations|directory-clubs))$/, async (route) => {
+    if (decided && route.request().method() === 'GET') await new Promise((r) => setTimeout(r, 800));
+    await route.continue();
+  });
+  await page.route(/\/api\/club-changes(\?|$)/, async (route) => {
+    const list = (await (await route.fetch()).json()) as { competitionId: string }[];
+    await route.fulfill({ json: list.filter((c) => competitionIds.includes(c.competitionId)).map((c) => ({ ...c, managedHere: false, ownerName: 'PC du dojo' })) });
+  });
+}
+const noteOf = (page: Page, text: string) => page.locator('.mantine-Notification-root').filter({ hasText: text });
+const nameOf = async (request: APIRequestContext, id: string) => ((await (await request.get(`/api/competitions/${id}`)).json()) as { name: string }).name;
+
+test('compétition gérée ailleurs, chaîne : après la première décision la fenêtre passe au club suivant, avec la notification', async ({ page, request, playwright }) => {
+  // Deux compétitions de même date : classées par nom, « ailleurs-1 » avant « ailleurs-2 ».
+  const a = await setup(page, request, 'ailleurs-1');
+  const b = await setup(page, request, 'ailleurs-2');
+  await coachSaves(playwright, a.token, { coachPhone: '06 36 36 36 36', coachName: 'Paul Martin' });
+  await coachSaves(playwright, b.token, { coachPhone: '06 37 37 37 37', coachName: 'Paul Martin' });
+  await managedElsewhere(page, [a.competitionId, b.competitionId]);
   await page.goto('/annuaire');
   await page.getByTestId('directory-changes-banner').getByRole('button', { name: 'Voir les changements' }).click();
+  const first = page.getByRole('dialog', { name: `${a.club} : garder quelles informations ?` });
+  // Téléphone de la compétition (la fiche change, sa version monte), nom du coach de l’annuaire : le club diffère encore de la fiche.
+  await first.getByTestId('change-field-coachName').getByRole('radio', { name: /^Annuaire :/ }).check();
+  await first.getByRole('button', { name: 'Enregistrer dans l’annuaire' }).click();
+  await expect(page.getByRole('dialog', { name: `${b.club} : garder quelles informations ?` })).toBeVisible();
+  await expect(noteOf(page, `Annuaire enregistré. Le club de ${await nameOf(request, a.competitionId)} reste à mettre à jour après le retour de la main.`)).toBeVisible();
+});
+
+test('compétition gérée ailleurs, « Comparer » hors chaîne : la fenêtre se ferme après l’enregistrement, avec la notification', async ({ page, request, playwright }) => {
+  const a = await setup(page, request, 'ailleurs-seul');
+  await coachSaves(playwright, a.token, { coachPhone: '06 38 38 38 38', coachName: 'Paul Martin' });
+  await managedElsewhere(page, [a.competitionId]);
+  await page.goto(`/competitions/${a.competitionId}/fiche-club`);
+  await page.getByTestId('competition-changes-banner').getByRole('button', { name: 'Comparer' }).click();
   const dialog = page.getByRole('dialog', { name: `${a.club} : garder quelles informations ?` });
+  await dialog.getByTestId('change-field-coachName').getByRole('radio', { name: /^Annuaire :/ }).check();
   await dialog.getByRole('button', { name: 'Enregistrer dans l’annuaire' }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  const name = ((await (await request.get(`/api/competitions/${a.competitionId}`)).json()) as { name: string }).name;
-  await expect(page.locator('.mantine-Notification-root').filter({ hasText: `Annuaire enregistré. Le club de ${name} reste à mettre à jour après le retour de la main.` })).toBeVisible();
-  expect((await entryOf(request, a.entry.id)).coachPhone).toBe('06 36 36 36 36');
+  await expect(noteOf(page, `Annuaire enregistré. Le club de ${await nameOf(request, a.competitionId)} reste à mettre à jour après le retour de la main.`)).toBeVisible();
+  expect((await entryOf(request, a.entry.id)).coachPhone).toBe('06 38 38 38 38');
+});
+
+test('compétition gérée ailleurs, valeur de la compétition choisie : la fenêtre se ferme sans notification, il ne reste rien à mettre à jour', async ({ page, request, playwright }) => {
+  const a = await setup(page, request, 'ailleurs-garde');
+  await coachSaves(playwright, a.token, { coachPhone: '06 39 39 39 39' });
+  await managedElsewhere(page, [a.competitionId]);
+  await page.goto(`/competitions/${a.competitionId}/fiche-club`);
+  await page.getByTestId('competition-changes-banner').getByRole('button', { name: 'Comparer' }).click();
+  const dialog = page.getByRole('dialog', { name: `${a.club} : garder quelles informations ?` });
+  await expect(dialog.getByRole('radio', { name: /^Compétition : 06 39/ })).toBeChecked();
+  await dialog.getByRole('button', { name: 'Enregistrer dans l’annuaire' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('.mantine-Notification-root').filter({ hasText: 'Annuaire enregistré' })).toHaveCount(0);
+  expect((await entryOf(request, a.entry.id)).coachPhone).toBe('06 39 39 39 39');
+});
+
+test('960 px : les adresses courtes et ordinaires tiennent sur une ligne dans l’annuaire, l’onglet Clubs et les invitations', async ({ page, request }) => {
+  const run = Date.now();
+  const competitionId = await newCompetition(page, request, `Coupe adresses ${run}`);
+  const emails = ['coach@lac.example', 'tresor@sud.example', 'contact@dojonice.example'];
+  const clubs: string[] = [];
+  for (const [i, email] of emails.entries()) {
+    const club = `Dojo ${'Z'.repeat(i + 1)} adresses ${run}`;
+    const entry = (await (await request.post('/api/club-directory', { data: { name: club, affiliationNumber: null, coachName: 'Marc Durand', coachPhone: '06 11 22 33 44', coachEmails: [email], notes: null } })).json()) as { id: string };
+    await inviteWithLink(request, competitionId, entry.id);
+    clubs.push(club);
+  }
+  await page.setViewportSize({ width: 960, height: 700 });
+  const broken = (rows: ReturnType<Page['locator']>) =>
+    rows.locator('p').evaluateAll((els) => els.filter((el) => /@/.test(el.textContent!) && el.getBoundingClientRect().height > 1.6 * parseFloat(getComputedStyle(el).lineHeight)).map((el) => el.textContent));
+  const seen = (rows: ReturnType<Page['locator']>) => rows.getByText('@', { exact: false }).count();
+
+  await page.goto('/annuaire');
+  const dir = page.getByTestId('directory-row').filter({ hasText: `adresses ${run}` });
+  await expect(dir).toHaveCount(3);
+  expect(await broken(dir)).toEqual([]);
+  expect(await seen(dir)).toBe(3);
+
+  await page.goto(`/competitions/${competitionId}/clubs`);
+  const tab = page.getByTestId('club-row');
+  await expect(tab).toHaveCount(3);
+  expect(await broken(tab)).toEqual([]);
+
+  await page.goto(`/competitions/${competitionId}/fiche-club`);
+  const inv = page.getByTestId('invitation-row');
+  await expect(inv).toHaveCount(3);
+  expect(await broken(inv)).toEqual([]);
+  expect(clubs).toHaveLength(3);
 });
