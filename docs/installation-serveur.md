@@ -162,10 +162,22 @@ rsync -a utilisateur@serveur:shidokan/data/sauvegardes/ ~/sauvegardes-shidokan/
        ports:
          - "127.0.0.1:3000:3000"
    ```
-2. Dans votre serveur web, faites suivre le domaine (en HTTPS) vers `http://127.0.0.1:3000`. Transmettez les en-têtes `Host`, `X-Forwarded-For` et `X-Forwarded-Proto`, et autorisez des requêtes de 20 Mo (import des fiches). `X-Forwarded-For` doit contenir **seulement** l'adresse du client vue par votre serveur web : l'application ne fait confiance qu'au dernier intermédiaire, et s'en sert pour limiter les essais de mot de passe.
+2. Dans votre serveur web, faites suivre le domaine (en HTTPS) vers `http://127.0.0.1:3000`. Transmettez les en-têtes `Host`, `X-Forwarded-For` et `X-Forwarded-Proto`, et autorisez des requêtes de 20 Mo (import des fiches), et de 500 Mo pour `/api/restore` (restauration d'une sauvegarde depuis l'application). `X-Forwarded-For` doit contenir **seulement** l'adresse du client vue par votre serveur web : l'application ne fait confiance qu'au dernier intermédiaire, et s'en sert pour limiter les essais de mot de passe.
 
    Exemple pour nginx :
    ```nginx
+   location = /api/restore {
+       proxy_pass http://127.0.0.1:3000;
+       proxy_set_header Host $host;
+       proxy_set_header X-Forwarded-For $remote_addr;
+       proxy_set_header X-Forwarded-Proto $scheme;
+       client_max_body_size 500m;   # restauration d'une sauvegarde
+       access_log off;
+       add_header Strict-Transport-Security "max-age=31536000" always;
+       add_header X-Content-Type-Options "nosniff" always;
+       add_header Referrer-Policy "no-referrer" always;
+       add_header X-Frame-Options "DENY" always;
+   }
    location / {
        proxy_pass http://127.0.0.1:3000;
        proxy_set_header Host $host;
