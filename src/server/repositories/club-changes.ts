@@ -4,7 +4,8 @@ import { normalizeName } from '../../domain/names.js';
 import type { AppDb } from '../db/client.js';
 import { clubChanges, clubDirectory, clubs, competitions } from '../db/schema.js';
 import { getManagement, ReadOnlyCompetitionError, readOnlyMessage } from '../sync/ownership.js';
-import { checkNumber, DirectoryConflictError, updateDirectoryEntry } from './directory.js';
+import { competitionChanged } from '../events.js';
+import { DirectoryConflictError, updateDirectoryEntry } from './directory.js';
 import { NotFoundError } from './registrations.js';
 
 type ClubRow = typeof clubs.$inferSelect;
@@ -120,7 +121,10 @@ function reconcileChange(db: AppDb, clubId: string): void {
   const club = db.select().from(clubs).where(eq(clubs.id, clubId)).get();
   const entry = club?.directoryClubId ? db.select().from(clubDirectory).where(eq(clubDirectory.id, club.directoryClubId)).get() : undefined;
   if (!club || !entry || !differingFields(clubValues(club, entry), directoryValues(entry)).length) db.delete(clubChanges).where(eq(clubChanges.clubId, clubId)).run();
-  else if (row.directoryId !== entry.id) db.update(clubChanges).set({ directoryId: entry.id }).where(eq(clubChanges.clubId, clubId)).run();
+  else {
+    // Le changement survit : ses valeurs sont celles du club maintenant (un champ appliqué depuis la fiche ne doit pas laisser l'ancien état).
+    db.update(clubChanges).set({ directoryId: entry.id, valuesJson: JSON.stringify(clubValues(club, entry)) }).where(eq(clubChanges.clubId, clubId)).run();
+  }
 }
 
 /** Numéro propre au club pour une valeur voulue : celui de la fiche se suit (null) ; effacé alors que la fiche en a un : `''`. */
@@ -137,6 +141,14 @@ function assertWritable(db: AppDb, competitionId: string): void {
   const management = getManagement(db, competitionId);
   if (!management.managedHere) throw new ReadOnlyCompetitionError(readOnlyMessage(management));
   if (!isUpcoming(competition.date, localToday())) throw new DirectoryConflictError('Cette compétition n’est plus à venir : ses clubs ne sont pas modifiés.');
+}
+
+/** Une autre fiche de l'annuaire porte déjà ce nom (casse et accents ignorés) ; un doublon déjà là n'empêche pas de garder le nom actuel. */
+function assertEntryNameFree(db: AppDb, entry: EntryRow, name: string): void {
+  const key = normalizeName(name);
+  if (key === entry.nameKey) return;
+  const clash = db.select().from(clubDirectory).where(eq(clubDirectory.nameKey, key)).all().find((e) => e.id !== entry.id);
+  if (clash) throw new DirectoryConflictError(`Une autre fiche de l’annuaire porte déjà le nom « ${clash.name} ».`);
 }
 
 function assertNameFree(db: AppDb, club: ClubRow, name: string): void {
@@ -158,42 +170,63 @@ function writeClubValues(db: AppDb, club: ClubRow, entry: EntryRow, values: Part
 
 export interface ResolveInput {
   directoryVersion: number;
+  /** `changedAt` du changement tel que la comparaison l'affichait. */
+  changedAt: string;
   values: ClubValues;
   applyToClub: boolean;
 }
 
+const STALE = 'Cette fiche vient de changer : rouvrez la comparaison.';
+
+/** Le changement à examiner d'un club, tel que la liste le présente : ni ignoré, ni sur une fiche archivée, et inchangé depuis l'affichage. */
+function openChange(db: AppDb, clubId: string, changedAt: string) {
+  const row = db.select().from(clubChanges).where(eq(clubChanges.clubId, clubId)).get();
+  const club = db.select().from(clubs).where(eq(clubs.id, clubId)).get();
+  const entry = club?.directoryClubId ? db.select().from(clubDirectory).where(eq(clubDirectory.id, club.directoryClubId)).get() : undefined;
+  if (!row || !club || !entry || row.ignored || entry.archived) throw new NotFoundError('Ce changement n’existe plus.');
+  if (row.changedAt !== changedAt) throw new DirectoryConflictError(STALE);
+  return { row, club, entry };
+}
+
 /**
  * Enregistre dans l'annuaire les valeurs choisies pour un changement à examiner, et dans le club aussi si `applyToClub`. Tout ou rien :
- * fiche modifiée depuis l'ouverture de la comparaison, numéro d'une autre fiche, nom déjà pris, compétition gérée ailleurs ou passée
- * refusent sans rien écrire. Les autres changements de la même fiche qui deviennent identiques sont fermés.
+ * fiche ou club modifiés depuis l'ouverture de la comparaison, numéro ou nom d'une autre fiche, nom déjà pris dans la compétition, compétition
+ * gérée ailleurs ou passée refusent sans rien écrire. Les autres changements de la même fiche qui deviennent identiques sont fermés.
  */
 export function resolveClubChange(db: AppDb, clubId: string, input: ResolveInput): void {
+  const touched = new Set<string>();
   db.transaction((tx) => {
     const t = asTx(tx);
-    const row = t.select().from(clubChanges).where(eq(clubChanges.clubId, clubId)).get();
-    const club = t.select().from(clubs).where(eq(clubs.id, clubId)).get();
-    if (!row || !club) throw new NotFoundError('Ce changement n’existe plus.');
-    const entry = t.select().from(clubDirectory).where(eq(clubDirectory.id, club.directoryClubId ?? row.directoryId)).get();
-    if (!entry) throw new NotFoundError('Club introuvable dans l’annuaire');
-    if ((entry.version ?? 0) !== input.directoryVersion) throw new DirectoryConflictError('Cette fiche vient de changer : rouvrez la comparaison.');
+    const { club, entry } = openChange(t, clubId, input.changedAt);
+    if ((entry.version ?? 0) !== input.directoryVersion) throw new DirectoryConflictError(STALE);
     if (input.applyToClub) {
       assertWritable(db, club.competitionId);
       assertNameFree(t, club, input.values.name);
     }
-    checkNumber(t, input.values.affiliationNumber, entry.id);
+    assertEntryNameFree(t, entry, input.values.name);
     const { name, coachName, coachPhone, coachEmails, affiliationNumber } = input.values;
-    updateDirectoryEntry(t, entry.id, { name, coachName, coachPhone, coachEmails, affiliationNumber });
+    updateDirectoryEntry(t, entry.id, { name, coachName, coachPhone, coachEmails, affiliationNumber }); // contrôle aussi le numéro (une autre fiche le porte)
     const updated = t.select().from(clubDirectory).where(eq(clubDirectory.id, entry.id)).get()!;
     if (input.applyToClub) writeClubValues(t, club, updated, input.values);
     t.delete(clubChanges).where(eq(clubChanges.clubId, clubId)).run();
-    for (const other of t.select().from(clubChanges).where(eq(clubChanges.directoryId, entry.id)).all()) reconcileChange(t, other.clubId);
+    touched.add(club.competitionId);
+    for (const other of t.select().from(clubChanges).where(eq(clubChanges.directoryId, entry.id)).all()) {
+      reconcileChange(t, other.clubId);
+      touched.add(other.competitionId);
+    }
   });
+  for (const id of touched) competitionChanged(id);
 }
 
-/** Ignore un changement : il ne revient que si une valeur du club change de nouveau. */
-export function ignoreClubChange(db: AppDb, clubId: string): void {
-  const done = db.update(clubChanges).set({ ignored: true }).where(eq(clubChanges.clubId, clubId)).run();
-  if (!done.changes) throw new NotFoundError('Ce changement n’existe plus.');
+/** Ignore un changement tel que la comparaison l'affichait : il ne revient que si une valeur du club change de nouveau. */
+export function ignoreClubChange(db: AppDb, clubId: string, changedAt: string): void {
+  const competitionId = db.transaction((tx) => {
+    const t = asTx(tx);
+    const { club } = openChange(t, clubId, changedAt);
+    t.update(clubChanges).set({ ignored: true }).where(eq(clubChanges.clubId, clubId)).run();
+    return club.competitionId;
+  });
+  competitionChanged(competitionId);
 }
 
 export interface UpcomingLine {
@@ -210,16 +243,15 @@ export interface UpcomingLine {
 }
 
 /**
- * Après la modification d'une fiche : pour chaque club relié d'une compétition à venir, chaque champ que la fiche a changé (par rapport à
- * `before`, ses valeurs d'avant) et sur lequel le club diffère de la nouvelle fiche. `apply` si le club avait la valeur d'avant, sinon `conflict`.
- * Une fiche archivée ne propose rien.
+ * Après la modification d'une fiche : si un champ comparé a changé (par rapport à `before`, ses valeurs d'avant), pour chaque club relié d'une
+ * compétition à venir, tous les champs sur lesquels il diffère de la nouvelle fiche. `apply` si le club avait la valeur d'avant, sinon `conflict`
+ * (y compris une différence restée d'une comparaison fermée sans rien appliquer). Une fiche archivée ne propose rien.
  */
 export function upcomingDifferences(db: AppDb, entryId: string, before: ClubValues): UpcomingLine[] {
   const entry = db.select().from(clubDirectory).where(eq(clubDirectory.id, entryId)).get();
   if (!entry || entry.archived) return [];
   const directory = directoryValues(entry);
-  const changed = differingFields(directory, before);
-  if (!changed.length) return [];
+  if (!differingFields(directory, before).length) return [];
   const lines: UpcomingLine[] = [];
   const candidates = db
     .select({ club: clubs, competition: competitions })
@@ -231,7 +263,7 @@ export function upcomingDifferences(db: AppDb, entryId: string, before: ClubValu
     const values = clubValues(club, entry);
     const differing = differingFields(values, directory);
     const management = getManagement(db, competition.id);
-    for (const field of changed.filter((f) => differing.includes(f))) {
+    for (const field of differing) {
       lines.push({
         clubId: club.id, competitionId: competition.id, competitionName: competition.name, competitionDate: competition.date, managedHere: management.managedHere,
         ownerName: management.ownerName, field, kind: propagationKind(field, values, before), clubValue: values[field], directoryValue: directory[field],
@@ -247,23 +279,49 @@ export interface ApplyResult {
   message: string | null;
 }
 
-/** Reporte des champs de la fiche sur des clubs. Une transaction par club : un refus (nom pris, gérée ailleurs, passée) n'arrête pas les autres. */
-export function applyDirectoryToClubs(db: AppDb, entryId: string, items: { clubId: string; fields: ClubField[] }[]): ApplyResult[] {
-  return items.map(({ clubId, fields }): ApplyResult => {
+export interface ShownField {
+  field: ClubField;
+  clubValue: unknown;
+  directoryValue: unknown;
+}
+
+const BLANK: ClubValues = { name: '', coachName: null, coachPhone: null, coachEmails: [], affiliationNumber: null };
+/** La valeur affichée est-elle encore la valeur actuelle ? Comparée comme `differingFields` (vide et absent se valent). */
+function sameShown(field: ClubField, shownValue: unknown, current: ClubValues): boolean {
+  if (field === 'coachEmails') return Array.isArray(shownValue) && !differingFields({ ...BLANK, coachEmails: shownValue as string[] }, { ...BLANK, coachEmails: current.coachEmails }).length;
+  if (shownValue !== null && typeof shownValue !== 'string') return false;
+  return !differingFields({ ...BLANK, [field]: shownValue }, { ...BLANK, [field]: current[field] }).length;
+}
+
+/**
+ * Reporte des champs de la fiche sur des clubs. Chaque champ porte les valeurs du club et de la fiche telles que l'organisateur les a vues :
+ * si l'une a changé depuis, le club est refusé. Une transaction par club : un refus (nom pris, gérée ailleurs, passée) n'arrête pas les autres.
+ */
+export function applyDirectoryToClubs(db: AppDb, entryId: string, items: { clubId: string; fields: ShownField[] }[]): ApplyResult[] {
+  if (!db.select().from(clubDirectory).where(eq(clubDirectory.id, entryId)).get()) throw new NotFoundError('Club introuvable dans l’annuaire');
+  const touched = new Set<string>();
+  const results = items.map(({ clubId, fields }): ApplyResult => {
     const club = db.select().from(clubs).where(eq(clubs.id, clubId)).get();
     const competition = club ? db.select().from(competitions).where(eq(competitions.id, club.competitionId)).get() : undefined;
-    const competitionName = competition?.name ?? '';
+    const competitionName = competition?.name ?? 'Compétition inconnue';
     try {
       db.transaction((tx) => {
         const t = asTx(tx);
         const entry = t.select().from(clubDirectory).where(eq(clubDirectory.id, entryId)).get();
         if (!entry) throw new NotFoundError('Club introuvable dans l’annuaire');
-        if (!club || club.directoryClubId !== entryId) throw new DirectoryConflictError('Ce club n’est plus relié à cette fiche.');
-        assertWritable(db, club.competitionId);
+        const current = club ? t.select().from(clubs).where(eq(clubs.id, clubId)).get() : undefined;
+        if (!club || !current) throw new NotFoundError('Ce club n’existe plus.');
+        if (current.directoryClubId !== entryId) throw new DirectoryConflictError('Ce club n’est plus relié à cette fiche.');
+        assertWritable(db, current.competitionId);
         const directory = directoryValues(entry);
-        const chosen = Object.fromEntries(fields.map((f) => [f, directory[f]])) as Partial<ClubValues>;
-        if (chosen.name !== undefined) assertNameFree(t, club, chosen.name);
-        writeClubValues(t, club, entry, chosen);
+        const values = clubValues(current, entry);
+        if (fields.some((f) => !sameShown(f.field, f.clubValue, values) || !sameShown(f.field, f.directoryValue, directory))) {
+          throw new DirectoryConflictError('Ce club ou cette fiche vient de changer : recommencez.');
+        }
+        const chosen = Object.fromEntries(fields.map((f) => [f.field, directory[f.field]])) as Partial<ClubValues>;
+        if (chosen.name !== undefined) assertNameFree(t, current, chosen.name);
+        writeClubValues(t, current, entry, chosen);
+        touched.add(current.competitionId);
       });
       return { competitionName, status: 'applied', message: null };
     } catch (error) {
@@ -271,4 +329,19 @@ export function applyDirectoryToClubs(db: AppDb, entryId: string, items: { clubI
       throw error;
     }
   });
+  for (const id of touched) competitionChanged(id);
+  return results;
+}
+
+/**
+ * Enregistre la modification d'une fiche (les valeurs d'avant sont lues dans la même transaction), puis calcule ce qu'elle change dans les
+ * compétitions à venir. Le calcul est à part : la fiche reste enregistrée même s'il échoue.
+ */
+export function updateDirectoryEntryWithUpcoming(db: AppDb, id: string, patch: Parameters<typeof updateDirectoryEntry>[2]) {
+  const { entry, before } = db.transaction((tx) => {
+    const t = asTx(tx);
+    const row = t.select().from(clubDirectory).where(eq(clubDirectory.id, id)).get();
+    return { before: row ? directoryValues(row) : null, entry: updateDirectoryEntry(t, id, patch) };
+  });
+  return { ...entry, upcoming: before ? upcomingDifferences(db, entry.id, before) : [] };
 }

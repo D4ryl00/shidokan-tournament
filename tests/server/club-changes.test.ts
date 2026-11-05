@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, expect, test } from 'vitest';
+import { onCompetitionChange } from '../../src/server/events.js';
 import type { ClubFormParse } from '../../src/domain/club-form.js';
 import { buildApp } from '../../src/server/app.js';
 import { openDb } from '../../src/server/db/client.js';
@@ -9,6 +10,13 @@ import { importClubForm } from '../../src/server/repositories/registrations.js';
 import { BLANK, buildFfkWorkbook, type FfkLine } from '../helpers/ffk-fixture.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
+/** Date locale `AAAA-MM-JJ` à n jours d'aujourd'hui : les compétitions « à venir » des tests le restent quelle que soit la date d'exécution. */
+function inDays(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  const p = (v: number) => String(v).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
 let app: FastifyInstance;
 let dbPath: string;
 let base: string;
@@ -24,13 +32,13 @@ async function invite(competition: string, id: string) {
   await app.inject({ method: 'POST', url: `${competition}/invitations`, payload: { directoryIds: [id] } });
   const [row] = (await app.inject({ method: 'GET', url: `${competition}/invitations` })).json();
   const link = (await app.inject({ method: 'POST', url: `${competition}/invitations/${row.clubId}/links` })).json();
-  await app.inject({ method: 'PATCH', url: `${competition}/club-entry`, payload: { status: 'open', deadline: '2026-11-15' } });
+  await app.inject({ method: 'PATCH', url: `${competition}/club-entry`, payload: { status: 'open', deadline: inDays(5) } });
   return { token: link.token as string, clubId: link.clubId as string };
 }
 beforeEach(async () => {
   dbPath = tmpDbPath();
   app = await buildApp({ clubServices: true, dbPath });
-  base = `/api/competitions/${(await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22', location: 'Nice' } })).json().id}`;
+  base = `/api/competitions/${(await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: inDays(10), location: 'Nice' } })).json().id}`;
   entryId = await createEntry({ name: 'Tani Dojo', coachName: 'Jean', coachPhone: '0600000000', coachEmails: ['jean@tani.example'] });
   ({ token, clubId } = await invite(base, entryId));
 });
@@ -100,7 +108,7 @@ test('numéro : un numéro libre n’est pas écrit dans la fiche et la page le 
 
 test('numéro : celui de la fiche, laissé en place, ne crée pas de différence', async () => {
   const withNumber = await createEntry({ name: 'Autre Dojo', affiliationNumber: '0061111' });
-  const other = (await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Open', date: '2026-12-05', location: 'Lyon' } })).json().id;
+  const other = (await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Open', date: inDays(25), location: 'Lyon' } })).json().id;
   const access = await invite(`/api/competitions/${other}`, withNumber);
   const get = async () => (await app.inject({ method: 'GET', url: `/api/inscription/${access.token}` })).json().club;
   expect((await get()).affiliationNumber).toBe('0061111');
@@ -134,7 +142,7 @@ test('numéro : refus conservés, sans rien écrire', async () => {
 
 test('onglet Clubs : un nouveau nom et un téléphone créent un changement d’origine « competition », la fiche reste, même vide', async () => {
   const bare = await createEntry({ name: 'Sans Coordonnées' });
-  const other = (await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Open', date: '2026-12-05', location: 'Lyon' } })).json().id;
+  const other = (await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Open', date: inDays(25), location: 'Lyon' } })).json().id;
   const otherBase = `/api/competitions/${other}`;
   const club = (await app.inject({ method: 'POST', url: `${otherBase}/clubs/from-directory`, payload: { directoryId: bare } })).json();
   expect(changes()).toHaveLength(0);
@@ -177,7 +185,7 @@ test('club sans fiche : la fiche créée par linkClub prend les valeurs du club,
 /** Fiche vide d'un club "Vide Dojo" et son accès, dans une autre compétition. */
 async function emptyFicheAccess() {
   const id = await createEntry({ name: 'Vide Dojo' });
-  const other = (await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Open', date: '2026-12-05', location: 'Lyon' } })).json().id;
+  const other = (await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Open', date: inDays(25), location: 'Lyon' } })).json().id;
   const access = await invite(`/api/competitions/${other}`, id);
   const save = (over: Record<string, unknown>) => app.inject({ method: 'PATCH', url: `/api/inscription/${access.token}/club`, payload: header({ coachName: null, coachPhone: null, coachEmails: [], ...over }) });
   const fiche = async () => ((await app.inject({ method: 'GET', url: '/api/club-directory' })).json() as Record<string, unknown>[]).find((e) => e.id === id)!;
@@ -218,7 +226,7 @@ test('import FFK après une saisie du coach : pas de ligne créée, la ligne exi
 
 test('import d’une fiche et import FFK d’un club neuf ne créent aucune ligne', async () => {
   const repoDb = openDb(dbPath);
-  const other = (await createCompetition(repoDb, { name: 'Autre', date: '2026-12-12' })).id;
+  const other = (await createCompetition(repoDb, { name: 'Autre', date: inDays(32) })).id;
   await importClubForm(repoDb, other, { header: { club: 'Neuf Dojo', coachName: 'Z', coachPhone: '0600', coachEmails: [], preApproval: false }, rows: [] });
   repoDb.$client.close();
   expect(changes()).toHaveLength(0);
@@ -303,11 +311,14 @@ test('numéro effacé : « » seulement si la fiche a un numéro', async () => {
 
 // --- Décisions et report vers les compétitions à venir ---
 
-type View = { clubId: string; competitionId: string; directoryVersion: number; fields: string[]; values: Record<string, unknown>; directory: Record<string, unknown>; managedHere: boolean; upcoming: boolean };
+type View = { clubId: string; competitionId: string; directoryVersion: number; changedAt: string; fields: string[]; values: Record<string, unknown>; directory: Record<string, unknown>; managedHere: boolean; upcoming: boolean };
 const list = async (query = '') => (await app.inject({ method: 'GET', url: `/api/club-changes${query}` })).json() as View[];
-const resolve = (id: string, version: number, values: Record<string, unknown>, applyToClub = false) =>
-  app.inject({ method: 'POST', url: `/api/club-changes/${id}/resolve`, payload: { directoryVersion: version, values: { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], name: 'Tani Dojo', ...values }, applyToClub } });
+const resolve = (id: string, view: { directoryVersion: number; changedAt: string }, values: Record<string, unknown>, applyToClub = false) =>
+  app.inject({ method: 'POST', url: `/api/club-changes/${id}/resolve`, payload: { directoryVersion: view.directoryVersion, changedAt: view.changedAt, values: { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], name: 'Tani Dojo', ...values }, applyToClub } });
 const patchEntry = async (payload: Record<string, unknown>, id = entryId) => app.inject({ method: 'PATCH', url: `/api/club-directory/${id}`, payload });
+const ignore = (id: string, view: { changedAt: string }) => app.inject({ method: 'POST', url: `/api/club-changes/${id}/ignore`, payload: { changedAt: view.changedAt } });
+const applyToClubs = (items: unknown[], id = entryId) => app.inject({ method: 'POST', url: `/api/club-directory/${id}/apply-to-clubs`, payload: { items } });
+const shown = (field: string, clubValue: unknown, directoryValue: unknown) => ({ field, clubValue, directoryValue });
 type Line = { clubId: string; competitionName: string; managedHere: boolean; field: string; kind: string; clubValue: unknown; directoryValue: unknown };
 const clubRow = (id: string) => {
   const db = new Database(dbPath, { readonly: true });
@@ -335,7 +346,7 @@ test('GET /api/club-changes : ignoré et archivé absents, désarchiver fait rev
   expect(await list()).toHaveLength(0);
   await patchEntry({ archived: false });
   expect(await list()).toHaveLength(1);
-  expect((await app.inject({ method: 'POST', url: `/api/club-changes/${clubId}/ignore` })).statusCode).toBe(204);
+  expect((await ignore(clubId, view!)).statusCode).toBe(204);
   expect(await list()).toHaveLength(0);
   expect(changes()).toHaveLength(1);
   await patchClub({ coachPhone: '0622222222' });
@@ -349,7 +360,7 @@ test('GET /api/club-changes : ignoré et archivé absents, désarchiver fait rev
 test('resolve : la fiche prend les valeurs, le club aussi avec applyToClub, la ligne disparaît', async () => {
   await patchClub({ coachPhone: '0611111111', coachName: 'Paul' });
   const [view] = await list();
-  const res = await resolve(clubId, view!.directoryVersion, { coachName: 'Paul', coachPhone: '0633333333', coachEmails: ['jean@tani.example'], affiliationNumber: '0060893' }, true);
+  const res = await resolve(clubId, view!, { coachName: 'Paul', coachPhone: '0633333333', coachEmails: ['jean@tani.example'], affiliationNumber: '0060893' }, true);
   expect(res.statusCode).toBe(204);
   expect(await directory()).toMatchObject({ coachName: 'Paul', coachPhone: '0633333333', affiliationNumber: '0060893' });
   expect(clubRow(clubId)).toMatchObject({ coach_phone: '0633333333', affiliation_number: null });
@@ -359,7 +370,7 @@ test('resolve : la fiche prend les valeurs, le club aussi avec applyToClub, la l
 test('resolve sans applyToClub : le club garde ses valeurs', async () => {
   await patchClub({ coachPhone: '0611111111' });
   const [view] = await list();
-  expect((await resolve(clubId, view!.directoryVersion, { coachName: 'Jean', coachPhone: '0644444444', coachEmails: ['jean@tani.example'] })).statusCode).toBe(204);
+  expect((await resolve(clubId, view!, { coachName: 'Jean', coachPhone: '0644444444', coachEmails: ['jean@tani.example'] })).statusCode).toBe(204);
   expect(await directory()).toMatchObject({ coachPhone: '0644444444' });
   expect(clubRow(clubId).coach_phone).toBe('0611111111');
   expect(changes()).toHaveLength(0);
@@ -369,19 +380,19 @@ test('resolve : effacement choisi → la fiche est vidée', async () => {
   await patchClub({ coachPhone: null, coachEmails: [] });
   const [view] = await list();
   expect(view!.fields).toEqual(['coachPhone', 'coachEmails']);
-  expect((await resolve(clubId, view!.directoryVersion, { coachName: 'Jean' })).statusCode).toBe(204);
+  expect((await resolve(clubId, view!, { coachName: 'Jean' })).statusCode).toBe(204);
   expect(await directory()).toMatchObject({ coachPhone: null, coachEmails: [] });
 });
 
 test('resolve : un autre changement sur la même fiche devient identique → supprimé, sinon gardé', async () => {
-  const same = await otherCompetition('Open A', '2026-12-06', '0611111111');
-  const different = await otherCompetition('Open B', '2026-12-13', '0699999999');
+  const same = await otherCompetition('Open A', inDays(20), '0611111111');
+  const different = await otherCompetition('Open B', inDays(30), '0699999999');
   await patchClub({ coachPhone: '0611111111' });
   expect(changes()).toHaveLength(3);
   // les clubs modifiés par l'organisateur ont aussi une ligne
   expect((await list()).map((v) => v.clubId).sort()).toEqual([clubId, same.clubId, different.clubId].sort());
   const mine = (await list()).find((v) => v.clubId === clubId)!;
-  expect((await resolve(clubId, mine.directoryVersion, { coachName: 'Jean', coachPhone: '0611111111', coachEmails: ['jean@tani.example'] })).statusCode).toBe(204);
+  expect((await resolve(clubId, mine, { coachName: 'Jean', coachPhone: '0611111111', coachEmails: ['jean@tani.example'] })).statusCode).toBe(204);
   expect((await list()).map((v) => v.clubId)).toEqual([different.clubId]);
 });
 
@@ -389,7 +400,7 @@ test('resolve, refus : fiche modifiée depuis l’ouverture (409), rien d’écr
   await patchClub({ coachPhone: '0611111111' });
   const [view] = await list();
   await patchEntry({ notes: 'modifiée entre-temps' });
-  const res = await resolve(clubId, view!.directoryVersion, { coachName: 'Jean', coachPhone: '0655555555', coachEmails: ['jean@tani.example'] }, true);
+  const res = await resolve(clubId, view!, { coachName: 'Jean', coachPhone: '0655555555', coachEmails: ['jean@tani.example'] }, true);
   expect(res.statusCode).toBe(409);
   expect(res.json().error).toBe('Cette fiche vient de changer : rouvrez la comparaison.');
   expect(await directory()).toMatchObject({ coachPhone: '0600000000' });
@@ -401,7 +412,7 @@ test('resolve, refus : numéro d’une autre fiche', async () => {
   await createEntry({ name: 'Autre Dojo', affiliationNumber: '0060893' });
   await patchClub({ coachPhone: '0611111111' });
   const [view] = await list();
-  const res = await resolve(clubId, view!.directoryVersion, { coachName: 'Jean', coachPhone: '0611111111', coachEmails: ['jean@tani.example'], affiliationNumber: '0060893' });
+  const res = await resolve(clubId, view!, { coachName: 'Jean', coachPhone: '0611111111', coachEmails: ['jean@tani.example'], affiliationNumber: '0060893' });
   expect(res.statusCode).toBe(409);
   expect(res.json().error).toBe('Ce numéro d’affiliation est déjà celui de « Autre Dojo ».');
   expect(await directory()).toMatchObject({ coachPhone: '0600000000' });
@@ -413,11 +424,11 @@ test('resolve, refus : applyToClub sur une compétition gérée ailleurs ou pass
   const [view] = await list();
   const values = { coachName: 'Jean', coachPhone: '0677777777', coachEmails: ['jean@tani.example'] };
   raw("update competitions set owner_instance_id = 'ailleurs', owner_name = 'PC Nice' where id = ?", view!.competitionId);
-  const managed = await resolve(clubId, view!.directoryVersion, values, true);
+  const managed = await resolve(clubId, view!, values, true);
   expect(managed.statusCode).toBe(409);
   expect(managed.json().error).toContain('Compétition gérée par PC Nice');
-  raw('update competitions set owner_instance_id = null, owner_name = null, date = ? where id = ?', '2026-01-01', view!.competitionId);
-  const past = await resolve(clubId, view!.directoryVersion, values, true);
+  raw('update competitions set owner_instance_id = null, owner_name = null, date = ? where id = ?', inDays(-200), view!.competitionId);
+  const past = await resolve(clubId, view!, values, true);
   expect(past.statusCode).toBe(409);
   expect(await directory()).toMatchObject({ coachPhone: '0600000000' });
   expect(changes()).toHaveLength(1);
@@ -428,7 +439,7 @@ test('resolve, refus : nom déjà pris dans la compétition, rien d’écrit', a
   await app.inject({ method: 'POST', url: `${base}/clubs/from-directory`, payload: { directoryId: (await (app.inject({ method: 'GET', url: '/api/club-directory' }))).json().find((e: { name: string }) => e.name === 'Rival Dojo').id } });
   await patchClub({ coachPhone: '0611111111' });
   const [view] = await list();
-  const res = await resolve(clubId, view!.directoryVersion, { name: 'Rival Dojo', coachName: 'Jean', coachPhone: '0611111111', coachEmails: ['jean@tani.example'] }, true);
+  const res = await resolve(clubId, view!, { name: 'Rival Dojo', coachName: 'Jean', coachPhone: '0611111111', coachEmails: ['jean@tani.example'] }, true);
   expect(res.statusCode).toBe(409);
   expect(await directory()).toMatchObject({ name: 'Tani Dojo' });
 });
@@ -442,9 +453,9 @@ test('PATCH fiche : upcoming vide sans club qui diffère, notes ou archivage seu
 });
 
 test('PATCH fiche : apply, conflict, compétition passée absente, gérée ailleurs présente, fiche enregistrée', async () => {
-  const conflict = await otherCompetition('Open A', '2026-12-06', '0688888888');
-  const past = await otherCompetition('Ancienne', '2026-01-10');
-  const away = await otherCompetition('Chez PC', '2026-12-20');
+  const conflict = await otherCompetition('Open A', inDays(20), '0688888888');
+  const past = await otherCompetition('Ancienne', inDays(-300));
+  const away = await otherCompetition('Chez PC', inDays(40));
   raw("update competitions set owner_instance_id = 'ailleurs', owner_name = 'PC Nice' where id = ?", away.id);
   const res = await patchEntry({ coachPhone: '0612121212' });
   expect(res.statusCode).toBe(200);
@@ -465,8 +476,8 @@ test('PATCH fiche : numéro refusé → 409 et upcoming sans objet', async () =>
 });
 
 test('apply-to-clubs : champs choisis (valeur vide comprise), nom pris refusé sans bloquer les autres, gérée ailleurs refusée, ligne identique supprimée', async () => {
-  const taken = await otherCompetition('Open A', '2026-12-06');
-  const away = await otherCompetition('Chez PC', '2026-12-20');
+  const taken = await otherCompetition('Open A', inDays(20));
+  const away = await otherCompetition('Chez PC', inDays(40));
   await app.inject({ method: 'POST', url: `/api/competitions/${taken.id}/clubs`, payload: { name: 'Tani Karaté' } });
   await patchEntry({ coachPhone: null, name: 'Tani Karaté' });
   raw("update competitions set owner_instance_id = 'ailleurs', owner_name = 'PC Nice' where id = ?", away.id);
@@ -474,7 +485,13 @@ test('apply-to-clubs : champs choisis (valeur vide comprise), nom pris refusé s
   expect(changes()).toHaveLength(1);
   const res = await app.inject({
     method: 'POST', url: `/api/club-directory/${entryId}/apply-to-clubs`,
-    payload: { items: [{ clubId, fields: ['name', 'coachPhone'] }, { clubId: taken.clubId, fields: ['name', 'coachPhone'] }, { clubId: away.clubId, fields: ['name'] }] },
+    payload: {
+      items: [
+        { clubId, fields: [shown('name', 'Tani Dojo', 'Tani Karaté'), shown('coachPhone', '0611111111', null)] },
+        { clubId: taken.clubId, fields: [shown('name', 'Tani Dojo', 'Tani Karaté'), shown('coachPhone', '0600000000', null)] },
+        { clubId: away.clubId, fields: [shown('name', 'Tani Dojo', 'Tani Karaté')] },
+      ],
+    },
   });
   expect(res.statusCode).toBe(200);
   const [mine, clash, remote] = res.json() as { competitionName: string; status: string; message: string | null }[];
@@ -486,4 +503,124 @@ test('apply-to-clubs : champs choisis (valeur vide comprise), nom pris refusé s
   expect(clubRow(clubId)).toMatchObject({ name: 'Tani Karaté', name_key: 'TANI KARATE', coach_phone: null });
   expect(clubRow(taken.clubId).name).toBe('Tani Dojo');
   expect(changes().find((c) => c.club_id === clubId)).toBeUndefined();
+});
+
+const STALE = 'Cette fiche vient de changer : rouvrez la comparaison.';
+const sleep = () => new Promise((r) => setTimeout(r, 5));
+
+test('comparaison ouverte, le coach enregistre une nouvelle valeur : resolve (avec ou sans applyToClub) et ignore refusent', async () => {
+  await patchClub({ coachPhone: '0611111111' });
+  const [view] = await list();
+  await sleep();
+  await patchClub({ coachPhone: '0622222222' });
+  const values = { coachName: 'Jean', coachPhone: '0699999999', coachEmails: ['jean@tani.example'] };
+  for (const apply of [false, true]) {
+    const res = await resolve(clubId, view!, values, apply);
+    expect(res.statusCode, `applyToClub ${apply}`).toBe(409);
+    expect(res.json().error).toBe(STALE);
+  }
+  const ignored = await ignore(clubId, view!);
+  expect(ignored.statusCode).toBe(409);
+  expect(ignored.json().error).toBe(STALE);
+  expect(await directory()).toMatchObject({ coachPhone: '0600000000' });
+  expect(clubRow(clubId).coach_phone).toBe('0622222222');
+  expect(await list()).toHaveLength(1);
+});
+
+test('apply-to-clubs : valeur du club changée depuis l’affichage → refusé ; fiche changée depuis l’affichage → refusé', async () => {
+  await patchEntry({ coachPhone: '0612121212' });
+  await patchClub({ coachPhone: '0633333333' });
+  const stale = await applyToClubs([{ clubId, fields: [shown('coachPhone', '0600000000', '0612121212')] }]);
+  expect(stale.json()[0]).toMatchObject({ status: 'refused', message: 'Ce club ou cette fiche vient de changer : recommencez.' });
+  expect(clubRow(clubId).coach_phone).toBe('0633333333');
+  const changedEntry = await applyToClubs([{ clubId, fields: [shown('coachPhone', '0633333333', '0600000000')] }]);
+  expect(changedEntry.json()[0]).toMatchObject({ status: 'refused' });
+  expect(clubRow(clubId).coach_phone).toBe('0633333333');
+  const fresh = await applyToClubs([{ clubId, fields: [shown('coachPhone', '0633333333', '0612121212')] }]);
+  expect(fresh.json()[0]).toMatchObject({ status: 'applied' });
+  expect(clubRow(clubId).coach_phone).toBe('0612121212');
+});
+
+test('resolve : nom déjà pris par une autre fiche → 409, avec et sans applyToClub, rien d’écrit', async () => {
+  await createEntry({ name: 'Rival Dojo' });
+  await patchClub({ coachPhone: '0611111111' });
+  const [view] = await list();
+  for (const apply of [false, true]) {
+    const res = await resolve(clubId, view!, { name: 'rival dojo', coachName: 'Jean', coachPhone: '0611111111', coachEmails: ['jean@tani.example'] }, apply);
+    expect(res.statusCode, `applyToClub ${apply}`).toBe(409);
+    expect(res.json().error).toContain('Rival Dojo');
+  }
+  expect(await directory()).toMatchObject({ name: 'Tani Dojo', coachPhone: '0600000000' });
+  expect(changes()).toHaveLength(1);
+});
+
+test('PATCH fiche : dès qu’un champ change, tous les champs qui diffèrent sont proposés ; une différence restée d’une fenêtre fermée est un conflit', async () => {
+  const first = await patchEntry({ coachPhone: '0612121212' });
+  expect((first.json().upcoming as Line[]).map((l) => `${l.field}:${l.kind}`)).toEqual(['coachPhone:apply']);
+  const second = await patchEntry({ coachName: 'Paul' });
+  const lines = second.json().upcoming as Line[];
+  expect(lines.map((l) => `${l.field}:${l.kind}`).sort()).toEqual(['coachName:apply', 'coachPhone:conflict']);
+  // notes seules : rien
+  expect((await patchEntry({ notes: 'x' })).json().upcoming).toEqual([]);
+});
+
+test('resolve : une ligne ignorée ou une fiche archivée n’est plus résolue (404)', async () => {
+  await patchClub({ coachPhone: '0611111111' });
+  const [view] = await list();
+  const values = { coachName: 'Jean', coachPhone: '0611111111', coachEmails: ['jean@tani.example'] };
+  await patchEntry({ archived: true });
+  expect((await resolve(clubId, view!, values)).statusCode).toBe(404);
+  await patchEntry({ archived: false });
+  const [fresh] = await list();
+  expect((await ignore(clubId, fresh!)).statusCode).toBe(204);
+  expect((await resolve(clubId, fresh!, values)).statusCode).toBe(404);
+  expect(await directory()).toMatchObject({ coachPhone: '0600000000' });
+});
+
+test('application partielle : la ligne ignorée ensuite revient si le coach remet son ancienne valeur', async () => {
+  await patchEntry({ name: 'Tani Karaté' });
+  await patchClub({ coachPhone: '0611111111' });
+  await applyToClubs([{ clubId, fields: [shown('name', 'Tani Dojo', 'Tani Karaté')] }]);
+  expect(clubRow(clubId).name).toBe('Tani Karaté');
+  const [view] = await list();
+  expect(view!.fields).toEqual(['coachPhone']);
+  expect((await ignore(clubId, view!)).statusCode).toBe(204);
+  expect(await list()).toHaveLength(0);
+  await patchClub({ coachPhone: '0611111111' });
+  expect(await list()).toHaveLength(0);
+  raw('update clubs set name = ? where id = ?', 'Tani Dojo', clubId);
+  await patchClub({ coachPhone: '0611111111', coachName: 'Marc' });
+  expect(await list()).toHaveLength(1);
+});
+
+test('apply-to-clubs : fiche inconnue → 404 ; club inconnu → refusé avec un nom de compétition non vide', async () => {
+  expect((await applyToClubs([], 'inconnue')).statusCode).toBe(404);
+  const res = await applyToClubs([{ clubId: 'inconnu', fields: [shown('coachPhone', null, null)] }]);
+  expect(res.json()[0].status).toBe('refused');
+  expect(res.json()[0].competitionName).not.toBe('');
+});
+
+test('resolve : un numéro de longueur autre que 7 déjà dans la fiche peut être résolu', async () => {
+  raw("update club_directory set affiliation_number = '12345' where id = ?", entryId);
+  await patchClub({ coachPhone: '0611111111' });
+  const [view] = await list();
+  const res = await resolve(clubId, view!, { coachName: 'Jean', coachPhone: '0611111111', coachEmails: ['jean@tani.example'], affiliationNumber: '12345' });
+  expect(res.statusCode).toBe(204);
+  expect(await directory()).toMatchObject({ affiliationNumber: '12345' });
+});
+
+test('resolve et apply-to-clubs préviennent les postes qui affichent la compétition', async () => {
+  const competitionId = base.split('/').pop()!;
+  const seen: unknown[] = [];
+  const off = onCompetitionChange(competitionId, () => seen.push(1));
+  await patchClub({ coachPhone: '0611111111' });
+  const [view] = await list();
+  seen.length = 0;
+  await resolve(clubId, view!, { coachName: 'Jean', coachPhone: '0611111111', coachEmails: ['jean@tani.example'] }, true);
+  expect(seen).toHaveLength(1);
+  await patchEntry({ coachPhone: '0644444444' });
+  seen.length = 0;
+  await applyToClubs([{ clubId, fields: [shown('coachPhone', '0611111111', '0644444444')] }]);
+  expect(seen).toHaveLength(1);
+  off();
 });
