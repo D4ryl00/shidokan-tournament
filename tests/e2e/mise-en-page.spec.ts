@@ -30,29 +30,6 @@ test('titre de l’onglet du navigateur : l’écran, et la compétition ouverte
   await expect(page).toHaveTitle('Compétitions — Shidokan France');
 });
 
-test('téléphone (320 px) : l’état des inscriptions d’un club se lit en entier', async ({ page }) => {
-  const club = `Dojo étroit ${Date.now()}`;
-  await page.goto('/');
-  await page.getByTestId('nav-directory').click();
-  await page.getByTestId('directory-new').click();
-  await page.getByTestId('directory-name').fill(club);
-  await page.getByTestId('directory-save').click();
-  const id = await createCompetition(page, 'Coupe étroite');
-  await page.goto(`/competitions/${id}/fiche-club`);
-  await page.getByTestId('invite-select').click();
-  await page.getByTestId('invite-select').fill(club);
-  await page.getByRole('option', { name: club }).click();
-  await page.getByTestId('invite-clubs').click();
-  const url = (await page.getByTestId('invitation-url').textContent())!;
-  await page.setViewportSize({ width: 320, height: 700 });
-  await page.goto(url);
-  await expect(page.getByTestId('club-entry-state')).toHaveText('Inscriptions closes : contactez l’organisateur.');
-  expect(await clipped(page)).toEqual([]);
-  // Ni la page ne défile de côté, ni l'état ne sort de l'écran.
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
-  expect((await page.getByTestId('club-entry-state').boundingBox())!.width).toBeLessThanOrEqual(320 - 32);
-});
-
 test('Combats : « Noter » amène le panneau de la catégorie à l’écran', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe défilement');
   const club = (await (await request.post(`/api/competitions/${id}/clubs`, { data: { name: 'Dojo' } })).json()) as { id: string };

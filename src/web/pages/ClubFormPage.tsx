@@ -2,7 +2,7 @@ import { Button, FileButton, Group, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useRef, useState } from 'react';
 import { useParams } from 'react-router';
-import { useGrid, useImportClubForm, usePreviewClubForm } from '../api.js';
+import { useAuthMe, useGrid, useImportClubForm, usePreviewClubForm } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { ClubFormPreviewTable } from '../components/ClubFormPreviewTable.js';
 import { HELP } from '../help.js';
@@ -14,6 +14,7 @@ import { plural } from '../../domain/plural.js';
 export function ClubFormPage() {
   const { id = '' } = useParams();
   const { data: grid } = useGrid(id);
+  const { data: me } = useAuthMe();
   const preview = usePreviewClubForm(id);
   const importForm = useImportClubForm(id);
   const [file, setFile] = useState<File | null>(null);
@@ -44,7 +45,8 @@ export function ClubFormPage() {
 
   return (
     <Stack gap="lg">
-      <OnlineEntryPanel competitionId={id} />
+      {/* Inscriptions en ligne et mails : serveur en ligne seulement ; rien tant que le rôle est inconnu. */}
+      {me?.role === 'serveur' && <OnlineEntryPanel competitionId={id} />}
 
       <SectionCard title={HELP['fiche-club.envoyer'].title} help="fiche-club.envoyer">
         <Group gap="sm">

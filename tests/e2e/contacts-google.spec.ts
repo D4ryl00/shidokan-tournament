@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test';
 import { CONTACTS_NOT_GRANTED, DIRECTORY_CHANGED } from '../../src/domain/google-contacts.js';
-import { GOOGLE_PREVIEW, mockGoogleContacts } from './helpers.js';
+import { GOOGLE_PREVIEW, mockGoogleContacts, SERVER_SESSION } from './helpers.js';
 
-// Google n'est pas joignable ici : les réglages (compte connecté) et l'aperçu sont simulés sur le serveur local habituel.
+// Google n'est pas joignable ici : les réglages (compte connecté) et l'aperçu sont simulés. La synchronisation et les réglages de mail
+// n'existent que sur le serveur en ligne (port 3101), avec la session de l'organisateur.
+test.use({ baseURL: 'http://localhost:3101', storageState: SERVER_SESSION });
 
 test('annuaire : synchroniser avec Google — différences, lien suggéré, nouveau club, plus tard', async ({ page }) => {
   const { applied, previews } = await mockGoogleContacts(page);

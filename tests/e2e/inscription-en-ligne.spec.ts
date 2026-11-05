@@ -1,7 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { createCompetition } from './helpers.js';
+import { createCompetition, SERVER_SESSION } from './helpers.js';
+
+// Mails et inscriptions en ligne : serveur en ligne seulement (port 3101), session de l'organisateur ouverte une fois par global-setup.
+test.use({ baseURL: 'http://localhost:3101', storageState: SERVER_SESSION });
 
 /** Captures d'écran pour un contrôle visuel, seulement si E2E_SCREENSHOTS donne un dossier. */
 const shot = async (page: Page, name: string) => {
@@ -26,7 +29,7 @@ async function fillFighter(page: Page, f: { last: string; first: string; sex: 'F
   if (f.grade) await form.getByTestId('line-grade').fill(f.grade);
 }
 
-test('inscription en ligne : annuaire → invitation → le coach inscrit, modifie, supprime → « En ligne » → figé : lecture seule', async ({ page, context }) => {
+test('inscription en ligne : annuaire → invitation → le coach inscrit, modifie, supprime → « En ligne » → figé : lecture seule', async ({ page, browser }) => {
   const club = `Dojo en ligne ${Date.now()}`;
 
   // 1. Annuaire, puis compétition.
@@ -59,7 +62,8 @@ test('inscription en ligne : annuaire → invitation → le coach inscrit, modif
   await page.keyboard.press('Escape');
 
   // 3. Le coach, sur téléphone.
-  const coach = await context.newPage();
+  // Le coach n'a pas de compte : contexte sans la session de l'organisateur.
+  const coach = await (await browser.newContext({ storageState: undefined, locale: 'fr-FR' })).newPage();
   await coach.setViewportSize({ width: 390, height: 844 });
   await coach.goto(url);
   await expect(coach.getByTestId('club-entry-state')).toHaveText('Inscriptions ouvertes');
@@ -290,7 +294,7 @@ test('pièces jointes du mail : ajouter, refuser un type, décocher la fiche PDF
   await box.getByTestId('mail-attachment-input').setInputFiles({ name: 'reglement.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4') });
   await expect(box.getByRole('checkbox', { name: 'Joindre reglement.pdf' })).toBeChecked();
   const listed = (await (await request.get(`/api/competitions/${id}/mail-attachments`)).json()) as { id: string; fileName: string }[];
-  fs.rmSync(path.join('tmp/e2e/pieces-jointes', listed.find((a) => a.fileName === 'reglement.pdf')!.id));
+  fs.rmSync(path.join('tmp/e2e-serveur/pieces-jointes', listed.find((a) => a.fileName === 'reglement.pdf')!.id));
   await page.reload();
   await page.getByRole('button', { name: /Message aux clubs de cette compétition/ }).click();
   await expect(box).toContainText('reglement.pdf — Fichier manquant');

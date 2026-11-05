@@ -1,15 +1,14 @@
 import { expect, test } from '@playwright/test';
+import { SERVER_SESSION } from './helpers.js';
 
 const SERVER = 'http://localhost:3101';
 
 test('passage de main : jeton en ligne → PC relié → prise de main (lecture seule en ligne) → saisie sur le PC → rendre la main', async ({ browser, page }) => {
   const name = `Coupe synchronisée ${Date.now()}`;
   // Serveur en ligne : connexion, jeton, compétition.
-  const online = await (await browser.newContext({ baseURL: SERVER })).newPage();
+  // Session de l'organisateur ouverte une fois par global-setup (10 connexions par IP en 15 minutes pour toute la suite).
+  const online = await (await browser.newContext({ baseURL: SERVER, storageState: SERVER_SESSION })).newPage();
   await online.goto('/');
-  await online.getByTestId('login-email').fill('orga@e2e.example');
-  await online.getByTestId('login-password').fill('mot-de-passe-e2e');
-  await online.getByTestId('login-submit').click();
   await online.getByTestId('nav-settings').click();
   await online.getByTestId('create-sync-token').click();
   const token = await online.getByTestId('sync-token-value').innerText();
@@ -55,11 +54,9 @@ test('passage de main : jeton en ligne → PC relié → prise de main (lecture 
 
 test('secours : copie du serveur tenue à jour → « Prendre la main en secours » → saisie sur le PC → « Prévenir le serveur »', async ({ browser, page }) => {
   const name = `Coupe de secours ${Date.now()}`;
-  const online = await (await browser.newContext({ baseURL: SERVER })).newPage();
+  // Session de l'organisateur ouverte une fois par global-setup (10 connexions par IP en 15 minutes pour toute la suite).
+  const online = await (await browser.newContext({ baseURL: SERVER, storageState: SERVER_SESSION })).newPage();
   await online.goto('/');
-  await online.getByTestId('login-email').fill('orga@e2e.example');
-  await online.getByTestId('login-password').fill('mot-de-passe-e2e');
-  await online.getByTestId('login-submit').click();
   await expect(online.getByTestId('nav-settings')).toBeVisible();
   const token = (await (await online.request.post('/api/sync/tokens', { data: { name: 'PC de secours' } })).json()).token as string;
   const id = (await (await online.request.post('/api/competitions', { data: { name, date: '2026-11-22', location: 'Nice' } })).json()).id as string;

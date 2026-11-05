@@ -161,3 +161,39 @@ test('zones (relecture) : nom en double → rien n’est enregistré ; liste pé
   await expect(page.getByText('Les zones ont été modifiées ailleurs')).toBeVisible();
   await other.close();
 });
+
+test('PC : pas d’inscriptions en ligne sur la Fiche club, ni d’envoi de mails dans les Réglages ; la mention sur les données s’enregistre', async ({ page }) => {
+  const id = await createCompetition(page, 'Coupe sans mails');
+  await page.goto(`/competitions/${id}/fiche-club`);
+  // Les fiches à télécharger sont là : l'écran est chargé, ce n'est pas un écran encore vide.
+  await expect(page.getByTestId('paper-form-download')).toBeVisible();
+  await expect(page.getByTestId('club-form-download')).toBeVisible();
+  await expect(page.getByText('Inscriptions en ligne', { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId('send-invitations')).toHaveCount(0);
+  await expect(page.getByTestId('club-entry-toggle')).toHaveCount(0);
+
+  // Un lien de club ouvert sur un PC : le refus est expliqué.
+  await page.goto('/inscription/lien-de-club-quelconque');
+  await expect(page.getByTestId('club-entry-error')).toHaveText('Réservé au serveur en ligne : les mails et les inscriptions en ligne ne sont pas disponibles sur ce PC.');
+
+  // Sur un PC, le morceau de code de l'éditeur de mail n'est même pas téléchargé.
+  const scripts: string[] = [];
+  page.on('request', (r) => { if (r.resourceType() === 'script') scripts.push(r.url()); });
+  await page.goto('/parametres');
+  await expect(page.getByTestId('privacy-contact')).toBeVisible();
+  expect(scripts.filter((u) => /MailMessageEditor/.test(u))).toEqual([]);
+  await expect(page.getByText('Envoi des mails')).toHaveCount(0);
+  await expect(page.getByLabel('Objet')).toHaveCount(0);
+  await expect(page.getByTestId('settings-summary')).not.toContainText('Envoi des mails');
+  await expect(page.getByTestId('settings-summary')).not.toContainText('Message aux clubs');
+  const before = (await (await page.request.get('/api/app-settings')).json()) as { privacyContact: string; privacyNotice: string };
+  try {
+    await page.getByTestId('privacy-contact').fill('rgpd@dojo.example');
+    await page.getByRole('button', { name: 'Enregistrer' }).first().click();
+    await expect(page.getByText('Réglages enregistrés.')).toBeVisible();
+    await page.reload();
+    await expect(page.getByTestId('privacy-contact')).toHaveValue('rgpd@dojo.example');
+  } finally {
+    await page.request.patch('/api/app-settings', { data: { privacyContact: before.privacyContact } });
+  }
+});

@@ -171,7 +171,8 @@ function MailCard({ settings }: { settings: PublicAppSettings }) {
   );
 }
 
-function TextsCard({ settings }: { settings: PublicAppSettings }) {
+/** `withMessage` : le message aux clubs ne se règle que sur le serveur en ligne ; sur un PC, la carte ne garde que les données personnelles. */
+function TextsCard({ settings, withMessage }: { settings: PublicAppSettings; withMessage: boolean }) {
   const update = useUpdateAppSettings();
   const [form, setForm] = useState({
     subject: settings.invitationMail.subject, body: settings.invitationMail.body, format: settings.invitationMail.format, privacyNotice: settings.privacyNotice, privacyContact: settings.privacyContact,
@@ -182,21 +183,25 @@ function TextsCard({ settings }: { settings: PublicAppSettings }) {
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
   const save = () =>
     update.mutate(
-      { invitationMail: { subject: form.subject, body: form.body, format: form.format }, privacyNotice: form.privacyNotice, privacyContact: form.privacyContact, retentionMonths: form.retentionMonths, directoryInactiveYears: form.directoryInactiveYears },
+      { ...(withMessage ? { invitationMail: { subject: form.subject, body: form.body, format: form.format } } : {}), privacyNotice: form.privacyNotice, privacyContact: form.privacyContact, retentionMonths: form.retentionMonths, directoryInactiveYears: form.directoryInactiveYears },
       { onSuccess: saved },
     );
   return (
-    <SectionCard id="clubs" title="Message aux clubs et données personnelles"
-      description="Le message des invitations, la mention de la page des clubs et la durée de conservation des données.">
-      <Stack gap="xs">
-        <Title order={4} fz="md">Message aux clubs</Title>
-        <Text size="sm" c="dimmed">Variables : {'{club} {coach} {competition} {date} {lieu} {date_limite} {lien}'}. Chaque compétition peut avoir son propre message (onglet Fiche club).</Text>
-        <TextInput label="Objet" value={form.subject} onChange={(e) => set({ subject: e.currentTarget.value })} />
-        <Input.Wrapper label="Texte">
-          <MailMessageEditor value={settings.invitationMail} onChange={(v) => set(v)} onSourceModeChange={setSourceMode} />
-        </Input.Wrapper>
-      </Stack>
-      <Divider color="var(--sk-line)" />
+    <SectionCard id="clubs" title={withMessage ? 'Message aux clubs et données personnelles' : 'Données personnelles'}
+      description={withMessage ? 'Le message des invitations, la mention de la page des clubs et la durée de conservation des données.' : 'La mention de la page des clubs et la durée de conservation des données.'}>
+      {withMessage && (
+        <>
+          <Stack gap="xs">
+            <Title order={4} fz="md">Message aux clubs</Title>
+            <Text size="sm" c="dimmed">Variables : {'{club} {coach} {competition} {date} {lieu} {date_limite} {lien}'}. Chaque compétition peut avoir son propre message (onglet Fiche club).</Text>
+            <TextInput label="Objet" value={form.subject} onChange={(e) => set({ subject: e.currentTarget.value })} />
+            <Input.Wrapper label="Texte">
+              <MailMessageEditor value={settings.invitationMail} onChange={(v) => set(v)} onSourceModeChange={setSourceMode} />
+            </Input.Wrapper>
+          </Stack>
+          <Divider color="var(--sk-line)" />
+        </>
+      )}
       <Stack gap="xs">
         <Title order={4} fz="md">Données personnelles</Title>
         <Textarea label="Mention affichée sur la page des clubs" description="{contact} est remplacé par l’adresse de contact." autosize minRows={3} value={form.privacyNotice}
@@ -240,22 +245,26 @@ export function AppSettingsPage() {
   const { data } = useAppSettings();
   const { data: me } = useAuthMe();
   const local = me?.role === 'local';
+  // Mails et inscriptions en ligne : serveur en ligne seulement. Tant que le rôle est inconnu, ni l'un ni l'autre n'est affiché.
+  const server = me?.role === 'serveur';
   const sections = [
-    ...(data ? [{ id: 'mails', label: 'Envoi des mails' }, { id: 'clubs', label: 'Message aux clubs' }, { id: 'regles', label: 'Règles de réaffectation' }] : []),
+    ...(data && server ? [{ id: 'mails', label: 'Envoi des mails' }, { id: 'clubs', label: 'Message aux clubs' }] : []),
+    ...(data && local ? [{ id: 'clubs', label: 'Données personnelles' }] : []),
+    ...(data ? [{ id: 'regles', label: 'Règles de réaffectation' }] : []),
     ...(me ? [{ id: 'synchronisation', label: HELP.synchronisation.title }] : []),
     { id: 'jour-j', label: 'Préparer le jour J' },
     ...(local ? [{ id: 'secours', label: 'Copie de secours' }, { id: 'zones-autonomes', label: 'Portable de zone' }] : []),
   ];
   return (
     <Stack gap="lg">
-      <PageHeader title={HELP.parametres.title} help="parametres" />
+      <PageHeader title={HELP.parametres.title} help={server ? 'parametres' : 'parametres.pc'} />
       <Group gap="xs" data-testid="settings-summary">
         {sections.map((x) => <Button key={x.id} component="a" href={`#${x.id}`} size="compact-sm" variant="subtle">{x.label}</Button>)}
       </Group>
-      {data && (
+      {data && me && (
         <>
-          <MailCard settings={data} />
-          <TextsCard settings={data} />
+          {server && <MailCard settings={data} />}
+          <TextsCard settings={data} withMessage={server} />
           <ReplacementRulesCard settings={data} />
         </>
       )}

@@ -6,9 +6,11 @@
 export type HelpTopicId =
   | 'competitions'
   | 'annuaire'
+  | 'annuaire.pc'
   | 'synchro-google'
   | 'comptes'
   | 'parametres'
+  | 'parametres.pc'
   | 'impression'
   | 'inscriptions'
   | 'clubs'
@@ -76,6 +78,19 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Ordre habituel : réglages et grille, fiche club envoyée aux clubs, inscriptions, import FFK, pesée, réaffectation, tableaux, combats, podiums.',
     ],
   },
+  'annuaire.pc': {
+    title: 'Annuaire des clubs',
+    short: 'Les clubs connus, d’une compétition à l’autre : leurs coordonnées sont reprises dans les fiches et les inscriptions.',
+    details: [
+      'L’annuaire ne dépend d’aucune compétition. Il se remplit tout seul avec les clubs des fiches, de l’import FFK et des saisies ; vous pouvez aussi y créer des clubs à l’avance.',
+      [
+        'Le numéro d’affiliation FFK (les chiffres en tête du club dans l’export FFK) reconnaît un club à coup sûr, même si son nom est écrit autrement.',
+        '« Modifier » change le nom, le numéro d’affiliation, le coach, les adresses e-mail ou les notes ; « Archiver » cache un club qui ne vient plus, sans rien effacer.',
+        'Un club peut avoir plusieurs adresses e-mail (coach, président, secrétariat…) : tapez-les dans « E-mails », Entrée ou virgule entre deux. L’envoi des mails aux clubs se fait depuis le serveur en ligne.',
+        '« Fusionner avec… » réunit deux fiches du même club : les compétitions de l’une passent à l’autre, la fiche gardée reçoit les adresses e-mail qu’elle n’avait pas, puis la première est supprimée.',
+      ],
+    ],
+  },
   annuaire: {
     title: 'Annuaire des clubs',
     short: 'Les clubs connus, d’une compétition à l’autre : invitez-les ensuite aux inscriptions en ligne d’une compétition.',
@@ -128,6 +143,15 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Le premier compte d’un serveur se crée sur le serveur lui-même : docker compose exec -it app node dist/server/cli.js add-user <e-mail>.',
         'Les comptes ne sont jamais copiés dans les sauvegardes : après une restauration sur un nouveau serveur, recréez-les avec la même commande.',
       ],
+    ],
+  },
+  'parametres.pc': {
+    title: 'Réglages de l’application',
+    short: 'Ce qui vaut pour toutes les compétitions : mention sur les données personnelles, conservation, règles de réaffectation.',
+    details: [
+      'Les mails aux clubs et les inscriptions en ligne se règlent et s’envoient depuis le serveur en ligne, pas depuis ce PC.',
+      'Données personnelles : la mention affichée en bas de la page de chaque club, et l’adresse à laquelle écrire pour exercer ses droits (à compléter avant d’ouvrir les inscriptions).',
+      'Conservation : après ce nombre de mois, le poids, la licence, le grade, les coordonnées des coachs, les liens et les mails d’une compétition sont effacés tout seuls ; le palmarès reste. Un club de l’annuaire sans compétition depuis ce nombre d’années est archivé et ses coordonnées effacées.',
     ],
   },
   parametres: {

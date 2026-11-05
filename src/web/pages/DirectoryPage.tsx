@@ -4,7 +4,7 @@ import { Link } from 'react-router';
 import { normalizeName } from '../../domain/names.js';
 import { plural } from '../../domain/plural.js';
 import type { DirectoryEntry, DirectoryInput } from '../../domain/registration.js';
-import { useAppSettings, useCreateDirectoryEntry, useDirectory, useMergeDirectoryEntries, useUpdateDirectoryEntry } from '../api.js';
+import { useAppSettings, useAuthMe, useCreateDirectoryEntry, useDirectory, useMergeDirectoryEntries, useUpdateDirectoryEntry } from '../api.js';
 import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { EmailsInput, EmailsList } from '../components/EmailsInput.js';
@@ -87,8 +87,9 @@ export function DirectoryPage() {
   const { data: entries = [], isLoading } = useDirectory();
   const update = useUpdateDirectoryEntry();
   const { data: settings } = useAppSettings();
-  // Synchronisation : là où Google est disponible, avec un compte connecté (quel que soit le mode d'envoi des mails).
-  const canSync = !!settings?.googleAvailable && !!settings.google;
+  const { data: me } = useAuthMe();
+  // Synchronisation : sur le serveur en ligne seulement, là où Google est disponible, avec un compte connecté (quel que soit le mode d'envoi des mails).
+  const canSync = me?.role === 'serveur' && !!settings?.googleAvailable && !!settings.google;
   const [search, setSearch] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<DirectoryEntry | 'new' | null>(null);
@@ -99,7 +100,7 @@ export function DirectoryPage() {
   const active = entries.filter((e) => !e.archived).length;
   return (
     <Stack gap="lg">
-      <PageHeader title="Annuaire des clubs" help="annuaire"
+      <PageHeader title="Annuaire des clubs" help={me?.role === 'serveur' ? 'annuaire' : 'annuaire.pc'}
         summary={entries.length > 0 ? `${plural(active, 'club')}${entries.length > active ? ` · ${plural(entries.length - active, 'archivé')}` : ''}` : undefined}
         actions={<>
           {canSync && <Button variant="default" component={Link} to="/annuaire/google">Synchroniser avec Google</Button>}

@@ -5,6 +5,7 @@ import { SERVER_ONLY } from '../../src/domain/app-settings.js';
 import { createUser } from '../../src/server/auth/sessions.js';
 import { buildApp } from '../../src/server/app.js';
 import { closeDb, openDb } from '../../src/server/db/client.js';
+import type { MailTransport } from '../../src/server/mail.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
@@ -102,5 +103,66 @@ test('serveur en ligne connecté : les invitations répondent 200', async () => 
     expect((await a.inject({ method: 'GET', url: `/api/competitions/${cid}/invitations`, headers: { cookie } })).statusCode).toBe(200);
   } finally {
     await a.close();
+  }
+});
+
+test('main ailleurs : l’envoi aux clubs est refusé, le message et son image restent ; au retour du paquet, l’envoi part avec l’image', async () => {
+  const p = tmpDbPath();
+  const d = openDb(p);
+  createUser(d, 'orga@example.org', 'mot-de-passe-long');
+  closeDb(d);
+  const sent: { to: string; html?: string; attachments?: { cid?: string; content: Buffer }[] }[] = [];
+  const transport: MailTransport = () => ({
+    verify: async () => true,
+    sendMail: async (m: { to: { address: string }[]; html?: string; attachments?: { cid?: string; content: Buffer }[] }) => {
+      sent.push({ to: m.to.map((a) => a.address).join(', '), html: m.html, attachments: m.attachments });
+      return {};
+    },
+  });
+  const srv = await buildApp({ dbPath: p, role: 'serveur', publicUrl: 'https://competitions.example.org', mailTransport: transport });
+  try {
+    const cookie = String((await srv.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'orga@example.org', password: 'mot-de-passe-long' } })).headers['set-cookie']).split(';')[0]!;
+    const orga = (method: 'GET' | 'POST' | 'PATCH', url: string, payload?: unknown) => srv.inject({ method, url, headers: { cookie }, payload: payload as object });
+    const cid = (await orga('POST', '/api/competitions', { name: 'Coupe', date: '2026-11-22' })).json().id as string;
+    const base = `/api/competitions/${cid}`;
+    await orga('PATCH', '/api/app-settings', { smtp: { host: 'smtp.example.org', port: 465, security: 'tls', user: 'orga@example.org', password: 'x', fromName: 'Shidokan France', fromEmail: 'orga@example.org' } });
+    await orga('PATCH', `${base}/club-entry`, { status: 'open', deadline: '2026-11-15' });
+
+    // Un message avec une image, un club invité.
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+    const image = (await srv.inject({ method: 'POST', url: '/api/mail-images', headers: { cookie, 'content-type': 'application/octet-stream' }, payload: png })).json() as { id: string; url: string };
+    const body = `<p>Bonjour {coach}</p><img src="${image.url}"><p>{lien}</p>`;
+    expect((await orga('PATCH', base, { settings: { invitationMail: { subject: 'Inscriptions', body, format: 'html' } } })).statusCode).toBe(200);
+    const directory = (await orga('POST', '/api/club-directory', { name: 'Tani Dojo', affiliationNumber: null, coachName: 'Jean', coachPhone: null, coachEmails: ['tani@example.org'], notes: null })).json().id as string;
+    const [link] = (await orga('POST', `${base}/invitations`, { directoryIds: [directory] })).json() as { clubId: string }[];
+    const linksOf = async () => ((await orga('GET', `${base}/invitations/${link!.clubId}/links`)).json() as unknown[]).length;
+    expect(await linksOf()).toBe(1);
+
+    // La compétition part sur un PC (paquet exporté, main ailleurs).
+    const jeton = (await orga('POST', '/api/sync/tokens', { name: 'PC de la salle' })).json().token as string;
+    const remote = (path: string, payload: unknown) => srv.inject({ method: 'POST', url: `/api/sync/remote${path}`, headers: { authorization: `Bearer ${jeton}` }, payload: payload as object });
+    const pkg = (await remote(`/competitions/${cid}/take`, { instanceId: 'pc-1', instanceName: 'PC-SALLE' })).json();
+
+    // Pendant ce temps : envoi refusé, aucun mail, aucun lien de plus ; le message et son image sont intacts.
+    const refused = await orga('POST', `${base}/invitations/send`, { clubs: [{ clubId: link!.clubId }] });
+    expect(refused.statusCode).toBe(409);
+    expect(sent).toEqual([]);
+    expect(await linksOf()).toBe(1);
+    const mine = (await orga('GET', base)).json() as { settings: { invitationMail: { body: string } } };
+    expect(mine.settings.invitationMail.body).toContain(image.url);
+    expect((await srv.inject({ method: 'GET', url: image.url, headers: { cookie } })).statusCode).toBe(200);
+
+    // Le paquet revient : la main aussi, et l'envoi part avec l'image dans le mail.
+    const back = await remote(`/competitions/${cid}/return`, { ...pkg, from: { instanceId: 'pc-1', instanceName: 'PC-SALLE', role: 'local' }, handOver: true });
+    expect(back.statusCode).toBe(200);
+    const res = await orga('POST', `${base}/invitations/send`, { clubs: [{ clubId: link!.clubId }] });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([expect.objectContaining({ status: 'sent' })]);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.html).toContain(`cid:image-${image.id}@shidokan`);
+    expect(sent[0]!.attachments!.find((a) => a.cid === `image-${image.id}@shidokan`)!.content.equals(png)).toBe(true);
+    expect(await linksOf()).toBe(2);
+  } finally {
+    await srv.close();
   }
 });
