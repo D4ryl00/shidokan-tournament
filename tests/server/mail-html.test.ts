@@ -24,6 +24,14 @@ describe('filtre et construction du mail', () => {
     const r = cleanMailHtml('<a href="//evil.fr">a</a><a href="/x">b</a><img src="/api/other/00000000-0000-4000-8000-000000000000"><a href="JavaScript:x()">c</a>');
     expect(r.html).not.toMatch(/href|<img|evil/);
   });
+  it('ne tolère aucune espace autour d’une adresse d’image ou de {lien}', () => {
+    const img = cleanMailHtml('<img src=" /api/mail-images/00000000-0000-4000-8000-000000000000 "><a href=" {lien} ">x</a>');
+    expect(img.html).not.toMatch(/<img|href/);
+    expect(img.imageIds).toEqual([]);
+    expect(img.removed).toEqual(expect.arrayContaining(['image externe', 'lien non autorisé']));
+    const many = Array.from({ length: 11 }, (_, i) => `<img src=" /api/mail-images/00000000-0000-4000-8000-0000000000${String(i).padStart(2, '0')} ">`).join('');
+    expect(cleanMailHtml(`<p>t</p>${many}`).html).not.toContain('<img');
+  });
   it('échappe les valeurs dans le texte et dans une adresse de lien', () => {
     const { html, text } = renderMailHtml('<p>{club}</p><p><a href="{lien}">ici</a></p>', v);
     expect(html).toContain('A&amp;B &lt;b&gt;&quot;x&quot;&lt;/b&gt;');

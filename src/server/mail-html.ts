@@ -16,8 +16,8 @@ const COLOR = [/^#[0-9a-f]{3,8}$/i, /^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1
 const TABLE_TAGS = new Set(['tr', 'td', 'th', 'tbody', 'thead', 'tfoot', 'caption', 'colgroup', 'col']);
 
 /** Adresse de lien permise : http, https, mailto, ou la variable `{lien}` seule. */
-const linkAllowed = (href: string) => /^(https?:\/\/|mailto:)/i.test(href.trim()) || href.trim() === '{lien}';
-const imageAllowed = (src: string) => IMAGE_PATH.test(src.trim());
+const linkAllowed = (href: string) => /^(https?:\/\/|mailto:)/i.test(href) || href === '{lien}';
+const imageAllowed = (src: string) => IMAGE_PATH.test(src);
 
 function walk(nodes: ChildNode[], visit: (el: Element) => void): void {
   for (const n of nodes) {

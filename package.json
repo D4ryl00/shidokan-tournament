@@ -37,7 +37,6 @@
     "@tiptap/starter-kit": "^3.32.3",
     "better-sqlite3": "^13.0.3",
     "dayjs": "^1.11.23",
-    "dom-serializer": "^3.1.1",
     "domhandler": "^6.0.1",
     "drizzle-orm": "^0.45.4",
     "fastify": "^5.12.7",
