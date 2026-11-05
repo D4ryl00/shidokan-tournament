@@ -435,30 +435,55 @@ test('960 px : l’étiquette « Conflit » ne rétrécit pas, les adresses de l
   for (const c of open) expect((await request.post(`/api/club-changes/${c.clubId}/ignore`, { data: { changedAt: c.changedAt } })).status()).toBe(204);
 });
 
+const DECISION = /\/api\/club-changes\/[^/]+\/(resolve|ignore)$/;
 /**
- * Compétitions tenues par un PC : le vrai serveur répond (version de l'annuaire comprise), seul « géré ici » est changé et la liste est limitée à ces
- * compétitions. Le serveur de test gère lui-même ces compétitions et supprime donc la ligne décidée ; un vrai serveur la garde quand le club diffère encore
- * des valeurs enregistrées. La liste relue la rend donc comme le ferait le vrai serveur : même club, version de la fiche augmentée (la fenêtre est remontée).
+ * Les listes relues après une décision arrivent en retard (cas du réseau réel), sauf celle des changements : elle remonte la fenêtre avant les autres,
+ * et la décision reste en cours pendant ce temps.
  */
-async function managedElsewhere(page: Page, competitionIds: string[]) {
-  // Les autres listes relues après la décision arrivent en retard (cas du réseau réel) : la liste des changements, plus rapide, remonte la fenêtre avant elles.
+async function slowListsAfterDecision(page: Page) {
   let decided = false;
-  page.on('request', (r) => { if (r.method() === 'POST' && /\/api\/club-changes\/.+\/resolve$/.test(r.url())) decided = true; });
+  page.on('request', (r) => { if (r.method() === 'POST' && DECISION.test(r.url())) decided = true; });
   await page.route(/\/api\/(club-directory|competitions\/[^/]+\/(clubs|invitations|directory-clubs))$/, async (route) => {
     if (decided && route.request().method() === 'GET') await new Promise((r) => setTimeout(r, 800));
     await route.continue();
   });
+}
+/** Réponse d'une liste demandée après la réponse de la décision : la décision est alors finie (fin de `onSettled`). */
+function listAfterDecision(page: Page, list: RegExp): Promise<void> {
+  return new Promise((done) => {
+    let answered = false;
+    page.on('response', (r) => { if (DECISION.test(r.url())) answered = true; });
+    page.on('request', (q) => { if (answered && q.method() === 'GET' && list.test(q.url())) void q.response().then(() => done()); });
+  });
+}
+/** Liste des changements limitée à ces compétitions : d'autres tests en laissent sur la base partagée. */
+async function onlyCompetitions(page: Page, competitionIds: string[]) {
+  await page.route(/\/api\/club-changes(\?|$)/, async (route) => {
+    const list = (await (await route.fetch()).json()) as { competitionId: string }[];
+    await route.fulfill({ json: list.filter((c) => competitionIds.includes(c.competitionId)) });
+  });
+}
+/**
+ * Compétitions tenues par un PC : le vrai serveur répond (version de l'annuaire comprise), seul « géré ici » est changé et la liste est limitée à ces
+ * compétitions. Le serveur de test gère lui-même ces compétitions et supprime donc la ligne décidée ; un vrai serveur la garde quand le club diffère encore
+ * des valeurs enregistrées. La liste relue la rend donc comme le ferait le vrai serveur : même club, version de la fiche augmentée (la fenêtre est remontée),
+ * plus aucun champ « modifié par cet enregistrement ». Les champs qui diffèrent (`fields`) ne sont pas recalculés : les tests n'en lisent rien.
+ */
+async function managedElsewhere(page: Page, competitionIds: string[]) {
+  await slowListsAfterDecision(page);
   type Change = { clubId: string; competitionId: string; directoryVersion: number; values: Record<string, unknown>; directory: Record<string, unknown> };
   const seen = new Map<string, Change>();
   const kept = new Map<string, Change>();
+  const same = (f: string, x: unknown, y: unknown) =>
+    f === 'coachEmails' ? JSON.stringify(((x as string[]) ?? []).map((e) => e.toLowerCase()).sort()) === JSON.stringify(((y as string[]) ?? []).map((e) => e.toLowerCase()).sort()) : (x ?? null) === (y ?? null);
   await page.route('**/api/club-changes/*/resolve', async (route) => {
     const res = await route.fetch();
     const body = route.request().postDataJSON() as { values: Record<string, unknown> };
     const clubId = route.request().url().split('/').at(-2)!;
     const before = seen.get(clubId);
-    const scalar = ['name', 'coachName', 'coachPhone', 'affiliationNumber'];
-    if (res.ok() && before && scalar.some((f) => (body.values[f] ?? null) !== (before.values[f] ?? null))) {
-      kept.set(clubId, { ...before, directory: { ...before.directory, ...body.values }, directoryVersion: before.directoryVersion + 1 });
+    const fields = ['name', 'coachName', 'coachPhone', 'coachEmails', 'affiliationNumber'];
+    if (res.ok() && before && fields.some((f) => !same(f, body.values[f], before.values[f]))) {
+      kept.set(clubId, { ...before, directory: { ...before.directory, ...body.values }, directoryVersion: before.directoryVersion + 1, changedFields: [] } as Change);
     }
     await route.fulfill({ response: res });
   });
@@ -512,8 +537,8 @@ test('compétition gérée ailleurs, valeur de la compétition choisie : la fen�
   await page.getByTestId('competition-changes-banner').getByRole('button', { name: 'Comparer' }).click();
   const dialog = page.getByRole('dialog', { name: `${a.club} : garder quelles informations ?` });
   await expect(dialog.getByRole('radio', { name: /^Compétition : 06 39/ })).toBeChecked();
-  // La notification viendrait à la fin de la décision, après les listes retardées : on attend la dernière, puis un court délai.
-  const late = page.waitForResponse((r) => /\/invitations$/.test(r.url()) && r.request().method() === 'GET');
+  // La notification viendrait à la fin de la décision, après les listes retardées : on attend l'une d'elles, demandée après la décision, puis un court délai.
+  const late = listAfterDecision(page, /\/invitations$/);
   await dialog.getByRole('button', { name: 'Enregistrer dans l’annuaire' }).click();
   await late;
   await page.waitForTimeout(300);
@@ -535,8 +560,17 @@ test('le coach enregistre encore pendant la comparaison : refus, la fenêtre rem
   await expect(dialog.getByRole('radio', { name: /^Compétition : 06 40/ })).toBeChecked();
   await coachSaves(playwright, a.token, { coachPhone: '06 41 41 41 41' });
   let posts = 0;
-  page.on('request', (r) => { if (r.method() === 'POST' && /\/resolve$/.test(r.url())) posts++; });
+  page.on('request', (r) => { if (r.method() === 'POST' && DECISION.test(r.url())) posts++; });
+  await slowListsAfterDecision(page);
   await dialog.getByRole('button', { name: 'Enregistrer dans l’annuaire' }).click();
+  // Fenêtre remontée sur la saisie relue, décision pas encore finie (listes en retard) : aucune seconde décision possible, chargement visible.
+  await expect(dialog.getByRole('radio', { name: /^Compétition : 06 41/ })).toBeChecked();
+  await expect(dialog.getByTestId('change-notice')).toHaveCount(0);
+  await expect(dialog.getByTestId('change-save')).toBeDisabled();
+  await expect(dialog.getByTestId('change-save')).toHaveAttribute('data-loading', 'true');
+  await expect(dialog.getByRole('button', { name: 'Ignorer ce changement' })).toBeDisabled();
+  await dialog.getByTestId('change-save').click({ force: true });
+  await dialog.getByRole('button', { name: 'Ignorer ce changement' }).click({ force: true });
   await expect(dialog.getByTestId('change-notice')).toHaveText('Cette fiche vient de changer : rouvrez la comparaison.');
   await expect(dialog.getByRole('radio', { name: /^Compétition : 06 41/ })).toBeChecked();
   expect(posts).toBe(1);
@@ -548,6 +582,47 @@ test('le coach enregistre encore pendant la comparaison : refus, la fenêtre rem
   // Décision réussie : l'ancien refus n'est pas annoncé à la disparition du changement (compte lu une fois, sans attente).
   await page.waitForTimeout(300);
   expect(await page.locator('.mantine-Notification-root').filter({ hasText: 'Ce changement n’existe plus' }).count()).toBe(0);
+});
+
+test('changement ignoré ailleurs pendant la comparaison : la fenêtre se ferme, une notification nomme le club, rien n’est enregistré', async ({ page, request, playwright }) => {
+  const a = await setup(page, request, 'disparu-404');
+  await coachSaves(playwright, a.token, { coachPhone: '06 42 42 42 42' });
+  await page.route(/\/api\/competitions\/[^/]+\/events$/, (route) => route.abort());
+  await page.goto(`/competitions/${a.competitionId}/fiche-club`);
+  await page.getByTestId('competition-changes-banner').getByRole('button', { name: 'Comparer' }).click();
+  const dialog = page.getByRole('dialog', { name: `${a.club} : garder quelles informations ?` });
+  await expect(dialog.getByRole('radio', { name: /^Compétition : 06 42/ })).toBeChecked();
+  const open = ((await (await request.get(`/api/club-changes?competitionId=${a.competitionId}`)).json()) as { clubId: string; changedAt: string }[])[0]!;
+  expect((await request.post(`/api/club-changes/${open.clubId}/ignore`, { data: { changedAt: open.changedAt } })).status()).toBe(204);
+  await dialog.getByRole('button', { name: 'Enregistrer dans l’annuaire' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(noteOf(page, `${a.club} : ce changement n’existe plus, rien n’a été enregistré.`)).toBeVisible();
+  expect((await entryOf(request, a.entry.id)).coachPhone).toBe('06 11 22 33 44');
+});
+
+test('chaîne : un refus sur un club disparu entre-temps est annoncé à son nom, pas dans la fenêtre du club suivant', async ({ page, request, playwright }) => {
+  // Deux compétitions de même date : classées par nom, « chaine-refus-1 » avant « chaine-refus-2 ».
+  const a = await setup(page, request, 'chaine-refus-1');
+  const b = await setup(page, request, 'chaine-refus-2');
+  await coachSaves(playwright, a.token, { coachPhone: '06 43 43 43 43' });
+  await coachSaves(playwright, b.token, { coachPhone: '06 44 44 44 44' });
+  await onlyCompetitions(page, [a.competitionId, b.competitionId]);
+  await page.goto('/annuaire');
+  await page.getByTestId('directory-changes-banner').getByRole('button', { name: 'Voir les changements' }).click();
+  const first = page.getByRole('dialog', { name: `${a.club} : garder quelles informations ?` });
+  await expect(first).toBeVisible();
+  // Pendant la comparaison, la fiche de A est corrigée ailleurs et rejoint le club : sa version change (refus), puis le changement disparaît.
+  expect((await request.patch(`/api/club-directory/${a.entry.id}`, { data: { coachPhone: '06 43 43 43 43' } })).ok()).toBe(true);
+  await first.getByTestId('change-field-coachPhone').getByRole('radio', { name: /^Annuaire :/ }).check();
+  await first.getByRole('button', { name: 'Enregistrer dans l’annuaire' }).click();
+  const next = page.getByRole('dialog', { name: `${b.club} : garder quelles informations ?` });
+  await expect(next).toBeVisible();
+  await expect(noteOf(page, `${a.club} : ce changement n’existe plus, rien n’a été enregistré.`)).toBeVisible();
+  expect(await next.getByTestId('change-notice').count()).toBe(0);
+  expect((await entryOf(request, a.entry.id)).coachPhone).toBe('06 43 43 43 43');
+  // Nettoyage : le changement restant est ignoré.
+  await next.getByRole('button', { name: 'Ignorer ce changement' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
 test('960 px : les adresses courtes et ordinaires tiennent sur une ligne dans l’annuaire, l’onglet Clubs et les invitations', async ({ page, request }) => {

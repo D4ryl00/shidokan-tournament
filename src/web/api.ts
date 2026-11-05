@@ -899,25 +899,25 @@ export function useFetchClubChanges(competitionId: string) {
       : [];
 }
 
-/** Après une décision : changements, annuaire, et clubs, invitations des compétitions. */
-/** Clé commune aux décisions sur un changement (enregistrer, ignorer) : la fenêtre remontée sait qu'une décision est en cours. */
+/** Préfixe des clés des décisions sur un changement (`resolve`, `ignore`) : la fenêtre remontée sait qu'une décision est en cours, et laquelle. */
 export const CLUB_CHANGE_DECISION = ['club-change-decision'];
 
-function useClubChangeMutation<V>(fn: (v: V) => Promise<void>) {
+/** Après une décision : changements, annuaire, et clubs, invitations des compétitions. */
+function useClubChangeMutation<V>(kind: 'resolve' | 'ignore', fn: (v: V) => Promise<void>) {
   const qc = useQueryClient();
   return useMutation({
-    mutationKey: CLUB_CHANGE_DECISION,
+    mutationKey: [...CLUB_CHANGE_DECISION, kind],
     mutationFn: fn,
     onSettled: () => Promise.all(['club-changes', 'club-directory', 'directory-clubs', 'clubs', 'invitations'].map((k) => qc.invalidateQueries({ queryKey: [k] }))),
   });
 }
 
 export const useResolveClubChange = () =>
-  useClubChangeMutation(({ clubId, ...body }: { clubId: string; directoryVersion: number; changedAt: string; values: ClubValues; applyToClub: boolean }) =>
+  useClubChangeMutation('resolve', ({ clubId, ...body }: { clubId: string; directoryVersion: number; changedAt: string; values: ClubValues; applyToClub: boolean }) =>
     api<void>('POST', `/api/club-changes/${clubId}/resolve`, body));
 
 export const useIgnoreClubChange = () =>
-  useClubChangeMutation(({ clubId, changedAt }: { clubId: string; changedAt: string }) => api<void>('POST', `/api/club-changes/${clubId}/ignore`, { changedAt }));
+  useClubChangeMutation('ignore', ({ clubId, changedAt }: { clubId: string; changedAt: string }) => api<void>('POST', `/api/club-changes/${clubId}/ignore`, { changedAt }));
 
 export const useCreateDirectoryEntry = () => useDirectoryMutation((input: DirectoryInput) => api<DirectoryEntry>('POST', '/api/club-directory', input));
 export const useUpdateDirectoryEntry = () =>

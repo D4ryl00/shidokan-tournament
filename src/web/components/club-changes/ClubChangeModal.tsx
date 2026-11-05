@@ -25,8 +25,11 @@ interface Props {
   onClose: () => void;
   /** Décision prise (enregistrée ou ignorée), après la relecture des listes. */
   onDone: () => void;
-  /** Le serveur dit que la fiche ou le changement a bougé : message à garder affiché, la liste est relue ; null : une nouvelle décision l'efface. */
-  onStale?: (message: string | null) => void;
+  /**
+   * Refus du serveur (fiche ou changement modifiés, changement disparu), après la relecture des listes ; null : une nouvelle décision efface le refus
+   * précédent. Le parent l'affiche dans la fenêtre de ce club, ou par une notification si la fenêtre montre autre chose.
+   */
+  onRefused?: (message: string | null) => void;
   notice?: string | null;
 }
 
@@ -34,7 +37,7 @@ interface Props {
  * Comparaison d'un club de compétition avec sa fiche d'annuaire : l'organisateur garde, champ par champ, la valeur de l'annuaire ou de la
  * compétition. Le parent la remonte (key) pour chaque changement : l'état part du changement ouvert.
  */
-export function ClubChangeModal({ change, onClose, onDone, onStale, notice }: Props) {
+export function ClubChangeModal({ change, onClose, onDone, onRefused, notice }: Props) {
   const resolve = useResolveClubChange();
   const ignore = useIgnoreClubChange();
   const [choices, setChoices] = useState<Partial<Record<ClubField, Side>>>({});
@@ -49,21 +52,22 @@ export function ClubChangeModal({ change, onClose, onDone, onStale, notice }: Pr
   const values = resolvedValues(change.directory, change.values, choices, emails, change.changedFields);
 
   const error = resolve.error ?? ignore.error;
-  // Une décision en cours, même lancée par la fenêtre d'avant le remontage : pas de seconde décision avant sa fin.
+  // Une décision en cours, même lancée par la fenêtre d'avant le remontage : pas de seconde décision avant sa fin, et le bouton de cette décision
+  // garde son indicateur de chargement (l'état `isPending` d'une fenêtre remontée ne voit pas la mutation de la précédente).
   const busy = useIsMutating({ mutationKey: CLUB_CHANGE_DECISION }) > 0;
+  const saving = useIsMutating({ mutationKey: [...CLUB_CHANGE_DECISION, 'resolve'] }) > 0;
+  const skipping = useIsMutating({ mutationKey: [...CLUB_CHANGE_DECISION, 'ignore'] }) > 0;
   // `mutateAsync` et non les rappels de `mutate` : la relecture des listes remonte la fenêtre (sa clé change) avant la fin de la mutation, et un
   // rappel de `mutate` est alors perdu. Cette promesse survit au remontage ; un refus y est donc traité aussi (l'état d'erreur de la mutation
   // reste sur l'ancienne fenêtre).
   const refused = (e: unknown) => {
-    if (!(e instanceof ApiError)) return; // autre erreur : affichée dans la fenêtre si elle n'a pas été remontée
-    // Fiche ou changement modifiés depuis l'ouverture : les listes sont relues, le message reste affiché dans la fenêtre remontée.
-    if (e.status === 409) onStale?.(e.message);
-    // Changement disparu : la fenêtre s'est déjà fermée, on dit pourquoi.
-    else if (e.status === 404) notifications.show({ color: 'yellow', message: e.message });
+    // Fiche ou changement modifiés depuis l'ouverture (409), changement disparu (404) : les listes sont déjà relues, le parent dit pourquoi.
+    if (e instanceof ApiError && (e.status === 409 || e.status === 404)) onRefused?.(e.message);
+    // Autre erreur : affichée dans la fenêtre (erreur de la mutation), si elle n'a pas été remontée.
   };
   const save = () => {
     // Nouvelle décision : l'ancien refus ne vaut plus (sinon la disparition du changement décidé serait annoncée comme un refus).
-    onStale?.(null);
+    onRefused?.(null);
     resolve.mutateAsync({ clubId: change.clubId, directoryVersion: change.directoryVersion, changedAt: change.changedAt, values, applyToClub: canApply && applyToClub }).then(() => {
       // Compétition gérée ailleurs : seul l'annuaire est enregistré. Le club suivra après le retour de la main, s'il diffère encore de ce qui est enregistré
       // (valeur de la compétition choisie partout : la ligne est supprimée, rien à mettre à jour).
@@ -73,7 +77,7 @@ export function ClubChangeModal({ change, onClose, onDone, onStale, notice }: Pr
       onDone();
     }, refused);
   };
-  const skip = () => { onStale?.(null); ignore.mutateAsync({ clubId: change.clubId, changedAt: change.changedAt }).then(onDone, refused); };
+  const skip = () => { onRefused?.(null); ignore.mutateAsync({ clubId: change.clubId, changedAt: change.changedAt }).then(onDone, refused); };
 
   const fields: ReactNode[] = (['name', 'coachName', 'coachPhone', 'coachEmails', 'affiliationNumber'] as const).map((f) => {
     if (!differs(f)) {
@@ -124,8 +128,8 @@ export function ClubChangeModal({ change, onClose, onDone, onStale, notice }: Pr
         <ApiErrorAlert error={error instanceof ApiError && (error.status === 409 || error.status === 404) ? null : error} />
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose} disabled={busy}>Plus tard</Button>
-          <Button variant="default" onClick={skip} loading={ignore.isPending} disabled={busy}>Ignorer ce changement</Button>
-          <Button data-testid="change-save" onClick={save} loading={resolve.isPending} disabled={busy || !values.name.trim()}>Enregistrer dans l’annuaire</Button>
+          <Button variant="default" onClick={skip} loading={skipping} disabled={busy}>Ignorer ce changement</Button>
+          <Button data-testid="change-save" onClick={save} loading={saving} disabled={busy || !values.name.trim()}>Enregistrer dans l’annuaire</Button>
         </Group>
       </Stack>
     </Modal>
@@ -142,25 +146,31 @@ const NEXT = Symbol('suivant');
 export function useClubChangeDialog(changes: ClubChangeView[]): { open: (clubId: string) => void; openFirst: () => void; element: ReactNode } {
   const [target, setTarget] = useState<string | typeof NEXT | null>(null);
   const [chain, setChain] = useState(false);
-  const [stale, setStale] = useState<string | null>(null);
+  // Dernier refus du serveur, avec le club qu'il concerne : affiché dans la fenêtre de ce club seulement.
+  const [refusal, setRefusal] = useState<{ clubId: string; name: string; message: string } | null>(null);
   // Changements décidés pendant cette ouverture : la chaîne ne les rouvre pas (un changement gardé après le retour de la main reste listé).
   const [decided, setDecided] = useState<Set<string>>(new Set());
   const current = target === NEXT ? changes.find((c) => !decided.has(c.clubId)) : target ? changes.find((c) => c.clubId === target) : undefined;
-  // Changement disparu (décidé ailleurs, rendu identique) : la fenêtre se ferme ; si un refus venait de s'afficher, on le dit autrement.
+  // Changement disparu (décidé ailleurs, rendu identique) : la fenêtre se ferme.
   useEffect(() => {
-    if (target === null || current) return;
-    if (stale) notifications.show({ color: 'yellow', message: `${stale} Ce changement n’existe plus.` });
-    setStale(null);
-    setTarget(null);
-  }, [target, current, stale]);
-  const close = () => { setTarget(null); setStale(null); };
+    if (target !== null && !current) setTarget(null);
+  }, [target, current]);
+  // Refus d'un changement que la fenêtre ne montre plus (fermée, ou passée au club suivant de la chaîne) : une notification nomme le club.
+  useEffect(() => {
+    if (!refusal || refusal.clubId === current?.clubId) return;
+    const still = changes.some((c) => c.clubId === refusal.clubId);
+    notifications.show({ color: 'yellow', message: still ? `${refusal.name} : ${refusal.message}` : `${refusal.name} : ce changement n’existe plus, rien n’a été enregistré.` });
+    setRefusal(null);
+  }, [refusal, current, changes]);
+  const close = () => { setTarget(null); setRefusal(null); };
   const element = current ? (
-    <ClubChangeModal key={`${current.clubId}:${current.changedAt}:${current.directoryVersion}`} change={current} notice={stale} onStale={setStale} onClose={close}
-      onDone={() => { setStale(null); setDecided((d) => new Set(d).add(current.clubId)); setTarget(chain ? NEXT : null); }} />
+    <ClubChangeModal key={`${current.clubId}:${current.changedAt}:${current.directoryVersion}`} change={current} notice={refusal?.clubId === current.clubId ? refusal.message : null}
+      onRefused={(message) => setRefusal(message === null ? null : { clubId: current.clubId, name: current.values.name, message })} onClose={close}
+      onDone={() => { setRefusal(null); setDecided((d) => new Set(d).add(current.clubId)); setTarget(chain ? NEXT : null); }} />
   ) : null;
   return {
-    open: (clubId) => { setStale(null); setDecided(new Set()); setChain(false); setTarget(clubId); },
-    openFirst: () => { setStale(null); setDecided(new Set()); setChain(true); setTarget(NEXT); },
+    open: (clubId) => { setRefusal(null); setDecided(new Set()); setChain(false); setTarget(clubId); },
+    openFirst: () => { setRefusal(null); setDecided(new Set()); setChain(true); setTarget(NEXT); },
     element,
   };
 }
