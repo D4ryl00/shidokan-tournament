@@ -1,4 +1,5 @@
 import { Button, Checkbox, Group, Modal, Radio, Stack, Text } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useEffect, useState, type ReactNode } from 'react';
 import { defaultChoice, emailChoices, resolvedValues, type ClubField, type ClubValues, type Side } from '../../../domain/club-changes.js';
 import { ApiError, useIgnoreClubChange, useResolveClubChange, type ClubChangeView } from '../../api.js';
@@ -123,10 +124,13 @@ export function useClubChangeDialog(changes: ClubChangeView[]): { open: (clubId:
   const [chain, setChain] = useState(false);
   const [stale, setStale] = useState<string | null>(null);
   const current = target === NEXT ? changes[0] : target ? changes.find((c) => c.clubId === target) : undefined;
-  // Changement disparu (décidé ailleurs, rendu identique) : la fenêtre se ferme.
+  // Changement disparu (décidé ailleurs, rendu identique) : la fenêtre se ferme ; si un refus venait de s'afficher, on le dit autrement.
   useEffect(() => {
-    if (target !== null && !current) setTarget(null);
-  }, [target, current]);
+    if (target === null || current) return;
+    if (stale) notifications.show({ color: 'yellow', message: `${stale} Ce changement n’existe plus.` });
+    setStale(null);
+    setTarget(null);
+  }, [target, current, stale]);
   const close = () => { setTarget(null); setStale(null); };
   const element = current ? (
     <ClubChangeModal key={`${current.clubId}:${current.changedAt}:${current.directoryVersion}`} change={current} notice={stale} onStale={setStale} onClose={close}

@@ -50,9 +50,7 @@ export function ClubFormPage() {
   return (
     <Stack gap="lg">
       {/* Bandeaux hors du panneau en ligne : ils restent sur un PC, où ce panneau n'existe pas. */}
-      <Stack gap="xs">
-        <CompetitionChangesBanner competitionId={id} onOpen={(clubId) => (clubId ? comparison.open(clubId) : comparison.openFirst())} />
-      </Stack>
+      <CompetitionChangesBanner competitionId={id} onOpen={(clubId) => (clubId ? comparison.open(clubId) : comparison.openFirst())} />
       {comparison.element}
       {/* Inscriptions en ligne et mails : serveur en ligne seulement ; rien tant que le rôle est inconnu. */}
       {me?.role === 'serveur' && <OnlineEntryPanel competitionId={id} />}

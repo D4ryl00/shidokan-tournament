@@ -150,13 +150,15 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {shown.map((i) => (
+                {shown.map((i) => {
+                  const change = changeOf(i.clubId);
+                  return (
                   <Table.Tr key={i.clubId} data-testid="invitation-row">
                     <Table.Td><Checkbox aria-label={`Choisir ${i.clubName}`} checked={checked.has(i.clubId)} onChange={(e) => toggle(i.clubId, e.currentTarget.checked)} /></Table.Td>
                     <Table.Td fw={600}>
                       <Group gap="xs" wrap="nowrap">
                         {i.clubName}
-                        {changeOf(i.clubId) && <ClubChangePill origin={changeOf(i.clubId)!.origin} />}
+                        {change && <ClubChangePill origin={change.origin} />}
                       </Group>
                     </Table.Td>
                     <Table.Td><EmailsList emails={i.coachEmails} /></Table.Td>
@@ -180,7 +182,8 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
                       <Button size="compact-sm" variant="subtle" loading={mailto.isPending && mailto.variables?.clubId === i.clubId} disabled={!settings.managedHere} onClick={() => { setAddresses({}); setMailtoClub(i); }}>Ouvrir dans ma messagerie</Button>
                     </Table.Td>
                   </Table.Tr>
-                ))}
+                  );
+                })}
               </Table.Tbody>
             </Table>
           </ScrollArea>

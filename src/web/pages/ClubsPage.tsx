@@ -98,12 +98,14 @@ export function ClubsPage() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {clubs.map((c) => (
+              {clubs.map((c) => {
+                const change = changeOf(c.id);
+                return (
                 <Table.Tr key={c.id} data-testid="club-row">
                   <Table.Td fw={600}>
                     <Group gap="xs" wrap="nowrap">
                       {c.name}
-                      {changeOf(c.id) && <ClubChangePill origin={changeOf(c.id)!.origin} />}
+                      {change && <ClubChangePill origin={change.origin} />}
                     </Group>
                   </Table.Td>
                   <Table.Td>{c.coachName ?? <Text span c="dimmed" size="sm">—</Text>}</Table.Td>
@@ -118,7 +120,8 @@ export function ClubsPage() {
                     <ActionIcon variant="subtle" color="gray" aria-label={`Modifier ${c.name}`} title="Modifier" data-testid="club-edit" onClick={() => setEditing(c)}><IconEdit /></ActionIcon>
                   </Table.Td>
                 </Table.Tr>
-              ))}
+                );
+              })}
             </Table.Tbody>
           </Table>
         </TableCard>
