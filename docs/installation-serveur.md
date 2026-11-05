@@ -151,6 +151,7 @@ Les sauvegardes automatiques (toutes les 30 minutes quand quelque chose a chang�
 rsync -a utilisateur@serveur:shidokan/data/sauvegardes/ ~/sauvegardes-shidokan/
 ```
 
+- **Les images du message aux clubs comptent dans chaque sauvegarde.** Chaque copie porte toutes les images : dix images de 2 Mo ajoutent 20 Mo à chacune, et jusqu'à 200 copies sont gardées (soit jusqu'à 4 Go pour ces seules images). Surveillez la place libre du disque et celle de votre copie hors du serveur. Une sauvegarde de 500 Mo au plus se restaure depuis l'application. Une restauration ne supprime aucune image : celles que plus aucun message ne cite sont retirées ensuite par le nettoyage.
 - **Les sauvegardes ne contiennent pas les comptes.** Après une restauration sur un nouveau serveur, recréez-les avec `cli.js add-user`, et refaites les réglages d'envoi des mails (reconnectez le compte Google).
 - **N'ouvrez jamais `data/shidokan.sqlite` avec un autre programme depuis l'hôte** pendant que l'application tourne. Utilisez les fichiers de `data/sauvegardes/` ou « Télécharger la base complète ». La commande `docker compose exec app …` (le CLI des comptes), elle, est sans risque.
 

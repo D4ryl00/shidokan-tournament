@@ -253,3 +253,29 @@ test('restaurer une sauvegarde d’une autre installation ne touche pas aux comp
   expect(r.prepare("select value_json from app_settings where key = 'privacyContact'").get()).toEqual({ value_json: '"local@example.org"' });
   r.close();
 });
+
+test('restauration : les images du message restent, celles de la sauvegarde reviennent (le message de l’application n’est pas restauré)', async () => {
+  const raw = new Database(dbPath);
+  const addImage = (id: string) => raw.prepare('insert into mail_images (id, content_type, size, data) values (?, ?, ?, ?)').run(id, 'image/png', 1, Buffer.from([1]));
+  const ids = () => (raw.prepare('select id from mail_images order by id').all() as { id: string }[]).map((r) => r.id);
+  try {
+    addImage('avant');
+    const snapshot = (await app.inject({ method: 'GET', url: '/api/backup.sqlite' })).rawPayload;
+    raw.prepare('delete from mail_images').run();
+    addImage('apres');
+    const res = await app.inject({ method: 'POST', url: '/api/restore', payload: snapshot, headers: { 'content-type': 'application/octet-stream' } });
+    expect(res.statusCode).toBe(204);
+    expect(ids()).toEqual(['apres', 'avant']);
+    // Déjà présente : gardée sans doublon ni erreur.
+    expect((await app.inject({ method: 'POST', url: '/api/restore', payload: snapshot, headers: { 'content-type': 'application/octet-stream' } })).statusCode).toBe(204);
+    expect(ids()).toEqual(['apres', 'avant']);
+  } finally {
+    raw.close();
+  }
+});
+
+test('restauration : une sauvegarde de plus de 20 Mio (images comprises) n’est pas refusée pour sa taille', async () => {
+  const res = await app.inject({ method: 'POST', url: '/api/restore', payload: Buffer.alloc(21 * 1024 * 1024, 1), headers: { 'content-type': 'application/octet-stream' } });
+  expect(res.statusCode).toBe(400);
+  expect(res.json().error).toBe("Ce fichier n'est pas une sauvegarde de l'application");
+});

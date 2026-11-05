@@ -10,7 +10,7 @@ export class RestoreError extends Error {
   }
 }
 
-/** 200 fichiers : plus d'une journée entière toutes les 5 minutes (les sauvegardes sont petites). */
+/** 200 fichiers : plus d'une journée entière toutes les 5 minutes (petites sans images ; chacune porte toutes les images du message). */
 const KEEP = 200;
 const NAME = /^shidokan-\d{8}-\d{6}-\d{3}\.sqlite$/;
 const quote = (p: string) => `'${p.replace(/'/g, "''")}'`;
@@ -27,6 +27,12 @@ function stamp(d = new Date()): string {
  * jamais), ses comptes et sessions, ses réglages (envoi des mails…).
  */
 export const INSTALLATION_TABLES = ['instance', 'change_counter', 'users', 'sessions', 'app_settings', 'sync_tokens'];
+
+/**
+ * Tables fusionnées par une restauration, sans rien supprimer. Le message de l'application n'est pas restauré (`app_settings`) et peut
+ * citer une image plus récente que la sauvegarde ; les identifiants sont des UUID et une image ne change jamais. Le nettoyage retire les orphelines.
+ */
+const MERGED_TABLES = ['mail_images'];
 
 /** Retire d'une copie de base ce qui ne doit pas quitter l'installation : comptes, sessions, jetons, mots de passe (effacés pour de bon). */
 function stripSecrets(file: string): void {
@@ -117,7 +123,8 @@ export function freshCopy(db: AppDb): Buffer {
 /**
  * Restaure une sauvegarde : contrôle qu'elle vient de l'application ; une sauvegarde d'une version antérieure est
  * d'abord mise à niveau (migrations appliquées à la copie temporaire), une d'une version plus récente est refusée.
- * Puis le contenu de chaque table est remplacé dans une seule transaction. En cas d'erreur, la base courante est intacte.
+ * Puis le contenu de chaque table est remplacé dans une seule transaction (les images du message sont fusionnées, voir `MERGED_TABLES`).
+ * En cas d'erreur, la base courante est intacte.
  */
 export async function restoreFrom(db: AppDb, file: Buffer, beforeCopy: () => Promise<unknown> = async () => undefined): Promise<void> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shidokan-restauration-'));
@@ -163,8 +170,9 @@ export async function restoreFrom(db: AppDb, file: Buffer, beforeCopy: () => Pro
         for (const t of tables) {
           // Colonnes nommées : l'ordre peut différer entre une base mise à niveau et une base créée d'un coup.
           const cols = (client.prepare(`select name from pragma_table_info('${t}')`).all() as { name: string }[]).map((c) => `"${c.name}"`).join(', ');
-          client.exec(`DELETE FROM main."${t}"`);
-          client.exec(`INSERT INTO main."${t}" (${cols}) SELECT ${cols} FROM src."${t}"`);
+          const merged = MERGED_TABLES.includes(t);
+          if (!merged) client.exec(`DELETE FROM main."${t}"`);
+          client.exec(`INSERT ${merged ? 'OR IGNORE ' : ''}INTO main."${t}" (${cols}) SELECT ${cols} FROM src."${t}"`);
         }
         // Restaurer, c'est reprendre la main sur ce que gérait l'installation d'origine ; et une installation n'est jamais « l'autre » pour elle-même.
         if (client.prepare("select 1 from src.sqlite_master where type = 'table' and name = 'instance'").get()) {
