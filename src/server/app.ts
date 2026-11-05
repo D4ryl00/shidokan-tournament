@@ -32,6 +32,7 @@ import { zoneRoutes } from './routes/zones.js';
 import { backupRoutes } from './routes/backups.js';
 import { directoryRoutes } from './routes/directory.js';
 import { invitationRoutes } from './routes/invitations.js';
+import { mailImageRoutes } from './routes/mail-images.js';
 import { clubEntryRoutes } from './routes/club-entry.js';
 import { loggerOptions } from './log.js';
 import { registerGuard, type InstanceRole } from './auth/guard.js';
@@ -239,6 +240,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   const google = googleConfig ? googleClient(googleConfig) : null;
   const mailTransport = opts.mailTransport ?? defaultMailTransport(google);
   await app.register(invitationRoutes, { db, dbPath: opts.dbPath, mailTransport, publicUrl: opts.publicUrl, mailPauseMs: opts.mailPauseMs, role });
+  await app.register(mailImageRoutes, { db });
   await app.register(clubEntryRoutes, { db });
   await app.register(authRoutes, { db, role });
   // Échanges de compétitions : les routes du serveur en ligne et celles du PC ne tournent que dans leur rôle.

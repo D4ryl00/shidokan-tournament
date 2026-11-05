@@ -8,7 +8,7 @@ import { fillClubForm } from '../helpers/club-form-fill.js';
 import { olderDb } from '../helpers/older-db.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
-const GLOBAL_TABLES = ['competitions', 'instance', 'change_counter', 'users', 'sessions', 'app_settings', 'sync_tokens', 'club_directory', 'club_aliases', 'import_mappings', 'grid_templates', '__drizzle_migrations'];
+const GLOBAL_TABLES = ['competitions', 'instance', 'change_counter', 'users', 'sessions', 'app_settings', 'sync_tokens', 'club_directory', 'club_aliases', 'import_mappings', 'grid_templates', 'mail_images', '__drizzle_migrations'];
 
 let db: AppDb | null = null;
 let app: FastifyInstance | null = null;

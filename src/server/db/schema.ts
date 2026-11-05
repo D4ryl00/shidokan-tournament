@@ -157,6 +157,18 @@ export const mailAttachments = sqliteTable('mail_attachments', {
   ...rowMeta(),
 });
 
+/**
+ * Images du message aux clubs (collées dans l'éditeur) : le contenu est dans la base. Une image ne change jamais, donc ni version ni
+ * compétition ; propres à l'installation (ni dans le paquet d'une compétition). Nettoyées 24 h après leur création si aucun message ne les cite.
+ */
+export const mailImages = sqliteTable('mail_images', {
+  id: text('id').primaryKey(),
+  contentType: text('content_type').notNull(),
+  size: integer('size').notNull(),
+  data: blob('data', { mode: 'buffer' }).notNull(),
+  createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+});
+
 /** Lien personnel d'un club pour une compétition (seule l'empreinte du jeton est gardée). */
 export const clubInvitations = sqliteTable('club_invitations', {
   id: text('id').primaryKey(),

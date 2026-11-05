@@ -100,6 +100,22 @@ test('routeAccess : chaque route enregistrée a la décision attendue pour la Ta
   for (const k of [...TABLE_WRITES, ...COMMON]) expect(keys.has(k), k).toBe(true);
 });
 
+test('images et filtre du message aux clubs : réservés à l’organisateur (Table centrale, Zone et sans session refusées)', async () => {
+  const { table, zone1, a } = await setup();
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
+  const octet = { 'content-type': 'application/octet-stream' };
+  for (const [name, who] of [['table', table], ['zone', zone1]] as const) {
+    for (const [method, url, payload] of [['POST', '/api/mail-images', undefined], ['GET', '/api/mail-images/11111111-1111-4111-8111-111111111111', undefined], ['POST', '/api/mail-html/check', { html: '<p>x</p>' }]] as const) {
+      const res = await who(method, url, payload);
+      expect(res.statusCode, `${name} ${method} ${url}`).toBe(403);
+    }
+  }
+  for (const [method, url, payload, headers] of [['POST', '/api/mail-images', png, octet], ['GET', '/api/mail-images/11111111-1111-4111-8111-111111111111', undefined, {}], ['POST', '/api/mail-html/check', { html: '<p>x</p>' }, {}]] as const) {
+    const res = await a.inject({ method, url, payload: payload as never, headers });
+    expect(res.statusCode, `sans session ${method} ${url}`).toBe(401);
+  }
+});
+
 test('pages et fichiers de l’application (hors /api) : toujours servis, quel que soit le rôle', () => {
   for (const role of ['table', 'zone'] as const) {
     expect(routeAccess(user(role), 'GET', '/*')).toBe('allow');

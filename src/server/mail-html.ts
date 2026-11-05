@@ -1,7 +1,7 @@
 import sanitizeHtml from 'sanitize-html';
 import { parseDocument } from 'htmlparser2';
 import { Element, Text, type ChildNode, type ParentNode } from 'domhandler';
-import { MAIL_IMAGE_LIMITS, mailImageIdsIn } from '../domain/mail-images.js';
+import { MAIL_IMAGE_LIMITS, mailImageIdOfSrc, mailImageIdsIn } from '../domain/mail-images.js';
 import { renderTemplate, type MailValues } from '../domain/mail-template.js';
 import type { MailTemplate } from '../domain/mail-template-schema.js';
 
@@ -165,7 +165,7 @@ export function cleanTemplate(t: MailTemplate): MailTemplate {
   if (t.format !== 'html') return t;
   const { html, text, imageIds } = cleanMailHtml(t.body);
   if (!text.trim() && !imageIds.length) throw new MailHtmlError('Le message est vide.');
-  if (imageIds.length > MAIL_IMAGE_LIMITS.maxPerMessage) throw new MailHtmlError(`Au plus ${MAIL_IMAGE_LIMITS.maxPerMessage} images par message.`);
+  if (imageIds.length > MAIL_IMAGE_LIMITS.perMessage) throw new MailHtmlError(`Au plus ${MAIL_IMAGE_LIMITS.perMessage} images par message.`);
   return { ...t, body: html };
 }
 
@@ -231,7 +231,7 @@ function style(parent: ParentNode, imageSrc?: (id: string) => string): void {
     const defaults = inItem ? 'margin: 0' : DEFAULT_STYLES[n.name];
     if (defaults) n.attribs.style = withDefaults(n.attribs.style, defaults);
     if (n.name === 'img' && imageSrc) {
-      const id = mailImageIdsIn(`<img src="${n.attribs.src ?? ''}">`)[0];
+      const id = mailImageIdOfSrc(n.attribs.src ?? '');
       if (id) n.attribs.src = imageSrc(id);
     }
     if (n.name === 'p' && !n.children.some((c) => c instanceof Element || (c instanceof Text && c.data.trim()))) n.children = [new Text(' ')];

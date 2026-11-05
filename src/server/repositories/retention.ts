@@ -2,6 +2,7 @@ import type { AppDb } from '../db/client.js';
 import { getAppSettings } from './app-settings.js';
 import { pruneOldBackups } from './backups.js';
 import { sweepAttachmentFiles } from './mail-attachments.js';
+import { sweepMailImages } from './mail-images.js';
 
 export interface PurgeReport {
   competitions: number;
@@ -59,6 +60,12 @@ export function startRetention(db: AppDb, dbPath: string, onError: (e: unknown) 
   const run = () => {
     try {
       purgeExpiredData(db, dbPath);
+    } catch (e) {
+      onError(e);
+    }
+    // Images des messages que plus aucun message ne cite : à part, pour qu'une panne ne bloque ni la purge ni le démarrage.
+    try {
+      sweepMailImages(db);
     } catch (e) {
       onError(e);
     }
