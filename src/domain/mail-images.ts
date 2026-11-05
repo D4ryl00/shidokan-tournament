@@ -8,9 +8,10 @@ export const MAIL_IMAGE_LIMITS = {
   perMessage: 10,
   /** Largeurs d'affichage proposées, en pixels. */
   widths: { small: 200, medium: 400, full: 600 },
-  /** Poids maximal d'un mail (images + fiches + pièces) ; Gmail refuse au-delà de 25 Mo une fois encodé (facteur ~1,37). */
-  maxMailBytes: 18 * 1024 * 1024,
 } as const;
+
+/** Poids maximal d'un mail (images + fiches + pièces) ; Gmail refuse au-delà de 25 Mo une fois encodé (facteur ~1,37). */
+export const MAIL_TOTAL_BYTES = 18 * 1024 * 1024;
 
 const ID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const IMAGE_SRC = new RegExp(`^/api/mail-images/(${ID})$`, 'i');

@@ -129,3 +129,16 @@ test('configuration Google retirée avec un compte connecté : « Déconnecter �
   expect(res.json()).toEqual({ revoked: false });
   expect(await settings()).toMatchObject({ google: null, mailMode: 'smtp' });
 });
+
+test('envoi par Gmail d’un message avec image : multipart/related et image incluse', async () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+  const id = (await app.inject({ method: 'POST', url: '/api/mail-images', payload: png, headers: { 'content-type': 'application/octet-stream' } })).json().id as string;
+  await app.inject({ method: 'PATCH', url: base, payload: { settings: { invitationMail: { subject: 'S', body: `<p>Bonjour</p><img src="/api/mail-images/${id}"><p>{lien}</p>`, format: 'html' } } } });
+  const links = await invited('a@example.org');
+  expect((await send(links.map((l) => l.clubId))).statusCode).toBe(200);
+  const mime = fake.sent[0]!.toString();
+  expect(mime).toContain('multipart/related');
+  expect(mime).toContain(`Content-ID: <image-${id}@shidokan>`);
+  // Le HTML est en quoted-printable : on retire les coupures de ligne souples avant de chercher.
+  expect(mime.replace(/=\r?\n/g, '')).toContain(`cid:image-${id}@shidokan`);
+});

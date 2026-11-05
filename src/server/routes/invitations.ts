@@ -82,7 +82,8 @@ export async function invitationRoutes(
   });
   app.get<P & { Querystring: { clubId?: string } }>('/api/competitions/:id/invitations/preview', async (req) => {
     const { clubId } = z.object({ clubId: z.string().min(1) }).parse(req.query);
-    return invitationMessage(db, req.params.id, clubId, '{lien}');
+    const { subject, text, html } = await invitationMessage(db, req.params.id, clubId, '{lien}');
+    return { subject, body: text, html };
   });
 
   // Pièces jointes ajoutées au mail aux clubs (affiche, règlement…).

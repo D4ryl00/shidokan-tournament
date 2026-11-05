@@ -5,10 +5,13 @@ import nodemailer from 'nodemailer';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
 import { mailErrorText, type MailTransport } from '../../src/server/mail.js';
+import { formatBytes } from '../../src/domain/mail-attachments.js';
+import { MAIL_IMAGE_LIMITS } from '../../src/domain/mail-images.js';
+import { textToHtml } from '../../src/domain/mail-template.js';
 import { attachmentDir } from '../../src/server/repositories/mail-attachments.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
-type Sent = { from: { name: string; address: string }; to: { name: string; address: string }[]; subject: string; text: string; html?: string; attachments?: { filename: string; content: Buffer; contentType: string }[] };
+type Sent = { from: { name: string; address: string }; to: { name: string; address: string }[]; subject: string; text: string; html?: string; attachments?: { filename: string; content: Buffer; contentType: string; cid?: string; contentDisposition?: string }[] };
 let sent: (Omit<Sent, 'to'> & { to: string })[];
 let failFor: Set<string>;
 let verifyError: string | null;
@@ -390,4 +393,86 @@ test('club en erreur SMTP : l’erreur notée et renvoyée est en français', as
   failCode = { address: 'refuse@club.fr', code: 'EENVELOPE', response: '550 refused' };
   const res = await send([a!.clubId]);
   expect(res.json()[0].error).toBe('Le serveur d’envoi a refusé l’adresse (réponse du serveur : 550 refused)');
+});
+
+// --- Message mis en forme et images ---------------------------------------------------------------------------------------
+const IMG_PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+const upload = async (data: Buffer = IMG_PNG) =>
+  (await app.inject({ method: 'POST', url: '/api/mail-images', payload: data, headers: { 'content-type': 'application/octet-stream' } })).json().id as string;
+const htmlMessage = (body: string) => app.inject({ method: 'PATCH', url: base, payload: { settings: { invitationMail: { subject: 'Coupe {competition}', body, format: 'html' } } } });
+const linkCount = async (clubId: string) => ((await app.inject({ method: 'GET', url: `${base}/invitations/${clubId}/links` })).json() as unknown[]).length;
+
+test('ancien message : text = corps rendu, html = textToHtml(corps), même avec a < b', async () => {
+  await smtp();
+  await app.inject({ method: 'PATCH', url: base, payload: { settings: { invitationMail: { subject: 'S', body: 'Si a < b, club {club} : {lien}' } } } });
+  const [link] = await invited({ name: 'Tani Dojo', coachEmails: ['tani@example.org'] });
+  await send([link!.clubId]);
+  expect(sent[0]!.html).toBe(textToHtml(sent[0]!.text));
+  expect(sent[0]!.text).toMatch(/^Si a < b, club Tani Dojo : https:/);
+  expect(sent[0]!.html).toContain('a &lt; b');
+});
+
+test('message html avec une image : cid dans le html, pièce en ligne, texte sans balise, un lien par club', async () => {
+  await smtp();
+  const id = await upload();
+  await htmlMessage(`<p>Bonjour <strong>{coach}</strong></p><img src="/api/mail-images/${id}" width="400"><p>{lien}</p>`);
+  const links = await invited({ name: 'Tani Dojo', coachEmails: ['tani@example.org'] }, { name: 'Budo', coachEmails: ['budo@example.org'] });
+  expect((await send(links.map((l) => l.clubId))).statusCode).toBe(200);
+  expect(sent).toHaveLength(2);
+  for (const m of sent) {
+    expect(m.html).toContain(`cid:image-${id}@shidokan`);
+    const image = m.attachments!.find((a) => a.cid === `image-${id}@shidokan`)!;
+    expect(image).toMatchObject({ contentType: 'image/png', contentDisposition: 'inline' });
+    expect(image.content.equals(IMG_PNG)).toBe(true);
+    expect(m.text).not.toMatch(/<|>/);
+    expect(m.text).toContain('Bonjour');
+  }
+  expect(tokenOf(sent[0]!.text)).not.toBe(tokenOf(sent[1]!.text));
+  expect(sent[0]!.html).toContain(`/inscription/${tokenOf(sent[0]!.text)}`);
+});
+
+test('image absente de la base : rejet avant tout envoi, aucun lien créé', async () => {
+  await smtp();
+  await htmlMessage('<p>Salut</p><img src="/api/mail-images/11111111-1111-4111-8111-111111111111">');
+  const [link] = await invited({ name: 'Tani Dojo', coachEmails: ['tani@example.org'] });
+  const res = await send([link!.clubId]);
+  expect(res.statusCode).toBe(400);
+  expect(res.json().error).toContain('Image introuvable dans le message : remettez-la dans l’éditeur.');
+  expect(sent).toHaveLength(0);
+  expect(await linkCount(link!.clubId)).toBe(1);
+});
+
+test('mail trop lourd : rejet avant tout envoi, aucun lien créé', async () => {
+  await smtp();
+  const big = Buffer.concat([IMG_PNG, Buffer.alloc(MAIL_IMAGE_LIMITS.fileBytes - IMG_PNG.length)]);
+  const ids: string[] = [];
+  for (let i = 0; i < 9; i++) ids.push(await upload(big));
+  await htmlMessage(ids.map((id) => `<img src="/api/mail-images/${id}">`).join(''));
+  const [link] = await invited({ name: 'Tani Dojo', coachEmails: ['tani@example.org'] });
+  const res = await send([link!.clubId]);
+  expect(res.statusCode).toBe(400);
+  expect(res.json().error).toMatch(/^Mail trop lourd \(.+ Mo, 18 Mo au plus\) : retirez une image ou une pièce jointe\.$/);
+  expect(res.json().error).toContain(formatBytes(9 * MAIL_IMAGE_LIMITS.fileBytes));
+  expect(sent).toHaveLength(0);
+  expect(await linkCount(link!.clubId)).toBe(1);
+});
+
+test('messagerie : le corps est la version texte, sans balise ni image', async () => {
+  const id = await upload();
+  await htmlMessage(`<p>Bonjour <strong>{coach}</strong></p><img src="/api/mail-images/${id}"><p>{lien}</p>`);
+  const [link] = await invited({ name: 'Tani Dojo', coachEmails: ['tani@example.org'], coachName: 'Jean' });
+  const res = (await app.inject({ method: 'POST', url: `${base}/invitations/${link!.clubId}/mailto`, payload: {} })).json();
+  expect(res.body).toMatch(/^Bonjour Jean\n\nhttps:\/\/competitions\.example\.org\/inscription\//);
+  expect(res.body).not.toMatch(/[<>]|mail-images/);
+});
+
+test('aperçu html : garde /api/mail-images/<id> et échappe le nom du club', async () => {
+  const id = await upload();
+  await htmlMessage(`<p>Club {club}</p><img src="/api/mail-images/${id}">`);
+  const [link] = await invited({ name: '<b>x</b>', coachEmails: ['tani@example.org'] });
+  const res = (await app.inject({ method: 'GET', url: `${base}/invitations/preview?clubId=${link!.clubId}` })).json();
+  expect(res.html).toContain(`/api/mail-images/${id}`);
+  expect(res.html).toContain('&lt;b&gt;x&lt;/b&gt;');
+  expect(res.html).not.toContain('<b>x</b>');
+  expect(res.body).toContain('Club <b>x</b>');
 });

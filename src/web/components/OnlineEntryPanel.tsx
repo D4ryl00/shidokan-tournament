@@ -203,7 +203,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
                       </Button>
                     </Table.Td>
                     <Table.Td ta="right">
-                      <Button size="compact-sm" variant="subtle" loading={mailto.isPending && mailto.variables?.clubId === i.clubId} onClick={() => { setExcluded({}); setMailtoClub(i); }}>Ouvrir dans ma messagerie</Button>
+                      <Button size="compact-sm" variant="subtle" loading={mailto.isPending && mailto.variables?.clubId === i.clubId} disabled={!settings.managedHere} onClick={() => { setExcluded({}); setMailtoClub(i); }}>Ouvrir dans ma messagerie</Button>
                     </Table.Td>
                   </Table.Tr>
                 ))}
@@ -211,10 +211,10 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
             </Table>
           </ScrollArea>
           <Group>
-            <Button data-testid="send-invitations" disabled={selected.length === 0} loading={send.isPending} onClick={() => { setExcluded({}); setConfirmSend(true); }}>
+            <Button data-testid="send-invitations" disabled={selected.length === 0 || !settings.managedHere} loading={send.isPending} onClick={() => { setExcluded({}); setConfirmSend(true); }}>
               Envoyer le lien par mail ({selected.length})
             </Button>
-            <Text size="sm" c="dimmed">{NEW_LINK_WARNING}</Text>
+            <Text size="sm" c="dimmed">{settings.managedHere ? NEW_LINK_WARNING : 'Rendez la main au serveur pour envoyer des mails.'}</Text>
           </Group>
           <CompetitionMessage competitionId={competitionId} previewClubId={selected[0]?.clubId ?? null} />
         </>
@@ -240,6 +240,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
       <Modal opened={mailtoClub !== null} onClose={() => setMailtoClub(null)} title="Ouvrir dans ma messagerie">
         <Stack>
           <Text>Un nouveau lien est créé pour {mailtoClub?.clubName} ; ses liens d’avant restent valables. Envoyez bien ce mail depuis votre messagerie.</Text>
+          <Text size="sm">Votre messagerie recevra le texte seul : sans mise en forme ni image.</Text>
           {mailtoClub && mailtoClub.coachEmails.length > 1 && <Recipients club={mailtoClub} excluded={excluded} onChange={setExcluded} />}
           {attachments.length > 0 && (
             <Text size="sm" data-testid="mailto-attachments">

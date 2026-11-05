@@ -47,7 +47,8 @@ export function CompetitionMessage({ competitionId, previewClubId }: { competiti
               <Stack gap={4}>
                 <Text size="sm" fw={600}>Aperçu pour le premier club coché (le lien sera créé à l’envoi)</Text>
                 <Text size="sm">Objet : {preview.data.subject}</Text>
-                <Text size="sm" style={{ whiteSpace: 'pre-wrap' }} p="xs" bg="var(--mantine-color-default-hover)">{preview.data.body}</Text>
+                {/* Le HTML est filtré par le serveur ; fond blanc et texte sombre dans les deux thèmes, comme dans la messagerie. */}
+                <div data-testid="invitation-preview" style={{ background: '#ffffff', color: '#222222', padding: 12, borderRadius: 4, overflowX: 'auto' }} dangerouslySetInnerHTML={{ __html: preview.data.html }} />
                 {lines && (
                   <Text size="sm" data-testid="invitation-attachments">
                     Pièces jointes : {sentLines(lines).map((l) => (l.missing ? `${l.fileName} (manquante : l’envoi sera refusé)` : l.fileName)).join(', ') || 'aucune'}

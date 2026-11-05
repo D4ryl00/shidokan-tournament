@@ -1042,7 +1042,7 @@ export const useMailtoInvitation = (id: string) =>
 export const useInvitationPreview = (id: string, clubId: string | null, version: string) =>
   useQuery({
     queryKey: ['invitation-preview', id, clubId, version],
-    queryFn: () => api<{ subject: string; body: string }>('GET', `/api/competitions/${id}/invitations/preview?clubId=${clubId}`),
+    queryFn: () => api<{ subject: string; body: string; html: string }>('GET', `/api/competitions/${id}/invitations/preview?clubId=${clubId}`),
     enabled: !!clubId,
   });
 

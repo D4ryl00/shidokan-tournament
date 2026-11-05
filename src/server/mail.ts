@@ -5,7 +5,8 @@ import { buildClubFormPdf } from './club-form-pdf.js';
 import { buildClubFormTemplate } from './club-form-template.js';
 import { writeOds } from './spreadsheet/ods.js';
 import { isAcceptableEmail, joinEmails, sameEmail } from '../domain/emails.js';
-import { clubFormFileNames } from '../domain/mail-attachments.js';
+import { clubFormFileNames, formatBytes } from '../domain/mail-attachments.js';
+import { MAIL_TOTAL_BYTES, mailImageIdsIn } from '../domain/mail-images.js';
 import { frenchDate, renderTemplate, textToHtml, type MailValues } from '../domain/mail-template.js';
 import type { AppDb } from './db/client.js';
 import { clubs, mailLog } from './db/schema.js';
@@ -15,6 +16,8 @@ import { closedSet } from './repositories/closed-categories.js';
 import { getCompetition, getGrid } from './repositories/competitions.js';
 import { addInvitationLink, markLinkSent, revokeLink } from './repositories/invitations.js';
 import { listMailAttachments, readMailAttachment } from './repositories/mail-attachments.js';
+import { readMailImage } from './repositories/mail-images.js';
+import { renderMailHtml } from './mail-html.js';
 import { NotFoundError } from './repositories/registrations.js';
 
 export interface MailAddress {
@@ -34,6 +37,9 @@ export interface MailAttachment {
   filename: string;
   content: Buffer;
   contentType: string;
+  /** Image affichée dans le texte du mail : identifiant cité par `cid:` dans le HTML. */
+  cid?: string;
+  contentDisposition?: 'inline' | 'attachment';
 }
 /** Qui envoie : un serveur SMTP (identifiant et mot de passe) ou le compte Google connecté. */
 export type MailSender = { kind: 'smtp'; smtp: SmtpSettings } | { kind: 'google'; google: GoogleSender };
@@ -126,12 +132,23 @@ function clubOf(db: AppDb, competitionId: string, clubId: string) {
   return club;
 }
 
-/** Message d'invitation d'un club : celui de la compétition, sinon celui de l'application ; `link` remplace {lien}. */
-export async function invitationMessage(db: AppDb, competitionId: string, clubId: string, link: string): Promise<MailTemplate> {
+/** Message d'invitation d'une compétition : le sien, sinon celui de l'application. */
+async function templateOf(db: AppDb, competitionId: string): Promise<MailTemplate> {
+  const competition = await getCompetition(db, competitionId);
+  if (!competition) throw new NotFoundError('Compétition introuvable');
+  return competition.settings.invitationMail ? currentInvitationMail(competition.settings.invitationMail) : getAppSettings(db).invitationMail;
+}
+
+/**
+ * Message d'invitation d'un club : celui de la compétition, sinon celui de l'application ; `link` remplace {lien}.
+ * `imageSrc` donne l'adresse des images d'un message mis en forme (absent : leur adresse dans l'application, pour l'aperçu).
+ * Un ancien message en texte brut est rendu comme avant.
+ */
+export async function invitationMessage(db: AppDb, competitionId: string, clubId: string, link: string, imageSrc?: (id: string) => string, template?: MailTemplate): Promise<{ subject: string; text: string; html: string }> {
   const competition = await getCompetition(db, competitionId);
   if (!competition) throw new NotFoundError('Compétition introuvable');
   const club = clubOf(db, competitionId, clubId);
-  const template = competition.settings.invitationMail ? currentInvitationMail(competition.settings.invitationMail) : getAppSettings(db).invitationMail;
+  const chosen = template ?? (await templateOf(db, competitionId));
   const row = db.$client.prepare('select club_entry_deadline as d from competitions where id = ?').get(competitionId) as { d: string | null };
   const values: MailValues = {
     club: club.name,
@@ -142,7 +159,30 @@ export async function invitationMessage(db: AppDb, competitionId: string, clubId
     date_limite: row.d ? frenchDate(row.d) : 'non précisée',
     lien: link,
   };
-  return { subject: renderTemplate(template.subject, values), body: renderTemplate(template.body, values) };
+  const subject = renderTemplate(chosen.subject, values);
+  if (chosen.format === 'html') return { subject, ...renderMailHtml(chosen.body, values, imageSrc) };
+  const text = renderTemplate(chosen.body, values);
+  return { subject, text, html: textToHtml(text) };
+}
+
+const IMAGE_EXTENSIONS: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif' };
+const imageCid = (id: string) => `image-${id}@shidokan`;
+
+/**
+ * Images du message d'une compétition, jointes en ligne (une seule fois pour tous les clubs). Une image absente de la base
+ * (supprimée, ou message importé sans ses images) ou un mail trop lourd : refus, avant tout envoi et tout lien.
+ */
+async function invitationImages(db: AppDb, template: MailTemplate, others: MailAttachment[]): Promise<MailAttachment[]> {
+  if (template.format !== 'html') return [];
+  const out: MailAttachment[] = [];
+  for (const id of mailImageIdsIn(template.body)) {
+    const image = readMailImage(db, id);
+    if (!image) throw new MailError('Image introuvable dans le message : remettez-la dans l’éditeur.');
+    out.push({ filename: `image-${id}.${IMAGE_EXTENSIONS[image.contentType] ?? 'bin'}`, content: image.data, contentType: image.contentType, cid: imageCid(id), contentDisposition: 'inline' });
+  }
+  const total = [...out, ...others].reduce((sum, a) => sum + a.content.length, 0);
+  if (total > MAIL_TOTAL_BYTES) throw new MailError(`Mail trop lourd (${formatBytes(total)}, ${formatBytes(MAIL_TOTAL_BYTES)} au plus) : retirez une image ou une pièce jointe.`);
+  return out;
 }
 
 /**
@@ -199,7 +239,10 @@ function recipientsOf(club: { coachEmails: string[] }, chosen: string[] | undefi
 export async function sendInvitations(db: AppDb, dbPath: string, transport: MailTransport, competitionId: string, targets: SendTarget[], baseUrl: string, pauseMs = 300): Promise<SendResult[]> {
   const sender = senderOf(db);
   // Les mêmes pièces jointes pour chaque club : préparées une fois, avant tout (une pièce manquante arrête l'envoi sans rien changer).
-  const attachments = await invitationAttachments(db, dbPath, competitionId);
+  const files = await invitationAttachments(db, dbPath, competitionId);
+  // Le message et ses images, lus une fois : une image absente ou un mail trop lourd arrête l'envoi avant le moindre lien.
+  const template = await templateOf(db, competitionId);
+  const attachments = [...(await invitationImages(db, template, files)), ...files];
   const mailer = transport(sender);
   try {
     await mailer.verify?.();
@@ -234,8 +277,8 @@ export async function sendInvitations(db: AppDb, dbPath: string, transport: Mail
     const link = addInvitationLink(db, competitionId, clubId);
     let error: string | null = null;
     try {
-      const message = await invitationMessage(db, competitionId, clubId, linkUrl(baseUrl, link.token));
-      await mailer.sendMail({ from: fromOf(sender), to: recipients.emails.map((address) => ({ name: club.name, address })), subject: message.subject, text: message.body, html: textToHtml(message.body), attachments });
+      const message = await invitationMessage(db, competitionId, clubId, linkUrl(baseUrl, link.token), (id) => `cid:${imageCid(id)}`, template);
+      await mailer.sendMail({ from: fromOf(sender), to: recipients.emails.map((address) => ({ name: club.name, address })), subject: message.subject, text: message.text, html: message.html, attachments });
       markLinkSent(db, link.token, 'mail');
     } catch (e) {
       revokeLink(db, link.token);
@@ -262,7 +305,7 @@ export async function mailtoInvitation(db: AppDb, competitionId: string, clubId:
   const link = addInvitationLink(db, competitionId, clubId);
   markLinkSent(db, link.token, 'messagerie');
   const message = await invitationMessage(db, competitionId, clubId, linkUrl(baseUrl, link.token));
-  return { to: recipients.emails.length ? recipients.emails.join(',') : null, subject: message.subject, body: message.body };
+  return { to: recipients.emails.length ? recipients.emails.join(',') : null, subject: message.subject, body: message.text };
 }
 
 export async function sendTestMail(db: AppDb, transport: MailTransport, to: string): Promise<void> {
