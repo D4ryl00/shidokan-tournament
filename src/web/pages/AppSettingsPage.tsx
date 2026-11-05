@@ -11,7 +11,9 @@ import { DayChecklist } from '../components/DayChecklist.js';
 import { ZoneLinkCard } from '../components/ZoneLinkCard.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { MailMessageEditor } from '../components/mail-editor/index.js';
+import { useRemovedNotice } from '../components/mail-editor/removed-notice.js';
 import { HELP } from '../help.js';
+import { useUnsaved } from '../unsaved.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
 import { RuleLadder } from '../components/replacement/RuleLadder.js';
@@ -178,14 +180,30 @@ function TextsCard({ settings, withMessage }: { settings: PublicAppSettings; wit
     subject: settings.invitationMail.subject, body: settings.invitationMail.body, format: settings.invitationMail.format, privacyNotice: settings.privacyNotice, privacyContact: settings.privacyContact,
     retentionMonths: settings.retentionMonths, directoryInactiveYears: settings.directoryInactiveYears,
   });
-  // En mode code, le texte n'est pas encore le message : on n'enregistre qu'après être revenu à l'éditeur.
-  const [sourceMode, setSourceMode] = useState(false);
+  // Dernières valeurs enregistrées : quitter l'écran avec autre chose demande confirmation.
+  const [lastSaved, setLastSaved] = useState(form);
+  const unsaved = JSON.stringify(form) !== JSON.stringify(lastSaved);
+  useUnsaved('textes-reglages', unsaved);
+  // L'éditeur ne lit son contenu qu'à l'ouverture : après un enregistrement, il repart du message tel que le serveur l'a gardé.
+  const [opened, setOpened] = useState({ mail: settings.invitationMail, key: 0 });
+  // Mode code ou image en cours d'envoi : le message n'est pas prêt, on enregistre ensuite.
+  const [saveBlock, setSaveBlock] = useState<string | null>(null);
+  const { checking, noticeThenSave } = useRemovedNotice();
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
-  const save = () =>
+  const send = () =>
     update.mutate(
       { ...(withMessage ? { invitationMail: { subject: form.subject, body: form.body, format: form.format } } : {}), privacyNotice: form.privacyNotice, privacyContact: form.privacyContact, retentionMonths: form.retentionMonths, directoryInactiveYears: form.directoryInactiveYears },
-      { onSuccess: saved },
+      {
+        onSuccess: ({ invitationMail: mail }) => {
+          const kept = withMessage ? { ...form, subject: mail.subject, body: mail.body, format: mail.format } : form;
+          setForm(kept);
+          setLastSaved(kept);
+          if (withMessage) setOpened(({ key }) => ({ mail, key: key + 1 }));
+          saved();
+        },
+      },
     );
+  const save = () => (withMessage ? noticeThenSave(form, send) : send());
   return (
     <SectionCard id="clubs" title={withMessage ? 'Message aux clubs et données personnelles' : 'Données personnelles'}
       description={withMessage ? 'Le message des invitations, la mention de la page des clubs et la durée de conservation des données.' : 'La mention de la page des clubs et la durée de conservation des données.'}>
@@ -196,7 +214,7 @@ function TextsCard({ settings, withMessage }: { settings: PublicAppSettings; wit
             <Text size="sm" c="dimmed">Variables : {'{club} {coach} {competition} {date} {lieu} {date_limite} {lien}'}. Chaque compétition peut avoir son propre message (onglet Fiche club).</Text>
             <TextInput label="Objet" value={form.subject} onChange={(e) => set({ subject: e.currentTarget.value })} />
             <Input.Wrapper label="Texte">
-              <MailMessageEditor value={settings.invitationMail} onChange={(v) => set(v)} onSourceModeChange={setSourceMode} />
+              <MailMessageEditor key={opened.key} value={opened.mail} onChange={(v) => set(v)} onSaveBlockChange={setSaveBlock} />
             </Input.Wrapper>
           </Stack>
           <Divider color="var(--sk-line)" />
@@ -218,8 +236,8 @@ function TextsCard({ settings, withMessage }: { settings: PublicAppSettings; wit
       </Stack>
       <ApiErrorAlert error={update.error} />
       <Group justify="flex-end">
-        {sourceMode && <Text size="sm" c="dimmed">Revenez à l’éditeur pour enregistrer.</Text>}
-        <Button loading={update.isPending} disabled={sourceMode} onClick={save}>Enregistrer</Button>
+        {saveBlock ? <Text size="sm" c="dimmed">{saveBlock}</Text> : unsaved && <Text size="sm" c="dimmed" data-testid="texts-unsaved">Modifications non enregistrées.</Text>}
+        <Button loading={update.isPending || checking} disabled={!!saveBlock} onClick={save}>Enregistrer</Button>
       </Group>
     </SectionCard>
   );

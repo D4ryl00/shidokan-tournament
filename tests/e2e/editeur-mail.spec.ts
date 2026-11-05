@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { createCompetition, SERVER_SESSION } from './helpers.js';
 
 test.use({ baseURL: 'http://localhost:3101', storageState: SERVER_SESSION });
@@ -143,7 +143,7 @@ test('images et mode code : image, tailles, WebP converti, SVG refusé ; message
   expect(saved.settings.invitationMail.body).not.toMatch(/script|e\.fr|&lt;/);
 
   // 5. Coller un tableau : signalé, pas de tableau dans le message.
-  await page.getByRole('button', { name: /Message aux clubs de cette compétition/ }).isVisible();
+  await expect(page.getByRole('button', { name: /Message aux clubs de cette compétition/ })).toBeVisible();
   await editor.locator('p').first().click();
   await editor.evaluate((el) => {
     const data = new DataTransfer();
@@ -160,4 +160,214 @@ test('images et mode code : image, tailles, WebP converti, SVG refusé ; message
   await expect(settingsEditor().locator('img[src^="/api/mail-images/"]')).toHaveCount(0);
   await saveSettings().click();
   await expect(page.getByText('Réglages enregistrés.')).toBeVisible();
+});
+
+/** Une compétition avec un club invité (nom propre à chaque test), son message ouvert. Renvoie ses identifiants. */
+async function openedMessage(page: Page, request: APIRequestContext, name: string, club: string) {
+  const id = await createCompetition(page, name);
+  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
+  const directory = (await (await request.post('/api/club-directory', { data: { ...EMPTY, name: `${club} ${Date.now()}`, coachEmails: ['coach@exemple.example'] } })).json()) as { id: string };
+  const [link] = (await (await request.post(`/api/competitions/${id}/invitations`, { data: { directoryIds: [directory.id] } })).json()) as { clubId: string }[];
+  await page.goto(`/competitions/${id}/fiche-club`);
+  await page.getByRole('button', { name: /Message aux clubs de cette compétition/ }).click();
+  const editor = page.getByTestId('mail-editor').locator('.ProseMirror');
+  await expect(editor.locator('p').first()).toBeVisible();
+  return { id, clubId: link!.clubId, editor };
+}
+
+const pasteHtml = (editor: Locator, html: string) =>
+  editor.evaluate((el, h) => {
+    const data = new DataTransfer();
+    data.setData('text/html', h);
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  }, html);
+
+test('liens et couleurs : www. et adresse e-mail complétés, adresse refusée dite, {lien} par la fenêtre de lien, aperçu inerte, retrait annoncé à l’enregistrement', async ({ page, request }) => {
+  const { id, clubId, editor } = await openedMessage(page, request, 'Liens Nagoya', 'Dojo Nagoya');
+  const setLink = async (address: string) => {
+    await editor.click();
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.getByRole('button', { name: 'Lien', exact: true }).click();
+    await page.getByPlaceholder('https://… ou {lien}').fill(address);
+    await page.getByRole('button', { name: 'Valider' }).click();
+  };
+  await editor.click();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type('Inscrivez-vous');
+
+  await setLink('www.club.fr');
+  await expect(editor.locator('a')).toHaveAttribute('href', 'https://www.club.fr');
+  await setLink('contact@club.fr');
+  await expect(editor.locator('a')).toHaveAttribute('href', 'mailto:contact@club.fr');
+  // Refusées : dit, et le lien précédent ne change pas.
+  await setLink('tel:0102030405');
+  await expect(page.getByText(/Adresse de lien refusée/)).toBeVisible();
+  await expect(editor.locator('a')).toHaveAttribute('href', 'mailto:contact@club.fr');
+
+  // Le lien personnel derrière un mot : gardé à l'enregistrement, sans retrait annoncé.
+  await setLink('{lien}');
+  await expect(editor.locator('a')).toHaveAttribute('href', '{lien}');
+  await page.getByRole('checkbox', { name: /^Choisir Dojo Nagoya/ }).check();
+  await page.getByRole('button', { name: 'Enregistrer pour cette compétition' }).click();
+  await expect(page.getByText('Message enregistré.')).toBeVisible();
+  await expect(page.getByText(/Retiré du message/)).toHaveCount(0);
+  const stored = async () => ((await (await request.get(`/api/competitions/${id}`)).json()) as { settings: { invitationMail: { body: string } } }).settings.invitationMail.body;
+  expect(await stored()).toContain('href="{lien}"');
+  await expect(editor.locator('a')).toHaveAttribute('href', '{lien}');
+  const mailto = (await (await request.post(`/api/competitions/${id}/invitations/${clubId}/mailto`, { data: {} })).json()) as { body: string };
+  expect(mailto.body).toMatch(/Inscrivez-vous \(https?:\/\/[^)]*\/inscription\/[^)]+\)/);
+
+  // Aperçu : un clic sur un lien ne quitte pas la page.
+  const url = page.url();
+  await page.getByTestId('invitation-preview').locator('a').click();
+  await expect(page.getByTestId('invitation-preview')).toBeVisible();
+  expect(page.url()).toBe(url);
+
+  // Couleur nommée collée : gardée. Couleur que le filtre ne connaît pas : retirée, et dit à l'enregistrement.
+  await editor.click();
+  await pasteHtml(editor, '<p><span style="color: red">rouge</span></p>');
+  await expect(editor.locator('span', { hasText: 'rouge' })).toHaveAttribute('style', /color: red/);
+  await pasteHtml(editor, '<p><span style="color: var(--x)">variable</span></p>');
+  await expect(editor).toContainText('variable');
+  await page.getByRole('button', { name: 'Enregistrer pour cette compétition' }).click();
+  await expect(page.getByText('Retiré du message : style non permis.')).toBeVisible();
+  await expect(page.getByText('Message enregistré.').first()).toBeVisible();
+  const body = await stored();
+  expect(body).toContain('color:red');
+  expect(body).not.toContain('var(--x)');
+});
+
+test('réglages : retrait annoncé à l’enregistrement et visible sans recharger ; modification non enregistrée signalée', async ({ page, request }) => {
+  const original = ((await (await request.get('/api/app-settings')).json()) as { invitationMail: unknown }).invitationMail;
+  await page.goto('/parametres');
+  const editor = page.getByTestId('mail-editor').locator('.ProseMirror');
+  await expect(editor.locator('p').first()).toContainText('Bonjour');
+  await expect(page.getByTestId('texts-unsaved')).toHaveCount(0);
+
+  // Avertissement avant de quitter une page modifiée.
+  await page.getByLabel('Objet').fill('Objet modifié');
+  await expect(page.getByTestId('texts-unsaved')).toBeVisible();
+  const dialogs: string[] = [];
+  page.once('dialog', (d) => {
+    dialogs.push(d.type());
+    void d.accept();
+  });
+  await page.reload();
+  expect(dialogs).toEqual(['beforeunload']);
+  await expect(page.getByLabel('Objet')).not.toHaveValue('Objet modifié');
+
+  await editor.locator('p').first().click();
+  await pasteHtml(editor, '<p><span style="color: var(--x)">variable</span></p>');
+  await expect(editor.locator('span', { hasText: 'variable' })).toHaveAttribute('style', /var\(--x\)/);
+  await expect(page.getByTestId('texts-unsaved')).toBeVisible();
+  await page.getByTestId('mail-editor').locator('xpath=ancestor::*[@id="clubs"]').getByRole('button', { name: /Enregistrer/ }).first().click();
+  await expect(page.getByText('Retiré du message : style non permis.')).toBeVisible();
+  await expect(page.getByText('Réglages enregistrés.')).toBeVisible();
+  await expect(page.getByTestId('texts-unsaved')).toHaveCount(0);
+  // L'éditeur montre aussitôt ce que le serveur a gardé.
+  await expect(editor).toContainText('variable');
+  await expect(editor.locator('span[style*="var(--x)"]')).toHaveCount(0);
+
+  await request.patch('/api/app-settings', { data: { invitationMail: original } });
+});
+
+test('brouillon du message : quitter l’onglet demande confirmation ; les fenêtres d’envoi et de messagerie préviennent', async ({ page, request }) => {
+  const WARNING = 'Le message affiché n’est pas enregistré : c’est la dernière version enregistrée qui partira.';
+  const { editor } = await openedMessage(page, request, 'Brouillon Osaka', 'Dojo Osaka');
+  await page.getByRole('checkbox', { name: /^Choisir Dojo Osaka/ }).check();
+  const openSend = async () => {
+    await page.getByTestId('send-invitations').click();
+    return page.getByRole('dialog', { name: 'Envoyer le lien par mail' });
+  };
+  const openMailto = async () => {
+    await page.getByRole('button', { name: 'Ouvrir dans ma messagerie' }).click();
+    return page.getByRole('dialog', { name: 'Ouvrir dans ma messagerie' });
+  };
+
+  // Rien de modifié : ni avertissement, ni confirmation.
+  let dialog = await openSend();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByTestId('unsaved-message-warning')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Annuler' }).click();
+
+  await editor.locator('p').first().click();
+  await page.keyboard.type('Brouillon ');
+  dialog = await openSend();
+  await expect(dialog.getByTestId('unsaved-message-warning')).toHaveText(WARNING);
+  await dialog.getByRole('button', { name: 'Annuler' }).click();
+  dialog = await openMailto();
+  await expect(dialog.getByTestId('unsaved-message-warning')).toHaveText(WARNING);
+  await dialog.getByRole('button', { name: 'Annuler' }).click();
+
+  await page.getByRole('tab', { name: 'Réglages', exact: true }).click();
+  await expect(page.getByTestId('leave-confirm')).toBeVisible();
+  await page.getByTestId('leave-stay').click();
+  await expect(editor).toContainText('Brouillon');
+
+  await page.getByRole('button', { name: 'Enregistrer pour cette compétition' }).click();
+  await expect(page.getByText('Message enregistré.')).toBeVisible();
+  dialog = await openSend();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByTestId('unsaved-message-warning')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Annuler' }).click();
+  await page.getByRole('tab', { name: 'Réglages', exact: true }).click();
+  await expect(page).toHaveURL(/\/reglages$/);
+});
+
+test('fichiers : dépôt hors liste refusé sans quitter la page, image copiée reçue comme fichier, GPS retiré d’un petit JPEG, envoi visible et enregistrement bloqué', async ({ page, request }) => {
+  const { editor } = await openedMessage(page, request, 'Images Sendai', 'Dojo Sendai');
+  const images = editor.locator('img[src^="/api/mail-images/"]');
+
+  // Un PDF déposé : refus, l'événement est pris (le navigateur n'ouvre pas le fichier).
+  const prevented = await editor.evaluate((el) => {
+    const data = new DataTransfer();
+    data.items.add(new File(['%PDF-1.4'], 'affiche.pdf', { type: 'application/pdf' }));
+    const box = el.getBoundingClientRect();
+    return !el.dispatchEvent(new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true, clientX: box.left + 5, clientY: box.top + 5 }));
+  });
+  expect(prevented).toBe(true);
+  await expect(page.getByText('Format d’image non accepté : JPEG, PNG, WebP ou GIF.')).toBeVisible();
+  await expect(images).toHaveCount(0);
+
+  // « Copier l'image » : un fichier et une balise img dans le presse-papiers. Le fichier est pris, rien n'est annoncé comme retiré.
+  await editor.locator('p').first().click();
+  const png = (await drawnImage(page, 'image/png')).toString('base64');
+  await editor.evaluate((el, b64) => {
+    const data = new DataTransfer();
+    data.setData('text/html', '<meta charset="utf-8"><img src="https://e.fr/photo.png" alt="photo">');
+    data.items.add(new File([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], 'image.png', { type: 'image/png' }));
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  }, png);
+  await expect(images).toHaveCount(1);
+  await expect(page.getByText(/Retiré du collage/)).toHaveCount(0);
+
+  // Pendant l'envoi : indicateur, enregistrement bloqué ; ensuite, de nouveau possible. Un JPEG porteur d'un segment Exif arrive sans.
+  let release = () => {};
+  const held = new Promise<void>((r) => (release = r));
+  await page.route('**/api/mail-images', async (route) => {
+    await held;
+    await route.continue();
+  });
+  const save = page.getByRole('button', { name: 'Enregistrer pour cette compétition' });
+  const jpeg = await drawnImage(page, 'image/jpeg');
+  const marker = Buffer.from('Exif\0\0GPSMARQUE');
+  const app1 = Buffer.concat([Buffer.from([0xff, 0xe1, 0, marker.length + 2]), marker]);
+  await page.getByTestId('mail-editor-image-input').setInputFiles({ name: 'photo.jpg', mimeType: 'image/jpeg', buffer: Buffer.concat([jpeg.subarray(0, 2), app1, jpeg.subarray(2)]) });
+  await expect(page.getByTestId('mail-image-uploading')).toBeVisible();
+  await expect(save).toBeDisabled();
+  await expect(page.getByText('Image en cours d’envoi : vous pourrez enregistrer ensuite.')).toBeVisible();
+  release();
+  await expect(images).toHaveCount(2);
+  await expect(page.getByTestId('mail-image-uploading')).toHaveCount(0);
+  await expect(save).toBeEnabled();
+  const uploaded = await (await request.get((await images.nth(1).getAttribute('src'))!)).body();
+  expect(uploaded.subarray(0, 2).equals(Buffer.from([0xff, 0xd8]))).toBe(true);
+  expect(uploaded.includes('GPSMARQUE')).toBe(false);
+});
+
+test('un morceau de l’éditeur qui ne charge plus : un message à sa place, le reste de la page reste', async ({ page }) => {
+  await page.route(/\/assets\/MailMessageEditor[^/]*\.js/, (route) => route.abort());
+  await page.goto('/parametres');
+  await expect(page.getByTestId('mail-editor-failed')).toHaveText('L’éditeur n’a pas pu se charger : rechargez la page.');
+  await expect(page.getByRole('heading', { name: 'Envoi des mails' })).toBeVisible();
 });

@@ -23,6 +23,30 @@ export function pastedLosses(html: string): string[] {
   return losses;
 }
 
+/** Vrai si le HTML collé n'est qu'une image, sans texte (« Copier l'image » depuis un site, Gmail ou Word) : le fichier du presse-papiers est alors l'image voulue. */
+export function pastedOnlyAnImage(html: string): boolean {
+  if (!/<img\b/i.test(html)) return false;
+  const text = html
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<(style|script|title)\b[\s\S]*?<\/\1\s*>/gi, '')
+    .replace(/<(?:"[^"]*"|'[^']*'|[^>"'])*>/g, '')
+    .replace(/&nbsp;|&#160;|\u00a0/gi, ' ');
+  return text.trim() === '';
+}
+
+/** Vrai si un JPEG porte un segment APP1 (Exif ou XMP : appareil, date, parfois position GPS). Lit les segments jusqu'au début de l'image. */
+export function jpegCarriesMetadata(bytes: Uint8Array): boolean {
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8) return false;
+  let at = 2;
+  while (at + 3 < bytes.length && bytes[at] === 0xff) {
+    const marker = bytes[at + 1]!;
+    if (marker === 0xe1) return true;
+    if (marker === 0xda) return false; // début de l'image
+    at += marker === 0xff ? 1 : 2 + ((bytes[at + 2]! << 8) | bytes[at + 3]!);
+  }
+  return false;
+}
+
 const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const BY_EXTENSION: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' };
 
@@ -56,6 +80,7 @@ function hasTransparency(canvas: HTMLCanvasElement): boolean {
 
 /**
  * Prépare une image à envoyer : GIF tel quel, WebP converti, JPEG et PNG réduits à 1200 px au plus et 2 Mo au plus.
+ * Un JPEG qui porte des métadonnées est réencodé même petit : une photo ne part pas avec sa position GPS (l'orientation est déjà appliquée par `createImageBitmap`).
  * Lève une erreur en français pour un format refusé (SVG compris) ou une image trop lourde.
  */
 export async function prepareImage(file: File): Promise<Blob> {
@@ -73,7 +98,8 @@ export async function prepareImage(file: File): Promise<Blob> {
     throw new Error(UNREADABLE);
   }
   try {
-    if (type !== 'image/webp' && bitmap.width <= MAIL_IMAGE_LIMITS.maxWidth && file.size <= max) return file;
+    const fits = bitmap.width <= MAIL_IMAGE_LIMITS.maxWidth && file.size <= max;
+    if (type !== 'image/webp' && fits && !(type === 'image/jpeg' && jpegCarriesMetadata(new Uint8Array(await file.arrayBuffer())))) return file;
     const width = Math.min(bitmap.width, MAIL_IMAGE_LIMITS.maxWidth);
     const height = Math.max(1, Math.round((bitmap.height * width) / bitmap.width));
     let output = reducedOutputType(type, type !== 'image/jpeg' && hasTransparency(drawn(bitmap, width, height, false)));

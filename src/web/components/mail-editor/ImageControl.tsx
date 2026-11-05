@@ -39,11 +39,11 @@ export async function insertImages(editor: Editor, files: File[], pos?: number, 
 }
 
 /** Seul bouton ajouté à la barre de Mantine : insérer une image. */
-export function ImageControl({ disabled, blocked }: { disabled: boolean; blocked: () => boolean }) {
+export function ImageControl({ disabled, onFiles }: { disabled: boolean; onFiles: (editor: Editor, files: File[]) => void }) {
   const { editor } = useRichTextEditorContext();
   const resetRef = useRef<() => void>(null);
   return (
-    <FileButton accept="image/*" multiple resetRef={resetRef} onChange={(files) => { resetRef.current?.(); if (editor) void insertImages(editor as never, files, undefined, blocked); }} inputProps={{ 'data-testid': 'mail-editor-image-input' } as object}>
+    <FileButton accept="image/*" multiple resetRef={resetRef} onChange={(files) => { resetRef.current?.(); if (editor) onFiles(editor as never, files); }} inputProps={{ 'data-testid': 'mail-editor-image-input' } as object}>
       {(props) => (
         <RichTextEditor.Control {...props} disabled={disabled} aria-label="Image" title="Image" data-testid="mail-editor-image">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

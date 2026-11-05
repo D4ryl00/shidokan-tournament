@@ -17,7 +17,7 @@ import {
 import { ClubAccessModal } from './ClubAccessModal.js';
 import { EmailsList } from './EmailsInput.js';
 import { sameEmail } from '../../domain/emails.js';
-import { CompetitionMessage, NEW_LINK_WARNING, SendResultsModal } from './InvitationMail.js';
+import { CompetitionMessage, NEW_LINK_WARNING, SendResultsModal, UNSAVED_MESSAGE_WARNING } from './InvitationMail.js';
 import { sentLines, useAttachmentLines } from './MailAttachments.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { HELP } from '../help.js';
@@ -106,6 +106,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
   const [mailtoClub, setMailtoClub] = useState<ClubInvitationRow | null>(null);
   const [accessClubId, setAccessClubId] = useState<string | null>(null);
   const [excluded, setExcluded] = useState<Excluded>({});
+  const [messageUnsaved, setMessageUnsaved] = useState(false);
   // Pièces cochées : celles que la messagerie ne recevra pas, proposées au téléchargement.
   const attachments = sentLines(useAttachmentLines(competitionId) ?? []).filter((l) => !l.missing);
   if (!settings) return null;
@@ -216,7 +217,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
             </Button>
             <Text size="sm" c="dimmed">{settings.managedHere ? NEW_LINK_WARNING : 'Rendez la main au serveur pour envoyer des mails.'}</Text>
           </Group>
-          <CompetitionMessage competitionId={competitionId} previewClubId={selected[0]?.clubId ?? null} />
+          <CompetitionMessage competitionId={competitionId} previewClubId={selected[0]?.clubId ?? null} onUnsavedChange={setMessageUnsaved} />
         </>
       )}
       <ApiErrorAlert error={send.error ?? mailto.error} />
@@ -226,6 +227,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
           <ScrollArea.Autosize mah="45vh" type="auto">
             <Stack gap="sm">{selected.map((i) => <Recipients key={i.clubId} club={i} excluded={excluded} onChange={setExcluded} />)}</Stack>
           </ScrollArea.Autosize>
+          {messageUnsaved && <Alert color="orange" data-testid="unsaved-message-warning">{UNSAVED_MESSAGE_WARNING}</Alert>}
           <Alert color="yellow">{NEW_LINK_WARNING}</Alert>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setConfirmSend(false)}>Annuler</Button>
@@ -241,6 +243,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
         <Stack>
           <Text>Un nouveau lien est créé pour {mailtoClub?.clubName} ; ses liens d’avant restent valables. Envoyez bien ce mail depuis votre messagerie.</Text>
           <Text size="sm">Votre messagerie recevra le texte seul : sans mise en forme ni image.</Text>
+          {messageUnsaved && <Alert color="orange" data-testid="unsaved-message-warning">{UNSAVED_MESSAGE_WARNING}</Alert>}
           {mailtoClub && mailtoClub.coachEmails.length > 1 && <Recipients club={mailtoClub} excluded={excluded} onChange={setExcluded} />}
           {attachments.length > 0 && (
             <Text size="sm" data-testid="mailto-attachments">
