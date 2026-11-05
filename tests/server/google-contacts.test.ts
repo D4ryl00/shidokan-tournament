@@ -11,7 +11,7 @@ let fake: FakeGoogle;
 
 beforeEach(async () => {
   fake = fakeGoogle();
-  app = await buildApp({ dbPath: tmpDbPath(), publicUrl: 'https://competitions.example.org', google: { clientId: 'id', clientSecret: 's', fetch: fake.fetch } });
+  app = await buildApp({ clubServices: true, dbPath: tmpDbPath(), publicUrl: 'https://competitions.example.org', google: { clientId: 'id', clientSecret: 's', fetch: fake.fetch } });
 });
 afterEach(async () => {
   await app.close();

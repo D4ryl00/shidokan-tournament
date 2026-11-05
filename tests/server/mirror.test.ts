@@ -20,7 +20,7 @@ beforeEach(async () => {
   mainUrl = `http://127.0.0.1:${(main.server.address() as { port: number }).port}`;
   await main.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe du principal', date: '2026-11-22' } });
   secondPath = tmpDbPath();
-  second = await buildApp({ dbPath: secondPath, instanceName: 'PC-SECOURS' });
+  second = await buildApp({ clubServices: true, dbPath: secondPath, instanceName: 'PC-SECOURS' });
 });
 afterEach(async () => {
   await second.close();

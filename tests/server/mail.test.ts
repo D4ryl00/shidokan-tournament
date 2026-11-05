@@ -42,7 +42,7 @@ beforeEach(async () => {
   verifyError = null;
   failCode = null;
   dbPathOf = tmpDbPath();
-  app = await buildApp({ dbPath: dbPathOf, mailTransport: transport, publicUrl: 'https://competitions.example.org' });
+  app = await buildApp({ clubServices: true, dbPath: dbPathOf, mailTransport: transport, publicUrl: 'https://competitions.example.org' });
   base = `/api/competitions/${(await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe 2026', date: '2026-11-22', location: 'Nice' } })).json().id}`;
   await app.inject({ method: 'PATCH', url: `${base}/club-entry`, payload: { status: 'open', deadline: '2026-11-15' } });
 });

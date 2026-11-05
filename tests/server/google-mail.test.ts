@@ -12,7 +12,7 @@ let base: string;
 const PUBLIC_URL = 'https://competitions.example.org';
 const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
 const build = (withGoogle = true) =>
-  buildApp({ dbPath, publicUrl: PUBLIC_URL, mailPauseMs: 0, google: withGoogle ? { clientId: 'id', clientSecret: 's', fetch: fake.fetch } : undefined });
+  buildApp({ clubServices: true, dbPath, publicUrl: PUBLIC_URL, mailPauseMs: 0, google: withGoogle ? { clientId: 'id', clientSecret: 's', fetch: fake.fetch } : undefined });
 
 beforeEach(async () => {
   fake = fakeGoogle();

@@ -12,7 +12,7 @@ let dbPath: string;
 let base: string;
 beforeEach(async () => {
   dbPath = tmpDbPath();
-  app = await buildApp({ dbPath });
+  app = await buildApp({ clubServices: true, dbPath });
   base = `/api/competitions/${(await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22' } })).json().id}`;
 });
 afterEach(async () => app.close());

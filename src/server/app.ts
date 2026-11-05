@@ -58,6 +58,7 @@ import { googleRoutes } from './routes/google.js';
 import { googleContactsRoutes } from './routes/google-contacts.js';
 import { googleClient, googleConfigFrom } from './google/client.js';
 import { startGoogleKeepAlive } from './google/keepalive.js';
+import { registerClubServicesRefusal } from './club-services.js';
 import { defaultMailTransport, type MailTransport } from './mail.js';
 import { RestoreError, backupNow, startAutoBackup } from './repositories/backups.js';
 import { ensureInstance } from './repositories/instance.js';
@@ -84,6 +85,11 @@ export interface AppOptions {
   mailTransport?: MailTransport;
   /** Pause entre deux mails d'un envoi groupé (300 ms par défaut). */
   mailPauseMs?: number;
+  /**
+   * Mails aux clubs, inscriptions en ligne et compte Google. Par défaut : seulement sur le serveur en ligne (`role === 'serveur'`).
+   * Forcé à `true` seulement dans les tests sans connexion.
+   */
+  clubServices?: boolean;
   /** Compte Google expéditeur (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET) ; disponible seulement avec `publicUrl`. `fetch` : remplacé dans les tests. */
   google?: { clientId: string; clientSecret: string; fetch?: typeof fetch };
 }
@@ -92,12 +98,15 @@ const NOT_FOUND = { error: 'Compétition introuvable' };
 
 export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   const role = opts.role ?? 'local';
+  const clubServices = opts.clubServices ?? role === 'serveur';
   // Rôle serveur : un seul intermédiaire de confiance (Caddy) ; l'adresse du client est la dernière qu'il ajoute à X-Forwarded-For.
   const trustProxy = role === 'serveur' ? (_addr: string, hop: number) => hop < 1 : false;
   const app = Fastify({ logger: loggerOptions(opts.logger ?? false), bodyLimit: 20 * 1024 * 1024, trustProxy });
   const db = openDb(opts.dbPath);
   // Fichiers de pièces jointes sans ligne (supprimées pendant un arrêt, base restaurée à la main…).
   sweepAttachmentFiles(db, opts.dbPath);
+  // Avant tout autre contrôle : sur un PC, le refus l'emporte sur la connexion, la main ailleurs et la compétition inconnue.
+  if (!clubServices) registerClubServicesRefusal(app);
   registerGuard(app, db, role);
   registerPermissions(app, db, role);
   registerReadOnlyGuard(app, db, role);
@@ -236,12 +245,15 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(launchRoutes, { db });
   await app.register(backupRoutes, { db, dbPath: opts.dbPath });
   await app.register(directoryRoutes, { db });
-  const googleConfig = googleConfigFrom({ ...opts.google, publicUrl: opts.publicUrl });
+  // Sur un PC, aucun client Google : les routes de mail et d'inscription en ligne sont refusées (voir `registerClubServicesRefusal`).
+  const googleConfig = clubServices ? googleConfigFrom({ ...opts.google, publicUrl: opts.publicUrl }) : null;
   const google = googleConfig ? googleClient(googleConfig) : null;
   const mailTransport = opts.mailTransport ?? defaultMailTransport(google);
-  await app.register(invitationRoutes, { db, dbPath: opts.dbPath, mailTransport, publicUrl: opts.publicUrl, mailPauseMs: opts.mailPauseMs, role });
-  await app.register(mailImageRoutes, { db });
-  await app.register(clubEntryRoutes, { db });
+  if (clubServices) {
+    await app.register(invitationRoutes, { db, dbPath: opts.dbPath, mailTransport, publicUrl: opts.publicUrl, mailPauseMs: opts.mailPauseMs, role });
+    await app.register(mailImageRoutes, { db });
+    await app.register(clubEntryRoutes, { db });
+  }
   await app.register(authRoutes, { db, role });
   // Échanges de compétitions : les routes du serveur en ligne et celles du PC ne tournent que dans leur rôle.
   if (role === 'serveur') await app.register(syncRemoteRoutes, { db, dbPath: opts.dbPath });
@@ -260,8 +272,8 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     app.addHook('onClose', async () => stopZoneFollow());
   }
   await app.register(syncFileRoutes, { db, dbPath: opts.dbPath, role });
-  await app.register(appSettingsRoutes, { db, mailTransport, googleAvailable: !!google });
-  await app.register(googleRoutes, { db, google, role });
+  await app.register(appSettingsRoutes, { db, mailTransport, googleAvailable: !!google, clubServices });
+  if (clubServices) await app.register(googleRoutes, { db, google, role });
   if (google) await app.register(googleContactsRoutes, { db, google });
   if (google) {
     const stopKeepAlive = startGoogleKeepAlive(db, google, (e) => app.log.error(e));

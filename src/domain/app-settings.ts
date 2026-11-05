@@ -53,6 +53,8 @@ export type PublicSmtpSettings = Omit<SmtpSettings, 'password'> & { hasPassword:
 export type PublicGoogleSender = Omit<GoogleSender, 'refreshToken'>;
 export type PublicAppSettings = Omit<AppSettings, 'smtp' | 'google' | 'googleContacts'> & { smtp: PublicSmtpSettings | null; google: PublicGoogleSender | null; googleAvailable: boolean };
 
+/** Refus des mails et des inscriptions en ligne sur un PC : ils n'existent que sur le serveur en ligne. */
+export const SERVER_ONLY = 'Réservé au serveur en ligne : les mails et les inscriptions en ligne ne sont pas disponibles sur ce PC.';
 export const GOOGLE_RECONNECT = 'L’accès au compte Google a été retiré ou a expiré. Reconnectez-vous dans les Réglages de l’application.';
 export const GOOGLE_NOT_CONFIGURED = 'Le compte Google n’est plus configuré sur le serveur (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).';
 export const GOOGLE_NOT_SENT = 'Non envoyé : accès au compte Google retiré. Reconnectez-vous, puis relancez l’envoi pour ce club.';

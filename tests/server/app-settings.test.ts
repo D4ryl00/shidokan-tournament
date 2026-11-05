@@ -10,7 +10,7 @@ import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
 beforeEach(async () => {
-  app = await buildApp({ dbPath: tmpDbPath() });
+  app = await buildApp({ clubServices: true, dbPath: tmpDbPath() });
 });
 afterEach(async () => app.close());
 
@@ -85,7 +85,7 @@ test('un réglage smtp enregistré avant (sans mode) se lit comme du SMTP', asyn
 
 test('état des contacts Google : défaut, jamais envoyé à l’écran, refusé en modification', async () => {
   const dbPath = tmpDbPath();
-  const own = await buildApp({ dbPath });
+  const own = await buildApp({ clubServices: true, dbPath });
   try {
     expect(((await own.inject({ method: 'GET', url: '/api/app-settings' })).json() as Record<string, unknown>).googleContacts).toBeUndefined();
     expect((await own.inject({ method: 'PATCH', url: '/api/app-settings', payload: { googleContacts: { account: 'x', label: null, pending: [] } } })).statusCode).toBe(400);

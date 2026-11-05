@@ -14,7 +14,7 @@ let clubId: string;
 let entryId: string;
 beforeEach(async () => {
   dbPath = tmpDbPath();
-  app = await buildApp({ dbPath });
+  app = await buildApp({ clubServices: true, dbPath });
   base = `/api/competitions/${(await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22', location: 'Nice' } })).json().id}`;
   const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
   entryId = (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, name: 'Tani Dojo', coachPhone: '0600000000' } })).json().id;

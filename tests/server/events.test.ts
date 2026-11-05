@@ -10,7 +10,7 @@ let url: string;
 let id: string;
 let other: string;
 beforeEach(async () => {
-  app = await buildApp({ dbPath: tmpDbPath() });
+  app = await buildApp({ clubServices: true, dbPath: tmpDbPath() });
   await app.listen({ port: 0, host: '127.0.0.1' });
   url = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
   id = (await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22' } })).json().id;
@@ -82,7 +82,7 @@ test('arrêt du serveur avec un flux ouvert : il se ferme au lieu d’attendre',
   await app.close();
   expect(Date.now() - started).toBeLessThan(2000);
   controller.abort();
-  app = await buildApp({ dbPath: tmpDbPath() });
+  app = await buildApp({ clubServices: true, dbPath: tmpDbPath() });
 });
 
 test('aperçus (routes …/preview) : aucun change (sinon les postes se rechargent en boucle)', async () => {

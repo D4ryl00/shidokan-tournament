@@ -11,7 +11,7 @@ let fake: FakeGoogle;
 let dbPath: string;
 const PUBLIC_URL = 'https://competitions.example.org';
 const build = (o: { google?: boolean; publicUrl?: string } = {}) =>
-  buildApp({ dbPath, publicUrl: o.publicUrl, google: o.google === false ? undefined : { clientId: 'id', clientSecret: 'SECRET-CLIENT', fetch: fake.fetch } });
+  buildApp({ clubServices: true, dbPath, publicUrl: o.publicUrl, google: o.google === false ? undefined : { clientId: 'id', clientSecret: 'SECRET-CLIENT', fetch: fake.fetch } });
 
 beforeEach(async () => {
   fake = fakeGoogle();

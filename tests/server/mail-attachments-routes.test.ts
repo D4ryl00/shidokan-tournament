@@ -6,7 +6,7 @@ import { tmpDbPath } from '../helpers/tmp-db.js';
 let app: FastifyInstance;
 let base: string;
 beforeEach(async () => {
-  app = await buildApp({ dbPath: tmpDbPath() });
+  app = await buildApp({ clubServices: true, dbPath: tmpDbPath() });
   base = `/api/competitions/${(await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe 2026', date: '2026-11-22' } })).json().id}`;
 });
 afterEach(async () => app.close());

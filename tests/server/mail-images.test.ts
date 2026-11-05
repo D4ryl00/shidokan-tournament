@@ -57,7 +57,7 @@ test('mailImageIdsIn : seul l’attribut src d’une balise img compte (pas un a
 });
 
 async function orgaApp() {
-  app = await buildApp({ dbPath: tmpDbPath() });
+  app = await buildApp({ clubServices: true, dbPath: tmpDbPath() });
   return app;
 }
 const post = (a: FastifyInstance, payload: Buffer) => a.inject({ method: 'POST', url: '/api/mail-images', payload, headers: { 'content-type': 'application/octet-stream' } });
