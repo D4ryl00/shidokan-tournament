@@ -37,10 +37,16 @@ internet et n'invite jamais les clubs (décision de l'organisateur, qui ne prév
 - La barre peut passer sur plusieurs lignes, rangée par groupes de fonctions. La disposition A reste valable.
 - Une variable peut être mise en forme comme le reste du texte. Le lien personnel peut rester visible (`{lien}` dans le texte, devient un lien
   cliquable affichant l'adresse) ou être placé derrière un mot (lien dont l'adresse est `{lien}`) : la fenêtre de lien accepte donc `{lien}`.
-- Couleurs : une palette courte et fixe pour le texte (choix du concepteur) ; le surlignage n'a qu'une couleur (jaune), car le contrôle de Mantine n'en propose pas d'autre. La zone de texte et l'aperçu restent
+- Couleurs : une palette courte pour le texte (choix du concepteur) et le choix libre fourni par le contrôle de couleur de Mantine, gardé tel quel (décision de la relecture finale) ; le surlignage n'a qu'une couleur (jaune), car le contrôle de Mantine n'en propose pas d'autre. La zone de texte et l'aperçu restent
   sur fond blanc même en thème sombre, pour montrer ce que verront les clubs (choix du concepteur).
 - Coller depuis Gmail ou Word garde ce qui est permis et retire le reste. Coller une image passe par le même ajout qu'une image choisie
-  (choix du concepteur).
+  (choix du concepteur) ; une image copiée depuis un site, avec son fichier dans le presse-papiers, est reçue comme ce fichier.
+- Liens : la fenêtre applique la règle du filtre. `www.…` devient `https://www.…`, `x@y.fr` devient `mailto:x@y.fr` ; une autre adresse est refusée avec un message.
+- Signalement de ce qui est retiré (décision de la relecture finale). En mode code, au retour dans l'éditeur : balises, images externes, liens, et aussi les styles
+  (« taille ou police », « style non permis »). À l'enregistrement, dans les deux écrans : le client demande au filtre ce qu'il retire et affiche `Retiré du message : …`.
+  **Au collage, le signalement reste limité aux tableaux et aux images externes** : le résultat se voit aussitôt à l'écran, et un avis à chaque collage depuis Word
+  serait du bruit.
+- Quitter un message modifié sans l'enregistrer demande confirmation, et les fenêtres d'envoi et de messagerie préviennent que la dernière version enregistrée partira.
 
 ### Message envoyé
 
@@ -164,6 +170,8 @@ Choix du concepteur :
 - Table ajoutée à `LOCAL_ONLY_TABLES` : les images **ne voyagent pas** dans le paquet de passage de main. Le serveur garde ses images pendant
   qu'un PC a la main, et le message les retrouve au retour. Si une compétition est importée sur une autre installation, le message arrive sans
   ses images : le refus d'envoi « image absente » s'applique, et l'organisateur les remet.
+- Une restauration fusionne les images sans en retirer : le message de l'application n'est pas restauré et peut citer une image plus récente que la sauvegarde.
+  Chaque sauvegarde porte toutes les images, et `POST /api/restore` accepte jusqu'à 500 Mo.
 - Nettoyage : une image citée par aucun message (application et toutes les compétitions) est supprimée après un délai d'au moins 24 h, pour ne
   pas perdre une image ajoutée dans un message pas encore enregistré. Une panne du nettoyage ne bloque jamais le démarrage.
 
