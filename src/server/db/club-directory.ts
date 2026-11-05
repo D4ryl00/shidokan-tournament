@@ -25,13 +25,15 @@ function findEntry(db: AppDb, nameKey: string, number: string | null): Entry | u
 }
 
 /**
- * Relie le club de compétition à son entrée d'annuaire, en la créant au besoin ; complète les coordonnées vides de l'entrée
- * et lui donne l'entité FFK et le numéro d'affiliation du club si elle ne les a pas. Ne change un lien existant que si son entrée n'a pas
- * de numéro et qu'une autre porte celui du club. Renvoie l'id de l'entrée.
- * `fillCoordinates` faux : une entrée existante garde ses coordonnées (nom du coach, téléphone, adresses), même vides ; seuls le lien,
- * l'entité et le numéro sont complétés.
+ * Relie le club de compétition à son entrée d'annuaire, en la créant au besoin (avec les valeurs du club). Ne change un lien existant
+ * que si son entrée n'a pas de numéro et qu'une autre porte celui du club. Renvoie l'entrée et si elle vient d'être créée.
+ *
+ * `complete` (imports, saisies de l'organisateur) : l'entrée reçoit aussi l'entité FFK et le numéro d'affiliation du club si elle ne les a pas ;
+ * les coordonnées vides de l'entrée (coach, téléphone, adresses) ne sont complétées que pour un club qui vient d'être relié,
+ * jamais pour un club déjà relié : ses valeurs, saisies depuis, sont des changements à examiner.
+ * `link` : relie seulement, sans rien écrire dans une entrée existante.
  */
-export function linkClub(db: AppDb, clubId: string, fillCoordinates = true): string {
+export function linkClubResult(db: AppDb, clubId: string, mode: 'complete' | 'link' = 'complete'): { id: string; created: boolean } {
   const club = db.select().from(clubs).where(eq(clubs.id, clubId)).get();
   if (!club) throw new Error(`Club introuvable : ${clubId}`);
   const entity = club.ffkEntity ?? db.select().from(clubAliases).where(eq(clubAliases.nameKey, club.nameKey)).get()?.clubEntity ?? null;
@@ -52,20 +54,26 @@ export function linkClub(db: AppDb, clubId: string, fillCoordinates = true): str
       .values({ id, name: club.name, nameKey: club.nameKey, affiliationNumber: number, ffkEntity: entity, coachName: club.coachName, coachPhone: club.coachPhone, coachEmails: club.coachEmails })
       .run();
     db.update(clubs).set({ directoryClubId: id }).where(eq(clubs.id, clubId)).run();
-    return id;
+    return { id, created: true };
   }
-  const numberFree = number && !entry.affiliationNumber && !db.select().from(clubDirectory).where(eq(clubDirectory.affiliationNumber, number)).get();
-  const fill = {
-    ...(numberFree ? { affiliationNumber: number } : {}),
-    ...(entity && !entry.ffkEntity ? { ffkEntity: entity } : {}),
-    ...(fillCoordinates && club.coachName && !entry.coachName ? { coachName: club.coachName } : {}),
-    ...(fillCoordinates && club.coachPhone && !entry.coachPhone ? { coachPhone: club.coachPhone } : {}),
-    ...(fillCoordinates && club.coachEmails.length && !entry.coachEmails.length ? { coachEmails: club.coachEmails } : {}),
-  };
-  if (Object.keys(fill).length) db.update(clubDirectory).set(fill).where(eq(clubDirectory.id, entry.id)).run();
+  if (mode === 'complete') {
+    const numberFree = number && !entry.affiliationNumber && !db.select().from(clubDirectory).where(eq(clubDirectory.affiliationNumber, number)).get();
+    const coordinates = !linked;
+    const fill = {
+      ...(numberFree ? { affiliationNumber: number } : {}),
+      ...(entity && !entry.ffkEntity ? { ffkEntity: entity } : {}),
+      ...(coordinates && club.coachName && !entry.coachName ? { coachName: club.coachName } : {}),
+      ...(coordinates && club.coachPhone && !entry.coachPhone ? { coachPhone: club.coachPhone } : {}),
+      ...(coordinates && club.coachEmails.length && !entry.coachEmails.length ? { coachEmails: club.coachEmails } : {}),
+    };
+    if (Object.keys(fill).length) db.update(clubDirectory).set(fill).where(eq(clubDirectory.id, entry.id)).run();
+  }
   if (!linked) db.update(clubs).set({ directoryClubId: entry.id }).where(eq(clubs.id, clubId)).run();
-  return entry.id;
+  return { id: entry.id, created: false };
 }
+
+/** Relie le club à son entrée d'annuaire (voir `linkClubResult`, mode `complete`). Renvoie l'id de l'entrée. */
+export const linkClub = (db: AppDb, clubId: string): string => linkClubResult(db, clubId).id;
 
 /**
  * Relie tous les clubs non reliés, de la compétition la plus récente à la plus ancienne (date, puis created_at) : les coordonnées

@@ -17,9 +17,9 @@ import type { DisciplineId } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
 import { withoutRowMeta } from '../db/row-versions.js';
 import { rowRev } from '../revisions.js';
-import { linkClub } from '../db/club-directory.js';
-import { recordClubChange } from './club-changes.js';
-import { categories, clubs, fighters, registrations } from '../db/schema.js';
+import { linkClub, linkClubResult } from '../db/club-directory.js';
+import { clubValues, recordClubChange } from './club-changes.js';
+import { categories, clubDirectory, clubs, fighters, registrations } from '../db/schema.js';
 import { closedSet } from './closed-categories.js';
 import { getCompetition, getGrid } from './competitions.js';
 
@@ -93,10 +93,19 @@ export async function updateClub(db: AppDb, competitionId: string, clubId: strin
   const set = { ...patch, ...(patch.name ? { nameKey: normalizeName(patch.name) } : {}) };
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
+    const oldEntry = row.directoryClubId ? t.select().from(clubDirectory).where(eq(clubDirectory.id, row.directoryClubId)).get() ?? null : null;
+    const before = clubValues(row, oldEntry);
     t.update(clubs).set(set).where(eq(clubs.id, clubId)).run();
-    // Le lien (nouvelle entité FFK…) se refait, mais une fiche existante garde ses coordonnées : ce qui diffère devient un changement à examiner.
-    linkClub(t, clubId, !row.directoryClubId);
-    if ((['name', 'coachName', 'coachPhone', 'coachEmails'] as const).some((k) => patch[k] !== undefined)) recordClubChange(t, clubId, 'competition');
+    // Le lien se refait (nouvelle entité FFK…) mais rien n'est écrit dans une fiche existante : ce qui diffère devient un changement à examiner.
+    const { id: entryId } = linkClubResult(t, clubId, 'link');
+    const relinked = entryId !== row.directoryClubId;
+    const coordinates = (['name', 'coachName', 'coachPhone', 'coachEmails'] as const).some((k) => patch[k] !== undefined);
+    if (coordinates) recordClubChange(t, clubId, 'competition', before);
+    // Nouveau lien sans autre changement : un changement existant se rattache à la nouvelle fiche, sans être redaté.
+    else if (relinked) {
+      const entry = t.select().from(clubDirectory).where(eq(clubDirectory.id, entryId)).get() ?? null;
+      recordClubChange(t, clubId, 'competition', clubValues(t.select().from(clubs).where(eq(clubs.id, clubId)).get()!, entry));
+    }
   });
   return toClub(db.select().from(clubs).where(eq(clubs.id, clubId)).get()!);
 }

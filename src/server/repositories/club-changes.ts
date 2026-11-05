@@ -10,7 +10,7 @@ type EntryRow = typeof clubDirectory.$inferSelect;
  * Coordonnées du club de la compétition. Numéro : `''` (effacé par le club) vaut aucun numéro ;
  * sinon celui du club ; sinon celui de la fiche d'annuaire.
  */
-export function clubValues(club: ClubRow, entry?: Pick<EntryRow, 'affiliationNumber'> | null): ClubValues {
+export function clubValues(club: ClubRow, entry: Pick<EntryRow, 'affiliationNumber'> | null): ClubValues {
   const affiliationNumber = club.affiliationNumber === '' ? null : (club.affiliationNumber ?? entry?.affiliationNumber ?? null);
   return { name: club.name, coachName: club.coachName, coachPhone: club.coachPhone, coachEmails: club.coachEmails, affiliationNumber };
 }
@@ -24,8 +24,10 @@ export const directoryValues = (entry: EntryRow): ClubValues => ({
  * Compare le club à sa fiche d'annuaire après une modification de ses coordonnées, et tient à jour son changement à examiner :
  * sans fiche, rien ; sans différence, le changement disparaît ; un changement ignoré aux mêmes valeurs reste ignoré ;
  * sinon il est écrit (toutes les valeurs du club) et à examiner.
+ * `before` : valeurs du club avant l'enregistrement. Si aucun champ comparé n'a changé, aucun changement n'est créé ni redaté
+ * (un changement existant n'est que rattaché à la fiche du lien actuel) : la différence vient d'ailleurs, de la fiche par exemple.
  */
-export function recordClubChange(db: AppDb, clubId: string, origin: 'club' | 'competition'): void {
+export function recordClubChange(db: AppDb, clubId: string, origin: 'club' | 'competition', before?: ClubValues): void {
   const club = db.select().from(clubs).where(eq(clubs.id, clubId)).get();
   if (!club?.directoryClubId) return;
   const entry = db.select().from(clubDirectory).where(eq(clubDirectory.id, club.directoryClubId)).get();
@@ -34,6 +36,10 @@ export function recordClubChange(db: AppDb, clubId: string, origin: 'club' | 'co
   const existing = db.select().from(clubChanges).where(eq(clubChanges.clubId, clubId)).get();
   if (!differingFields(values, directoryValues(entry)).length) {
     if (existing) db.delete(clubChanges).where(eq(clubChanges.clubId, clubId)).run();
+    return;
+  }
+  if (before && !differingFields(values, before).length) {
+    if (existing && existing.directoryId !== entry.id) db.update(clubChanges).set({ directoryId: entry.id }).where(eq(clubChanges.clubId, clubId)).run();
     return;
   }
   if (existing?.ignored && existing.directoryId === entry.id && !differingFields(values, JSON.parse(existing.valuesJson) as ClubValues).length) return;

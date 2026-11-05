@@ -7,7 +7,7 @@ import { getAppSettings } from './app-settings.js';
 import { normalizeName } from '../../domain/names.js';
 import { ageRangeText } from '../../domain/grid.js';
 import type { DisciplineId, Sex } from '../../domain/types.js';
-import { assignAffiliationNumber, checkAffiliationNumber, linkClub } from '../db/club-directory.js';
+import { assignAffiliationNumber, checkAffiliationNumber, linkClubResult } from '../db/club-directory.js';
 import type { AppDb } from '../db/client.js';
 import { categories, clubDirectory, clubs, competitions, fighters, registrations } from '../db/schema.js';
 import { getCompetition, getGrid } from './competitions.js';
@@ -120,7 +120,7 @@ function headerOf(db: AppDb, club: typeof clubs.$inferSelect): ClubEntryView['cl
   const entry = club.directoryClubId ? db.select().from(clubDirectory).where(eq(clubDirectory.id, club.directoryClubId)).get() : undefined;
   return {
     name: club.name, coachName: club.coachName, coachPhone: club.coachPhone, coachEmails: club.coachEmails, preApproval: club.preApproval,
-    affiliationNumber: clubValues(club, entry).affiliationNumber,
+    affiliationNumber: clubValues(club, entry ?? null).affiliationNumber,
   };
 }
 
@@ -156,7 +156,8 @@ export async function getClubEntry(db: AppDb, access: ClubAccess): Promise<ClubE
 
 /**
  * En-tête du club : met à jour le club de la compétition (numéro d'affiliation compris), pas l'annuaire. Ce qui diffère de la fiche
- * devient un changement à examiner par l'organisateur. Seul un club sans fiche en reçoit une (`linkClub`), avec ses valeurs.
+ * devient un changement à examiner par l'organisateur, si l'enregistrement a changé une valeur comparée. Seul un club sans fiche
+ * en reçoit une, avec ses valeurs ; une fiche existante n'est jamais complétée.
  */
 export async function updateClubEntryHeader(db: AppDb, access: ClubAccess, header: ClubEntryHeader): Promise<ClubEntryView['club']> {
   assertWritable(db, access);
@@ -164,22 +165,28 @@ export async function updateClubEntryHeader(db: AppDb, access: ClubAccess, heade
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     const { affiliationNumber, ...fields } = header;
+    const wasLinked = !!club.directoryClubId;
+    const knownEntry = club.directoryClubId ? t.select().from(clubDirectory).where(eq(clubDirectory.id, club.directoryClubId)).get() ?? null : null;
+    const before = wasLinked ? clubValues(club, knownEntry) : undefined;
     t.update(clubs).set(fields).where(eq(clubs.id, club.id)).run();
-    const linkedNow = !club.directoryClubId;
-    const entryId = club.directoryClubId ?? linkClub(t, club.id);
+    const { id: entryId, created } = linkClubResult(t, club.id, 'link');
     const entry = t.select().from(clubDirectory).where(eq(clubDirectory.id, entryId)).get()!;
     let own: string | null;
     if (affiliationNumber) {
-      // Une fiche créée à l'instant prend le numéro du club ; sinon il est seulement contrôlé.
-      if (linkedNow) assignAffiliationNumber(t, club.id, affiliationNumber);
-      else checkAffiliationNumber(t, club.id, affiliationNumber);
-      own = affiliationNumber;
+      if (affiliationNumber === club.affiliationNumber) own = affiliationNumber; // déjà gardé pour le club : plus de contrôle
+      else if (affiliationNumber === entry.affiliationNumber) own = null; // celui de la fiche, laissé en place : le club le suit
+      else {
+        // Une fiche créée à l'instant prend le numéro du club ; sinon il est seulement contrôlé.
+        if (created) assignAffiliationNumber(t, club.id, affiliationNumber);
+        else checkAffiliationNumber(t, club.id, affiliationNumber);
+        own = affiliationNumber;
+      }
     } else {
-      // Effacé : '' si le club ou la fiche avait un numéro, pour que la page n'affiche plus celui de la fiche ; sinon rien n'a changé.
-      own = club.affiliationNumber || entry.affiliationNumber ? '' : club.affiliationNumber;
+      // Effacé : '' si la fiche a un numéro (la page n'affiche plus le sien) ; un effacement déjà enregistré reste.
+      own = entry.affiliationNumber && wasLinked ? '' : club.affiliationNumber === '' ? '' : null;
     }
     t.update(clubs).set({ affiliationNumber: own }).where(eq(clubs.id, club.id)).run();
-    recordClubChange(t, club.id, 'club');
+    recordClubChange(t, club.id, 'club', before);
   });
   return headerOf(db, clubRow(db, access));
 }

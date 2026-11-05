@@ -313,7 +313,7 @@ export const clubChanges = sqliteTable('club_changes', {
     .references(() => clubDirectory.id, { onDelete: 'cascade' }),
   /** Qui a changé les coordonnées : le club (page en ligne) ou l'organisateur (onglet Clubs). */
   origin: text('origin', { enum: ['club', 'competition'] }).notNull(),
-  /** Valeurs de l'annuaire au moment du changement, par champ modifié (JSON). */
+  /** Toutes les coordonnées du club au moment du changement (JSON de ClubValues) ; comparées à la fiche à chaque lecture. */
   valuesJson: text('values_json').notNull(),
   changedAt: text('changed_at').notNull(),
   ignored: integer('ignored', { mode: 'boolean' }).notNull().default(false),
