@@ -545,6 +545,9 @@ test('le coach enregistre encore pendant la comparaison : refus, la fenêtre rem
   await dialog.getByRole('button', { name: 'Enregistrer dans l’annuaire' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   expect((await entryOf(request, a.entry.id)).coachPhone).toBe('06 41 41 41 41');
+  // Décision réussie : l'ancien refus n'est pas annoncé à la disparition du changement (compte lu une fois, sans attente).
+  await page.waitForTimeout(300);
+  expect(await page.locator('.mantine-Notification-root').filter({ hasText: 'Ce changement n’existe plus' }).count()).toBe(0);
 });
 
 test('960 px : les adresses courtes et ordinaires tiennent sur une ligne dans l’annuaire, l’onglet Clubs et les invitations', async ({ page, request }) => {

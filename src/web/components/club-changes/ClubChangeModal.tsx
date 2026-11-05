@@ -25,8 +25,8 @@ interface Props {
   onClose: () => void;
   /** Décision prise (enregistrée ou ignorée), après la relecture des listes. */
   onDone: () => void;
-  /** Le serveur dit que la fiche ou le changement a bougé : message à garder affiché, la liste est relue. */
-  onStale?: (message: string) => void;
+  /** Le serveur dit que la fiche ou le changement a bougé : message à garder affiché, la liste est relue ; null : une nouvelle décision l'efface. */
+  onStale?: (message: string | null) => void;
   notice?: string | null;
 }
 
@@ -62,6 +62,8 @@ export function ClubChangeModal({ change, onClose, onDone, onStale, notice }: Pr
     else if (e.status === 404) notifications.show({ color: 'yellow', message: e.message });
   };
   const save = () => {
+    // Nouvelle décision : l'ancien refus ne vaut plus (sinon la disparition du changement décidé serait annoncée comme un refus).
+    onStale?.(null);
     resolve.mutateAsync({ clubId: change.clubId, directoryVersion: change.directoryVersion, changedAt: change.changedAt, values, applyToClub: canApply && applyToClub }).then(() => {
       // Compétition gérée ailleurs : seul l'annuaire est enregistré. Le club suivra après le retour de la main, s'il diffère encore de ce qui est enregistré
       // (valeur de la compétition choisie partout : la ligne est supprimée, rien à mettre à jour).
@@ -71,7 +73,7 @@ export function ClubChangeModal({ change, onClose, onDone, onStale, notice }: Pr
       onDone();
     }, refused);
   };
-  const skip = () => { ignore.mutateAsync({ clubId: change.clubId, changedAt: change.changedAt }).then(onDone, refused); };
+  const skip = () => { onStale?.(null); ignore.mutateAsync({ clubId: change.clubId, changedAt: change.changedAt }).then(onDone, refused); };
 
   const fields: ReactNode[] = (['name', 'coachName', 'coachPhone', 'coachEmails', 'affiliationNumber'] as const).map((f) => {
     if (!differs(f)) {
