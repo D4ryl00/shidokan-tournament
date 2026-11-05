@@ -84,7 +84,7 @@ export function ApplyToClubsModal({ entryId, lines, onClose }: { entryId: string
                 return (
                   <Stack key={key} gap={4} data-testid={testId}>
                     <Group gap="xs" wrap="nowrap" align="flex-start">
-                      <Badge color="yellow" variant="light">Conflit</Badge>
+                      <Badge color="yellow" variant="light" style={{ flexShrink: 0 }}>Conflit</Badge>
                       <Text size="sm" style={WRAP}>{LABEL[l.field]} : {summary(l)}</Text>
                     </Group>
                     <Radio.Group value={taken.has(key) ? 'directory' : 'club'} aria-label={`${LABEL[l.field]} dans ${l.competitionName}`}

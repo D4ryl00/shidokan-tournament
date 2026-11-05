@@ -54,7 +54,13 @@ export function ClubChangeModal({ change, onClose, onDone, onStale, notice }: Pr
   }, [error, onStale]);
   const busy = resolve.isPending || ignore.isPending;
   const save = () =>
-    resolve.mutate({ clubId: change.clubId, directoryVersion: change.directoryVersion, changedAt: change.changedAt, values, applyToClub: canApply && applyToClub }, { onSuccess: onDone });
+    resolve.mutate({ clubId: change.clubId, directoryVersion: change.directoryVersion, changedAt: change.changedAt, values, applyToClub: canApply && applyToClub }, {
+      onSuccess: () => {
+        // Compétition gérée ailleurs : seul l'annuaire est enregistré, le club suivra après le retour de la main.
+        if (!change.managedHere) notifications.show({ color: 'yellow', message: `Annuaire enregistré. Le club de ${change.competitionName} reste à mettre à jour après le retour de la main.` });
+        onDone();
+      },
+    });
   const skip = () => ignore.mutate({ clubId: change.clubId, changedAt: change.changedAt }, { onSuccess: onDone });
 
   const fields: ReactNode[] = (['name', 'coachName', 'coachPhone', 'coachEmails', 'affiliationNumber'] as const).map((f) => {
@@ -125,7 +131,9 @@ export function useClubChangeDialog(changes: ClubChangeView[]): { open: (clubId:
   const [target, setTarget] = useState<string | typeof NEXT | null>(null);
   const [chain, setChain] = useState(false);
   const [stale, setStale] = useState<string | null>(null);
-  const current = target === NEXT ? changes[0] : target ? changes.find((c) => c.clubId === target) : undefined;
+  // Changements décidés pendant cette ouverture : la chaîne ne les rouvre pas (un changement gardé après le retour de la main reste listé).
+  const [decided, setDecided] = useState<Set<string>>(new Set());
+  const current = target === NEXT ? changes.find((c) => !decided.has(c.clubId)) : target ? changes.find((c) => c.clubId === target) : undefined;
   // Changement disparu (décidé ailleurs, rendu identique) : la fenêtre se ferme ; si un refus venait de s'afficher, on le dit autrement.
   useEffect(() => {
     if (target === null || current) return;
@@ -136,11 +144,11 @@ export function useClubChangeDialog(changes: ClubChangeView[]): { open: (clubId:
   const close = () => { setTarget(null); setStale(null); };
   const element = current ? (
     <ClubChangeModal key={`${current.clubId}:${current.changedAt}:${current.directoryVersion}`} change={current} notice={stale} onStale={setStale} onClose={close}
-      onDone={() => { setStale(null); setTarget(chain ? NEXT : null); }} />
+      onDone={() => { setStale(null); setDecided((d) => new Set(d).add(current.clubId)); setTarget(chain ? NEXT : null); }} />
   ) : null;
   return {
-    open: (clubId) => { setStale(null); setChain(false); setTarget(clubId); },
-    openFirst: () => { setStale(null); setChain(true); setTarget(NEXT); },
+    open: (clubId) => { setStale(null); setDecided(new Set()); setChain(false); setTarget(clubId); },
+    openFirst: () => { setStale(null); setDecided(new Set()); setChain(true); setTarget(NEXT); },
     element,
   };
 }

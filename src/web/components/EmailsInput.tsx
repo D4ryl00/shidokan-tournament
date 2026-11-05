@@ -30,5 +30,6 @@ export function EmailsInput({ value, onChange, compact = false, ...props }: { va
 /** Adresses d'un club dans un tableau : une par ligne, « — » s'il n'y en a pas. */
 export function EmailsList({ emails }: { emails: string[] }) {
   if (!emails.length) return <Text span c="dimmed" size="sm">—</Text>;
-  return <Stack gap={0}>{emails.map((e) => <Text key={e} size="sm" style={{ overflowWrap: 'anywhere' }}>{e}</Text>)}</Stack>;
+  // Largeur minimale : une adresse ne se coupe pas en plein mot quand le tableau est serré (il défile de côté au besoin).
+  return <Stack gap={0} style={{ minWidth: 'min(16rem, 100%)' }}>{emails.map((e) => <Text key={e} size="sm" style={{ overflowWrap: 'anywhere' }}>{e}</Text>)}</Stack>;
 }

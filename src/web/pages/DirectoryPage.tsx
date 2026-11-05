@@ -137,7 +137,7 @@ export function DirectoryPage() {
                 return (
                 <Table.Tr key={e.id} data-testid="directory-row" c={e.archived ? 'dimmed' : undefined}>
                   <Table.Td fw={500}>
-                    <Group gap="xs" wrap="nowrap">
+                    <Group gap="xs" wrap="wrap">
                       {e.name}
                       {e.googleContactId && <StatusBadge tone="accent" size="sm" title="Lié à un contact Google">Google</StatusBadge>}
                       {e.archived && <StatusBadge tone="neutral" size="sm">Archivé</StatusBadge>}

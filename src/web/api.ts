@@ -967,7 +967,7 @@ export function useApplyGoogleContacts() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: SyncApply) => api<{ updated: number; linked: number; created: number }>('POST', '/api/club-directory/google/apply', input),
-    onSuccess: () => Promise.all([['club-directory'], [GOOGLE_CONTACTS_KEY]].map((queryKey) => qc.invalidateQueries({ queryKey }))),
+    onSuccess: () => Promise.all([['club-directory'], ['club-changes'], [GOOGLE_CONTACTS_KEY]].map((queryKey) => qc.invalidateQueries({ queryKey }))),
   });
 }
 

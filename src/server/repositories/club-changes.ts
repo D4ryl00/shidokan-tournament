@@ -1,6 +1,6 @@
 import { and, eq, gte } from 'drizzle-orm';
 import { sameEmail } from '../../domain/emails.js';
-import { differingFields, isUpcoming, propagationKind, type ClubField, type ClubValues } from '../../domain/club-changes.js';
+import { CLUB_FIELDS, differingFields, isUpcoming, propagationKind, type ClubField, type ClubValues } from '../../domain/club-changes.js';
 import { normalizeName } from '../../domain/names.js';
 import type { AppDb } from '../db/client.js';
 import { clubChanges, clubDirectory, clubs, competitions } from '../db/schema.js';
@@ -56,9 +56,20 @@ export function recordClubChange(db: AppDb, clubId: string, origin: 'club' | 'co
   }
   if (existing?.ignored && existing.directoryId === entry.id && !differingFields(values, JSON.parse(existing.valuesJson) as ClubValues).length) return;
   if (db.select({ purgedAt: competitions.purgedAt }).from(competitions).where(eq(competitions.id, club.competitionId)).get()?.purgedAt) return;
+  // Un changement encore à examiner sur la même fiche : ses choix par défaut se cumulent avec ceux de cet enregistrement, pour les champs qui
+  // diffèrent encore de la fiche et les adresses encore présentes dans le club.
+  let fields = changedFields;
+  let added = emailsNotIn(values.coachEmails, reference.coachEmails);
+  if (existing && !existing.ignored && existing.directoryId === entry.id) {
+    const still = differingFields(values, directoryValues(entry));
+    const previous = JSON.parse(existing.changedFields) as ClubField[];
+    fields = CLUB_FIELDS.filter((f) => still.includes(f) && (changedFields.includes(f) || previous.includes(f)));
+    const earlier = (JSON.parse(existing.addedEmails) as string[]).filter((e) => values.coachEmails.some((v) => sameEmail(v, e)));
+    added = [...added, ...emailsNotIn(earlier, added)];
+  }
   const row = {
     competitionId: club.competitionId, directoryId: entry.id, origin, valuesJson: JSON.stringify(values), changedAt: new Date().toISOString(), ignored: false,
-    changedFields: JSON.stringify(changedFields), addedEmails: JSON.stringify(emailsNotIn(values.coachEmails, reference.coachEmails)),
+    changedFields: JSON.stringify(fields), addedEmails: JSON.stringify(added),
   };
   db.insert(clubChanges).values({ clubId, ...row }).onConflictDoUpdate({ target: clubChanges.clubId, set: row }).run();
 }

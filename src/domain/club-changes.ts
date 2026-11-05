@@ -60,11 +60,17 @@ export interface EmailChoice {
  * par l'enregistrement (`competition-only`) est décochée.
  */
 export function emailChoices(directory: readonly string[], competition: readonly string[], changedFields: readonly ClubField[], addedEmails: readonly string[]): EmailChoice[] {
-  const directoryKept = !changedFields.includes('coachEmails') || competition.length === 0;
+  const directoryKept = competition.length === 0;
+  if (!changedFields.includes('coachEmails')) {
+    // E-mails non touchés par l'enregistrement : la fiche garde ses adresses, dans son ordre, la première restant la principale.
+    const kept = directory.map((email): EmailChoice => ({ email, origin: competition.some((c) => sameEmail(c, email)) ? 'both' : 'directory', checked: true }));
+    const onlyCompetition = competition.filter((c) => !directory.some((d) => sameEmail(d, c))).map((email): EmailChoice => ({ email, origin: 'competition-only', checked: false }));
+    return [...kept, ...onlyCompetition];
+  }
   const fromCompetition = competition.map((email): EmailChoice => {
     if (directory.some((d) => sameEmail(d, email))) return { email, origin: 'both', checked: true };
     const added = addedEmails.some((a) => sameEmail(a, email));
-    return { email, origin: added ? 'competition' : 'competition-only', checked: added && changedFields.includes('coachEmails') };
+    return { email, origin: added ? 'competition' : 'competition-only', checked: added };
   });
   const onlyDirectory = directory.filter((d) => !competition.some((c) => sameEmail(c, d))).map((email): EmailChoice => ({ email, origin: 'directory', checked: directoryKept }));
   return [...fromCompetition, ...onlyDirectory];

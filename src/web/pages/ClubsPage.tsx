@@ -107,7 +107,7 @@ export function ClubsPage() {
                 return (
                 <Table.Tr key={c.id} data-testid="club-row">
                   <Table.Td fw={600}>
-                    <Group gap="xs" wrap="nowrap">
+                    <Group gap="xs" wrap="wrap">
                       {c.name}
                       {change && <ClubChangePill origin={change.origin} />}
                     </Group>

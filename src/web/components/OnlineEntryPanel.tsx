@@ -156,7 +156,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
                   <Table.Tr key={i.clubId} data-testid="invitation-row">
                     <Table.Td><Checkbox aria-label={`Choisir ${i.clubName}`} checked={checked.has(i.clubId)} onChange={(e) => toggle(i.clubId, e.currentTarget.checked)} /></Table.Td>
                     <Table.Td fw={600}>
-                      <Group gap="xs" wrap="nowrap">
+                      <Group gap="xs" wrap="wrap">
                         {i.clubName}
                         {change && <ClubChangePill origin={change.origin} />}
                       </Group>

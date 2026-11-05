@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { and, count, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { AppDb } from '../db/client.js';
-import { clubDirectory, clubInvitations, clubs, competitions, fighters, mailLog } from '../db/schema.js';
+import { clubChanges, clubDirectory, clubInvitations, clubs, competitions, fighters, mailLog } from '../db/schema.js';
 import type { Club } from '../../domain/registration.js';
 import { NotFoundError, toClub } from './registrations.js';
 
@@ -114,13 +114,13 @@ function clubForEntry(t: AppDb, competitionId: string, entry: typeof clubDirecto
     }
     club = sameName;
   }
-  // Un club déjà relié à cette fiche n'est pas rempli : ce qu'il a effacé (le coach, le retrait d'une invitation) ne lui est pas rendu.
-  const linked = club?.directoryClubId === entry.id;
+  // Un club qui a un changement à examiner (le coach a saisi ou effacé ses valeurs) n'est pas rempli : sa saisie est respectée.
+  const entered = !!club && !!t.select().from(clubChanges).where(eq(clubChanges.clubId, club.id)).get();
   if (club) {
     const fill = {
       directoryClubId: entry.id,
       ...(!club.ffkEntity && entry.ffkEntity ? { ffkEntity: entry.ffkEntity } : {}),
-      ...(linked
+      ...(entered
         ? {}
         : {
             ...(!club.coachName && entry.coachName ? { coachName: entry.coachName } : {}),

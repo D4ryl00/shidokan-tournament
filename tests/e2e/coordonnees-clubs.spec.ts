@@ -405,3 +405,49 @@ test('fiche corrigée à la main : la pastille et le bandeau disparaissent sans 
   await expect(row.getByTestId('club-change-pill')).toHaveCount(0);
   expect(await changesOf(request, competitionId)).toEqual([]);
 });
+
+test('960 px : l’étiquette « Conflit » ne rétrécit pas, les adresses de l’annuaire restent lisibles à côté de la pastille et des boutons', async ({ page, request, playwright }) => {
+  const long = `${'adresse-tres-longue-'.repeat(4)}@exemple-de-domaine-interminable.example`;
+  const a = await setup(page, request, 'largeurs');
+  await coachSaves(playwright, a.token, { coachPhone: '06 34 34 34 34', coachEmails: ['une@dojo.example', long] });
+  await page.setViewportSize({ width: 960, height: 700 });
+
+  // Annuaire : chaque adresse tient sur une ligne (pas de coupure en plein mot), le tableau défile de côté si besoin.
+  await page.goto('/annuaire');
+  const row = page.getByTestId('directory-row').filter({ hasText: a.club });
+  await expect(row.getByTestId('club-change-pill')).toBeVisible();
+  const broken = await row.locator('td').nth(4).locator('p').evaluateAll((els) => els.filter((el) => el.textContent!.length < 30 && el.getBoundingClientRect().height > 1.6 * parseFloat(getComputedStyle(el).lineHeight)).map((el) => el.textContent));
+  expect(broken).toEqual([]);
+
+  // Fenêtre « Appliquer aux compétitions à venir ? » : deux conflits, l'étiquette garde son texte entier.
+  await row.getByRole('button', { name: 'Modifier' }).click();
+  const form = page.getByRole('dialog', { name: 'Modifier le club' });
+  await form.getByLabel('Téléphone').fill('06 35 35 35 35');
+  await form.getByTestId('directory-email').fill('autre@dojo.example');
+  await form.getByTestId('directory-save').click();
+  const dialog = page.getByRole('dialog', { name: 'Appliquer aux compétitions à venir ?' });
+  await expect(dialog.getByText('Conflit')).toHaveCount(2);
+  const cut = await dialog.getByText('Conflit').evaluateAll((els) => els.filter((el) => el.scrollWidth > el.clientWidth).length);
+  expect(cut).toBe(0);
+  await dialog.getByRole('button', { name: 'Ne rien appliquer' }).click();
+  // Nettoyage : le changement est ignoré.
+  const open = (await (await request.get(`/api/club-changes?competitionId=${a.competitionId}`)).json()) as { clubId: string; changedAt: string }[];
+  for (const c of open) expect((await request.post(`/api/club-changes/${c.clubId}/ignore`, { data: { changedAt: c.changedAt } })).status()).toBe(204);
+});
+
+test('compétition gérée ailleurs : « Voir les changements » ne rouvre pas la même fenêtre, et une notification dit ce qui reste à faire', async ({ page, request, playwright }) => {
+  const a = await setup(page, request, 'chaîne-ailleurs');
+  await coachSaves(playwright, a.token, { coachPhone: '06 36 36 36 36' });
+  const [change] = (await (await request.get(`/api/club-changes?competitionId=${a.competitionId}`)).json()) as Record<string, unknown>[];
+  // Réponse simulée : la compétition est tenue par un PC, le changement reste listé après la décision.
+  await page.route(/\/api\/club-changes(\?|$)/, (route) => route.fulfill({ json: [{ ...change, managedHere: false, ownerName: 'PC du dojo' }] }));
+  await page.goto('/annuaire');
+  await page.getByTestId('directory-changes-banner').getByRole('button', { name: 'Voir les changements' }).click();
+  const dialog = page.getByRole('dialog', { name: `${a.club} : garder quelles informations ?` });
+  await dialog.getByRole('button', { name: 'Enregistrer dans l’annuaire' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const name = ((await (await request.get(`/api/competitions/${a.competitionId}`)).json()) as { name: string }).name;
+  await expect(page.locator('.mantine-Notification-root').filter({ hasText: `Annuaire enregistré. Le club de ${name} reste à mettre à jour après le retour de la main.` })).toBeVisible();
+  expect((await entryOf(request, a.entry.id)).coachPhone).toBe('06 36 36 36 36');
+});

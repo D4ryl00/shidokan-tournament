@@ -41,9 +41,13 @@ test('emailChoices : liste de la compétition vide (effacée) → les adresses d
 test('emailChoices : champ non modifié par l’enregistrement → la fiche pour choix par défaut', () => {
   expect(emailChoices(['a@x.fr', 'b@x.fr'], ['a@x.fr', 'z@x.fr'], ['coachPhone'], [])).toEqual([
     { email: 'a@x.fr', origin: 'both', checked: true },
-    { email: 'z@x.fr', origin: 'competition-only', checked: false },
     { email: 'b@x.fr', origin: 'directory', checked: true },
+    { email: 'z@x.fr', origin: 'competition-only', checked: false },
   ]);
+});
+
+test('N4 : e-mails non modifiés par l’enregistrement : les adresses de la fiche gardent leur ordre, en tête', () => {
+  expect(emailChoices(['a@x.fr', 'b@x.fr'], ['b@x.fr', 'a@x.fr', 'c@x.fr'], ['coachPhone'], []).map((c) => `${c.email}:${c.checked}`)).toEqual(['a@x.fr:true', 'b@x.fr:true', 'c@x.fr:false']);
 });
 
 test('resolvedValues : le choix de chaque champ différent, les adresses cochées', () => {

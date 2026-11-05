@@ -637,7 +637,27 @@ test('I3 : le changement garde les champs que l’enregistrement a modifiés et 
   // Il ajoute ensuite une adresse : celle-ci seule est « ajoutée ».
   await patchClub({ coachPhone: '0611111111', coachEmails: ['jean@tani.example', 'nouveau@tani.example'] });
   [view] = await list();
-  expect(view).toMatchObject({ changedFields: ['coachEmails'], addedEmails: ['nouveau@tani.example'] });
+  // Les choix par défaut du premier enregistrement restent : le téléphone, puis l'adresse ajoutée.
+  expect(view).toMatchObject({ changedFields: ['coachPhone', 'coachEmails'], addedEmails: ['nouveau@tani.example'] });
+});
+
+test('N1 : adresse ajoutée puis téléphone changé : l’adresse reste ajoutée ; téléphone puis adresse : le téléphone reste modifié', async () => {
+  await patchClub({ coachEmails: ['jean@tani.example', 'n@tani.example'] });
+  await patchClub({ coachEmails: ['jean@tani.example', 'n@tani.example'], coachPhone: '0611111111' });
+  let [view] = await list();
+  expect(view).toMatchObject({ changedFields: ['coachPhone', 'coachEmails'], addedEmails: ['n@tani.example'] });
+  await resolve(clubId, view!, { coachName: 'Jean' }); // ferme
+  await patchClub({ coachPhone: '0622222222' });
+  await patchClub({ coachPhone: '0622222222', coachEmails: ['jean@tani.example', 'm@tani.example'] });
+  [view] = await list();
+  expect(view).toMatchObject({ changedFields: ['coachPhone', 'coachEmails'], addedEmails: ['m@tani.example'] });
+});
+
+test('N1 : un champ revenu à la valeur de la fiche, une adresse retirée du club ne sont plus gardés', async () => {
+  await patchClub({ coachPhone: '0611111111', coachEmails: ['jean@tani.example', 'n@tani.example'] });
+  await patchClub({ coachPhone: '0600000000', coachEmails: ['jean@tani.example'], coachName: 'Paul' });
+  const [view] = await list();
+  expect(view).toMatchObject({ fields: ['coachName'], changedFields: ['coachName'], addedEmails: [] });
 });
 
 test('I3 : un changement fait par l’onglet Clubs garde aussi ses champs modifiés', async () => {
@@ -655,6 +675,16 @@ test('M8 : aucun changement sur une compétition purgée', async () => {
   raw("update competitions set purged_at = '2026-01-01T00:00:00.000Z' where id = ?", base.split('/').pop());
   await patchClub({ coachPhone: '0611111111' });
   expect(changes()).toHaveLength(0);
+});
+
+test('N2 : un club créé sans coordonnées puis invité est rempli depuis la fiche', async () => {
+  const dir = await createEntry({ name: 'Rempli Dojo', coachName: 'Zoé', coachPhone: '0677777777', coachEmails: ['z@rempli.example'] });
+  const other = (await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Open', date: inDays(25), location: 'Lyon' } })).json().id;
+  const club = (await app.inject({ method: 'POST', url: `/api/competitions/${other}/clubs`, payload: { name: 'Rempli Dojo' } })).json();
+  await app.inject({ method: 'POST', url: `/api/competitions/${other}/invitations`, payload: { directoryIds: [dir] } });
+  const db = new Database(dbPath, { readonly: true });
+  expect(db.prepare('select coach_name as n, coach_phone as p, coach_emails as e from clubs where id = ?').get(club.id)).toEqual({ n: 'Zoé', p: '0677777777', e: '["z@rempli.example"]' });
+  db.close();
 });
 
 test('M2 : réinviter un club relié qui a effacé ses valeurs ne les lui rend pas', async () => {
