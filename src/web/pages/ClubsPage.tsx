@@ -1,10 +1,13 @@
 import { ActionIcon, Button, Checkbox, Group, Modal, Stack, Table, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
+import { notifications } from '@mantine/notifications';
 import { useParams } from 'react-router';
 import { ofName, plural } from '../../domain/plural.js';
 import type { Club } from '../../domain/registration.js';
-import { useClubs, useRegistrations, useUpdateClub } from '../api.js';
+import { useClubChanges, useClubs, useFetchClubChanges, useRegistrations, useUpdateClub } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { ClubChangePill } from '../components/club-changes/ClubChangeBanners.js';
+import { useClubChangeDialog } from '../components/club-changes/ClubChangeModal.js';
 import { EmailsInput, EmailsList } from '../components/EmailsInput.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { IconEdit } from '../components/ui/icons.js';
@@ -17,7 +20,7 @@ const FIELDS: { field: Field; label: string }[] = [
 ];
 
 /** Fenêtre de modification d'un club : seuls les champs changés sont envoyés (le nom ne peut pas être vidé). */
-function ClubModal({ competitionId, club, onClose }: { competitionId: string; club: Club | null; onClose: () => void }) {
+function ClubModal({ competitionId, club, onClose, onSaved }: { competitionId: string; club: Club | null; onClose: () => void; onSaved: (clubId: string) => void }) {
   const update = useUpdateClub(competitionId);
   // Le parent remonte la fenêtre (key) pour chaque club : l'état part du club ouvert.
   const [form, setForm] = useState<Record<Field, string>>({
@@ -43,7 +46,7 @@ function ClubModal({ competitionId, club, onClose }: { competitionId: string; cl
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>Annuler</Button>
           <Button data-testid="club-edit-save" loading={update.isPending} disabled={!form.name.trim()}
-            onClick={() => (Object.keys(patch).length === 0 ? onClose() : update.mutate({ clubId: club.id, ...patch }, { onSuccess: onClose }))}>
+            onClick={() => (Object.keys(patch).length === 0 ? onClose() : update.mutate({ clubId: club.id, ...patch }, { onSuccess: () => { onClose(); onSaved(club.id); } }))}>
             Enregistrer
           </Button>
         </Group>
@@ -57,8 +60,27 @@ export function ClubsPage() {
   const { data: clubs = [], isLoading } = useClubs(id);
   const { data: rows = [] } = useRegistrations(id);
   const update = useUpdateClub(id);
+  const { data: changes = [] } = useClubChanges(id);
+  const fetchChanges = useFetchClubChanges(id);
+  const comparison = useClubChangeDialog(changes);
   const [editing, setEditing] = useState<Club | null>(null);
+  const changeOf = (clubId: string) => changes.find((x) => x.clubId === clubId);
   const count = (clubId: string) => rows.filter((r) => r.club?.id === clubId).length;
+  // Après un enregistrement : si le club diffère maintenant de l'annuaire, l'organisateur peut comparer tout de suite.
+  const afterSave = async (clubId: string) => {
+    const change = (await fetchChanges().catch(() => [])).find((c) => c.clubId === clubId);
+    if (!change) return;
+    const key = `club-change-${clubId}`;
+    notifications.show({
+      id: key, color: 'yellow', autoClose: 15_000,
+      message: (
+        <Group gap="sm" wrap="nowrap">
+          <Text size="sm" style={{ overflowWrap: 'anywhere' }}>{change.values.name} diffère de l’annuaire.</Text>
+          <Button size="compact-sm" variant="default" onClick={() => { notifications.hide(key); comparison.open(clubId); }}>Comparer</Button>
+        </Group>
+      ),
+    });
+  };
   const preApproved = clubs.filter((c) => c.preApproval).length;
 
   return (
@@ -78,7 +100,12 @@ export function ClubsPage() {
             <Table.Tbody>
               {clubs.map((c) => (
                 <Table.Tr key={c.id} data-testid="club-row">
-                  <Table.Td fw={600}>{c.name}</Table.Td>
+                  <Table.Td fw={600}>
+                    <Group gap="xs" wrap="nowrap">
+                      {c.name}
+                      {changeOf(c.id) && <ClubChangePill origin={changeOf(c.id)!.origin} />}
+                    </Group>
+                  </Table.Td>
                   <Table.Td>{c.coachName ?? <Text span c="dimmed" size="sm">—</Text>}</Table.Td>
                   <Table.Td className="num" style={{ whiteSpace: 'nowrap' }}>{c.coachPhone ?? <Text span c="dimmed" size="sm">—</Text>}</Table.Td>
                   <Table.Td><EmailsList emails={c.coachEmails} /></Table.Td>
@@ -97,7 +124,8 @@ export function ClubsPage() {
         </TableCard>
       )}
       <ApiErrorAlert error={update.error} />
-      <ClubModal key={editing?.id ?? 'closed'} competitionId={id} club={editing} onClose={() => setEditing(null)} />
+      <ClubModal key={editing?.id ?? 'closed'} competitionId={id} club={editing} onClose={() => setEditing(null)} onSaved={afterSave} />
+      {comparison.element}
     </Stack>
   );
 }

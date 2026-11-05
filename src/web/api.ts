@@ -7,6 +7,7 @@ import type { Category, CategoryStatus } from '../domain/categories.js';
 import type { ClubFormHeader, ClubFormLine, ClubFormParse } from '../domain/club-form.js';
 import type { ClosedCategoriesView, EntryCell } from '../domain/closed-categories.js';
 import type { ColumnMapping, FfkChoices, FfkImportPlan } from '../domain/ffk-import.js';
+import type { ClubField, ClubValues } from '../domain/club-changes.js';
 import type { Club, DirectoryEntry, DirectoryInput, RegistrationInput, RegistrationRow } from '../domain/registration.js';
 import type { Case, MoveView, Presence, Proposal, ProposalType } from '../domain/replacement/index.js';
 import type { CategoryGrid, DisciplineId, Sex } from '../domain/types.js';
@@ -139,7 +140,7 @@ export function useUpdateClub(id: string) {
   return useMutation({
     mutationFn: ({ clubId, ...patch }: Partial<Club> & { clubId: string }) =>
       api<Club>('PATCH', `/api/competitions/${id}/clubs/${clubId}`, patch),
-    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: ['clubs', id] }), qc.invalidateQueries({ queryKey: ['registrations', id] })]),
+    onSuccess: () => Promise.all(['clubs', 'registrations', 'club-changes'].map((k) => qc.invalidateQueries({ queryKey: [k] }))),
   });
 }
 
@@ -846,6 +847,64 @@ function useDirectoryMutation<V>(fn: (v: V) => Promise<DirectoryEntry>) {
   const qc = useQueryClient();
   return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries({ queryKey: ['club-directory'] }) });
 }
+// --- Changements de coordonnées entre l'annuaire et les compétitions (organisateur seulement) ---
+
+export interface ClubChangeView {
+  clubId: string;
+  competitionId: string;
+  competitionName: string;
+  competitionDate: string;
+  managedHere: boolean;
+  ownerName: string | null;
+  upcoming: boolean;
+  directoryId: string;
+  directoryVersion: number;
+  origin: 'club' | 'competition';
+  changedAt: string;
+  values: ClubValues;
+  directory: ClubValues;
+  fields: ClubField[];
+}
+
+/**
+ * Changements à examiner (toutes les compétitions, ou une seule). Un compte Table centrale n'y a pas accès : pas de requête.
+ * Relus au retour sur l'onglet (page Annuaire) et, dans une compétition, à chaque événement du flux (voir `useCompetitionEvents`).
+ */
+export const useClubChanges = (competitionId?: string) => {
+  const organiser = useIsOrganiser();
+  return useQuery({
+    queryKey: ['club-changes', competitionId ?? null],
+    queryFn: () => api<ClubChangeView[]>('GET', `/api/club-changes${competitionId ? `?competitionId=${encodeURIComponent(competitionId)}` : ''}`),
+    enabled: organiser,
+  });
+};
+
+/** Changements d'une compétition relus à l'instant (après une modification d'un club) ; rien pour un compte qui n'y a pas accès. */
+export function useFetchClubChanges(competitionId: string) {
+  const qc = useQueryClient();
+  const organiser = useIsOrganiser();
+  return async (): Promise<ClubChangeView[]> =>
+    organiser
+      ? qc.fetchQuery({ queryKey: ['club-changes', competitionId], queryFn: () => api<ClubChangeView[]>('GET', `/api/club-changes?competitionId=${encodeURIComponent(competitionId)}`), staleTime: 0 })
+      : [];
+}
+
+/** Après une décision : changements, annuaire, et clubs, invitations des compétitions. */
+function useClubChangeMutation<V>(fn: (v: V) => Promise<void>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSettled: () => Promise.all(['club-changes', 'club-directory', 'directory-clubs', 'clubs', 'invitations'].map((k) => qc.invalidateQueries({ queryKey: [k] }))),
+  });
+}
+
+export const useResolveClubChange = () =>
+  useClubChangeMutation(({ clubId, ...body }: { clubId: string; directoryVersion: number; changedAt: string; values: ClubValues; applyToClub: boolean }) =>
+    api<void>('POST', `/api/club-changes/${clubId}/resolve`, body));
+
+export const useIgnoreClubChange = () =>
+  useClubChangeMutation(({ clubId, changedAt }: { clubId: string; changedAt: string }) => api<void>('POST', `/api/club-changes/${clubId}/ignore`, { changedAt }));
+
 export const useCreateDirectoryEntry = () => useDirectoryMutation((input: DirectoryInput) => api<DirectoryEntry>('POST', '/api/club-directory', input));
 export const useUpdateDirectoryEntry = () =>
   useDirectoryMutation(({ id, ...patch }: Partial<DirectoryInput> & { id: string; archived?: boolean; googleContactId?: null }) => api<DirectoryEntry>('PATCH', `/api/club-directory/${id}`, patch));

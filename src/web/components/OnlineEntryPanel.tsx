@@ -2,6 +2,7 @@ import { Alert, Anchor, Button, Checkbox, Chip, Group, Modal, MultiSelect, Scrol
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import {
+  useClubChanges,
   useClubEntrySettings,
   useDirectory,
   useInvitations,
@@ -14,6 +15,7 @@ import {
   type SendResult,
   type SendTarget,
 } from '../api.js';
+import { ClubChangePill } from './club-changes/ClubChangeBanners.js';
 import { ClubAccessModal } from './ClubAccessModal.js';
 import { EmailsList } from './EmailsInput.js';
 import { checkedAddresses, noneChecked, sendTarget, toggleAddress, type CheckedAddresses } from '../send-recipients.js';
@@ -57,6 +59,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
   const { data: settings } = useClubEntrySettings(competitionId);
   const { data: invitations = [] } = useInvitations(competitionId);
   const { data: directory } = useDirectory();
+  const { data: changes = [] } = useClubChanges(competitionId);
   const updateSettings = useUpdateClubEntrySettings(competitionId);
   const invite = useInviteClubs(competitionId);
   const { data: appSettings } = useAppSettings();
@@ -90,6 +93,7 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
     mailto.mutate(target, {
       onSuccess: (m) => { window.location.href = `mailto:${(m.to ?? '').split(',').map(encodeURIComponent).join(',')}?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.body)}`; },
     });
+  const changeOf = (clubId: string) => changes.find((c) => c.clubId === clubId);
   const invitedEntries = new Set(invited.map((i) => i.directoryClubId));
   const candidates = (directory ?? [])
     .filter((e) => !e.archived && !invitedEntries.has(e.id))
@@ -149,7 +153,12 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
                 {shown.map((i) => (
                   <Table.Tr key={i.clubId} data-testid="invitation-row">
                     <Table.Td><Checkbox aria-label={`Choisir ${i.clubName}`} checked={checked.has(i.clubId)} onChange={(e) => toggle(i.clubId, e.currentTarget.checked)} /></Table.Td>
-                    <Table.Td fw={600}>{i.clubName}</Table.Td>
+                    <Table.Td fw={600}>
+                      <Group gap="xs" wrap="nowrap">
+                        {i.clubName}
+                        {changeOf(i.clubId) && <ClubChangePill origin={changeOf(i.clubId)!.origin} />}
+                      </Group>
+                    </Table.Td>
                     <Table.Td><EmailsList emails={i.coachEmails} /></Table.Td>
                     <Table.Td>
                       {i.lastMail ? (

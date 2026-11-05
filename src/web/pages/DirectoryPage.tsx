@@ -4,9 +4,11 @@ import { Link } from 'react-router';
 import { normalizeName } from '../../domain/names.js';
 import { plural } from '../../domain/plural.js';
 import type { DirectoryEntry, DirectoryInput } from '../../domain/registration.js';
-import { useAppSettings, useAuthMe, useCreateDirectoryEntry, useDirectory, useMergeDirectoryEntries, useUpdateDirectoryEntry } from '../api.js';
+import { useAppSettings, useAuthMe, useClubChanges, useCreateDirectoryEntry, useDirectory, useMergeDirectoryEntries, useUpdateDirectoryEntry } from '../api.js';
 import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { ClubChangePill, DirectoryChangesBanner } from '../components/club-changes/ClubChangeBanners.js';
+import { useClubChangeDialog } from '../components/club-changes/ClubChangeModal.js';
 import { EmailsInput, EmailsList } from '../components/EmailsInput.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
@@ -88,6 +90,8 @@ export function DirectoryPage() {
   const update = useUpdateDirectoryEntry();
   const { data: settings } = useAppSettings();
   const { data: me } = useAuthMe();
+  const { data: changes = [] } = useClubChanges();
+  const comparison = useClubChangeDialog(changes);
   // Synchronisation : sur le serveur en ligne seulement, là où Google est disponible, avec un compte connecté (quel que soit le mode d'envoi des mails).
   const canSync = me?.role === 'serveur' && !!settings?.googleAvailable && !!settings.google;
   const [search, setSearch] = useState('');
@@ -106,6 +110,7 @@ export function DirectoryPage() {
           {canSync && <Button variant="default" component={Link} to="/annuaire/google">Synchroniser avec Google</Button>}
           <Button data-testid="directory-new" onClick={() => setEditing('new')}>Ajouter un club</Button>
         </>} />
+      <DirectoryChangesBanner onOpen={comparison.openFirst} />
       <Group gap="md">
         <TextInput placeholder="Rechercher un nom ou un numéro" value={search} onChange={(e) => setSearch(e.currentTarget.value)} w={300} />
         <Checkbox label="Afficher les clubs archivés" checked={showArchived} onChange={(e) => setShowArchived(e.currentTarget.checked)} />
@@ -125,13 +130,16 @@ export function DirectoryPage() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {shown.map((e) => (
+              {shown.map((e) => {
+                const change = changes.find((c) => c.directoryId === e.id);
+                return (
                 <Table.Tr key={e.id} data-testid="directory-row" c={e.archived ? 'dimmed' : undefined}>
                   <Table.Td fw={500}>
                     <Group gap="xs" wrap="nowrap">
                       {e.name}
                       {e.googleContactId && <StatusBadge tone="accent" size="sm" title="Lié à un contact Google">Google</StatusBadge>}
                       {e.archived && <StatusBadge tone="neutral" size="sm">Archivé</StatusBadge>}
+                      {change && <ClubChangePill origin={change.origin} />}
                     </Group>
                   </Table.Td>
                   <Table.Td className="num">{e.affiliationNumber ?? '—'}</Table.Td>
@@ -141,6 +149,7 @@ export function DirectoryPage() {
                   <Table.Td ta="right" className="num">{e.competitions}</Table.Td>
                   <Table.Td>
                     <Group gap={4} justify="flex-end" wrap="nowrap">
+                      {change && <Button size="compact-sm" variant="light" onClick={() => comparison.open(change.clubId)}>Comparer</Button>}
                       <Button size="compact-sm" variant="subtle" onClick={() => setEditing(e)}>Modifier</Button>
                       <Menu position="bottom-end">
                         <Menu.Target><Button size="compact-sm" variant="subtle" color="gray" aria-label="Autres actions">…</Button></Menu.Target>
@@ -153,12 +162,14 @@ export function DirectoryPage() {
                     </Group>
                   </Table.Td>
                 </Table.Tr>
-              ))}
+                );
+              })}
             </Table.Tbody>
           </Table>
         </TableCard>
       )}
       <EntryModal key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.id} entry={editing} onClose={() => setEditing(null)} />
+      {comparison.element}
       <MergeModal merged={merging} entries={entries} onClose={() => setMerging(null)} />
     </Stack>
   );

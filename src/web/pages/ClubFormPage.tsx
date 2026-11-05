@@ -2,8 +2,10 @@ import { Button, FileButton, Group, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useRef, useState } from 'react';
 import { useParams } from 'react-router';
-import { useAuthMe, useGrid, useImportClubForm, usePreviewClubForm } from '../api.js';
+import { useAuthMe, useClubChanges, useGrid, useImportClubForm, usePreviewClubForm } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { CompetitionChangesBanner } from '../components/club-changes/ClubChangeBanners.js';
+import { useClubChangeDialog } from '../components/club-changes/ClubChangeModal.js';
 import { ClubFormPreviewTable } from '../components/ClubFormPreviewTable.js';
 import { HELP } from '../help.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
@@ -15,6 +17,8 @@ export function ClubFormPage() {
   const { id = '' } = useParams();
   const { data: grid } = useGrid(id);
   const { data: me } = useAuthMe();
+  const { data: changes = [] } = useClubChanges(id);
+  const comparison = useClubChangeDialog(changes);
   const preview = usePreviewClubForm(id);
   const importForm = useImportClubForm(id);
   const [file, setFile] = useState<File | null>(null);
@@ -45,6 +49,11 @@ export function ClubFormPage() {
 
   return (
     <Stack gap="lg">
+      {/* Bandeaux hors du panneau en ligne : ils restent sur un PC, où ce panneau n'existe pas. */}
+      <Stack gap="xs">
+        <CompetitionChangesBanner competitionId={id} onOpen={(clubId) => (clubId ? comparison.open(clubId) : comparison.openFirst())} />
+      </Stack>
+      {comparison.element}
       {/* Inscriptions en ligne et mails : serveur en ligne seulement ; rien tant que le rôle est inconnu. */}
       {me?.role === 'serveur' && <OnlineEntryPanel competitionId={id} />}
 
