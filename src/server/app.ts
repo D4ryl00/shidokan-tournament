@@ -31,6 +31,7 @@ import { launchRoutes } from './routes/launches.js';
 import { zoneRoutes } from './routes/zones.js';
 import { backupRoutes } from './routes/backups.js';
 import { directoryRoutes } from './routes/directory.js';
+import { clubChangeRoutes } from './routes/club-changes.js';
 import { invitationRoutes } from './routes/invitations.js';
 import { mailImageRoutes } from './routes/mail-images.js';
 import { clubEntryRoutes } from './routes/club-entry.js';
@@ -245,6 +246,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(launchRoutes, { db });
   await app.register(backupRoutes, { db, dbPath: opts.dbPath });
   await app.register(directoryRoutes, { db });
+  await app.register(clubChangeRoutes, { db });
   // Sur un PC, aucun client Google : les routes de mail et d'inscription en ligne sont refusées (voir `registerClubServicesRefusal`).
   const googleConfig = clubServices ? googleConfigFrom({ ...opts.google, publicUrl: opts.publicUrl }) : null;
   const google = googleConfig ? googleClient(googleConfig) : null;

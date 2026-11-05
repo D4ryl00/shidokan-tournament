@@ -193,3 +193,19 @@ test('rôle local : aucun contrôle de rôle', async () => {
   expect(res.statusCode).toBe(201);
   expect((await app.inject({ method: 'PUT', url: `/api/competitions/${res.json().id}/zones`, payload: [{ name: 'Ring' }] })).statusCode).toBe(200);
 });
+
+test('changements de coordonnées des clubs : Table centrale et Zone refusées, l’organisateur autorisé ; une modification de la Table dans l’onglet Clubs crée la ligne', async () => {
+  const { orga, table, zone1, base } = await setup();
+  const entryId = (await orga('POST', '/api/club-directory', { name: 'Tani Dojo', affiliationNumber: null, coachName: 'Jean', coachPhone: '0600000000', coachEmails: [], notes: null })).json().id as string;
+  const club = (await orga('POST', `${base}/clubs/from-directory`, { directoryId: entryId })).json() as { id: string };
+  for (const [method, url] of [['GET', '/api/club-changes'], ['POST', `/api/club-changes/${club.id}/resolve`], ['POST', `/api/club-changes/${club.id}/ignore`], ['POST', `/api/club-directory/${entryId}/apply-to-clubs`], ['PATCH', `/api/club-directory/${entryId}`]] as const) {
+    for (const [name, who] of [['table', table], ['zone', zone1]] as const) {
+      const res = await who(method, url, method === 'GET' ? undefined : {});
+      expect(res.statusCode, `${name} ${method} ${url}`).toBe(403);
+    }
+  }
+  expect((await orga('GET', '/api/club-changes')).statusCode).toBe(200);
+  expect((await table('PATCH', `${base}/clubs/${club.id}`, { coachPhone: '0611111111' })).statusCode).toBe(200);
+  const changes = (await orga('GET', '/api/club-changes')).json() as { clubId: string; origin: string }[];
+  expect(changes).toMatchObject([{ clubId: club.id, origin: 'competition' }]);
+});
