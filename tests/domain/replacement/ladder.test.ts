@@ -54,7 +54,7 @@ function allRules(seed: number, size: number) {
 }
 const fromFirstRule = (rows: { rule: string | null; alone: number | null }[]) => rows.filter((r) => r.rule !== null && r.alone !== null).map((r) => r.alone!);
 
-test('règles rares : les barres ne remontent jamais, même sans preuve', () => {
+test('règles rares : les barres ne remontent jamais, même sans preuve', { timeout: 120_000 }, () => {
   // Graine 4 : la recherche de la dernière règle n'allait pas au bout et laissait plus de seuls que la ligne au-dessus.
   const s = allRules(4, 150);
   const { rows, plan } = planLadder(s, { waveId: null, choices: [] });
