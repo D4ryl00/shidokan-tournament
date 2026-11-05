@@ -5,7 +5,7 @@ import { useRef } from 'react';
 import type { Editor } from '@tiptap/core';
 import { MAIL_IMAGE_LIMITS } from '../../../domain/mail-images.js';
 import { uploadMailImage } from '../../api.js';
-import { prepareImage } from './images.js';
+import { insertionWidth, naturalWidthOf, prepareImage } from './images.js';
 
 const countImages = (editor: Editor) => {
   let n = 0;
@@ -17,7 +17,7 @@ const countImages = (editor: Editor) => {
 
 const refuse = (message: string) => notifications.show({ color: 'red', message });
 
-/** Réduit, envoie puis insère les images (bouton, collage, dépôt) : largeur moyenne, 10 images au plus par message. */
+/** Réduit, envoie puis insère les images (bouton, collage, dépôt) : largeur moyenne au plus (une petite image garde sa taille), 10 images au plus par message. */
 export async function insertImages(editor: Editor, files: File[], pos?: number, blocked: () => boolean = () => false): Promise<void> {
   const inCode = 'Revenez à l’éditeur pour ajouter une image.';
   for (const file of files) {
@@ -27,9 +27,11 @@ export async function insertImages(editor: Editor, files: File[], pos?: number, 
       return;
     }
     try {
-      const { url } = await uploadMailImage(await prepareImage(file));
+      const prepared = await prepareImage(file);
+      const width = insertionWidth(await naturalWidthOf(prepared), MAIL_IMAGE_LIMITS.widths.medium);
+      const { url } = await uploadMailImage(prepared);
       if (blocked()) { refuse(inCode); return; } // le mode code s'est ouvert pendant l'envoi
-      const image = { type: 'image', attrs: { src: url, width: MAIL_IMAGE_LIMITS.widths.medium } };
+      const image = { type: 'image', attrs: { src: url, width } };
       const chain = editor.chain().focus();
       (pos === undefined ? chain.insertContent(image) : chain.insertContentAt(pos, image)).run();
     } catch (err) {

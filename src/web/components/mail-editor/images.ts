@@ -11,6 +11,23 @@ export function reducedOutputType(type: string, hasAlpha: boolean): 'image/jpeg'
   return 'image/jpeg';
 }
 
+/** Largeur d'affichage à l'insertion : la largeur moyenne, sans jamais agrandir une petite image (elle serait floue). */
+export function insertionWidth(naturalWidth: number, medium: number): number {
+  return naturalWidth >= 1 ? Math.min(Math.round(naturalWidth), medium) : medium;
+}
+
+/** Largeur réelle d'une image prête à l'envoi, ou 0 si le navigateur ne sait pas la lire. */
+export async function naturalWidthOf(blob: Blob): Promise<number> {
+  try {
+    const bitmap = await createImageBitmap(blob);
+    const { width } = bitmap;
+    bitmap.close();
+    return width;
+  } catch {
+    return 0;
+  }
+}
+
 /** Ce que le collage fait perdre, d'après le HTML collé (simple signal : le vrai filtrage reste dans l'éditeur et le serveur). */
 export function pastedLosses(html: string): string[] {
   const losses: string[] = [];

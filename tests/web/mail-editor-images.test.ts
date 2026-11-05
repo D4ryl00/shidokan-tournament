@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { jpegCarriesMetadata, pastedLosses, pastedOnlyAnImage, reducedOutputType } from '../../src/web/components/mail-editor/images.js';
+import { insertionWidth, jpegCarriesMetadata, pastedLosses, pastedOnlyAnImage, reducedOutputType } from '../../src/web/components/mail-editor/images.js';
 
 describe('images du message', () => {
   it('choisit le format de l’image réduite', () => {
@@ -7,6 +7,14 @@ describe('images du message', () => {
     expect(reducedOutputType('image/png', true)).toBe('image/png');
     expect(reducedOutputType('image/webp', false)).toBe('image/jpeg');
     expect(reducedOutputType('image/webp', true)).toBe('image/png');
+  });
+
+  it('n’agrandit jamais une petite image à l’insertion', () => {
+    expect(insertionWidth(240, 400)).toBe(240);
+    expect(insertionWidth(1, 400)).toBe(1);
+    expect(insertionWidth(400, 400)).toBe(400);
+    expect(insertionWidth(1200, 400)).toBe(400);
+    expect(insertionWidth(0, 400)).toBe(400); // largeur illisible : la taille moyenne
   });
 
   it('signale ce que le collage fait perdre', () => {
