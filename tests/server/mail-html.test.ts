@@ -67,6 +67,47 @@ describe('filtre et construction du mail', () => {
     const imgs = Array.from({ length: 11 }, (_, i) => `<img src="/api/mail-images/00000000-0000-4000-8000-0000000000${String(i).padStart(2, '0')}">`).join('');
     expect(() => cleanTemplate({ subject: 'S', body: imgs, format: 'html' })).toThrow('Au plus 10 images par message.');
   });
+  it('accepte les couleurs nommées et hsl() ; une couleur inconnue du filtre reste signalée', () => {
+    const r = cleanMailHtml('<p><span style="color: red">a</span> <span style="color: hsl(120, 50%, 40%)">b</span> <span style="color: hsla(120 50% 40% / 0.5)">c</span><mark style="background-color: navy">d</mark></p>');
+    expect(r.removed).toEqual([]);
+    expect(r.html).toBe('<p><span style="color:red">a</span> <span style="color:hsl(120, 50%, 40%)">b</span> <span style="color:hsla(120 50% 40% / 0.5)">c</span><mark style="background-color:navy">d</mark></p>');
+    expect(cleanMailHtml(r.html).html).toBe(r.html);
+    const refused = cleanMailHtml('<p><span style="color: var(--x)">a</span></p>');
+    expect(refused.html).toBe('<p><span>a</span></p>');
+    expect(refused.removed).toEqual(['style non permis']);
+  });
+  it('signale la taille, la police et les autres styles retirés', () => {
+    const font = cleanMailHtml('<p><span style="font-size:30px;font-family:Arial">t</span></p>');
+    expect(font.html).toBe('<p><span>t</span></p>');
+    expect(font.removed).toEqual(['taille ou police']);
+    expect(cleanMailHtml('<p style="position:fixed;color:#000">t</p>').removed).toEqual(['style non permis']);
+    expect(cleanMailHtml('<p><strong style="color:#000">t</strong></p>').removed).toEqual(['style non permis']);
+    expect(cleanMailHtml('<p style="text-align:center"><span style="color:#000">t</span></p>').removed).toEqual([]);
+    expect(cleanMailHtml('<p style="">t</p>').removed).toEqual([]);
+  });
+  it('un div devient un paragraphe et h4-h6 un titre 3, sans être signalés', () => {
+    const r = cleanMailHtml('<div>Ligne 1</div><div style="text-align:center">Ligne 2</div><h4>T4</h4><h5>T5</h5><h6>T6</h6>');
+    expect(r.html).toBe('<p>Ligne 1</p><p style="text-align:center">Ligne 2</p><h3>T4</h3><h3>T5</h3><h3>T6</h3>');
+    expect(r.removed).toEqual([]);
+    expect(r.text).toBe('Ligne 1\n\nLigne 2\n\nT4\n\nT5\n\nT6');
+    expect(cleanMailHtml(r.html).html).toBe(r.html);
+  });
+  it('un div qui ne fait que contenir des blocs disparaît : jamais un paragraphe dans un paragraphe', () => {
+    const r = cleanMailHtml('<div dir="ltr"><div>Ligne 1</div><div><br></div><ul><li>a</li></ul></div>');
+    expect(r.html).toBe('<p>Ligne 1</p><p><br /></p><ul><li>a</li></ul>');
+    expect(r.removed).toEqual([]);
+    expect(cleanMailHtml(r.html).html).toBe(r.html);
+  });
+  it('{lien} dans un lien à l’adresse refusée reste un lien personnel cliquable', () => {
+    const { html, text } = renderMailHtml('<p><a href="tel:0102">{lien}</a></p><p><a href="javascript:x()"><strong>{lien}</strong></a></p>', v);
+    expect(html).toBe('<p><a href="https://s.fr/inscription/abc">https://s.fr/inscription/abc</a></p><p><strong><a href="https://s.fr/inscription/abc">https://s.fr/inscription/abc</a></strong></p>');
+    expect(text).toBe('https://s.fr/inscription/abc\n\nhttps://s.fr/inscription/abc');
+  });
+  it('un message déjà stocké avec un script est refiltré à la construction du mail', () => {
+    const { html, text } = renderMailHtml('<p>Bonjour {club}</p><script>alert("x")</script><img src="https://e.fr/a.png" onerror="x()"><a href="javascript:x()" onclick="x()">j</a>', v);
+    expect(html).not.toMatch(/script|alert|onerror|onclick|e\.fr|javascript/);
+    expect(text).not.toContain('alert');
+  });
   it('un message sans format est gardé tel quel', () => {
     const t = { subject: 'S', body: 'Bonjour <script>' };
     expect(cleanTemplate(t)).toEqual(t);

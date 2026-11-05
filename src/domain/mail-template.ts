@@ -30,6 +30,18 @@ export function mailBodyToHtml(t: { body: string; format?: 'html' }): string {
   return t.format === 'html' ? t.body : textToHtml(t.body);
 }
 
+/** Adresse de lien permise : http, https, mailto, ou la variable `{lien}` seule. La même règle vaut dans l'éditeur et dans le filtre du serveur. */
+export const mailLinkAllowed = (href: string): boolean => /^(https?:\/\/|mailto:)/i.test(href) || href === '{lien}';
+
+const BARE_EMAIL = /^[^\s@:/,;<>"']+@[^\s@:/,;<>"']+\.[^\s@:/,;<>"']+$/;
+
+/** Adresse telle qu'on l'écrit dans la fenêtre de lien : `www.…` devient `https://www.…`, `x@y.fr` devient `mailto:x@y.fr`. Le reste ne change pas. */
+export function normalizeMailLink(href: string): string {
+  const h = href.trim();
+  if (/^www\./i.test(h)) return `https://${h}`;
+  return BARE_EMAIL.test(h) ? `mailto:${h}` : h;
+}
+
 /** « 2026-11-22 » → « 22/11/2026 ». */
 export const frenchDate = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/');
 

@@ -6,7 +6,7 @@ import { buildClubFormTemplate } from './club-form-template.js';
 import { writeOds } from './spreadsheet/ods.js';
 import { isAcceptableEmail, joinEmails, sameEmail } from '../domain/emails.js';
 import { clubFormFileNames, formatBytes } from '../domain/mail-attachments.js';
-import { MAIL_TOTAL_BYTES, mailImageIdsIn } from '../domain/mail-images.js';
+import { MAIL_TOTAL_BYTES } from '../domain/mail-images.js';
 import { frenchDate, renderTemplate, textToHtml, type MailValues } from '../domain/mail-template.js';
 import type { AppDb } from './db/client.js';
 import { clubs, mailLog } from './db/schema.js';
@@ -17,7 +17,7 @@ import { getCompetition, getGrid } from './repositories/competitions.js';
 import { addInvitationLink, markLinkSent, revokeLink } from './repositories/invitations.js';
 import { listMailAttachments, readMailAttachment } from './repositories/mail-attachments.js';
 import { readMailImage } from './repositories/mail-images.js';
-import { renderMailHtml } from './mail-html.js';
+import { cleanMailHtml, renderMailHtml } from './mail-html.js';
 import { NotFoundError } from './repositories/registrations.js';
 
 export interface MailAddress {
@@ -175,7 +175,7 @@ const imageCid = (id: string) => `image-${id}@shidokan`;
 async function invitationImages(db: AppDb, template: MailTemplate, others: MailAttachment[]): Promise<MailAttachment[]> {
   if (template.format !== 'html') return [];
   const out: MailAttachment[] = [];
-  for (const id of mailImageIdsIn(template.body)) {
+  for (const id of cleanMailHtml(template.body).imageIds) {
     const image = readMailImage(db, id);
     if (!image) throw new MailError('Image introuvable dans le message : remettez-la dans l’éditeur.');
     out.push({ filename: `image-${id}.${IMAGE_EXTENSIONS[image.contentType] ?? 'bin'}`, content: image.data, contentType: image.contentType, cid: imageCid(id), contentDisposition: 'inline' });

@@ -1,7 +1,8 @@
 import { and, eq, lt, notInArray } from 'drizzle-orm';
-import { detectImageType, MAIL_IMAGE_LIMITS, mailImageIdsIn, mailImageUrl } from '../../domain/mail-images.js';
+import { detectImageType, MAIL_IMAGE_LIMITS, mailImageUrl } from '../../domain/mail-images.js';
 import type { AppDb } from '../db/client.js';
 import { mailImages } from '../db/schema.js';
+import { cleanMailHtml } from '../mail-html.js';
 import { getAppSettings } from './app-settings.js';
 
 export class MailImageError extends Error {
@@ -29,13 +30,13 @@ export function readMailImage(db: AppDb, id: string): { contentType: string; dat
 
 /**
  * Images citées par un message au format HTML : celui de l'application et celui de chaque compétition, y compris une compétition
- * gérée ailleurs ou purgée. Un message au format texte ne cite rien.
+ * gérée ailleurs ou purgée. Un message au format texte ne cite rien. C'est le corps filtré qui compte, comme pour le mail envoyé.
  */
 export function referencedMailImageIds(db: AppDb): Set<string> {
   const ids = new Set<string>();
   const add = (mail: unknown) => {
     const m = mail as { format?: unknown; body?: unknown } | null | undefined;
-    if (m && m.format === 'html' && typeof m.body === 'string') for (const id of mailImageIdsIn(m.body)) ids.add(id);
+    if (m && m.format === 'html' && typeof m.body === 'string') for (const id of cleanMailHtml(m.body).imageIds) ids.add(id);
   };
   add(getAppSettings(db).invitationMail);
   for (const { settingsJson } of db.$client.prepare('select settings_json as settingsJson from competitions').all() as { settingsJson: string }[]) {

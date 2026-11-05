@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { DEFAULT_INVITATION_MAIL } from '../../src/domain/app-settings.js';
-import { mailBodyToHtml, renderTemplate, textToHtml, type MailValues } from '../../src/domain/mail-template.js';
+import { mailBodyToHtml, mailLinkAllowed, normalizeMailLink, renderTemplate, textToHtml, type MailValues } from '../../src/domain/mail-template.js';
 import { mailTemplateSchema } from '../../src/domain/mail-template-schema.js';
 
 const VALUES: MailValues = {
@@ -63,4 +63,16 @@ test('accepte le format html jusqu’à 100 000 caractères', () => {
 test('ouvre un ancien texte sans jamais le lire comme du HTML', () => {
   expect(mailBodyToHtml({ body: 'a < b & <b>c</b>' })).toBe(textToHtml('a < b & <b>c</b>'));
   expect(mailBodyToHtml({ body: '<p>x</p>', format: 'html' })).toBe('<p>x</p>');
+});
+
+test('adresse d’un lien : ajoute ce qui manque à www. et à une adresse e-mail, ne touche pas au reste', () => {
+  expect(normalizeMailLink(' www.club.fr ')).toBe('https://www.club.fr');
+  expect(normalizeMailLink('WWW.club.fr/page')).toBe('https://WWW.club.fr/page');
+  expect(normalizeMailLink('contact@club.fr')).toBe('mailto:contact@club.fr');
+  for (const same of ['https://club.fr', 'http://club.fr', 'mailto:a@b.fr', '{lien}', 'club.fr', 'tel:0102030405', '/page', 'javascript:x()']) expect(normalizeMailLink(same)).toBe(same);
+});
+
+test('adresse d’un lien permise : http, https, mailto et {lien} seul', () => {
+  for (const ok of ['https://club.fr', 'http://club.fr', 'HTTPS://club.fr', 'mailto:a@b.fr', '{lien}']) expect(mailLinkAllowed(ok), ok).toBe(true);
+  for (const no of ['www.club.fr', 'club.fr', 'a@b.fr', 'tel:0102030405', '/page', '//club.fr', 'javascript:x()', ' {lien} ', '{lien}/x', '']) expect(mailLinkAllowed(no), no).toBe(false);
 });

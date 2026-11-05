@@ -2,7 +2,7 @@ import sanitizeHtml from 'sanitize-html';
 import { parseDocument } from 'htmlparser2';
 import { Element, Text, type ChildNode, type ParentNode } from 'domhandler';
 import { MAIL_IMAGE_LIMITS, mailImageIdOfSrc, mailImageIdsIn } from '../domain/mail-images.js';
-import { renderTemplate, type MailValues } from '../domain/mail-template.js';
+import { mailLinkAllowed, renderTemplate, type MailValues } from '../domain/mail-template.js';
 import type { MailTemplate } from '../domain/mail-template-schema.js';
 
 /** Refus d'un message : répond 400 avec un texte fait pour l'écran. */
@@ -12,11 +12,21 @@ export class MailHtmlError extends Error {
 
 const ALLOWED_TAGS = ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'span', 'mark', 'a', 'ul', 'ol', 'li', 'blockquote', 'h1', 'h2', 'h3', 'img'];
 const IMAGE_PATH = /^\/api\/mail-images\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const COLOR = [/^#[0-9a-f]{3,8}$/i, /^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*[\d.]+\s*)?\)$/i];
+const COLOR = [
+  /^#[0-9a-f]{3,8}$/i,
+  /^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*[\d.]+\s*)?\)$/i,
+  /^hsla?\(\s*[\d.]+(deg)?\s*,\s*[\d.]+%\s*,\s*[\d.]+%\s*(,\s*[\d.]+%?\s*)?\)$/i,
+  /^hsla?\(\s*[\d.]+(deg)?\s+[\d.]+%\s+[\d.]+%\s*(\/\s*[\d.]+%?\s*)?\)$/i,
+  // Un mot seul : une couleur nommée de CSS (red, navy…), comme en colle Word ; un mot inconnu est simplement ignoré par la messagerie.
+  /^[a-z]+$/i,
+];
+const ALLOWED_STYLES: Record<string, RegExp[]> = { 'text-align': [/^(left|center|right)$/], color: COLOR, 'background-color': COLOR };
+const STYLED_TAGS = ['p', 'h1', 'h2', 'h3', 'span', 'mark'];
+/** Balises courantes (Gmail, éditeurs de pages) rendues par la balise permise la plus proche, sans perdre leurs lignes : ce n'est pas un retrait. */
+const RENAMED_TAGS = new Map([['div', 'p'], ['h4', 'h3'], ['h5', 'h3'], ['h6', 'h3']]);
+const FONT_PROPERTIES = new Set(['font', 'font-size', 'font-family']);
 const TABLE_TAGS = new Set(['tr', 'td', 'th', 'tbody', 'thead', 'tfoot', 'caption', 'colgroup', 'col']);
 
-/** Adresse de lien permise : http, https, mailto, ou la variable `{lien}` seule. */
-const linkAllowed = (href: string) => /^(https?:\/\/|mailto:)/i.test(href) || href === '{lien}';
 const imageAllowed = (src: string) => IMAGE_PATH.test(src);
 
 function walk(nodes: ChildNode[], visit: (el: Element) => void): void {
@@ -28,15 +38,31 @@ function walk(nodes: ChildNode[], visit: (el: Element) => void): void {
   }
 }
 
+/** Libellés des déclarations de style que le filtre retire d'un élément, selon la balise qu'il devient. */
+function styleLosses(tag: string, style: string | undefined): string[] {
+  return (style ?? '')
+    .split(';')
+    .filter((d) => d.trim())
+    .flatMap((d) => {
+      const colon = d.indexOf(':');
+      const prop = (colon < 0 ? d : d.slice(0, colon)).trim();
+      const value = colon < 0 ? '' : d.slice(colon + 1).replace(/!important\s*$/i, '').trim();
+      const kept = STYLED_TAGS.includes(tag) && Object.hasOwn(ALLOWED_STYLES, prop) && ALLOWED_STYLES[prop]!.some((re) => re.test(value));
+      if (kept) return [];
+      return [FONT_PROPERTIES.has(prop.toLowerCase()) ? 'taille ou police' : 'style non permis'];
+    });
+}
+
 /** Ce que le filtre va retirer, en libellés lisibles et sans doublon. */
 function removedIn(html: string): string[] {
   const removed = new Set<string>();
   walk(parseDocument(html).children, (el) => {
-    const name = el.name.toLowerCase();
+    const name = RENAMED_TAGS.get(el.name.toLowerCase()) ?? el.name.toLowerCase();
+    if (ALLOWED_TAGS.includes(name)) for (const label of styleLosses(name, el.attribs.style)) removed.add(label);
     if (name === 'img') {
       if (!imageAllowed(el.attribs.src ?? '')) removed.add('image externe');
     } else if (name === 'a') {
-      if (el.attribs.href !== undefined && !linkAllowed(el.attribs.href)) removed.add('lien non autorisé');
+      if (el.attribs.href !== undefined && !mailLinkAllowed(el.attribs.href)) removed.add('lien non autorisé');
     } else if (!ALLOWED_TAGS.includes(name)) {
       removed.add(`« ${TABLE_TAGS.has(name) ? 'table' : name} »`);
     }
@@ -50,22 +76,19 @@ function sanitize(html: string): string {
     allowedAttributes: {
       a: ['href', 'target', 'rel'],
       img: ['src', 'width', 'alt'],
-      p: ['style'],
-      h1: ['style'],
-      h2: ['style'],
-      h3: ['style'],
-      span: ['style'],
+      ...Object.fromEntries(STYLED_TAGS.map((tag) => [tag, ['style']])),
       mark: ['style', 'data-color'],
     },
-    allowedStyles: { '*': { 'text-align': [/^(left|center|right)$/], color: COLOR, 'background-color': COLOR } },
+    allowedStyles: { '*': ALLOWED_STYLES },
     allowedSchemes: ['http', 'https', 'mailto'],
     allowProtocolRelative: false,
     nonTextTags: ['script', 'style', 'textarea', 'option', 'iframe', 'noscript'],
     // Les adresses relatives passent le contrôle des schémas : on les refuse ici.
     transformTags: {
+      ...Object.fromEntries([...RENAMED_TAGS].map(([from, to]) => [from, sanitizeHtml.simpleTransform(to, {})])),
       a: (tagName, attribs) => {
         const out = { ...attribs };
-        if (out.href !== undefined && !linkAllowed(out.href)) delete out.href;
+        if (out.href !== undefined && !mailLinkAllowed(out.href)) delete out.href;
         if (out.target !== undefined && out.target !== '_blank') delete out.target;
         return { tagName, attribs: out };
       },
@@ -154,9 +177,29 @@ function serialize(nodes: ChildNode[]): string {
     .join('');
 }
 
+/** Retire les `div` qui contiennent des blocs : de simples conteneurs (Gmail en met partout) ; dit si quelque chose a changé. */
+function unwrapContainerDivs(parent: ParentNode): boolean {
+  let changed = false;
+  parent.children = parent.children.flatMap((n) => {
+    if (!(n instanceof Element)) return [n];
+    changed = unwrapContainerDivs(n) || changed;
+    if (n.name !== 'div' || !n.children.some((c) => c instanceof Element && (RENAMED_TAGS.has(c.name) || BLOCK_TAGS.has(c.name)))) return [n];
+    changed = true;
+    return n.children;
+  });
+  parent.children.forEach((c) => (c.parent = parent));
+  return changed;
+}
+
+/** Filtre sans `div` conteneur : devenu `p`, il mettrait un paragraphe dans un paragraphe, que le navigateur rouvre avec des lignes vides. */
+function sanitizeBlocks(html: string): string {
+  const doc = parseDocument(html);
+  return sanitize(unwrapContainerDivs(doc) ? serialize(doc.children) : html);
+}
+
 /** Filtre un message : ne garde que ce que l'éditeur sait produire. `removed` dit ce qui a été retiré de l'entrée. */
 export function cleanMailHtml(html: string): { html: string; removed: string[]; text: string; imageIds: string[] } {
-  const clean = sanitize(html);
+  const clean = sanitizeBlocks(html);
   return { html: clean, removed: removedIn(html), text: textOf(parseDocument(clean).children), imageIds: mailImageIdsIn(clean) };
 }
 
@@ -244,8 +287,9 @@ function style(parent: ParentNode, imageSrc?: (id: string) => string): void {
  */
 export function renderMailHtml(html: string, values: MailValues, imageSrc?: (id: string) => string): { html: string; text: string } {
   const doc = parseDocument(cleanMailHtml(html).html);
-  fill(doc, values, false);
+  // Avant `fill` : `{lien}` dans un lien à l'adresse refusée n'est plus « dans un lien », il devient le lien personnel.
   unwrapBareLinks(doc);
+  fill(doc, values, false);
   const text = textOf(doc.children);
   style(doc, imageSrc);
   return { html: serialize(doc.children), text };

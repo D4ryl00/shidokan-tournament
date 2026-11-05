@@ -7,7 +7,7 @@ import { updateAppSettings } from '../../src/server/repositories/app-settings.js
 import { addMailImage, readMailImage, referencedMailImageIds, sweepMailImages } from '../../src/server/repositories/mail-images.js';
 import { startRetention } from '../../src/server/repositories/retention.js';
 import { buildPackage, unclassifiedTables } from '../../src/server/sync/package.js';
-import { createCompetition } from '../../src/server/repositories/competitions.js';
+import { createCompetition, getCompetition, updateCompetition } from '../../src/server/repositories/competitions.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let db: AppDb | null = null;
@@ -133,6 +133,19 @@ test('sweepMailImages : une image citée par le message de l’application ou pa
   expect(readMailImage(db, inComp!)).not.toBeNull();
 });
 
+test('sweepMailImages : seul le corps filtré cite une image (entité gardée, commentaire et script ignorés)', () => {
+  db = openDb(tmpDbPath());
+  const cited = addMailImage(db, PNG).id;
+  const inComment = addMailImage(db, JPEG).id;
+  const inScript = addMailImage(db, GIF).id;
+  db.$client.prepare('update mail_images set created_at = ?').run(hoursAgo(48));
+  const body = `<p>t</p><img src="/api/mail-images/&#${cited.charCodeAt(0)};${cited.slice(1)}"><!-- <img src="/api/mail-images/${inComment}"> --><script>'<img src="/api/mail-images/${inScript}">'</script>`;
+  updateAppSettings(db, { invitationMail: htmlMail(body) } as never);
+  expect([...referencedMailImageIds(db)]).toEqual([cited]);
+  expect(sweepMailImages(db, NOW)).toBe(2);
+  expect(readMailImage(db, cited)).not.toBeNull();
+});
+
 test('un message au format texte avec l’adresse d’une image ne la retient pas', () => {
   db = openDb(tmpDbPath());
   const id = addMailImage(db, PNG).id;
@@ -152,6 +165,18 @@ test('démarrage : le nettoyage des images ne bloque pas la purge, et une panne 
   db.$client.exec('drop table mail_images');
   startRetention(db, dbPath, (e) => errors.push(e))();
   expect(errors).toHaveLength(1);
+});
+
+test('updateCompetition : un message inchangé qui ne passerait pas le filtre ne bloque pas les réglages renvoyés en entier', async () => {
+  db = openDb(tmpDbPath());
+  const c = await createCompetition(db, { name: 'Coupe', date: '2026-11-22' });
+  const empty = htmlMail('<p></p>');
+  db.$client.prepare('update competitions set settings_json = ? where id = ?').run(JSON.stringify({ invitationMail: empty }), c.id);
+  const updated = await updateCompetition(db, c.id, { settings: { ...(await getCompetition(db, c.id))!.settings, repechage: true } });
+  expect(updated.settings.repechage).toBe(true);
+  expect(updated.settings.invitationMail).toEqual(empty);
+  // Changé, il repasse par le filtre.
+  await expect(updateCompetition(db, c.id, { settings: { invitationMail: htmlMail('<p> </p>') } })).rejects.toThrow('Le message est vide.');
 });
 
 test('mail_images est classée (locale) : aucune table non classée, et pas dans un paquet de compétition', async () => {

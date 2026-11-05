@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
 import nodemailer from 'nodemailer';
 import { afterEach, beforeEach, expect, test } from 'vitest';
@@ -475,4 +476,45 @@ test('aperçu html : garde /api/mail-images/<id> et échappe le nom du club', as
   expect(res.html).toContain('&lt;b&gt;x&lt;/b&gt;');
   expect(res.html).not.toContain('<b>x</b>');
   expect(res.body).toContain('Club <b>x</b>');
+});
+
+/** Message arrivé sans passer par l'enregistrement (paquet de compétition, ancienne version) : écrit tel quel dans la base. */
+function storeRawMessage(body: string) {
+  const raw = new Database(dbPathOf);
+  try {
+    const id = base.split('/').pop()!;
+    const row = raw.prepare('select settings_json as s from competitions where id = ?').get(id) as { s: string };
+    raw.prepare('update competitions set settings_json = ? where id = ?').run(JSON.stringify({ ...(JSON.parse(row.s) as object), invitationMail: { subject: 'S', body, format: 'html' } }), id);
+  } finally {
+    raw.close();
+  }
+}
+
+test('images d’un message stocké : c’est le corps filtré qui compte, comme pour le rendu', async () => {
+  await smtp();
+  const id = await upload();
+  const [link] = await invited({ name: 'Tani Dojo', coachEmails: ['tani@example.org'] });
+
+  // Adresse écrite avec une entité : le rendu la voit, la pièce doit partir avec.
+  storeRawMessage(`<p>{lien}</p><img src="/api/mail-images/&#${id.charCodeAt(0)};${id.slice(1)}">`);
+  expect((await send([link!.clubId])).json()).toEqual([expect.objectContaining({ status: 'sent' })]);
+  expect(sent[0]!.html).toContain(`cid:image-${id}@shidokan`);
+  expect(sent[0]!.attachments!.map((a) => a.cid)).toContain(`image-${id}@shidokan`);
+
+  // Image dans un commentaire ou un script : ni refus, ni pièce.
+  const ghost = '99999999-9999-4999-8999-999999999999';
+  storeRawMessage(`<p>{lien}</p><!-- <img src="/api/mail-images/${ghost}"> --><script>'<img src="/api/mail-images/${ghost}">'</script>`);
+  const res = await send([link!.clubId]);
+  expect(res.statusCode).toBe(200);
+  expect(res.json()).toEqual([expect.objectContaining({ status: 'sent' })]);
+  expect(sent[1]!.attachments!.filter((a) => a.cid)).toEqual([]);
+});
+
+test('aperçu : un script déjà stocké est refiltré', async () => {
+  const [link] = await invited({ name: 'Tani Dojo', coachEmails: ['tani@example.org'] });
+  storeRawMessage('<p>Bonjour {club}</p><script>alert(1)</script><a href="javascript:x()" onclick="x()">j</a>');
+  const preview = await app.inject({ method: 'GET', url: `${base}/invitations/preview?clubId=${link!.clubId}` });
+  expect(preview.statusCode).toBe(200);
+  expect(preview.json().html).toContain('Bonjour Tani Dojo');
+  expect(preview.json().html).not.toMatch(/script|alert|onclick|javascript/);
 });
