@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { appSettingsPatchSchema, GOOGLE_NOT_CONFIGURED } from '../../domain/app-settings.js';
 import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
+import { cleanTemplate } from '../mail-html.js';
 import { sendTestMail, type MailTransport } from '../mail.js';
 import { getAppSettings, publicAppSettings, updateAppSettings } from '../repositories/app-settings.js';
 
@@ -21,6 +22,8 @@ export async function appSettingsRoutes(app: FastifyInstance, { db, mailTranspor
     const patch = appSettingsPatchSchema.parse(req.body);
     // Sans compte connecté, le dépôt répond « Connectez d’abord un compte Google. »
     if (patch.mailMode === 'google' && !googleAvailable && getAppSettings(db).google) throw new SettingsError(GOOGLE_NOT_CONFIGURED);
+    // Le message est filtré avant d'être gardé : du code collé dans l'éditeur n'arrive jamais en base.
+    if (patch.invitationMail) patch.invitationMail = cleanTemplate(patch.invitationMail);
     return publicAppSettings(updateAppSettings(db, patch), googleAvailable);
   });
 }

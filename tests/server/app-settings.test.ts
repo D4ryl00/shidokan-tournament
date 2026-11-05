@@ -102,3 +102,28 @@ test('état des contacts Google : défaut, jamais envoyé à l’écran, refusé
   expect(hasContactsScope({})).toBe(false);
   expect(hasContactsScope({ scopes: [CONTACTS_SCOPE] })).toBe(true);
 });
+
+test('le message aux clubs est filtré à l’enregistrement ; un message vide est refusé', async () => {
+  const ok = await patch({ invitationMail: { subject: 'S', body: '<p>Bonjour</p><script>x()</script><img src="https://e.fr/a.png">', format: 'html' } });
+  expect(ok.statusCode).toBe(200);
+  const saved = (await get()).invitationMail;
+  expect(saved.body).toBe('<p>Bonjour</p>');
+  expect(saved.format).toBe('html');
+  const empty = await patch({ invitationMail: { subject: 'S', body: '<p></p>', format: 'html' } });
+  expect(empty.statusCode).toBe(400);
+  expect(empty.json().error).toBe('Le message est vide.');
+  expect((await get()).invitationMail.body).toBe('<p>Bonjour</p>');
+});
+
+test('le message d’une compétition est filtré de la même façon', async () => {
+  const id = (await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe filtre', date: '2026-11-22' } })).json().id as string;
+  const url = `/api/competitions/${id}`;
+  const ok = await app.inject({ method: 'PATCH', url, payload: { settings: { invitationMail: { subject: 'S', body: '<p>Salut</p><script>x()</script>', format: 'html' } } } });
+  expect(ok.statusCode).toBe(200);
+  expect(ok.json().settings.invitationMail.body).toBe('<p>Salut</p>');
+  const empty = await app.inject({ method: 'PATCH', url, payload: { settings: { invitationMail: { subject: 'S', body: '<p></p>', format: 'html' } } } });
+  expect(empty.statusCode).toBe(400);
+  expect(empty.json().error).toBe('Le message est vide.');
+  const cleared = await app.inject({ method: 'PATCH', url, payload: { settings: { invitationMail: null } } });
+  expect(cleared.statusCode).toBe(200);
+});
