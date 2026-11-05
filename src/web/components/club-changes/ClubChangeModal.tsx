@@ -69,9 +69,9 @@ export function ClubChangeModal({ change, onClose, onDone, onRefused, notice }: 
     // Nouvelle décision : l'ancien refus ne vaut plus (sinon la disparition du changement décidé serait annoncée comme un refus).
     onRefused?.(null);
     resolve.mutateAsync({ clubId: change.clubId, directoryVersion: change.directoryVersion, changedAt: change.changedAt, values, applyToClub: canApply && applyToClub }).then(() => {
-      // Compétition gérée ailleurs : seul l'annuaire est enregistré. Le club suivra après le retour de la main, s'il diffère encore de ce qui est enregistré
-      // (valeur de la compétition choisie partout : la ligne est supprimée, rien à mettre à jour).
-      if (!change.managedHere && differingFields(values, change.values).length > 0) {
+      // Compétition à venir gérée ailleurs : seul l'annuaire est enregistré. Le club suivra après le retour de la main, s'il diffère encore de ce qui est
+      // enregistré (valeur de la compétition choisie partout : la ligne est supprimée, rien à mettre à jour). Compétition passée : rien ne suivra.
+      if (change.upcoming && !change.managedHere && differingFields(values, change.values).length > 0) {
         notifications.show({ color: 'yellow', message: `Annuaire enregistré. Le club de ${change.competitionName} reste à mettre à jour après le retour de la main.` });
       }
       onDone();
@@ -166,7 +166,8 @@ export function useClubChangeDialog(changes: ClubChangeView[]): { open: (clubId:
   const element = current ? (
     <ClubChangeModal key={`${current.clubId}:${current.changedAt}:${current.directoryVersion}`} change={current} notice={refusal?.clubId === current.clubId ? refusal.message : null}
       onRefused={(message) => setRefusal(message === null ? null : { clubId: current.clubId, name: current.values.name, message })} onClose={close}
-      onDone={() => { setRefusal(null); setDecided((d) => new Set(d).add(current.clubId)); setTarget(chain ? NEXT : null); }} />
+      // Fenêtre fermée (croix, Échap) pendant la décision : elle ne se rouvre pas sur le club suivant.
+      onDone={() => { setRefusal(null); setDecided((d) => new Set(d).add(current.clubId)); setTarget((t) => (t === null ? null : chain ? NEXT : null)); }} />
   ) : null;
   return {
     open: (clubId) => { setRefusal(null); setDecided(new Set()); setChain(false); setTarget(clubId); },

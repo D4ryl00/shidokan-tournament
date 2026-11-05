@@ -625,6 +625,50 @@ test('chaîne : un refus sur un club disparu entre-temps est annoncé à son nom
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
+test('chaîne : fermée par Échap pendant une décision, la fenêtre ne se rouvre pas sur le club suivant', async ({ page, request, playwright }) => {
+  // Deux compétitions de même date : classées par nom, « chaine-echap-1 » avant « chaine-echap-2 ».
+  const a = await setup(page, request, 'chaine-echap-1');
+  const b = await setup(page, request, 'chaine-echap-2');
+  await coachSaves(playwright, a.token, { coachPhone: '06 45 45 45 45' });
+  await coachSaves(playwright, b.token, { coachPhone: '06 46 46 46 46' });
+  await onlyCompetitions(page, [a.competitionId, b.competitionId]);
+  await slowListsAfterDecision(page);
+  await page.goto('/annuaire');
+  await page.getByTestId('directory-changes-banner').getByRole('button', { name: 'Voir les changements' }).click();
+  const first = page.getByRole('dialog', { name: `${a.club} : garder quelles informations ?` });
+  await expect(first).toBeVisible();
+  const finished = listAfterDecision(page, /\/api\/club-directory$/);
+  await first.getByRole('button', { name: 'Enregistrer dans l’annuaire' }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await finished;
+  await page.waitForTimeout(300);
+  expect(await page.getByRole('dialog').count()).toBe(0);
+  expect((await entryOf(request, a.entry.id)).coachPhone).toBe('06 45 45 45 45');
+  // Nettoyage : le changement restant est ignoré.
+  const [left] = (await (await request.get(`/api/club-changes?competitionId=${b.competitionId}`)).json()) as { clubId: string; changedAt: string }[];
+  expect((await request.post(`/api/club-changes/${left!.clubId}/ignore`, { data: { changedAt: left!.changedAt } })).status()).toBe(204);
+});
+
+test('fiche modifiée puis « Annuler » pendant l’enregistrement : la fiche est enregistrée et le report est quand même proposé', async ({ page, request }) => {
+  const a = await setup(page, request, 'report-annule');
+  await page.route(`**/api/club-directory/${a.entry.id}`, async (route) => {
+    if (route.request().method() === 'PATCH') await new Promise((r) => setTimeout(r, 800));
+    await route.continue();
+  });
+  await page.goto('/annuaire');
+  await page.getByTestId('directory-row').filter({ hasText: a.club }).getByRole('button', { name: 'Modifier' }).click();
+  const form = page.getByRole('dialog', { name: 'Modifier le club' });
+  await form.getByLabel('Téléphone').fill('06 47 47 47 47');
+  await form.getByTestId('directory-save').click();
+  await form.getByRole('button', { name: 'Annuler' }).click();
+  await expect(form).toBeHidden();
+  const dialog = page.getByRole('dialog', { name: 'Appliquer aux compétitions à venir ?' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Ne rien appliquer' }).click();
+  expect((await entryOf(request, a.entry.id)).coachPhone).toBe('06 47 47 47 47');
+});
+
 test('960 px : les adresses courtes et ordinaires tiennent sur une ligne dans l’annuaire, l’onglet Clubs et les invitations', async ({ page, request }) => {
   const run = Date.now();
   const competitionId = await newCompetition(page, request, `Coupe adresses ${run}`);

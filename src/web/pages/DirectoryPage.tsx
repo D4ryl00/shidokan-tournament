@@ -28,10 +28,12 @@ function EntryModal({ entry, onClose, onUpcoming }: { entry: DirectoryEntry | 'n
     entry && entry !== 'new' ? { name: entry.name, affiliationNumber: entry.affiliationNumber, coachName: entry.coachName, coachPhone: entry.coachPhone, coachEmails: entry.coachEmails, notes: entry.notes } : EMPTY,
   );
   const set = (patch: Partial<DirectoryInput>) => setForm((f) => ({ ...f, ...patch }));
+  // `mutateAsync` et non les rappels de `mutate` : fermée (Annuler, croix) pendant l'enregistrement, la fenêtre est remontée et un rappel de `mutate` serait
+  // perdu ; la fiche est pourtant enregistrée, et la page doit encore proposer le report. Un refus reste affiché dans la fenêtre (erreur de la mutation).
   const save = () => {
-    if (entry === 'new') create.mutate(form, { onSuccess: onClose });
+    if (entry === 'new') create.mutateAsync(form).then(onClose, () => {});
     // La fiche est enregistrée : la fenêtre se ferme, puis la page propose de reporter la fiche sur les compétitions à venir s'il y a de quoi.
-    else if (entry) update.mutate({ id: entry.id, ...form }, { onSuccess: (saved) => { onClose(); onUpcoming(saved.id, saved.upcoming); } });
+    else if (entry) update.mutateAsync({ id: entry.id, ...form }).then((saved) => { onClose(); onUpcoming(saved.id, saved.upcoming); }, () => {});
   };
   return (
     <Modal opened={entry !== null} onClose={onClose} title={entry === 'new' ? 'Ajouter un club' : 'Modifier le club'}>

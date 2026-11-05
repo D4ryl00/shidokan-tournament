@@ -254,9 +254,11 @@ export function resolveClubChange(db: AppDb, clubId: string, input: ResolveInput
     updateDirectoryEntry(t, entry.id, { name, coachName, coachPhone, coachEmails, affiliationNumber }); // contrôle aussi le numéro (une autre fiche le porte)
     const updated = t.select().from(clubDirectory).where(eq(clubDirectory.id, entry.id)).get()!;
     if (input.applyToClub) writeClubValues(t, club, updated, input.values);
-    // Compétition gérée ailleurs, rien appliqué au club : s'il diffère encore du résultat, le changement reste à examiner au retour de la main.
-    // La fiche vient d'être choisie par l'organisateur : elle est le choix par défaut de tous les champs.
-    if (!input.applyToClub && !getManagement(db, club.competitionId).managedHere) {
+    // Compétition à venir gérée ailleurs, rien appliqué au club : s'il diffère encore du résultat, le changement reste à examiner au retour de la main.
+    // La fiche vient d'être choisie par l'organisateur : elle est le choix par défaut de tous les champs. Compétition passée : seul l'annuaire est
+    // modifié, il n'y aura rien à appliquer au club, le changement est fermé.
+    const date = t.select({ date: competitions.date }).from(competitions).where(eq(competitions.id, club.competitionId)).get()?.date;
+    if (!input.applyToClub && !getManagement(db, club.competitionId).managedHere && date !== undefined && isUpcoming(date, localToday())) {
       reconcileChange(t, clubId);
       t.update(clubChanges).set({ changedFields: '[]', addedEmails: '[]' }).where(eq(clubChanges.clubId, clubId)).run();
     } else t.delete(clubChanges).where(eq(clubChanges.clubId, clubId)).run();

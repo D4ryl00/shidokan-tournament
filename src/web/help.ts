@@ -82,7 +82,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     title: 'Annuaire des clubs',
     short: 'Les clubs connus, d’une compétition à l’autre : leurs coordonnées sont reprises dans les fiches et les inscriptions.',
     details: [
-      'L’annuaire ne dépend d’aucune compétition. Il se remplit tout seul avec les clubs des fiches, de l’import FFK et des saisies ; vous pouvez aussi y créer des clubs à l’avance.',
+      'L’annuaire ne dépend d’aucune compétition. Il se remplit tout seul avec les clubs des fiches, de l’import FFK et des saisies (création de fiches) ; vous pouvez aussi y créer des clubs à l’avance.',
       [
         'Le numéro d’affiliation FFK (les chiffres en tête du club dans l’export FFK) reconnaît un club à coup sûr, même si son nom est écrit autrement.',
         '« Modifier » change le nom, le numéro d’affiliation, le coach, les adresses e-mail ou les notes ; « Archiver » cache un club qui ne vient plus, sans rien effacer.',
@@ -97,7 +97,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     title: 'Annuaire des clubs',
     short: 'Les clubs connus, d’une compétition à l’autre : invitez-les ensuite aux inscriptions en ligne d’une compétition.',
     details: [
-      'L’annuaire ne dépend d’aucune compétition. Il se remplit tout seul avec les clubs des fiches, de l’import FFK et des saisies ; vous pouvez aussi y créer des clubs à l’avance.',
+      'L’annuaire ne dépend d’aucune compétition. Il se remplit tout seul avec les clubs des fiches, de l’import FFK et des saisies (création de fiches) ; vous pouvez aussi y créer des clubs à l’avance.',
       [
         'Le numéro d’affiliation FFK (les chiffres en tête du club dans l’export FFK) reconnaît un club à coup sûr, même si son nom est écrit autrement.',
         '« Modifier » change le nom, le numéro d’affiliation, le coach, les adresses e-mail ou les notes ; « Archiver » cache un club qui ne vient plus, sans rien effacer.',

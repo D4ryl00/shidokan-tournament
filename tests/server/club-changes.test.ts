@@ -738,6 +738,15 @@ test('M5 : décision sans application sur une compétition gérée ailleurs : le
   expect(await list()).toMatchObject([{ clubId, fields: ['coachPhone'], changedFields: [], addedEmails: [] }]);
 });
 
+test('décision sur une compétition passée gérée ailleurs : seul l’annuaire est modifié, le changement est fermé (rien à appliquer au retour de la main)', async () => {
+  await patchClub({ coachPhone: '0611111111' });
+  const [view] = await list();
+  raw("update competitions set owner_instance_id = 'ailleurs', owner_name = 'PC Nice', date = ? where id = ?", inDays(-200), view!.competitionId);
+  expect((await resolve(clubId, view!, { coachName: 'Jean', coachPhone: '0644444444', coachEmails: ['jean@tani.example'] })).statusCode).toBe(204);
+  expect(await directory()).toMatchObject({ coachPhone: '0644444444' });
+  expect(changes()).toHaveLength(0);
+});
+
 test('M5 : sur une compétition gérée ici, sans application, le changement est fermé', async () => {
   await patchClub({ coachPhone: '0611111111' });
   const [view] = await list();
