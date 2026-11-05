@@ -1,8 +1,9 @@
 import { Button, Checkbox, Group, Modal, Radio, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import { useIsMutating } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import { defaultChoice, differingFields, emailChoices, resolvedValues, type ClubField, type ClubValues, type Side } from '../../../domain/club-changes.js';
-import { ApiError, useIgnoreClubChange, useResolveClubChange, type ClubChangeView } from '../../api.js';
+import { ApiError, CLUB_CHANGE_DECISION, useIgnoreClubChange, useResolveClubChange, type ClubChangeView } from '../../api.js';
 import { ApiErrorAlert } from '../ApiErrorAlert.js';
 
 export const LABEL: Record<ClubField, string> = { name: 'Club', coachName: 'Coach', coachPhone: 'Téléphone', coachEmails: 'E-mails', affiliationNumber: 'N° d’affiliation FFK' };
@@ -48,13 +49,18 @@ export function ClubChangeModal({ change, onClose, onDone, onStale, notice }: Pr
   const values = resolvedValues(change.directory, change.values, choices, emails, change.changedFields);
 
   const error = resolve.error ?? ignore.error;
-  // Fiche ou changement modifiés depuis l'ouverture : les listes sont relues (par la décision), le message reste affiché.
-  useEffect(() => {
-    if (error instanceof ApiError && error.status === 409) onStale?.(error.message);
-  }, [error, onStale]);
-  const busy = resolve.isPending || ignore.isPending;
+  // Une décision en cours, même lancée par la fenêtre d'avant le remontage : pas de seconde décision avant sa fin.
+  const busy = useIsMutating({ mutationKey: CLUB_CHANGE_DECISION }) > 0;
   // `mutateAsync` et non les rappels de `mutate` : la relecture des listes remonte la fenêtre (sa clé change) avant la fin de la mutation, et un
-  // rappel de `mutate` est alors perdu. Cette promesse survit au remontage.
+  // rappel de `mutate` est alors perdu. Cette promesse survit au remontage ; un refus y est donc traité aussi (l'état d'erreur de la mutation
+  // reste sur l'ancienne fenêtre).
+  const refused = (e: unknown) => {
+    if (!(e instanceof ApiError)) return; // autre erreur : affichée dans la fenêtre si elle n'a pas été remontée
+    // Fiche ou changement modifiés depuis l'ouverture : les listes sont relues, le message reste affiché dans la fenêtre remontée.
+    if (e.status === 409) onStale?.(e.message);
+    // Changement disparu : la fenêtre s'est déjà fermée, on dit pourquoi.
+    else if (e.status === 404) notifications.show({ color: 'yellow', message: e.message });
+  };
   const save = () => {
     resolve.mutateAsync({ clubId: change.clubId, directoryVersion: change.directoryVersion, changedAt: change.changedAt, values, applyToClub: canApply && applyToClub }).then(() => {
       // Compétition gérée ailleurs : seul l'annuaire est enregistré. Le club suivra après le retour de la main, s'il diffère encore de ce qui est enregistré
@@ -63,9 +69,9 @@ export function ClubChangeModal({ change, onClose, onDone, onStale, notice }: Pr
         notifications.show({ color: 'yellow', message: `Annuaire enregistré. Le club de ${change.competitionName} reste à mettre à jour après le retour de la main.` });
       }
       onDone();
-    }, () => { /* refus : affiché dans la fenêtre (erreur de la mutation) */ });
+    }, refused);
   };
-  const skip = () => { ignore.mutateAsync({ clubId: change.clubId, changedAt: change.changedAt }).then(onDone, () => { /* refus affiché dans la fenêtre */ }); };
+  const skip = () => { ignore.mutateAsync({ clubId: change.clubId, changedAt: change.changedAt }).then(onDone, refused); };
 
   const fields: ReactNode[] = (['name', 'coachName', 'coachPhone', 'coachEmails', 'affiliationNumber'] as const).map((f) => {
     if (!differs(f)) {
@@ -113,11 +119,11 @@ export function ClubChangeModal({ change, onClose, onDone, onStale, notice }: Pr
           </Stack>
         )}
         {notice && <Text size="sm" c="red" data-testid="change-notice">{notice}</Text>}
-        <ApiErrorAlert error={error instanceof ApiError && error.status === 409 ? null : error} />
+        <ApiErrorAlert error={error instanceof ApiError && (error.status === 409 || error.status === 404) ? null : error} />
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose} disabled={busy}>Plus tard</Button>
-          <Button variant="default" onClick={skip} loading={ignore.isPending} disabled={resolve.isPending}>Ignorer ce changement</Button>
-          <Button data-testid="change-save" onClick={save} loading={resolve.isPending} disabled={ignore.isPending || !values.name.trim()}>Enregistrer dans l’annuaire</Button>
+          <Button variant="default" onClick={skip} loading={ignore.isPending} disabled={busy}>Ignorer ce changement</Button>
+          <Button data-testid="change-save" onClick={save} loading={resolve.isPending} disabled={busy || !values.name.trim()}>Enregistrer dans l’annuaire</Button>
         </Group>
       </Stack>
     </Modal>

@@ -900,9 +900,13 @@ export function useFetchClubChanges(competitionId: string) {
 }
 
 /** Après une décision : changements, annuaire, et clubs, invitations des compétitions. */
+/** Clé commune aux décisions sur un changement (enregistrer, ignorer) : la fenêtre remontée sait qu'une décision est en cours. */
+export const CLUB_CHANGE_DECISION = ['club-change-decision'];
+
 function useClubChangeMutation<V>(fn: (v: V) => Promise<void>) {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: CLUB_CHANGE_DECISION,
     mutationFn: fn,
     onSettled: () => Promise.all(['club-changes', 'club-directory', 'directory-clubs', 'clubs', 'invitations'].map((k) => qc.invalidateQueries({ queryKey: [k] }))),
   });

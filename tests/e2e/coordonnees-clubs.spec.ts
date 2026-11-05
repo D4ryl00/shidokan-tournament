@@ -435,7 +435,11 @@ test('960 px : l’étiquette « Conflit » ne rétrécit pas, les adresses de l
   for (const c of open) expect((await request.post(`/api/club-changes/${c.clubId}/ignore`, { data: { changedAt: c.changedAt } })).status()).toBe(204);
 });
 
-/** Compétitions tenues par un PC : le vrai serveur répond (version de l'annuaire comprise), seul « géré ici » est changé et la liste est limitée à ces compétitions. */
+/**
+ * Compétitions tenues par un PC : le vrai serveur répond (version de l'annuaire comprise), seul « géré ici » est changé et la liste est limitée à ces
+ * compétitions. Le serveur de test gère lui-même ces compétitions et supprime donc la ligne décidée ; un vrai serveur la garde quand le club diffère encore
+ * des valeurs enregistrées. La liste relue la rend donc comme le ferait le vrai serveur : même club, version de la fiche augmentée (la fenêtre est remontée).
+ */
 async function managedElsewhere(page: Page, competitionIds: string[]) {
   // Les autres listes relues après la décision arrivent en retard (cas du réseau réel) : la liste des changements, plus rapide, remonte la fenêtre avant elles.
   let decided = false;
@@ -444,9 +448,25 @@ async function managedElsewhere(page: Page, competitionIds: string[]) {
     if (decided && route.request().method() === 'GET') await new Promise((r) => setTimeout(r, 800));
     await route.continue();
   });
+  type Change = { clubId: string; competitionId: string; directoryVersion: number; values: Record<string, unknown>; directory: Record<string, unknown> };
+  const seen = new Map<string, Change>();
+  const kept = new Map<string, Change>();
+  await page.route('**/api/club-changes/*/resolve', async (route) => {
+    const res = await route.fetch();
+    const body = route.request().postDataJSON() as { values: Record<string, unknown> };
+    const clubId = route.request().url().split('/').at(-2)!;
+    const before = seen.get(clubId);
+    const scalar = ['name', 'coachName', 'coachPhone', 'affiliationNumber'];
+    if (res.ok() && before && scalar.some((f) => (body.values[f] ?? null) !== (before.values[f] ?? null))) {
+      kept.set(clubId, { ...before, directory: { ...before.directory, ...body.values }, directoryVersion: before.directoryVersion + 1 });
+    }
+    await route.fulfill({ response: res });
+  });
   await page.route(/\/api\/club-changes(\?|$)/, async (route) => {
-    const list = (await (await route.fetch()).json()) as { competitionId: string }[];
-    await route.fulfill({ json: list.filter((c) => competitionIds.includes(c.competitionId)).map((c) => ({ ...c, managedHere: false, ownerName: 'PC du dojo' })) });
+    const list = ((await (await route.fetch()).json()) as Change[]).filter((c) => competitionIds.includes(c.competitionId));
+    for (const c of list) seen.set(c.clubId, c);
+    const all = [...list, ...[...kept.values()].filter((k) => !list.some((c) => c.clubId === k.clubId))];
+    await route.fulfill({ json: all.map((c) => ({ ...c, managedHere: false, ownerName: 'PC du dojo' })) });
   });
 }
 const noteOf = (page: Page, text: string) => page.locator('.mantine-Notification-root').filter({ hasText: text });
@@ -492,11 +512,39 @@ test('compétition gérée ailleurs, valeur de la compétition choisie : la fen�
   await page.getByTestId('competition-changes-banner').getByRole('button', { name: 'Comparer' }).click();
   const dialog = page.getByRole('dialog', { name: `${a.club} : garder quelles informations ?` });
   await expect(dialog.getByRole('radio', { name: /^Compétition : 06 39/ })).toBeChecked();
+  // La notification viendrait à la fin de la décision, après les listes retardées : on attend la dernière, puis un court délai.
+  const late = page.waitForResponse((r) => /\/invitations$/.test(r.url()) && r.request().method() === 'GET');
   await dialog.getByRole('button', { name: 'Enregistrer dans l’annuaire' }).click();
+  await late;
+  await page.waitForTimeout(300);
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.locator('.mantine-Notification-root').filter({ hasText: 'Annuaire enregistré' })).toHaveCount(0);
+  // Compte lu une fois, sans attente : `toHaveCount(0)` réessaierait jusqu’à la fermeture automatique d’une notification affichée à tort.
+  expect(await page.locator('.mantine-Notification-root').filter({ hasText: 'Annuaire enregistré' }).count()).toBe(0);
   expect((await entryOf(request, a.entry.id)).coachPhone).toBe('06 39 39 39 39');
+});
+
+test('le coach enregistre encore pendant la comparaison : refus, la fenêtre remontée affiche « rouvrez la comparaison » et une seule décision part', async ({ page, request, playwright }) => {
+  const a = await setup(page, request, 'refus-409');
+  await coachSaves(playwright, a.token, { coachPhone: '06 40 40 40 40' });
+  // Sans mises à jour en direct : la page ne relit pas d'elle-même la seconde saisie du coach avant le clic (sinon, pas de refus).
+  await page.route(/\/api\/competitions\/[^/]+\/events$/, (route) => route.abort());
+  await page.goto(`/competitions/${a.competitionId}/fiche-club`);
+  await page.getByTestId('competition-changes-banner').getByRole('button', { name: 'Comparer' }).click();
+  const dialog = page.getByRole('dialog', { name: `${a.club} : garder quelles informations ?` });
+  await expect(dialog.getByRole('radio', { name: /^Compétition : 06 40/ })).toBeChecked();
+  await coachSaves(playwright, a.token, { coachPhone: '06 41 41 41 41' });
+  let posts = 0;
+  page.on('request', (r) => { if (r.method() === 'POST' && /\/resolve$/.test(r.url())) posts++; });
+  await dialog.getByRole('button', { name: 'Enregistrer dans l’annuaire' }).click();
+  await expect(dialog.getByTestId('change-notice')).toHaveText('Cette fiche vient de changer : rouvrez la comparaison.');
+  await expect(dialog.getByRole('radio', { name: /^Compétition : 06 41/ })).toBeChecked();
+  expect(posts).toBe(1);
+  expect((await entryOf(request, a.entry.id)).coachPhone).toBe('06 11 22 33 44');
+  // Nouvelle décision sur la version relue : acceptée, le message disparaît avec la fenêtre.
+  await dialog.getByRole('button', { name: 'Enregistrer dans l’annuaire' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect((await entryOf(request, a.entry.id)).coachPhone).toBe('06 41 41 41 41');
 });
 
 test('960 px : les adresses courtes et ordinaires tiennent sur une ligne dans l’annuaire, l’onglet Clubs et les invitations', async ({ page, request }) => {
@@ -516,6 +564,9 @@ test('960 px : les adresses courtes et ordinaires tiennent sur une ligne dans l�
   const seen = (rows: ReturnType<Page['locator']>) => rows.getByText('@', { exact: false }).count();
 
   await page.goto('/annuaire');
+  // Seules les fiches du test : une longue adresse d'un autre test élargirait la colonne et masquerait le défaut.
+  await page.getByPlaceholder('Rechercher un nom ou un numéro').fill(`adresses ${run}`);
+  await expect(page.getByTestId('directory-row')).toHaveCount(3);
   const dir = page.getByTestId('directory-row').filter({ hasText: `adresses ${run}` });
   await expect(dir).toHaveCount(3);
   expect(await broken(dir)).toEqual([]);
