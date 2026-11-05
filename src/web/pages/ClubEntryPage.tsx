@@ -40,18 +40,21 @@ function HeaderForm({ token, view }: { token: string; view: ClubEntryView }) {
   const initial: ClubEntryHeader = { coachName: view.club.coachName, coachPhone: view.club.coachPhone, coachEmails: view.club.coachEmails, preApproval: view.club.preApproval, affiliationNumber: view.club.affiliationNumber };
   const [form, setForm] = useState(initial);
   const set = (patch: Partial<ClubEntryHeader>) => setForm((f) => ({ ...f, ...patch }));
-  const orNull = (v: string) => v.trim() || null;
+  // Texte gardé tel que tapé pendant la saisie (un `trim` à chaque touche mangerait l'espace qu'on vient de taper) ; nettoyé à l'enregistrement.
+  const typed = (v: string) => v || null;
+  const orNull = (v: string | null) => v?.trim() || null;
+  const cleaned = (f: ClubEntryHeader): ClubEntryHeader => ({ ...f, coachName: orNull(f.coachName), coachPhone: orNull(f.coachPhone), affiliationNumber: orNull(f.affiliationNumber) });
   const ro = !view.editable;
   return (
     <Card withBorder padding="lg">
       <Stack>
         <Title order={2} fz="lg">Votre club : {view.club.name}</Title>
         <SimpleGrid cols={{ base: 1, xs: 2 }}>
-          <TextInput label="Coach" readOnly={ro} value={form.coachName ?? ''} onChange={(e) => set({ coachName: orNull(e.currentTarget.value) })} />
-          <TextInput label="Téléphone" readOnly={ro} inputMode="tel" value={form.coachPhone ?? ''} onChange={(e) => set({ coachPhone: orNull(e.currentTarget.value) })} />
+          <TextInput label="Coach" readOnly={ro} value={form.coachName ?? ''} onChange={(e) => set({ coachName: typed(e.currentTarget.value) })} />
+          <TextInput label="Téléphone" readOnly={ro} inputMode="tel" value={form.coachPhone ?? ''} onChange={(e) => set({ coachPhone: typed(e.currentTarget.value) })} />
           <EmailsInput readOnly={ro} value={form.coachEmails} onChange={(coachEmails) => set({ coachEmails })} />
           <TextInput data-testid="club-affiliation" label="N° d’affiliation FFK (facultatif)" readOnly={ro} inputMode="numeric" value={form.affiliationNumber ?? ''}
-            onChange={(e) => set({ affiliationNumber: orNull(e.currentTarget.value) })} />
+            onChange={(e) => set({ affiliationNumber: typed(e.currentTarget.value) })} />
         </SimpleGrid>
         <Checkbox label="Pré-accord du coach" description={`Pour trouver un adversaire à vos combattants, ${PRE_APPROVAL_TEXT} Le changement de discipline se choisit combattant par combattant.`} disabled={ro} checked={form.preApproval}
           onChange={(e) => set({ preApproval: e.currentTarget.checked })} />
@@ -59,7 +62,7 @@ function HeaderForm({ token, view }: { token: string; view: ClubEntryView }) {
         {!ro && (
           <Group justify="flex-end">
             <Button variant="default" loading={save.isPending}
-              onClick={() => save.mutate(form, { onSuccess: () => notifications.show({ color: 'green', message: 'Coordonnées enregistrées.' }) })}>
+              onClick={() => save.mutate(cleaned(form), { onSuccess: () => notifications.show({ color: 'green', message: 'Coordonnées enregistrées.' }) })}>
               Enregistrer les coordonnées
             </Button>
           </Group>

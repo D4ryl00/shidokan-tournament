@@ -1,6 +1,6 @@
 import { Button, Checkbox, Group, Modal, Radio, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useIsMutating } from '@tanstack/react-query';
+import { useIsMutating, useMutationState } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import { defaultChoice, differingFields, emailChoices, resolvedValues, type ClubField, type ClubValues, type Side } from '../../../domain/club-changes.js';
 import { ApiError, CLUB_CHANGE_DECISION, useIgnoreClubChange, useResolveClubChange, type ClubChangeView } from '../../api.js';
@@ -52,11 +52,16 @@ export function ClubChangeModal({ change, onClose, onDone, onRefused, notice }: 
   const values = resolvedValues(change.directory, change.values, choices, emails, change.changedFields);
 
   const error = resolve.error ?? ignore.error;
-  // Une décision en cours, même lancée par la fenêtre d'avant le remontage : pas de seconde décision avant sa fin, et le bouton de cette décision
-  // garde son indicateur de chargement (l'état `isPending` d'une fenêtre remontée ne voit pas la mutation de la précédente).
+  // Une décision en cours, même lancée par la fenêtre d'avant le remontage : pas de seconde décision avant sa fin. Le bouton de cette décision garde
+  // son indicateur de chargement dans la fenêtre de ce club seulement (l'état `isPending` d'une fenêtre remontée ne voit pas la mutation de la précédente ;
+  // la fenêtre du club suivant de la chaîne n'a rien en cours).
   const busy = useIsMutating({ mutationKey: CLUB_CHANGE_DECISION }) > 0;
-  const saving = useIsMutating({ mutationKey: [...CLUB_CHANGE_DECISION, 'resolve'] }) > 0;
-  const skipping = useIsMutating({ mutationKey: [...CLUB_CHANGE_DECISION, 'ignore'] }) > 0;
+  const pending = useMutationState({
+    filters: { mutationKey: CLUB_CHANGE_DECISION, status: 'pending' },
+    select: (m) => ({ kind: m.options.mutationKey?.[1], clubId: (m.state.variables as { clubId?: string } | undefined)?.clubId }),
+  });
+  const saving = pending.some((p) => p.kind === 'resolve' && p.clubId === change.clubId);
+  const skipping = pending.some((p) => p.kind === 'ignore' && p.clubId === change.clubId);
   // `mutateAsync` et non les rappels de `mutate` : la relecture des listes remonte la fenêtre (sa clé change) avant la fin de la mutation, et un
   // rappel de `mutate` est alors perdu. Cette promesse survit au remontage ; un refus y est donc traité aussi (l'état d'erreur de la mutation
   // reste sur l'ancienne fenêtre).

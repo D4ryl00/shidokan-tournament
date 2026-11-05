@@ -17,7 +17,11 @@ import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { TableCard } from '../components/ui/TableCard.js';
 
 const EMPTY: DirectoryInput = { name: '', affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
-const orNull = (v: string) => v.trim() || null;
+const orNull = (v: string | null) => v?.trim() || null;
+/** Texte gardé tel que tapé pendant la saisie (un `trim` à chaque touche mangerait l'espace qu'on vient de taper) ; nettoyé à l'enregistrement. */
+const typed = (v: string) => v || null;
+const cleaned = (f: DirectoryInput): DirectoryInput =>
+  ({ ...f, name: f.name.trim(), affiliationNumber: orNull(f.affiliationNumber), coachName: orNull(f.coachName), coachPhone: orNull(f.coachPhone), notes: orNull(f.notes) });
 
 /** Fenêtre de saisie d'une fiche (création ou modification). */
 function EntryModal({ entry, onClose, onUpcoming }: { entry: DirectoryEntry | 'new' | null; onClose: () => void; onUpcoming: (entryId: string, lines: UpcomingLine[]) => void }) {
@@ -31,20 +35,20 @@ function EntryModal({ entry, onClose, onUpcoming }: { entry: DirectoryEntry | 'n
   // `mutateAsync` et non les rappels de `mutate` : fermée (Annuler, croix) pendant l'enregistrement, la fenêtre est remontée et un rappel de `mutate` serait
   // perdu ; la fiche est pourtant enregistrée, et la page doit encore proposer le report. Un refus reste affiché dans la fenêtre (erreur de la mutation).
   const save = () => {
-    if (entry === 'new') create.mutateAsync(form).then(onClose, () => {});
+    if (entry === 'new') create.mutateAsync(cleaned(form)).then(onClose, () => {});
     // La fiche est enregistrée : la fenêtre se ferme, puis la page propose de reporter la fiche sur les compétitions à venir s'il y a de quoi.
-    else if (entry) update.mutateAsync({ id: entry.id, ...form }).then((saved) => { onClose(); onUpcoming(saved.id, saved.upcoming); }, () => {});
+    else if (entry) update.mutateAsync({ id: entry.id, ...cleaned(form) }).then((saved) => { onClose(); onUpcoming(saved.id, saved.upcoming); }, () => {});
   };
   return (
     <Modal opened={entry !== null} onClose={onClose} title={entry === 'new' ? 'Ajouter un club' : 'Modifier le club'}>
       <Stack>
         <TextInput data-testid="directory-name" label="Nom" required value={form.name} onChange={(e) => set({ name: e.currentTarget.value })} />
         <TextInput data-testid="directory-number" label="N° d’affiliation FFK" description="Les chiffres en tête du club dans l’export FFK."
-          value={form.affiliationNumber ?? ''} onChange={(e) => set({ affiliationNumber: orNull(e.currentTarget.value) })} />
-        <TextInput label="Coach" value={form.coachName ?? ''} onChange={(e) => set({ coachName: orNull(e.currentTarget.value) })} />
-        <TextInput label="Téléphone" value={form.coachPhone ?? ''} onChange={(e) => set({ coachPhone: orNull(e.currentTarget.value) })} />
+          value={form.affiliationNumber ?? ''} onChange={(e) => set({ affiliationNumber: typed(e.currentTarget.value) })} />
+        <TextInput label="Coach" value={form.coachName ?? ''} onChange={(e) => set({ coachName: typed(e.currentTarget.value) })} />
+        <TextInput label="Téléphone" value={form.coachPhone ?? ''} onChange={(e) => set({ coachPhone: typed(e.currentTarget.value) })} />
         <EmailsInput data-testid="directory-email" value={form.coachEmails} onChange={(coachEmails) => set({ coachEmails })} />
-        <Textarea label="Notes" autosize minRows={2} value={form.notes ?? ''} onChange={(e) => set({ notes: orNull(e.currentTarget.value) })} />
+        <Textarea label="Notes" autosize minRows={2} value={form.notes ?? ''} onChange={(e) => set({ notes: typed(e.currentTarget.value) })} />
         <ApiErrorAlert error={create.error ?? update.error} />
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>Annuler</Button>

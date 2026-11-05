@@ -650,6 +650,27 @@ test('chaîne : fermée par Échap pendant une décision, la fenêtre ne se rouv
   expect((await request.post(`/api/club-changes/${left!.clubId}/ignore`, { data: { changedAt: left!.changedAt } })).status()).toBe(204);
 });
 
+test('chaîne : la fenêtre du club suivant attend la fin de la décision précédente, sans indicateur de chargement', async ({ page, request, playwright }) => {
+  // Deux compétitions de même date : classées par nom, « chaine-charge-1 » avant « chaine-charge-2 ».
+  const a = await setup(page, request, 'chaine-charge-1');
+  const b = await setup(page, request, 'chaine-charge-2');
+  await coachSaves(playwright, a.token, { coachPhone: '06 48 48 48 48' });
+  await coachSaves(playwright, b.token, { coachPhone: '06 49 49 49 49' });
+  await onlyCompetitions(page, [a.competitionId, b.competitionId]);
+  await slowListsAfterDecision(page);
+  await page.goto('/annuaire');
+  await page.getByTestId('directory-changes-banner').getByRole('button', { name: 'Voir les changements' }).click();
+  await page.getByRole('dialog', { name: `${a.club} : garder quelles informations ?` }).getByRole('button', { name: 'Enregistrer dans l’annuaire' }).click();
+  // A disparaît de la liste relue avant la fin de la décision (les autres listes sont en retard) : B s'affiche déjà.
+  const next = page.getByRole('dialog', { name: `${b.club} : garder quelles informations ?` });
+  await expect(next).toBeVisible();
+  await expect(next.getByTestId('change-save')).toBeDisabled();
+  expect(await next.getByTestId('change-save').getAttribute('data-loading')).toBeNull();
+  await expect(next.getByTestId('change-save')).toBeEnabled();
+  await next.getByRole('button', { name: 'Ignorer ce changement' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
 test('fiche modifiée puis « Annuler » pendant l’enregistrement : la fiche est enregistrée et le report est quand même proposé', async ({ page, request }) => {
   const a = await setup(page, request, 'report-annule');
   await page.route(`**/api/club-directory/${a.entry.id}`, async (route) => {
@@ -667,6 +688,41 @@ test('fiche modifiée puis « Annuler » pendant l’enregistrement : la fiche e
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Ne rien appliquer' }).click();
   expect((await entryOf(request, a.entry.id)).coachPhone).toBe('06 47 47 47 47');
+});
+
+test('saisie lettre par lettre : les espaces tapés restent, dans la fiche d’annuaire comme sur la page du coach', async ({ page, request, playwright }) => {
+  const a = await setup(page, request, 'frappe');
+  await page.goto('/annuaire');
+  await page.getByTestId('directory-row').filter({ hasText: a.club }).getByRole('button', { name: 'Modifier' }).click();
+  const form = page.getByRole('dialog', { name: 'Modifier le club' });
+  await form.getByLabel('Coach').clear();
+  await form.getByLabel('Coach').pressSequentially('Jean Paul Durand ');
+  await form.getByLabel('Téléphone').clear();
+  await form.getByLabel('Téléphone').pressSequentially('06 12 12 12 12');
+  await expect(form.getByLabel('Coach')).toHaveValue('Jean Paul Durand ');
+  await form.getByTestId('directory-save').click();
+  await expect(form).toBeHidden();
+  await page.getByRole('dialog', { name: 'Appliquer aux compétitions à venir ?' }).getByRole('button', { name: 'Ne rien appliquer' }).click();
+  // Nettoyé à l'enregistrement : espace final retiré, espaces intérieurs gardés.
+  expect(await entryOf(request, a.entry.id)).toMatchObject({ coachPhone: '06 12 12 12 12' });
+  expect(((await (await request.get('/api/club-directory')).json()) as { id: string; coachName: string }[]).find((e) => e.id === a.entry.id)!.coachName).toBe('Jean Paul Durand');
+
+  const coach = await playwright.request.newContext({ baseURL: BASE });
+  const coachPage = await page.context().browser()!.newPage({ baseURL: BASE });
+  await coachPage.goto(`/inscription/${a.token}`);
+  await coachPage.getByRole('textbox', { name: 'Coach' }).clear();
+  await coachPage.getByRole('textbox', { name: 'Coach' }).pressSequentially('Anne Marie Roux');
+  await coachPage.getByLabel('Téléphone').clear();
+  await coachPage.getByLabel('Téléphone').pressSequentially('06 13 13 13 13');
+  await coachPage.getByRole('button', { name: 'Enregistrer les coordonnées' }).click();
+  await expect(coachPage.getByText('Coordonnées enregistrées.')).toBeVisible();
+  const view = (await (await coach.get(`/api/inscription/${a.token}`)).json()) as { club: { coachName: string; coachPhone: string } };
+  expect(view.club).toMatchObject({ coachName: 'Anne Marie Roux', coachPhone: '06 13 13 13 13' });
+  await coachPage.close();
+  await coach.dispose();
+  // Nettoyage : le changement créé par le coach est ignoré.
+  const open = (await (await request.get(`/api/club-changes?competitionId=${a.competitionId}`)).json()) as { clubId: string; changedAt: string }[];
+  for (const c of open) expect((await request.post(`/api/club-changes/${c.clubId}/ignore`, { data: { changedAt: c.changedAt } })).status()).toBe(204);
 });
 
 test('960 px : les adresses courtes et ordinaires tiennent sur une ligne dans l’annuaire, l’onglet Clubs et les invitations', async ({ page, request }) => {
