@@ -68,10 +68,10 @@ Les onglets de l'étape **Préparer**, dans l'ordre habituel :
 
 ### Le message aux clubs
 
-Réglages de l'application → **Message aux clubs** (modèle commun) ou, par compétition, « Message aux clubs de cette compétition ». L'éditeur propose gras, italique, souligné, barré, couleur, surlignage, titres, listes, citation, alignement et lien. Il n'y a pas de choix de police ni de taille de texte, ni de tableau.
+Réglages de l'application → **Message aux clubs** (modèle commun) ou, par compétition, « Message aux clubs de cette compétition ». L'éditeur propose gras, italique, souligné, couleur, surlignage, titres, listes, citation, alignement et lien. Il n'y a pas de choix de police ni de taille de texte, ni de tableau.
 
-- **Images** : bouton image, collage ou glisser-déposer ; trois tailles d'affichage (200, 400 ou 600 px). 10 images au plus par message, JPEG, PNG, WebP ou GIF, réduites à 1200 px de large et 2 Mo au plus.
-- **Code HTML** : on peut coller un message tout fait. Ce que le mail ne peut pas porter (scripts, images prises sur internet…) est retiré, et un avis le signale.
+- **Images** : bouton image, collage ou glisser-déposer ; trois tailles d'affichage (« Petite », « Moyenne », « Pleine largeur » : 200, 400 ou 600 px). 10 images au plus par message, JPEG, PNG, WebP ou GIF. Chaque image est réduite à 1200 px de large et 2 Mo au plus ; un GIF n'est jamais réduit et est refusé au-delà de 2 Mo.
+- **Code source (HTML)** : on peut coller un message tout fait. Ce que le mail ne peut pas porter (scripts, images prises sur internet…) est retiré : un avis le dit en quittant le mode code, et l'enregistrement est indisponible tant que le mode code est ouvert.
 - **Envoi par l'application** : message mis en forme, avec une version sans mise en forme. Un mail pèse 18 Mo au plus (images, fiches et pièces jointes) ; si c'est trop lourd ou si une image manque, rien ne part et aucun lien n'est créé.
 - **« Ouvrir dans ma messagerie »** ne transmet que le texte : ni mise en forme ni images, et les pièces jointes sont à joindre soi-même.
 - **Sur le serveur seulement** : un PC n'a ni cette section ni l'envoi de mails. Pour envoyer, la main doit être sur le serveur. Après l'installation, faites l'essai décrit dans [verification-mail-boites-reelles.md](verification-mail-boites-reelles.md).

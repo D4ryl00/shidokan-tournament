@@ -168,9 +168,9 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       ],
       [
         'Message aux clubs : le modèle de mail, avec les variables {club}, {coach}, {competition}, {date}, {lieu}, {date_limite} et {lien} ; chaque compétition peut avoir le sien.',
-        'L’éditeur a une barre de mise en forme : gras, italique, souligné, barré, couleur, surlignage, titres, listes, citation, alignement, lien. Pas de choix de police ni de taille de texte, pas de tableau.',
-        'Images : bouton image de la barre, collage ou glisser-déposer. Trois tailles d’affichage (petite, moyenne, grande : 200, 400 ou 600 px) ; 10 images au plus par message, JPEG, PNG, WebP ou GIF, réduites à 1200 px de large et 2 Mo au plus.',
-        'Le bouton « Code HTML » permet de coller un message tout fait. Ce que le mail ne peut pas porter (scripts, images prises sur internet…) est retiré, et un avis dit ce qui l’a été avant l’enregistrement.',
+        'L’éditeur a une barre de mise en forme : gras, italique, souligné, couleur, surlignage, titres, listes, citation, alignement, lien. Pas de choix de police ni de taille de texte, pas de tableau.',
+        'Images : bouton image de la barre, collage ou glisser-déposer. Trois tailles d’affichage (« Petite », « Moyenne », « Pleine largeur » : 200, 400 ou 600 px) ; 10 images au plus par message, JPEG, PNG, WebP ou GIF. Chaque image est réduite à 1200 px de large et 2 Mo au plus ; un GIF n’est jamais réduit et est refusé au-delà de 2 Mo.',
+        'Le bouton « Code source (HTML) » permet de coller un message tout fait. Ce que le mail ne peut pas porter (scripts, images prises sur internet…) est retiré : un avis le dit en quittant le mode code, et l’enregistrement est indisponible tant que le mode code est ouvert.',
         'Le message part mis en forme quand l’application l’envoie, avec une version sans mise en forme pour les messageries qui n’en veulent pas. « Ouvrir dans ma messagerie » ne transmet que le texte, sans mise en forme ni images.',
         'Un mail pèse 18 Mo au plus, images, fiches et pièces jointes comprises : au-delà, ou si une image manque, rien n’est envoyé et aucun lien n’est créé.',
         'Les mails se règlent et s’envoient depuis le serveur en ligne, quand la compétition y est modifiable (la main est sur le serveur). Depuis un PC, cette partie n’est pas proposée.',
