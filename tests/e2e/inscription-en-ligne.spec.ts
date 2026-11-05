@@ -225,9 +225,11 @@ test('envoi du lien : une case par adresse pour un club qui en a plusieurs ; seu
   await page.getByTestId('send-invitations').click();
   const dialog = page.getByRole('dialog', { name: 'Envoyer le lien par mail' });
   const recipients = dialog.getByTestId('send-recipients').filter({ hasText: multi });
-  for (const e of ['coach@multi.fr', 'pres@multi.fr', 'secr@multi.fr']) await expect(recipients.getByRole('checkbox', { name: e })).toBeChecked();
+  // Par défaut, seule la première adresse du club est cochée.
+  await expect(recipients.getByRole('checkbox', { name: 'coach@multi.fr' })).toBeChecked();
+  for (const e of ['pres@multi.fr', 'secr@multi.fr']) await expect(recipients.getByRole('checkbox', { name: e })).not.toBeChecked();
   await expect(dialog.getByTestId('send-recipients').filter({ hasText: solo })).toContainText('coach@solo.fr');
-  await recipients.getByRole('checkbox', { name: 'pres@multi.fr' }).uncheck();
+  await recipients.getByRole('checkbox', { name: 'secr@multi.fr' }).check();
   await dialog.getByTestId('send-confirm').click();
   // L'envoi fini ferme la fenêtre et vide la sélection : attendre avant de recocher.
   await expect(dialog).toBeHidden();
@@ -237,10 +239,11 @@ test('envoi du lien : une case par adresse pour un club qui en a plusieurs ; seu
   const idOf = (name: string) => ids.find((i) => i.clubName === name)!.clubId;
   expect(bodies[0]).toEqual({ clubs: [{ clubId: idOf(multi), emails: ['coach@multi.fr', 'secr@multi.fr'] }, { clubId: idOf(solo) }] });
 
-  // Toutes décochées : « Envoyer » bloqué. La fenêtre repart avec toutes les cases cochées.
+  // La fenêtre repart du choix par défaut ; la seule case cochée décochée : « Envoyer » bloqué.
   await page.getByRole('checkbox', { name: 'Tout cocher' }).check();
   await page.getByTestId('send-invitations').click();
-  for (const e of ['coach@multi.fr', 'pres@multi.fr', 'secr@multi.fr']) await recipients.getByRole('checkbox', { name: e }).uncheck();
+  await expect(recipients.getByRole('checkbox', { name: 'secr@multi.fr' })).not.toBeChecked();
+  await recipients.getByRole('checkbox', { name: 'coach@multi.fr' }).uncheck();
   await expect(dialog.getByText('Cochez au moins une adresse.')).toBeVisible();
   await expect(dialog.getByTestId('send-confirm')).toBeDisabled();
   await dialog.getByRole('button', { name: 'Annuler' }).click();
@@ -248,11 +251,12 @@ test('envoi du lien : une case par adresse pour un club qui en a plusieurs ; seu
   // « Ouvrir dans ma messagerie » : le même choix.
   await row.getByRole('button', { name: 'Ouvrir dans ma messagerie' }).click();
   const mailto = page.getByRole('dialog', { name: 'Ouvrir dans ma messagerie' });
-  await expect(mailto.getByRole('checkbox', { name: 'secr@multi.fr' })).toBeChecked();
-  await mailto.getByRole('checkbox', { name: 'coach@multi.fr' }).uncheck();
+  await expect(mailto.getByRole('checkbox', { name: 'coach@multi.fr' })).toBeChecked();
+  await expect(mailto.getByRole('checkbox', { name: 'secr@multi.fr' })).not.toBeChecked();
+  await mailto.getByRole('checkbox', { name: 'pres@multi.fr' }).check();
   await mailto.getByRole('button', { name: 'Ouvrir ma messagerie' }).click();
   await expect.poll(() => bodies.length).toBe(2);
-  expect(bodies[1]).toEqual({ emails: ['pres@multi.fr', 'secr@multi.fr'] });
+  expect(bodies[1]).toEqual({ emails: ['coach@multi.fr', 'pres@multi.fr'] });
 });
 
 test('pièces jointes du mail : ajouter, refuser un type, décocher la fiche PDF (gardé), aperçu et messagerie, supprimer', async ({ page, request }) => {
