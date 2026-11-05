@@ -11,3 +11,10 @@
 .sk-cell .mantine-NumberInput-controls { opacity: 0; }
 .sk-cell .mantine-NumberInput-root:hover .mantine-NumberInput-controls,
 .sk-cell .mantine-NumberInput-root:focus-within .mantine-NumberInput-controls { opacity: 1; }
+/* Éditeur du message aux clubs : fond blanc et texte foncé dans les deux thèmes, comme dans la messagerie du destinataire. */
+[data-testid='mail-editor'] .mantine-RichTextEditor-content { background: #fff; color: #1a1a1a; caret-color: #1a1a1a; }
+[data-testid='mail-editor'] .mantine-RichTextEditor-content a { color: #1c5fb8; text-decoration: underline; }
+[data-testid='mail-editor'] .mantine-RichTextEditor-content blockquote { background: #f1f3f5; color: #1a1a1a; }
+[data-testid='mail-editor'] .mantine-RichTextEditor-content mark { background-color: #ffec99; color: inherit; }
+/* Image choisie : un contour (la rangée de tailles s'applique à elle). Rien n'en passe dans le message. */
+[data-testid='mail-editor'] .ProseMirror img.ProseMirror-selectednode { outline: 3px solid #1c5fb8; outline-offset: 2px; }

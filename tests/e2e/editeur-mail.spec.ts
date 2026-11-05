@@ -27,15 +27,15 @@ test('réglages : le message par défaut s’ouvre avec ses paragraphes ; un mes
 });
 
 /** Image fabriquée par le navigateur (canvas), en base64 : `type` image/png ou image/webp. */
-const drawnImage = (page: Page, type: string) =>
-  page.evaluate(async (t) => {
+const drawnImage = (page: Page, type: string, size = 8) =>
+  page.evaluate(async ([t, side]) => {
     const canvas = document.createElement('canvas');
-    canvas.width = 8;
+    canvas.width = side as number;
     canvas.height = 8;
-    canvas.getContext('2d')!.fillRect(0, 0, 8, 8);
-    const blob: Blob = await new Promise((r) => canvas.toBlob((b) => r(b!), t));
+    canvas.getContext('2d')!.fillRect(0, 0, side as number, 8);
+    const blob: Blob = await new Promise((r) => canvas.toBlob((b) => r(b!), t as string));
     return btoa(String.fromCharCode(...new Uint8Array(await blob.arrayBuffer())));
-  }, type).then((b64) => Buffer.from(b64, 'base64'));
+  }, [type, size] as const).then((b64) => Buffer.from(b64, 'base64'));
 
 test('images et mode code : image, tailles, WebP converti, SVG refusé ; message de compétition ; code filtré ; collage de tableau', async ({ page, request }) => {
   const settingsEditor = () => page.getByTestId('mail-editor').locator('.ProseMirror');
@@ -49,7 +49,7 @@ test('images et mode code : image, tailles, WebP converti, SVG refusé ; message
   const image = settingsEditor().locator('img[src^="/api/mail-images/"]');
   await expect(image).toHaveCount(1);
   await expect.poll(() => image.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
-  await expect(image).toHaveAttribute('width', '400');
+  await expect(image).toHaveAttribute('width', '8'); // une petite image garde sa taille
   await image.click();
   await page.getByTestId('mail-image-size-small').click();
   await expect(image).toHaveAttribute('width', '200');
@@ -370,4 +370,84 @@ test('un morceau de l’éditeur qui ne charge plus : un message à sa place, le
   await page.goto('/parametres');
   await expect(page.getByTestId('mail-editor-failed')).toHaveText('L’éditeur n’a pas pu se charger : rechargez la page.');
   await expect(page.getByRole('heading', { name: 'Envoi des mails' })).toBeVisible();
+});
+
+test('éditeur : thème sombre lisible, image choisie entourée, petite image non agrandie, lien sans texte choisi dit, adresses tapées liées', async ({ page, request }) => {
+  await page.addInitScript(() => localStorage.setItem('shidokan-color-scheme', 'dark'));
+  const { editor } = await openedMessage(page, request, 'Sombre Hiroshima', 'Dojo Hiroshima');
+  await expect(page.locator('html')).toHaveAttribute('data-mantine-color-scheme', 'dark');
+
+  // Thème sombre : la zone de saisie reste blanche, le texte foncé (et non foncé sur sombre).
+  const content = page.getByTestId('mail-editor').locator('.mantine-RichTextEditor-content');
+  await expect(content).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(editor.locator('p').first()).toHaveCSS('color', 'rgb(26, 26, 26)');
+
+  // Adresses tapées : liens complétés ; `club.fr` seul reste du texte.
+  await editor.locator('p').first().click();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type('Voir www.club.fr puis contact@club.fr puis club.fr fin ');
+  await expect(editor.locator('a[href="https://www.club.fr"]')).toHaveCount(1);
+  await expect(editor.locator('a[href="mailto:contact@club.fr"]')).toHaveCount(1);
+  await expect(editor.locator('a')).toHaveCount(2);
+  await expect(editor.locator('a').first()).toHaveCSS('color', 'rgb(28, 95, 184)');
+
+  // Lien demandé sans texte choisi : dit, aucun lien de plus.
+  await page.keyboard.press('End');
+  await page.getByRole('button', { name: 'Lien', exact: true }).click();
+  await page.getByPlaceholder('https://… ou {lien}').fill('https://club.fr');
+  await page.getByRole('button', { name: 'Valider' }).click();
+  await expect(page.getByText('Sélectionnez d’abord le texte du lien.')).toBeVisible();
+  await expect(editor.locator('a')).toHaveCount(2);
+
+  // Petite image gardée à sa taille, grande image à 400 ; l'image choisie est entourée.
+  const input = page.getByTestId('mail-editor-image-input');
+  await input.setInputFiles({ name: 'petit.png', mimeType: 'image/png', buffer: await drawnImage(page, 'image/png', 240) });
+  const images = editor.locator('img[src^="/api/mail-images/"]');
+  await expect(images).toHaveCount(1);
+  await expect(images.first()).toHaveAttribute('width', '240');
+  await input.setInputFiles({ name: 'grand.png', mimeType: 'image/png', buffer: await drawnImage(page, 'image/png', 700) });
+  await expect(images).toHaveCount(2);
+  await expect(images.nth(1)).toHaveAttribute('width', '400');
+  await images.first().click();
+  await expect(images.first()).toHaveCSS('outline-style', 'solid');
+  await expect(images.nth(1)).toHaveCSS('outline-style', 'none');
+});
+
+test('message modifié en mode code : compté comme non enregistré ; un refus d’envoi s’affiche sous le bouton', async ({ page, request }) => {
+  const { editor } = await openedMessage(page, request, 'Code Kobe', 'Dojo Kobe');
+  await page.getByRole('checkbox', { name: /^Choisir Dojo Kobe/ }).check();
+  const settingsTab = page.getByRole('tab', { name: 'Réglages', exact: true });
+
+  // Mode code ouvert, rien changé : on ne peut pas quitter sans confirmer ; refermé sans rien changer, plus rien.
+  await page.getByRole('button', { name: 'Code source (HTML)' }).click();
+  await editor.click();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type('<p>Message prêt</p>');
+  await settingsTab.click();
+  await expect(page.getByTestId('leave-confirm')).toBeVisible();
+  await page.getByTestId('leave-stay').click();
+  await page.getByTestId('send-invitations').click();
+  await expect(page.getByTestId('unsaved-message-warning')).toBeVisible();
+  await page.getByRole('dialog', { name: 'Envoyer le lien par mail' }).getByRole('button', { name: 'Annuler' }).click();
+  await page.getByRole('button', { name: 'Code source (HTML)' }).click();
+  await expect(editor).toContainText('Message prêt');
+  await page.getByRole('button', { name: 'Enregistrer pour cette compétition' }).click();
+  await expect(page.getByText('Message enregistré.')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Code source (HTML)' }).click();
+  await page.getByRole('button', { name: 'Code source (HTML)' }).click();
+  await expect(page.getByText('Revenez à l’éditeur pour enregistrer.')).toBeHidden();
+  await settingsTab.click();
+  await expect(page).toHaveURL(/\/reglages$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/fiche-club$/);
+
+  // Refus d'envoi (réponse simulée, rien ne part) : l'alerte est sous le bouton, dans l'écran, accordéon ouvert.
+  await page.route('**/invitations/send', (route) => route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Mail trop lourd : retirez une pièce.' }) }));
+  await page.getByRole('checkbox', { name: /^Choisir Dojo Kobe/ }).check();
+  await page.getByRole('button', { name: /Message aux clubs de cette compétition/ }).click();
+  await page.getByTestId('send-invitations').click();
+  await page.getByTestId('send-confirm').click();
+  await expect(page.getByTestId('api-error')).toContainText('Mail trop lourd');
+  await expect(page.getByTestId('api-error')).toBeInViewport();
 });

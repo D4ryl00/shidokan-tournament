@@ -64,6 +64,7 @@ const MailImage = Image.extend({
   parseHTML: () => [{ tag: 'img[src^="/api/mail-images/"]' }],
 }).configure({ inline: true, allowBase64: false });
 
+const LINK_NO_SELECTION = 'Sélectionnez d’abord le texte du lien.';
 const LINK_REFUSED = 'Adresse de lien refusée : écrivez une adresse en https://, une adresse e-mail ou {lien}.';
 
 /**
@@ -82,11 +83,17 @@ const MailLink = Link.extend({
           if (props.dispatch) notifications.show({ color: 'red', message: LINK_REFUSED });
           return false;
         }
+        // Curseur seul : rien à lier. On le dit (un curseur dans un lien existant a déjà été étendu à tout le lien par la barre).
+        if (props.state.selection.empty) {
+          if (props.dispatch) notifications.show({ color: 'orange', message: LINK_NO_SELECTION });
+          return false;
+        }
         return commands.setLink!({ ...attributes, href })(props);
       },
     };
   },
-}).configure({ openOnClick: false, isAllowedUri: (url) => mailLinkAllowed(url ?? '') }) as unknown as AnyExtension;
+  // Les adresses tapées ou collées (`www.club.fr`, `contact@club.fr`) deviennent des liens avec l'adresse complétée (https://, mailto:) ; `club.fr` seul reste du texte.
+}).configure({ openOnClick: false, defaultProtocol: 'https', isAllowedUri: (url) => mailLinkAllowed(normalizeMailLink(url ?? '')) }) as unknown as AnyExtension;
 
 const SIZES = [
   { id: 'small', label: 'Petite', width: MAIL_IMAGE_LIMITS.widths.small },
@@ -151,6 +158,8 @@ export default function MailMessageEditor({ value, onChange, readOnly = false, o
   };
   const saveBlock = lockedView ? BLOCKED_BY_CODE : uploading > 0 ? BLOCKED_BY_UPLOAD : null;
   useEffect(() => onSaveBlockChange?.(saveBlock), [saveBlock]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Éditeur remonté ou fermé : le parent ne garde pas un blocage qui n'existe plus.
+  useEffect(() => () => onSaveBlockChange?.(null), []); // eslint-disable-line react-hooks/exhaustive-deps
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ codeBlock: false, code: false, horizontalRule: false, strike: false, link: false, heading: { levels: [1, 2, 3] } }),
@@ -292,8 +301,8 @@ export default function MailMessageEditor({ value, onChange, readOnly = false, o
           <Text size="sm">Envoi de l’image…</Text>
         </Group>
       )}
-      {/* Fond blanc et texte foncé dans les deux thèmes : c'est ce que verra le destinataire. */}
-      <RichTextEditor.Content style={{ background: '#fff', color: '#1a1a1a' }} />
+      {/* Fond blanc et texte foncé dans les deux thèmes (voir app.css) : c'est ce que verra le destinataire. */}
+      <RichTextEditor.Content />
     </RichTextEditor>
   );
 }
