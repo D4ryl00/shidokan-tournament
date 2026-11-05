@@ -87,6 +87,20 @@ Sur le serveur en ligne, Réglages de l'application → **Envoi des mails** → 
 - Se reconnecter avec **un autre compte** Google efface les liens entre l'annuaire et les contacts (ils appartenaient à l'ancien compte).
 - La préparation côté Google (une fois, par l'administrateur du serveur) est décrite dans `docs/installation-serveur.md`.
 
+### Coordonnées des clubs : annuaire et compétitions
+
+Un club de compétition est une **copie de sa fiche d'annuaire, faite à l'invitation**. Les deux ne se suivent pas tout seuls : c'est vous qui décidez.
+
+- **Ce qui ne modifie jamais l'annuaire** : ce qu'un coach saisit sur sa page d'inscription, et ce que vous changez dans l'onglet **Clubs** d'une compétition. Le club de la compétition prend la valeur saisie ; si elle diffère de la fiche (nom du club, coach, téléphone, adresses e-mail, numéro d'affiliation), un **changement à examiner** est enregistré. Un coach n'est jamais bloqué par un changement en attente.
+- **Où le voir** : dans l'**Annuaire**, un bandeau « N clubs diffèrent de l'annuaire » avec « **Voir les changements** », et sur chaque fiche concernée l'origine (modifié par le club, ou dans la compétition) et « **Comparer** ». En tête de la **Fiche club** d'une compétition, un bandeau par club concerné (au-delà de 3 clubs, un seul bandeau qui en donne le nombre). « Voir les changements » ouvre le premier, puis enchaîne sur le suivant après chaque décision.
+- **La fenêtre de comparaison** : une ligne par champ, avec la valeur de l'annuaire et celle de la compétition ; pour les adresses e-mail, une case par adresse. Trois sorties : « **Enregistrer dans l'annuaire** » applique vos choix ; « **Ignorer ce changement** » le ferme sans rien toucher ; « **Plus tard** » ferme la fenêtre et le garde. La case « Appliquer aussi au club dans la compétition » reporte le résultat dans le club de la compétition. Si la fiche a changé pendant que la fenêtre était ouverte, rien n'est enregistré et la comparaison se recharge.
+- **« Ignorer » dure jusqu'à une autre modification** : si le coach réenregistre les mêmes valeurs, rien ne revient ; si une valeur change, vous êtes prévenu de nouveau.
+- **Un champ effacé est proposé** comme une modification : l'annuaire n'est vidé que si vous choisissez la valeur vide. Par défaut, la valeur de l'annuaire reste choisie, pour qu'un effacement ne passe pas sans un clic. Le nom du club ne peut pas être vide.
+- **Compétition gérée par un PC** : le club ne peut pas y être modifié depuis le serveur ; la case est désactivée avec « Gérée par … : à appliquer après le retour de la main », et l'annuaire reste modifiable. **Compétition passée** : seul l'annuaire est modifié.
+- **Dans l'autre sens** : quand vous modifiez une fiche d'annuaire et que des clubs de compétitions **à venir** (date du jour ou après) y sont reliés et diffèrent, « **Appliquer aux compétitions à venir ?** » s'ouvre. Sans conflit, la ligne est cochée. En cas de conflit (le club avait une autre valeur que l'ancienne fiche), « **Garder le club** » est choisi par défaut, ou « **Prendre l'annuaire** ». « **Ne rien appliquer** » ferme la fenêtre ; la fiche, elle, est déjà enregistrée. Les compétitions passées ne sont pas proposées, et une compétition sous la main d'un PC est affichée sans pouvoir être modifiée.
+- **Ce qui ne crée rien** : la synchronisation Google, l'import d'une fiche et l'import FFK. Google écrit dans l'annuaire sans fenêtre.
+- **Sur un PC** : les bandeaux et la fenêtre fonctionnent pour les compétitions gérées sur ce PC, sans page en ligne.
+
 ### Coordonnées des coachs depuis Google Contacts
 
 Rangez les contacts des coachs sous un **libellé** dans Google Contacts (par exemple « Coachs »). Le champ **Entreprise** d'un contact, s'il porte le nom du club, aide l'application à proposer le bon club.
