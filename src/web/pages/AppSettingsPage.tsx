@@ -177,6 +177,8 @@ function TextsCard({ settings }: { settings: PublicAppSettings }) {
     subject: settings.invitationMail.subject, body: settings.invitationMail.body, format: settings.invitationMail.format, privacyNotice: settings.privacyNotice, privacyContact: settings.privacyContact,
     retentionMonths: settings.retentionMonths, directoryInactiveYears: settings.directoryInactiveYears,
   });
+  // En mode code, le texte n'est pas encore le message : on n'enregistre qu'après être revenu à l'éditeur.
+  const [sourceMode, setSourceMode] = useState(false);
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
   const save = () =>
     update.mutate(
@@ -191,7 +193,7 @@ function TextsCard({ settings }: { settings: PublicAppSettings }) {
         <Text size="sm" c="dimmed">Variables : {'{club} {coach} {competition} {date} {lieu} {date_limite} {lien}'}. Chaque compétition peut avoir son propre message (onglet Fiche club).</Text>
         <TextInput label="Objet" value={form.subject} onChange={(e) => set({ subject: e.currentTarget.value })} />
         <Input.Wrapper label="Texte">
-          <MailMessageEditor value={settings.invitationMail} onChange={(v) => set(v)} />
+          <MailMessageEditor value={settings.invitationMail} onChange={(v) => set(v)} onSourceModeChange={setSourceMode} />
         </Input.Wrapper>
       </Stack>
       <Divider color="var(--sk-line)" />
@@ -210,7 +212,10 @@ function TextsCard({ settings }: { settings: PublicAppSettings }) {
         </Group>
       </Stack>
       <ApiErrorAlert error={update.error} />
-      <Group justify="flex-end"><Button loading={update.isPending} onClick={save}>Enregistrer</Button></Group>
+      <Group justify="flex-end">
+        {sourceMode && <Text size="sm" c="dimmed">Revenez à l’éditeur pour enregistrer.</Text>}
+        <Button loading={update.isPending} disabled={sourceMode} onClick={save}>Enregistrer</Button>
+      </Group>
     </SectionCard>
   );
 }

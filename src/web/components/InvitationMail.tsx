@@ -1,7 +1,7 @@
 import { Accordion, Alert, Anchor, Button, Group, Input, Modal, Stack, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
-import { useAppSettings, useCompetition, useInvitationPreview, useUpdateCompetition, type SendResult } from '../api.js';
+import { useAppSettings, useClubEntrySettings, useCompetition, useInvitationPreview, useUpdateCompetition, type SendResult } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { MailMessageEditor } from './mail-editor/index.js';
 import { MailAttachments, sentLines, useAttachmentLines } from './MailAttachments.js';
@@ -23,6 +23,11 @@ export function CompetitionMessage({ competitionId, previewClubId }: { competiti
   const shown = form ?? current;
   const preview = useInvitationPreview(competitionId, previewClubId, JSON.stringify(current));
   const lines = useAttachmentLines(competitionId);
+  const { data: entry } = useClubEntrySettings(competitionId);
+  // Compétition tenue ailleurs : le message s'y règle, pas ici.
+  const readOnly = entry?.managedHere === false;
+  // En mode code, le texte n'est pas encore le message : on n'enregistre qu'après être revenu à l'éditeur.
+  const [sourceMode, setSourceMode] = useState(false);
   if (!shown) return null;
   const save = (invitationMail: { subject: string; body: string; format?: 'html' } | null) =>
     update.mutate({ settings: { invitationMail } }, { onSuccess: () => { setForm(null); setEditorKey((k) => k + 1); notifications.show({ color: 'green', message: 'Message enregistré.' }); } });
@@ -33,14 +38,15 @@ export function CompetitionMessage({ competitionId, previewClubId }: { competiti
         <Accordion.Panel>
           <Stack>
             <Text size="sm" c="dimmed">Variables : {'{club} {coach} {competition} {date} {lieu} {date_limite} {lien}'}.</Text>
-            <TextInput label="Objet" value={shown.subject} onChange={(e) => setForm({ ...shown, subject: e.currentTarget.value })} />
+            <TextInput label="Objet" value={shown.subject} readOnly={readOnly} onChange={(e) => setForm({ ...shown, subject: e.currentTarget.value })} />
             <Input.Wrapper label="Texte">
-              <MailMessageEditor key={editorKey} value={shown} onChange={(v) => setForm({ ...shown, ...v })} />
+              <MailMessageEditor key={editorKey} value={shown} readOnly={readOnly} onChange={(v) => setForm({ ...shown, ...v })} onSourceModeChange={setSourceMode} />
             </Input.Wrapper>
             <Group>
-              <Button size="xs" disabled={!form} loading={update.isPending} onClick={() => form && save(form)}>Enregistrer pour cette compétition</Button>
-              {own && <Button size="xs" variant="subtle" onClick={() => save(null)}>Revenir au message de l’application</Button>}
+              <Button size="xs" disabled={!form || readOnly || sourceMode} loading={update.isPending} onClick={() => form && save(form)}>Enregistrer pour cette compétition</Button>
+              {own && <Button size="xs" variant="subtle" disabled={readOnly || sourceMode} onClick={() => save(null)}>Revenir au message de l’application</Button>}
             </Group>
+            {sourceMode && <Text size="sm" c="dimmed">Revenez à l’éditeur pour enregistrer.</Text>}
             <ApiErrorAlert error={update.error} />
             <MailAttachments competitionId={competitionId} />
             {preview.data && (

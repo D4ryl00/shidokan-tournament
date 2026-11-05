@@ -1072,6 +1072,23 @@ export const useSetMailAttachmentIncluded = (id: string) =>
   useMailAttachmentMutation(id, ({ attachmentId, included }: { attachmentId: string; included: boolean }) => api<void>('PATCH', mailAttachmentUrl(id, attachmentId), { included }));
 export const useDeleteMailAttachment = (id: string) => useMailAttachmentMutation(id, (attachmentId: string) => api<void>('DELETE', mailAttachmentUrl(id, attachmentId)));
 
+/** Envoie une image du message aux clubs (déjà réduite) ; renvoie son adresse. */
+export async function uploadMailImage(image: Blob): Promise<{ id: string; url: string; size: number }> {
+  const res = await fetch('/api/mail-images', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream', 'X-Poste-Id': TAB_ID },
+    body: await image.arrayBuffer(),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string; issues?: string[] };
+    throw new ApiError(res.status, data.error ?? `Erreur ${res.status}`, data.issues ?? []);
+  }
+  return (await res.json()) as { id: string; url: string; size: number };
+}
+
+/** Ce que le filtre garde d'un message HTML et ce qu'il en retire. */
+export const checkMailHtml = (html: string) => api<{ html: string; removed: string[] }>('POST', '/api/mail-html/check', { html });
+
 // Passage de main entre le serveur et le PC.
 export interface Management { managedHere: boolean; ownerName: string | null; ownerSince: string | null; lastSyncAt: string | null; copyOfServer: boolean; rescueSince: string | null; copyOfMain: boolean }
 export interface ServerCompetition { id: string; name: string; date: string; managedHere: boolean; ownerName: string | null; clubEntryStatus: 'closed' | 'open' | 'frozen' }
