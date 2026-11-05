@@ -68,6 +68,9 @@ test('images et mode code : image, tailles, WebP converti, SVG refusé ; message
   await input().setInputFiles({ name: 'dessin.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>') });
   await expect(page.getByText('Format d’image non accepté : JPEG, PNG, WebP ou GIF.')).toBeVisible();
   await expect(settingsEditor().locator('img[src^="/api/mail-images/"]')).toHaveCount(2);
+  // Choisir de nouveau le même fichier refait la tentative.
+  await input().setInputFiles({ name: 'dessin.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>') });
+  await expect(page.getByText('Format d’image non accepté : JPEG, PNG, WebP ou GIF.')).toHaveCount(2);
   await page.reload(); // la deuxième image n'a pas été enregistrée : le message des réglages n'a que la première
   await expect(settingsEditor().locator('img[src^="/api/mail-images/"]')).toHaveCount(1);
 
@@ -112,6 +115,11 @@ test('images et mode code : image, tailles, WebP converti, SVG refusé ; message
   await page.getByRole('button', { name: 'Code source (HTML)' }).click();
   await expect(save).toBeDisabled();
   await expect(page.getByText('Revenez à l’éditeur pour enregistrer.')).toBeVisible();
+  // En mode code : ni image, ni annuler/rétablir.
+  await expect(page.getByRole('button', { name: 'Image' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Annuler', exact: true })).toBeDisabled();
+  await input().setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: await drawnImage(page, 'image/png') });
+  await expect(page.getByText('Revenez à l’éditeur pour ajouter une image.')).toBeVisible();
   await editor.click();
   await page.keyboard.press('ControlOrMeta+a');
   await page.keyboard.type('<p>Code propre</p><script>alert(1)</script><img src="https://e.fr/a.png">');
@@ -120,6 +128,14 @@ test('images et mode code : image, tailles, WebP converti, SVG refusé ; message
   await expect(editor).toContainText('Code propre');
   await expect(editor).not.toContainText('<p>');
   await expect(save).toBeEnabled();
+  // Annuler après la sortie du mode code ne ramène pas le code comme texte.
+  await editor.click();
+  await page.keyboard.press('ControlOrMeta+z');
+  await page.keyboard.press('ControlOrMeta+z');
+  await page.getByRole('button', { name: 'Annuler', exact: true }).click();
+  await expect(editor).toContainText('Code propre');
+  await expect(editor).not.toContainText('<p>');
+  await expect(editor.locator('img[src^="/api/mail-images/"]')).toHaveCount(0);
   await save.click();
   await expect(page.getByText('Message enregistré.')).toBeVisible();
   const saved = (await (await request.get(`/api/competitions/${id}`)).json()) as { settings: { invitationMail: { body: string } } };

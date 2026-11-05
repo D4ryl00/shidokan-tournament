@@ -9,7 +9,8 @@ import { useEditor, useEditorState } from '@tiptap/react';
 import type { AnyExtension, Editor } from '@tiptap/core';
 import { Button, Group, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useRef } from 'react';
+import { EditorState } from '@tiptap/pm/state';
+import { useRef, useState } from 'react';
 import { MAIL_IMAGE_LIMITS } from '../../../domain/mail-images.js';
 import { mailBodyToHtml } from '../../../domain/mail-template.js';
 import { checkMailHtml } from '../../api.js';
@@ -109,6 +110,10 @@ export default function MailMessageEditor({ value, onChange, readOnly = false, o
   // Code HTML à l'entrée du mode code et code au moment de la sortie (l'éditeur visuel perd ce qu'il ne connaît pas en y revenant).
   const codeAtEntry = useRef('');
   const codeAtExit = useRef('');
+  // Mode code ou sortie en cours : ni image, ni annuler/rétablir (ils toucheraient le code, pas le message).
+  const locked = useRef(false);
+  const [lockedView, setLockedView] = useState(false);
+  const setLocked = (v: boolean) => { locked.current = v; setLockedView(v); };
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const editor = useEditor({
@@ -124,11 +129,13 @@ export default function MailMessageEditor({ value, onChange, readOnly = false, o
       FileHandler.configure({
         allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'],
         // Un collage qui porte du HTML (Word, un site) passe par le collage ordinaire ; seul un fichier seul devient une image.
-        onPaste: (e, files, html) => { if (!html) void insertImages(e, files); },
-        onDrop: (e, files, pos) => void insertImages(e, files, pos),
+        onPaste: (e, files, html) => { if (!html) void insertImages(e, files, undefined, () => locked.current); },
+        onDrop: (e, files, pos) => void insertImages(e, files, pos, () => locked.current),
       }),
     ],
     editorProps: {
+      // Annuler/rétablir au clavier : sans effet en mode code.
+      handleKeyDown: (_view, event) => locked.current && (event.metaKey || event.ctrlKey) && ['z', 'y'].includes(event.key.toLowerCase()),
       transformPastedHTML: (html) => {
         const losses = pastedLosses(html);
         if (losses.length > 0) notifications.show({ color: 'orange', message: `Retiré du collage : ${losses.join(', ')}.` });
@@ -144,6 +151,11 @@ export default function MailMessageEditor({ value, onChange, readOnly = false, o
   });
 
   // Mantine remplace le contenu avant d'appeler ce rappel : à la sortie, le code a déjà été relu (clic capturé plus bas).
+  // Le passage par le mode code ne doit pas rester dans l'historique : « Annuler » rendrait le code comme texte.
+  const forgetHistory = () => {
+    if (editor) editor.view.updateState(EditorState.create({ doc: editor.state.doc, plugins: editor.state.plugins }));
+  };
+  const endExit = () => { setLocked(false); onSourceModeChange?.(false); };
   const switchSourceMode = (active: boolean) => {
     sourceMode.current = active;
     if (active) {
@@ -152,20 +164,22 @@ export default function MailMessageEditor({ value, onChange, readOnly = false, o
       return;
     }
     const code = codeAtExit.current;
-    if (!editor || code === codeAtEntry.current) { onSourceModeChange?.(false); return; } // code intact : rien à signaler
+    if (!editor || code === codeAtEntry.current) { forgetHistory(); endExit(); return; } // code intact : rien à signaler
     void checkMailHtml(code)
       .then(({ html, removed }) => {
         // Compte rendu direct : si le code nettoyé donne le même document, l'éditeur n'émet aucune mise à jour.
         editor.commands.setContent(html, { emitUpdate: false });
+        forgetHistory();
         onChangeRef.current({ body: editor.getHTML(), format: 'html' });
         if (removed.length > 0) notifications.show({ color: 'orange', message: `Retiré du code : ${removed.join(', ')}.` });
       })
       .catch(() => {
         // Le serveur filtre de toute façon à l'enregistrement : on garde ce que l'éditeur a compris du code.
+        forgetHistory();
         onChangeRef.current({ body: editor.getHTML(), format: 'html' });
         notifications.show({ color: 'red', message: 'Le code n’a pas pu être vérifié.' });
       })
-      .finally(() => onSourceModeChange?.(false));
+      .finally(endExit);
   };
 
   return (
@@ -182,10 +196,11 @@ export default function MailMessageEditor({ value, onChange, readOnly = false, o
             if (!editor || !(e.target as HTMLElement).closest(`[aria-label="${SOURCE_LABEL}"]`)) return;
             if (sourceMode.current) codeAtExit.current = editor.getText(); // sortie : le code tel qu'il est écrit
             sourceMode.current = true;
+            setLocked(true);
           }}>
           <RichTextEditor.ControlsGroup>
-            <RichTextEditor.Undo />
-            <RichTextEditor.Redo />
+            <RichTextEditor.Undo disabled={lockedView} />
+            <RichTextEditor.Redo disabled={lockedView} />
           </RichTextEditor.ControlsGroup>
           <RichTextEditor.ControlsGroup>
             <RichTextEditor.H1 />
@@ -218,7 +233,7 @@ export default function MailMessageEditor({ value, onChange, readOnly = false, o
             <RichTextEditor.Unlink />
           </RichTextEditor.ControlsGroup>
           <RichTextEditor.ControlsGroup>
-            <ImageControl />
+            <ImageControl disabled={lockedView} blocked={() => locked.current} />
           </RichTextEditor.ControlsGroup>
           <RichTextEditor.ControlsGroup>
             <RichTextEditor.SourceCode />
