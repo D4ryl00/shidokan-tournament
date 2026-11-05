@@ -62,3 +62,6 @@ Les étapes 1 à 14 sont réalisées, relues et fusionnées dans `main` (659 tes
 - **Données personnelles** : `coupe-shidokan.xlsx` contient de vrais noms. Il **n'est jamais commité** ; les tests utilisent des fichiers anonymisés construits à partir de sa structure (étape 3).
 - **Grille modifiable** (étape 2 et suivantes) : supprimer une catégorie de poids qui contient des inscriptions est refusé, avec un message qui indique combien d'inscriptions sont concernées.
 - **Modèles de grille** (enregistrer une grille modifiée pour les compétitions suivantes, spec §4.3) : étape 6, en finition.
+
+## Étape 35 : éditeur riche du mail aux clubs
+Faite le 2026-11-05 sur la branche `etape-35-editeur-riche` : voir le bilan. Reste le contrôle du rendu dans de vraies boîtes mail, par l'organisateur.
