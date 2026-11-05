@@ -217,10 +217,11 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
             </Button>
             <Text size="sm" c="dimmed">{settings.managedHere ? NEW_LINK_WARNING : 'Rendez la main au serveur pour envoyer des mails.'}</Text>
           </Group>
+          {/* Sous le bouton : l'accordéon du message peut être très haut, un refus placé après serait hors de l'écran. */}
+          <ApiErrorAlert error={send.error ?? mailto.error} />
           <CompetitionMessage competitionId={competitionId} previewClubId={selected[0]?.clubId ?? null} onUnsavedChange={setMessageUnsaved} />
         </>
       )}
-      <ApiErrorAlert error={send.error ?? mailto.error} />
       <Modal opened={confirmSend} onClose={() => setConfirmSend(false)} title="Envoyer le lien par mail">
         <Stack>
           <Text>{plural(selected.length, 'club')}. Un seul mail par club, adressé à toutes ses adresses cochées.</Text>

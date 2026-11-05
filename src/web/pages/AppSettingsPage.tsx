@@ -182,12 +182,12 @@ function TextsCard({ settings, withMessage }: { settings: PublicAppSettings; wit
   });
   // Dernières valeurs enregistrées : quitter l'écran avec autre chose demande confirmation.
   const [lastSaved, setLastSaved] = useState(form);
-  const unsaved = JSON.stringify(form) !== JSON.stringify(lastSaved);
+  // Mode code ou image en cours d'envoi : le message n'est pas prêt, on enregistre ensuite. Ce qui s'y écrit n'est pas encore remonté : c'est déjà un brouillon.
+  const [saveBlock, setSaveBlock] = useState<string | null>(null);
+  const unsaved = JSON.stringify(form) !== JSON.stringify(lastSaved) || saveBlock !== null;
   useUnsaved('textes-reglages', unsaved);
   // L'éditeur ne lit son contenu qu'à l'ouverture : après un enregistrement, il repart du message tel que le serveur l'a gardé.
   const [opened, setOpened] = useState({ mail: settings.invitationMail, key: 0 });
-  // Mode code ou image en cours d'envoi : le message n'est pas prêt, on enregistre ensuite.
-  const [saveBlock, setSaveBlock] = useState<string | null>(null);
   const { checking, noticeThenSave } = useRemovedNotice();
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
   const send = () =>

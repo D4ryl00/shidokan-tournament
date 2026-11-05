@@ -27,7 +27,9 @@ export function CompetitionMessage({ competitionId, previewClubId, onUnsavedChan
   // Remonte l'éditeur (il ne lit son contenu qu'à l'ouverture) après un enregistrement ou un retour au message de l'application.
   const [editorKey, setEditorKey] = useState(0);
   const shown = form ?? current;
-  const unsaved = form !== null;
+  // Mode code ou image en cours d'envoi : le message n'est pas prêt, on enregistre ensuite. Ce qui s'y écrit n'est pas encore remonté : c'est déjà un brouillon.
+  const [saveBlock, setSaveBlock] = useState<string | null>(null);
+  const unsaved = form !== null || saveBlock !== null;
   useUnsaved('message-clubs', unsaved);
   useEffect(() => {
     onUnsavedChange?.(unsaved);
@@ -38,8 +40,6 @@ export function CompetitionMessage({ competitionId, previewClubId, onUnsavedChan
   const { data: entry } = useClubEntrySettings(competitionId);
   // Compétition tenue ailleurs : le message s'y règle, pas ici.
   const readOnly = entry?.managedHere === false;
-  // Mode code ou image en cours d'envoi : le message n'est pas prêt, on enregistre ensuite.
-  const [saveBlock, setSaveBlock] = useState<string | null>(null);
   const { checking, noticeThenSave } = useRemovedNotice();
   if (!shown) return null;
   const save = (invitationMail: { subject: string; body: string; format?: 'html' } | null) =>
