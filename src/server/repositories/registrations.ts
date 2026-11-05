@@ -18,6 +18,7 @@ import type { AppDb } from '../db/client.js';
 import { withoutRowMeta } from '../db/row-versions.js';
 import { rowRev } from '../revisions.js';
 import { linkClub } from '../db/club-directory.js';
+import { recordClubChange } from './club-changes.js';
 import { categories, clubs, fighters, registrations } from '../db/schema.js';
 import { closedSet } from './closed-categories.js';
 import { getCompetition, getGrid } from './competitions.js';
@@ -90,8 +91,13 @@ export async function updateClub(db: AppDb, competitionId: string, clubId: strin
   const row = db.select().from(clubs).where(and(eq(clubs.id, clubId), eq(clubs.competitionId, competitionId))).get();
   if (!row) throw new NotFoundError('Club introuvable');
   const set = { ...patch, ...(patch.name ? { nameKey: normalizeName(patch.name) } : {}) };
-  db.update(clubs).set(set).where(eq(clubs.id, clubId)).run();
-  linkClub(db, clubId);
+  db.transaction((tx) => {
+    const t = tx as unknown as AppDb;
+    t.update(clubs).set(set).where(eq(clubs.id, clubId)).run();
+    // Le lien (nouvelle entité FFK…) se refait, mais une fiche existante garde ses coordonnées : ce qui diffère devient un changement à examiner.
+    linkClub(t, clubId, !row.directoryClubId);
+    if ((['name', 'coachName', 'coachPhone', 'coachEmails'] as const).some((k) => patch[k] !== undefined)) recordClubChange(t, clubId, 'competition');
+  });
   return toClub(db.select().from(clubs).where(eq(clubs.id, clubId)).get()!);
 }
 

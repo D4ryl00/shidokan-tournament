@@ -201,7 +201,7 @@ test('inscriptions figées, fermées ou gérées ailleurs → lecture seule ; to
   await closed();
 });
 
-test('en-tête : club et annuaire mis à jour ; n° d’affiliation libre, ou en conflit avec le numéro déjà connu', async () => {
+test('en-tête : le club est mis à jour, l’annuaire non ; n° d’affiliation libre, ou en conflit avec le numéro déjà connu', async () => {
   const header = { coachName: 'Jean', coachPhone: '0611111111', coachEmails: ['jean@tani.example'], preApproval: true, affiliationNumber: '0060893' };
   const res = await app.inject({ method: 'PATCH', url: url('/club'), payload: header });
   expect(res.statusCode).toBe(200);
@@ -209,7 +209,8 @@ test('en-tête : club et annuaire mis à jour ; n° d’affiliation libre, ou en
   const clubs = (await app.inject({ method: 'GET', url: `${base}/clubs` })).json() as { coachName: string; preApproval: boolean }[];
   expect(clubs[0]).toMatchObject({ coachName: 'Jean', preApproval: true });
   const dir = (await app.inject({ method: 'GET', url: '/api/club-directory' })).json() as { id: string; coachPhone: string; affiliationNumber: string }[];
-  expect(dir.find((e) => e.id === entryId)).toMatchObject({ coachPhone: '0611111111', affiliationNumber: '0060893' });
+  expect(dir.find((e) => e.id === entryId)).toMatchObject({ coachPhone: '0600000000', affiliationNumber: null }); // l'annuaire ne suit plus
+  raw('update club_directory set affiliation_number = ? where id = ?', '0060893', entryId);
   const conflict = await app.inject({ method: 'PATCH', url: url('/club'), payload: { ...header, affiliationNumber: '0130002' } }); // numéro libre, mais le club en a déjà un
   expect(conflict.statusCode).toBe(400);
   expect(conflict.json().error).toBe('Ce club a déjà le numéro d’affiliation 0060893 : contactez l’organisateur.');

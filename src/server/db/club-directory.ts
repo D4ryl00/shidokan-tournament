@@ -28,8 +28,10 @@ function findEntry(db: AppDb, nameKey: string, number: string | null): Entry | u
  * Relie le club de compétition à son entrée d'annuaire, en la créant au besoin ; complète les coordonnées vides de l'entrée
  * et lui donne l'entité FFK et le numéro d'affiliation du club si elle ne les a pas. Ne change un lien existant que si son entrée n'a pas
  * de numéro et qu'une autre porte celui du club. Renvoie l'id de l'entrée.
+ * `fillCoordinates` faux : une entrée existante garde ses coordonnées (nom du coach, téléphone, adresses), même vides ; seuls le lien,
+ * l'entité et le numéro sont complétés.
  */
-export function linkClub(db: AppDb, clubId: string): string {
+export function linkClub(db: AppDb, clubId: string, fillCoordinates = true): string {
   const club = db.select().from(clubs).where(eq(clubs.id, clubId)).get();
   if (!club) throw new Error(`Club introuvable : ${clubId}`);
   const entity = club.ffkEntity ?? db.select().from(clubAliases).where(eq(clubAliases.nameKey, club.nameKey)).get()?.clubEntity ?? null;
@@ -56,9 +58,9 @@ export function linkClub(db: AppDb, clubId: string): string {
   const fill = {
     ...(numberFree ? { affiliationNumber: number } : {}),
     ...(entity && !entry.ffkEntity ? { ffkEntity: entity } : {}),
-    ...(club.coachName && !entry.coachName ? { coachName: club.coachName } : {}),
-    ...(club.coachPhone && !entry.coachPhone ? { coachPhone: club.coachPhone } : {}),
-    ...(club.coachEmails.length && !entry.coachEmails.length ? { coachEmails: club.coachEmails } : {}),
+    ...(fillCoordinates && club.coachName && !entry.coachName ? { coachName: club.coachName } : {}),
+    ...(fillCoordinates && club.coachPhone && !entry.coachPhone ? { coachPhone: club.coachPhone } : {}),
+    ...(fillCoordinates && club.coachEmails.length && !entry.coachEmails.length ? { coachEmails: club.coachEmails } : {}),
   };
   if (Object.keys(fill).length) db.update(clubDirectory).set(fill).where(eq(clubDirectory.id, entry.id)).run();
   if (!linked) db.update(clubs).set({ directoryClubId: entry.id }).where(eq(clubs.id, clubId)).run();
@@ -91,19 +93,25 @@ export class AffiliationConflictError extends Error {
 }
 
 /**
- * Numéro d'affiliation donné par le club lui-même : s'il est libre, son entrée le reçoit. S'il est déjà celui d'une autre entrée,
- * ou si l'entrée a déjà un autre numéro, refus : seul l'organisateur rapproche deux fiches (fusion), pour qu'un coach ne
- * puisse pas se faire passer pour un autre club.
+ * Contrôle un numéro d'affiliation donné par le club lui-même, sans rien écrire. Refus s'il est déjà celui d'une autre entrée,
+ * ou si l'entrée a déjà un autre numéro : seul l'organisateur rapproche deux fiches (fusion), pour qu'un coach ne
+ * puisse pas se faire passer pour un autre club. Renvoie l'entrée du club (reliée au besoin) et si elle porte déjà ce numéro.
  */
-export function assignAffiliationNumber(db: AppDb, clubId: string, number: string): void {
+export function checkAffiliationNumber(db: AppDb, clubId: string, number: string): { entryId: string; alreadyHeld: boolean } {
   const entryId = db.select().from(clubs).where(eq(clubs.id, clubId)).get()?.directoryClubId ?? linkClub(db, clubId);
   const entry = db.select().from(clubDirectory).where(eq(clubDirectory.id, entryId)).get()!;
-  if (entry.affiliationNumber === number) return;
+  if (entry.affiliationNumber === number) return { entryId, alreadyHeld: true };
   if (db.select().from(clubDirectory).where(eq(clubDirectory.affiliationNumber, number)).get()) {
     throw new AffiliationConflictError('Ce numéro d’affiliation est celui d’un autre club de l’annuaire : contactez l’organisateur.');
   }
   if (entry.affiliationNumber) {
     throw new AffiliationConflictError(`Ce club a déjà le numéro d’affiliation ${entry.affiliationNumber} : contactez l’organisateur.`);
   }
-  db.update(clubDirectory).set({ affiliationNumber: number }).where(eq(clubDirectory.id, entryId)).run();
+  return { entryId, alreadyHeld: false };
+}
+
+/** Numéro d'affiliation donné par le club : s'il est libre, son entrée le reçoit (mêmes refus que `checkAffiliationNumber`). */
+export function assignAffiliationNumber(db: AppDb, clubId: string, number: string): void {
+  const { entryId, alreadyHeld } = checkAffiliationNumber(db, clubId, number);
+  if (!alreadyHeld) db.update(clubDirectory).set({ affiliationNumber: number }).where(eq(clubDirectory.id, entryId)).run();
 }

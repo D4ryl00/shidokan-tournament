@@ -7,11 +7,12 @@ import { getAppSettings } from './app-settings.js';
 import { normalizeName } from '../../domain/names.js';
 import { ageRangeText } from '../../domain/grid.js';
 import type { DisciplineId, Sex } from '../../domain/types.js';
-import { assignAffiliationNumber, linkClub } from '../db/club-directory.js';
+import { assignAffiliationNumber, checkAffiliationNumber, linkClub } from '../db/club-directory.js';
 import type { AppDb } from '../db/client.js';
 import { categories, clubDirectory, clubs, competitions, fighters, registrations } from '../db/schema.js';
 import { getCompetition, getGrid } from './competitions.js';
 import { closedSet } from './closed-categories.js';
+import { clubValues, recordClubChange } from './club-changes.js';
 import { NotFoundError, RegistrationValidationError, upsertFighterRegistration } from './registrations.js';
 
 /** Compétition et club d'un lien personnel. */
@@ -119,7 +120,7 @@ function headerOf(db: AppDb, club: typeof clubs.$inferSelect): ClubEntryView['cl
   const entry = club.directoryClubId ? db.select().from(clubDirectory).where(eq(clubDirectory.id, club.directoryClubId)).get() : undefined;
   return {
     name: club.name, coachName: club.coachName, coachPhone: club.coachPhone, coachEmails: club.coachEmails, preApproval: club.preApproval,
-    affiliationNumber: entry?.affiliationNumber ?? null,
+    affiliationNumber: clubValues(club, entry).affiliationNumber,
   };
 }
 
@@ -153,7 +154,10 @@ export async function getClubEntry(db: AppDb, access: ClubAccess): Promise<ClubE
   };
 }
 
-/** En-tête du club : met à jour le club de la compétition et l'annuaire (coordonnées données par le club lui-même). */
+/**
+ * En-tête du club : met à jour le club de la compétition (numéro d'affiliation compris), pas l'annuaire. Ce qui diffère de la fiche
+ * devient un changement à examiner par l'organisateur. Seul un club sans fiche en reçoit une (`linkClub`), avec ses valeurs.
+ */
 export async function updateClubEntryHeader(db: AppDb, access: ClubAccess, header: ClubEntryHeader): Promise<ClubEntryView['club']> {
   assertWritable(db, access);
   const club = clubRow(db, access);
@@ -161,14 +165,21 @@ export async function updateClubEntryHeader(db: AppDb, access: ClubAccess, heade
     const t = tx as unknown as AppDb;
     const { affiliationNumber, ...fields } = header;
     t.update(clubs).set(fields).where(eq(clubs.id, club.id)).run();
+    const linkedNow = !club.directoryClubId;
     const entryId = club.directoryClubId ?? linkClub(t, club.id);
-    const coords = {
-      ...(fields.coachName ? { coachName: fields.coachName } : {}),
-      ...(fields.coachPhone ? { coachPhone: fields.coachPhone } : {}),
-      ...(fields.coachEmails.length ? { coachEmails: fields.coachEmails } : {}),
-    };
-    if (Object.keys(coords).length) t.update(clubDirectory).set(coords).where(eq(clubDirectory.id, entryId)).run();
-    if (affiliationNumber) assignAffiliationNumber(t, club.id, affiliationNumber);
+    const entry = t.select().from(clubDirectory).where(eq(clubDirectory.id, entryId)).get()!;
+    let own: string | null;
+    if (affiliationNumber) {
+      // Une fiche créée à l'instant prend le numéro du club ; sinon il est seulement contrôlé.
+      if (linkedNow) assignAffiliationNumber(t, club.id, affiliationNumber);
+      else checkAffiliationNumber(t, club.id, affiliationNumber);
+      own = affiliationNumber;
+    } else {
+      // Effacé : '' si le club ou la fiche avait un numéro, pour que la page n'affiche plus celui de la fiche ; sinon rien n'a changé.
+      own = club.affiliationNumber || entry.affiliationNumber ? '' : club.affiliationNumber;
+    }
+    t.update(clubs).set({ affiliationNumber: own }).where(eq(clubs.id, club.id)).run();
+    recordClubChange(t, club.id, 'club');
   });
   return headerOf(db, clubRow(db, access));
 }
