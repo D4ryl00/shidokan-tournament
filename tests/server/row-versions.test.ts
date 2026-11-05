@@ -40,7 +40,7 @@ const insertResult = (d: AppDb) =>
 
 test('versionedTables : liste exacte', () => {
   expect(versionedTables(freshDb())).toEqual([
-    'age_bands', 'age_links', 'categories', 'closed_categories', 'club_directory', 'club_invitations', 'clubs', 'competitions', 'fighters', 'frozen_passages', 'kata_scores',
+    'age_bands', 'age_links', 'categories', 'closed_categories', 'club_changes', 'club_directory', 'club_invitations', 'clubs', 'competitions', 'fighters', 'frozen_passages', 'kata_scores',
     'mail_attachments', 'mail_log', 'match_results', 'recasements', 'received_copies', 'refusals', 'registrations', 'set_aside_cases', 'tie_breaks', 'wave_launches', 'waves', 'weight_classes', 'zone_entries', 'zone_journal', 'zones',
   ]);
 });
@@ -211,7 +211,7 @@ test('schéma drizzle : chaque table versionnée déclare version et updatedAt',
   const missing = (Object.values(schema) as unknown[])
     .filter((t) => t instanceof SQLiteTable)
     .map((t) => getTableConfig(t as Parameters<typeof getTableConfig>[0]))
-    .filter((c) => c.name === 'competitions' || c.name === 'club_directory' || (c.name !== 'uploads' && c.name !== 'users' && c.columns.some((col) => col.name === 'competition_id')))
+    .filter((c) => c.name === 'competitions' || c.name === 'club_directory' || (c.name !== 'uploads' && c.name !== 'users' && c.name !== 'club_changes' && c.columns.some((col) => col.name === 'competition_id')))
     .filter((c) => !['version', 'updated_at'].every((n) => c.columns.some((col) => col.name === n)))
     .map((c) => c.name);
   expect(missing).toEqual([]);

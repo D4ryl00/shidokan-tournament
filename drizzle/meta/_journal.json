@@ -218,6 +218,13 @@
       "when": 1793894130072,
       "tag": "0030_invitation_sans_lien",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1793902103291,
+      "tag": "0031_coordonnees_clubs",
+      "breakpoints": true
     }
   ]
 }

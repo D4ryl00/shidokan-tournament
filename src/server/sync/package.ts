@@ -46,8 +46,8 @@ const CLOSED_FROM_CLUB_FORM = `
   ) c
   WHERE b.competition_id = ? AND b.on_club_form = 0 AND NOT (b.is_minor = 1 AND c.ruleset = 'shobu')`;
 
-/** Tables d'une compétition qui restent sur l'installation (liens et mails envoyés, pièces jointes des mails, fichiers importés, copies reçues, journaux de zone). */
-export const LOCAL_ONLY_TABLES = ['uploads', 'club_invitations', 'mail_log', 'mail_attachments', 'mail_images', 'received_copies', 'zone_journal', 'zone_entries'];
+/** Tables d'une compétition qui restent sur l'installation (liens et mails envoyés, changements de coordonnées des clubs en attente, pièces jointes des mails, fichiers importés, copies reçues, journaux de zone). */
+export const LOCAL_ONLY_TABLES = ['uploads', 'club_invitations', 'club_changes', 'mail_log', 'mail_attachments', 'mail_images', 'received_copies', 'zone_journal', 'zone_entries'];
 
 /** Toutes les tables de compétition doivent être classées : celles qui voyagent, celles qui restent (garde contre l'oubli). */
 export function unclassifiedTables(db: AppDb): string[] {

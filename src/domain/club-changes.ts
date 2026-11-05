@@ -1,0 +1,59 @@
+import { sameEmail } from './emails.js';
+
+// Coordonnées d'un club comparées entre sa fiche d'annuaire et celle d'une compétition.
+
+export const CLUB_FIELDS = ['name', 'coachName', 'coachPhone', 'coachEmails', 'affiliationNumber'] as const;
+export type ClubField = (typeof CLUB_FIELDS)[number];
+
+export interface ClubValues {
+  name: string;
+  coachName: string | null;
+  coachPhone: string | null;
+  coachEmails: string[];
+  affiliationNumber: string | null;
+}
+
+export type Side = 'competition' | 'directory';
+
+const text = (v: string | null) => (v ?? '').trim();
+
+/** Mêmes adresses, casse, espaces et ordre ignorés. */
+const sameEmails = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x) => b.some((y) => sameEmail(x, y))) && b.every((y) => a.some((x) => sameEmail(x, y)));
+
+function same(field: ClubField, a: ClubValues, b: ClubValues): boolean {
+  if (field === 'coachEmails') return sameEmails(a.coachEmails, b.coachEmails);
+  return text(a[field]) === text(b[field]);
+}
+
+/** Champs dont la valeur diffère, dans l'ordre de CLUB_FIELDS. Vide et absent se valent. */
+export const differingFields = (a: ClubValues, b: ClubValues): ClubField[] => CLUB_FIELDS.filter((f) => !same(f, a, b));
+
+const isEmpty = (field: ClubField, v: ClubValues) => (field === 'coachEmails' ? v.coachEmails.length === 0 : text(v[field]) === '');
+
+/** Par défaut la valeur de la compétition, sauf si elle est vide : l'annuaire n'est vidé que si l'organisateur le choisit. */
+export const defaultChoice = (field: ClubField, competition: ClubValues): Side => (isEmpty(field, competition) ? 'directory' : 'competition');
+
+export interface EmailChoice {
+  email: string;
+  origin: 'both' | 'competition' | 'directory';
+  checked: boolean;
+}
+
+/** Adresses proposées : celles de la compétition d'abord (cochées, dans leur ordre), puis celles de l'annuaire seules (décochées). */
+export function emailChoices(directory: readonly string[], competition: readonly string[]): EmailChoice[] {
+  const fromCompetition = competition.map((email): EmailChoice => ({ email, origin: directory.some((d) => sameEmail(d, email)) ? 'both' : 'competition', checked: true }));
+  const onlyDirectory = directory.filter((d) => !competition.some((c) => sameEmail(c, d))).map((email): EmailChoice => ({ email, origin: 'directory', checked: false }));
+  return [...fromCompetition, ...onlyDirectory];
+}
+
+/** Valeurs retenues : pour chaque champ le côté choisi (par défaut `defaultChoice`), les adresses étant celles cochées. */
+export function resolvedValues(directory: ClubValues, competition: ClubValues, choices: Partial<Record<ClubField, Side>>, emails: string[]): ClubValues {
+  const pick = <F extends Exclude<ClubField, 'coachEmails'>>(f: F): ClubValues[F] => ((choices[f] ?? defaultChoice(f, competition)) === 'competition' ? competition[f] : directory[f]);
+  return { name: pick('name'), coachName: pick('coachName'), coachPhone: pick('coachPhone'), coachEmails: emails, affiliationNumber: pick('affiliationNumber') };
+}
+
+/** Un changement se reporte sur un autre club (`apply`) seulement s'il avait exactement la valeur d'avant ; sinon `conflict`. */
+export const propagationKind = (field: ClubField, club: ClubValues, before: ClubValues): 'apply' | 'conflict' => (same(field, club, before) ? 'apply' : 'conflict');
+
+/** Compétition à venir : sa date est celle du jour ou plus tard (dates `AAAA-MM-JJ`). */
+export const isUpcoming = (competitionDate: string, today: string): boolean => competitionDate >= today;

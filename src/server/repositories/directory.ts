@@ -3,7 +3,7 @@ import { missingEmails } from '../../domain/emails.js';
 import type { DirectoryEntry, DirectoryInput } from '../../domain/registration.js';
 import { normalizeName } from '../../domain/names.js';
 import type { AppDb } from '../db/client.js';
-import { clubDirectory, clubs } from '../db/schema.js';
+import { clubChanges, clubDirectory, clubs } from '../db/schema.js';
 import { NotFoundError } from './registrations.js';
 
 export class DirectoryConflictError extends Error {
@@ -63,6 +63,7 @@ export function mergeDirectoryEntries(db: AppDb, keepId: string, mergeId: string
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     t.update(clubs).set({ directoryClubId: keepId }).where(eq(clubs.directoryClubId, mergeId)).run();
+    t.update(clubChanges).set({ directoryId: keepId }).where(eq(clubChanges.directoryId, mergeId)).run();
     t.delete(clubDirectory).where(eq(clubDirectory.id, mergeId)).run(); // avant de reprendre son numéro (unique)
     const fields = ['affiliationNumber', 'ffkEntity', 'coachName', 'coachPhone', 'notes'] as const;
     const fill = Object.fromEntries(fields.filter((f) => !keep[f] && merged[f]).map((f) => [f, merged[f]]));

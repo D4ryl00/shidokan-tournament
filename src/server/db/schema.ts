@@ -292,7 +292,31 @@ export const clubs = sqliteTable('clubs', {
   directoryClubId: text('directory_club_id').references(() => clubDirectory.id, { onDelete: 'set null' }),
   /** Invité aux inscriptions en ligne, à cette date ; le lien personnel se crée à part (envoi ou « Créer un lien »). */
   invitedAt: text('invited_at'),
+  /** Numéro d'affiliation propre au club de la compétition : `''` effacé par le club, null jamais saisi. */
+  affiliationNumber: text('affiliation_number'),
   ...rowMeta(),
+});
+
+/**
+ * Coordonnées d'un club qui diffèrent de sa fiche d'annuaire, en attente d'une décision de l'organisateur (une ligne par club).
+ * Reste sur l'installation (ne voyage pas) et n'a pas de version de ligne.
+ */
+export const clubChanges = sqliteTable('club_changes', {
+  clubId: text('club_id')
+    .primaryKey()
+    .references(() => clubs.id, { onDelete: 'cascade' }),
+  competitionId: text('competition_id')
+    .notNull()
+    .references(() => competitions.id, { onDelete: 'cascade' }),
+  directoryId: text('directory_id')
+    .notNull()
+    .references(() => clubDirectory.id, { onDelete: 'cascade' }),
+  /** Qui a changé les coordonnées : le club (page en ligne) ou l'organisateur (onglet Clubs). */
+  origin: text('origin', { enum: ['club', 'competition'] }).notNull(),
+  /** Valeurs de l'annuaire au moment du changement, par champ modifié (JSON). */
+  valuesJson: text('values_json').notNull(),
+  changedAt: text('changed_at').notNull(),
+  ignored: integer('ignored', { mode: 'boolean' }).notNull().default(false),
 });
 
 export const fighters = sqliteTable('fighters', {
