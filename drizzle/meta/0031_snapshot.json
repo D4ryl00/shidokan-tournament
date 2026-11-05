@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "bfd8ad51-b474-4bad-b8ea-6a098e1d8313",
+  "id": "8c79c842-9bd6-4946-bedc-73e7a8220a2b",
   "prevId": "5de95d12-de51-4d89-a302-969dc819e5f3",
   "tables": {
     "age_bands": {
@@ -571,6 +571,22 @@
           "notNull": true,
           "autoincrement": false,
           "default": false
+        },
+        "changed_fields": {
+          "name": "changed_fields",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
+        },
+        "added_emails": {
+          "name": "added_emails",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
         }
       },
       "indexes": {},

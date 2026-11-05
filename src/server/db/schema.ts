@@ -317,6 +317,10 @@ export const clubChanges = sqliteTable('club_changes', {
   valuesJson: text('values_json').notNull(),
   changedAt: text('changed_at').notNull(),
   ignored: integer('ignored', { mode: 'boolean' }).notNull().default(false),
+  /** Champs que cet enregistrement a modifiés (JSON de ClubField[]) : les autres ont la fiche pour choix par défaut. */
+  changedFields: text('changed_fields').notNull().default('[]'),
+  /** Adresses que cet enregistrement a ajoutées (JSON de string[]) : les autres adresses seulement dans la compétition sont décochées. */
+  addedEmails: text('added_emails').notNull().default('[]'),
 });
 
 export const fighters = sqliteTable('fighters', {

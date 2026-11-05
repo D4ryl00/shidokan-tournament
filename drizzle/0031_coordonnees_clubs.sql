@@ -6,6 +6,8 @@ CREATE TABLE `club_changes` (
 	`values_json` text NOT NULL,
 	`changed_at` text NOT NULL,
 	`ignored` integer DEFAULT false NOT NULL,
+	`changed_fields` text DEFAULT '[]' NOT NULL,
+	`added_emails` text DEFAULT '[]' NOT NULL,
 	FOREIGN KEY (`club_id`) REFERENCES `clubs`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`competition_id`) REFERENCES `competitions`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`directory_id`) REFERENCES `club_directory`(`id`) ON UPDATE no action ON DELETE cascade

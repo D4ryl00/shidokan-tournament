@@ -4,6 +4,7 @@ import type { AppDb } from '../db/client.js';
 import { versionedTables } from '../db/row-versions.js';
 import { backupNow } from '../repositories/backups.js';
 import { competitionChanged } from '../events.js';
+import { reopenIgnoredChanges } from '../repositories/club-changes.js';
 import { getInstance } from '../repositories/instance.js';
 import { APP_VERSION } from '../version.js';
 
@@ -258,6 +259,9 @@ export async function importPackage(
 
       // Paquet d'une version d'avant les catégories fermées : ses tranches « non proposées sur la fiche club » deviennent fermées (comme la migration 0021).
       if (!('closed_categories' in pkg.tables)) client.prepare(CLOSED_FROM_CLUB_FORM).run(id);
+
+      // Un changement ignoré dont le club a changé pendant que le PC avait la main repasse à examiner.
+      reopenIgnoredChanges(db, id);
 
       const stamp = now.toISOString();
       client

@@ -1,4 +1,5 @@
 import { and, eq, gte } from 'drizzle-orm';
+import { sameEmail } from '../../domain/emails.js';
 import { differingFields, isUpcoming, propagationKind, type ClubField, type ClubValues } from '../../domain/club-changes.js';
 import { normalizeName } from '../../domain/names.js';
 import type { AppDb } from '../db/client.js';
@@ -25,12 +26,16 @@ export const directoryValues = (entry: EntryRow): ClubValues => ({
   name: entry.name, coachName: entry.coachName, coachPhone: entry.coachPhone, coachEmails: entry.coachEmails, affiliationNumber: entry.affiliationNumber,
 });
 
+/** Les adresses de `emails` qui ne sont pas dans `base` (casse et espaces ignorés). */
+const emailsNotIn = (emails: readonly string[], base: readonly string[]) => emails.filter((e) => !base.some((b) => sameEmail(b, e)));
+
 /**
  * Compare le club à sa fiche d'annuaire après une modification de ses coordonnées, et tient à jour son changement à examiner :
  * sans fiche, rien ; sans différence, le changement disparaît ; un changement ignoré aux mêmes valeurs reste ignoré ;
- * sinon il est écrit (toutes les valeurs du club) et à examiner.
+ * sinon il est écrit (toutes les valeurs du club, avec les champs que cet enregistrement a modifiés et les adresses qu'il a ajoutées) et à examiner.
  * `before` : valeurs du club avant l'enregistrement. Si aucun champ comparé n'a changé, aucun changement n'est créé ni redaté
  * (un changement existant n'est que rattaché à la fiche du lien actuel) : la différence vient d'ailleurs, de la fiche par exemple.
+ * Une compétition purgée n'en reçoit aucun.
  */
 export function recordClubChange(db: AppDb, clubId: string, origin: 'club' | 'competition', before?: ClubValues): void {
   const club = db.select().from(clubs).where(eq(clubs.id, clubId)).get();
@@ -43,13 +48,38 @@ export function recordClubChange(db: AppDb, clubId: string, origin: 'club' | 'co
     if (existing) db.delete(clubChanges).where(eq(clubChanges.clubId, clubId)).run();
     return;
   }
-  if (before && !differingFields(values, before).length) {
+  const reference = before ?? directoryValues(entry);
+  const changedFields = differingFields(values, reference);
+  if (before && !changedFields.length) {
     if (existing && existing.directoryId !== entry.id) db.update(clubChanges).set({ directoryId: entry.id }).where(eq(clubChanges.clubId, clubId)).run();
     return;
   }
   if (existing?.ignored && existing.directoryId === entry.id && !differingFields(values, JSON.parse(existing.valuesJson) as ClubValues).length) return;
-  const row = { competitionId: club.competitionId, directoryId: entry.id, origin, valuesJson: JSON.stringify(values), changedAt: new Date().toISOString(), ignored: false };
+  if (db.select({ purgedAt: competitions.purgedAt }).from(competitions).where(eq(competitions.id, club.competitionId)).get()?.purgedAt) return;
+  const row = {
+    competitionId: club.competitionId, directoryId: entry.id, origin, valuesJson: JSON.stringify(values), changedAt: new Date().toISOString(), ignored: false,
+    changedFields: JSON.stringify(changedFields), addedEmails: JSON.stringify(emailsNotIn(values.coachEmails, reference.coachEmails)),
+  };
   db.insert(clubChanges).values({ clubId, ...row }).onConflictDoUpdate({ target: clubChanges.clubId, set: row }).run();
+}
+
+/**
+ * Après la réception d'une compétition rendue par un PC : un changement ignoré dont les valeurs du club ne sont plus celles de l'ignorance
+ * (le PC les a changées pendant qu'il avait la main) repasse à examiner, avec les champs que le PC a modifiés.
+ */
+export function reopenIgnoredChanges(db: AppDb, competitionId: string): void {
+  for (const row of db.select().from(clubChanges).where(and(eq(clubChanges.competitionId, competitionId), eq(clubChanges.ignored, true))).all()) {
+    const club = db.select().from(clubs).where(eq(clubs.id, row.clubId)).get();
+    const entry = club?.directoryClubId ? db.select().from(clubDirectory).where(eq(clubDirectory.id, club.directoryClubId)).get() : undefined;
+    if (!club || !entry) continue;
+    const values = clubValues(club, entry);
+    const ignoredValues = JSON.parse(row.valuesJson) as ClubValues;
+    const changedFields = differingFields(values, ignoredValues);
+    if (!changedFields.length) continue;
+    db.update(clubChanges)
+      .set({ ignored: false, valuesJson: JSON.stringify(values), changedFields: JSON.stringify(changedFields), addedEmails: JSON.stringify(emailsNotIn(values.coachEmails, ignoredValues.coachEmails)), changedAt: new Date().toISOString() })
+      .where(eq(clubChanges.clubId, row.clubId)).run();
+  }
 }
 
 // --- Décisions de l'organisateur et report de l'annuaire vers les compétitions à venir ---
@@ -78,13 +108,16 @@ export interface ClubChangeView {
   values: ClubValues;
   directory: ClubValues;
   fields: ClubField[];
+  /** Champs que l'enregistrement du changement a modifiés, et adresses qu'il a ajoutées : les autres valeurs ont la fiche pour choix par défaut. */
+  changedFields: ClubField[];
+  addedEmails: string[];
 }
 
 /**
  * Changements à examiner : ni ignorés ni portant sur une fiche archivée. Une ligne devenue sans différence (la fiche ou le club a bougé
- * entre-temps) est supprimée ici.
+ * entre-temps) est supprimée ici. `managedHereOnly` (un PC) : seules les compétitions gérées ici sont listées.
  */
-export function listClubChanges(db: AppDb, competitionId?: string): ClubChangeView[] {
+export function listClubChanges(db: AppDb, competitionId?: string, managedHereOnly = false): ClubChangeView[] {
   const today = localToday();
   const rows = db.select().from(clubChanges).where(competitionId ? eq(clubChanges.competitionId, competitionId) : undefined).all();
   const views: ClubChangeView[] = [];
@@ -105,10 +138,11 @@ export function listClubChanges(db: AppDb, competitionId?: string): ClubChangeVi
     }
     if (row.ignored || entry.archived) continue;
     const management = getManagement(db, competition.id);
+    if (managedHereOnly && !management.managedHere) continue;
     views.push({
       clubId: club.id, competitionId: competition.id, competitionName: competition.name, competitionDate: competition.date, managedHere: management.managedHere,
       ownerName: management.ownerName, upcoming: isUpcoming(competition.date, today), directoryId: entry.id, directoryVersion: entry.version ?? 0, origin: row.origin,
-      changedAt: row.changedAt, values, directory, fields,
+      changedAt: row.changedAt, values, directory, fields, changedFields: JSON.parse(row.changedFields) as ClubField[], addedEmails: JSON.parse(row.addedEmails) as string[],
     });
   }
   return views.sort((a, b) => a.competitionDate.localeCompare(b.competitionDate) || a.competitionName.localeCompare(b.competitionName) || a.values.name.localeCompare(b.values.name));
@@ -191,7 +225,8 @@ function openChange(db: AppDb, clubId: string, changedAt: string) {
 /**
  * Enregistre dans l'annuaire les valeurs choisies pour un changement à examiner, et dans le club aussi si `applyToClub`. Tout ou rien :
  * fiche ou club modifiés depuis l'ouverture de la comparaison, numéro ou nom d'une autre fiche, nom déjà pris dans la compétition, compétition
- * gérée ailleurs ou passée refusent sans rien écrire. Les autres changements de la même fiche qui deviennent identiques sont fermés.
+ * gérée ailleurs ou passée refusent sans rien écrire. Sans application au club sur une compétition gérée ailleurs, le changement reste tant que le club
+ * diffère du résultat. Les autres changements de la même fiche qui deviennent identiques sont fermés.
  */
 export function resolveClubChange(db: AppDb, clubId: string, input: ResolveInput): void {
   const touched = new Set<string>();
@@ -208,7 +243,12 @@ export function resolveClubChange(db: AppDb, clubId: string, input: ResolveInput
     updateDirectoryEntry(t, entry.id, { name, coachName, coachPhone, coachEmails, affiliationNumber }); // contrôle aussi le numéro (une autre fiche le porte)
     const updated = t.select().from(clubDirectory).where(eq(clubDirectory.id, entry.id)).get()!;
     if (input.applyToClub) writeClubValues(t, club, updated, input.values);
-    t.delete(clubChanges).where(eq(clubChanges.clubId, clubId)).run();
+    // Compétition gérée ailleurs, rien appliqué au club : s'il diffère encore du résultat, le changement reste à examiner au retour de la main.
+    // La fiche vient d'être choisie par l'organisateur : elle est le choix par défaut de tous les champs.
+    if (!input.applyToClub && !getManagement(db, club.competitionId).managedHere) {
+      reconcileChange(t, clubId);
+      t.update(clubChanges).set({ changedFields: '[]', addedEmails: '[]' }).where(eq(clubChanges.clubId, clubId)).run();
+    } else t.delete(clubChanges).where(eq(clubChanges.clubId, clubId)).run();
     touched.add(club.competitionId);
     for (const other of t.select().from(clubChanges).where(eq(clubChanges.directoryId, entry.id)).all()) {
       reconcileChange(t, other.clubId);
@@ -316,7 +356,7 @@ export function applyDirectoryToClubs(db: AppDb, entryId: string, items: { clubI
         const directory = directoryValues(entry);
         const values = clubValues(current, entry);
         if (fields.some((f) => !sameShown(f.field, f.clubValue, values) || !sameShown(f.field, f.directoryValue, directory))) {
-          throw new DirectoryConflictError('Ce club ou cette fiche vient de changer : recommencez.');
+          throw new DirectoryConflictError('Ce club ou cette fiche vient de changer : rien n’a été appliqué à ce club.');
         }
         const chosen = Object.fromEntries(fields.map((f) => [f.field, directory[f.field]])) as Partial<ClubValues>;
         if (chosen.name !== undefined) assertNameFree(t, current, chosen.name);

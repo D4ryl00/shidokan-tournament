@@ -246,7 +246,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(launchRoutes, { db });
   await app.register(backupRoutes, { db, dbPath: opts.dbPath });
   await app.register(directoryRoutes, { db });
-  await app.register(clubChangeRoutes, { db });
+  await app.register(clubChangeRoutes, { db, role });
   // Sur un PC, aucun client Google : les routes de mail et d'inscription en ligne sont refusées (voir `registerClubServicesRefusal`).
   const googleConfig = clubServices ? googleConfigFrom({ ...opts.google, publicUrl: opts.publicUrl }) : null;
   const google = googleConfig ? googleClient(googleConfig) : null;

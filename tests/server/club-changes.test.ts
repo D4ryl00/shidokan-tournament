@@ -6,6 +6,7 @@ import type { ClubFormParse } from '../../src/domain/club-form.js';
 import { buildApp } from '../../src/server/app.js';
 import { openDb } from '../../src/server/db/client.js';
 import { createCompetition } from '../../src/server/repositories/competitions.js';
+import { buildPackage, importPackage } from '../../src/server/sync/package.js';
 import { importClubForm } from '../../src/server/repositories/registrations.js';
 import { BLANK, buildFfkWorkbook, type FfkLine } from '../helpers/ffk-fixture.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
@@ -311,7 +312,7 @@ test('numéro effacé : « » seulement si la fiche a un numéro', async () => {
 
 // --- Décisions et report vers les compétitions à venir ---
 
-type View = { clubId: string; competitionId: string; directoryVersion: number; changedAt: string; fields: string[]; values: Record<string, unknown>; directory: Record<string, unknown>; managedHere: boolean; upcoming: boolean };
+type View = { changedFields: string[]; addedEmails: string[]; clubId: string; competitionId: string; directoryVersion: number; changedAt: string; fields: string[]; values: Record<string, unknown>; directory: Record<string, unknown>; managedHere: boolean; upcoming: boolean };
 const list = async (query = '') => (await app.inject({ method: 'GET', url: `/api/club-changes${query}` })).json() as View[];
 const resolve = (id: string, view: { directoryVersion: number; changedAt: string }, values: Record<string, unknown>, applyToClub = false) =>
   app.inject({ method: 'POST', url: `/api/club-changes/${id}/resolve`, payload: { directoryVersion: view.directoryVersion, changedAt: view.changedAt, values: { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], name: 'Tani Dojo', ...values }, applyToClub } });
@@ -531,7 +532,7 @@ test('apply-to-clubs : valeur du club changée depuis l’affichage → refusé 
   await patchEntry({ coachPhone: '0612121212' });
   await patchClub({ coachPhone: '0633333333' });
   const stale = await applyToClubs([{ clubId, fields: [shown('coachPhone', '0600000000', '0612121212')] }]);
-  expect(stale.json()[0]).toMatchObject({ status: 'refused', message: 'Ce club ou cette fiche vient de changer : recommencez.' });
+  expect(stale.json()[0]).toMatchObject({ status: 'refused', message: 'Ce club ou cette fiche vient de changer : rien n’a été appliqué à ce club.' });
   expect(clubRow(clubId).coach_phone).toBe('0633333333');
   const changedEntry = await applyToClubs([{ clubId, fields: [shown('coachPhone', '0633333333', '0600000000')] }]);
   expect(changedEntry.json()[0]).toMatchObject({ status: 'refused' });
@@ -623,4 +624,93 @@ test('resolve et apply-to-clubs préviennent les postes qui affichent la compét
   await applyToClubs([{ clubId, fields: [shown('coachPhone', '0611111111', '0644444444')] }]);
   expect(seen).toHaveLength(1);
   off();
+});
+
+// --- Relecture finale ---
+
+test('I3 : le changement garde les champs que l’enregistrement a modifiés et les adresses qu’il a ajoutées', async () => {
+  // L'organisateur a retiré les adresses de la fiche ; le club les a encore. Le coach ne change que son téléphone.
+  raw('update club_directory set coach_emails = ? where id = ?', '[]', entryId);
+  await patchClub({ coachPhone: '0611111111' });
+  let [view] = await list();
+  expect(view).toMatchObject({ fields: ['coachPhone', 'coachEmails'], changedFields: ['coachPhone'], addedEmails: [] });
+  // Il ajoute ensuite une adresse : celle-ci seule est « ajoutée ».
+  await patchClub({ coachPhone: '0611111111', coachEmails: ['jean@tani.example', 'nouveau@tani.example'] });
+  [view] = await list();
+  expect(view).toMatchObject({ changedFields: ['coachEmails'], addedEmails: ['nouveau@tani.example'] });
+});
+
+test('I3 : un changement fait par l’onglet Clubs garde aussi ses champs modifiés', async () => {
+  await app.inject({ method: 'PATCH', url: `${base}/clubs/${clubId}`, payload: { coachName: 'Paul', coachEmails: ['jean@tani.example', 'p@tani.example'] } });
+  const [view] = await list();
+  expect(view).toMatchObject({ changedFields: ['coachName', 'coachEmails'], addedEmails: ['p@tani.example'] });
+});
+
+test('M7 : un téléphone écrit autrement ne crée pas de différence', async () => {
+  await patchClub({ coachPhone: '06 00 00 00 00' });
+  expect(changes()).toHaveLength(0);
+});
+
+test('M8 : aucun changement sur une compétition purgée', async () => {
+  raw("update competitions set purged_at = '2026-01-01T00:00:00.000Z' where id = ?", base.split('/').pop());
+  await patchClub({ coachPhone: '0611111111' });
+  expect(changes()).toHaveLength(0);
+});
+
+test('M2 : réinviter un club relié qui a effacé ses valeurs ne les lui rend pas', async () => {
+  await patchClub({ coachPhone: null, coachEmails: [] });
+  await app.inject({ method: 'POST', url: `${base}/invitations`, payload: { directoryIds: [entryId] } });
+  expect(clubRow(clubId).coach_phone).toBeNull();
+  const db = new Database(dbPath, { readonly: true });
+  expect(db.prepare('select coach_emails as e from clubs where id = ?').get(clubId)).toEqual({ e: '[]' });
+  db.close();
+});
+
+test('M3 : un changement ignoré revient à examiner si le PC a changé la valeur pendant qu’il avait la main', async () => {
+  await patchClub({ coachPhone: '0611111111' });
+  const [view] = await list();
+  expect((await ignore(clubId, view!)).statusCode).toBe(204);
+  expect(await list()).toHaveLength(0);
+  const repoDb = openDb(dbPath);
+  try {
+    const pkg = JSON.parse(JSON.stringify(buildPackage(repoDb, view!.competitionId, { handOver: false, role: 'local' })));
+    // Valeurs identiques à l'ignorance : reste ignoré.
+    await importPackage(repoDb, dbPath, pkg, null, new Date(), { backup: false });
+    expect(await list()).toHaveLength(0);
+    // Le PC a changé le téléphone du club.
+    for (const c of pkg.tables.clubs) c.coach_phone = '0699999999';
+    await importPackage(repoDb, dbPath, pkg, null, new Date(), { backup: false });
+  } finally {
+    repoDb.$client.close();
+  }
+  const [again] = await list();
+  expect(again).toMatchObject({ clubId, fields: ['coachPhone'], changedFields: ['coachPhone'] });
+  expect(again!.values).toMatchObject({ coachPhone: '0699999999' });
+});
+
+test('M4 : un PC ne liste que les compétitions gérées ici', async () => {
+  await patchClub({ coachPhone: '0611111111' });
+  expect(await list()).toHaveLength(1);
+  raw("update competitions set owner_instance_id = 'ailleurs', owner_name = 'PC Nice' where id = ?", base.split('/').pop());
+  expect(await list()).toHaveLength(0);
+  expect(changes()).toHaveLength(1);
+});
+
+test('M5 : décision sans application sur une compétition gérée ailleurs : le changement reste tant que le club diffère', async () => {
+  await patchClub({ coachPhone: '0611111111' });
+  const [view] = await list();
+  raw("update competitions set owner_instance_id = 'ailleurs', owner_name = 'PC Nice' where id = ?", view!.competitionId);
+  expect((await resolve(clubId, view!, { coachName: 'Jean', coachPhone: '0644444444', coachEmails: ['jean@tani.example'] })).statusCode).toBe(204);
+  expect(await directory()).toMatchObject({ coachPhone: '0644444444' });
+  expect(changes()).toHaveLength(1);
+  raw('update competitions set owner_instance_id = null, owner_name = null where id = ?', view!.competitionId);
+  // Au retour de la main : à examiner, la fiche (choix de l'organisateur) pour choix par défaut.
+  expect(await list()).toMatchObject([{ clubId, fields: ['coachPhone'], changedFields: [], addedEmails: [] }]);
+});
+
+test('M5 : sur une compétition gérée ici, sans application, le changement est fermé', async () => {
+  await patchClub({ coachPhone: '0611111111' });
+  const [view] = await list();
+  expect((await resolve(clubId, view!, { coachName: 'Jean', coachPhone: '0644444444', coachEmails: ['jean@tani.example'] })).statusCode).toBe(204);
+  expect(changes()).toHaveLength(0);
 });

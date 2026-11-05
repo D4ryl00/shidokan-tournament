@@ -114,13 +114,19 @@ function clubForEntry(t: AppDb, competitionId: string, entry: typeof clubDirecto
     }
     club = sameName;
   }
+  // Un club déjà relié à cette fiche n'est pas rempli : ce qu'il a effacé (le coach, le retrait d'une invitation) ne lui est pas rendu.
+  const linked = club?.directoryClubId === entry.id;
   if (club) {
     const fill = {
       directoryClubId: entry.id,
       ...(!club.ffkEntity && entry.ffkEntity ? { ffkEntity: entry.ffkEntity } : {}),
-      ...(!club.coachName && entry.coachName ? { coachName: entry.coachName } : {}),
-      ...(!club.coachPhone && entry.coachPhone ? { coachPhone: entry.coachPhone } : {}),
-      ...(!club.coachEmails.length && entry.coachEmails.length ? { coachEmails: entry.coachEmails } : {}),
+      ...(linked
+        ? {}
+        : {
+            ...(!club.coachName && entry.coachName ? { coachName: entry.coachName } : {}),
+            ...(!club.coachPhone && entry.coachPhone ? { coachPhone: entry.coachPhone } : {}),
+            ...(!club.coachEmails.length && entry.coachEmails.length ? { coachEmails: entry.coachEmails } : {}),
+          }),
     };
     t.update(clubs).set(fill).where(eq(clubs.id, club.id)).run();
     return t.select().from(clubs).where(eq(clubs.id, club.id)).get()!;
