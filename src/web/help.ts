@@ -438,7 +438,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Sous le nom du combattant : sa tranche d’âge, sa discipline et son règlement, sa catégorie de poids, son poids (pesé ou approximatif) et les disciplines qu’il accepte.',
       'Catégorie fermée : le combattant est inscrit dans une catégorie que vous n’avez pas ouverte ; déplacez-le ou choisissez « Ne combat pas ».',
       'Split : un combattant seul peut aussi recevoir un combattant d’une autre catégorie (ou deux de la même, « pour donner une poule à… »), s’il en reste au moins deux au départ et si ce déplacement respecte les règles actives (âge, discipline, mixité, écart de poids…) : on propose d’abord les moins coûteux, puis les plus proches en poids. Jamais en kata. Sans autre règle que l’écart de poids réglé, c’est un cas simple.',
-      'Badges : ⚖ Poids (catégorie de poids voisine), ⚖ Poids + (écart au-delà du seuil), ↑ Âge (tranche voisine), ⇄ Sen./Vét., ↑ Min./Adultes, ⚥ Mixte, Shobu → Jiyu, ⇄ Discipline, ↩ Retour, ✋ Manuel. Cliquez un badge validé pour son détail.',
+      'Badges : ⚖ Poids (catégorie de poids voisine), ⚖ Poids + (écart au-delà du seuil), ↑ Âge (tranche voisine), ⇄ Sen./Vét., ↑ Min./Adultes, ⚥ Mixte, Shobu → Jiyu, ⇄ Discipline, ↩ Retour, ✋ Placé à la main. Cliquez un badge validé pour son détail.',
       'Seul un déplacement qui ne change que la catégorie de poids, dans l’écart réglé, se fait sans validation ; tous les autres se valident à la main. « Pré-accord coach » rappelle que le club a accepté d’avance les déplacements d’âge et de poids.',
       'Avec des sessions : choisissez la session en haut de l’écran (la même que pour la pesée). Les cas, les compteurs et le plan d’ensemble ne portent que sur ses catégories.',
       'Le badge « ↪ change de session : Matin → Dimanche » signale une proposition qui ferait passer le combattant dans une catégorie d’une autre session. Elle n’est jamais appliquée sans votre validation : validez-la une par une. Le combattant repasse alors « non pesé » dans sa nouvelle session, à pointer à sa pesée ; son poids déjà relevé est gardé.',
@@ -470,7 +470,8 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       [
         'Provisoire (gris) : avant la pesée et la réaffectation. Prête (bleu) : vérifiée, on peut l’imprimer. Lancée (orange) : un résultat est saisi, le tableau est figé. Terminée (vert) : podium connu.',
         'Format, repêchage et combat pour la 3e place se changent tant que la catégorie n’est pas lancée.',
-        'Cliquez deux combattants pour les échanger.',
+        'Cliquez deux combattants pour les échanger : l’échange est gardé quand le tableau est refait (arrivée, retrait), jusqu’à « Nouveau tirage ».',
+        'Un clic sur un combattant ouvre aussi « Déplacer vers… » sous le tableau : une autre catégorie, ou un tableau libre (créé dans l’onglet Catégories). Cochez « Toutes les catégories » pour voir celles dont les règles seraient enfreintes ; l’aperçu les liste avant de confirmer. Le combattant porte alors « Placé à la main » ; « Annuler son déplacement manuel » le remet dans sa catégorie.',
         '« Déverrouiller » rouvre une catégorie lancée (le tableau peut être refait si ses inscrits ont changé).',
         'Session figée : ses tableaux ne changent plus d’eux-mêmes. Si un combattant devient absent, « Régénérer (renuméroté à la suite) » refait le tableau et lui donne de nouveaux numéros, après le dernier numéro de sa zone : réimprimez-le (il porte « mis à jour à … »).',
       ],

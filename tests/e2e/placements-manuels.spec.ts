@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type APIRequestContext } from '@playwright/test';
 import { createCompetition, openTab } from './helpers.js';
 
 test('tableaux libres dans l’onglet Catégories', async ({ page, request }) => {
@@ -49,4 +49,105 @@ test('tableaux libres dans l’onglet Catégories', async ({ page, request }) =>
   await page.getByRole('button', { name: 'Supprimer le tableau' }).click();
   expect((await deleted).ok()).toBeTruthy();
   await expect(section.getByTestId('free-tableau')).toHaveCount(0);
+});
+
+async function reg(request: APIRequestContext, id: string, lastName: string, weightClassId: string, extra: object = {}) {
+  const res = await request.post(`/api/competitions/${id}/registrations`, {
+    data: { clubId: null, firstName: 'Léa', lastName, sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', weightClassId, approxWeightKg: 46, source: 'manual', ...extra },
+  });
+  expect(res.ok()).toBeTruthy();
+}
+
+test('gala entre deux catégories', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe gala placements');
+  for (const n of ['CADA', 'CADB', 'CADC']) await reg(request, id, n, 'cadet:F:-47');
+  for (const n of ['LOURDA', 'LOURDB', 'LOURDC']) await reg(request, id, n, 'cadet:F:+61', { approxWeightKg: 62 });
+  await reg(request, id, 'SEULE', 'cadet:F:-61', { approxWeightKg: 58 });
+  expect((await request.post(`/api/competitions/${id}/free-tableaux`, { data: { name: 'Gala 1', discipline: 'karate', ruleset: 'jiyu' } })).status()).toBe(201);
+
+  await page.goto(`/competitions/${id}/tableaux`);
+  const rowOf = (text: string) => page.getByTestId('category-row').filter({ hasText: text });
+  const panel = page.getByTestId('move-entrant-panel');
+  const moveTo = async (lastName: string, target: string) => {
+    // Un second clic sur le même inscrit annulerait sa sélection.
+    if (!(await panel.isVisible())) await page.getByTestId('bracket-entrant').filter({ hasText: lastName }).first().click();
+    await expect(panel).toContainText(lastName);
+    await panel.getByTestId('move-entrant-select').click();
+    await page.getByRole('option', { name: new RegExp(`^${target}`) }).click();
+    const previewed = page.waitForResponse((r) => r.url().includes('/replacement/preview') && r.request().method() === 'POST');
+    await panel.getByRole('button', { name: 'Déplacer…' }).click();
+    expect((await previewed).ok()).toBeTruthy();
+    const moved = page.waitForResponse((r) => r.url().endsWith('/replacement/move') && r.request().method() === 'POST');
+    await page.getByTestId('move-entrant-confirm').click();
+    expect((await moved).ok()).toBeTruthy();
+  };
+
+  await rowOf('-47').click();
+  await expect(page.getByTestId('bracket-entrant').filter({ hasText: 'CADA' }).first()).toBeVisible();
+  // Le groupe « Tableaux libres » est proposé.
+  await page.getByTestId('bracket-entrant').filter({ hasText: 'CADA' }).first().click();
+  await panel.getByTestId('move-entrant-select').click();
+  await expect(page.getByRole('group', { name: 'Tableaux libres' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await moveTo('CADA', 'Gala 1');
+  await rowOf('+61').click();
+  await moveTo('LOURDA', 'Gala 1');
+
+  await rowOf('Gala 1').click();
+  await expect(page.getByTestId('bracket-match')).toHaveCount(1);
+  const badges = page.getByTestId('replacement-badge');
+  await expect(badges).toHaveCount(2);
+  await expect(badges.first()).toContainText('Placé à la main');
+
+  // Appliquer le plan de la réaffectation ne touche pas au tableau libre.
+  await openTab(page, 'Réaffectation');
+  await page.getByTestId('plan-show').click();
+  const view = page.getByTestId('plan-view');
+  await expect(view).toBeVisible();
+  await view.getByTestId('plan-apply').click();
+  const applied = page.waitForResponse((r) => r.url().includes('/replacement/plan/apply') && r.request().method() === 'POST');
+  await page.getByTestId('plan-apply-confirm').click();
+  expect((await applied).ok()).toBeTruthy();
+  const cats = async () => (await (await request.get(`/api/competitions/${id}/categories`)).json()) as { label: string; registrationIds: string[] }[];
+  expect((await cats()).find((c) => c.label.includes('Gala 1'))!.registrationIds).toHaveLength(2);
+
+  // Annuler le déplacement manuel de CADA : il revient dans sa catégorie.
+  await openTab(page, 'Tableaux');
+  await rowOf('Gala 1').click();
+  await page.getByTestId('bracket-entrant').filter({ hasText: 'CADA' }).first().click();
+  const undone = page.waitForResponse((r) => r.url().includes('/replacement/undo-manual') && r.request().method() === 'POST');
+  await panel.getByRole('button', { name: 'Annuler son déplacement manuel' }).click();
+  expect((await undone).ok()).toBeTruthy();
+  await expect(page.getByTestId('bracket-entrant').filter({ hasText: 'CADA' })).toHaveCount(0);
+  const after = await cats();
+  expect(after.find((c) => c.label.includes('Gala 1'))!.registrationIds).toHaveLength(1);
+  await rowOf('-47').click();
+  await expect(page.getByTestId('bracket-entrant').filter({ hasText: 'CADA' }).first()).toBeVisible();
+});
+
+test('échange gardé après une arrivée', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe échange gardé');
+  for (const n of ['AAA', 'BBB', 'CCC', 'DDD']) await reg(request, id, n, 'cadet:F:-47');
+  await page.goto(`/competitions/${id}/tableaux`);
+  await page.getByTestId('category-row').first().click();
+  const pairs = async () => (await page.getByTestId('bracket-match').allInnerTexts()).map((t) => ['AAA', 'BBB', 'CCC', 'DDD', 'EEE'].filter((n) => t.includes(n)).sort().join('+'));
+  const before = await pairs();
+  // Échange : le premier de la première rencontre contre le premier de la seconde.
+  const first = page.getByTestId('bracket-match').nth(0).getByTestId('bracket-entrant').first();
+  const second = page.getByTestId('bracket-match').nth(1).getByTestId('bracket-entrant').first();
+  await first.click();
+  const swapped = page.waitForResponse((r) => r.url().includes('/swap') && r.request().method() === 'POST');
+  await second.click();
+  expect((await swapped).ok()).toBeTruthy();
+  await expect.poll(pairs).not.toEqual(before);
+  const arranged = await pairs();
+  const kept = arranged.filter((p) => p.includes('+'));
+  expect(kept).toHaveLength(2);
+
+  await reg(request, id, 'EEE', 'cadet:F:-47');
+  await page.reload();
+  await page.getByTestId('category-row').first().click();
+  await expect(page.getByTestId('bracket-entrant').filter({ hasText: 'EEE' }).first()).toBeVisible();
+  const now = await pairs();
+  for (const p of kept) expect(now).toContain(p);
 });

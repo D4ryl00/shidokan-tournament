@@ -14,7 +14,7 @@ export const PROPOSAL_TYPES: Record<ProposalType, { color: string; label: string
   G: { color: 'cyan', label: 'Shobu → Jiyu', title: 'Passage du shobu au jiyu' },
   H: { color: 'grape', label: '⇄ Discipline', title: 'Autre discipline (préférences du combattant)' },
   R: { color: 'gray', label: '↩ Retour', title: 'Retour dans la catégorie d’origine' },
-  M: { color: 'gray', label: '✋ Manuel', title: 'Déplacement manuel de l’organisateur' },
+  M: { color: 'gray', label: '✋ Placé à la main', title: 'Déplacement manuel de l’organisateur' },
   W: { color: 'gray', label: '⊘ Ne combat pas', title: 'Ne combat pas (catégorie non ouverte)' },
 };
 
