@@ -22,13 +22,15 @@ import { clubValues, recordClubChange } from './club-changes.js';
 import { categories, clubDirectory, clubs, fighters, registrations } from '../db/schema.js';
 import { closedSet } from './closed-categories.js';
 import { getCompetition, getGrid } from './competitions.js';
+import { NotFoundError } from './errors.js';
 
 export class RegistrationValidationError extends Error {
   constructor(readonly errors: string[]) {
     super(errors.join(' '));
   }
 }
-export class NotFoundError extends Error {}
+// Défini à part (sans dépendance) : `club-changes` l'importe sans créer de cycle avec ce module.
+export { NotFoundError };
 export class RegistrationLockedError extends Error {
   constructor() {
     super('Cette inscription appartient à une catégorie lancée : déverrouillez la catégorie d’abord.');
@@ -101,10 +103,11 @@ export async function updateClub(db: AppDb, competitionId: string, clubId: strin
     const relinked = entryId !== row.directoryClubId;
     const coordinates = (['name', 'coachName', 'coachPhone', 'coachEmails'] as const).some((k) => patch[k] !== undefined);
     if (coordinates) recordClubChange(t, clubId, 'competition', before);
-    // Nouveau lien sans autre changement : un changement existant se rattache à la nouvelle fiche, sans être redaté.
+    // Nouveau lien sans autre changement : un changement existant se rattache à la nouvelle fiche, sans être redaté ; sans changement, un club qui
+    // diffère de la nouvelle fiche en reçoit un.
     else if (relinked) {
       const entry = t.select().from(clubDirectory).where(eq(clubDirectory.id, entryId)).get() ?? null;
-      recordClubChange(t, clubId, 'competition', clubValues(t.select().from(clubs).where(eq(clubs.id, clubId)).get()!, entry));
+      recordClubChange(t, clubId, 'competition', clubValues(t.select().from(clubs).where(eq(clubs.id, clubId)).get()!, entry), { relinked: true });
     }
   });
   return toClub(db.select().from(clubs).where(eq(clubs.id, clubId)).get()!);

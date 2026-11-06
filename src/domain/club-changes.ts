@@ -19,7 +19,8 @@ export type Side = 'competition' | 'directory';
 const text = (v: string | null) => (v ?? '').trim();
 
 /** Mêmes adresses, casse, espaces et ordre ignorés. */
-const sameEmails = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x) => b.some((y) => sameEmail(x, y))) && b.every((y) => a.some((x) => sameEmail(x, y)));
+/** Mêmes adresses, sans casse ni ordre ; une adresse en double ne compte qu'une fois. */
+const sameEmails = (a: readonly string[], b: readonly string[]) => a.every((x) => b.some((y) => sameEmail(x, y))) && b.every((y) => a.some((x) => sameEmail(x, y)));
 
 /** Téléphones égaux malgré espaces, points ou indicatif ; sans chiffre de part et d'autre, le texte tel quel décide. */
 function samePhone(a: string | null, b: string | null): boolean {

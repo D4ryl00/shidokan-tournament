@@ -7,7 +7,7 @@ import { clubChanges, clubDirectory, clubs, competitions } from '../db/schema.js
 import { getManagement, ReadOnlyCompetitionError, readOnlyMessage } from '../sync/ownership.js';
 import { competitionChanged } from '../events.js';
 import { DirectoryConflictError, updateDirectoryEntry } from './directory.js';
-import { NotFoundError } from './registrations.js';
+import { NotFoundError } from './errors.js';
 
 type ClubRow = typeof clubs.$inferSelect;
 type EntryRow = typeof clubDirectory.$inferSelect;
@@ -35,9 +35,10 @@ const emailsNotIn = (emails: readonly string[], base: readonly string[]) => emai
  * sinon il est écrit (toutes les valeurs du club, avec les champs que cet enregistrement a modifiés et les adresses qu'il a ajoutées) et à examiner.
  * `before` : valeurs du club avant l'enregistrement. Si aucun champ comparé n'a changé, aucun changement n'est créé ni redaté
  * (un changement existant n'est que rattaché à la fiche du lien actuel) : la différence vient d'ailleurs, de la fiche par exemple.
- * Une compétition purgée n'en reçoit aucun.
+ * `relinked` : le club vient d'être relié à une autre fiche (nouvelle entité FFK) ; sans changement existant, un changement à examiner est créé s'il
+ * diffère de cette fiche, avec la fiche pour choix par défaut (aucun champ modifié par cet enregistrement). Une compétition purgée n'en reçoit aucun.
  */
-export function recordClubChange(db: AppDb, clubId: string, origin: 'club' | 'competition', before?: ClubValues): void {
+export function recordClubChange(db: AppDb, clubId: string, origin: 'club' | 'competition', before?: ClubValues, { relinked = false } = {}): void {
   const club = db.select().from(clubs).where(eq(clubs.id, clubId)).get();
   if (!club?.directoryClubId) return;
   const entry = db.select().from(clubDirectory).where(eq(clubDirectory.id, club.directoryClubId)).get();
@@ -50,12 +51,17 @@ export function recordClubChange(db: AppDb, clubId: string, origin: 'club' | 'co
   }
   const reference = before ?? directoryValues(entry);
   const changedFields = differingFields(values, reference);
+  const purged = () => !!db.select({ purgedAt: competitions.purgedAt }).from(competitions).where(eq(competitions.id, club.competitionId)).get()?.purgedAt;
   if (before && !changedFields.length) {
     if (existing && existing.directoryId !== entry.id) db.update(clubChanges).set({ directoryId: entry.id }).where(eq(clubChanges.clubId, clubId)).run();
+    else if (!existing && relinked && !purged()) {
+      const row = { competitionId: club.competitionId, directoryId: entry.id, origin, valuesJson: JSON.stringify(values), changedAt: new Date().toISOString(), ignored: false, changedFields: '[]', addedEmails: '[]' };
+      db.insert(clubChanges).values({ clubId, ...row }).run();
+    }
     return;
   }
   if (existing?.ignored && existing.directoryId === entry.id && !differingFields(values, JSON.parse(existing.valuesJson) as ClubValues).length) return;
-  if (db.select({ purgedAt: competitions.purgedAt }).from(competitions).where(eq(competitions.id, club.competitionId)).get()?.purgedAt) return;
+  if (purged()) return;
   // Un changement encore à examiner sur la même fiche : ses choix par défaut se cumulent avec ceux de cet enregistrement, pour les champs qui
   // diffèrent encore de la fiche et les adresses encore présentes dans le club.
   let fields = changedFields;
@@ -327,6 +333,7 @@ export function upcomingDifferences(db: AppDb, entryId: string, before: ClubValu
 }
 
 export interface ApplyResult {
+  clubId: string;
   competitionName: string;
   status: 'applied' | 'refused';
   message: string | null;
@@ -376,9 +383,9 @@ export function applyDirectoryToClubs(db: AppDb, entryId: string, items: { clubI
         writeClubValues(t, current, entry, chosen);
         touched.add(current.competitionId);
       });
-      return { competitionName, status: 'applied', message: null };
+      return { clubId, competitionName, status: 'applied', message: null };
     } catch (error) {
-      if (error instanceof DirectoryConflictError || error instanceof ReadOnlyCompetitionError || error instanceof NotFoundError) return { competitionName, status: 'refused', message: error.message };
+      if (error instanceof DirectoryConflictError || error instanceof ReadOnlyCompetitionError || error instanceof NotFoundError) return { clubId, competitionName, status: 'refused', message: error.message };
       throw error;
     }
   });

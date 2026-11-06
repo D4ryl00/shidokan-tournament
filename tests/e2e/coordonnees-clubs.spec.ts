@@ -126,6 +126,26 @@ test('onglet Clubs : notification « diffère de l’annuaire » avec Comparer, 
   await expect(page.getByTestId('club-row').filter({ hasText: renamed }).getByTestId('club-change-pill')).toHaveCount(0);
 });
 
+test('onglet Clubs : « Annuler » pendant l’enregistrement, le club est enregistré et la notification « Comparer » vient quand même', async ({ page, request }) => {
+  const { club, competitionId } = await setup(page, request, 'clubs-annule');
+  await page.route(/\/api\/competitions\/[^/]+\/clubs\/[^/]+$/, async (route) => {
+    if (route.request().method() === 'PATCH') await new Promise((r) => setTimeout(r, 800));
+    await route.continue();
+  });
+  await page.goto(`/competitions/${competitionId}/clubs`);
+  await page.getByRole('button', { name: `Modifier ${club}` }).click();
+  const form = page.getByRole('dialog', { name: 'Modifier le club' });
+  await page.getByTestId('club-edit-coachPhone').fill('06 18 18 18 18');
+  await page.getByTestId('club-edit-save').click();
+  await form.getByRole('button', { name: 'Annuler' }).click();
+  await expect(form).toBeHidden();
+  await expect(page.locator('.mantine-Notification-root').filter({ hasText: `${club} diffère de l’annuaire.` })).toBeVisible();
+  expect((await clubIn(request, competitionId, club)).coachPhone).toBe('06 18 18 18 18');
+  // Nettoyage : le changement est ignoré.
+  const open = (await (await request.get(`/api/club-changes?competitionId=${competitionId}`)).json()) as { clubId: string; changedAt: string }[];
+  for (const c of open) expect((await request.post(`/api/club-changes/${c.clubId}/ignore`, { data: { changedAt: c.changedAt } })).status()).toBe(204);
+});
+
 test('onglet Clubs : la notification « Comparer » disparaît quand on quitte la page', async ({ page, request }) => {
   const { club, competitionId } = await setup(page, request, 'notification');
   await page.goto(`/competitions/${competitionId}/clubs`);
@@ -172,6 +192,7 @@ test('« Voir les changements » : le premier, puis le suivant après chaque dé
   const second = await setup(page, request, 'suite-2');
   await coachSaves(playwright, first.token, { coachPhone: '06 10 10 10 10' });
   await coachSaves(playwright, second.token, { coachPhone: '06 20 20 20 20' });
+  await onlyCompetitions(page, [first.competitionId, second.competitionId]);
 
   await page.goto('/annuaire');
   await page.getByTestId('directory-changes-banner').getByRole('button', { name: 'Voir les changements' }).click();
@@ -311,6 +332,61 @@ test('fiche modifiée : fenêtre « Appliquer aux compétitions à venir ? », c
   expect(await clubIn(request, b, club)).toMatchObject({ coachPhone: '06 88 88 88 88', coachEmails: ['une@dojo.example', 'deux@dojo.example', 'nouveau@dojo.example'] });
   expect((await clubIn(request, past, club)).coachPhone).toBe('06 11 22 33 44');
   expect((await clubIn(request, elsewhere, club)).coachPhone).toBe('06 11 22 33 44');
+});
+
+test('report : ligne décochée non appliquée, club changé entre-temps refusé en rouge, résultats affichés sans attendre la relecture des listes', async ({ page, request, playwright }) => {
+  const a = await setup(page, request, 'report-refus');
+  const b = await newCompetition(page, request, `Coupe report-refus-b ${Date.now()}`);
+  const linkB = await inviteWithLink(request, b, a.entry.id);
+  await editEntry(page, a.club, { phone: '06 14 14 14 14', emails: 'une@dojo.example, deux@dojo.example, trois@dojo.example, quatre@dojo.example' });
+  const dialog = page.getByRole('dialog', { name: 'Appliquer aux compétitions à venir ?' });
+  await expect(dialog).toBeVisible();
+  // Dans A, seul le téléphone est appliqué ; dans B, le coach enregistre pendant que la fenêtre est ouverte.
+  await dialog.getByTestId(`apply-line-${a.competitionId}-coachEmails`).getByRole('checkbox').uncheck();
+  await coachSaves(playwright, linkB.token, { coachPhone: '06 15 15 15 15' });
+  // Les listes relues après le report arrivent en retard : les résultats viennent de la réponse du report.
+  let applied = false;
+  page.on('request', (r) => { if (r.method() === 'POST' && /apply-to-clubs$/.test(r.url())) applied = true; });
+  await page.route(/\/api\/(club-directory|club-changes|competitions\/[^/]+\/(clubs|invitations|directory-clubs))(\?.*)?$/, async (route) => {
+    if (applied && route.request().method() === 'GET') await new Promise((r) => setTimeout(r, 2000));
+    await route.continue();
+  });
+  await dialog.getByRole('button', { name: 'Appliquer', exact: true }).click();
+  const nameA = await nameOf(request, a.competitionId);
+  const nameB = await nameOf(request, b);
+  await expect(dialog.getByTestId('apply-result').filter({ hasText: nameA })).toContainText('appliqué', { timeout: 1500 });
+  const refused = dialog.getByTestId('apply-result').filter({ hasText: nameB });
+  await expect(refused).toContainText('Ce club ou cette fiche vient de changer : rien n’a été appliqué à ce club.', { timeout: 1500 });
+  await expect(refused).toHaveCSS('color', /^rgb\((?!0, 0, 0\))/);
+  expect(await clubIn(request, a.competitionId, a.club)).toMatchObject({ coachPhone: '06 14 14 14 14', coachEmails: ['une@dojo.example', 'deux@dojo.example', 'trois@dojo.example'] });
+  expect((await clubIn(request, b, a.club)).coachPhone).toBe('06 15 15 15 15');
+  await dialog.getByRole('button', { name: 'Fermer' }).click();
+  // Nettoyage : les changements restants sont ignorés.
+  for (const id of [a.competitionId, b]) {
+    const open = (await (await request.get(`/api/club-changes?competitionId=${id}`)).json()) as { clubId: string; changedAt: string }[];
+    for (const c of open) expect((await request.post(`/api/club-changes/${c.clubId}/ignore`, { data: { changedAt: c.changedAt } })).status()).toBe(204);
+  }
+});
+
+test('« Comparer » sur la ligne d’une fiche reliée à deux compétitions qui diffèrent : les deux comparaisons, l’une après l’autre', async ({ page, request, playwright }) => {
+  const a = await setup(page, request, 'deux-compet');
+  const b = await newCompetition(page, request, `Coupe deux-compet-b ${Date.now()}`);
+  const linkB = await inviteWithLink(request, b, a.entry.id);
+  await coachSaves(playwright, a.token, { coachPhone: '06 16 16 16 16' });
+  await coachSaves(playwright, linkB.token, { coachPhone: '06 17 17 17 17' });
+  await page.goto('/annuaire');
+  await page.getByTestId('directory-row').filter({ hasText: a.club }).getByRole('button', { name: 'Comparer' }).click();
+  const dialog = page.getByRole('dialog', { name: `${a.club} : garder quelles informations ?` });
+  const nameA = await nameOf(request, a.competitionId);
+  const nameB = await nameOf(request, b);
+  // L'ordre des deux compétitions n'importe pas ici : chacune est proposée une fois.
+  const subtitle = dialog.getByText(/, le \d{2}\/\d{2}\/\d{4} · modifié le/);
+  await expect(subtitle).toBeVisible();
+  const first = (await subtitle.textContent())!.startsWith(nameA) ? nameA : nameB;
+  await dialog.getByRole('button', { name: 'Ignorer ce changement' }).click();
+  await expect(subtitle).toContainText(`${first === nameA ? nameB : nameA}, le`);
+  await dialog.getByRole('button', { name: 'Ignorer ce changement' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
 test('« Ne rien appliquer » : aucune requête, clubs inchangés, fiche enregistrée ; sans différence ou en archivant, aucune fenêtre', async ({ page, request }) => {

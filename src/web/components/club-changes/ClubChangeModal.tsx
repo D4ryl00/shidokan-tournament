@@ -145,17 +145,20 @@ export function ClubChangeModal({ change, onClose, onDone, onRefused, notice }: 
 const NEXT = Symbol('suivant');
 
 /**
- * Fenêtre de comparaison d'une page : `open(clubId)` ouvre un changement, `openFirst()` le premier puis, après chaque décision, le suivant.
+ * Fenêtre de comparaison d'une page : `open(clubId)` ouvre un changement, `openFirst()` le premier puis, après chaque décision, le suivant ;
+ * `openFirst(directoryId)` fait de même pour les seuls changements de cette fiche (une fiche reliée à plusieurs compétitions).
  * Le changement ouvert est relu dans `changes` : une liste relue le remplace (la fenêtre est remontée, key), et il disparaît s'il n'existe plus.
  */
-export function useClubChangeDialog(changes: ClubChangeView[]): { open: (clubId: string) => void; openFirst: () => void; element: ReactNode } {
+export function useClubChangeDialog(changes: ClubChangeView[]): { open: (clubId: string) => void; openFirst: (directoryId?: string) => void; element: ReactNode } {
   const [target, setTarget] = useState<string | typeof NEXT | null>(null);
   const [chain, setChain] = useState(false);
+  // Chaîne limitée aux changements d'une fiche (null : tous).
+  const [scope, setScope] = useState<string | null>(null);
   // Dernier refus du serveur, avec le club qu'il concerne : affiché dans la fenêtre de ce club seulement.
   const [refusal, setRefusal] = useState<{ clubId: string; name: string; message: string } | null>(null);
   // Changements décidés pendant cette ouverture : la chaîne ne les rouvre pas (un changement gardé après le retour de la main reste listé).
   const [decided, setDecided] = useState<Set<string>>(new Set());
-  const current = target === NEXT ? changes.find((c) => !decided.has(c.clubId)) : target ? changes.find((c) => c.clubId === target) : undefined;
+  const current = target === NEXT ? changes.find((c) => !decided.has(c.clubId) && (scope === null || c.directoryId === scope)) : target ? changes.find((c) => c.clubId === target) : undefined;
   // Changement disparu (décidé ailleurs, rendu identique) : la fenêtre se ferme.
   useEffect(() => {
     if (target !== null && !current) setTarget(null);
@@ -176,7 +179,7 @@ export function useClubChangeDialog(changes: ClubChangeView[]): { open: (clubId:
   ) : null;
   return {
     open: (clubId) => { setRefusal(null); setDecided(new Set()); setChain(false); setTarget(clubId); },
-    openFirst: () => { setRefusal(null); setDecided(new Set()); setChain(true); setTarget(NEXT); },
+    openFirst: (directoryId) => { setRefusal(null); setDecided(new Set()); setChain(true); setScope(directoryId ?? null); setTarget(NEXT); },
     element,
   };
 }

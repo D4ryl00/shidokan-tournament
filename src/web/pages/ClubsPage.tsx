@@ -46,7 +46,9 @@ function ClubModal({ competitionId, club, onClose, onSaved }: { competitionId: s
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>Annuler</Button>
           <Button data-testid="club-edit-save" loading={update.isPending} disabled={!form.name.trim()}
-            onClick={() => (Object.keys(patch).length === 0 ? onClose() : update.mutate({ clubId: club.id, ...patch }, { onSuccess: () => { onClose(); onSaved(club.id); } }))}>
+            // `mutateAsync` : fermée (Annuler, croix) pendant l'enregistrement, la fenêtre est remontée et un rappel de `mutate` serait perdu ; le club est
+            // pourtant enregistré, et la page doit encore dire s'il diffère de l'annuaire. Un refus reste affiché dans la fenêtre (erreur de la mutation).
+            onClick={() => (Object.keys(patch).length === 0 ? onClose() : update.mutateAsync({ clubId: club.id, ...patch }).then(() => { onClose(); onSaved(club.id); }, () => {}))}>
             Enregistrer
           </Button>
         </Group>

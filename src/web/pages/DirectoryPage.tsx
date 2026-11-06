@@ -118,7 +118,7 @@ export function DirectoryPage() {
           {canSync && <Button variant="default" component={Link} to="/annuaire/google">Synchroniser avec Google</Button>}
           <Button data-testid="directory-new" onClick={() => setEditing('new')}>Ajouter un club</Button>
         </>} />
-      <DirectoryChangesBanner onOpen={comparison.openFirst} />
+      <DirectoryChangesBanner onOpen={() => comparison.openFirst()} />
       <Group gap="md">
         <TextInput placeholder="Rechercher un nom ou un numéro" value={search} onChange={(e) => setSearch(e.currentTarget.value)} w={300} />
         <Checkbox label="Afficher les clubs archivés" checked={showArchived} onChange={(e) => setShowArchived(e.currentTarget.checked)} />
@@ -157,7 +157,8 @@ export function DirectoryPage() {
                   <Table.Td ta="right" className="num">{e.competitions}</Table.Td>
                   <Table.Td>
                     <Group gap={4} justify="flex-end" wrap="nowrap">
-                      {change && <Button size="compact-sm" variant="light" onClick={() => comparison.open(change.clubId)}>Comparer</Button>}
+                      {/* Tous les changements de la fiche, compétition par compétition. */}
+                      {change && <Button size="compact-sm" variant="light" onClick={() => comparison.openFirst(e.id)}>Comparer</Button>}
                       <Button size="compact-sm" variant="subtle" onClick={() => setEditing(e)}>Modifier</Button>
                       <Menu position="bottom-end">
                         <Menu.Target><Button size="compact-sm" variant="subtle" color="gray" aria-label="Autres actions">…</Button></Menu.Target>

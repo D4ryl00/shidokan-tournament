@@ -49,8 +49,8 @@ export function ApplyToClubsModal({ entryId, lines, onClose }: { entryId: string
     <Modal opened onClose={onClose} size="lg" title={<Text fw={700}>Appliquer aux compétitions à venir ?</Text>}>
       {results ? (
         <Stack>
-          {results.map((r, i) => (
-            <Text key={i} size="sm" data-testid="apply-result" c={r.status === 'refused' ? 'red' : undefined} style={WRAP}>
+          {results.map((r) => (
+            <Text key={r.clubId} size="sm" data-testid="apply-result" c={r.status === 'refused' ? 'red' : undefined} style={WRAP}>
               {r.competitionName} : {r.status === 'applied' ? 'appliqué.' : `refusé. ${r.message ?? ''}`}
             </Text>
           ))}

@@ -302,6 +302,24 @@ test('nouveau lien sans coordonnées : le changement existant se rattache à la 
   db.close();
 });
 
+test('nouveau lien vers une fiche qui diffère, sans changement ouvert : changement à examiner, la fiche pour choix par défaut', async () => {
+  const holder = await createEntry({ name: 'Autre Fiche', affiliationNumber: '0060808', coachName: 'Paul', coachPhone: '0622222222', coachEmails: ['paul@autre.example'] });
+  expect(changes()).toHaveLength(0);
+  const res = await app.inject({ method: 'PATCH', url: `${base}/clubs/${clubId}`, payload: { ffkEntity: '0060808 TANI DOJO' } });
+  expect(res.statusCode).toBe(200);
+  const [row] = changes();
+  expect(row).toMatchObject({ origin: 'competition' });
+  const db = new Database(dbPath, { readonly: true });
+  expect(db.prepare('select directory_id as d, changed_fields as f, added_emails as a from club_changes').get()).toEqual({ d: holder, f: '[]', a: '[]' });
+  db.close();
+  // Aucune différence avec la nouvelle fiche : rien n'est créé.
+  raw('delete from club_changes');
+  await app.inject({ method: 'PATCH', url: `/api/club-directory/${holder}`, payload: { coachName: 'Jean', coachPhone: '0600000000', coachEmails: ['jean@tani.example'] } });
+  raw('delete from club_changes');
+  await app.inject({ method: 'PATCH', url: `${base}/clubs/${clubId}`, payload: { ffkEntity: '0060808 TANI DOJO bis' } });
+  expect(changes()).toHaveLength(0);
+});
+
 test('numéro effacé : « » seulement si la fiche a un numéro', async () => {
   await patchClub({ affiliationNumber: '0060893' }); // numéro du club, fiche sans numéro
   await patchClub({ affiliationNumber: null });

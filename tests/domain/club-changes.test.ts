@@ -66,3 +66,8 @@ test('isUpcoming : le jour même compte', () => {
   expect(isUpcoming('2026-11-05', '2026-11-05')).toBe(true);
   expect(isUpcoming('2026-11-04', '2026-11-05')).toBe(false);
 });
+
+test('differingFields : une adresse en double ne compte qu’une fois', () => {
+  expect(differingFields(a, { ...a, coachEmails: [...a.coachEmails, a.coachEmails[0]!.toUpperCase()] })).toEqual([]);
+  expect(differingFields(a, { ...a, coachEmails: [a.coachEmails[0]!, a.coachEmails[0]!] })).toEqual(a.coachEmails.length > 1 ? ['coachEmails'] : []);
+});

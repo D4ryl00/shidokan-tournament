@@ -936,7 +936,7 @@ export interface UpcomingLine {
   clubValue: string | string[] | null;
   directoryValue: string | string[] | null;
 }
-export interface ApplyResult { competitionName: string; status: 'applied' | 'refused'; message: string | null }
+export interface ApplyResult { clubId: string; competitionName: string; status: 'applied' | 'refused'; message: string | null }
 export interface ApplyItem { clubId: string; fields: { field: ClubField; clubValue: UpcomingLine['clubValue']; directoryValue: UpcomingLine['directoryValue'] }[] }
 
 /** Reporte la fiche sur des clubs de compétitions à venir ; relit ensuite changements, annuaire, clubs et invitations. */
@@ -944,7 +944,8 @@ export function useApplyDirectoryToClubs() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ entryId, items }: { entryId: string; items: ApplyItem[] }) => api<ApplyResult[]>('POST', `/api/club-directory/${entryId}/apply-to-clubs`, { items }),
-    onSettled: () => Promise.all(['club-changes', 'club-directory', 'directory-clubs', 'clubs', 'invitations'].map((k) => qc.invalidateQueries({ queryKey: [k] }))),
+    // Listes relues sans être attendues : les résultats par compétition s'affichent dès la réponse.
+    onSettled: () => { void Promise.all(['club-changes', 'club-directory', 'directory-clubs', 'clubs', 'invitations'].map((k) => qc.invalidateQueries({ queryKey: [k] }))); },
   });
 }
 
