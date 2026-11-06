@@ -1,10 +1,17 @@
-import { keyString, naturalKey, type CategoryKey } from '../categories.js';
+import { isFreeKey, keyString, naturalKey, type CategoryKey } from '../categories.js';
 import { categoryKeyClosed, entryKey } from '../closed-categories.js';
 import { DISCIPLINES } from '../disciplines.js';
 import type { Case, CategoryState, Member, State } from './types.js';
 import { categoryWeightGap, effectiveWeight, gapThreshold, isOverweight } from './weights.js';
 
-export const isLocked = (c: CategoryState | undefined) => c !== undefined && (c.status === 'started' || c.status === 'finished' || c.frozen === true);
+/** Catégorie lancée, terminée ou d'une vague lancée : ni départ ni arrivée, même pour un déplacement manuel. */
+export const isLockedForManual = (c: CategoryState | undefined): boolean => c !== undefined && (c.status === 'started' || c.status === 'finished' || c.frozen === true);
+
+/** Fermée au calcul (propositions, plan) : `isLockedForManual`, ou tableau libre (rempli seulement à la main). */
+export const isLocked = (c: CategoryState | undefined): boolean => isLockedForManual(c) || (c !== undefined && isFreeKey(c.key));
+
+/** Placé à la main par l'organisateur : le calcul ne le déplace jamais (ni retour, ni split), seul il donne une carte d'alerte. */
+export const isManualPlacement = (m: Member): boolean => m.placementLocked && m.recasementType === 'M';
 
 /** Catégorie qui accueille une clé naturelle (clé propre ou absorbée par une fusion). */
 export function categoryForKey(state: State, ks: string): CategoryState | undefined {
@@ -71,17 +78,28 @@ export function detectCases(state: State): Case[] {
   }
 
   for (const c of state.categories) {
-    if (isLocked(c)) continue;
+    // Pas `isLocked` : un tableau libre, fermé au calcul, donne quand même une carte d'alerte à son combattant seul.
+    if (isLockedForManual(c)) continue;
     const active = activeIn(c.id).filter((m) => !closed.has(m.registrationId));
-    if (active.length === 1 && !withWeightOut.has(active[0]!.registrationId)) {
-      cases.push({ id: `alone:${active[0]!.registrationId}`, kind: 'alone', registrationId: active[0]!.registrationId, categoryId: c.id, detail: active[0]!.sex === 'F' ? 'Seule dans sa catégorie' : 'Seul dans sa catégorie' });
-    } else if (active.length >= 2 && DISCIPLINES[c.key.discipline].hasWeight) {
-      const gap = categoryWeightGap(active, state.grid);
-      const threshold = gapThreshold(active, state);
+    const free = isFreeKey(c.key);
+    const alone = active.length === 1 && !withWeightOut.has(active[0]!.registrationId) ? active[0]! : null;
+    if (alone && (free || isManualPlacement(alone))) {
+      const detail = free ? `Seul dans le tableau libre ${c.key.free}` : 'Placé à la main, seul dans sa catégorie';
+      cases.push({ id: `alone:${alone.registrationId}`, kind: 'alone', alert: true, registrationId: alone.registrationId, categoryId: c.id, detail });
+      continue;
+    }
+    if (free) continue;
+    // L'écart se mesure sans les placés à la main : jamais déplacés, ils ne font pas sortir un autre de la catégorie.
+    const weighed = active.filter((m) => !isManualPlacement(m));
+    if (alone) {
+      cases.push({ id: `alone:${alone.registrationId}`, kind: 'alone', registrationId: alone.registrationId, categoryId: c.id, detail: alone.sex === 'F' ? 'Seule dans sa catégorie' : 'Seul dans sa catégorie' });
+    } else if (weighed.length >= 2 && DISCIPLINES[c.key.discipline].hasWeight) {
+      const gap = categoryWeightGap(weighed, state.grid);
+      const threshold = gapThreshold(weighed, state);
       if (gap > threshold + 1e-9) {
-        const weights = active.map((m) => effectiveWeight(m, state.grid) ?? 0).sort((a, b) => a - b);
+        const weights = weighed.map((m) => effectiveWeight(m, state.grid) ?? 0).sort((a, b) => a - b);
         const median = weights[Math.floor(weights.length / 2)]!;
-        const outlier = [...active].sort((a, b) => Math.abs((effectiveWeight(b, state.grid) ?? 0) - median) - Math.abs((effectiveWeight(a, state.grid) ?? 0) - median))[0]!;
+        const outlier = [...weighed].sort((a, b) => Math.abs((effectiveWeight(b, state.grid) ?? 0) - median) - Math.abs((effectiveWeight(a, state.grid) ?? 0) - median))[0]!;
         if (!withWeightOut.has(outlier.registrationId)) {
           cases.push({ id: `weight_gap:${outlier.registrationId}`, kind: 'weight_gap', registrationId: outlier.registrationId, categoryId: c.id, detail: `Écart de poids de ${gap.toFixed(1).replace('.', ',')} kg dans la catégorie (max ${threshold} kg)` });
         }
@@ -91,7 +109,8 @@ export function detectCases(state: State): Case[] {
 
   let lookup: ReturnType<typeof keyLookup> | null = null;
   for (const m of state.members) {
-    if (!m.placementLocked || !m.original || m.presence === 'absent') continue;
+    // Placé à la main : jamais de retour, quelle que soit la raison de son premier déplacement.
+    if (!m.placementLocked || !m.original || m.presence === 'absent' || isManualPlacement(m)) continue;
     const current = byId.get(m.categoryId ?? '');
     if (isLocked(current)) continue;
     // Seul un combattant déplacé parce qu'il était seul revient, et seulement si le retour respecte l'écart de poids.

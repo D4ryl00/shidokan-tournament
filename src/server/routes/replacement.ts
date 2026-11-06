@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { PassThrough } from 'node:stream';
 import { z } from 'zod';
-import { applyAll, applyProposal, casesOfWave, categoryWave, detectCases, isClosedTarget, isLocked, memberWave, moveView, stateFingerprint } from '../../domain/replacement/index.js';
+import { applyAll, applyProposal, casesOfWave, categoryWave, detectCases, memberWave, moveTargetsFor, moveView, stateFingerprint } from '../../domain/replacement/index.js';
 import type { AppDb } from '../db/client.js';
 import { applyRulesView, rulesView, rulesViewSchema } from '../../domain/replacement/rules.js';
 import { getAppSettings } from '../repositories/app-settings.js';
@@ -104,15 +104,7 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
         return [c.registrationId, { sex, ageBandCode, discipline, ruleset, weightClassId, weighInKg, approxWeightKg, otherDisciplines, acceptsJiyuFirst, presence }];
       }),
     );
-    const moveTargets = Object.fromEntries(
-      cases.map((c) => {
-        const m = byRegistration.get(c.registrationId)!;
-        const targets = state.categories
-          .filter((t) => t.id !== m.categoryId && !isLocked(t) && !isClosedTarget(state, t.key))
-          .map((t) => ({ categoryId: t.id, warnings: manualProposal(state, m.registrationId, t.id).warnings }));
-        return [c.id, targets];
-      }),
-    );
+    const moveTargets = Object.fromEntries(cases.map((c) => [c.id, moveTargetsFor(state, c.registrationId)]));
     // Les compteurs ne comptent que les cartes à traiter (pas celles mises de côté).
     const aside = new Set(state.setAside);
     const active = cases.filter((c) => !aside.has(c.id));

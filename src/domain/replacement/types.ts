@@ -73,6 +73,8 @@ export interface Case {
   registrationId: string;
   categoryId: string | null;
   detail: string;
+  /** Carte d'alerte (placé à la main seul, ou seul dans un tableau libre) : jamais de proposition, jamais dans le plan. */
+  alert?: true;
 }
 
 export interface Proposal {
