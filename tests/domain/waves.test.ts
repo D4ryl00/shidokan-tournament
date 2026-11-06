@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import type { CategoryKey } from '../../src/domain/categories.js';
+import { freeKey, type CategoryKey } from '../../src/domain/categories.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 import { validateWaves, WAVE_NONE, waveConflicts, waveOfCategory, type Wave } from '../../src/domain/waves.js';
 
@@ -62,4 +62,13 @@ test('relecture : catégorie d’arrivée d’une réaffectation — sa session 
   expect(waveOfCategory({ key: key(['cadet', 'minime']), waveOverride: null, waveBands: ['cadet'] }, [MATIN, APREM], grid)).toBe('aprem');
   // Sans combattant d'origine (catégorie créée par le recasement) : clé de la catégorie
   expect(waveOfCategory({ key: key(['cadet', 'minime']), waveOverride: null, waveBands: [] }, [MATIN, APREM], grid)).toBe('matin');
+});
+
+test('tableau libre : session seulement par choix individuel', () => {
+  const kata = wave('kata', 0, [], ['kata']);
+  const waves = [kata, MATIN];
+  const key = freeKey('Gala', 'kata', null);
+  expect(waveOfCategory({ key, waveOverride: null, waveBands: [] }, waves, grid)).toBeNull();
+  expect(waveOfCategory({ key, waveOverride: waves[0]!.id, waveBands: [] }, waves, grid)).toBe(waves[0]!.id);
+  expect(waveConflicts([{ id: 'c', key, waveOverride: null }], [kata, wave('k2', 1, [], ['kata'])], grid)).toEqual([]);
 });

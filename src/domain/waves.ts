@@ -59,6 +59,7 @@ const byOrder = (waves: Wave[]) => [...waves].sort((a, b) => a.order - b.order);
 export function waveOfCategory(c: WaveSubject & { waveOverride: string | null }, waves: Wave[], grid: CategoryGrid): string | null {
   if (c.waveOverride === WAVE_NONE) return null;
   if (c.waveOverride && waves.some((w) => w.id === c.waveOverride)) return c.waveOverride;
+  if (c.key.free !== undefined) return null;
   return byOrder(waves).find((w) => ruleMatches(w.rules, c.key, grid, c.waveBands))?.id ?? null;
 }
 
@@ -70,6 +71,7 @@ export function waveConflicts(
 ): { categoryId: string; waveIds: string[] }[] {
   const ordered = byOrder(waves);
   return cats
+    .filter((c) => c.key.free === undefined)
     .filter((c) => !c.waveOverride || (c.waveOverride !== WAVE_NONE && !waves.some((w) => w.id === c.waveOverride)))
     .map((c) => ({ categoryId: c.id, waveIds: ordered.filter((w) => ruleMatches(w.rules, c.key, grid, c.waveBands)).map((w) => w.id) }))
     .filter((x) => x.waveIds.length > 1);

@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { activeEntrantCount, categoryLabel, compareKeys, keyString, naturalKey, type Category, type CategoryKey } from '../../src/domain/categories.js';
+import { activeEntrantCount, categoryLabel, compareKeys, freeKey, freeNameError, keyString, naturalKey, type Category, type CategoryKey } from '../../src/domain/categories.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 
 const grid = ffkDefaultGrid();
@@ -42,4 +42,20 @@ test('activeEntrantCount : présents avant lancement, inscrits du tableau ensuit
   expect(activeEntrantCount({ ...base, status: 'provisional' })).toBe(2);
   expect(activeEntrantCount({ ...base, absentIds: ['a', 'b', 'c'], status: 'ready' })).toBe(0);
   expect(activeEntrantCount({ ...base, status: 'started', bracket: { entrants: [{}, {}, {}] } } as unknown as Category)).toBe(3);
+});
+
+test('tableau libre', () => {
+  const k = freeKey('Gala 1', 'karate', 'jiyu');
+  expect(keyString(k)).toBe('karate|jiyu|X|||libre:Gala 1');
+  expect(keyString({ discipline: 'karate', ruleset: 'jiyu', sex: 'M', ageBandCodes: ['senior'], weightClassIds: ['senior:M:-75'] })).toBe('karate|jiyu|M|senior|senior:M:-75');
+  expect(categoryLabel(k, grid)).toBe('Gala 1');
+  const keys = [freeKey('B', 'karate', 'jiyu'), freeKey('A', 'kata', null), { discipline: 'kata', ruleset: null, sex: 'M', ageBandCodes: ['senior'], weightClassIds: [] } as CategoryKey];
+  expect([...keys].sort((a, b) => compareKeys(a, b, grid)).map((x) => x.free ?? 'grille')).toEqual(['grille', 'A', 'B']);
+});
+
+test('freeNameError', () => {
+  expect(freeNameError('  ', [])).toBe('Donnez un nom au tableau libre.');
+  expect(freeNameError('x'.repeat(61), [])).toBe('60 caractères au plus.');
+  expect(freeNameError('gala   1', ['Gala 1'])).toBe('Un tableau libre porte déjà ce nom.');
+  expect(freeNameError('Gala 2', ['Gala 1'])).toBeNull();
 });

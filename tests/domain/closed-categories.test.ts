@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { categoryKeyClosed, closedSummary, columnLabel, entryCells, entryKey, offeredAgeBands } from '../../src/domain/closed-categories.js';
+import { freeKey } from '../../src/domain/categories.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 
 const grid = ffkDefaultGrid();
@@ -42,4 +43,8 @@ test('categoryKeyClosed : fermée seulement si toutes ses parts le sont', () => 
   expect(categoryKeyClosed(closed, { ...key, ageBandCodes: ['cadet', 'junior'] })).toBe(false);
   expect(categoryKeyClosed(new Set(['cadet|F|karate|jiyu']), { ...key, sex: 'X' })).toBe(false);
   expect(categoryKeyClosed(closed, { ...key, sex: 'X' })).toBe(true);
+});
+
+test('categoryKeyClosed : un tableau libre n’est jamais fermé', () => {
+  expect(categoryKeyClosed(cells(() => true), freeKey('Gala', 'karate', 'jiyu'))).toBe(false);
 });

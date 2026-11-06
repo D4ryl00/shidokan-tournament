@@ -48,6 +48,7 @@ export const isEntryClosed = (closed: ReadonlySet<string>, c: EntryCell): boolea
 
 /** Une catégorie est fermée quand toutes ses parts (tranche × sexe, F et M pour une catégorie mixte) le sont. */
 export function categoryKeyClosed(closed: ReadonlySet<string>, key: CategoryKey): boolean {
+  if (key.free !== undefined) return false;
   const sexes: Sex[] = key.sex === 'X' ? SEXES : [key.sex];
   return key.ageBandCodes.length > 0 && key.ageBandCodes.every((ageBandCode) =>
     sexes.every((sex) => closed.has(entryKey({ ageBandCode, sex, discipline: key.discipline, ruleset: key.ruleset }))),
