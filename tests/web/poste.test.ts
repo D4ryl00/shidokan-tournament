@@ -5,7 +5,7 @@ import { COMPETITION_TABS } from '../../src/web/tabs.js';
 
 test('onglets de chaque poste, dans l’ordre des onglets', () => {
   expect(posteTabs({ kind: 'organisation' })).toEqual(COMPETITION_TABS.map((t) => t.path));
-  expect(posteTabs({ kind: 'table' })).toEqual(['inscriptions', 'clubs', 'pesee', 'reaffectation', 'tableaux', 'combats', 'podiums']);
+  expect(posteTabs({ kind: 'table' })).toEqual(['inscriptions', 'clubs', 'pesee', 'reaffectation', 'tableaux', 'combats', 'podiums', 'categories']);
   expect(posteTabs({ kind: 'zone', zoneId: 'z1' })).toEqual(['tableaux', 'combats']);
 });
 

@@ -18,7 +18,7 @@ test('chaque onglet a une étape, dans l’ordre des étapes', () => {
 test('postes : seulement les étapes et onglets permis', () => {
   expect(visibleStages({ kind: 'zone', zoneId: 'z1' })).toEqual([{ id: 'jour-j', label: 'Jour J', tabs: ['tableaux', 'combats'] }]);
   expect(visibleStages({ kind: 'table' }).map((s) => [s.id, s.tabs])).toEqual([
-    ['preparer', ['inscriptions', 'clubs']], ['jour-j', ['pesee', 'reaffectation', 'tableaux', 'combats']], ['apres', ['podiums']],
+    ['preparer', ['inscriptions', 'clubs', 'categories']], ['jour-j', ['pesee', 'reaffectation', 'tableaux', 'combats']], ['apres', ['podiums']],
   ]);
   expect(visibleStages({ kind: 'organisation' })).toEqual(STAGES);
 });

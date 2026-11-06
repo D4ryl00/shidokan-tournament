@@ -1,6 +1,6 @@
 import { Alert, Button, Group, Modal, NativeSelect, Stack, Table, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
-import { activeEntrantCount, FREE_NAME_MAX, isFreeKey, type Category } from '../../domain/categories.js';
+import { FREE_NAME_MAX, isFreeKey, type Category } from '../../domain/categories.js';
 import { DISCIPLINES, RULESETS } from '../../domain/disciplines.js';
 import { plural } from '../../domain/plural.js';
 import type { DisciplineId, Ruleset } from '../../domain/types.js';
@@ -11,7 +11,7 @@ import { EmptyState } from './ui/EmptyState.js';
 
 const DISCIPLINE_OPTIONS = (Object.entries(DISCIPLINES) as [DisciplineId, { label: string }][]).map(([value, d]) => ({ value, label: d.label }));
 const RULESET_OPTIONS = (Object.entries(RULESETS) as [Ruleset, { label: string }][]).map(([value, r]) => ({ value, label: r.label }));
-const LOCKED_NOTE = 'Ce tableau est lancé : son nom, sa discipline et son règlement ne changent plus. Déverrouillez-le dans l’onglet Tableaux.';
+const LOCKED_NOTE = 'Tableau verrouillé : déverrouillez-le dans l’onglet Tableaux pour le modifier.';
 
 type Draft = { cid: string | null; name: string; discipline: DisciplineId; ruleset: Ruleset | null };
 const NEW_DRAFT: Draft = { cid: null, name: '', discipline: 'karate', ruleset: 'jiyu' };
@@ -38,10 +38,10 @@ export function FreeTableauxSection({ competitionId }: { competitionId: string }
     const ruleset = DISCIPLINES[draft.discipline].hasWeight ? draft.ruleset ?? 'jiyu' : null;
     const done = { onSuccess: close };
     if (draft.cid === null) create.mutate({ name: draft.name, discipline: draft.discipline, ruleset }, done);
-    else update.mutate(locked ? { cid: draft.cid, name: draft.name } : { cid: draft.cid, name: draft.name, discipline: draft.discipline, ruleset }, done);
+    else if (!locked) update.mutate({ cid: draft.cid, name: draft.name, discipline: draft.discipline, ruleset }, done);
   };
   const waveValue = (c: Category) => (c.waveOverride === WAVE_NONE || c.waveOverride === null ? WAVE_NONE : c.waveOverride);
-  const returned = deleting ? deleting.registrationIds.length : 0;
+  const returned = deleting ? deleting.registrationIds.length : 0; // inscrits placés dans le tableau : ceux qui retournent
 
   return (
     <Stack gap="sm">
@@ -68,7 +68,7 @@ export function FreeTableauxSection({ competitionId }: { competitionId: string }
                       data={[{ value: WAVE_NONE, label: 'En attente' }, ...waves.map((w) => ({ value: w.id, label: w.name }))]}
                       onChange={(e) => setWave.mutate({ cid: c.id, waveOverride: e.currentTarget.value })} />
                   </Table.Td>
-                  <Table.Td>{plural(activeEntrantCount(c), 'combattant')}</Table.Td>
+                  <Table.Td>{plural(c.registrationIds.length, 'combattant')}</Table.Td>
                   <Table.Td>
                     <Group gap="xs" wrap="nowrap" justify="flex-end">
                       <Button size="compact-sm" variant="default" onClick={() => setDraft({ cid: c.id, name: c.key.free ?? '', discipline: c.key.discipline, ruleset: c.key.ruleset })}>Modifier</Button>
@@ -89,7 +89,7 @@ export function FreeTableauxSection({ competitionId }: { competitionId: string }
         {draft && (
           <Stack>
             {locked && <Alert color="yellow">{LOCKED_NOTE}</Alert>}
-            <TextInput label="Nom du tableau" maxLength={FREE_NAME_MAX} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.currentTarget.value })} data-autofocus />
+            <TextInput label="Nom du tableau" disabled={locked} maxLength={FREE_NAME_MAX} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.currentTarget.value })} data-autofocus />
             <NativeSelect label="Discipline" disabled={locked} data={DISCIPLINE_OPTIONS} value={draft.discipline}
               onChange={(e) => {
                 const discipline = e.currentTarget.value as DisciplineId;
@@ -102,7 +102,7 @@ export function FreeTableauxSection({ competitionId }: { competitionId: string }
             <ApiErrorAlert error={create.error ?? update.error} />
             <Group justify="flex-end">
               <Button variant="default" onClick={close}>Annuler</Button>
-              <Button onClick={save} loading={create.isPending || update.isPending}>Enregistrer</Button>
+              <Button onClick={save} loading={create.isPending || update.isPending} disabled={locked}>Enregistrer</Button>
             </Group>
           </Stack>
         )}
