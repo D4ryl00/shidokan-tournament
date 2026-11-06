@@ -7,7 +7,7 @@ afterEach(() => vi.unstubAllGlobals());
 test('chaque onglet a une étape, dans l’ordre des étapes', () => {
   expect(STAGES.map((s) => [s.id, s.label])).toEqual([['preparer', 'Préparer'], ['jour-j', 'Jour J'], ['apres', 'Après']]);
   expect(STAGES.flatMap((s) => s.tabs).sort()).toEqual(COMPETITION_TABS.map((t) => t.path).sort());
-  expect(STAGES[0]!.tabs).toEqual(['inscriptions', 'clubs', 'fiche-club', 'import-ffk', 'sessions', 'grille', 'reglages']);
+  expect(STAGES[0]!.tabs).toEqual(['inscriptions', 'clubs', 'fiche-club', 'import-ffk', 'sessions', 'categories', 'reglages']);
   expect(STAGES[1]!.tabs).toEqual(['pesee', 'reaffectation', 'tableaux', 'combats']);
   expect(STAGES[2]!.tabs).toEqual(['podiums']);
   expect(stageOf('combats')).toBe('jour-j');

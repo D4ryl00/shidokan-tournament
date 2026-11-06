@@ -14,7 +14,7 @@ test('onglet par défaut et redirection d’un onglet masqué', () => {
   expect(defaultTab({ kind: 'table' })).toBe('inscriptions');
   expect(tabFor({ kind: 'zone', zoneId: 'z1' }, 'reglages')).toBe('combats');
   expect(tabFor({ kind: 'zone', zoneId: 'z1' }, 'tableaux')).toBe('tableaux');
-  expect(tabFor({ kind: 'organisation' }, 'grille')).toBe('grille');
+  expect(tabFor({ kind: 'organisation' }, 'categories')).toBe('categories');
 });
 
 test('lecture du poste enregistré : illisible ou absent → Organisation', () => {

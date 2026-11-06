@@ -24,7 +24,7 @@ export type HelpTopicId =
   | 'combats'
   | 'podiums'
   | 'reglages'
-  | 'grille'
+  | 'categories'
   | 'fiche-club.en-ligne'
   | 'fiche-club.envoyer'
   | 'fiche-club.importer'
@@ -55,6 +55,7 @@ export type HelpTopicId =
   | 'grille.poids'
   | 'grille.tranches'
   | 'grille.ouvertes'
+  | 'grille.libres'
   | 'grille.passages'
   | 'grille.modeles';
 
@@ -652,9 +653,9 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Le nombre de médailles de bronze en kata et le nombre de rounds du triathlon.',
     details: ['Kata : un ou deux bronzes (les suivants du tour 1).'],
   },
-  grille: {
-    title: 'Grille âge / poids',
-    short: 'Les tranches d’âge et les catégories de poids de la compétition ; la grille FFK est déjà remplie.',
+  categories: {
+    title: 'Catégories',
+    short: 'La grille âge / poids de la compétition (déjà remplie avec la grille FFK), les catégories ouvertes et les tableaux libres.',
     details: [
       'Modifiez-la seulement si votre compétition s’écarte de la grille FFK. Cliquez « Enregistrer la grille » après vos changements.',
       'Une catégorie de poids qui contient des inscrits ne peut pas être supprimée.',
@@ -681,6 +682,15 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Une case = une tranche d’âge, un sexe, une discipline et son règlement. Le réglage vaut pour cette compétition seulement ; tout est ouvert au départ.',
       'Les combattants déjà inscrits dans une catégorie que vous fermez apparaissent en Réaffectation : vous les déplacez ou choisissez « Ne combat pas ».',
       'Une catégorie déjà lancée ne se ferme plus. La case d’une ligne (ou d’une colonne) ferme ou rouvre toute la ligne.',
+    ],
+  },
+  'grille.libres': {
+    title: 'Tableaux libres',
+    short: 'Des tableaux hors grille (gala, démonstration…) où l’on place des combattants à la main, avec leur propre session.',
+    details: [
+      'Un tableau libre a un nom, une discipline et un règlement. Il reste « En attente » tant qu’on ne le met pas dans une session.',
+      'Supprimer un tableau libre renvoie ses combattants dans leur catégorie précédente.',
+      'Un tableau lancé ne change plus de nom, de discipline ni de règlement : déverrouillez-le dans l’onglet Tableaux.',
     ],
   },
   'grille.passages': {

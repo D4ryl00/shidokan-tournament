@@ -10,7 +10,7 @@ import type { ColumnMapping, FfkChoices, FfkImportPlan } from '../domain/ffk-imp
 import type { ClubField, ClubValues } from '../domain/club-changes.js';
 import type { Club, DirectoryEntry, DirectoryInput, RegistrationInput, RegistrationRow } from '../domain/registration.js';
 import type { Case, MoveView, Presence, Proposal, ProposalType } from '../domain/replacement/index.js';
-import type { CategoryGrid, DisciplineId, Sex } from '../domain/types.js';
+import type { CategoryGrid, DisciplineId, Ruleset, Sex } from '../domain/types.js';
 import type { LadderProgress, LadderRow, PlanChoice, PlanMove } from '../domain/replacement/plan.js';
 import { fetchPlanStream } from './planStream.js';
 import { queriesAfterCompetitionPatch } from './settingsPatch.js';
@@ -291,6 +291,24 @@ export const useUpdateCategory = (id: string) =>
   useCategoryMutation(id, ({ cid, ...patch }: { cid: string; format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null; status?: CategoryStatus; unlock?: boolean; zoneId?: string | null; waveOverride?: string | null; order?: number }, qc) =>
     api<Category>('PATCH', `/api/competitions/${id}/categories/${cid}`, patch, { rev: categoryRevOf(qc, id, cid) }),
   );
+/** Tableaux libres (étape 37) : création sans révision, modification et suppression avec celle de la catégorie. */
+export const useCreateFreeTableau = (id: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; discipline: DisciplineId; ruleset: Ruleset | null }) => api<Category>('POST', `/api/competitions/${id}/free-tableaux`, body),
+    onSuccess: () => Promise.all(['categories', 'schedule'].map((k) => qc.invalidateQueries({ queryKey: [k, id] }))),
+  });
+};
+export const useUpdateFreeTableau = (id: string) =>
+  useCategoryMutation(id, ({ cid, ...patch }: { cid: string; name?: string; discipline?: DisciplineId; ruleset?: Ruleset | null }, qc) =>
+    api<Category>('PATCH', `/api/competitions/${id}/free-tableaux/${cid}`, patch, { rev: categoryRevOf(qc, id, cid) }));
+export function useDeleteFreeTableau(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (cid: string) => api<{ returned: number }>('DELETE', `/api/competitions/${id}/free-tableaux/${cid}`, undefined, { rev: categoryRevOf(qc, id, cid) }),
+    onSuccess: () => Promise.all(['categories', 'schedule', 'registrations', 'replacement'].map((k) => qc.invalidateQueries({ queryKey: [k, id] }))),
+  });
+}
 export const useRedraw = (id: string) =>
   useCategoryMutation(id, (cid: string, qc) => api<Category>('POST', `/api/competitions/${id}/categories/${cid}/redraw`, undefined, { rev: categoryRevOf(qc, id, cid) }));
 export const useSwap = (id: string) =>
