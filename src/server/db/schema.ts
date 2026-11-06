@@ -412,6 +412,8 @@ export const categories = sqliteTable('categories', {
   /** Clés naturelles absorbées par une fusion (leurs inscriptions continuent d'arriver ici). */
   aliasKeys: text('alias_keys').notNull().default('[]'),
   stale: integer('stale', { mode: 'boolean' }).notNull().default(false),
+  /** Tableau arrangé à la main (échange) : refait en gardant les places ; « Nouveau tirage » le remet à false. */
+  arranged: integer('arranged', { mode: 'boolean' }).notNull().default(false),
   zoneId: text('zone_id').references(() => zones.id, { onDelete: 'set null' }),
   /** Choix individuel de vague : id d'une vague, « none » (en attente) ou null (règles des vagues). */
   waveOverride: text('wave_override'),

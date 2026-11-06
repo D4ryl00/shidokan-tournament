@@ -136,6 +136,8 @@ export interface Category {
   effectiveFormat: BracketFormat | null;
   /** Catégorie lancée dont les inscrits ont changé depuis (tableau non régénéré). */
   stale: boolean;
+  /** Tableau arrangé à la main (échange) : refait en gardant les places quand ses inscrits changent. */
+  arranged: boolean;
   /** Heure de la dernière renumérotation après le lancement de sa vague (« mis à jour à HH:MM »). */
   numbersUpdatedAt: string | null;
   /** Numérotée dans une vague lancée : tableau, zone et vague ne changent plus sans confirmation. */
