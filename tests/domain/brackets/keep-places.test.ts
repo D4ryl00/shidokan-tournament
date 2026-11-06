@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import { singleElimination } from '../../../src/domain/brackets/elimination.js';
-import { type Bracket, resolveBracket } from '../../../src/domain/brackets/index.js';
+import { type Bracket, type BracketFormat, generateBracket, resolveBracket } from '../../../src/domain/brackets/index.js';
 import { kataBracket, type KataBracket } from '../../../src/domain/brackets/kata.js';
 import { keepPlaces } from '../../../src/domain/brackets/keep-places.js';
 import { poolsThenBracket, singleMatch } from '../../../src/domain/brackets/pools.js';
 import type { CombatBracket, Entrant, SlotSource } from '../../../src/domain/brackets/types.js';
-import { entrants } from './helpers.js';
+import { bestWins, entrants, play } from './helpers.js';
 
 const NO = { repechage: false, thirdPlace: false };
 const OPTS = { ...NO, kataBronzeCount: 1 as const };
@@ -82,6 +82,16 @@ describe('keepPlaces : élimination', () => {
     expect(next.matches.some((m) => m.id === 'gf')).toBe(true);
   });
 
+  test('départ d’un exempté : pas de match exemption contre exemption', () => {
+    const six = entrants(6);
+    const prev = arranged(six, [['r1', 'r2'], ['r3', 'r4'], ['r5', null], ['r6', null]]);
+    const next = keepPlaces(prev, without(six, 'r5'), 'single_elimination', OPTS, 1) as CombatBracket;
+    // Exemptions comme le tirage ; r1-r2 au 1er tour, r3 et r4 se rencontrent au 2e tour, r6 rencontre le vainqueur r1/r2.
+    expect(firstRound(next)).toEqual([['r6', null], ['r1', 'r2'], ['r3', null], ['r4', null]]);
+    const fought = play(next, bestWins).matches.filter((m) => m.playable && [m.entrantA, m.entrantB].includes('r6'));
+    expect(fought.some((m) => m.round < 3)).toBe(true);
+  });
+
   test('il reste un seul combattant', () => {
     const four = entrants(4);
     const prev = arranged(four, [['r1', 'r2'], ['r3', 'r4']]);
@@ -108,6 +118,22 @@ describe('keepPlaces : poules, kata, changement de format', () => {
     const prev = poolsThenBracket(entrants(8), 1, NO, pools);
     const next = keepPlaces(prev, without(entrants(8), 'r2'), 'pools_then_bracket', OPTS, 1) as CombatBracket;
     expect(next.pools).toEqual([['r1', 'r3', 'r4'], ['r5', 'r6', 'r7', 'r8']]);
+  });
+
+  test('élimination ➜ poules : chaque paire du 1er tour reste dans la même poule', () => {
+    const eight = entrants(8);
+    const pairs = [['r1', 'r5'], ['r2', 'r6'], ['r3', 'r7'], ['r4', 'r8']];
+    const next = keepPlaces(arranged(eight, pairs), eight, 'pools_then_bracket', OPTS, 1) as CombatBracket;
+    expect(next.pools).toEqual([['r1', 'r5', 'r3', 'r7'], ['r2', 'r6', 'r4', 'r8']]);
+    for (const [a, b] of pairs) expect(next.pools!.some((p) => p.includes(a!) && p.includes(b!))).toBe(true);
+  });
+
+  test('poules : une poule réduite à un combattant n’est pas gardée', () => {
+    const pools = [['r1', 'r2', 'r3', 'r4'], ['r5', 'r6', 'r7', 'r8'], ['r9', 'r10', 'r11', 'r12']];
+    const prev = poolsThenBracket(entrants(12), 1, NO, pools);
+    const next = keepPlaces(prev, without(entrants(12), 'r1', 'r2', 'r3'), 'pools_then_bracket', OPTS, 1) as CombatBracket;
+    // Tailles du tirage (3, 3, 3) ; les anciennes poules restent ensemble autant que possible.
+    expect(next.pools).toEqual([['r5', 'r6', 'r7'], ['r8', 'r12', 'r4'], ['r9', 'r10', 'r11']]);
   });
 
   test('kata : départ et arrivée', () => {
@@ -144,5 +170,20 @@ describe('keepPlaces : poules, kata, changement de format', () => {
     expect(kata.order).toEqual(['r1']);
     const rr = keepPlaces(singleMatch(entrants(2), 1), entrants(1), 'round_robin', OPTS, 1) as CombatBracket;
     expect(rr.matches).toEqual([]);
+  });
+});
+
+describe('keepPlaces : rien ne bouge quand rien ne change', () => {
+  const opts = { repechage: false, thirdPlace: true, kataBronzeCount: 2 as const };
+  const shape = (b: Bracket) => (b.kind === 'kata' ? b.order : { matches: b.matches, pools: b.pools });
+  test.each([
+    ['single_elimination', 6], ['double_elimination', 5], ['single_match', 2], ['best_of_three', 2], ['round_robin', 5],
+    ['three_with_repechage', 3], ['pools_then_bracket', 9], ['kata_two_rounds', 5],
+  ] as [BracketFormat, number][])('%s (%i)', (format, n) => {
+    const people = entrants(n, (i) => `club${i % 3}`);
+    const drawn = generateBracket(format, people, opts, 3);
+    const once = keepPlaces(drawn, people, format, opts, 3);
+    expect(shape(once)).toEqual(shape(drawn));
+    expect(shape(keepPlaces(once, people, format, opts, 3))).toEqual(shape(once));
   });
 });

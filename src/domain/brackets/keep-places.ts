@@ -43,23 +43,63 @@ function circleOrder(ids: string[]): string[] {
   return players;
 }
 
-/** Anciennes poules moins les partants ; chaque arrivant dans la plus petite (égalité : sans son club, puis l'indice le plus bas). */
+/** Parmi `candidates`, la première poule sans membre du club de `e` (sinon la première). */
+const awayFromClub = (pools: string[][], candidates: number[], e: Entrant, byId: Map<string, Entrant>) =>
+  candidates.find((i) => e.clubId === null || !pools[i]!.some((id) => byId.get(id)!.clubId === e.clubId)) ?? candidates[0]!;
+
+/**
+ * Anciennes poules moins les partants (même nombre de poules) ; chaque arrivant dans la plus petite (égalité : sans son
+ * club, puis l'indice le plus bas). Pas gardées si une poule a moins de 2 membres.
+ */
 function keptPools(previous: Bracket, byId: Map<string, Entrant>, arrivals: Entrant[]): string[][] | null {
   if (previous.kind !== 'combat' || previous.format !== 'pools_then_bracket' || !previous.pools) return null;
   if (Math.max(1, Math.ceil(byId.size / 4)) !== previous.pools.length) return null;
   const pools = previous.pools.map((p) => p.filter((id) => byId.has(id)));
   for (const e of arrivals) {
     const min = Math.min(...pools.map((p) => p.length));
-    const smallest = pools.flatMap((p, i) => (p.length === min ? [i] : []));
-    const free = smallest.find((i) => e.clubId === null || !pools[i]!.some((id) => byId.get(id)!.clubId === e.clubId));
-    pools[free ?? smallest[0]!]!.push(e.registrationId);
+    pools[awayFromClub(pools, pools.flatMap((p, i) => (p.length === min ? [i] : [])), e, byId)]!.push(e.registrationId);
   }
-  return pools.some((p) => p.length === 0) ? null : pools;
+  return byId.size >= 2 && pools.some((p) => p.length < 2) ? null : pools;
+}
+
+/**
+ * Poules à refaire : tailles du serpentin ; les groupes à garder ensemble (paires gardées, ou anciennes poules) d'abord,
+ * chacun dans la poule la plus libre (coupé seulement s'il n'y tient pas), puis les autres anciens, puis les arrivants
+ * (poule la plus libre, sans leur club si possible). Sans groupe : serpentin de `sequence`.
+ */
+function poolLayout(previous: Bracket, byId: Map<string, Entrant>, arrivals: Entrant[], pairs: [string, string][], sequence: string[]): string[][] {
+  const kept = keptPools(previous, byId, arrivals);
+  if (kept) return kept;
+  const groups: string[][] =
+    previous.kind === 'combat' && previous.format === 'pools_then_bracket' && previous.pools
+      ? previous.pools.map((p) => p.filter((id) => byId.has(id))).filter((g) => g.length > 0).sort((a, b) => b.length - a.length)
+      : pairs;
+  if (groups.length === 0) return serpentinePools(sequence);
+  const capacity = serpentinePools(sequence).map((p) => p.length);
+  const pools: string[][] = capacity.map(() => []);
+  const room = (i: number) => capacity[i]! - pools[i]!.length;
+  const roomiest = () => pools.reduce((best, _, i) => (room(i) > room(best) ? i : best), 0);
+  for (const group of groups) {
+    const rest = [...group];
+    while (rest.length) {
+      const i = roomiest();
+      pools[i]!.push(...rest.splice(0, room(i)));
+    }
+  }
+  const placed = new Set(groups.flat());
+  const arriving = new Set(arrivals.map((e) => e.registrationId));
+  for (const id of sequence) if (!placed.has(id) && !arriving.has(id)) pools[roomiest()]!.push(id);
+  for (const e of arrivals) {
+    const max = room(roomiest());
+    pools[awayFromClub(pools, pools.flatMap((_, i) => (room(i) === max ? [i] : [])), e, byId)]!.push(e.registrationId);
+  }
+  return pools;
 }
 
 /**
  * Cases du 1er tour d'une élimination. Même nombre de places : anciennes cases, partants ➜ exemption, chaque arrivant
- * prend la première exemption face à un autre club, sinon face à un combattant, sinon la première. Sinon : exemptions
+ * prend la première exemption face à un autre club, sinon face à un combattant, sinon la première (gardées s'il ne reste
+ * aucun match exemption contre exemption). Sinon : exemptions
  * placées comme le tirage ; matchs complets remplis par les paires gardées puis par des isolés (en évitant le même
  * club) ; les paires qui ne tiennent plus au 1er tour vont dans deux matchs avec exemption voisins (elles se
  * rencontrent au 2e tour) ; les autres isolés prennent les exemptions restantes.
@@ -79,7 +119,8 @@ function eliminationSlots(previous: Bracket, kept: Place[], pairs: [string, stri
         byes.find((i) => facing(i) !== null && !sameClub(e.registrationId, facing(i)!)) ?? byes.find((i) => facing(i) !== null) ?? byes[0]!;
       slots[i] = e.registrationId;
     }
-    return slots;
+    // Un match exemption contre exemption enverrait un combattant loin sans combattre : exemptions remises comme le tirage.
+    if (!slots.some((p, i) => i % 2 === 0 && p === null && slots[i + 1] === null)) return slots;
   }
 
   const model = firstRoundSlots(Array.from({ length: n }, (_, i): SlotSource => ({ kind: 'entrant', registrationId: String(i) })));
@@ -156,7 +197,7 @@ export function keepPlaces(
     case 'three_with_repechage':
       return threeWithRepechage(entrants, seed, entrants.length === 3 ? ents(sequence) : roundRobinOrder());
     case 'pools_then_bracket':
-      return poolsThenBracket(entrants, seed, opts, keptPools(previous, byId, arrivals) ?? serpentinePools(sequence));
+      return poolsThenBracket(entrants, seed, opts, poolLayout(previous, byId, arrivals, pairs, sequence));
     case 'single_elimination':
     case 'double_elimination':
     case 'single_match': {
