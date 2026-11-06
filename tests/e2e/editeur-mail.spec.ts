@@ -136,8 +136,11 @@ test('images et mode code : image, tailles, WebP converti, SVG refusé ; message
   await expect(editor).toContainText('Code propre');
   await expect(editor).not.toContainText('<p>');
   await expect(editor.locator('img[src^="/api/mail-images/"]')).toHaveCount(0);
+  // La réponse de cet enregistrement, pas la notification : celle de « Revenir au message de l'application » (même texte) peut être encore affichée.
+  const saving = page.waitForResponse((r) => r.url().endsWith(`/api/competitions/${id}`) && r.request().method() === 'PATCH');
   await save.click();
-  await expect(page.getByText('Message enregistré.')).toBeVisible();
+  expect((await saving).ok()).toBe(true);
+  await expect(page.getByText('Message enregistré.').first()).toBeVisible();
   const saved = (await (await request.get(`/api/competitions/${id}`)).json()) as { settings: { invitationMail: { body: string } } };
   expect(saved.settings.invitationMail.body).toContain('Code propre');
   expect(saved.settings.invitationMail.body).not.toMatch(/script|e\.fr|&lt;/);
@@ -229,8 +232,11 @@ test('liens et couleurs : www. et adresse e-mail complétés, adresse refusée d
   await expect(editor.locator('span', { hasText: 'rouge' })).toHaveAttribute('style', /color: red/);
   await pasteHtml(editor, '<p><span style="color: var(--x)">variable</span></p>');
   await expect(editor).toContainText('variable');
+  // La réponse de cet enregistrement : le « Message enregistré. » du précédent peut être encore affiché, et l'avis de retrait vient avant l'envoi.
+  const saving = page.waitForResponse((r) => r.url().endsWith(`/api/competitions/${id}`) && r.request().method() === 'PATCH');
   await page.getByRole('button', { name: 'Enregistrer pour cette compétition' }).click();
   await expect(page.getByText('Retiré du message : style non permis.')).toBeVisible();
+  expect((await saving).ok()).toBe(true);
   await expect(page.getByText('Message enregistré.').first()).toBeVisible();
   const body = await stored();
   expect(body).toContain('color:red');
