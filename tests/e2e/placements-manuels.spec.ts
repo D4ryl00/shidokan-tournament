@@ -155,3 +155,39 @@ test('échange gardé après une arrivée', async ({ page, request }) => {
   const now = await pairs();
   for (const p of kept) expect(now).toContain(p);
 });
+
+test('alerte et remise à zéro', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe alerte placements');
+  for (const n of ['ALPHA', 'BRAVO', 'CHARLIE']) await reg(request, id, n, 'cadet:F:-47');
+  const gala = (await (await request.post(`/api/competitions/${id}/free-tableaux`, { data: { name: 'Gala 1', discipline: 'karate', ruleset: 'jiyu' } })).json()) as { id: string };
+  const regs = (await (await request.get(`/api/competitions/${id}/registrations`)).json()) as { id: string; fighter: { lastName: string } }[];
+  const idOf = (n: string) => regs.find((r) => r.fighter.lastName === n)!.id;
+  for (const n of ['ALPHA', 'BRAVO']) {
+    const res = await request.post(`/api/competitions/${id}/replacement/move`, { data: { registrationId: idOf(n), categoryId: gala.id } });
+    expect(res.ok()).toBeTruthy();
+  }
+  // Annuler BRAVO : ALPHA reste seul, placé à la main, dans Gala 1.
+  expect((await request.post(`/api/competitions/${id}/replacement/undo-manual`, { data: { registrationId: idOf('BRAVO') } })).ok()).toBeTruthy();
+
+  await page.goto(`/competitions/${id}/reaffectation`);
+  const card = page.getByTestId('replacement-case').filter({ hasText: 'ALPHA' });
+  await expect(card).toContainText('Sans adversaire');
+  await expect(card).toContainText(/Seule? dans le tableau libre Gala 1/);
+  await expect(card.getByTestId('replacement-proposal')).toHaveCount(0);
+  await expect(card.getByTestId('manual-move-select')).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Annuler son déplacement manuel' })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Mettre de côté' })).toBeVisible();
+  await expect(page.getByTestId('replacement-summary')).toContainText('Sans adversaire1');
+
+  await page.getByTestId('replacement-reset').click();
+  const dialog = page.getByRole('dialog', { name: 'Repartir de zéro ?' });
+  await expect(dialog).toContainText('dont 1 déplacement manuel');
+  const reset = page.waitForResponse((r) => r.url().includes('/replacement/reset') && r.request().method() === 'POST');
+  await dialog.getByTestId('replacement-reset-confirm').click();
+  expect((await reset).ok()).toBeTruthy();
+  await expect(page.getByTestId('replacement-case').filter({ hasText: 'ALPHA' })).toHaveCount(0);
+  const cats = (await (await request.get(`/api/competitions/${id}/categories`)).json()) as { label: string; registrationIds: string[] }[];
+  const g = cats.find((c) => c.label.includes('Gala 1'));
+  expect(g).toBeTruthy();
+  expect(g!.registrationIds).toHaveLength(0);
+});
