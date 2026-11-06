@@ -18,3 +18,8 @@
 [data-testid='mail-editor'] .mantine-RichTextEditor-content mark { background-color: #ffec99; color: inherit; }
 /* Image choisie : un contour (la rangée de tailles s'applique à elle). Rien n'en passe dans le message. */
 [data-testid='mail-editor'] .ProseMirror img.ProseMirror-selectednode { outline: 3px solid #1c5fb8; outline-offset: 2px; }
+
+/* Barre du haut sur un très petit téléphone : le nom ne tient pas à côté du menu, du thème et du compte ; le logo reste (retour à l'accueil). */
+@media (max-width: 359.98px) {
+  .sk-brand-name { display: none; }
+}

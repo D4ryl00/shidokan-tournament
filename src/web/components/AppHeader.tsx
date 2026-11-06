@@ -1,4 +1,4 @@
-import { Anchor, Group, Menu, ActionIcon, Text, UnstyledButton } from '@mantine/core';
+import { Anchor, Box, Group, Menu, ActionIcon, Text, UnstyledButton } from '@mantine/core';
 import { Link, useLocation } from 'react-router';
 import { isOrganiser, useAppVersion, useAuthMe, type AuthMe } from '../api.js';
 import { Logo } from './Logo.js';
@@ -27,7 +27,7 @@ export function Brand({ compact = false }: { compact?: boolean }) {
     <UnstyledButton component={Link} to="/" aria-label="Shidokan France — compétitions" title={label ? `Version ${label}` : undefined} style={{ flexShrink: 0 }}>
       <Group gap="xs" wrap="nowrap">
         <Logo size={compact ? 30 : 34} />
-        {!compact && <Text fw={800} size="lg" style={{ whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>Shidokan France</Text>}
+        {!compact && <Text className="sk-brand-name" fw={800} size="lg" style={{ whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>Shidokan France</Text>}
         {!compact && label && <Text size="xs" c="dimmed" visibleFrom="sm" data-testid="app-version" style={{ whiteSpace: 'nowrap' }}>{label}</Text>}
       </Group>
     </UnstyledButton>
@@ -51,15 +51,19 @@ export function AppMenu() {
   );
 }
 
-/** Barre du haut des pages de l'application : sur une ligne, jamais coupée. */
+/**
+ * Barre du haut des pages de l'application : sur une ligne, jamais coupée. Les pages sont en ligne sur un écran large (992 px et plus) ; en dessous
+ * (téléphone, tablette, petite fenêtre), elles ne tiennent pas à côté du nom et des boutons, et passent dans le menu ☰ (le même que dans les écrans d'une compétition).
+ */
 export function AppHeader() {
   const { data: me } = useAuthMe();
   const { pathname } = useLocation();
   const active = (to: string) => (to === '/' ? pathname === '/' : pathname.startsWith(to));
   return (
-    <Group h="100%" px="lg" gap="lg" wrap="nowrap" style={{ background: 'var(--sk-bar)', borderBottom: '1px solid var(--sk-line)' }}>
+    <Group h="100%" px={{ base: 'md', sm: 'lg' }} gap="lg" wrap="nowrap" style={{ background: 'var(--sk-bar)', borderBottom: '1px solid var(--sk-line)' }}>
       <Brand />
-      <Group gap={4} wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
+      <Box hiddenFrom="md" style={{ flex: 1 }} />
+      <Group gap={4} wrap="nowrap" visibleFrom="md" style={{ flex: 1, minWidth: 0 }}>
         {appLinks(me).map((l) => (
           <Anchor key={l.to} component={Link} to={l.to} data-testid={l.testId} underline="never" px="sm" py={6}
             style={{ borderRadius: 999, whiteSpace: 'nowrap', fontWeight: 600, fontSize: 14, color: active(l.to) ? 'var(--sk-chip-text)' : 'var(--sk-muted)', background: active(l.to) ? 'var(--sk-chip)' : 'transparent' }}>
@@ -68,6 +72,7 @@ export function AppHeader() {
         ))}
       </Group>
       <Group gap="xs" wrap="nowrap">
+        <Box hiddenFrom="md"><AppMenu /></Box>
         <ThemeToggle />
         <UserMenu />
       </Group>
