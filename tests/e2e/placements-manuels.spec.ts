@@ -69,8 +69,7 @@ test('gala entre deux catégories', async ({ page, request }) => {
   const rowOf = (text: string) => page.getByTestId('category-row').filter({ hasText: text });
   const panel = page.getByTestId('move-entrant-panel');
   const moveTo = async (lastName: string, target: string) => {
-    // Un second clic sur le même inscrit annulerait sa sélection.
-    if (!(await panel.isVisible())) await page.getByTestId('bracket-entrant').filter({ hasText: lastName }).first().click();
+    await page.getByTestId('bracket-entrant').filter({ hasText: lastName }).first().click();
     await expect(panel).toContainText(lastName);
     await panel.getByTestId('move-entrant-select').click();
     await page.getByRole('option', { name: new RegExp(`^${target}`) }).click();
@@ -80,6 +79,8 @@ test('gala entre deux catégories', async ({ page, request }) => {
     const moved = page.waitForResponse((r) => r.url().endsWith('/replacement/move') && r.request().method() === 'POST');
     await page.getByTestId('move-entrant-confirm').click();
     expect((await moved).ok()).toBeTruthy();
+    await expect(panel).toHaveCount(0);
+    await expect(page.getByTestId('swap-select')).toContainText('Échange manuel');
   };
 
   await rowOf('-47').click();
@@ -89,6 +90,8 @@ test('gala entre deux catégories', async ({ page, request }) => {
   await panel.getByTestId('move-entrant-select').click();
   await expect(page.getByRole('group', { name: 'Tableaux libres' })).toBeVisible();
   await page.keyboard.press('Escape');
+  await page.getByTestId('bracket-entrant').filter({ hasText: 'CADA' }).first().click(); // désélectionne
+  await expect(panel).toHaveCount(0);
   await moveTo('CADA', 'Gala 1');
   await rowOf('+61').click();
   await moveTo('LOURDA', 'Gala 1');
@@ -116,8 +119,9 @@ test('gala entre deux catégories', async ({ page, request }) => {
   await rowOf('Gala 1').click();
   await page.getByTestId('bracket-entrant').filter({ hasText: 'CADA' }).first().click();
   const undone = page.waitForResponse((r) => r.url().includes('/replacement/undo-manual') && r.request().method() === 'POST');
-  await panel.getByRole('button', { name: 'Annuler son déplacement manuel' }).click();
+  await panel.getByTestId('move-entrant-undo').click();
   expect((await undone).ok()).toBeTruthy();
+  await expect(panel).toHaveCount(0);
   await expect(page.getByTestId('bracket-entrant').filter({ hasText: 'CADA' })).toHaveCount(0);
   const after = await cats();
   expect(after.find((c) => c.label.includes('Gala 1'))!.registrationIds).toHaveLength(1);

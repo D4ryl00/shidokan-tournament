@@ -9,7 +9,7 @@ import { ProposalPreview } from './ProposalPreview.js';
  * Sous le tableau, pour l'inscrit choisi : le déplacer à la main vers une autre catégorie ou un tableau libre (avec aperçu avant
  * confirmation), ou annuler son déplacement manuel.
  */
-export function MoveEntrantPanel({ competitionId, registrationId, name, manual }: { competitionId: string; registrationId: string; name: string; manual: boolean }) {
+export function MoveEntrantPanel({ competitionId, registrationId, name, manual, onDone }: { competitionId: string; registrationId: string; name: string; manual: boolean; onDone?: () => void }) {
   const { data: categories = [] } = useCategories(competitionId);
   const { data } = useMoveTargets(competitionId, registrationId);
   const [target, setTarget] = useState<string | null>(null);
@@ -49,7 +49,7 @@ export function MoveEntrantPanel({ competitionId, registrationId, name, manual }
             Déplacer…
           </Button>
           {manual && (
-            <Button variant="subtle" color="orange" loading={undo.isPending} onClick={() => undo.mutate({ registrationId })}>
+            <Button variant="subtle" color="orange" data-testid="move-entrant-undo" loading={undo.isPending} onClick={() => undo.mutateAsync({ registrationId }).then(() => onDone?.(), () => {})}>
               Annuler son déplacement manuel
             </Button>
           )}
@@ -67,7 +67,7 @@ export function MoveEntrantPanel({ competitionId, registrationId, name, manual }
           <Group justify="flex-end">
             <Button variant="default" onClick={close}>Annuler</Button>
             <Button data-testid="move-entrant-confirm" loading={move.isPending} disabled={!preview.data}
-              onClick={() => move.mutate({ registrationId, categoryId: chosen! }, { onSuccess: () => { close(); setTarget(null); } })}>
+              onClick={() => move.mutateAsync({ registrationId, categoryId: chosen! }).then(() => { close(); setTarget(null); onDone?.(); }, () => {})}>
               Confirmer le déplacement
             </Button>
           </Group>

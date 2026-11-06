@@ -237,8 +237,8 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
             )}
             <ApiErrorAlert error={update.error ?? redraw.error ?? swap.error ?? regenerate.error} />
             <BracketView category={selected} entrants={entrants} numbers={passages?.numbers} noRest={passages?.noRest} matchZones={movedMatchZones(passages, zones, selected.bracket)} selected={swapFrom} onSelect={locked || readOnlyPoste ? undefined : onSelectEntrant} badges={badges} badgeDetails={badgeDetails} />
-            {swapFrom && !locked && !readOnlyPoste && selected.bracket && (
-              <MoveEntrantPanel key={swapFrom} competitionId={id} registrationId={swapFrom} name={entrants.get(swapFrom)?.name ?? ''} manual={badges.get(swapFrom) === 'M'} />
+            {swapFrom && !locked && !readOnlyPoste && selected.bracket && selected.registrationIds.includes(swapFrom) && (
+              <MoveEntrantPanel key={swapFrom} competitionId={id} registrationId={swapFrom} name={entrants.get(swapFrom)?.name ?? ''} manual={badges.get(swapFrom) === 'M'} onDone={() => setSwapFrom(null)} />
             )}
           </Stack>
         )}
