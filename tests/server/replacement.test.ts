@@ -1323,7 +1323,7 @@ describe('repartir de zéro par session', () => {
     await validate(matin, m1.id);
     await validate(aprem, c1.id);
     const before = await log();
-    expect(await preview(matin)).toEqual({ undo: 1, kept: [], blockedBy: null, clears: 0, history: 1, refusal: null, locked: false });
+    expect(await preview(matin)).toEqual({ undo: 1, manual: 0, kept: [], blockedBy: null, clears: 0, history: 1, refusal: null, locked: false });
     const res = await reset(matin);
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true, undone: 1, kept: [] });

@@ -11,6 +11,7 @@ import {
 import {
   categoryLabel,
   compareKeys,
+  isFreeKey,
   keyString,
   naturalKey,
   type Category,
@@ -117,7 +118,7 @@ function upToDate(row: Row, ctx: Context): boolean {
 
 /**
  * Place chaque inscription non verrouillée dans sa catégorie naturelle (créée si besoin), supprime les catégories
- * vides non lancées et régénère les tableaux non lancés qui ne correspondent plus.
+ * vides non lancées (sauf les tableaux libres) et régénère les tableaux non lancés qui ne correspondent plus.
  */
 export async function syncCategories(db: AppDb, competitionId: string, opts: { regenerate?: string } = {}): Promise<void> {
   const grid = await getGrid(db, competitionId);
@@ -142,6 +143,8 @@ export async function syncCategories(db: AppDb, competitionId: string, opts: { r
       }
     };
     for (const c of cats) {
+      // Tableau libre : on n'y arrive jamais par sa catégorie naturelle, seulement par un déplacement manuel.
+      if (isFreeKey(JSON.parse(c.keyJson) as CategoryKey)) continue;
       offer(c.keyString, c, true);
       for (const alias of JSON.parse(c.aliasKeys) as string[]) offer(alias, c, false);
     }
@@ -200,6 +203,14 @@ export async function syncCategories(db: AppDb, competitionId: string, opts: { r
       const count = ctx.members.get(row.id)?.length ?? 0;
       const key = JSON.parse(row.keyJson) as CategoryKey;
       const label = categoryLabel(key, grid);
+      // Tableau libre vide : gardé (il existe tant qu'on ne le supprime pas), sans tableau.
+      if (count === 0 && !kept(row) && isFreeKey(key)) {
+        if (row.bracketJson !== null || row.stale || label !== row.label) {
+          t.update(categories).set({ bracketJson: null, stale: false, label }).where(eq(categories.id, row.id)).run();
+          t.delete(tieBreaks).where(eq(tieBreaks.categoryId, row.id)).run();
+        }
+        continue;
+      }
       if (count === 0 && !kept(row)) {
         t.delete(categories).where(eq(categories.id, row.id)).run();
         continue;
@@ -280,7 +291,7 @@ function getRow(db: AppDb, competitionId: string, categoryId: string): Row {
   return row;
 }
 
-async function categoryById(db: AppDb, competitionId: string, categoryId: string): Promise<Category> {
+export async function categoryById(db: AppDb, competitionId: string, categoryId: string): Promise<Category> {
   const found = (await listCategories(db, competitionId)).find((c) => c.id === categoryId);
   if (!found) throw new NotFoundError('Catégorie introuvable');
   return found;

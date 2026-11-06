@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { PassThrough } from 'node:stream';
 import { z } from 'zod';
+import { categoryLabel, compareKeys } from '../../domain/categories.js';
 import { applyAll, applyProposal, casesOfWave, categoryWave, detectCases, memberWave, moveTargetsFor, moveView, stateFingerprint } from '../../domain/replacement/index.js';
 import type { AppDb } from '../db/client.js';
 import { applyRulesView, rulesView, rulesViewSchema } from '../../domain/replacement/rules.js';
@@ -27,12 +28,14 @@ import {
   unrefuseProposal,
   setWeighIn,
   undoRecasement,
+  undoManualMove,
   withdrawRegistration,
   setAsideCase,
   resumeCase,
   setAsideNotes,
   weighInList, fighterPresence } from '../repositories/replacement.js';
 import { PlanAbortedError, runPlanJob } from '../plan/runner.js';
+import { NotFoundError } from '../repositories/registrations.js';
 
 type P = { Params: { id: string } };
 /** Plan d'ensemble en flux : une ligne JSON par événement (progression, puis résultat ou erreur). */
@@ -233,6 +236,24 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
     const { waveId } = z.object({ waveId: z.string().optional() }).strict().parse(req.body ?? {});
     const state = await loadState(db, req.params.id);
     return { ok: true, ...(await resetReplacement(db, req.params.id, knownWave(state.waves, waveId))) };
+  });
+
+  /** Annule le déplacement manuel d'un combattant (sa réaffectation la plus récente, de type M). */
+  app.post<P>('/api/competitions/:id/replacement/undo-manual', async (req) => {
+    const { registrationId } = z.object({ registrationId: z.string() }).strict().parse(req.body);
+    await undoManualMove(db, req.params.id, registrationId);
+    return { ok: true };
+  });
+
+  /** Catégories où déplacer un combattant à la main (tableaux libres compris), avec les règles qu'enfreindrait chaque déplacement. */
+  app.get<{ Params: { id: string; registrationId: string } }>('/api/competitions/:id/replacement/move-targets/:registrationId', async (req) => {
+    const state = await loadState(db, req.params.id);
+    if (!state.members.some((m) => m.registrationId === req.params.registrationId)) throw new NotFoundError('Inscription introuvable');
+    const byId = new Map(state.categories.map((c) => [c.id, c]));
+    const targets = moveTargetsFor(state, req.params.registrationId)
+      .sort((a, b) => compareKeys(byId.get(a.categoryId)!.key, byId.get(b.categoryId)!.key, state.grid))
+      .map((t) => ({ categoryId: t.categoryId, label: categoryLabel(byId.get(t.categoryId)!.key, state.grid), free: t.free, warnings: t.warnings }));
+    return { targets };
   });
 
   app.post<P>('/api/competitions/:id/replacement/move', async (req) => {

@@ -392,8 +392,8 @@ export interface ReplacementData {
   cases: Case[];
   /** Par inscription d'un cas. */
   fighters: Record<string, CaseFighter>;
-  /** Par cas : catégories où le déplacer à la main, avec les règles enfreintes (aucune : déplacement cohérent). */
-  moveTargets: Record<string, { categoryId: string; warnings: string[] }[]>;
+  /** Par cas : catégories où le déplacer à la main (`free` : tableau libre), avec les règles enfreintes (aucune : déplacement cohérent). */
+  moveTargets: Record<string, { categoryId: string; free: boolean; warnings: string[] }[]>;
   /** Les propositions refusées suivent les autres, marquées `refused`. */
   proposals: Record<string, (Proposal & { refused?: true; view: MoveView })[]>;
   /** Cartes mises de côté (de la session affichée), avec leur note. */
@@ -402,7 +402,7 @@ export interface ReplacementData {
   fingerprint: string;
   recasements: RecasementEntry[];
   /** Ce que « Repartir de zéro » ferait dans la session affichée. */
-  reset: { undo: number; kept: { name: string; toLabel: string; why: 'frozen' | 'started' }[]; blockedBy: string | null; clears: number; history: number; refusal: string | null; locked: boolean };
+  reset: { undo: number; manual: number; kept: { name: string; toLabel: string; why: 'frozen' | 'started' }[]; blockedBy: string | null; clears: number; history: number; refusal: string | null; locked: boolean };
 }
 export interface PreviewData {
   steps: { proposal: Proposal; manual: boolean }[];
