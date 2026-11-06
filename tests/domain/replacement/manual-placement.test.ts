@@ -38,11 +38,14 @@ describe('placements manuels et tableaux libres', () => {
     const s = makeState([x]);
     const cases = detectCases(s);
     expect(cases).toEqual([
-      { id: `alone:${x.registrationId}`, kind: 'alone', alert: true, registrationId: x.registrationId, categoryId: x.categoryId, detail: 'Placé à la main, seul dans sa catégorie' },
+      { id: `alone:${x.registrationId}`, kind: 'alone', alert: true, registrationId: x.registrationId, categoryId: x.categoryId, detail: 'Placée à la main, seule dans sa catégorie' },
     ]);
     expect(allProposals(s).get(cases[0]!.id)).toEqual([]);
     expect(aloneRegistrations(s, null)).not.toContain(x.registrationId);
     expect(plan(s).moves).toEqual([]);
+
+    const boy = member({ sex: 'M', weightClassId: 'cadet:M:-63', approxWeightKg: 60, ...manual() });
+    expect(detectCases(makeState([boy])).map((c) => [c.alert, c.detail])).toEqual([[true, 'Placé à la main, seul dans sa catégorie']]);
   });
 
   test('seul dans un tableau libre : carte d\'alerte', () => {
@@ -50,10 +53,14 @@ describe('placements manuels et tableaux libres', () => {
     const s = makeState([x], { categories: [freeCategory('libre', 'Gala 1')] });
     const cases = detectCases(s);
     expect(cases).toEqual([
-      { id: `alone:${x.registrationId}`, kind: 'alone', alert: true, registrationId: x.registrationId, categoryId: 'libre', detail: 'Seul dans le tableau libre Gala 1' },
+      { id: `alone:${x.registrationId}`, kind: 'alone', alert: true, registrationId: x.registrationId, categoryId: 'libre', detail: 'Seule dans le tableau libre Gala 1' },
     ]);
     expect(allProposals(s).get(cases[0]!.id)).toEqual([]);
     expect(aloneRegistrations(s, null)).toEqual([]);
+
+    const boy = member({ sex: 'M', weightClassId: 'cadet:M:-63', approxWeightKg: 60, ...manual({ categoryId: 'libre' }) });
+    const t = makeState([boy], { categories: [freeCategory('libre', 'Gala 1')] });
+    expect(detectCases(t).map((c) => [c.alert, c.detail])).toEqual([[true, 'Seul dans le tableau libre Gala 1']]);
   });
 
   test('tableau libre vide : rien', () => {

@@ -84,7 +84,8 @@ export function detectCases(state: State): Case[] {
     const free = isFreeKey(c.key);
     const alone = active.length === 1 && !withWeightOut.has(active[0]!.registrationId) ? active[0]! : null;
     if (alone && (free || isManualPlacement(alone))) {
-      const detail = free ? `Seul dans le tableau libre ${c.key.free}` : 'Placé à la main, seul dans sa catégorie';
+      const e = alone.sex === 'F' ? 'e' : '';
+      const detail = free ? `Seul${e} dans le tableau libre ${c.key.free}` : `Placé${e} à la main, seul${e} dans sa catégorie`;
       cases.push({ id: `alone:${alone.registrationId}`, kind: 'alone', alert: true, registrationId: alone.registrationId, categoryId: c.id, detail });
       continue;
     }
