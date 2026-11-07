@@ -83,7 +83,7 @@ export function MoveEntrantPanel({ competitionId, registrationId, name, manual, 
               onClick={() => {
                 const label = targets.find((t) => t.categoryId === chosen)?.label ?? '';
                 const sameClub = preview.data?.sameClub ?? [];
-                void move.mutateAsync({ registrationId, categoryId: chosen! }).then((r) => { close(); setTarget(null); onDone?.(); undoToast(`${name} déplacé(e) vers ${label}`, r.historyId ?? null, sameClub); }, () => {});
+                void move.mutateAsync({ registrationId, categoryId: chosen! }).then((r) => { close(); setTarget(null); onDone?.(); undoToast(`Déplacement de ${name} vers ${label}`, r.historyId ?? null, sameClub); }, () => {});
               }}>
               Confirmer le déplacement
             </Button>
