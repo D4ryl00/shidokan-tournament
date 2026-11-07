@@ -208,4 +208,9 @@ test('planche : lien « voir » entoure la carte, lisible à 360 px', async ({ p
   await expect(page.getByTestId('planche-card').and(page.locator(`[data-category="${cid}"]`))).toHaveAttribute('data-ring', 'see');
   await expect(page.getByTestId('planche-card').and(page.locator(`[data-category="${cid}"]`))).not.toHaveAttribute('data-ring', 'see', { timeout: 5000 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  // Une fois seulement : Liste puis Planche ne l'entoure plus.
+  await showList(page);
+  await page.getByTestId('brackets-view').getByText('Planche', { exact: true }).click();
+  await expect(page.getByTestId('planche-card').first()).toBeVisible();
+  await expect(page.locator('[data-ring="see"]')).toHaveCount(0);
 });

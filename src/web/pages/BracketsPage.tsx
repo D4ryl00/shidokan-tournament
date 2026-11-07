@@ -177,7 +177,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
     {view === 'planche' && (
       <Planche competitionId={id} categories={categories} waves={waves} waveId={waveId} scope={scope} onScope={onSelectScope} readOnly={readOnlyPoste}
         entrants={entrants} badges={badges} badgeDetails={badgeDetails} cases={casesByCategory} aside={asideByCategory} historyCount={historyCount}
-        onHistory={() => setHistoryOpen((o) => !o)} seeRequest={seeRequest} onOpenList={openInList} />
+        onHistory={() => setHistoryOpen((o) => !o)} seeRequest={seeRequest} onConsumed={() => setSeeRequest(null)} onOpenList={openInList} />
     )}
     {view === 'liste' && (
     <Grid>

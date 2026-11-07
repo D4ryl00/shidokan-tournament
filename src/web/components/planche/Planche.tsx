@@ -1,5 +1,5 @@
 import { Anchor, Box, Grid, Group, SimpleGrid, Stack, Text } from '@mantine/core';
-import { useEffect, useMemo, useRef, useState, type HTMLAttributes } from 'react';
+import { useEffect, useMemo, useState, type HTMLAttributes } from 'react';
 import { type Category } from '../../../domain/categories.js';
 import { DISCIPLINES, RULESETS } from '../../../domain/disciplines.js';
 import { normalizeName } from '../../../domain/names.js';
@@ -18,7 +18,7 @@ import { PlancheToolbar, type Scope } from './PlancheToolbar.js';
 export interface SeeRequest { ids: string[]; n: number }
 
 /** La planche : toutes les catégories de la session en cartes, groupées, avec le bac « Sans adversaire ». */
-export function Planche({ competitionId, categories, waves, waveId, scope, onScope, readOnly, entrants, badges, badgeDetails, cases, aside, historyCount, onHistory, seeRequest, onOpenList, chipProps, cardProps }: {
+export function Planche({ competitionId, categories, waves, waveId, scope, onScope, readOnly, entrants, badges, badgeDetails, cases, aside, historyCount, onHistory, seeRequest, onConsumed, onOpenList, chipProps, cardProps }: {
   competitionId: string;
   categories: Category[];
   waves: Wave[];
@@ -35,6 +35,8 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
   onHistory?: () => void;
   /** « Voir » : défile jusqu'aux cartes et les entoure un instant. */
   seeRequest: SeeRequest | null;
+  /** La demande a été appliquée : l'appelant l'oublie (elle ne doit jouer qu'une fois). */
+  onConsumed: () => void;
   onOpenList: (categoryId: string) => void;
   /** Attributs ajoutés aux pastilles et aux cartes (glisser-déposer). */
   chipProps?: (registrationId: string, category: Category) => HTMLAttributes<HTMLDivElement>;
@@ -49,7 +51,6 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
   const [onlyTodo, setOnlyTodo] = useState(false);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [seen, setSeen] = useState<Set<string>>(new Set());
-  const consumed = useRef(0);
 
   const inScope = (c: Category) => waves.length === 0 || scope === 'all' || (scope === 'waiting' ? c.waveId === null : c.waveId === waveId);
   const waiting = categories.filter((c) => c.waveId === null).length;
@@ -73,13 +74,16 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
 
   // « Voir » : lève les filtres, entoure les cartes ~2 s et défile jusqu'à la première (une fois les catégories chargées).
   useEffect(() => {
-    if (!seeRequest || seeRequest.n === consumed.current || categories.length === 0) return;
-    consumed.current = seeRequest.n;
+    if (!seeRequest || categories.length === 0) return;
     setQuery(''); setOnlyTodo(false);
     setSeen(new Set(seeRequest.ids));
+    onConsumed();
+  }, [seeRequest, categories.length, onConsumed]);
+  useEffect(() => {
+    if (seen.size === 0) return;
     const t = setTimeout(() => setSeen(new Set()), 2200);
     return () => clearTimeout(t);
-  }, [seeRequest, categories.length]);
+  }, [seen]);
   useEffect(() => {
     if (seen.size === 0) return;
     const first = [...seen].find((id) => document.querySelector(`[data-testid="planche-card"][data-category="${id}"]`));
