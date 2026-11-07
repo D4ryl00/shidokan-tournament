@@ -23,7 +23,7 @@ async function reg(over: object = {}) {
   return res.json().row as { id: string; fighterId: string };
 }
 type Cat = {
-  id: string; label: string; registrationIds: string[]; waveId: string | null; status: string;
+  id: string; label: string; registrationIds: string[]; waveId: string | null; status: string; arranged: boolean;
   key: { discipline: string; ruleset: string | null; free?: string };
   bracket: { kind: 'combat' | 'kata'; entrants: { registrationId: string }[]; matches?: { id: string }[] } | null;
 };
@@ -122,6 +122,42 @@ test('réaffectation : rien ne bouge dans un tableau libre, alerte si seul', asy
   expect(card).toMatchObject({ kind: 'alone', alert: true });
   expect(r.cases).toHaveLength(1);
   expect(r.summary).toMatchObject({ cases: 1, alone: 1, withoutProposal: 1 });
+});
+
+test('alerte d’un tableau libre en attente : visible et comptée dans chaque session', async () => {
+  const [matin, aprem] = (await call('PUT', '/waves', [
+    { name: 'Matin', rules: { ageBandCodes: ['poussin', 'pupille', 'benjamin', 'minime'], disciplines: [] } },
+    { name: 'Après-midi', rules: { ageBandCodes: ['cadet', 'junior', 'senior'], disciplines: [] } },
+  ])).json() as { id: string }[];
+  const { a, b } = await twoGroups();
+  const free = await freeTableau();
+  await move(a.id, free.id);
+  await move(b.id, free.id);
+  expect((await call('POST', '/replacement/undo-manual', { registrationId: b.id })).statusCode).toBe(200);
+  expect((await categories()).find((c) => c.id === free.id)!.waveId).toBeNull();
+  for (const wave of [matin!.id, aprem!.id]) {
+    const r = (await call('GET', `/replacement?vague=${wave}`)).json() as Replacement & { fighters: Record<string, unknown>; moveTargets: Record<string, unknown> };
+    const card = r.cases.find((c) => c.registrationId === a.id);
+    expect(card).toMatchObject({ kind: 'alone', alert: true });
+    expect(r.summary).toMatchObject({ cases: 1, alone: 1 });
+    expect(r.fighters[a.id]).toBeDefined();
+    expect(r.moveTargets[card!.id]).toBeDefined();
+  }
+});
+
+test('tableau libre vidé : plus arrangé, le suivant est tiré à neuf', async () => {
+  const { a, b } = await twoGroups();
+  const free = await freeTableau();
+  await move(a.id, free.id);
+  await move(b.id, free.id);
+  const swap = await call('POST', `/categories/${free.id}/swap`, { a: a.id, b: b.id });
+  expect(swap.statusCode).toBe(200);
+  expect((swap.json() as Cat).arranged).toBe(true);
+  for (const id of [a.id, b.id]) expect((await call('POST', '/replacement/undo-manual', { registrationId: id })).statusCode).toBe(200);
+  expect((await categories()).find((c) => c.id === free.id)).toMatchObject({ registrationIds: [], bracket: null, arranged: false });
+  await move(a.id, free.id);
+  await move(b.id, free.id);
+  expect((await categories()).find((c) => c.id === free.id)).toMatchObject({ registrationIds: [a.id, b.id].sort(), arranged: false });
 });
 
 test('modifier : nom, discipline (combattants en kata), refusé une fois lancé', async () => {

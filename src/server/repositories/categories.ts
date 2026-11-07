@@ -223,8 +223,9 @@ export async function syncCategories(db: AppDb, competitionId: string, opts: { r
       const label = categoryLabel(key, grid);
       // Tableau libre vide : gardé (il existe tant qu'on ne le supprime pas), sans tableau.
       if (count === 0 && !kept(row) && isFreeKey(key)) {
-        if (row.bracketJson !== null || row.stale || label !== row.label) {
-          t.update(categories).set({ bracketJson: null, stale: false, label }).where(eq(categories.id, row.id)).run();
+        if (row.bracketJson !== null || row.stale || row.arranged || label !== row.label) {
+          // Ses échanges ne valent plus : les prochains inscrits sont tirés à neuf.
+          t.update(categories).set({ bracketJson: null, stale: false, arranged: false, label }).where(eq(categories.id, row.id)).run();
           t.delete(tieBreaks).where(eq(tieBreaks.categoryId, row.id)).run();
         }
         continue;

@@ -88,7 +88,15 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
   app.get<P & { Querystring: { vague?: string } }>('/api/competitions/:id/replacement', async (req) => {
     const state = await loadState(db, req.params.id);
     const waveId = knownWave(state.waves, req.query.vague || undefined);
-    const cases = casesOfWave(state, detectCases(state), waveId);
+    const detected = detectCases(state);
+    const ofWave = new Set(casesOfWave(state, detected, waveId));
+    // Une carte d'alerte d'une catégorie en attente (sans session, ex. tableau libre) n'appartient à aucune session :
+    // elle est montrée, et comptée, dans chacune, pour que le combattant seul soit signalé quelque part.
+    const pending = (categoryId: string | null) => {
+      const cat = state.categories.find((x) => x.id === categoryId);
+      return cat !== undefined && categoryWave(state, cat) === null;
+    };
+    const cases = detected.filter((c) => ofWave.has(c) || (c.alert === true && pending(c.categoryId)));
     const proposals = allProposals(state, cases);
     const shown = displayedProposals(state, cases);
     const inWave = waveId ? state.members.filter((m) => memberWave(state, m) === waveId) : state.members;
