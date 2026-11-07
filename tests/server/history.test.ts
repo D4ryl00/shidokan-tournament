@@ -186,6 +186,31 @@ test('catégorie lancée : l’annulation est bloquée, avec la raison', async (
   expect(CHANGED_REASON).not.toBe(lockedReason(arrival.label));
 });
 
+test('session lancée : bloquée même pour une catégorie sans combat (aucun passage figé)', async () => {
+  const a = await reg({ lastName: 'ALPHA', weightClassId: 'cadet:F:-47' });
+  const b = await reg({ weightClassId: 'cadet:F:-47' });
+  const from = (await catOf(a.id))!;
+  const free = (await call('POST', '/free-tableaux', { name: 'Gala 1', discipline: 'karate', ruleset: 'jiyu' })).json() as Cat;
+  // Après le déplacement : un combattant seul de chaque côté, donc aucun combat ni passage.
+  const h = await move(a.id, free.id);
+  const [zone] = (await call('GET', '/zones')).json() as { id: string }[];
+  for (const c of await categories()) await call('PATCH', `/categories/${c.id}`, { status: 'ready', zoneId: zone!.id });
+  expect((await call('POST', '/launch', { waveId: null })).statusCode).toBe(204);
+  const cats = (await categories()) as (Cat & { launchLocked: boolean })[];
+  const touched = cats.filter((c) => c.id === from.id || c.id === free.id);
+  expect(touched).toHaveLength(2);
+  // Aucun passage figé : seule la session lancée les ferme (comme `state.frozen` aujourd'hui).
+  expect(touched.every((c) => !c.launchLocked)).toBe(true);
+  const reasons = touched.map((c) => lockedReason(c.label));
+  expect(reasons).toContain((await entry(h)).blocked);
+  const res = await undo([h], [h]);
+  expect(res.statusCode).toBe(409);
+  expect(reasons).toContain(res.json().error);
+  expect((await entry(h)).status).toBe('active');
+  expect((await catOf(a.id))!.id).toBe(free.id);
+  expect((await catOf(b.id))!.id).toBe(from.id);
+});
+
 test('session : la liste ne rend que les actions de la session demandée', async () => {
   const [matin, aprem] = (
     await call('PUT', '/waves', [

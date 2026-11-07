@@ -7,7 +7,7 @@ import { categories, fighters, historyEntries, recasements, registrations, zones
 import { CategoryLockedError, syncCategories } from './categories.js';
 import { launchedCategoryIds } from './launch-state.js';
 import { NotFoundError } from './registrations.js';
-import { recomputeKeys, restoreSnapshot, snapshotTouches, StaleProposalError, type RecasementSnapshot } from './replacement.js';
+import { loadState, recomputeKeys, restoreSnapshot, snapshotTouches, StaleProposalError, type RecasementSnapshot } from './replacement.js';
 
 /** Ce qu'une action écrit dans l'historique (le reste — catégories touchées, état d'avant — est calculé par `recorded`). */
 export interface EntrySpec {
@@ -161,11 +161,17 @@ interface BlockContext {
   members: Map<string, string[]>;
 }
 
-function blockContext(db: AppDb, competitionId: string): BlockContext {
+/**
+ * Catégories fermées à l'annulation, même règle qu'aujourd'hui : lancées ou terminées, à numéros figés d'une session lancée,
+ * ou d'une session lancée (`frozen` de l'état du recasement, y compris sans combat ni passage). Synchronise les catégories
+ * (via `loadState`) : à appeler avant de lire les entrées.
+ */
+async function blockContext(db: AppDb, competitionId: string): Promise<BlockContext> {
+  const frozen = new Set((await loadState(db, competitionId)).categories.filter((c) => c.frozen).map((c) => c.id));
   const cats = db.select({ id: categories.id, label: categories.label, status: categories.status }).from(categories).where(eq(categories.competitionId, competitionId)).all();
   const launched = launchedCategoryIds(db, competitionId);
   return {
-    locked: new Set(cats.filter((c) => c.status === 'started' || c.status === 'finished' || launched.has(c.id)).map((c) => c.id)),
+    locked: new Set(cats.filter((c) => c.status === 'started' || c.status === 'finished' || launched.has(c.id) || frozen.has(c.id)).map((c) => c.id)),
     labels: new Map(cats.map((c) => [c.id, c.label])),
     members: presentMembers(registrationRows(db, competitionId)),
   };
@@ -191,8 +197,8 @@ export function entryOfRecasement(db: AppDb, competitionId: string, recasementId
  * toutes). La cascade et les blocages sont calculés sur toutes les entrées.
  */
 export async function listHistory(db: AppDb, competitionId: string, waveId: string | null): Promise<{ entries: HistoryEntryView[] }> {
+  const ctx = await blockContext(db, competitionId);
   const all = loadEntries(db, competitionId);
-  const ctx = blockContext(db, competitionId);
   const names = new Map(
     db
       .select({ id: registrations.id, lastName: fighters.lastName, firstName: fighters.firstName })
@@ -263,13 +269,14 @@ function undoEntry(t: AppDb, e: Loaded, undoneAt: string): void {
  */
 export async function undoHistory(db: AppDb, competitionId: string, ids: string[], expect: string[] | null): Promise<{ undone: string[] }> {
   return atomically(db, async () => {
+    const ctx = await blockContext(db, competitionId);
     const all = loadEntries(db, competitionId);
     const known = new Set(all.map((e) => e.id));
     if (ids.some((id) => !known.has(id))) throw new NotFoundError('Action introuvable dans l’historique');
     const set = undoSet(all, ids);
     if (set.length === 0) throw new StaleProposalError(STALE);
     if (expect !== null && [...expect].sort().join('\n') !== set.map((e) => e.id).sort().join('\n')) throw new StaleProposalError(STALE);
-    const reason = blockReason(set, blockContext(db, competitionId));
+    const reason = blockReason(set, ctx);
     if (reason) throw new CategoryLockedError(reason);
     const undoneAt = new Date().toISOString();
     db.transaction((tx) => {
