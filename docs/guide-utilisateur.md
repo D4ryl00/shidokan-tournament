@@ -145,10 +145,46 @@ Sur chaque portable, avant le début : Réglages de l'application → **Portable
 Les onglets de l'étape **Jour J** :
 1. **Pesée** : poids et présence ; « Clôturer la pesée » marque absents les non-pesés.
 2. **Réaffectation** : une carte pour chaque combattant seul, hors de sa catégorie, ou inscrit dans une catégorie fermée (propositions, aperçu, validation). Pour une catégorie fermée, vous pouvez aussi choisir « Ne combat pas » : le coach le voit sur sa page d’inscription, et « Annuler » dans l’historique le remet en place. « Mettre de côté » écarte une carte que vous ne pouvez pas trancher tout de suite (une note facultative rappelle pourquoi) : elle ne compte plus dans les cas à traiter, se retrouve dans « Mises de côté », et le lancement de la session vous la rappelle.
-3. **Tableaux** : vérifier, « Marquer prête », imprimer.
+3. **Tableaux** : vérifier, déplacer ou échanger des combattants sur la planche (voir ci-dessous), « Marquer prête », imprimer.
 4. **Combats** : quand les catégories d'une session sont prêtes, « Figer et imprimer la session » fixe les numéros de passage et imprime ses tableaux. Les résultats se saisissent zone par zone, le combat « à l'appel » en tête de chaque zone.
 
 Pendant la journée, s'il y a internet : Réglages de la compétition → « Échanges avec le serveur » → « Envoyer une copie au serveur » (copie de secours ; le PC garde la main).
+
+### La planche des tableaux (Jour J → Tableaux)
+
+L'onglet **Tableaux** s'ouvre sur la **Planche** : toutes les catégories d'un coup, une carte par catégorie, avec les combattants en pastilles (nom et club). Le sélecteur « Planche / Liste » ramène à l'ancienne page, la **Liste**, qui sert aux réglages d'une catégorie (format, repêchage, « Marquer prête », impression). Un poste est retenu dans son choix.
+
+- **Retrouver une catégorie** : la barre du haut propose la session, une recherche (« Chercher une catégorie ou un combattant », qui surligne les combattants trouvés), « Classer par » **Catégorie** ou **Zone**, et « Seulement à traiter » (cartes sans adversaire ou avec un cas à traiter). Une ligne de raccourcis sous la barre fait défiler jusqu'à un groupe. « Agrandir » sur une carte montre le vrai tableau.
+- **Bac « Sans adversaire »** : à gauche, un combattant par catégorie qui n'en a qu'un. Vide, il dit « Tout le monde a un adversaire. ». On le glisse comme une pastille.
+
+**Déplacer ou échanger, à la souris (glisser-déposer)** : prenez une pastille et déposez-la.
+- **Sur un autre combattant du même tableau** : les deux échangent leur place, tout de suite.
+- **Sur un combattant d'une autre catégorie** : échange. Chacun prend la place exacte de l'autre ; la fenêtre « Échanger deux combattants » demande de confirmer. C'est une seule action dans l'historique.
+- **Sur une carte d'une autre catégorie** : déplacement manuel (fenêtre « Déplacement manuel »). Le combattant prend une place libre. Un **tableau libre** vide accepte aussi un dépôt : il garde toujours sa carte.
+- **Sur sa propre carte** : rien ne se passe. **Sur une catégorie lancée** : refusé (« Catégorie lancée : déverrouillez-la d’abord »).
+
+Les fenêtres de confirmation montrent « De … ➜ Vers … » pour chaque combattant, les règles enfreintes (orange) et un éventuel changement de session (bleu). Dans les deux tableaux, les autres combattants gardent leur place ; ils ne sont refaits qu'à un « Nouveau tirage ».
+
+**Sur écran tactile (ou sans glisser) : clic-clic.** Cliquez sur une pastille : un bandeau dit « Sélection : X. Cliquez sur un autre combattant pour échanger, ou sur une catégorie pour l’y déplacer. (Échap pour annuler) ». Cliquez ensuite sur la destination ; mêmes effets que ci-dessus. Échap, ou un second clic sur la pastille, annule le choix.
+
+**« Annuler » juste après** : après chaque action, un message en bas de l'écran propose « Annuler » pendant 5 secondes ; cela défait cette action seule.
+
+**Même club au premier tour** : si deux combattants du même club se rencontrent au premier combat d'un tableau à élimination, le nom du club est en orange sur les deux pastilles et dans le tableau, la carte porte « Même club », et la fenêtre ou le message le dit. C'est un avertissement, jamais un blocage : aucun acquittement à donner. Rien en poule ni en kata, et rien à l'impression.
+
+**Poste Zone** : la planche est en lecture seule (pas de glisser, pas de choix).
+
+### L'historique et l'annulation en cascade
+
+Le bouton **Historique (n)** (planche et Liste) ouvre un panneau qui liste, du plus récent au plus ancien, tout ce qui change qui est dans quel tableau : plan appliqué, réaffectations, déplacements manuels, échanges, « Ne combat pas », échanges de places, nouveaux tirages, changements de format et de tableau libre, quelle que soit la page d'où ils viennent. Les filtres sont « Tout », « Plan », « À la main » et « Tableaux ». Ne sont pas inclus : « Marquer prête », déverrouiller, régénérer, pesée, inscriptions, présences et résultats. Dans l'onglet **Réaffectation**, ce panneau remplace « Réaffectations validées ».
+
+- **Voir** fait défiler la planche jusqu'aux cartes concernées et les entoure environ 2 secondes.
+- **Annuler…** remet les catégories touchées exactement comme avant. Si des actions **plus récentes** touchent les mêmes catégories, elles sont **annulées aussi, en premier** : c'est la cascade. Une ligne annulée reste, barrée, avec « Annulée à hh:mm » ; il n'y a pas de « Rétablir ».
+- **Mise en évidence** : en survolant « Annuler… » (ou au clavier), l'action choisie est marquée « Sera annulée » et celles de la cascade « Sera annulée aussi » ; sur la planche, les cartes concernées sont entourées en orange. Sous le bouton, « Annule aussi : … » liste toujours ces actions, même sans souris.
+- **La fenêtre « Annuler cette action ? »** (ou « Annuler tout le plan d’ensemble ? ») donne les actions dans l'ordre où elles seront annulées, ce qui revient pour chacune, et ce qui reste en place. Boutons « Garder » ou « Annuler ces n actions ».
+- **Ce qui bloque** : une catégorie lancée ou terminée, ou une session lancée. Le bouton est grisé et la raison écrite ; déverrouillez la catégorie pour annuler. Un échange de places ou un tirage ne s'annule plus si les inscrits du tableau ont changé depuis (pesée, absence) ; refaites le tirage ou échangez à la main.
+- **Supprimer un tableau libre** renvoie ses combattants d'où ils viennent, par la même annulation en cascade et la même fenêtre.
+
+**« Repartir de zéro »** (onglet Réaffectation) garde son rôle pour la session choisie : réaffectations, déplacements manuels et échanges entre catégories sont annulés et effacés de l'historique. C'est aussi une cascade : les échanges de places, tirages et changements de format plus récents qui touchent les mêmes catégories partent avec, mis en évidence dans la fenêtre ; ceux qui n'en dépendent pas restent. Impossible si la session est lancée ; un combattant dans une catégorie commencée reste où il est.
 
 ### Si le réseau de la salle tombe
 

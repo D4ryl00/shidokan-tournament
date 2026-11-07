@@ -71,3 +71,6 @@ Faite le 2026-11-06 sur la branche `coordonnees-clubs-annuaire` : voir le bilan.
 
 ## Étape 37 : placements manuels et tableaux libres
 Faite le 2026-11-06 sur la branche `etape-37-placements-manuels` : voir le bilan. Déplacer n'importe quel inscrit vers une autre catégorie ou un tableau libre, avec annulation ; la réaffectation automatique ignore ces placements (cartes d'alerte) ; les tableaux arrangés gardent leurs échanges à la régénération ; onglet « Catégories ». Détail : `docs/superpowers/specs/2026-11-06-placements-manuels-design.md`.
+
+## Étape 38 : planche des tableaux et historique
+Faite le 2026-11-08 sur la branche `etape-38-planche-historique` : voir le bilan. Onglet Tableaux : planche de toutes les catégories (glisser-déposer et clic-clic, échange entre catégories, bac sans adversaire, même club au 1er tour signalé) ; historique de tous les changements de tableaux avec annulation en cascade mise en évidence, aussi dans la Réaffectation ; « Repartir de zéro » en cascade ; poste Zone en lecture seule. Migration 0033. Détail : `docs/superpowers/specs/2026-11-07-planche-et-historique-design.md`.
