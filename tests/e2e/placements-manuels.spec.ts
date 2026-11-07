@@ -118,15 +118,23 @@ test('gala entre deux catégories', async ({ page, request }) => {
   await openTab(page, 'Tableaux');
   await rowOf('Gala 1').click();
   await page.getByTestId('bracket-entrant').filter({ hasText: 'CADA' }).first().click();
-  const undone = page.waitForResponse((r) => r.url().includes('/replacement/undo-manual') && r.request().method() === 'POST');
   await panel.getByTestId('move-entrant-undo').click();
+  // La fenêtre d'annulation montre le lot : le déplacement de CADA, et celui de LOURDA (plus récent, même tableau) « annulé aussi ».
+  const lot = page.getByTestId('undo-dialog');
+  // (L'application du plan, juste avant, touche aussi ces catégories : elle part avec, dans le lot.)
+  await expect(lot.locator('[data-role="main"]')).toContainText('CADA');
+  await expect(lot.locator('[data-role="also"]').filter({ hasText: 'LOURDA' })).toHaveCount(1);
+  const undone = page.waitForResponse((r) => r.url().endsWith('/history/undo') && r.request().method() === 'POST');
+  await page.getByTestId('undo-confirm').click();
   expect((await undone).ok()).toBeTruthy();
   await expect(panel).toHaveCount(0);
   await expect(page.getByTestId('bracket-entrant').filter({ hasText: 'CADA' })).toHaveCount(0);
   const after = await cats();
-  expect(after.find((c) => c.label.includes('Gala 1'))!.registrationIds).toHaveLength(1);
+  expect(after.find((c) => c.label.includes('Gala 1'))!.registrationIds).toHaveLength(0);
   await rowOf('-47').click();
   await expect(page.getByTestId('bracket-entrant').filter({ hasText: 'CADA' }).first()).toBeVisible();
+  await rowOf('+61').click();
+  await expect(page.getByTestId('bracket-entrant').filter({ hasText: 'LOURDA' }).first()).toBeVisible();
 });
 
 test('échange gardé après une arrivée', async ({ page, request }) => {

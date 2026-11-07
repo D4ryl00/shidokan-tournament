@@ -17,6 +17,7 @@ import { ThemeToggle } from './ThemeToggle.js';
 import { UserMenu } from './UserMenu.js';
 import { ZoneAutonomyBar } from './ZoneAutonomyBar.js';
 import { EmptyState } from './ui/EmptyState.js';
+import { HistoryProvider } from './history/HistoryProvider.js';
 import { useCompetitionEvents } from '../liveUpdates.js';
 
 const labelOf = (tab: string) => COMPETITION_TABS.find((t) => t.path === tab)?.label ?? tab;
@@ -154,7 +155,9 @@ export function CompetitionLayout() {
           </Group>
         </Stack>
       </Modal>
-      <Outlet />
+      <HistoryProvider competitionId={id}>
+        <Outlet />
+      </HistoryProvider>
     </Stack>
   );
 }

@@ -56,7 +56,7 @@ test('téléphone (375 px), thème sombre : la Réaffectation ne défile pas de 
   expect(await proposal.getByTestId('proposal-refuse').evaluate((el) => getComputedStyle(el).color)).toBe('rgb(255, 135, 135)');
   await proposal.getByTestId('proposal-apply').click();
   await page.getByTestId('proposal-confirm').click();
-  await expect(page.getByTestId('recasement-row')).toHaveCount(1);
+  await expect(page.getByTestId('history-entry')).toHaveCount(1);
   // Ni la barre du haut ni le tableau de l'historique ne font défiler la page de côté ; rien n'est coupé.
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
   expect(await clipped(page)).toEqual([]);

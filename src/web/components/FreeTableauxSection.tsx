@@ -1,12 +1,15 @@
 import { Alert, Button, Group, Loader, Modal, NativeSelect, Stack, Table, Text, TextInput } from '@mantine/core';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FREE_NAME_MAX, isFreeKey, type Category } from '../../domain/categories.js';
 import { DISCIPLINES, RULESETS } from '../../domain/disciplines.js';
 import { plural } from '../../domain/plural.js';
 import type { DisciplineId, Ruleset } from '../../domain/types.js';
 import { WAVE_NONE } from '../../domain/waves.js';
-import { useCategories, useCreateFreeTableau, useDeleteFreeTableau, useUpdateCategory, useUpdateFreeTableau, useWaves } from '../api.js';
+import { useCategories, useCreateFreeTableau, useDeleteFreeTableau, useFreeTableauDeletePreview, useHistory, useUpdateCategory, useUpdateFreeTableau, useWaves } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
+import { useUndoHighlight } from './history/highlight.js';
+import { lotOf } from './history/lot.js';
+import { cascadeSentence, UndoLotLine } from './history/UndoHistoryDialog.js';
 import { EmptyState } from './ui/EmptyState.js';
 
 const DISCIPLINE_OPTIONS = (Object.entries(DISCIPLINES) as [DisciplineId, { label: string }][]).map(([value, d]) => ({ value, label: d.label }));
@@ -42,6 +45,19 @@ export function FreeTableauxSection({ competitionId }: { competitionId: string }
   };
   const waveValue = (c: Category) => (c.waveOverride === WAVE_NONE || c.waveOverride === null ? WAVE_NONE : c.waveOverride);
   const returned = deleting ? deleting.registrationIds.length : 0; // inscrits placés dans le tableau : ceux qui retournent
+  // Supprimer renvoie les combattants par l'annulation, en cascade, des actions qui les y ont mis : la fenêtre les montre.
+  const preview = useFreeTableauDeletePreview(competitionId, deleting?.id ?? null);
+  const { data: history } = useHistory(competitionId, null);
+  const targets = preview.data?.targets;
+  const lot = useMemo(() => (history && targets ? lotOf(history.entries, targets) : []), [history, targets]);
+  const highlight = useUndoHighlight();
+  const targetKey = (targets ?? []).join(',');
+  useEffect(() => {
+    if (!targets || targets.length === 0) return;
+    highlight.pin(targets);
+    return highlight.unpin;
+  }, [targetKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const closeDelete = () => { setDeleting(null); remove.reset(); };
 
   return (
     <Stack gap="sm">
@@ -111,16 +127,22 @@ export function FreeTableauxSection({ competitionId }: { competitionId: string }
         )}
       </Modal>
 
-      <Modal opened={deleting !== null} onClose={() => { setDeleting(null); remove.reset(); }} title={`Supprimer le tableau libre « ${deleting?.key.free ?? ''} » ?`}>
-        <Stack>
+      <Modal opened={deleting !== null} onClose={closeDelete} title={`Supprimer le tableau libre « ${deleting?.key.free ?? ''} » ?`}>
+        <Stack data-testid="free-delete-dialog">
           <Text size="sm">
             {returned === 0 ? 'Aucun combattant à renvoyer : le tableau est vide.'
               : `${plural(returned, 'combattant')} ${returned > 1 ? 'retourneront' : 'retournera'} dans leur catégorie précédente.`}
           </Text>
-          <ApiErrorAlert error={remove.error} />
+          {lot.map((e) => <UndoLotLine key={e.id} entry={e} requested={(targets ?? []).includes(e.id)} />)}
+          {lot.length > (targets ?? []).length && <Alert color="orange" data-testid="undo-cascade">{cascadeSentence(lot.length - (targets ?? []).length)}</Alert>}
+          {lot.some((e) => e.blocked) && <Alert color="red">{lot.find((e) => e.blocked)!.blocked}</Alert>}
+          <ApiErrorAlert error={preview.error ?? remove.error} />
           <Group justify="flex-end">
-            <Button variant="default" onClick={() => { setDeleting(null); remove.reset(); }}>Annuler</Button>
-            <Button color="red" onClick={() => deleting && remove.mutate(deleting.id, { onSuccess: () => setDeleting(null) })} loading={remove.isPending}>Supprimer le tableau</Button>
+            <Button variant="default" onClick={closeDelete}>Annuler</Button>
+            <Button color="red" data-testid="free-delete-confirm" disabled={!targets || !history || preview.isError || lot.some((e) => e.blocked)}
+              onClick={() => deleting && targets && remove.mutate({ cid: deleting.id, expect: lot.map((e) => e.id) }, { onSuccess: () => setDeleting(null) })} loading={remove.isPending}>
+              Supprimer le tableau
+            </Button>
           </Group>
         </Stack>
       </Modal>

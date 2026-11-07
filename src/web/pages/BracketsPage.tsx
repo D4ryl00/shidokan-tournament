@@ -1,17 +1,19 @@
 import {
   Badge, Button, Card, Checkbox, Grid, Group, Modal, ScrollArea, SegmentedControl, Select, Stack, Text, TextInput, Title, UnstyledButton,
 } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { compatibleFormats, type BracketFormat } from '../../domain/brackets/index.js';
 import { activeEntrantCount, type Category, type CategoryStatus } from '../../domain/categories.js';
 import { normalizeName } from '../../domain/names.js';
 import { plural } from '../../domain/plural.js';
-import { useCategories, usePassages, useRedraw, useRegenerate, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
+import { useCategories, useHistory, usePassages, useRedraw, useRegenerate, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
 import { categoryPassages, kataPassageText, movedMatchZones } from '../passages.js';
 import { useSelectedWave } from '../useSelectedWave.js';
 import { usePoste } from '../poste.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { HistoryPanel, HISTORY_DRAWER_WIDTH } from '../components/history/HistoryPanel.js';
 import { MoveEntrantPanel } from '../components/MoveEntrantPanel.js';
 import { BracketView, type EntrantInfo } from '../components/BracketView.js';
 import { useRecasementDetails } from '../components/ReplacementBadge.js';
@@ -63,6 +65,11 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   // Avec des vagues : les catégories de la vague choisie (la même que dans les autres onglets), celles en attente, ou toutes.
   const { waves, waveId, select } = useSelectedWave(id);
   const [scope, setScope] = useState<'wave' | 'waiting' | 'all'>('wave');
+  // Historique : tiroir à droite ; au-dessus de `lg`, la page se resserre pour lui laisser la place.
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const wide = useMediaQuery('(min-width: 75em)');
+  const { data: history } = useHistory(id, waveId);
+  const historyCount = (history?.entries ?? []).filter((e) => e.status === 'active').length;
 
   const { data: registrations = [] } = useRegistrations(id);
   const badges = useMemo(() => new Map(registrations.filter((r) => r.recasementType).map((r) => [r.id, r.recasementType!])), [registrations]);
@@ -110,9 +117,15 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   };
 
   return (
-    <Grid>
+    <>
+    <Grid style={historyOpen && wide ? { marginRight: HISTORY_DRAWER_WIDTH } : undefined}>
       <Grid.Col span={{ base: 12, md: 4 }}>
         <Stack gap="xs">
+          {!readOnlyPoste && (
+            <Group justify="flex-end">
+              <Button size="compact-sm" variant="default" data-testid="history-open" onClick={() => setHistoryOpen((o) => !o)}>Historique ({historyCount})</Button>
+            </Group>
+          )}
           {waves.length > 0 && (
             <SegmentedControl size="xs" data-testid="brackets-wave" value={scope === 'wave' ? (waveId ?? '') : scope}
               onChange={(v) => {
@@ -268,5 +281,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
         </Modal>
       </Grid.Col>
     </Grid>
+    <HistoryPanel competitionId={id} waveId={waveId} mode="drawer" opened={historyOpen} onClose={() => setHistoryOpen(false)} />
+    </>
   );
 }

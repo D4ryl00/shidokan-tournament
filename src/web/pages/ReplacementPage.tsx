@@ -9,7 +9,6 @@ import {
   useCompetition,
   useGrid,
   useManualMove,
-  useUndoManualMove,
   usePreviewReplacement,
   usePlan,
   useResetRules,
@@ -20,7 +19,6 @@ import {
   useUnrefuseProposal,
   useRegistrations,
   useReplacement,
-  useUndoRecasement,
   useResetReplacement,
   useWithdrawRegistration,
   useSetAsideCase,
@@ -28,13 +26,16 @@ import {
   type CaseFighter,
 } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { HistoryPanel } from '../components/history/HistoryPanel.js';
+import { useRequestMoveUndo } from '../components/history/useRequestMoveUndo.js';
+import { ResetCascade } from '../components/history/ResetCascade.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { HELP } from '../help.js';
 import { HelpButton } from '../components/Help.js';
 import { ProposalPreview } from '../components/ProposalPreview.js';
-import { PROPOSAL_TYPES, ReplacementBadge } from '../components/ReplacementBadge.js';
+import { ReplacementBadge } from '../components/ReplacementBadge.js';
 import { ageBandLabel, disciplineLabel, prefsLabel, rulesetShort, weightLabel } from '../labels.js';
 import { PlanProgress, PROGRESS_HEIGHT } from '../components/replacement/PlanProgress.js';
 import { RuleLadder } from '../components/replacement/RuleLadder.js';
@@ -50,7 +51,6 @@ import { plural } from '../../domain/plural.js';
 
 type Dialog =
   | { kind: 'proposal'; proposal: Proposal; confirm: boolean }
-  | { kind: 'undo'; recasementId: string; label: string }
   | { kind: 'move'; registrationId: string; categoryId: string }
   | { kind: 'withdraw'; registrationId: string; categoryLabel: string }
   | { kind: 'set-aside'; caseId: string }
@@ -205,12 +205,11 @@ export function ReplacementPage() {
   const apply = useApplyProposal(id);
   const refuse = useRefuseProposal(id);
   const unrefuse = useUnrefuseProposal(id);
-  const undo = useUndoRecasement(id);
   const resetAll = useResetReplacement(id);
   // Change à chaque « Repartir de zéro » : la liste des règles et le plan repartent sans les choix du poste.
   const [resets, setResets] = useState(0);
   const move = useManualMove(id);
-  const undoManual = useUndoManualMove(id);
+  const requestMoveUndo = useRequestMoveUndo(id);
   const withdraw = useWithdrawRegistration(id);
   const setAside = useSetAsideCase(id);
   const resume = useResumeCase(id);
@@ -233,8 +232,6 @@ export function ReplacementPage() {
         : null;
   const canReset = resetBlocked === null;
   const [kinds, setKinds] = useState<string[]>([]);
-  const [logState, setLogState] = useState<'all' | 'validated' | 'undone'>('all');
-  const [logType, setLogType] = useState<string | null>(null);
   const reg = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
   const name = (rid: string) => {
     const r = reg.get(rid);
@@ -401,8 +398,8 @@ export function ReplacementPage() {
           </Group>
           {c.alert && (
             <Group gap="xs">
-              <Button size="xs" variant="subtle" color="orange" data-testid="case-undo-manual" loading={undoManual.isPending}
-                onClick={() => undoManual.mutate({ registrationId: c.registrationId }, { onSuccess: () => done('Déplacement manuel annulé.') })}>
+              <Button size="xs" variant="subtle" color="orange" data-testid="case-undo-manual" 
+                onClick={() => requestMoveUndo(c.registrationId)}>
                 Annuler son déplacement manuel
               </Button>
             </Group>
@@ -500,14 +497,6 @@ export function ReplacementPage() {
       <SectionCard title={HELP['recasement.valides'].title} help="recasement.valides"
         actions={(data.recasements.length > 0 || data.reset.undo + data.reset.manual + data.reset.clears + data.reset.history + data.reset.kept.length > 0) && (
           <Group gap="xs">
-            {data.recasements.length > 0 && (
-              <Group gap="xs" data-testid="recasement-filters">
-                <SegmentedControl size="xs" value={logState} onChange={(v) => setLogState(v as typeof logState)}
-                  data={[{ value: 'all', label: 'Toutes' }, { value: 'validated', label: 'Validées' }, { value: 'undone', label: 'Annulées' }]} />
-                <Select size="xs" w={200} placeholder="Tous les types" clearable value={logType} onChange={setLogType}
-                  data={[...new Set(data.recasements.map((r) => r.type))].map((t) => ({ value: t, label: `${PROPOSAL_TYPES[t as ProposalType].label} — ${PROPOSAL_TYPES[t as ProposalType].title}` }))} />
-              </Group>
-            )}
             <Button size="compact-sm" variant="light" color="red" data-testid="replacement-reset" disabled={!canReset}
               title={resetBlocked ?? undefined} onClick={() => { resetAll.reset(); setDialog({ kind: 'reset' }); }}>
               {sessionName ? `Repartir de zéro (session ${sessionName})` : 'Repartir de zéro'}
@@ -515,35 +504,7 @@ export function ReplacementPage() {
             {resetBlocked && <Text size="xs" c="dimmed" data-testid="replacement-reset-why">{resetBlocked}</Text>}
           </Group>
         )}>
-      {data.recasements.length === 0 ? (
-        <Text size="sm" c="dimmed">Aucune pour l’instant.</Text>
-      ) : (
-        // Sur un écran étroit, le tableau défile de côté dans la carte au lieu d'élargir la page.
-        <Box style={{ overflowX: 'auto' }}>
-        <Table>
-          <Table.Tbody>
-            {data.recasements.filter((r) => (logState === 'all' || r.status === logState) && (!logType || r.type === logType)).map((r) => (
-              <Table.Tr key={r.id} data-testid="recasement-row">
-                <Table.Td style={{ whiteSpace: 'nowrap' }}><ReplacementBadge type={r.type} state={r.status === 'undone' ? 'refused' : 'validated'} detail={r} /></Table.Td>
-                <Table.Td fw={500}>{name(r.registrationId)}</Table.Td>
-                <Table.Td>{r.fromLabel} → {r.toLabel}{r.reason && <Text size="xs" c="dimmed">{r.reason}</Text>}</Table.Td>
-                <Table.Td>
-                  {r.bulk ? 'en masse' : 'unitaire'}{r.bulk && r.manual ? ' · validé à la main' : ''}{r.preApproved ? ' · pré-accord coach' : ''}{r.status === 'undone' ? ' · annulée' : ''}
-                  <Text size="xs" c="dimmed" className="num">{new Date(r.createdAt).toLocaleTimeString('fr-FR')}</Text>
-                </Table.Td>
-                <Table.Td ta="right">
-                  {r.status === 'validated' && (
-                    <Button size="compact-sm" variant="subtle" color="red" data-testid="recasement-undo" onClick={() => { undo.reset(); setDialog({ kind: 'undo', recasementId: r.id, label: name(r.registrationId) }); }}>
-                      Annuler
-                    </Button>
-                  )}
-                </Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-        </Box>
-      )}
+        <HistoryPanel competitionId={id} waveId={waveId} mode="inline" />
       </SectionCard>
 
       <Modal opened={dialog?.kind === 'proposal' || dialog?.kind === 'move'} onClose={() => setDialog(null)} size="xl"
@@ -625,6 +586,7 @@ export function ReplacementPage() {
               {data.reset.blockedBy} a été réaffecté ensuite depuis une autre session : annulez d’abord ce déplacement-là dans l’historique.
             </Alert>
           )}
+          <ResetCascade competitionId={id} ids={data.reset.cascade} active={dialog?.kind === 'reset'} />
           {data.reset.refusal && <Alert color="red" data-testid="replacement-reset-refusal">{data.reset.refusal}</Alert>}
           <ApiErrorAlert error={resetAll.error} />
           <Group justify="flex-end">
@@ -638,19 +600,6 @@ export function ReplacementPage() {
                 },
               })}>
               {sessionName ? 'Tout annuler dans cette session' : 'Tout annuler'}
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
-      <Modal opened={dialog?.kind === 'undo'} onClose={() => setDialog(null)} title="Annuler cette réaffectation ?">
-        <Stack>
-          <Text>{dialog?.kind === 'undo' && dialog.label} retrouvera sa place d’avant.</Text>
-          <ApiErrorAlert error={undo.error} />
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setDialog(null)}>Non</Button>
-            <Button color="red" data-testid="recasement-undo-confirm"
-              onClick={() => dialog?.kind === 'undo' && undo.mutate({ recasementId: dialog.recasementId }, { onSuccess: () => done('Réaffectation annulée.') })}>
-              Annuler la réaffectation
             </Button>
           </Group>
         </Stack>

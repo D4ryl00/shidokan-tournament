@@ -65,7 +65,7 @@ test('pesée puis réaffectation : aperçu, validation, refus, plan d’ensemble
   await expect(page.getByTestId('preview-content')).toContainText('MARTIN Léa contre BERNARD Léa');
   await page.getByTestId('proposal-confirm').click();
   await expect(page.getByText('Réaffectation validée.')).toBeVisible();
-  await expect(page.getByTestId('recasement-row')).toHaveCount(1);
+  await expect(page.getByTestId('history-entry')).toHaveCount(1);
 
   await page.goto(`/competitions/${id}/inscriptions`);
   const badge = page.getByTestId('registration-row').filter({ hasText: 'MARTIN' }).getByTestId('replacement-badge');
@@ -123,13 +123,13 @@ test('pesée puis réaffectation : aperçu, validation, refus, plan d’ensemble
   await expect(page.getByText('Réaffectation validée.')).toBeVisible();
 
   // 6. Annulation depuis l'historique
-  const rows = page.getByTestId('recasement-row');
+  const rows = page.getByTestId('history-entry');
   const count = await rows.count();
-  await rows.first().getByTestId('recasement-undo').click();
-  await page.getByTestId('recasement-undo-confirm').click();
-  await expect(page.getByText('Réaffectation annulée.')).toBeVisible();
+  await rows.first().getByTestId('history-undo').click();
+  await page.getByTestId('undo-confirm').click();
+  await expect(page.getByText('Action annulée.')).toBeVisible();
   await expect(rows).toHaveCount(count);
-  await expect(rows.first()).toContainText('annulé');
+  await expect(rows.first()).toContainText('Annulée à');
 
   // 7. Aucune pastille à l'impression
   await page.goto(`/competitions/${id}/impression`);
@@ -144,7 +144,7 @@ test('repartir de zéro remet la réaffectation à l’état d’avant', async (
   const martin = caseOf(page, 'MARTIN Léa');
   await martin.getByTestId('replacement-proposal').filter({ hasText: '-54' }).first().getByTestId('proposal-apply').click();
   await page.getByTestId('proposal-confirm').click();
-  await expect(page.getByTestId('recasement-row')).toHaveCount(1);
+  await expect(page.getByTestId('history-entry')).toHaveCount(1);
   await expect(martin).toHaveCount(0);
 
   await expect(page.getByTestId('replacement-reset')).toHaveText('Repartir de zéro');
@@ -153,8 +153,8 @@ test('repartir de zéro remet la réaffectation à l’état d’avant', async (
   await expect(dialog).toContainText('1 réaffectation validée est annulée');
   await expect(dialog).toContainText('Les refus, les cartes mises de côté et l’historique sont effacés. Les règles ne changent pas.');
   await dialog.getByRole('button', { name: 'Tout annuler' }).click();
-  await expect(page.getByTestId('recasement-row')).toHaveCount(0);
-  await expect(page.getByText('Aucune pour l’instant.')).toBeVisible();
+  await expect(page.getByTestId('history-entry')).toHaveCount(0);
+  await expect(page.getByText('Aucune action pour l’instant.')).toBeVisible();
   await expect(page.getByTestId('replacement-reset')).toHaveCount(0);
   await expect(martin).toBeVisible();
 });
@@ -166,14 +166,14 @@ test('repartir de zéro refusé : le motif se lit dans la confirmation', async (
   const martin = caseOf(page, 'MARTIN Léa');
   await martin.getByTestId('replacement-proposal').filter({ hasText: '-54' }).first().getByTestId('proposal-apply').click();
   await page.getByTestId('proposal-confirm').click();
-  await expect(page.getByTestId('recasement-row')).toHaveCount(1);
+  await expect(page.getByTestId('history-entry')).toHaveCount(1);
   const refusal = 'Une catégorie concernée a déjà commencé ou sa session est lancée : rouvrez-la pour repartir de zéro.';
   await page.route('**/replacement/reset', (route) => route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: refusal }) }));
   await page.getByTestId('replacement-reset').click();
   const dialog = page.getByRole('dialog', { name: 'Repartir de zéro ?' });
   await dialog.getByRole('button', { name: 'Tout annuler' }).click();
   await expect(dialog).toContainText(refusal);
-  await expect(page.getByTestId('recasement-row')).toHaveCount(1);
+  await expect(page.getByTestId('history-entry')).toHaveCount(1);
 });
 
 test('carte : pourquoi, de et vers lisibles, pastille de la correction imposée', async ({ page, request }) => {
@@ -228,8 +228,9 @@ test('repartir de zéro : session choisie seulement, bouton rouge', async ({ pag
   await dialog.getByRole('button', { name: 'Tout annuler dans cette session' }).click();
   await expect(page.getByText('Réaffectation remise à zéro.')).toBeVisible();
   // L'historique de l'après-midi est toujours là.
-  await expect(page.getByTestId('recasement-row')).toHaveCount(1);
-  await expect(page.getByTestId('recasement-row')).toContainText('Cadets');
+  await page.getByTestId('replacement-wave').getByText('Après-midi').click();
+  await expect(page.getByTestId('history-entry')).toHaveCount(1);
+  await expect(page.getByTestId('history-entry')).toContainText('Cadets');
 });
 
 test('carte d’un split : le nom de celui qui vient, et d’où il vient', async ({ page, request }) => {

@@ -458,11 +458,11 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     ],
   },
   'recasement.valides': {
-    title: 'Réaffectations validées',
-    short: 'L’historique des déplacements ; vous pouvez annuler le plus récent d’un combattant.',
+    title: 'Historique',
+    short: 'Tout ce qui a été fait sur les tableaux ; vous pouvez annuler une action, avec celles qui en dépendent.',
     details: [
-      'Annuler remet le combattant dans sa catégorie d’avant. Impossible si sa catégorie a déjà commencé.',
-      'Repartir de zéro annule d’un coup ce qui a été décidé depuis la session choisie (réaffectations, refus, cartes mises de côté) et efface cet historique ; les autres sessions ne bougent pas. Un combattant placé dans une session lancée ou une catégorie commencée reste où il est ; impossible si la session choisie est lancée.',
+      'Annuler remet les tableaux touchés exactement comme avant. Les actions plus récentes qui touchent les mêmes catégories partent avec : elles sont écrites sous le bouton, surlignées au survol et listées dans la fenêtre de confirmation. Impossible si une de ces catégories a déjà commencé.',
+      'Repartir de zéro annule d’un coup ce qui a été décidé depuis la session choisie (réaffectations, déplacements à la main, échanges, refus, cartes mises de côté) et efface ces lignes ; les actions Places, Tirage et Format plus récentes qui en dépendent partent avec. Les autres sessions ne bougent pas. Un combattant placé dans une session lancée ou une catégorie commencée reste où il est ; impossible si la session choisie est lancée.',
     ],
   },
   tableaux: {

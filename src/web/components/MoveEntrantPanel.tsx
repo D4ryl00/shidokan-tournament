@@ -1,8 +1,9 @@
 import { Alert, Button, Card, Group, Modal, Select, Stack, Switch, Text } from '@mantine/core';
 import { useState } from 'react';
 import { plural } from '../../domain/plural.js';
-import { useCategories, useManualMove, useMoveTargets, usePreviewReplacement, useUndoManualMove, useWaves } from '../api.js';
+import { useCategories, useManualMove, useMoveTargets, usePreviewReplacement, useWaves } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
+import { useRequestMoveUndo } from './history/useRequestMoveUndo.js';
 import { ProposalPreview } from './ProposalPreview.js';
 import { WaveChangeWarning } from './replacement/WaveChangeWarning.js';
 
@@ -19,7 +20,7 @@ export function MoveEntrantPanel({ competitionId, registrationId, name, manual, 
   const [open, setOpen] = useState(false);
   const preview = usePreviewReplacement(competitionId);
   const move = useManualMove(competitionId);
-  const undo = useUndoManualMove(competitionId);
+  const requestUndo = useRequestMoveUndo(competitionId);
 
   const size = (categoryId: string) => {
     const c = categories.find((x) => x.id === categoryId);
@@ -58,12 +59,11 @@ export function MoveEntrantPanel({ competitionId, registrationId, name, manual, 
             Déplacer…
           </Button>
           {manual && (
-            <Button variant="subtle" color="orange" data-testid="move-entrant-undo" loading={undo.isPending} onClick={() => undo.mutateAsync({ registrationId }).then(() => onDone?.(), () => {})}>
+            <Button variant="subtle" color="orange" data-testid="move-entrant-undo" onClick={() => requestUndo(registrationId, onDone)}>
               Annuler son déplacement manuel
             </Button>
           )}
         </Group>
-        <ApiErrorAlert error={undo.error} />
       </Stack>
       <Modal opened={open} onClose={close} size="xl" title="Déplacement manuel">
         <Stack>

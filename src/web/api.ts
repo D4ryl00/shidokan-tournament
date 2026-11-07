@@ -308,11 +308,13 @@ export const useUpdateFreeTableau = (id: string) =>
     api<CategoryWrite>('PATCH', `/api/competitions/${id}/free-tableaux/${cid}`, patch, { rev: categoryRevOf(qc, id, cid) }),
   // La discipline et le règlement passent aux combattants du tableau : inscriptions et réaffectation à recharger.
   ['registrations', 'replacement']);
+/** Supprime un tableau libre ; `expect` : le lot d'actions annulées affiché (périmé : refusé). L'historique est rechargé. */
 export function useDeleteFreeTableau(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (cid: string) => api<{ returned: number }>('DELETE', `/api/competitions/${id}/free-tableaux/${cid}`, undefined, { rev: categoryRevOf(qc, id, cid) }),
-    onSuccess: () => Promise.all(['categories', 'schedule', 'registrations', 'replacement'].map((k) => qc.invalidateQueries({ queryKey: [k, id] }))),
+    mutationFn: ({ cid, expect }: { cid: string; expect: string[] }) =>
+      api<{ returned: number }>('DELETE', `/api/competitions/${id}/free-tableaux/${cid}?expect=${encodeURIComponent(expect.join(','))}`, undefined, { rev: categoryRevOf(qc, id, cid) }),
+    onSettled: () => Promise.all(['categories', 'schedule', 'registrations', 'replacement', 'history', 'free-delete-preview'].map((k) => qc.invalidateQueries({ queryKey: [k, id] }))),
   });
 }
 export const useRedraw = (id: string) =>

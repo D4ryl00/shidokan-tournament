@@ -49,14 +49,14 @@ test('réaffectation : une catégorie fermée, « Ne combat pas », puis annuler
   await cards.first().getByTestId('case-withdraw').click();
   await page.getByTestId('case-withdraw-confirm').click();
   await expect(cards).toHaveCount(1);
-  await expect(page.getByTestId('recasement-row').first()).toContainText('⊘ Ne combat pas');
+  await expect(page.getByTestId('history-entry').first()).toContainText('ne combat pas');
 
   await page.goto(`/competitions/${id}/inscriptions`);
   await expect(page.getByTestId('registration-withdrawn')).toHaveCount(1);
 
   await page.goto(`/competitions/${id}/reaffectation`);
-  await page.getByTestId('recasement-undo').first().click();
-  await page.getByTestId('recasement-undo-confirm').click();
+  await page.getByTestId('history-undo').first().click();
+  await page.getByTestId('undo-confirm').click();
   await expect(cards).toHaveCount(2);
 });
 

@@ -200,11 +200,10 @@ test('valider un déplacement à valider, appliquer : seuls lui et les cas simpl
   await expect(dialog.getByTestId('preview-content')).toBeVisible();
   await confirm.click();
   await expect(page.getByText('2 réaffectations appliquées.')).toBeVisible();
-  const rows = page.getByTestId('recasement-row');
+  const rows = page.getByTestId('history-entry');
   await expect(rows).toHaveCount(2);
-  await expect(rows.filter({ hasText: 'MINI' })).toContainText('en masse · validé à la main');
-  await expect(rows.filter({ hasText: 'SEULE' })).toContainText('en masse');
-  await expect(rows.filter({ hasText: 'SEULE' })).not.toContainText('validé à la main');
+  // L'historique groupe les déplacements du plan dans un bloc « Plan d’ensemble appliqué ».
+  await expect(page.getByTestId('history-plan')).toContainText('Plan d’ensemble appliqué · 2 déplacements');
   // Le déplacement non validé reste en attente dans le plan recalculé ; les choix sont vidés.
   await expect(view.getByTestId('plan-move')).toHaveCount(1);
   // Les déplacements appliqués ne sont pas signalés comme « n’est plus déplacé ».
@@ -262,7 +261,7 @@ test('valider, appliquer, repartir de zéro, puis valider le même déplacement 
   await expect(moveOf('MINI Léa')).toHaveCount(0);
   await page.getByTestId('replacement-reset').click();
   await page.getByTestId('replacement-reset-confirm').click();
-  await expect(page.getByTestId('recasement-row')).toHaveCount(0);
+  await expect(page.getByTestId('history-entry')).toHaveCount(0);
   await page.getByTestId('plan-show').click();
   // Même déplacement, même choix qu'avant l'application : le plan gardé pour ce choix (où il n'était plus possible) ne doit pas l'effacer.
   await moveOf('MINI Léa').getByTestId('plan-move-validate').click();
@@ -406,7 +405,7 @@ test('plan périmé à l’application : refusé, les choix restent', async ({ p
   });
   await page.getByTestId('plan-apply-confirm').click();
   await expect(view.getByTestId('api-error')).toBeVisible();
-  await expect(page.getByTestId('recasement-row')).toHaveCount(0);
+  await expect(page.getByTestId('history-entry')).toHaveCount(0);
   await expect(moveOf('MINI Léa').getByTestId('plan-move-unvalidate')).toBeVisible();
   await expect(view).toContainText('TARDIVE Léa');
 });
@@ -970,9 +969,9 @@ test('une annulation refusée dans l’historique : l’erreur dans sa fenêtre,
   await view.getByTestId('plan-apply').click();
   await page.getByTestId('plan-apply-confirm').click();
   await expect(page.getByText('1 réaffectation appliquée.')).toBeVisible();
-  await page.route('**/replacement/undo', (route) => route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Catégorie déjà lancée' }) }));
-  await page.getByTestId('recasement-undo').first().click();
-  await page.getByTestId('recasement-undo-confirm').click();
+  await page.route('**/history/undo', (route) => route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Catégorie déjà lancée' }) }));
+  await page.getByTestId('history-undo').first().click();
+  await page.getByTestId('undo-confirm').click();
   await expect(page.getByRole('dialog').getByTestId('api-error')).toContainText('Catégorie déjà lancée');
   await expect(page.getByTestId('replacement-step-cards').getByTestId('api-error')).toHaveCount(0);
 });
