@@ -319,7 +319,7 @@ test('plan groupé : une entrée « plan » par déplacement, même groupe, rais
   expect(next!.groupId).not.toBe(first!.groupId);
 });
 
-test('plan avec catégorie créée : annuler un seul déplacement, puis l’autre ; la catégorie créée disparaît, chacun dans son tableau', async () => {
+test('plan avec catégorie créée : annuler un seul déplacement, puis l’autre ; la catégorie créée disparaît, la vidée revient, chacun dans son tableau', async () => {
   // X pèse 58 kg (inscrite -54) : sa correction vers une -61 vide (nouvelle) est validée ; Y, seule en +61, la rejoint.
   const x = await reg({ lastName: 'X', weightClassId: 'cadet:F:-54', approxWeightKg: 52 });
   await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 52 });
@@ -348,7 +348,7 @@ test('plan avec catégorie créée : annuler un seul déplacement, puis l’autr
   let res = await undo([hY!.id], [hY!.id]);
   expect(res.statusCode).toBe(200);
   expect(res.json()).toEqual({ undone: [hY!.id] });
-  expect((await catOf(y.id))!.label).toBe(fromY.label);
+  expect((await catOf(y.id))!.id).toBe(fromY.id);
   expect((await catOf(x.id))!.id).toBe(created.id);
   await everyoneInBracket();
   // Puis celui qui l'a créée : elle disparaît, X revient dans sa catégorie d'avant.
@@ -379,8 +379,34 @@ test('plan avec catégorie créée : annuler le déplacement qui la crée emport
   expect(res.statusCode).toBe(200);
   expect(res.json()).toEqual({ undone: [hY!.id, hX!.id] });
   expect((await catOf(x.id))!.id).toBe(fromX.id);
-  expect((await catOf(y.id))!.label).toBe(fromY.label);
+  expect((await catOf(y.id))!.id).toBe(fromY.id);
   expect((await categories()).some((k) => k.id === created.id)).toBe(false);
+  await everyoneInBracket();
+});
+
+test('plan : annuler un seul déplacement qui a vidé une catégorie la rend avec le même id, le combattant dans son tableau', async () => {
+  // Deux seules en cadettes (-47, -54) et deux seules en minimes (-40, -45) : chaque réunion vide une catégorie.
+  const c47 = await reg({ lastName: 'C47', weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  const c54 = await reg({ lastName: 'C54', weightClassId: 'cadet:F:-54', approxWeightKg: 49 });
+  const m40 = await reg({ lastName: 'M40', ageBandCode: 'minime', weightClassId: 'minime:F:-40', approxWeightKg: 39 });
+  const m45 = await reg({ lastName: 'M45', ageBandCode: 'minime', weightClassId: 'minime:F:-45', approxWeightKg: 41 });
+  const before = new Map<string, Cat>();
+  for (const r of [c47, c54, m40, m45]) before.set(r.id, (await catOf(r.id))!);
+  const ids = new Set([...before.values()].map((c) => c.id));
+  expect(ids.size).toBe(4);
+  await applyPlan();
+  expect((await categories()).length).toBe(2);
+  // Le plus ancien des deux déplacements : sans cascade (l'autre ne touche pas les mêmes catégories).
+  const [, older] = await history();
+  expect(older!.cascade).toEqual([]);
+  const moved = older!.summary.registrationIds[0]!;
+  const emptied = before.get(moved)!;
+  expect((await categories()).some((c) => c.id === emptied.id)).toBe(false);
+  const res = await undo([older!.id], [older!.id]);
+  expect(res.statusCode).toBe(200);
+  const back = (await catOf(moved))!;
+  expect(back.id).toBe(emptied.id);
+  expect(back.bracket?.entrants.map((e) => e.registrationId) ?? []).toEqual(expect.arrayContaining([moved]));
   await everyoneInBracket();
 });
 

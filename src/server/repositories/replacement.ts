@@ -384,9 +384,9 @@ export async function applyPlan(
   if (stateFingerprint(await loadState(db, competitionId)) !== body.fingerprint) throw new StaleProposalError();
   // Tout ou rien : une seule transaction pour tous les déplacements (les `await` ci-dessous ne rendent jamais la main à une
   // autre requête, la base est synchrone). Un déplacement refusé annule ceux déjà écrits ; `persist` s'y emboîte en point de sauvegarde.
-  // Historique : une entrée `plan` par déplacement, toutes du même groupe (« Annuler tout le plan »), sans synchronisation
-  // propre : celle qui suit est faite par `loadState` au déplacement suivant, puis une dernière à la fin. Annuler un seul
-  // déplacement refait donc le tableau intermédiaire d'après sa graine.
+  // Historique : une entrée `plan` par déplacement, toutes du même groupe (« Annuler tout le plan »). Chacune synchronise après
+  // son déplacement (comme le faisait déjà `loadState` au déplacement suivant) : une catégorie vidée par ce déplacement et
+  // supprimée est gardée dans son état d'avant, et revient avec le même id si on annule ce seul déplacement.
   const groupId = crypto.randomUUID();
   let applied = 0;
   await atomically(db, async () => {
@@ -409,11 +409,9 @@ export async function applyPlan(
         competitionId,
         (ids: string[]) => proposalEntry(db, { kind: 'plan', groupId, waveId }, p, ids),
         async () => persistAll(db, competitionId, before, p, { bulk: true, waveId }),
-        { sync: false },
       );
       applied++;
     }
-    await syncCategories(db, competitionId);
   });
   return { applied };
 }
