@@ -18,14 +18,13 @@ export const CHANGED_REASON = 'Le tableau a changé depuis (inscrits différents
  */
 export function undoSet<T extends CascadeEntry>(entries: T[], targetIds: string[]): T[] {
   const active = entries.filter((e) => e.active).sort((a, b) => a.seq - b.seq);
-  const targets = active.filter((e) => targetIds.includes(e.id));
-  if (!targets.length) return [];
-  const inSet = new Set(targets.map((e) => e.id));
-  const cats = new Set(targets.flatMap((e) => e.categoryIds));
-  const oldest = targets[0]!.seq;
+  const targetSet = new Set(targetIds);
+  if (!active.some((e) => targetSet.has(e.id))) return [];
+  const inSet = new Set<string>();
+  const cats = new Set<string>();
+  // Dans l'ordre : les catégories d'une cible ne comptent qu'à partir d'elle (union des cascades de chaque cible).
   for (const e of active) {
-    if (e.seq <= oldest || inSet.has(e.id)) continue;
-    if (e.categoryIds.some((c) => cats.has(c))) {
+    if (targetSet.has(e.id) || e.categoryIds.some((c) => cats.has(c))) {
       inSet.add(e.id);
       for (const c of e.categoryIds) cats.add(c);
     }

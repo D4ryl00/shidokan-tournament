@@ -19,6 +19,10 @@ test('plusieurs cibles (plan) : union sans doublon', () => {
   const all = [e('p1', 1, ['A']), e('p2', 2, ['B']), e('s', 3, ['A', 'B'], 'places')];
   expect(undoSet(all, ['p1', 'p2']).map((x) => x.id)).toEqual(['s', 'p2', 'p1']);
 });
+test('plusieurs cibles : union de la cascade de chacune, une entrée plus ancienne qu’une cible n’est pas emportée', () => {
+  const all = [e('p1', 1, ['A']), e('m', 2, ['B']), e('p3', 3, ['B'])];
+  expect(undoSet(all, ['p1', 'p3']).map((x) => x.id)).toEqual(['p3', 'p1']);
+});
 test('composition : un échange de places dont le tableau a changé hors historique', () => {
   const s = e('s', 3, ['A'], 'places', true, { A: ['r1', 'r2'] });
   expect(compositionChanged([s], new Map([['A', ['r2', 'r1']]]))).toBe(false);

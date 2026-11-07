@@ -14,6 +14,8 @@ test('titres', () => {
   expect(entryHeadline(view({ kind: 'format', summary: { registrationIds: [], detail: 'Kata · Benjamins F : Automatique ➜ Tour 1 puis finale à deux' } })).what).toBe('Format changé');
   expect(entryHeadline(view({ kind: 'manual', names: ['GUERIN Emma'], summary: { registrationIds: ['g'], fromLabel: 'Minimes F · -38 kg', toLabel: 'Minimes F · -42 kg' } })))
     .toEqual({ what: 'GUERIN Emma', detail: 'Minimes F · -38 kg ➜ Minimes F · -42 kg' });
+  expect(entryHeadline(view({ kind: 'exchange', names: ['A', 'B'], summary: { registrationIds: ['a', 'b'], fromLabel: 'Minimes F · -38 kg', toLabel: 'Minimes F · -42 kg' } })))
+    .toEqual({ what: 'A ↔ B', detail: 'Minimes F · -38 kg ↔ Minimes F · -42 kg' });
 });
 
 test('effet de l’annulation', () => {
