@@ -155,9 +155,11 @@ test('tableau libre vidé : plus arrangé, le suivant est tiré à neuf', async 
   expect((swap.json() as Cat).arranged).toBe(true);
   for (const id of [a.id, b.id]) expect((await call('POST', '/replacement/undo-manual', { registrationId: id })).statusCode).toBe(200);
   expect((await categories()).find((c) => c.id === free.id)).toMatchObject({ registrationIds: [], bracket: null, arranged: false });
+  // Le premier arrivant est tiré à neuf (l'ancien arrangement est oublié) ; le suivant, déplacé à la main, garde les places (spec §2.6).
   await move(a.id, free.id);
+  expect((await categories()).find((c) => c.id === free.id)).toMatchObject({ registrationIds: [a.id], arranged: false });
   await move(b.id, free.id);
-  expect((await categories()).find((c) => c.id === free.id)).toMatchObject({ registrationIds: [a.id, b.id].sort(), arranged: false });
+  expect((await categories()).find((c) => c.id === free.id)).toMatchObject({ registrationIds: [a.id, b.id].sort(), arranged: true });
 });
 
 test('modifier : nom, discipline (combattants en kata), refusé une fois lancé', async () => {

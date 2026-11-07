@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import { entryKey } from '../../domain/closed-categories.js';
 import {
   compatibleFormats,
@@ -253,6 +253,18 @@ export async function syncCategories(db: AppDb, competitionId: string, opts: { r
       }
     }
   });
+}
+
+/**
+ * Tableaux « arrangés » (places gardées) : la prochaine synchronisation les refait avec `keepPlaces` au lieu d'un nouveau
+ * tirage. Seulement ceux qui ont déjà un tableau (et ne le sont pas encore).
+ */
+export function markArranged(t: AppDb, categoryIds: string[]): void {
+  if (categoryIds.length === 0) return;
+  t.update(categories)
+    .set({ arranged: true })
+    .where(and(inArray(categories.id, categoryIds), isNotNull(categories.bracketJson), eq(categories.arranged, false)))
+    .run();
 }
 
 /** Noms des inscrits à jour (une correction de nom ne régénère pas le tableau). */

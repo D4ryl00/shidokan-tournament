@@ -30,7 +30,8 @@ import { categories, clubs, competitions, fighters, recasements, refusals, regis
 import { listWaves } from './waves.js';
 import { launchedWaveKeys } from './launch-state.js';
 import type { Wave } from '../../domain/waves.js';
-import { CategoryLockedError, listCategories, syncCategories } from './categories.js';
+import { CategoryLockedError, listCategories, markArranged, syncCategories } from './categories.js';
+import { recorded } from './history.js';
 import { closedSet } from './closed-categories.js';
 import { getManagement } from '../sync/ownership.js';
 import { getCompetition, getGrid } from './competitions.js';
@@ -163,10 +164,11 @@ type CategoryRow = typeof categories.$inferSelect;
  * Écrit en base le passage de `before` à `after` pour l'inscription déplacée par `p`, et journalise.
  * Une inscription qui change de vague repasse « non pesé » : elle se pointe dans sa nouvelle vague (le poids reste).
  */
-function persist(db: AppDb, competitionId: string, before: State, after: State, p: Proposal, opts: { bulk: boolean; waveId: string | null }): void {
+function persist(db: AppDb, competitionId: string, before: State, after: State, p: Proposal, opts: { bulk: boolean; waveId: string | null }): string {
   const m0 = before.members.find((m) => m.registrationId === p.registrationId)!;
   const m1 = after.members.find((m) => m.registrationId === p.registrationId)!;
   const fromCat = before.categories.find((c) => c.id === m0.categoryId);
+  const recasementId = crypto.randomUUID();
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     const rows = new Map(t.select().from(categories).where(eq(categories.competitionId, competitionId)).all().map((c) => [c.id, c]));
@@ -222,7 +224,7 @@ function persist(db: AppDb, competitionId: string, before: State, after: State, 
     const toCat = after.categories.find((c) => c.id === m1.categoryId)!;
     t.insert(recasements)
       .values({
-        id: crypto.randomUUID(),
+        id: recasementId,
         competitionId,
         registrationId: p.registrationId,
         proposalId: p.id,
@@ -238,6 +240,7 @@ function persist(db: AppDb, competitionId: string, before: State, after: State, 
       })
       .run();
   });
+  return recasementId;
 }
 
 /** « Ne combat pas » pour un inscrit d'une catégorie fermée : hors de toute catégorie, inscrit au journal (annulable). */
@@ -285,14 +288,16 @@ export function actionWave(before: State, caseId: string, registrationId: string
   return m ? memberWave(before, m) : null;
 }
 
-/** Écrit chaque déplacement d'une proposition (plusieurs pour un « split »), un recasement par inscription. */
-function persistAll(db: AppDb, competitionId: string, state: State, p: Proposal, opts: { bulk: boolean; waveId: string | null }): void {
+/** Écrit chaque déplacement d'une proposition (plusieurs pour un « split »), un recasement par inscription ; rend leurs ids. */
+function persistAll(db: AppDb, competitionId: string, state: State, p: Proposal, opts: { bulk: boolean; waveId: string | null }): string[] {
   let current = state;
+  const ids: string[] = [];
   for (const step of proposalMoves(p)) {
     const next = applyProposal(current, step);
-    persist(db, competitionId, current, next, step, opts);
+    ids.push(persist(db, competitionId, current, next, step, opts));
     current = next;
   }
+  return ids;
 }
 
 /** Vague demandée par l'écran (`null` : toutes) ; 404 si elle n'existe pas. */
@@ -401,16 +406,50 @@ export function manualProposal(state: State, registrationId: string, categoryId:
   }
 }
 
-export async function manualMove(db: AppDb, competitionId: string, registrationId: string, categoryId: string): Promise<{ warnings: string[] }> {
-  const state = await loadState(db, competitionId);
+/**
+ * Écrit un déplacement manuel (type M) sans synchroniser, et garde les places des deux tableaux (spec §2.6) : départ et
+ * arrivée deviennent « arrangés », la synchronisation qui suit les refait avec `keepPlaces` au lieu d'un nouveau tirage.
+ */
+export function persistManualMove(
+  db: AppDb,
+  competitionId: string,
+  state: State,
+  registrationId: string,
+  categoryId: string,
+): { recasementId: string; warnings: string[]; fromCategoryId: string | null } {
   const { p, warnings } = manualProposal(state, registrationId, categoryId);
-  persist(db, competitionId, state, applyProposal(state, p), p, { bulk: false, waveId: actionWave(state, p.caseId, p.registrationId) });
-  await syncCategories(db, competitionId);
-  return { warnings };
+  const fromCategoryId = state.members.find((m) => m.registrationId === registrationId)?.categoryId ?? null;
+  let recasementId = '';
+  db.transaction((tx) => {
+    const t = tx as unknown as AppDb;
+    recasementId = persist(t, competitionId, state, applyProposal(state, p), p, { bulk: false, waveId: actionWave(state, p.caseId, p.registrationId) });
+    markArranged(t, [fromCategoryId, categoryId].filter((id): id is string => id !== null));
+  });
+  return { recasementId, warnings, fromCategoryId };
+}
+
+/** Déplacement manuel depuis « Déplacer vers… » ou la planche : places gardées, journalisé dans l'historique (`manual`). */
+export async function manualMove(db: AppDb, competitionId: string, registrationId: string, categoryId: string): Promise<{ warnings: string[]; historyId: string | null }> {
+  const state = await loadState(db, competitionId);
+  const { result, historyId } = await recorded(
+    db,
+    competitionId,
+    (r: ReturnType<typeof persistManualMove>) => {
+      const row = db.select({ fromLabel: recasements.fromLabel, toLabel: recasements.toLabel }).from(recasements).where(eq(recasements.id, r.recasementId)).get()!;
+      return {
+        kind: 'manual',
+        waveId: actionWave(state, 'manual', registrationId),
+        summary: { registrationIds: [registrationId], fromLabel: row.fromLabel, toLabel: row.toLabel, reason: 'Placé à la main' },
+        recasementIds: [r.recasementId],
+      };
+    },
+    async () => persistManualMove(db, competitionId, state, registrationId, categoryId),
+  );
+  return { warnings: result.warnings, historyId };
 }
 
 /** Instantané d'une réaffectation : ce qu'il faut réécrire pour l'annuler. */
-type RecasementSnapshot = {
+export type RecasementSnapshot = {
   /** Instantané d'un « Ne combat pas » : la catégorie et le retrait seulement. */
   registration: {
     categoryId: string | null; placementLocked?: boolean; originalJson?: string | null; recasementType?: string | null;
@@ -423,7 +462,7 @@ type RecasementSnapshot = {
 };
 
 /** Catégories qu'une annulation touche : la catégorie actuelle, celle d'avant et celles dont la clé avait changé. */
-const snapshotTouches = (currentCategoryId: string | null, snapshot: RecasementSnapshot): string[] =>
+export const snapshotTouches = (currentCategoryId: string | null, snapshot: RecasementSnapshot): string[] =>
   // Instantané incomplet (ligne écrite à la main, ancienne) : seulement ce qu'il contient.
   [...new Set([currentCategoryId, snapshot.registration?.categoryId, ...(snapshot.categories ?? []).map((c) => c.id)].filter((x): x is string => !!x))];
 
@@ -431,7 +470,7 @@ const snapshotTouches = (currentCategoryId: string | null, snapshot: RecasementS
  * Réécrit l'état d'avant une réaffectation (dans une transaction de l'appelant). Les valeurs d'origine corrigées depuis
  * (export FFK, fiche club : elles ne changent que `originalJson` d'une inscription réaffectée) sont gardées.
  */
-function restoreSnapshot(t: AppDb, registrationId: string, snapshot: RecasementSnapshot): void {
+export function restoreSnapshot(t: AppDb, registrationId: string, snapshot: RecasementSnapshot): void {
   // Instantané incomplet (ligne écrite à la main, ancienne) : seulement ce qu'il contient.
   for (const c of snapshot.categories ?? []) {
     const { id, ...values } = c;
@@ -707,7 +746,7 @@ export async function resetReplacement(db: AppDb, competitionId: string, waveId:
 }
 
 /** Recalcule et enregistre la clé des catégories choisies d'après leurs membres, puis resynchronise. */
-async function recomputeKeys(db: AppDb, competitionId: string, pick: (state: State) => string[]): Promise<void> {
+export async function recomputeKeys(db: AppDb, competitionId: string, pick: (state: State) => string[]): Promise<void> {
   const state = await loadState(db, competitionId);
   for (const id of pick(state)) {
     const cat = state.categories.find((c) => c.id === id);
