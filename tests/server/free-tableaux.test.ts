@@ -278,3 +278,20 @@ test('move-targets : le tableau libre, sans avertissement', async () => {
   expect(targets.some((t) => t.categoryId === fromA.id)).toBe(false);
   expect((await call('GET', '/replacement/move-targets/inconnu')).statusCode).toBe(404);
 });
+
+test('supprimer : un membre arrivé par un échange renvoie aussi l’autre combattant de l’échange', async () => {
+  const { a, b, fromA, fromB } = await twoGroups();
+  const free = await freeTableau('Démo', 'karate', 'jiyu');
+  await move(a.id, free.id);
+  // B (dans sa catégorie) prend la place de A dans le tableau libre : A va dans la catégorie de B.
+  const res = await call('POST', '/replacement/exchange', { a: b.id, b: a.id });
+  expect(res.statusCode).toBe(200);
+  expect((await catOf(b.id))!.id).toBe(free.id);
+  expect((await catOf(a.id))!.id).toBe(fromB.id);
+  const del = await call('DELETE', `/free-tableaux/${free.id}`);
+  expect(del.statusCode).toBe(200);
+  // A et B retrouvent leur catégorie d'avant.
+  expect((await catOf(a.id))!.id).toBe(fromA.id);
+  expect((await catOf(b.id))!.id).toBe(fromB.id);
+  expect((await categories()).some((c) => c.id === free.id)).toBe(false);
+});

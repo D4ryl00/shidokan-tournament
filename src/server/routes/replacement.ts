@@ -35,6 +35,7 @@ import {
   setAsideNotes,
   weighInList, fighterPresence } from '../repositories/replacement.js';
 import { PlanAbortedError, runPlanJob } from '../plan/runner.js';
+import { exchangeEntrants, exchangePreview, sameClubPreview } from '../repositories/exchange.js';
 import { NotFoundError } from '../repositories/registrations.js';
 
 type P = { Params: { id: string } };
@@ -152,7 +153,8 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
     const state = await loadState(db, req.params.id);
     if ('move' in body) {
       const { p, warnings } = manualProposal(state, body.move.registrationId, body.move.categoryId);
-      return { steps: [{ proposal: p, manual: true }], categories: previewTransition(state, applyProposal(state, p)), warnings };
+      const sameClub = await sameClubPreview(db, req.params.id, () => manualMove(db, req.params.id, body.move.registrationId, body.move.categoryId));
+      return { steps: [{ proposal: p, manual: true }], categories: previewTransition(state, applyProposal(state, p)), warnings, sameClub };
     }
     if ('proposalId' in body) {
       const p = findProposal(state, body.proposalId);
@@ -267,5 +269,18 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
   app.post<P>('/api/competitions/:id/replacement/move', async (req) => {
     const { registrationId, categoryId } = z.object({ registrationId: z.string(), categoryId: z.string() }).parse(req.body);
     return manualMove(db, req.params.id, registrationId, categoryId);
+  });
+
+  const exchangeBody = z.object({ a: z.string(), b: z.string() }).strict();
+  /** Aperçu de l'échange de deux combattants de deux catégories : règles enfreintes et paires du même club, sans écrire. */
+  app.post<P>('/api/competitions/:id/replacement/exchange/preview', async (req) => {
+    const { a, b } = exchangeBody.parse(req.body);
+    return exchangePreview(db, req.params.id, a, b);
+  });
+
+  /** Échange deux combattants de deux catégories : chacun prend la place exacte de l'autre (une entrée d'historique). */
+  app.post<P>('/api/competitions/:id/replacement/exchange', async (req) => {
+    const { a, b } = exchangeBody.parse(req.body);
+    return exchangeEntrants(db, req.params.id, a, b);
   });
 }
