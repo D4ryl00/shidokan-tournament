@@ -131,3 +131,28 @@ test('impression : nom de la zone sur le tableau', async ({ page, request }) => 
   // Non épinglée : la zone de la répartition automatique (l'autre zone, moins chargée).
   await expect(page.getByTestId('print-section').filter({ hasText: without.label })).toContainText('Zone : Tatami 2');
 });
+
+test('même club au 1er tour : club en orange, message et annulation', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe meme club ecran');
+  await seed(request, id);
+  await page.goto(`/competitions/${id}/tableaux`);
+  await page.getByTestId('category-row').filter({ hasText: '-54' }).click();
+  await expect(page.getByTestId('same-club')).toHaveCount(0);
+  const entrant = (n: string) => page.getByTestId('bracket-view').getByTestId('bracket-entrant').filter({ hasText: n }).first();
+  // Les deux Tani Dojo sont séparés au tirage.
+  const matches = page.getByTestId('bracket-match');
+  const m0 = (await matches.nth(0).textContent()) ?? '';
+  const m1 = (await matches.nth(1).textContent()) ?? '';
+  const tani1In0 = m0.includes('TANI1');
+  const tani1Match = tani1In0 ? m0 : m1;
+  const opponent = tani1Match.includes('ISSA') ? 'ISSA' : 'SHIN';
+  // TANI2 est dans l'autre match : l'échanger avec l'adversaire de TANI1.
+  await entrant('TANI2').click();
+  await entrant(opponent).click();
+  await expect(page.getByTestId('same-club')).toHaveCount(2);
+  const toast = page.locator('.mantine-Notification-root').filter({ hasText: 'se rencontrent au 1er tour.' });
+  await expect(toast).toContainText('TANI1');
+  await expect(toast).toContainText('Tani Dojo');
+  await toast.getByTestId('undo-toast-action').click();
+  await expect(page.getByTestId('same-club')).toHaveCount(0);
+});

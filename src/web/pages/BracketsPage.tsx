@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { compatibleFormats, type BracketFormat } from '../../domain/brackets/index.js';
 import { activeEntrantCount, type Category, type CategoryStatus } from '../../domain/categories.js';
+import { newSameClubPairs, sameClubSentence } from '../../domain/brackets/same-club.js';
 import { normalizeName } from '../../domain/names.js';
 import { plural } from '../../domain/plural.js';
 import { useCategories, useHistory, usePassages, useRedraw, useRegenerate, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
@@ -13,6 +14,7 @@ import { categoryPassages, kataPassageText, movedMatchZones } from '../passages.
 import { useSelectedWave } from '../useSelectedWave.js';
 import { usePoste } from '../poste.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { useUndoToast } from '../components/history/undoToast.js';
 import { HistoryPanel, HISTORY_DRAWER_WIDTH } from '../components/history/HistoryPanel.js';
 import { MoveEntrantPanel } from '../components/MoveEntrantPanel.js';
 import { BracketView, type EntrantInfo } from '../components/BracketView.js';
@@ -57,6 +59,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
   const redraw = useRedraw(id);
   const swap = useSwap(id);
+  const undoToast = useUndoToast(id);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [onlyAlone, setOnlyAlone] = useState(false);
@@ -111,7 +114,14 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
     if (!swapFrom) setSwapFrom(rid);
     else if (swapFrom === rid) setSwapFrom(null);
     else {
-      swap.mutate({ cid: selected.id, a: swapFrom, b: rid });
+      const before = selected.bracket;
+      const nameOf = (x: string) => entrants.get(x)?.name ?? '?';
+      swap.mutate({ cid: selected.id, a: swapFrom, b: rid }, {
+        onSuccess: (c) => undoToast(
+          `Places échangées : ${nameOf(swapFrom)} ↔ ${nameOf(rid)}`, c.historyId ?? null,
+          newSameClubPairs(before, c.bracket).map((p) => sameClubSentence(p, (x) => entrants.get(x) ?? { name: '?', club: '?' })),
+        ),
+      });
       setSwapFrom(null);
     }
   };
@@ -212,7 +222,10 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
                 data={[{ value: 'auto', label: `Automatique (${selected.effectiveFormat ? ALL_FORMAT_LABELS[selected.effectiveFormat] : '—'})` },
                   ...compatibleFormats(selected.key.discipline, activeCount(selected)).map((f) => ({ value: f, label: ALL_FORMAT_LABELS[f] }))]}
                 value={selected.format && compatibleFormats(selected.key.discipline, activeCount(selected)).includes(selected.format) ? selected.format : 'auto'}
-                onChange={(v) => update.mutate({ cid: selected.id, format: v === 'auto' ? null : (v as BracketFormat) })} />
+                onChange={(v) => update.mutate({ cid: selected.id, format: v === 'auto' ? null : (v as BracketFormat) }, {
+                  onSuccess: (c) => undoToast(`Format changé : ${v === 'auto' ? 'automatique' : ALL_FORMAT_LABELS[v as BracketFormat]}`, c.historyId ?? null,
+                    newSameClubPairs(selected.bracket, c.bracket).map((p) => sameClubSentence(p, (x) => entrants.get(x) ?? { name: '?', club: '?' }))),
+                })} />
               {selected.key.discipline !== 'kata' && (
                 <>
                   <OptionToggle label="Repêchage" value={selected.repechage} inherited={settingsRepechage} disabled={locked}
@@ -226,7 +239,10 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
               <Text size="xs" c="orange">Le format imposé ({ALL_FORMAT_LABELS[selected.format]}) ne convient plus au nombre d’inscrits : format automatique utilisé.</Text>
             )}
             <Group gap="sm">
-              <Button variant="default" data-testid="category-redraw" disabled={locked} onClick={() => redraw.mutate(selected.id)}>
+              <Button variant="default" data-testid="category-redraw" disabled={locked} onClick={() => redraw.mutate(selected.id, {
+                onSuccess: (c) => undoToast(`Nouveau tirage : ${selected.label}`, c.historyId ?? null,
+                  newSameClubPairs(selected.bracket, c.bracket).map((p) => sameClubSentence(p, (x) => entrants.get(x) ?? { name: '?', club: '?' }))),
+              })}>
                 Nouveau tirage
               </Button>
               {selected.status === 'provisional' && (

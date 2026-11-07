@@ -1,4 +1,5 @@
 import { Badge, Box, Group, Paper, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
+import { sameClubFirstRound } from '../../domain/brackets/same-club.js';
 import type { CSSProperties } from 'react';
 import {
   resolveBracket,
@@ -105,6 +106,8 @@ export function BracketView(props: Props) {
 
 function EntrantLine({ id, fallback, info, props, winner, inline }: { id: string | null; fallback: string; info?: EntrantInfo; props: Props; winner?: boolean; inline?: boolean }) {
   const selected = id !== null && props.selected === id;
+  // À l'écran seulement : le club en orange quand deux combattants du même club se rencontrent au 1er tour.
+  const sameClub = !props.printable && id !== null && sameClubFirstRound(props.category.bracket).some((p) => p.includes(id));
   const style: CSSProperties = {
     cursor: props.onSelect && id ? 'pointer' : undefined,
     outline: selected ? '2px solid var(--sk-accent)' : undefined,
@@ -124,7 +127,7 @@ function EntrantLine({ id, fallback, info, props, winner, inline }: { id: string
             {info.name}
             {!props.printable && id && props.badges?.get(id) && <> <ReplacementBadge type={props.badges.get(id)!} size="xs" detail={props.badgeDetails?.get(id)} /></>}
           </Text>
-          <Text size="xs" c={props.printable ? undefined : 'dimmed'} lh={1.2}>{info.club}</Text>
+          <Text size="xs" c={props.printable ? undefined : sameClub ? 'orange' : 'dimmed'} fw={sameClub ? 600 : undefined} lh={1.2} data-testid={sameClub ? 'same-club' : undefined}>{info.club}</Text>
         </>
       ) : (
         <Text size="sm" c="dimmed" fs="italic">{fallback}</Text>
