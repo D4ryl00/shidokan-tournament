@@ -81,11 +81,23 @@ export function BracketView(props: Props) {
   const { category } = props;
   if (!category.bracket || category.registrationIds.length === 0) return null;
   if (category.registrationIds.length === 1) {
-    const only = props.entrants.get(category.registrationIds[0]!);
+    // Sa case comme dans un tableau : cliquable pour le choisir (déplacement vers une autre catégorie).
+    const onlyId = category.registrationIds[0]!;
+    const only = props.entrants.get(onlyId);
     return (
-      <Text data-testid="bracket-view" c="dimmed">
-        {only?.name} ({only?.club}) n’a pas d’adversaire dans cette catégorie : pas de combat. À réaffecter.
-      </Text>
+      <Stack data-testid="bracket-view" gap="xs">
+        <Paper withBorder className="bracket-card" maw={260} data-testid="bracket-alone">
+          <div className="bracket-card-head">
+            <Text size="xs" fw={700}>Sans adversaire</Text>
+          </div>
+          <Box className="bracket-card-row" px={2} py={1}>
+            <EntrantLine id={onlyId} fallback="—" info={only} props={props} inline={props.printable} />
+          </Box>
+        </Paper>
+        <Text c="dimmed" size="sm">
+          {only?.name} ({only?.club}) n’a pas d’adversaire dans cette catégorie : pas de combat. À réaffecter.
+        </Text>
+      </Stack>
     );
   }
   return category.bracket.kind === 'kata' ? <KataView {...props} bracket={category.bracket} /> : <CombatView {...props} bracket={category.bracket} />;

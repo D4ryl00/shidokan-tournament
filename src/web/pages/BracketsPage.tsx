@@ -228,7 +228,9 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
               )}
               {!locked && selected.bracket && (
                 <Text size="sm" c={swapFrom ? undefined : 'dimmed'} fw={swapFrom ? 600 : undefined} data-testid="swap-select">
-                  {swapFrom ? `Cliquez sur l’inscrit à échanger avec ${entrants.get(swapFrom)?.name}` : 'Échange manuel : cliquez sur deux inscrits.'}
+                  {selected.registrationIds.length === 1
+                    ? 'Cliquez sur l’inscrit pour le déplacer.'
+                    : swapFrom ? `Cliquez sur l’inscrit à échanger avec ${entrants.get(swapFrom)?.name}` : 'Échange manuel : cliquez sur deux inscrits.'}
                 </Text>
               )}
             </Group>

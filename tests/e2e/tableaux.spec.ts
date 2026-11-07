@@ -56,6 +56,22 @@ test('tableaux : catégories, séparation des clubs, format, tirage, prête, imp
   await expect(page.getByTestId('print-section')).toHaveCount(2);
 });
 
+test('tableau d’un seul combattant : sa case est affichée et permet de le déplacer', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe tableau seul');
+  await seed(request, id);
+  await page.goto(`/competitions/${id}/tableaux`);
+  await page.getByTestId('category-row').filter({ hasText: 'Kata' }).click();
+  const view = page.getByTestId('bracket-view');
+  await expect(view).toContainText('n’a pas d’adversaire dans cette catégorie');
+  const entrant = view.getByTestId('bracket-entrant');
+  await expect(entrant).toHaveCount(1);
+  await expect(entrant).toContainText('KATA');
+  await expect(entrant).toContainText('Shinsengumi');
+  await expect(page.getByTestId('swap-select')).toContainText('Cliquez sur l’inscrit pour le déplacer');
+  await entrant.click();
+  await expect(page.getByTestId('move-entrant-panel')).toContainText('KATA');
+});
+
 test('impression : un grand tableau tient sur une page A4 paysage', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe grands tableaux');
   for (let i = 0; i < 17; i++) {
