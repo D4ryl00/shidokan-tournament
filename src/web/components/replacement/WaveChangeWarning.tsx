@@ -6,7 +6,9 @@ import type { Wave } from '../../../domain/waves.js';
  * Ce qu'entraîne un changement de vague : le combattant (et ceux que sa catégorie emmène) repasse « non pesé »
  * dans sa nouvelle vague ; vague d'arrivée déjà clôturée ou catégorie en attente signalées.
  */
-export function WaveChangeWarning({ proposal, waves, name }: { proposal: Proposal | undefined; waves: Wave[]; name: (registrationId: string) => string }) {
+export type WaveEffects = Pick<Proposal, 'registrationId' | 'waveChange' | 'waveShifts'>;
+
+export function WaveChangeWarning({ proposal, waves, name }: { proposal: WaveEffects | undefined; waves: Wave[]; name: (registrationId: string) => string }) {
   if (!proposal || (!proposal.waveChange && proposal.waveShifts.length === 0)) return null;
   const waveName = (w: string | null) => waves.find((x) => x.id === w)?.name ?? 'en attente';
   const where = (to: string | null) => (to === null ? 'dans une catégorie en attente (dans aucune session)' : `dans la session « ${waveName(to)} »`);

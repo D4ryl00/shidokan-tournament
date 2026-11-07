@@ -51,8 +51,9 @@ export class StaleProposalError extends Error {
 }
 
 /** État du recasement, après synchronisation des catégories. */
-export async function loadState(db: AppDb, competitionId: string): Promise<State> {
-  await syncCategories(db, competitionId);
+export async function loadState(db: AppDb, competitionId: string, opts: { sync?: boolean } = {}): Promise<State> {
+  // `sync: false` : état intermédiaire d'une action en deux temps (une catégorie vidée en attendant son arrivant n'est pas supprimée).
+  if (opts.sync !== false) await syncCategories(db, competitionId);
   const competition = await getCompetition(db, competitionId);
   if (!competition) throw new NotFoundError('Compétition introuvable');
   const grid = await getGrid(db, competitionId);

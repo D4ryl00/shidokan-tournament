@@ -1,13 +1,12 @@
 import { Badge, Button, Card, Group, Stack, Text } from '@mantine/core';
 import type { HTMLAttributes } from 'react';
 import { Link } from 'react-router';
-import { newSameClubPairs, sameClubFirstRound } from '../../../domain/brackets/same-club.js';
+import { newSameClubSentences, sameClubFirstRound } from '../../../domain/brackets/same-club.js';
 import { activeEntrantCount, isFreeKey, type Category } from '../../../domain/categories.js';
 import { normalizeName } from '../../../domain/names.js';
 import { plural } from '../../../domain/plural.js';
 import type { ProposalType } from '../../../domain/replacement/index.js';
 import { ALL_FORMAT_LABELS } from '../../../domain/brackets/format-labels.js';
-import { sameClubSentence } from '../../../domain/brackets/same-club.js';
 import { useRedraw } from '../../api.js';
 import type { RecasementEntry } from '../../api.js';
 import { STATUS_LABELS, STATUS_TONES } from '../../pages/BracketsPage.js';
@@ -16,7 +15,8 @@ import { BracketView, type EntrantInfo } from '../BracketView.js';
 import { useUndoToast } from '../history/undoToast.js';
 import { StatusBadge } from '../ui/StatusBadge.js';
 import { FighterChip } from './FighterChip.js';
-import { cardSections } from './model.js';
+import { cardSections, isLockedCategory, LOCKED_DROP } from './model.js';
+import type { DragAttrs } from './useDragMove.js';
 
 type Passages = ReturnType<typeof categoryPassages>;
 
@@ -44,8 +44,9 @@ export interface CardProps {
   /** Contour : `undo` = annulation en préparation (orange), `see` = « Voir » de l'historique. */
   ring?: 'undo' | 'see' | null;
   /** Attributs ajoutés à la carte et à chaque pastille (glisser-déposer). */
-  cardProps?: HTMLAttributes<HTMLDivElement>;
+  cardProps?: DragAttrs;
   chipProps?: (registrationId: string, category: Category) => HTMLAttributes<HTMLDivElement>;
+  /** Pastille choisie (clic-clic). */
   selectedChip?: string | null;
 }
 
@@ -57,7 +58,7 @@ function RedrawButton({ competitionId, category, entrants }: { competitionId: st
     <Button size="xs" variant="default" data-testid="card-redraw" loading={redraw.isPending}
       onClick={() => redraw.mutate(category.id, {
         onSuccess: (c) => undoToast(`Nouveau tirage : ${category.label}`, c.historyId ?? null,
-          newSameClubPairs(category.bracket, c.bracket).map((p) => sameClubSentence(p, (x) => entrants.get(x) ?? { name: '?', club: '?' }))),
+          newSameClubSentences(category.bracket, c.bracket, (x) => entrants.get(x))),
       })}>
       Nouveau tirage
     </Button>
@@ -66,7 +67,8 @@ function RedrawButton({ competitionId, category, entrants }: { competitionId: st
 
 export function CategoryCard(p: CardProps) {
   const c = p.category;
-  const locked = c.status === 'started' || c.status === 'finished' || c.launchLocked;
+  const locked = isLockedCategory(c);
+  const drop = p.cardProps?.['data-drop'];
   const active = activeEntrantCount(c);
   const pairs = sameClubFirstRound(c.bracket);
   const sameIds = new Set(pairs.flat());
@@ -119,7 +121,19 @@ export function CategoryCard(p: CardProps) {
         )}
         {p.expanded && (
           <BracketView category={c} entrants={p.entrants} numbers={p.passages.numbers} noRest={p.passages.noRest}
-            matchZones={movedMatchZones(p.passages, p.zones, c.bracket)} badges={p.badges} badgeDetails={p.badgeDetails} />
+            matchZones={movedMatchZones(p.passages, p.zones, c.bracket)} badges={p.badges} badgeDetails={p.badgeDetails}
+            selected={p.selectedChip} entrantProps={locked ? undefined : p.chipProps && ((id) => p.chipProps!(id, c))} />
+        )}
+        {drop === 'ok' && (
+          <Text size="xs" ta="center" c="var(--sk-accent)" data-testid="card-drop-hint" py={6}
+            style={{ border: '1px dashed var(--sk-accent)', borderRadius: 8 }}>
+            Déposer ici : déplacer dans cette catégorie
+          </Text>
+        )}
+        {drop === 'no' && (
+          <Text size="xs" ta="center" c="dimmed" data-testid="card-drop-hint" py={6} style={{ border: '1px dashed var(--sk-card-line)', borderRadius: 8 }}>
+            {LOCKED_DROP}
+          </Text>
         )}
         <Group gap="xs">
           {c.bracket && (

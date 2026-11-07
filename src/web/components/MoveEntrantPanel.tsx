@@ -1,12 +1,11 @@
-import { Alert, Button, Card, Group, Modal, Select, Stack, Switch, Text } from '@mantine/core';
+import { Button, Card, Group, Modal, Select, Stack, Switch, Text } from '@mantine/core';
 import { useState } from 'react';
 import { plural } from '../../domain/plural.js';
 import { useCategories, useManualMove, useMoveTargets, usePreviewReplacement, useWaves } from '../api.js';
 import { useUndoToast } from './history/undoToast.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { useRequestMoveUndo } from './history/useRequestMoveUndo.js';
-import { ProposalPreview } from './ProposalPreview.js';
-import { WaveChangeWarning } from './replacement/WaveChangeWarning.js';
+import { MoveConsequences } from './MoveConsequences.js';
 
 /**
  * Sous le tableau, pour l'inscrit choisi : le déplacer à la main vers une autre catégorie ou un tableau libre (avec aperçu avant
@@ -69,14 +68,9 @@ export function MoveEntrantPanel({ competitionId, registrationId, name, manual, 
       </Stack>
       <Modal opened={open} onClose={close} size="xl" title="Déplacement manuel">
         <Stack>
-          {preview.isPending && <Text size="sm">Calcul de l’aperçu…</Text>}
           <ApiErrorAlert error={preview.error ?? move.error} />
-          {preview.data?.warnings && preview.data.warnings.length > 0 && (
-            <Alert color="orange" title="Règles enfreintes" data-testid="move-warnings">{preview.data.warnings.join(' ')}</Alert>
-          )}
-          {preview.data?.sameClub?.map((s) => <Text key={s} size="sm" c="orange" data-testid="move-same-club">{s}</Text>)}
-          <WaveChangeWarning proposal={preview.data?.steps[0]?.proposal} waves={waves} name={() => name} />
-          {preview.data && <ProposalPreview data={preview.data} />}
+          <MoveConsequences pending={preview.isPending} warnings={preview.data?.warnings} sameClub={preview.data?.sameClub}
+            waveEffects={[preview.data?.steps[0]?.proposal]} waves={waves} name={() => name} preview={preview.data} />
           <Group justify="flex-end">
             <Button variant="default" onClick={close}>Annuler</Button>
             <Button data-testid="move-entrant-confirm" loading={move.isPending} disabled={!preview.data}

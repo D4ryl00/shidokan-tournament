@@ -107,3 +107,32 @@ export function cardSections(c: Category): CardSection[] {
   }
   return out.length ? out : [{ label: 'INSCRITS', ids: all }];
 }
+
+/** Ce que fait le dépôt d'une pastille (spec §2.6) ; `from` / `to` : catégories de départ et d'arrivée. */
+export type DropAction = { kind: 'swap' | 'exchange' | 'move'; from: string; to: string } | { kind: 'none' } | { kind: 'locked' };
+
+export const LOCKED_DROP = 'Catégorie lancée : déverrouillez-la d’abord.';
+
+/** Catégorie lancée, terminée, ou de session lancée : rien n'y entre ni n'en sort. */
+export const isLockedCategory = (c: Pick<Category, 'status' | 'launchLocked'> | undefined): boolean =>
+  !!c && (c.status === 'started' || c.status === 'finished' || !!c.launchLocked);
+
+/** `dropAction`, les verrous déjà connus (pastilles et cartes les portent). */
+export function dropKind(
+  src: { registrationId: string; categoryId: string; locked: boolean },
+  target: { registrationId?: string; categoryId: string; locked: boolean },
+): DropAction {
+  if (target.registrationId === src.registrationId || (target.registrationId === undefined && target.categoryId === src.categoryId)) return { kind: 'none' };
+  if (src.locked || target.locked) return { kind: 'locked' };
+  const kind = target.categoryId === src.categoryId ? 'swap' : target.registrationId !== undefined ? 'exchange' : 'move';
+  return { kind, from: src.categoryId, to: target.categoryId };
+}
+
+/**
+ * Pastille déposée sur une pastille ou une carte : même pastille ou sa propre carte → rien ; une catégorie verrouillée → refusé ;
+ * même catégorie → échange de places ; pastille d'une autre catégorie → échange ; carte d'une autre catégorie → déplacement.
+ */
+export function dropAction(src: { registrationId: string; categoryId: string }, target: { registrationId?: string; categoryId: string }, cats: Category[]): DropAction {
+  const locked = (id: string) => isLockedCategory(cats.find((c) => c.id === id));
+  return dropKind({ ...src, locked: locked(src.categoryId) }, { ...target, locked: locked(target.categoryId) });
+}

@@ -103,3 +103,48 @@ test('refus : même catégorie, absent, catégorie lancée', async () => {
   expect((await call('POST', '/replacement/exchange', { a: a[0]!.id, b: b[1]!.id })).statusCode).toBe(409);
   expect(await history()).toHaveLength(0);
 });
+
+test('aperçu : changements de session des deux combattants', async () => {
+  const minimes = [await reg({ lastName: 'MINI0', ageBandCode: 'minime', weightClassId: 'minime:F:-50' }), await reg({ lastName: 'MINI1', ageBandCode: 'minime', weightClassId: 'minime:F:-50' })];
+  const cadets = [await reg({ lastName: 'CAD0' }), await reg({ lastName: 'CAD1' })];
+  const [matin, aprem] = (await call('PUT', '/waves', [
+    { name: 'Matin', rules: { ageBandCodes: ['poussin', 'pupille', 'benjamin', 'minime'], disciplines: [] } },
+    { name: 'Après-midi', rules: { ageBandCodes: ['cadet', 'junior', 'senior'], disciplines: [] } },
+  ])).json() as { id: string }[];
+  const before = await contents();
+  const preview = await call('POST', '/replacement/exchange/preview', { a: minimes[0]!.id, b: cadets[0]!.id });
+  expect(preview.statusCode).toBe(200);
+  const { waveMoves } = preview.json() as { waveMoves: { registrationId: string; label: string; from: string | null; to: string | null }[] };
+  expect(waveMoves).toEqual(expect.arrayContaining([
+    { registrationId: minimes[0]!.id, label: 'MINI0 x', from: matin!.id, to: aprem!.id },
+    { registrationId: cadets[0]!.id, label: 'CAD0 x', from: aprem!.id, to: matin!.id },
+  ]));
+  expect(await contents()).toEqual(before);
+});
+
+test('échange avec un combattant seul dans sa catégorie (bac « Sans adversaire ») : sa catégorie reste, l’autre y prend sa place', async () => {
+  const a = [await reg({ lastName: 'ALPHA0' }), await reg({ lastName: 'ALPHA1' }), await reg({ lastName: 'ALPHA2' })];
+  const solo = await reg({ lastName: 'SOLO', weightClassId: 'cadet:F:-61' });
+  const [catA, catSolo] = [await catOf(a[0]!.id), await catOf(solo.id)];
+  const before = await contents();
+  const preview = await call('POST', '/replacement/exchange/preview', { a: solo.id, b: a[0]!.id });
+  expect(preview.statusCode, preview.body).toBe(200);
+  const res = await call('POST', '/replacement/exchange', { a: solo.id, b: a[0]!.id });
+  expect(res.statusCode, res.body).toBe(200);
+  expect((await catOf(solo.id)).id).toBe(catA.id);
+  expect((await catOf(a[0]!.id)).id).toBe(catSolo.id);
+  expect((await catOf(a[0]!.id)).registrationIds).toEqual([a[0]!.id]);
+  expect((await catOf(a[0]!.id)).label).toContain('-61');
+  // Annulée : tout revient, puis refaite.
+  const { historyId } = res.json() as { historyId: string };
+  expect((await call('POST', '/history/undo', { ids: [historyId], expect: [historyId] })).statusCode).toBe(200);
+  expect(await contents()).toEqual(before);
+  expect((await call('POST', '/replacement/exchange', { a: solo.id, b: a[0]!.id })).statusCode).toBe(200);
+  // Deux combattants seuls : chacun prend la catégorie de l'autre.
+  const lone = await reg({ lastName: 'LONE', weightClassId: 'cadet:F:-47' });
+  const catLone = await catOf(lone.id);
+  const both = await call('POST', '/replacement/exchange', { a: lone.id, b: a[0]!.id });
+  expect(both.statusCode, both.body).toBe(200);
+  expect((await catOf(lone.id)).id).toBe(catSolo.id);
+  expect((await catOf(a[0]!.id)).id).toBe(catLone.id);
+});

@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { compatibleFormats, type BracketFormat } from '../../domain/brackets/index.js';
 import { activeEntrantCount, type Category, type CategoryStatus } from '../../domain/categories.js';
-import { newSameClubPairs, sameClubSentence } from '../../domain/brackets/same-club.js';
+import { newSameClubSentences } from '../../domain/brackets/same-club.js';
 import { normalizeName } from '../../domain/names.js';
 import { plural } from '../../domain/plural.js';
 import { useCategories, useHistory, usePassages, useRedraw, useRegenerate, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
@@ -144,7 +144,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
       swap.mutate({ cid: selected.id, a: swapFrom, b: rid }, {
         onSuccess: (c) => undoToast(
           `Places échangées : ${nameOf(swapFrom)} ↔ ${nameOf(rid)}`, c.historyId ?? null,
-          newSameClubPairs(before, c.bracket).map((p) => sameClubSentence(p, (x) => entrants.get(x) ?? { name: '?', club: '?' })),
+          newSameClubSentences(before, c.bracket, (x) => entrants.get(x)),
         ),
       });
       setSwapFrom(null);
@@ -276,7 +276,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
                 value={selected.format && compatibleFormats(selected.key.discipline, activeCount(selected)).includes(selected.format) ? selected.format : 'auto'}
                 onChange={(v) => update.mutate({ cid: selected.id, format: v === 'auto' ? null : (v as BracketFormat) }, {
                   onSuccess: (c) => undoToast(`Format changé : ${v === 'auto' ? 'automatique' : ALL_FORMAT_LABELS[v as BracketFormat]}`, c.historyId ?? null,
-                    newSameClubPairs(selected.bracket, c.bracket).map((p) => sameClubSentence(p, (x) => entrants.get(x) ?? { name: '?', club: '?' }))),
+                    newSameClubSentences(selected.bracket, c.bracket, (x) => entrants.get(x))),
                 })} />
               {selected.key.discipline !== 'kata' && (
                 <>
@@ -293,7 +293,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
             <Group gap="sm">
               <Button variant="default" data-testid="category-redraw" disabled={locked} onClick={() => redraw.mutate(selected.id, {
                 onSuccess: (c) => undoToast(`Nouveau tirage : ${selected.label}`, c.historyId ?? null,
-                  newSameClubPairs(selected.bracket, c.bracket).map((p) => sameClubSentence(p, (x) => entrants.get(x) ?? { name: '?', club: '?' }))),
+                  newSameClubSentences(selected.bracket, c.bracket, (x) => entrants.get(x))),
               })}>
                 Nouveau tirage
               </Button>

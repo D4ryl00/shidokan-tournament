@@ -28,3 +28,8 @@ export function sameClubSentence(pair: [string, string], info: (id: string) => {
   const [a, b] = [info(pair[0]), info(pair[1])];
   return `${a.name} et ${b.name} (${a.club}) se rencontrent au 1er tour.`;
 }
+
+/** Phrases des nouvelles paires du même club au 1er tour (message de 5 s après une action) ; inconnu : « ? ». */
+export function newSameClubSentences(before: Bracket | null, after: Bracket | null, info: (id: string) => { name: string; club: string } | undefined): string[] {
+  return newSameClubPairs(before, after).map((p) => sameClubSentence(p, (x) => info(x) ?? { name: '?', club: '?' }));
+}

@@ -496,9 +496,15 @@ export function useUndoHistory(id: string) {
     onError: invalidate,
   });
 }
+/** Aperçu d'un échange entre catégories : règles enfreintes, même club au 1er tour, combattants qui changeraient de session. */
+export interface ExchangePreview {
+  warnings: string[];
+  sameClub: string[];
+  waveMoves: { registrationId: string; label: string; from: string | null; to: string | null }[];
+}
 export function useExchangePreview(id: string) {
   return useMutation({
-    mutationFn: (body: { a: string; b: string }) => api<{ warnings: string[]; sameClub: string[] }>('POST', `/api/competitions/${id}/replacement/exchange/preview`, body),
+    mutationFn: (body: { a: string; b: string }) => api<ExchangePreview>('POST', `/api/competitions/${id}/replacement/exchange/preview`, body),
   });
 }
 export const useExchange = (id: string) => {

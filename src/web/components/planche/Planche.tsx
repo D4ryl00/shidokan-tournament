@@ -1,24 +1,32 @@
-import { Anchor, Box, Grid, Group, SimpleGrid, Stack, Text } from '@mantine/core';
-import { useEffect, useMemo, useState, type HTMLAttributes } from 'react';
+import { Anchor, Box, Grid, Group, Paper, SimpleGrid, Stack, Text } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { newSameClubSentences } from '../../../domain/brackets/same-club.js';
 import { type Category } from '../../../domain/categories.js';
 import { DISCIPLINES, RULESETS } from '../../../domain/disciplines.js';
 import { normalizeName } from '../../../domain/names.js';
 import type { ProposalType } from '../../../domain/replacement/index.js';
 import type { Wave } from '../../../domain/waves.js';
-import { useGrid, useZones, usePassages, type RecasementEntry } from '../../api.js';
+import { useGrid, useZones, usePassages, useSwap, type RecasementEntry } from '../../api.js';
 import { categoryPassages } from '../../passages.js';
 import type { EntrantInfo } from '../BracketView.js';
 import { useUndoHighlight } from '../history/highlight.js';
+import { useUndoToast } from '../history/undoToast.js';
 import { EmptyState } from '../ui/EmptyState.js';
 import { CategoryCard } from './CategoryCard.js';
+import { DropConfirmDialog, type PendingDrop } from './DropConfirmDialog.js';
 import { LoneTray } from './LoneTray.js';
-import { cardTitle, loneFighters, plancheFilter, plancheGroups, shownOnPlanche, type PlancheSort } from './model.js';
+import { cardTitle, isLockedCategory, LOCKED_DROP, loneFighters, plancheFilter, plancheGroups, shownOnPlanche, type PlancheSort } from './model.js';
 import { PlancheToolbar, type Scope } from './PlancheToolbar.js';
+import { useDragMove, type DragAttrs, type PlancheAction } from './useDragMove.js';
 
 export interface SeeRequest { ids: string[]; n: number }
 
+/** Une pastille est à la fois source (glisser, clic) et cible (dépôt). */
+const both = (a: DragAttrs, b: DragAttrs): DragAttrs => ({ ...a, ...b, onClick: a.onClick ?? b.onClick, style: { ...a.style, ...b.style } });
+
 /** La planche : toutes les catégories de la session en cartes, groupées, avec le bac « Sans adversaire ». */
-export function Planche({ competitionId, categories, waves, waveId, scope, onScope, readOnly, entrants, badges, badgeDetails, cases, aside, historyCount, onHistory, seeRequest, onConsumed, onOpenList, chipProps, cardProps }: {
+export function Planche({ competitionId, categories, waves, waveId, scope, onScope, readOnly, entrants, badges, badgeDetails, cases, aside, historyCount, onHistory, seeRequest, onConsumed, onOpenList }: {
   competitionId: string;
   categories: Category[];
   waves: Wave[];
@@ -38,9 +46,6 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
   /** La demande a été appliquée : l'appelant l'oublie (elle ne doit jouer qu'une fois). */
   onConsumed: () => void;
   onOpenList: (categoryId: string) => void;
-  /** Attributs ajoutés aux pastilles et aux cartes (glisser-déposer). */
-  chipProps?: (registrationId: string, category: Category) => HTMLAttributes<HTMLDivElement>;
-  cardProps?: (category: Category) => HTMLAttributes<HTMLDivElement>;
 }) {
   const { data: grid } = useGrid(competitionId);
   const { data: zones = [] } = useZones(competitionId);
@@ -51,6 +56,35 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
   const [onlyTodo, setOnlyTodo] = useState(false);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [seen, setSeen] = useState<Set<string>>(new Set());
+
+  // Glisser-déposer et clic-clic : échange de places tout de suite, échange et déplacement après confirmation.
+  const swap = useSwap(competitionId);
+  const undoToast = useUndoToast(competitionId);
+  const [drop, setDrop] = useState<PendingDrop | null>(null);
+  const nameOf = (rid?: string) => (rid ? entrants.get(rid)?.name : undefined) ?? '?';
+  const onAction = (a: PlancheAction) => {
+    if (a.kind === 'none') return;
+    if (a.kind === 'locked') {
+      notifications.show({ id: 'planche-locked', color: 'orange', message: LOCKED_DROP });
+      return;
+    }
+    if (a.kind === 'swap' && a.target) {
+      const before = categories.find((c) => c.id === a.from)?.bracket ?? null;
+      const [x, y] = [a.source, a.target];
+      swap.mutate({ cid: a.from, a: x, b: y }, {
+        onSuccess: (c) => undoToast(`Places échangées : ${nameOf(x)} ↔ ${nameOf(y)}`, c.historyId ?? null, newSameClubSentences(before, c.bracket, (r) => entrants.get(r))),
+        onError: (e) => notifications.show({ color: 'red', message: e.message }),
+      });
+      return;
+    }
+    if (a.kind === 'exchange' || a.kind === 'move') setDrop({ kind: a.kind, source: a.source, target: a.target, from: a.from, to: a.to });
+  };
+  const drag = useDragMove({ readOnly, onAction });
+  const chipProps = (registrationId: string, c: Category) => {
+    const t = { registrationId, categoryId: c.id, locked: isLockedCategory(c) };
+    return both(drag.dragProps(t), drag.dropProps(t));
+  };
+  const cardProps = (c: Category) => drag.dropProps({ categoryId: c.id, locked: isLockedCategory(c) });
 
   const inScope = (c: Category) => waves.length === 0 || scope === 'all' || (scope === 'waiting' ? c.waveId === null : c.waveId === waveId);
   const waiting = categories.filter((c) => c.waveId === null).length;
@@ -84,11 +118,15 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
     const t = setTimeout(() => setSeen(new Set()), 2200);
     return () => clearTimeout(t);
   }, [seen]);
+  // Défile une fois, dès que la carte est affichée (la grille peut arriver après la demande).
+  const scrolled = useRef<Set<string> | null>(null);
   useEffect(() => {
-    if (seen.size === 0) return;
-    const first = [...seen].find((id) => document.querySelector(`[data-testid="planche-card"][data-category="${id}"]`));
-    if (first) document.querySelector(`[data-testid="planche-card"][data-category="${first}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  }, [seen]);
+    if (seen.size === 0 || scrolled.current === seen) return;
+    const first = [...seen].map((id) => document.querySelector(`[data-testid="planche-card"][data-category="${id}"]`)).find(Boolean);
+    if (!first) return;
+    scrolled.current = seen;
+    first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [seen, groups.length]);
 
   const jump = (i: number) => document.getElementById(`planche-group-${i}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   const toggle = (id: string) => setOpen((o) => { const n = new Set(o); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -97,6 +135,12 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
     <Stack gap="sm" data-testid="planche">
       <PlancheToolbar waves={waves} waveId={waveId} scope={scope} waiting={waiting} onScope={onScope} query={query} onQuery={setQuery}
         sort={sort} onSort={setSort} onlyTodo={onlyTodo} onOnlyTodo={setOnlyTodo} historyCount={historyCount} onHistory={readOnly ? undefined : onHistory} />
+      {drag.selected && (
+        <Paper data-testid="planche-banner" role="status" px="sm" py={6} radius="sm"
+          style={{ position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--sk-chip)', color: 'var(--sk-chip-text)', border: '1px solid var(--sk-accent)' }}>
+          <Text size="sm" fw={500}>Sélection : {nameOf(drag.selected)}. Cliquez sur un autre combattant pour échanger, ou sur une catégorie pour l’y déplacer. (Échap pour annuler)</Text>
+        </Paper>
+      )}
       {groups.length > 0 && (
         <Group gap="md" data-testid="planche-jumps">
           {groups.map((g, i) => (
@@ -107,7 +151,7 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
       <Grid gutter="md">
         <Grid.Col span={{ base: 12, md: 3 }}>
           <Box style={{ position: 'sticky', top: 8 }}>
-            <LoneTray items={loneItems} entrants={entrants} badges={badges} badgeDetails={badgeDetails} chipProps={readOnly ? undefined : chipProps} />
+            <LoneTray items={loneItems} entrants={entrants} badges={badges} badgeDetails={badgeDetails} chipProps={readOnly ? undefined : chipProps} selectedChip={drag.selected} />
           </Box>
         </Grid.Col>
         <Grid.Col span={{ base: 12, md: 9 }}>
@@ -130,7 +174,7 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
                         zoneName={sort === 'categorie' ? zone?.name ?? null : null} passages={passages} zones={zones} entrants={entrants}
                         badges={badges} badgeDetails={badgeDetails} cases={cases.get(c.id) ?? 0} aside={aside.get(c.id) ?? 0} readOnly={readOnly}
                         expanded={open.has(c.id)} onToggle={() => toggle(c.id)} onOpenList={() => onOpenList(c.id)} words={words} ring={ring}
-                        cardProps={cardProps?.(c)} chipProps={readOnly ? undefined : chipProps} />
+                        cardProps={readOnly ? undefined : cardProps(c)} chipProps={readOnly ? undefined : chipProps} selectedChip={drag.selected} />
                     );
                   })}
                 </SimpleGrid>
@@ -139,6 +183,7 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
           </Stack>
         </Grid.Col>
       </Grid>
+      <DropConfirmDialog competitionId={competitionId} drop={drop} categories={categories} entrants={entrants} waves={waves} onClose={() => setDrop(null)} />
     </Stack>
   );
 }

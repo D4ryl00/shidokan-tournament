@@ -1,6 +1,6 @@
 import { Badge, Box, Group, Paper, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
 import { sameClubFirstRound } from '../../domain/brackets/same-club.js';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, HTMLAttributes } from 'react';
 import {
   resolveBracket,
   type CombatBracket,
@@ -66,6 +66,8 @@ interface Props {
   /** Inscrit sélectionné (échange manuel). */
   selected?: string | null;
   onSelect?: (registrationId: string) => void;
+  /** Attributs ajoutés à la case de chaque inscrit (glisser-déposer de la planche) ; son clic remplace `onSelect`. */
+  entrantProps?: (registrationId: string) => HTMLAttributes<HTMLDivElement>;
   /** Badges de recasement (écran seulement). */
   badges?: Map<string, ProposalType>;
   /** Détail des recasements validés (clic sur un badge). */
@@ -108,6 +110,7 @@ function EntrantLine({ id, fallback, info, props, winner, inline }: { id: string
   const selected = id !== null && props.selected === id;
   // À l'écran seulement : le club en orange quand deux combattants du même club se rencontrent au 1er tour.
   const sameClub = !props.printable && id !== null && sameClubFirstRound(props.category.bracket).some((p) => p.includes(id));
+  const extra = id ? props.entrantProps?.(id) : undefined;
   const style: CSSProperties = {
     cursor: props.onSelect && id ? 'pointer' : undefined,
     outline: selected ? '2px solid var(--sk-accent)' : undefined,
@@ -116,7 +119,8 @@ function EntrantLine({ id, fallback, info, props, winner, inline }: { id: string
     fontWeight: winner ? 700 : undefined,
   };
   return (
-    <Box data-testid="bracket-entrant" data-entrant={id ?? ''} style={style} onClick={() => id && props.onSelect?.(id)}>
+    <Box data-testid="bracket-entrant" data-entrant={id ?? ''} onClick={() => id && props.onSelect?.(id)} {...extra}
+      style={{ ...style, ...(extra ? { cursor: 'grab' } : undefined), ...extra?.style }}>
       {id && info && inline ? (
         <Text size="sm" lh={1.3} className="bracket-entrant-inline" fw={winner ? 800 : 400} td={winner ? 'underline' : undefined}>
           {info.name} <Text span size="xs">{info.club}</Text>

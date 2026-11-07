@@ -1,7 +1,7 @@
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { categoryLabel, freeKey, type Category, type CategoryKey } from '../../src/domain/categories.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
-import { cardTitle, groupTitle, loneFighters, plancheFilter, plancheGroups, shownOnPlanche } from '../../src/web/components/planche/model.js';
+import { cardTitle, dropAction, groupTitle, loneFighters, plancheFilter, plancheGroups, shownOnPlanche } from '../../src/web/components/planche/model.js';
 
 const grid = ffkDefaultGrid();
 let n = 0;
@@ -71,4 +71,32 @@ test('loneFighters : session affichée et catégories en attente', () => {
   expect(ids(loneFighters(all, { waveId: 'w1', scopeAll: false }))).toEqual(['x', 'y', 'p']);
   expect(ids(loneFighters(all, { waveId: 'w1', scopeAll: true }))).toEqual(['x', 'y', 'z', 'p']);
   expect(loneFighters(all, { waveId: 'w1', scopeAll: false })[0]).toEqual({ categoryId: a.id, registrationId: 'x' });
+});
+
+describe('dropAction', () => {
+  const a = cat(k('karate', 'cadet', 'F', 'cadet:F:-54'), { registrationIds: ['a1', 'a2'] });
+  const b = cat(k('karate', 'cadet', 'F', 'cadet:F:-61'), { registrationIds: ['b1', 'b2'] });
+  const started = cat(k('karate', 'junior', 'F', 'junior:F:-55'), { registrationIds: ['s1', 's2'], status: 'started' });
+  const sessionLocked = cat(k('karate', 'junior', 'M', 'junior:M:-60'), { registrationIds: ['l1', 'l2'], launchLocked: true });
+  const all = [a, b, started, sessionLocked];
+  const src = { registrationId: 'a1', categoryId: a.id };
+
+  test('même pastille ou sa propre carte : rien', () => {
+    expect(dropAction(src, { registrationId: 'a1', categoryId: a.id }, all)).toEqual({ kind: 'none' });
+    expect(dropAction(src, { categoryId: a.id }, all)).toEqual({ kind: 'none' });
+  });
+  test('catégorie lancée, terminée ou session lancée (d’un côté ou de l’autre) : refusé', () => {
+    expect(dropAction(src, { categoryId: started.id }, all)).toEqual({ kind: 'locked' });
+    expect(dropAction(src, { registrationId: 'l1', categoryId: sessionLocked.id }, all)).toEqual({ kind: 'locked' });
+    expect(dropAction({ registrationId: 's1', categoryId: started.id }, { categoryId: a.id }, all)).toEqual({ kind: 'locked' });
+  });
+  test('autre combattant du même tableau : échange de places', () => {
+    expect(dropAction(src, { registrationId: 'a2', categoryId: a.id }, all)).toEqual({ kind: 'swap', from: a.id, to: a.id });
+  });
+  test('combattant d’une autre catégorie : échange', () => {
+    expect(dropAction(src, { registrationId: 'b1', categoryId: b.id }, all)).toEqual({ kind: 'exchange', from: a.id, to: b.id });
+  });
+  test('carte d’une autre catégorie : déplacement', () => {
+    expect(dropAction(src, { categoryId: b.id }, all)).toEqual({ kind: 'move', from: a.id, to: b.id });
+  });
 });
