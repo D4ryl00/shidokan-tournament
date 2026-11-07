@@ -73,7 +73,7 @@ const REFERENCES: [table: string, column: string, target: string][] = [
   ['categories', 'zone_id', 'zones'], ['categories', 'wave_override', 'waves'], ['frozen_passages', 'zone_id', 'zones'],
   ['frozen_passages', 'category_id', 'categories'], ['match_results', 'category_id', 'categories'], ['match_results', 'entrant_a', 'registrations'],
   ['match_results', 'entrant_b', 'registrations'], ['kata_scores', 'category_id', 'categories'], ['kata_scores', 'registration_id', 'registrations'],
-  ['tie_breaks', 'category_id', 'categories'], ['recasements', 'registration_id', 'registrations'], ['wave_launches', 'wave_key', 'waves'],
+  ['tie_breaks', 'category_id', 'categories'], ['recasements', 'registration_id', 'registrations'], ['history_entries', 'wave_id', 'waves'], ['wave_launches', 'wave_key', 'waves'],
 ];
 
 /** Valeur acceptée dans une ligne : texte, nombre fini dans l'intervalle des entiers sûrs, ou vide. */

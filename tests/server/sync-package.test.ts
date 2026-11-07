@@ -162,6 +162,18 @@ test('paquet piégé par une référence vers une autre compétition (catégorie
   expect(b.db.$client.prepare('select count(*) as n from competitions where id = ?').get(a.id)).toEqual({ n: 0 });
 });
 
+test('paquet piégé : une entrée d’historique dont la session est d’une autre compétition → 400 ; session nulle acceptée', async () => {
+  const a = await seeded();
+  const b = await seeded();
+  a.db.$client.exec(`INSERT INTO history_entries (id, competition_id, kind, summary_json) VALUES ('h-${a.id}', '${a.id}', 'manual', '{}')`);
+  const pkg = buildPackage(a.db, a.id, { handOver: false, role: 'local' });
+  expect(pkg.tables.history_entries).toHaveLength(1);
+  const trapped = { ...pkg, tables: { ...pkg.tables, history_entries: pkg.tables.history_entries!.map((r) => ({ ...r, wave_id: `wave-${b.id}` })) } };
+  await expect(importPackage(b.db, b.dbPath, trapped, null)).rejects.toThrow('Paquet invalide : des données appartiennent à une autre compétition.');
+  await importPackage(b.db, b.dbPath, pkg, null);
+  expect(b.db.$client.prepare('select count(*) as n from history_entries where competition_id = ?').get(a.id)).toEqual({ n: 1 });
+});
+
 test('valeurs trafiquées (version géante, objet, booléen) → 400 ; le compteur de versions reste un entier', async () => {
   const a = await seeded();
   const b = await seeded();
