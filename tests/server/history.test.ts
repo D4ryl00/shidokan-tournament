@@ -38,7 +38,7 @@ type Cat = {
   bracket: { kind: 'combat' | 'kata'; entrants: { registrationId: string }[]; matches?: Match[] } | null;
 };
 type Entry = {
-  id: string; seq: number; kind: string; status: 'active' | 'undone'; undoneAt: string | null; waveId: string | null; names: string[];
+  id: string; seq: number; kind: string; groupId: string | null; status: 'active' | 'undone'; undoneAt: string | null; waveId: string | null; names: string[];
   summary: { registrationIds: string[]; fromLabel?: string; toLabel?: string; reason?: string }; categoryIds: string[]; blocked: string | null; cascade: string[];
 };
 const categories = async () => (await call('GET', '/categories')).json() as Cat[];
@@ -59,6 +59,33 @@ const history = async (waveId?: string) => {
 };
 const entry = async (id: string) => (await history()).find((e) => e.id === id)!;
 const undo = (ids: string[], expectIds: string[]) => call('POST', '/history/undo', { ids, expect: expectIds });
+type PlanMove = { id: string; registrationId: string; reason: string; anchor: string | null };
+type PlanOut = { plan: { moves: PlanMove[]; hash: string }; fingerprint: string };
+type Choice = { kind: 'validate'; proposalId: string; caseId: string };
+/** Plan à appliquer (sans validation, plus les choix), appliqué avec son empreinte et son hash ; rend le plan affiché. */
+const applyPlan = async (choices: Choice[] = []) => {
+  const p = (await call('POST', '/replacement/plan', { choices, forApply: true })).json() as PlanOut;
+  const res = await call('POST', '/replacement/plan/apply', { choices, fingerprint: p.fingerprint, hash: p.plan.hash });
+  expect(res.statusCode).toBe(200);
+  expect(res.json()).toEqual({ applied: p.plan.moves.length });
+  return p.plan;
+};
+type Replacement = {
+  cases: { id: string; kind: string; registrationId: string }[];
+  proposals: Record<string, { id: string; target: object }[]>;
+  recasements: { id: string; registrationId: string; type: string; status: string; reason: string }[];
+  fingerprint: string;
+};
+const replacement = async () => (await call('GET', '/replacement')).json() as Replacement;
+/** Chaque inscrit présent d'une catégorie figure dans son tableau. */
+async function everyoneInBracket() {
+  const regs = (await call('GET', '/registrations')).json() as { id: string; presence?: string }[];
+  const absent = new Set(regs.filter((r) => r.presence === 'absent').map((r) => r.id));
+  for (const c of await categories()) {
+    const entrants = (c.bracket?.entrants ?? []).map((e) => e.registrationId);
+    expect(entrants).toEqual(expect.arrayContaining(c.registrationIds.filter((id) => !absent.has(id))));
+  }
+}
 /** Paires du 1er tour (combats complets) d'un tableau à élimination. */
 const firstRoundPairs = (c: Cat) =>
   (c.bracket!.matches ?? [])
@@ -259,4 +286,151 @@ test('recorded sans synchronisation : un changement de membres seul touche les d
   } finally {
     closeDb(db);
   }
+});
+
+test('plan groupé : une entrée « plan » par déplacement, même groupe, raisons reprises', async () => {
+  // Deux seules en cadettes (-47, -54) et deux seules en minimes (-40, -45) : deux réunions.
+  await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 49 });
+  await reg({ ageBandCode: 'minime', weightClassId: 'minime:F:-40', approxWeightKg: 39 });
+  await reg({ ageBandCode: 'minime', weightClassId: 'minime:F:-45', approxWeightKg: 41 });
+  const shown = await applyPlan();
+  expect(shown.moves).toHaveLength(2);
+  const list = await history();
+  expect(list.map((e) => e.kind)).toEqual(['plan', 'plan']);
+  const [second, first] = list;
+  expect(first!.groupId).toEqual(expect.any(String));
+  expect(second!.groupId).toBe(first!.groupId);
+  expect([first, second].map((e) => e!.summary.registrationIds)).toEqual(shown.moves.map((m) => [m.registrationId]));
+  expect([first, second].map((e) => e!.summary.reason)).toEqual(shown.moves.map((m) => m.reason));
+  const journal = (await replacement()).recasements;
+  for (const e of list) {
+    expect(e.summary.fromLabel).toEqual(expect.any(String));
+    expect(e.summary.toLabel).toEqual(expect.any(String));
+    expect(e.categoryIds.length).toBeGreaterThan(0);
+    expect(journal.find((r) => r.registrationId === e.summary.registrationIds[0])!.reason).toBe(e.summary.reason);
+  }
+  // Une autre application : un autre groupe.
+  await reg({ ageBandCode: 'junior', weightClassId: 'junior:F:-53', approxWeightKg: 50 });
+  await reg({ ageBandCode: 'junior', weightClassId: 'junior:F:-59', approxWeightKg: 55 });
+  await applyPlan();
+  const [next] = await history();
+  expect(next!.kind).toBe('plan');
+  expect(next!.groupId).not.toBe(first!.groupId);
+});
+
+test('plan avec catégorie créée : annuler un seul déplacement, puis l’autre ; la catégorie créée disparaît, chacun dans son tableau', async () => {
+  // X pèse 58 kg (inscrite -54) : sa correction vers une -61 vide (nouvelle) est validée ; Y, seule en +61, la rejoint.
+  const x = await reg({ lastName: 'X', weightClassId: 'cadet:F:-54', approxWeightKg: 52 });
+  await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 52 });
+  await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 52 });
+  const y = await reg({ lastName: 'Y', weightClassId: 'cadet:F:+61', approxWeightKg: 62 });
+  const fromX = (await catOf(x.id))!;
+  const fromY = (await catOf(y.id))!;
+  expect((await call('PUT', `/weigh-in/${x.fighterId}`, { weighInKg: 58 })).statusCode).toBe(204);
+  const r = await replacement();
+  const c = r.cases.find((k) => k.kind === 'weight_out' && k.registrationId === x.id)!;
+  const toNew = r.proposals[c.id]!.find((p) => 'newKey' in p.target)!;
+  const shown = await applyPlan([{ kind: 'validate', proposalId: toNew.id, caseId: c.id }]);
+  expect(shown.moves.map((m) => [m.registrationId, m.anchor])).toEqual([[x.id, null], [y.id, x.id]]);
+  const created = (await catOf(x.id))!;
+  expect([fromX.id, fromY.id]).not.toContain(created.id);
+  expect(created.registrationIds).toEqual([x.id, y.id].sort());
+  const [hY, hX] = await history();
+  expect(hX!.summary.registrationIds).toEqual([x.id]);
+  expect(hY!.summary.registrationIds).toEqual([y.id]);
+  expect(hX!.categoryIds).toContain(created.id);
+  expect(hY!.categoryIds).toContain(created.id);
+  // Le déplacement qui crée la catégorie emporte celui qui la rejoint.
+  expect(hX!.cascade).toEqual([hY!.id]);
+  expect(hY!.cascade).toEqual([]);
+  // Le plus récent seul : Y retrouve une catégorie +61, X reste seule dans la catégorie créée.
+  let res = await undo([hY!.id], [hY!.id]);
+  expect(res.statusCode).toBe(200);
+  expect(res.json()).toEqual({ undone: [hY!.id] });
+  expect((await catOf(y.id))!.label).toBe(fromY.label);
+  expect((await catOf(x.id))!.id).toBe(created.id);
+  await everyoneInBracket();
+  // Puis celui qui l'a créée : elle disparaît, X revient dans sa catégorie d'avant.
+  expect((await entry(hX!.id)).cascade).toEqual([]);
+  res = await undo([hX!.id], [hX!.id]);
+  expect(res.statusCode).toBe(200);
+  expect((await catOf(x.id))!.id).toBe(fromX.id);
+  expect((await categories()).some((k) => k.id === created.id)).toBe(false);
+  await everyoneInBracket();
+  expect((await history()).every((e) => e.status === 'undone')).toBe(true);
+});
+
+test('plan avec catégorie créée : annuler le déplacement qui la crée emporte celui qui la rejoint', async () => {
+  const x = await reg({ lastName: 'X', weightClassId: 'cadet:F:-54', approxWeightKg: 52 });
+  await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 52 });
+  await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 52 });
+  const y = await reg({ lastName: 'Y', weightClassId: 'cadet:F:+61', approxWeightKg: 62 });
+  const fromX = (await catOf(x.id))!;
+  const fromY = (await catOf(y.id))!;
+  await call('PUT', `/weigh-in/${x.fighterId}`, { weighInKg: 58 });
+  const r = await replacement();
+  const c = r.cases.find((k) => k.kind === 'weight_out' && k.registrationId === x.id)!;
+  const toNew = r.proposals[c.id]!.find((p) => 'newKey' in p.target)!;
+  await applyPlan([{ kind: 'validate', proposalId: toNew.id, caseId: c.id }]);
+  const created = (await catOf(x.id))!;
+  const [hY, hX] = await history();
+  const res = await undo([hX!.id], [hY!.id, hX!.id]);
+  expect(res.statusCode).toBe(200);
+  expect(res.json()).toEqual({ undone: [hY!.id, hX!.id] });
+  expect((await catOf(x.id))!.id).toBe(fromX.id);
+  expect((await catOf(y.id))!.label).toBe(fromY.label);
+  expect((await categories()).some((k) => k.id === created.id)).toBe(false);
+  await everyoneInBracket();
+});
+
+test('réaffectation à l’unité journalisée ; annuler une réaffectation ancienne emporte la plus récente', async () => {
+  const a = await reg({ lastName: 'ALPHA', weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  const b = await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
+  const before = await contents();
+  const fromA = (await catOf(a.id))!;
+  const fromB = (await catOf(b.id))!;
+  let r = await replacement();
+  const prop = r.proposals[r.cases.find((x) => x.registrationId === a.id)!.id]![0]! as unknown as { id: string; reason: string };
+  expect((await call('POST', '/replacement/apply', { proposalId: prop.id })).statusCode).toBe(200);
+  const [hApply] = await history();
+  expect(hApply).toMatchObject({ kind: 'reaffectation', groupId: null, names: ['ALPHA x'], summary: { registrationIds: [a.id], reason: prop.reason } });
+  const senior = await reg({ ageBandCode: 'senior', weightClassId: 'senior:F:-50' });
+  const other = (await catOf(senior.id))!;
+  const hMove = await move(a.id, other.id);
+  r = await replacement();
+  const first = r.recasements.find((x) => x.registrationId === a.id && x.type !== 'M')!;
+  expect((await entry(hApply!.id)).cascade).toEqual([hMove]);
+  const res = await call('POST', '/replacement/undo', { recasementId: first.id });
+  expect(res.statusCode).toBe(200);
+  for (const id of [hApply!.id, hMove]) expect((await entry(id)).status).toBe('undone');
+  expect((await replacement()).recasements.filter((x) => x.registrationId === a.id).map((x) => x.status)).toEqual(['undone', 'undone']);
+  expect((await catOf(a.id))!.id).toBe(fromA.id);
+  expect((await catOf(b.id))!.id).toBe(fromB.id);
+  const now = (await contents()).filter((c) => !c.registrationIds.includes(senior.id));
+  expect(now).toEqual(before);
+  // Déjà annulée : introuvable (comme avant).
+  expect((await call('POST', '/replacement/undo', { recasementId: first.id })).statusCode).toBe(404);
+});
+
+test('« Ne combat pas » journalisé et annulable depuis l’historique', async () => {
+  const a = await reg({ lastName: 'ALPHA' });
+  await reg();
+  await reg();
+  const from = (await catOf(a.id))!;
+  const cell = { ageBandCode: 'cadet', sex: 'F', discipline: 'karate', ruleset: 'jiyu' };
+  expect((await call('PUT', '/closed-categories', { cells: [cell], closed: true })).statusCode).toBeLessThan(300);
+  const before = await contents();
+  const res = await call('POST', '/replacement/withdraw', { registrationId: a.id, fingerprint: (await replacement()).fingerprint });
+  expect(res.statusCode).toBe(200);
+  const [e] = await history();
+  expect(e).toMatchObject({
+    kind: 'withdraw', groupId: null, names: ['ALPHA x'], blocked: null, cascade: [],
+    summary: { registrationIds: [a.id], fromLabel: from.label, toLabel: 'Ne combat pas', reason: 'Catégorie non ouverte à cette compétition' },
+  });
+  expect(e!.categoryIds).toContain(from.id);
+  expect((await undo([e!.id], [e!.id])).statusCode).toBe(200);
+  expect((await catOf(a.id))!.id).toBe(from.id);
+  expect(await contents()).toEqual(before);
+  expect((await replacement()).recasements[0]!.status).toBe('undone');
 });

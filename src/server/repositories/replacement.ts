@@ -31,7 +31,7 @@ import { listWaves } from './waves.js';
 import { launchedWaveKeys } from './launch-state.js';
 import type { Wave } from '../../domain/waves.js';
 import { CategoryLockedError, listCategories, markArranged, syncCategories } from './categories.js';
-import { recorded } from './history.js';
+import { entryOfRecasement, recorded, undoHistory, type EntrySpec } from './history.js';
 import { closedSet } from './closed-categories.js';
 import { getManagement } from '../sync/ownership.js';
 import { getCompetition, getGrid } from './competitions.js';
@@ -243,7 +243,7 @@ function persist(db: AppDb, competitionId: string, before: State, after: State, 
   return recasementId;
 }
 
-/** « Ne combat pas » pour un inscrit d'une catégorie fermée : hors de toute catégorie, inscrit au journal (annulable). */
+/** « Ne combat pas » pour un inscrit d'une catégorie fermée : hors de toute catégorie, inscrit au journal et à l'historique (`withdraw`, annulable). */
 export async function withdrawRegistration(db: AppDb, competitionId: string, registrationId: string, fingerprint: string): Promise<void> {
   const state = await loadState(db, competitionId);
   if (stateFingerprint(state) !== fingerprint) throw new StaleProposalError();
@@ -254,26 +254,50 @@ export async function withdrawRegistration(db: AppDb, competitionId: string, reg
   // L'annulation ne rétablit que la catégorie et lève le retrait : une modification faite entre-temps (discipline…) est gardée.
   const snapshot = { registration: { categoryId: reg.categoryId, withdrawnReason: null, withdrawnEntry: null }, categories: [] };
   const withdrawnEntry = entryKey({ ageBandCode: m.ageBandCode, sex: m.sex, discipline: m.discipline, ruleset: m.ruleset });
-  db.transaction((tx) => {
-    const t = tx as unknown as AppDb;
-    t.update(registrations).set({ withdrawnReason: 'closed_category', withdrawnEntry, categoryId: null }).where(eq(registrations.id, registrationId)).run();
-    t.insert(recasements)
-      .values({
-        id: crypto.randomUUID(), competitionId, registrationId, proposalId: `W:${registrationId}`, type: 'W',
-        fromLabel: from ? categoryLabel(from.key, state.grid) : '—', toLabel: 'Ne combat pas', reason: 'Catégorie non ouverte à cette compétition',
-        manual: true, preApproved: false, bulk: false, snapshotJson: JSON.stringify(snapshot), waveId: actionWave(state, registrationId, registrationId),
-      })
-      .run();
+  const recasementId = crypto.randomUUID();
+  const waveId = actionWave(state, registrationId, registrationId);
+  const fromLabel = from ? categoryLabel(from.key, state.grid) : '—';
+  const toLabel = 'Ne combat pas';
+  const reason = 'Catégorie non ouverte à cette compétition';
+  await recorded(db, competitionId, { kind: 'withdraw', waveId, summary: { registrationIds: [registrationId], fromLabel, toLabel, reason }, recasementIds: [recasementId] }, async () => {
+    db.transaction((tx) => {
+      const t = tx as unknown as AppDb;
+      t.update(registrations).set({ withdrawnReason: 'closed_category', withdrawnEntry, categoryId: null }).where(eq(registrations.id, registrationId)).run();
+      t.insert(recasements)
+        .values({
+          id: recasementId, competitionId, registrationId, proposalId: `W:${registrationId}`, type: 'W', fromLabel, toLabel, reason,
+          manual: true, preApproved: false, bulk: false, snapshotJson: JSON.stringify(snapshot), waveId,
+        })
+        .run();
+    });
   });
-  await syncCategories(db, competitionId);
 }
 
+/** Valide une proposition à l'unité : une entrée `reaffectation` de l'historique (tous les déplacements d'un « split »). */
 export async function applyProposalById(db: AppDb, competitionId: string, proposalId: string, opts: { bulk?: boolean; fingerprint?: string } = {}): Promise<void> {
   const state = await loadState(db, competitionId);
   if (opts.fingerprint !== undefined && stateFingerprint(state) !== opts.fingerprint) throw new StaleProposalError();
   const p = findProposal(state, proposalId);
-  persistAll(db, competitionId, state, p, { bulk: opts.bulk ?? false, waveId: actionWave(state, p.caseId, p.registrationId) });
-  await syncCategories(db, competitionId);
+  const waveId = actionWave(state, p.caseId, p.registrationId);
+  await recorded(
+    db,
+    competitionId,
+    (ids: string[]) => proposalEntry(db, { kind: 'reaffectation', groupId: null, waveId }, p, ids),
+    async () => persistAll(db, competitionId, state, p, { bulk: opts.bulk ?? false, waveId }),
+  );
+}
+
+/**
+ * Entrée d'historique d'une proposition écrite par `persistAll` (`ids` : ses recasements) : ses inscriptions, « de ➜ vers »
+ * du journal (premier déplacement) et sa raison.
+ */
+function proposalEntry(db: AppDb, head: Pick<EntrySpec, 'kind' | 'groupId' | 'waveId'>, p: Proposal, ids: string[]): EntrySpec {
+  const row = db.select({ fromLabel: recasements.fromLabel, toLabel: recasements.toLabel }).from(recasements).where(eq(recasements.id, ids[0]!)).get();
+  return {
+    ...head,
+    summary: { registrationIds: proposalMoves(p).map((m) => m.registrationId), fromLabel: row?.fromLabel, toLabel: row?.toLabel, reason: p.reason },
+    recasementIds: ids,
+  };
 }
 
 /**
@@ -360,6 +384,10 @@ export async function applyPlan(
   if (stateFingerprint(await loadState(db, competitionId)) !== body.fingerprint) throw new StaleProposalError();
   // Tout ou rien : une seule transaction pour tous les déplacements (les `await` ci-dessous ne rendent jamais la main à une
   // autre requête, la base est synchrone). Un déplacement refusé annule ceux déjà écrits ; `persist` s'y emboîte en point de sauvegarde.
+  // Historique : une entrée `plan` par déplacement, toutes du même groupe (« Annuler tout le plan »), sans synchronisation
+  // propre : celle qui suit est faite par `loadState` au déplacement suivant, puis une dernière à la fin. Annuler un seul
+  // déplacement refait donc le tableau intermédiaire d'après sa graine.
+  const groupId = crypto.randomUUID();
   let applied = 0;
   await atomically(db, async () => {
     for (const move of plan.moves) {
@@ -375,9 +403,17 @@ export async function applyPlan(
         if (!categoryId) throw new StaleProposalError('Le plan a changé depuis l’affichage : relisez-le avant de l’appliquer.');
         p = { ...move, target: { categoryId } };
       }
-      persistAll(db, competitionId, state, p, { bulk: true, waveId });
+      const before = state;
+      await recorded(
+        db,
+        competitionId,
+        (ids: string[]) => proposalEntry(db, { kind: 'plan', groupId, waveId }, p, ids),
+        async () => persistAll(db, competitionId, before, p, { bulk: true, waveId }),
+        { sync: false },
+      );
       applied++;
     }
+    await syncCategories(db, competitionId);
   });
   return { applied };
 }
@@ -502,38 +538,15 @@ export function restoreSnapshot(t: AppDb, registrationId: string, snapshot: Reca
   for (const r of snapshot.presences ?? []) t.update(registrations).set({ presence: r.presence }).where(eq(registrations.id, r.id)).run();
 }
 
+/**
+ * Annule une réaffectation (route `/replacement/undo`) : l'entrée de l'historique qui la porte, en cascade (actions plus
+ * récentes qui touchent les mêmes catégories, de proche en proche), tout ou rien, mêmes blocages que l'historique.
+ */
 export async function undoRecasement(db: AppDb, competitionId: string, recasementId: string): Promise<void> {
-  const entry = db.select().from(recasements).where(and(eq(recasements.id, recasementId), eq(recasements.competitionId, competitionId))).get();
-  if (!entry || entry.status !== 'validated') throw new NotFoundError('Réaffectation introuvable');
-  const snapshot = JSON.parse(entry.snapshotJson) as RecasementSnapshot;
-  const reg = db.select().from(registrations).where(eq(registrations.id, entry.registrationId)).get();
-  if (!reg) throw new NotFoundError('Inscription introuvable');
-  const locked = (id: string | null) => {
-    const c = id ? db.select().from(categories).where(eq(categories.id, id)).get() : undefined;
-    return c !== undefined && (c.status === 'started' || c.status === 'finished');
-  };
-  if (locked(reg.categoryId) || locked(snapshot.registration.categoryId)) throw new CategoryLockedError();
-  const frozen = new Set((await loadState(db, competitionId)).categories.filter((c) => c.frozen).map((c) => c.id));
-  if ((reg.categoryId && frozen.has(reg.categoryId)) || (snapshot.registration.categoryId && frozen.has(snapshot.registration.categoryId))) {
-    throw new CategoryLockedError('La session est lancée : rouvrez-la pour annuler cette réaffectation.');
-  }
-  // Ordre d'insertion (rowid) : fiable même pour deux recasements de la même milliseconde.
-  const mine = db.select({ n: sql<number>`rowid` }).from(recasements).where(eq(recasements.id, entry.id)).get()!.n;
-  const newer = db
-    .select({ id: recasements.id, n: sql<number>`rowid` })
-    .from(recasements)
-    .where(and(eq(recasements.registrationId, entry.registrationId), eq(recasements.status, 'validated')))
-    .all()
-    .some((r) => r.id !== entry.id && r.n > mine);
-  if (newer) throw new StaleProposalError("Annulez d'abord la réaffectation plus récente de ce combattant.");
-  const touched = snapshotTouches(reg.categoryId, snapshot);
-  db.transaction((tx) => {
-    const t = tx as unknown as AppDb;
-    restoreSnapshot(t, entry.registrationId, snapshot);
-    t.update(recasements).set({ status: 'undone' }).where(eq(recasements.id, recasementId)).run();
-  });
-  // Les clés des catégories touchées sont recalculées d'après leurs membres actuels.
-  await recomputeKeys(db, competitionId, () => touched);
+  const rec = db.select({ status: recasements.status }).from(recasements).where(and(eq(recasements.id, recasementId), eq(recasements.competitionId, competitionId))).get();
+  const entry = rec?.status === 'validated' ? entryOfRecasement(db, competitionId, recasementId) : undefined;
+  if (!entry) throw new NotFoundError('Réaffectation introuvable');
+  await undoHistory(db, competitionId, [entry], null);
 }
 
 /** Dernière réaffectation validée d'une inscription (ordre d'insertion), ou `undefined`. */
@@ -548,8 +561,8 @@ export function lastValidatedRecasement(db: AppDb, competitionId: string, regist
 }
 
 /**
- * Annule le déplacement manuel d'un combattant : sa réaffectation validée la plus récente, qui doit être de type M (même
- * opération que l'annulation depuis l'historique, mêmes refus).
+ * Annule le déplacement manuel d'un combattant : sa réaffectation validée la plus récente, qui doit être de type M, par
+ * l'historique (en cascade, mêmes refus).
  */
 export async function undoManualMove(db: AppDb, competitionId: string, registrationId: string): Promise<void> {
   const last = lastValidatedRecasement(db, competitionId, registrationId);

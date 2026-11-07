@@ -421,7 +421,7 @@ test('annulation : clé de catégorie recalculée ; seulement la réaffectation 
   if (host.registrationIds.includes(c.id)) expect(host.label).toContain('-61');
 });
 
-test('annulation d’un ancien réaffectation refusée si un plus récent existe pour la même inscription', async () => {
+test('annulation d’une ancienne réaffectation : la plus récente de la même inscription est annulée avec (cascade)', async () => {
   const a = await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
   await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
   let r = await replacement();
@@ -434,7 +434,9 @@ test('annulation d’un ancien réaffectation refusée si un plus récent existe
   r = await replacement();
   const older = r.recasements.filter((x) => x.registrationId === a.id).sort((x, y) => x.id.localeCompare(y.id));
   const firstApplied = r.recasements.filter((x) => x.registrationId === a.id).at(-1)!;
-  expect((await call('POST', '/replacement/undo', { recasementId: firstApplied.id })).statusCode).toBe(409);
+  expect((await call('POST', '/replacement/undo', { recasementId: firstApplied.id })).statusCode).toBe(200);
+  expect((await replacement()).recasements.filter((x) => x.registrationId === a.id).map((x) => x.status)).toEqual(['undone', 'undone']);
+  expect((await categories()).find((c) => c.registrationIds.includes(a.id))!.label).toContain('-47');
   void older;
 });
 
@@ -544,8 +546,10 @@ test('annulation : ordre fiable même si deux réaffectations ont la même heure
   raw.close();
   const [newest, oldest] = (await replacement()).recasements;
   expect(newest!.type).toBe('M');
-  expect((await call('POST', '/replacement/undo', { recasementId: oldest!.id })).statusCode).toBe(409);
-  expect((await call('POST', '/replacement/undo', { recasementId: newest!.id })).statusCode).toBe(200);
+  // La plus ancienne emporte la plus récente (cascade) : les deux sont annulées, dans l'ordre d'insertion malgré la même heure.
+  expect((await call('POST', '/replacement/undo', { recasementId: oldest!.id })).statusCode).toBe(200);
+  expect((await replacement()).recasements.map((x) => x.status)).toEqual(['undone', 'undone']);
+  expect((await call('POST', '/replacement/undo', { recasementId: newest!.id })).statusCode).toBe(404);
 });
 
 test('absence : la clé recalculée ne rejoint jamais celle d’une autre catégorie (pas de déplacement silencieux)', async () => {

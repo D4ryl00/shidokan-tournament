@@ -153,7 +153,9 @@ test('tableau libre vidé : plus arrangé, le suivant est tiré à neuf', async 
   const swap = await call('POST', `/categories/${free.id}/swap`, { a: a.id, b: b.id });
   expect(swap.statusCode).toBe(200);
   expect((swap.json() as Cat).arranged).toBe(true);
-  for (const id of [a.id, b.id]) expect((await call('POST', '/replacement/undo-manual', { registrationId: id })).statusCode).toBe(200);
+  // Annuler l'arrivée de A emporte celle de B, plus récente sur le même tableau (cascade de l'historique).
+  expect((await call('POST', '/replacement/undo-manual', { registrationId: a.id })).statusCode).toBe(200);
+  expect((await call('POST', '/replacement/undo-manual', { registrationId: b.id })).statusCode).toBe(400);
   expect((await categories()).find((c) => c.id === free.id)).toMatchObject({ registrationIds: [], bracket: null, arranged: false });
   // Le premier arrivant est tiré à neuf (l'ancien arrangement est oublié) ; le suivant, déplacé à la main, garde les places (spec §2.6).
   await move(a.id, free.id);

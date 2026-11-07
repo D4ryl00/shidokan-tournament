@@ -4,7 +4,7 @@ import { DISCIPLINES } from '../../domain/disciplines.js';
 import type { DisciplineId, Ruleset } from '../../domain/types.js';
 import { atomically } from '../db/atomic.js';
 import type { AppDb } from '../db/client.js';
-import { categories, registrations, tieBreaks } from '../db/schema.js';
+import { categories, recasements, registrations, tieBreaks } from '../db/schema.js';
 import { CategoryLockedError, categoryById, syncCategories } from './categories.js';
 import { launchedCategoryIds } from './launch-state.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
@@ -126,8 +126,12 @@ export async function deleteFreeTableau(db: AppDb, competitionId: string, catego
   });
   // Une seule transaction (comme l'application du plan) : un retour refusé annule ceux déjà faits ; les transactions de
   // `undoRecasement` s'y emboîtent en points de sauvegarde (base synchrone : aucune autre requête ne passe entre-temps).
+  // L'annulation passe par l'historique, en cascade : un déplacement déjà annulé avec un précédent est sauté.
   await atomically(db, async () => {
-    for (const id of moves) await undoRecasement(db, competitionId, id);
+    for (const id of moves) {
+      if (db.select({ status: recasements.status }).from(recasements).where(eq(recasements.id, id)).get()?.status !== 'validated') continue;
+      await undoRecasement(db, competitionId, id);
+    }
     db.delete(tieBreaks).where(eq(tieBreaks.categoryId, row.id)).run();
     db.delete(categories).where(eq(categories.id, row.id)).run();
   });
