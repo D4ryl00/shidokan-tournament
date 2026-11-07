@@ -247,12 +247,19 @@ lignes passent à « annulée ». Un combattant arrivé par un **échange** fait
 (l'échange est une seule action), et la fenêtre le montre. Si une de ces annulations est bloquée (catégorie lancée), la
 suppression est refusée avec la raison. La suppression elle-même n'est pas une ligne d'historique.
 
-### 3.7 « Repartir de zéro »
+### 3.7 « Repartir de zéro » ✅ en cascade
 
-Garde son rôle actuel (réaffectations, déplacements manuels, refus, cartes de côté de la session choisie, historique de ces
-actions effacé). 💡 Les lignes **Places / Tirage / Format** ne sont pas annulées par « Repartir de zéro » et restent dans
-l'historique ; s'il les rend impossibles à annuler (composition changée), elles le disent (§3.4). Les échanges entre
-catégories sont annulés avec les déplacements manuels.
+Garde son rôle actuel pour la session choisie : réaffectations (plan et validations à l'unité), déplacements manuels et
+**échanges entre catégories** annulés, refus et cartes de côté remis à zéro, lignes de ces actions **effacées** de
+l'historique. ✅ C'est une annulation **en cascade** (§3.4) de toutes ces actions : les lignes **Places / Tirage / Format /
+Tableau libre** plus récentes qui touchent les mêmes catégories (de proche en proche) sont annulées avec, et effacées
+aussi 💡 ; celles qui n'en dépendent pas restent en place. La fenêtre de « Repartir de zéro » montre, mises en évidence
+comme au §3.5, les lignes Places / Tirage / Format qui partent avec. Blocages : comme aujourd'hui (session lancée :
+impossible ; combattant dans une catégorie commencée : il reste où il est, et ce qui en dépend aussi).
+
+Exemple : le plan met GUERIN Emma en Minimes F -42 kg, puis on échange BLANC Zoé ↔ GUERIN Emma dans ce tableau ;
+« Repartir de zéro » renvoie GUERIN Emma en -38 kg **et** annule l'échange de places ; un format changé sur Kata
+Benjamins F, que personne n'a touché autrement, reste.
 
 ## 4. Contraintes
 
@@ -299,7 +306,7 @@ catégories sont annulés avec les déplacements manuels.
 5. Le panneau d'historique dans la planche, dans la Liste, et à la place de « Réaffectations validées » (§3.2).
 6. Filtres Tout / Plan / À la main / Tableaux (§3.3).
 7. Échange de places ou tirage non annulable si la composition du tableau a changé hors historique (§3.4).
-8. « Repartir de zéro » ne touche pas aux places, tirages et formats (§3.7).
+8. « Repartir de zéro » efface aussi de l'historique les lignes Places / Tirage / Format qu'il annule en cascade (§3.7).
 9. Un tableau libre a toujours sa carte, même vide (§2.5) ; changer sa discipline ou son règlement est dans l'historique
    (§3.1) ; le supprimer passe par l'annulation en cascade de ce qui y a mis ses combattants (§3.6).
 10. L'arrivant d'un déplacement manuel prend une place libre en évitant son club si possible (§2.6).
