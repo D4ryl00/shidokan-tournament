@@ -18,9 +18,8 @@ import { useRecasementDetails } from '../components/ReplacementBadge.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { IconSearch } from '../components/ui/icons.js';
 import { StatusBadge, type Tone } from '../components/ui/StatusBadge.js';
-import { FORMAT_LABELS } from './CompetitionSettingsPage.js';
+import { ALL_FORMAT_LABELS } from '../../domain/brackets/format-labels.js';
 
-export const ALL_FORMAT_LABELS: Record<BracketFormat, string> = { ...FORMAT_LABELS, kata_two_rounds: 'Kata : tour 1 puis finale à deux' };
 export const STATUS_LABELS: Record<CategoryStatus, string> = { provisional: 'Provisoire', ready: 'Prête', started: 'Lancée', finished: 'Terminée' };
 /** Sens de l'état d'une catégorie : provisoire (neutre), prête (action), lancée (en cours), terminée (succès). */
 export const STATUS_TONES: Record<CategoryStatus, Tone> = { provisional: 'neutral', ready: 'accent', started: 'warn', finished: 'ok' };

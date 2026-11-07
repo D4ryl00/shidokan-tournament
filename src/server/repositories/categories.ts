@@ -21,12 +21,16 @@ import {
 } from '../../domain/categories.js';
 import type { CompetitionSettings } from '../../domain/settings.js';
 import type { CategoryGrid } from '../../domain/types.js';
+import { ALL_FORMAT_LABELS } from '../../domain/brackets/format-labels.js';
+import { categoryWave } from '../../domain/replacement/waves.js';
 import { WAVE_NONE, waveOfCategory, type Wave } from '../../domain/waves.js';
 import type { AppDb } from '../db/client.js';
 import { rowRev } from '../revisions.js';
 import { categories, fighters, registrations, tieBreaks, zones } from '../db/schema.js';
 import { getCompetition, getGrid } from './competitions.js';
+import { recorded } from './history.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
+import { loadState } from './replacement.js';
 import { listWaves } from './waves.js';
 import { launchedCategoryIds } from './launch-state.js';
 import { plural } from '../../domain/plural.js';
@@ -329,11 +333,49 @@ export async function categoryById(db: AppDb, competitionId: string, categoryId:
   return found;
 }
 
+/** Catégorie rendue par une action, plus l'entrée d'historique qu'elle a écrite (nulle si rien n'a changé). */
+export type Journaled = Category & { historyId: string | null };
+
+/** Session d'une catégorie (null sans sessions), pour rattacher l'action à l'historique de cette session. */
+export async function wavePerCategory(db: AppDb, competitionId: string, categoryId: string): Promise<string | null> {
+  const state = await loadState(db, competitionId);
+  const c = state.categories.find((x) => x.id === categoryId);
+  return c ? categoryWave(state, c) : null;
+}
+
+const optionLabel = (v: boolean | null) => (v === null ? 'Comme la compétition' : v ? 'Oui' : 'Non');
+const formatLabel = (f: BracketFormat | null) => (f === null ? 'Automatique' : ALL_FORMAT_LABELS[f]);
+
+/** Changement de format, de repêchage ou de 3e place (journalisé), ou `null` si le patch n'en change aucun. */
+function formatChange(row: Row, patch: { format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null }): string | null {
+  const parts: string[] = [];
+  if (patch.format !== undefined && patch.format !== row.format) parts.push(`${formatLabel(row.format as BracketFormat | null)} ➜ ${formatLabel(patch.format)}`);
+  if (patch.repechage !== undefined && patch.repechage !== row.repechage) parts.push(`Repêchage : ${optionLabel(row.repechage)} ➜ ${optionLabel(patch.repechage)}`);
+  if (patch.thirdPlace !== undefined && patch.thirdPlace !== row.thirdPlace) parts.push(`Combat pour la 3e place : ${optionLabel(row.thirdPlace)} ➜ ${optionLabel(patch.thirdPlace)}`);
+  return parts.length ? `${row.label} : ${parts.join(' ; ')}` : null;
+}
+
 export async function updateCategory(
   db: AppDb,
   competitionId: string,
   categoryId: string,
   patch: { format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null; status?: CategoryStatus; zoneId?: string | null; waveOverride?: string | null; order?: number; unlock?: boolean },
+): Promise<Journaled> {
+  const row = getRow(db, competitionId, categoryId);
+  const detail = formatChange(row, patch);
+  if (detail === null) return { ...(await applyCategoryPatch(db, competitionId, categoryId, patch)), historyId: null };
+  const waveId = await wavePerCategory(db, competitionId, categoryId);
+  const { result, historyId } = await recorded(db, competitionId, { kind: 'format', waveId, summary: { registrationIds: [], detail } }, () =>
+    applyCategoryPatch(db, competitionId, categoryId, patch),
+  );
+  return { ...result, historyId };
+}
+
+async function applyCategoryPatch(
+  db: AppDb,
+  competitionId: string,
+  categoryId: string,
+  patch: Parameters<typeof updateCategory>[3],
 ): Promise<Category> {
   const row = getRow(db, competitionId, categoryId);
   if (launchedCategoryIds(db, competitionId).has(categoryId)) {
@@ -375,7 +417,17 @@ export async function updateCategory(
   return categoryById(db, competitionId, categoryId);
 }
 
-export async function redraw(db: AppDb, competitionId: string, categoryId: string): Promise<Category> {
+/** Nouveau tirage, journalisé (`redraw`). */
+export async function redraw(db: AppDb, competitionId: string, categoryId: string): Promise<Journaled> {
+  const label = getRow(db, competitionId, categoryId).label;
+  const waveId = await wavePerCategory(db, competitionId, categoryId);
+  const { result, historyId } = await recorded(db, competitionId, { kind: 'redraw', waveId, summary: { registrationIds: [], detail: label } }, () =>
+    redrawNow(db, competitionId, categoryId),
+  );
+  return { ...result, historyId };
+}
+
+async function redrawNow(db: AppDb, competitionId: string, categoryId: string): Promise<Category> {
   const row = getRow(db, competitionId, categoryId);
   if (LOCKED.includes(row.status) || launchedCategoryIds(db, competitionId).has(categoryId)) throw new CategoryLockedError();
   let seed = newSeed();
@@ -386,7 +438,16 @@ export async function redraw(db: AppDb, competitionId: string, categoryId: strin
 }
 
 /** Échange deux inscrits dans le tableau (tirage manuel). */
-export async function swapEntrants(db: AppDb, competitionId: string, categoryId: string, a: string, b: string): Promise<Category> {
+export async function swapEntrants(db: AppDb, competitionId: string, categoryId: string, a: string, b: string): Promise<Journaled> {
+  const label = getRow(db, competitionId, categoryId).label;
+  const waveId = await wavePerCategory(db, competitionId, categoryId);
+  const { result, historyId } = await recorded(db, competitionId, { kind: 'places', waveId, summary: { registrationIds: [a, b], detail: label } }, () =>
+    swapNow(db, competitionId, categoryId, a, b),
+  );
+  return { ...result, historyId };
+}
+
+async function swapNow(db: AppDb, competitionId: string, categoryId: string, a: string, b: string): Promise<Category> {
   const row = getRow(db, competitionId, categoryId);
   if (LOCKED.includes(row.status) || launchedCategoryIds(db, competitionId).has(categoryId)) throw new CategoryLockedError();
   if (!row.bracketJson) throw new NotFoundError('Tableau introuvable');

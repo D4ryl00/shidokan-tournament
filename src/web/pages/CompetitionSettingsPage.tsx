@@ -5,6 +5,7 @@ import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { useParams } from 'react-router';
 import type { CombatFormat, CompetitionSettings, PassageOrderMode } from '../../domain/settings.js';
+import { FORMAT_LABELS } from '../../domain/brackets/format-labels.js';
 import { DISCIPLINES } from '../../domain/disciplines.js';
 import type { DisciplineId } from '../../domain/types.js';
 import { useCategories, useCompetition, useGrid, usePassages, useSaveZones, useUpdateCompetition, useZones } from '../api.js';
@@ -20,15 +21,6 @@ import { settingsPatch } from '../settingsPatch.js';
 import { SyncPanel } from '../components/SyncPanel.js';
 import { HELP } from '../help.js';
 
-export const FORMAT_LABELS: Record<CombatFormat, string> = {
-  single_match: 'Un seul combat',
-  best_of_three: 'Au meilleur des trois',
-  round_robin: 'Poule (tous contre tous)',
-  three_with_repechage: '3 combattants avec repêchage',
-  single_elimination: 'Élimination directe',
-  double_elimination: 'Double élimination',
-  pools_then_bracket: 'Poules puis tableau final',
-};
 const FORMAT_OPTIONS = Object.entries(FORMAT_LABELS).map(([value, label]) => ({ value, label }));
 const ALL_DISCIPLINES = Object.keys(DISCIPLINES) as DisciplineId[];
 const PASSAGE_ORDER_OPTIONS: { value: PassageOrderMode; label: string }[] = [

@@ -4,11 +4,12 @@ import { DISCIPLINES } from '../../domain/disciplines.js';
 import type { DisciplineId, Ruleset } from '../../domain/types.js';
 import { atomically } from '../db/atomic.js';
 import type { AppDb } from '../db/client.js';
-import { categories, recasements, registrations, tieBreaks } from '../db/schema.js';
-import { CategoryLockedError, categoryById, syncCategories } from './categories.js';
+import { categories, registrations, tieBreaks } from '../db/schema.js';
+import { CategoryLockedError, categoryById, syncCategories, wavePerCategory, type Journaled } from './categories.js';
+import { entryOfRecasement, recorded, undoHistory } from './history.js';
 import { launchedCategoryIds } from './launch-state.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
-import { lastValidatedRecasement, loadState, undoRecasement } from './replacement.js';
+import { lastValidatedRecasement, loadState } from './replacement.js';
 
 type Row = typeof categories.$inferSelect;
 
@@ -80,7 +81,7 @@ export async function updateFreeTableau(
   competitionId: string,
   categoryId: string,
   patch: { name?: string; discipline?: DisciplineId; ruleset?: Ruleset | null },
-): Promise<Category> {
+): Promise<Journaled> {
   const row = freeRow(db, competitionId, categoryId);
   await checkUnlocked(db, competitionId, row, 'modifier');
   const name = patch.name !== undefined ? checkName(patch.name, freeNames(db, competitionId, row.id)) : row.key.free!;
@@ -90,50 +91,69 @@ export async function updateFreeTableau(
   checkRuleset(discipline, ruleset);
   const key = freeKey(name, discipline, ruleset);
   const regrouped = discipline !== row.key.discipline || ruleset !== row.key.ruleset;
-  db.transaction((tx) => {
-    const t = tx as unknown as AppDb;
-    t.update(categories).set({ keyString: keyString(key), keyJson: JSON.stringify(key), label: name }).where(eq(categories.id, row.id)).run();
-    if (regrouped) {
-      t.update(registrations)
-        .set({ discipline, ruleset, ...(DISCIPLINES[discipline].hasWeight ? {} : { weightClassId: null }) })
-        .where(and(eq(registrations.competitionId, competitionId), eq(registrations.categoryId, row.id)))
-        .run();
-    }
-  });
-  await syncCategories(db, competitionId);
-  return categoryById(db, competitionId, categoryId);
+  const write = async () => {
+    db.transaction((tx) => {
+      const t = tx as unknown as AppDb;
+      t.update(categories).set({ keyString: keyString(key), keyJson: JSON.stringify(key), label: name }).where(eq(categories.id, row.id)).run();
+      if (regrouped) {
+        t.update(registrations)
+          .set({ discipline, ruleset, ...(DISCIPLINES[discipline].hasWeight ? {} : { weightClassId: null }) })
+          .where(and(eq(registrations.competitionId, competitionId), eq(registrations.categoryId, row.id)))
+          .run();
+      }
+    });
+  };
+  if (!regrouped) {
+    await write();
+    await syncCategories(db, competitionId);
+    return { ...(await categoryById(db, competitionId, categoryId)), historyId: null };
+  }
+  // Discipline ou règlement changés : journalisé (état d'avant des membres et de la clé rétabli par l'annulation).
+  const members = db.select({ id: registrations.id }).from(registrations).where(and(eq(registrations.competitionId, competitionId), eq(registrations.categoryId, row.id))).all().map((r) => r.id);
+  const describe = (d: DisciplineId, r: Ruleset | null) => `${DISCIPLINES[d].label}${r ? ` · ${r === 'jiyu' ? 'Jiyu' : 'Shobu'}` : ''}`;
+  const waveId = await wavePerCategory(db, competitionId, categoryId);
+  const { historyId } = await recorded(
+    db,
+    competitionId,
+    { kind: 'free', waveId, summary: { registrationIds: members, detail: `${row.key.free} : ${describe(row.key.discipline, row.key.ruleset)} ➜ ${describe(discipline, ruleset)}` }, registrations: members },
+    write,
+  );
+  return { ...(await categoryById(db, competitionId, categoryId)), historyId };
 }
 
-/**
- * Supprime un tableau libre : chacun de ses combattants retourne là où il était juste avant d'y être placé (annulation de
- * son déplacement manuel). Tout ou rien : refusé si le tableau ou sa session est lancé, ou si l'un d'eux ne peut pas revenir.
- */
-export async function deleteFreeTableau(db: AppDb, competitionId: string, categoryId: string): Promise<{ returned: number }> {
+/** Entrée de la dernière réaffectation manuelle (`M`) de chaque membre du tableau libre ; erreur si l'un n'y a pas été placé ainsi. */
+export async function freeTableauDeleteTargets(db: AppDb, competitionId: string, categoryId: string): Promise<string[]> {
   const row = freeRow(db, competitionId, categoryId);
-  await checkUnlocked(db, competitionId, row, 'supprimer');
   const members = db
     .select({ id: registrations.id })
     .from(registrations)
     .where(and(eq(registrations.competitionId, competitionId), eq(registrations.categoryId, row.id)))
     .all()
     .map((r) => r.id);
-  const moves = members.map((id) => {
+  const targets = new Set<string>();
+  for (const id of members) {
     const last = lastValidatedRecasement(db, competitionId, id);
-    if (!last || last.type !== 'M') {
-      throw new RegistrationValidationError(['Un combattant de ce tableau n’y a pas été placé par un déplacement manuel annulable : suppression refusée.']);
-    }
-    return last.id;
-  });
-  // Une seule transaction (comme l'application du plan) : un retour refusé annule ceux déjà faits ; les transactions de
-  // `undoRecasement` s'y emboîtent en points de sauvegarde (base synchrone : aucune autre requête ne passe entre-temps).
-  // L'annulation passe par l'historique, en cascade : un déplacement déjà annulé avec un précédent est sauté.
+    const entry = last && last.type === 'M' ? entryOfRecasement(db, competitionId, last.id) : undefined;
+    if (!entry) throw new RegistrationValidationError(['Un combattant de ce tableau n’y a pas été placé par un déplacement manuel annulable : suppression refusée.']);
+    targets.add(entry);
+  }
+  return [...targets];
+}
+
+/**
+ * Supprime un tableau libre : chacun de ses combattants retourne là où il était juste avant d'y être placé (annulation de
+ * son déplacement manuel, avec sa cascade, par l'historique). Tout ou rien : refusé si le tableau ou sa session est lancé, ou
+ * si l'un d'eux ne peut pas revenir. `expect` : le lot affiché (null : pas de contrôle) ; périmé, rien n'est supprimé (409).
+ */
+export async function deleteFreeTableau(db: AppDb, competitionId: string, categoryId: string, expect: string[] | null): Promise<{ returned: number }> {
+  const row = freeRow(db, competitionId, categoryId);
+  await checkUnlocked(db, competitionId, row, 'supprimer');
+  const targets = await freeTableauDeleteTargets(db, competitionId, categoryId);
+  const returned = db.select({ id: registrations.id }).from(registrations).where(and(eq(registrations.competitionId, competitionId), eq(registrations.categoryId, row.id))).all().length;
   await atomically(db, async () => {
-    for (const id of moves) {
-      if (db.select({ status: recasements.status }).from(recasements).where(eq(recasements.id, id)).get()?.status !== 'validated') continue;
-      await undoRecasement(db, competitionId, id);
-    }
+    if (targets.length) await undoHistory(db, competitionId, targets, expect);
     db.delete(tieBreaks).where(eq(tieBreaks.categoryId, row.id)).run();
     db.delete(categories).where(eq(categories.id, row.id)).run();
   });
-  return { returned: members.length };
+  return { returned };
 }
