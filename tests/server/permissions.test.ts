@@ -23,7 +23,7 @@ type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 const TABLE_WRITES = [
   'POST /registrations', 'PUT /registrations/:rid', 'DELETE /registrations/:rid', 'POST /clubs', 'PATCH /clubs/:clubId', 'POST /clubs/from-directory',
   'PUT /weigh-in/:fighterId', 'POST /weigh-in/close',
-  'POST /replacement/preview', 'POST /replacement/apply', 'POST /replacement/plan', 'POST /replacement/plan/apply', 'POST /replacement/refuse', 'POST /replacement/unrefuse', 'POST /replacement/undo', 'POST /replacement/move', 'POST /replacement/undo-manual', 'POST /replacement/withdraw', 'POST /replacement/set-aside', 'POST /replacement/resume', 'POST /history/undo',
+  'POST /replacement/preview', 'POST /replacement/apply', 'POST /replacement/plan', 'POST /replacement/plan/apply', 'POST /replacement/refuse', 'POST /replacement/unrefuse', 'POST /replacement/undo', 'POST /replacement/move', 'POST /replacement/exchange', 'POST /replacement/exchange/preview', 'POST /replacement/undo-manual', 'POST /replacement/withdraw', 'POST /replacement/set-aside', 'POST /replacement/resume', 'POST /history/undo',
   'POST /free-tableaux', 'PATCH /free-tableaux/:cid', 'DELETE /free-tableaux/:cid',
   'PUT /replacement/rules', 'POST /replacement/rules/reset', 'POST /replacement/reset',
   'PATCH /categories/:cid', 'POST /categories/:cid/redraw', 'POST /categories/:cid/swap', 'POST /categories/:cid/move', 'POST /categories/:cid/move/preview', 'POST /categories/:cid/regenerate',
