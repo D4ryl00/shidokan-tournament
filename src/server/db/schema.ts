@@ -481,6 +481,27 @@ export const recasements = sqliteTable('recasements', {
   ...rowMeta(),
 });
 
+/** Historique annulable (planche des tableaux) : une entrée par action, avec de quoi la défaire. L'ordre est le `rowid`. */
+export const historyEntries = sqliteTable('history_entries', {
+  id: text('id').primaryKey(),
+  competitionId: text('competition_id')
+    .notNull()
+    .references(() => competitions.id, { onDelete: 'cascade' }),
+  kind: text('kind').notNull(),
+  /** Une application du plan regroupe plusieurs entrées. */
+  groupId: text('group_id'),
+  status: text('status', { enum: ['active', 'undone'] }).notNull().default('active'),
+  undoneAt: text('undone_at'),
+  waveId: text('wave_id'),
+  summaryJson: text('summary_json').notNull(),
+  recasementIds: text('recasement_ids').notNull().default('[]'),
+  categoryIds: text('category_ids').notNull().default('[]'),
+  beforeJson: text('before_json').notNull().default('{"categories":[],"created":[],"registrations":[]}'),
+  afterMembersJson: text('after_members_json').notNull().default('{}'),
+  createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  ...rowMeta(),
+});
+
 export const refusals = sqliteTable(
   'refusals',
   {

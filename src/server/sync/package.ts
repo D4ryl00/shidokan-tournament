@@ -30,7 +30,7 @@ export interface SyncPackage {
 /** Tables d'une compétition qui voyagent, dans un ordre compatible avec les clés étrangères (la compétition d'abord). */
 export const PACKAGE_TABLES = [
   'competitions', 'age_bands', 'weight_classes', 'age_links', 'closed_categories', 'waves', 'zones', 'clubs', 'fighters', 'registrations', 'categories',
-  'wave_launches', 'frozen_passages', 'recasements', 'refusals', 'set_aside_cases', 'match_results', 'kata_scores', 'tie_breaks',
+  'wave_launches', 'frozen_passages', 'recasements', 'history_entries', 'refusals', 'set_aside_cases', 'match_results', 'kata_scores', 'tie_breaks',
 ];
 /** Cases fermées tirées de l'ancienne case « Proposée sur la fiche club » d'une compétition (même règle que la migration 0021). */
 const CLOSED_FROM_CLUB_FORM = `

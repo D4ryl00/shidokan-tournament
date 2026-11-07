@@ -23,6 +23,7 @@ import {
   waveMoves,
 } from '../../domain/replacement/index.js';
 import { manualProposal as domainManualProposal } from '../../domain/replacement/manual.js';
+import { atomically } from '../db/atomic.js';
 import type { AppDb } from '../db/client.js';
 import { withoutRowMeta } from '../db/row-versions.js';
 import { categories, clubs, competitions, fighters, recasements, refusals, registrations, setAsideCases, waves } from '../db/schema.js';
@@ -354,14 +355,8 @@ export async function applyPlan(
   if (stateFingerprint(await loadState(db, competitionId)) !== body.fingerprint) throw new StaleProposalError();
   // Tout ou rien : une seule transaction pour tous les déplacements (les `await` ci-dessous ne rendent jamais la main à une
   // autre requête, la base est synchrone). Un déplacement refusé annule ceux déjà écrits ; `persist` s'y emboîte en point de sauvegarde.
-  const raw = db.$client;
   let applied = 0;
-  let begun = false;
-  try {
-    // Dans le `try` : un échec du BEGIN suit le même chemin d'erreur, sans ROLLBACK (aucune transaction ouverte ici, et une
-    // transaction ouverte ailleurs n'est pas la nôtre).
-    raw.exec('BEGIN IMMEDIATE');
-    begun = true;
+  await atomically(db, async () => {
     for (const move of plan.moves) {
       state = await loadState(db, competitionId);
       // Le combattant doit encore être là où le plan l'a pris (une catégorie créée en route, `new:…`, n'existe pas encore en base).
@@ -378,11 +373,7 @@ export async function applyPlan(
       persistAll(db, competitionId, state, p, { bulk: true, waveId });
       applied++;
     }
-    raw.exec('COMMIT');
-  } catch (e) {
-    if (begun && raw.inTransaction) raw.exec('ROLLBACK');
-    throw e;
-  }
+  });
   return { applied };
 }
 
