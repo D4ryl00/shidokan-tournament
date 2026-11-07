@@ -1,7 +1,7 @@
 import { Alert, Box, Button, Card, Checkbox, Chip, Collapse, Group, Loader, Modal, SegmentedControl, Select, SimpleGrid, Stack, Switch, Table, Text, TextInput, type ComboboxData } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import type { Case, CaseKind, Proposal, ProposalType } from '../../domain/replacement/index.js';
 import {
   useApplyProposal,
@@ -195,6 +195,7 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
 
 export function ReplacementPage() {
   const { id = '' } = useParams();
+  const navigate = useNavigate();
   // Avec des vagues : le tableau de bord de la vague choisie (même choix que la Pesée).
   const { waves, waveId, select, ready } = useSelectedWave(id);
   const { data } = useReplacement(id, waveId, ready);
@@ -504,7 +505,7 @@ export function ReplacementPage() {
             {resetBlocked && <Text size="xs" c="dimmed" data-testid="replacement-reset-why">{resetBlocked}</Text>}
           </Group>
         )}>
-        <HistoryPanel competitionId={id} waveId={waveId} mode="inline" />
+        <HistoryPanel competitionId={id} waveId={waveId} mode="inline" onSee={(ids) => navigate(`/competitions/${id}/tableaux?vue=planche&voir=${ids.join(',')}`)} />
       </SectionCard>
 
       <Modal opened={dialog?.kind === 'proposal' || dialog?.kind === 'move'} onClose={() => setDialog(null)} size="xl"

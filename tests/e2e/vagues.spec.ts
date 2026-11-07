@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { createCompetition, openTab } from './helpers.js';
+import { createCompetition, openTab, showList } from './helpers.js';
 
 async function seed(request: APIRequestContext, id: string) {
   let i = 0;
@@ -256,6 +256,7 @@ test('tableaux par session : la session choisie, celles en attente, toutes', asy
   for (const n of ['CADA', 'CADB']) await reg(n, 'cadet', 'cadet:F:-47');
   await request.put(`/api/competitions/${id}/waves`, { data: [{ name: 'Matin', rules: { ageBandCodes: ['minime'], disciplines: [] } }] });
   await page.goto(`/competitions/${id}/tableaux`);
+  await showList(page);
   const rows = page.getByTestId('category-row');
   await expect(rows).toHaveCount(1);
   await expect(rows).toContainText('Minimes');

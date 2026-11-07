@@ -150,3 +150,8 @@ export async function inviteWithLink(request: APIRequestContext, competitionId: 
   const clubId = rows.find((r) => r.directoryClubId === directoryId)!.clubId;
   return (await (await request.post(`/api/competitions/${competitionId}/invitations/${clubId}/links`)).json()) as { id: string; clubId: string; clubName: string; token: string };
 }
+
+/** Onglet Tableaux : passe de la Planche (vue par défaut) à la Liste. */
+export async function showList(page: Page): Promise<void> {
+  await page.getByTestId('brackets-view').getByText('Liste', { exact: true }).click();
+}

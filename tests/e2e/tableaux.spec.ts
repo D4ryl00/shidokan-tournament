@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { createCompetition } from './helpers.js';
+import { createCompetition, showList } from './helpers.js';
 
 async function seed(request: APIRequestContext, id: string) {
   const club = async (name: string) => (await (await request.post(`/api/competitions/${id}/clubs`, { data: { name } })).json()).id as string;
@@ -20,6 +20,7 @@ test('tableaux : catégories, séparation des clubs, format, tirage, prête, imp
   const id = await createCompetition(page, 'Coupe tableaux');
   await seed(request, id);
   await page.goto(`/competitions/${id}/tableaux`);
+  await showList(page);
   await expect(page.getByTestId('category-row')).toHaveCount(2);
   await expect(page.getByTestId('category-row').filter({ hasText: 'Kata' }).getByTestId('category-alone')).toBeVisible();
 
@@ -60,6 +61,7 @@ test('tableau d’un seul combattant : sa case est affichée et permet de le dé
   const id = await createCompetition(page, 'Coupe tableau seul');
   await seed(request, id);
   await page.goto(`/competitions/${id}/tableaux`);
+  await showList(page);
   await page.getByTestId('category-row').filter({ hasText: 'Kata' }).click();
   const view = page.getByTestId('bracket-view');
   await expect(view).toContainText('n’a pas d’adversaire dans cette catégorie');
@@ -136,6 +138,7 @@ test('même club au 1er tour : club en orange, message et annulation', async ({ 
   const id = await createCompetition(page, 'Coupe meme club ecran');
   await seed(request, id);
   await page.goto(`/competitions/${id}/tableaux`);
+  await showList(page);
   await page.getByTestId('category-row').filter({ hasText: '-54' }).click();
   await expect(page.getByTestId('same-club')).toHaveCount(0);
   const entrant = (n: string) => page.getByTestId('bracket-view').getByTestId('bracket-entrant').filter({ hasText: n }).first();
@@ -155,4 +158,54 @@ test('même club au 1er tour : club en orange, message et annulation', async ({ 
   await expect(toast).toContainText('Tani Dojo');
   await toast.getByTestId('undo-toast-action').click();
   await expect(page.getByTestId('same-club')).toHaveCount(0);
+});
+
+test('planche : groupes, recherche, bac, même club, agrandir, Liste retenue', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe planche');
+  await seed(request, id);
+  await page.goto(`/competitions/${id}/tableaux`);
+  // Planche par défaut : deux cartes (-54 kg et kata) dans deux groupes.
+  await expect(page.getByTestId('planche-card')).toHaveCount(2);
+  await expect(page.getByTestId('planche-group')).toHaveCount(2);
+  await expect(page.getByTestId('planche-jump')).toHaveCount(2);
+  const card = page.getByTestId('planche-card').filter({ hasText: '-54' });
+  await expect(card.getByTestId('planche-chip')).toHaveCount(4);
+  await expect(card).toContainText('COMBAT 1');
+  // Bac : le kata est seul.
+  await expect(page.getByTestId('planche-tray')).toContainText('Sans adversaire (1)');
+  await expect(page.getByTestId('planche-tray').getByTestId('planche-chip')).toHaveCount(1);
+  // Recherche.
+  await page.getByTestId('planche-search').fill('issa');
+  await expect(page.getByTestId('planche-card')).toHaveCount(1);
+  await page.getByTestId('planche-search').fill('zzz');
+  await expect(page.getByText('Aucune catégorie ne correspond.')).toBeVisible();
+  await page.getByTestId('planche-search').fill('');
+  // Classer par zone : une zone automatique.
+  await page.getByTestId('planche-sort').click();
+  await page.getByRole('option', { name: 'Zone' }).click();
+  await expect(page.getByTestId('planche-group').first()).toContainText('Tatami 1');
+  // Agrandir : le vrai tableau, avec Nouveau tirage.
+  await card.getByTestId('card-grow').click();
+  await expect(card.getByTestId('bracket-view')).toBeVisible();
+  await expect(card.getByTestId('card-redraw')).toBeVisible();
+  // La Liste est retenue.
+  await showList(page);
+  await page.reload();
+  await expect(page.getByTestId('category-row')).toHaveCount(2);
+  await page.getByTestId('brackets-view').getByText('Planche', { exact: true }).click();
+  await expect(page.getByTestId('planche')).toBeVisible();
+  // « Ouvrir dans la liste ».
+  await page.getByTestId('planche-card').filter({ hasText: '-54' }).getByTestId('card-open-list').click();
+  await expect(page.getByTestId('category-actions')).toBeVisible();
+});
+
+test('planche : lien « voir » entoure la carte, lisible à 360 px', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe planche voir');
+  await seed(request, id);
+  const cid = ((await (await request.get(`/api/competitions/${id}/categories`)).json()) as { id: string; label: string }[]).find((c) => c.label.includes('-54'))!.id;
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.goto(`/competitions/${id}/tableaux?vue=planche&voir=${cid}`);
+  await expect(page.getByTestId('planche-card').and(page.locator(`[data-category="${cid}"]`))).toHaveAttribute('data-ring', 'see');
+  await expect(page.getByTestId('planche-card').and(page.locator(`[data-category="${cid}"]`))).not.toHaveAttribute('data-ring', 'see', { timeout: 5000 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

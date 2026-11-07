@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createCompetition, openTab } from './helpers.js';
+import { createCompetition, openTab, showList } from './helpers.js';
 
 test('figer et imprimer la session, finales sur le Ring, régénérer à la suite, rouvrir et refiger', async ({ page, request, context }) => {
   const id = await createCompetition(page, 'Coupe figeage');
@@ -46,6 +46,7 @@ test('figer et imprimer la session, finales sur le Ring, régénérer à la suit
   // Absente tardive : rien ne bouge sans confirmation ; « Régénérer » renumérote à la suite.
   await request.put(`/api/competitions/${id}/weigh-in/${cadettes[0]!.fighterId}`, { data: { presence: 'absent' } });
   await openTab(page, 'Tableaux');
+  await showList(page);
   await page.getByText(big.label).first().click();
   await expect(page.getByText('Les inscrits ont changé')).toBeVisible();
   // À l'écran aussi, la finale déplacée indique sa zone.

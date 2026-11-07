@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { createCompetition } from './helpers.js';
+import { createCompetition, showList } from './helpers.js';
 
 async function seed(request: APIRequestContext, id: string) {
   const reg = async (data: object) =>
@@ -44,6 +44,7 @@ test('pesée puis réaffectation : aperçu, validation, refus, plan d’ensemble
 
   // 1 bis. Tableaux : nombre de cas par catégorie
   await page.goto(`/competitions/${id}/tableaux`);
+  await showList(page);
   await expect(page.getByTestId('category-row').filter({ hasText: 'Cadets F · -61 kg' }).getByTestId('category-cases')).toHaveText('1 cas à traiter');
   await expect(page.getByTestId('category-row').filter({ hasText: 'Shobu' }).getByTestId('category-all-absent')).toBeVisible();
   // Formats proposés d'après les présents (comme le serveur) : DUBOIS seule présente en -61 → pas de « combat unique »

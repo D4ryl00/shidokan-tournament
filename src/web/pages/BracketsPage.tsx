@@ -2,8 +2,8 @@ import {
   Badge, Button, Card, Checkbox, Grid, Group, Modal, ScrollArea, SegmentedControl, Select, Stack, Text, TextInput, Title, UnstyledButton,
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { compatibleFormats, type BracketFormat } from '../../domain/brackets/index.js';
 import { activeEntrantCount, type Category, type CategoryStatus } from '../../domain/categories.js';
 import { newSameClubPairs, sameClubSentence } from '../../domain/brackets/same-club.js';
@@ -16,6 +16,8 @@ import { usePoste } from '../poste.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { useUndoToast } from '../components/history/undoToast.js';
 import { HistoryPanel, HISTORY_DRAWER_WIDTH } from '../components/history/HistoryPanel.js';
+import { Planche, type SeeRequest } from '../components/planche/Planche.js';
+import type { Scope } from '../components/planche/PlancheToolbar.js';
 import { MoveEntrantPanel } from '../components/MoveEntrantPanel.js';
 import { BracketView, type EntrantInfo } from '../components/BracketView.js';
 import { useRecasementDetails } from '../components/ReplacementBadge.js';
@@ -27,6 +29,12 @@ import { ALL_FORMAT_LABELS } from '../../domain/brackets/format-labels.js';
 export const STATUS_LABELS: Record<CategoryStatus, string> = { provisional: 'Provisoire', ready: 'Prête', started: 'Lancée', finished: 'Terminée' };
 /** Sens de l'état d'une catégorie : provisoire (neutre), prête (action), lancée (en cours), terminée (succès). */
 export const STATUS_TONES: Record<CategoryStatus, Tone> = { provisional: 'neutral', ready: 'accent', started: 'warn', finished: 'ok' };
+
+type View = 'planche' | 'liste';
+const VIEW_KEY = 'tableaux-vue';
+function storedView(): View {
+  try { return localStorage.getItem(VIEW_KEY) === 'liste' ? 'liste' : 'planche'; } catch { return 'planche'; }
+}
 
 export function useEntrantInfo(competitionId: string): Map<string, EntrantInfo> {
   const { data: rows = [] } = useRegistrations(competitionId);
@@ -67,11 +75,28 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   const [confirmUnlock, setConfirmUnlock] = useState(false);
   // Avec des vagues : les catégories de la vague choisie (la même que dans les autres onglets), celles en attente, ou toutes.
   const { waves, waveId, select } = useSelectedWave(id);
-  const [scope, setScope] = useState<'wave' | 'waiting' | 'all'>('wave');
+  // `?vue=planche|liste` et `?voir=id1,id2` (lien « Voir » de la Réaffectation) ne sont lus qu'au chargement.
+  const [, setParams] = useSearchParams();
+  const first = useRef<{ vue: string | null; voir: string[] } | null>(null);
+  if (first.current === null) {
+    const q = new URLSearchParams(window.location.search);
+    first.current = { vue: q.get('vue'), voir: (q.get('voir') ?? '').split(',').filter(Boolean) };
+  }
+  const [view, setView] = useState<View>(() => (first.current!.vue === 'planche' || first.current!.vue === 'liste' ? first.current!.vue : first.current!.voir.length ? 'planche' : storedView()));
+  const [scope, setScope] = useState<Scope>(first.current.voir.length ? 'all' : 'wave');
+  const [seeRequest, setSeeRequest] = useState<SeeRequest | null>(first.current.voir.length ? { ids: first.current.voir, n: 1 } : null);
+  useEffect(() => {
+    setParams((p) => { p.delete('vue'); p.delete('voir'); return p; }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const chooseView = (v: string) => {
+    setView(v as View);
+    try { localStorage.setItem(VIEW_KEY, v); } catch { /* stockage indisponible : le choix vaut pour cette visite */ }
+  };
   // Historique : tiroir à droite ; au-dessus de `lg`, la page se resserre pour lui laisser la place.
   const [historyOpen, setHistoryOpen] = useState(false);
   const wide = useMediaQuery('(min-width: 75em)');
-  const { data: history } = useHistory(id, waveId);
+  const { data: history } = useHistory(id, scope === 'wave' ? waveId : null);
   const historyCount = (history?.entries ?? []).filter((e) => e.status === 'active').length;
 
   const { data: registrations = [] } = useRegistrations(id);
@@ -126,9 +151,36 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
     }
   };
 
+  // « Voir » (historique) : la planche, les cartes entourées ; « Toutes » si une carte n'est pas dans la session affichée.
+  const onSee = (ids: string[]) => {
+    if (waves.length > 0 && scope !== 'all' && ids.some((x) => !inScope(categories.find((c) => c.id === x) ?? ({ waveId: undefined } as unknown as Category)))) setScope('all');
+    setView('planche');
+    setSeeRequest((r) => ({ ids, n: (r?.n ?? 0) + 1 }));
+  };
+  const onSelectScope = (v: string) => {
+    if (v === 'waiting' || v === 'all') setScope(v);
+    else { setScope('wave'); select(v); }
+    setSelectedId(null);
+  };
+  const openInList = (cid: string) => {
+    const c = categories.find((x) => x.id === cid);
+    if (c && !inScope(c)) setScope('all');
+    setSelectedId(cid); setSwapFrom(null); setView('liste');
+  };
+
   return (
     <>
-    <Grid style={historyOpen && wide ? { marginRight: HISTORY_DRAWER_WIDTH } : undefined}>
+    <Stack gap="sm" style={historyOpen && wide ? { marginRight: HISTORY_DRAWER_WIDTH } : undefined}>
+    <Group justify="flex-end">
+      <SegmentedControl size="xs" data-testid="brackets-view" value={view} onChange={chooseView} data={[{ value: 'planche', label: 'Planche' }, { value: 'liste', label: 'Liste' }]} />
+    </Group>
+    {view === 'planche' && (
+      <Planche competitionId={id} categories={categories} waves={waves} waveId={waveId} scope={scope} onScope={onSelectScope} readOnly={readOnlyPoste}
+        entrants={entrants} badges={badges} badgeDetails={badgeDetails} cases={casesByCategory} aside={asideByCategory} historyCount={historyCount}
+        onHistory={() => setHistoryOpen((o) => !o)} seeRequest={seeRequest} onOpenList={openInList} />
+    )}
+    {view === 'liste' && (
+    <Grid>
       <Grid.Col span={{ base: 12, md: 4 }}>
         <Stack gap="xs">
           {!readOnlyPoste && (
@@ -297,7 +349,9 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
         </Modal>
       </Grid.Col>
     </Grid>
-    <HistoryPanel competitionId={id} waveId={waveId} mode="drawer" opened={historyOpen} onClose={() => setHistoryOpen(false)} />
+    )}
+    </Stack>
+    <HistoryPanel competitionId={id} waveId={scope === 'wave' ? waveId : null} mode="drawer" opened={historyOpen} onClose={() => setHistoryOpen(false)} onSee={onSee} />
     </>
   );
 }

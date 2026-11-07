@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { clipped, createCompetition } from './helpers.js';
+import { clipped, createCompetition, showList } from './helpers.js';
 
 async function reg(request: APIRequestContext, id: string, lastName: string, weightClassId: string, extra: object = {}): Promise<string> {
   const res = await request.post(`/api/competitions/${id}/registrations`, {
@@ -78,6 +78,8 @@ test('historique à 360 px : rien de coupé, bouton de la Liste', async ({ page,
   expect(await clipped(page)).toEqual([]);
 
   await page.goto(`/competitions/${id}/tableaux`);
+
+  await showList(page);
   await page.getByTestId('history-open').click();
   const panel = page.getByTestId('history-panel');
   await expect(panel.getByTestId('history-entry')).toHaveCount(2);
@@ -89,6 +91,7 @@ test('tiroir de la Liste utilisable, suppression d’un tableau libre avec sa ca
   const id = await createCompetition(page, 'Coupe historique annulable libre');
   await seed(request, id);
   await page.goto(`/competitions/${id}/tableaux`);
+  await showList(page);
   await page.getByTestId('history-open').click();
   await expect(page.getByTestId('history-panel').getByTestId('history-entry')).toHaveCount(2);
   // Sans voile : la page reste cliquable derrière le tiroir.

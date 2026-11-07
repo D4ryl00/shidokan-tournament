@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { createCompetition, openTab } from './helpers.js';
+import { createCompetition, openTab, showList } from './helpers.js';
 
 test('tableaux libres dans l’onglet Catégories', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe placements libres');
@@ -66,6 +66,8 @@ test('gala entre deux catégories', async ({ page, request }) => {
   expect((await request.post(`/api/competitions/${id}/free-tableaux`, { data: { name: 'Gala 1', discipline: 'karate', ruleset: 'jiyu' } })).status()).toBe(201);
 
   await page.goto(`/competitions/${id}/tableaux`);
+
+  await showList(page);
   const rowOf = (text: string) => page.getByTestId('category-row').filter({ hasText: text });
   const panel = page.getByTestId('move-entrant-panel');
   const moveTo = async (lastName: string, target: string) => {
@@ -116,6 +118,7 @@ test('gala entre deux catégories', async ({ page, request }) => {
 
   // Annuler le déplacement manuel de CADA : il revient dans sa catégorie.
   await openTab(page, 'Tableaux');
+  await showList(page);
   await rowOf('Gala 1').click();
   await page.getByTestId('bracket-entrant').filter({ hasText: 'CADA' }).first().click();
   await panel.getByTestId('move-entrant-undo').click();
@@ -141,6 +144,7 @@ test('échange gardé après une arrivée', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe échange gardé');
   for (const n of ['AAA', 'BBB', 'CCC', 'DDD']) await reg(request, id, n, 'cadet:F:-47');
   await page.goto(`/competitions/${id}/tableaux`);
+  await showList(page);
   await page.getByTestId('category-row').first().click();
   const pairs = async () => (await page.getByTestId('bracket-match').allInnerTexts()).map((t) => ['AAA', 'BBB', 'CCC', 'DDD', 'EEE'].filter((n) => t.includes(n)).sort().join('+'));
   const before = await pairs();
@@ -211,6 +215,8 @@ test('Tableaux : déplacer vers un tableau libre en attente prévient du changem
   expect((await request.post(`/api/competitions/${id}/free-tableaux`, { data: { name: 'Gala 1', discipline: 'karate', ruleset: 'jiyu' } })).status()).toBe(201);
 
   await page.goto(`/competitions/${id}/tableaux`);
+
+  await showList(page);
   await page.getByTestId('brackets-wave').getByText('Après-midi', { exact: true }).click();
   await page.getByTestId('category-row').filter({ hasText: '-47' }).click();
   await page.getByTestId('bracket-entrant').filter({ hasText: 'CADA' }).first().click();

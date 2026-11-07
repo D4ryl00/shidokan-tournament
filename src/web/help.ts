@@ -471,6 +471,10 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     details: [
       'Les tableaux se font tout seuls à partir des inscriptions, en séparant les combattants d’un même club au premier tour.',
       [
+        'Deux vues, au choix en haut (« Planche / Liste », retenu sur ce poste). La planche (par défaut) montre toutes les catégories de la session en cartes, groupées par discipline, règlement et tranche d’âge, ou par zone (« Classer par »). Chaque carte montre ses combattants en pastilles, par combat du premier tour ; « Agrandir » montre le vrai tableau, avec « Nouveau tirage ». Le bac « Sans adversaire » à gauche liste les combattants seuls dans leur catégorie.',
+        'Cherchez une catégorie ou un combattant ; « Seulement à traiter » garde les cartes sans adversaire ou avec un cas de réaffectation. « Même club » (orange) prévient quand deux combattants d’un même club se rencontrent au premier tour : rien ne l’empêche. Le format, le repêchage, « Marquer prête » et l’impression restent dans la Liste (« Ouvrir dans la liste » sur une carte).',
+      ],
+      [
         'Provisoire (gris) : avant la pesée et la réaffectation. Prête (bleu) : vérifiée, on peut l’imprimer. Lancée (orange) : un résultat est saisi, le tableau est figé. Terminée (vert) : podium connu.',
         'Format, repêchage et combat pour la 3e place se changent tant que la catégorie n’est pas lancée.',
         'Cliquez deux combattants pour les échanger : l’échange est gardé quand le tableau est refait (arrivée, retrait), jusqu’à « Nouveau tirage ».',
