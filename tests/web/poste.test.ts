@@ -5,7 +5,7 @@ import { COMPETITION_TABS } from '../../src/web/tabs.js';
 
 test('onglets de chaque poste, dans l’ordre des onglets', () => {
   expect(posteTabs({ kind: 'organisation' })).toEqual(COMPETITION_TABS.map((t) => t.path));
-  expect(posteTabs({ kind: 'table' })).toEqual(['inscriptions', 'clubs', 'pesee', 'reaffectation', 'tableaux', 'combats', 'podiums']);
+  expect(posteTabs({ kind: 'table' })).toEqual(['inscriptions', 'clubs', 'pesee', 'reaffectation', 'tableaux', 'combats', 'podiums', 'categories']);
   expect(posteTabs({ kind: 'zone', zoneId: 'z1' })).toEqual(['tableaux', 'combats']);
 });
 
@@ -14,7 +14,7 @@ test('onglet par défaut et redirection d’un onglet masqué', () => {
   expect(defaultTab({ kind: 'table' })).toBe('inscriptions');
   expect(tabFor({ kind: 'zone', zoneId: 'z1' }, 'reglages')).toBe('combats');
   expect(tabFor({ kind: 'zone', zoneId: 'z1' }, 'tableaux')).toBe('tableaux');
-  expect(tabFor({ kind: 'organisation' }, 'grille')).toBe('grille');
+  expect(tabFor({ kind: 'organisation' }, 'categories')).toBe('categories');
 });
 
 test('lecture du poste enregistré : illisible ou absent → Organisation', () => {

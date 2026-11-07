@@ -80,7 +80,7 @@ test('compte Table centrale : poste imposé, aucun menu de l’organisateur, cha
   await expect(page.getByTestId('poste-select')).toHaveCount(0);
   // Ses onglets, rangés par étape : Préparer (inscriptions, clubs), Jour J, Après.
   const stages: [string, string[]][] = [
-    ['preparer', ['Inscriptions', 'Clubs']], ['jour-j', ['Pesée', 'Réaffectation', 'Tableaux', 'Combats']], ['apres', ['Podiums']],
+    ['preparer', ['Inscriptions', 'Clubs', 'Catégories']], ['jour-j', ['Pesée', 'Réaffectation', 'Tableaux', 'Combats']], ['apres', ['Podiums']],
   ];
   for (const [stage, tabs] of stages) {
     await page.getByTestId(`stage-${stage}`).click();
@@ -95,6 +95,13 @@ test('compte Table centrale : poste imposé, aucun menu de l’organisateur, cha
       await page.getByRole('tab', { name: tab, exact: true }).click();
       await expect(page.getByRole('tab', { name: tab, exact: true })).toHaveAttribute('aria-selected', 'true');
       await page.waitForLoadState('networkidle');
+      if (tab === 'Catégories') {
+        // Table centrale : seulement les tableaux libres, jamais la grille.
+        await expect(page.getByRole('group', { name: 'Tableaux libres', exact: true })).toBeVisible();
+        for (const hidden of ['Catégories de poids', 'Tranches d’âge', 'Catégories ouvertes', 'Passages d’âge autorisés']) {
+          await expect(page.getByRole('group', { name: hidden, exact: true })).toHaveCount(0);
+        }
+      }
     }
   }
   // Son mot de passe : un écran à lui, sans la liste des comptes.

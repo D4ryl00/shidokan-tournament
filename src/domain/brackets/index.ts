@@ -8,6 +8,7 @@ import type { BracketFormat, CombatBracket, Entrant, MatchResult, Podium, Resolv
 export * from './types.js';
 export type { KataBracket, KataScores } from './kata.js';
 export type Bracket = CombatBracket | KataBracket;
+export { keepPlaces } from './keep-places.js';
 
 /** Côté d'un match : identifiant d'inscription, exemption, ou pas encore connu (null). */
 type Side = string | 'bye' | null;

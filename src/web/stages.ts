@@ -9,7 +9,7 @@ export interface Stage {
 }
 
 export const STAGES: Stage[] = [
-  { id: 'preparer', label: 'Préparer', tabs: ['inscriptions', 'clubs', 'fiche-club', 'import-ffk', 'sessions', 'grille', 'reglages'] },
+  { id: 'preparer', label: 'Préparer', tabs: ['inscriptions', 'clubs', 'fiche-club', 'import-ffk', 'sessions', 'categories', 'reglages'] },
   { id: 'jour-j', label: 'Jour J', tabs: ['pesee', 'reaffectation', 'tableaux', 'combats'] },
   { id: 'apres', label: 'Après', tabs: ['podiums'] },
 ];

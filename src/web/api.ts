@@ -10,7 +10,7 @@ import type { ColumnMapping, FfkChoices, FfkImportPlan } from '../domain/ffk-imp
 import type { ClubField, ClubValues } from '../domain/club-changes.js';
 import type { Club, DirectoryEntry, DirectoryInput, RegistrationInput, RegistrationRow } from '../domain/registration.js';
 import type { Case, MoveView, Presence, Proposal, ProposalType } from '../domain/replacement/index.js';
-import type { CategoryGrid, DisciplineId, Sex } from '../domain/types.js';
+import type { CategoryGrid, DisciplineId, Ruleset, Sex } from '../domain/types.js';
 import type { LadderProgress, LadderRow, PlanChoice, PlanMove } from '../domain/replacement/plan.js';
 import { fetchPlanStream } from './planStream.js';
 import { queriesAfterCompetitionPatch } from './settingsPatch.js';
@@ -275,14 +275,14 @@ export function useCategories(id: string) {
   return useQuery({ queryKey: ['categories', id], queryFn: () => api<Category[]>('GET', `/api/competitions/${id}/categories`) });
 }
 
-function useCategoryMutation<T>(id: string, fn: (arg: T, qc: QC) => Promise<Category>) {
+function useCategoryMutation<T>(id: string, fn: (arg: T, qc: QC) => Promise<Category>, also: string[] = []) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (arg: T) => fn(arg, qc),
     onSuccess: (updated) => {
       // Nouvelle révision tout de suite en cache : un second clic rapide ne passe pas pour une écriture périmée.
       qc.setQueryData<Category[]>(['categories', id], (list) => list?.map((c) => (c.id === updated.id ? updated : c)));
-      return Promise.all(['categories', 'schedule'].map((k) => qc.invalidateQueries({ queryKey: [k, id] })));
+      return Promise.all(['categories', 'schedule', ...also].map((k) => qc.invalidateQueries({ queryKey: [k, id] })));
     },
   });
 }
@@ -291,6 +291,26 @@ export const useUpdateCategory = (id: string) =>
   useCategoryMutation(id, ({ cid, ...patch }: { cid: string; format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null; status?: CategoryStatus; unlock?: boolean; zoneId?: string | null; waveOverride?: string | null; order?: number }, qc) =>
     api<Category>('PATCH', `/api/competitions/${id}/categories/${cid}`, patch, { rev: categoryRevOf(qc, id, cid) }),
   );
+/** Tableaux libres (étape 37) : création sans révision, modification et suppression avec celle de la catégorie. */
+export const useCreateFreeTableau = (id: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; discipline: DisciplineId; ruleset: Ruleset | null }) => api<Category>('POST', `/api/competitions/${id}/free-tableaux`, body),
+    onSuccess: () => Promise.all(['categories', 'schedule'].map((k) => qc.invalidateQueries({ queryKey: [k, id] }))),
+  });
+};
+export const useUpdateFreeTableau = (id: string) =>
+  useCategoryMutation(id, ({ cid, ...patch }: { cid: string; name?: string; discipline?: DisciplineId; ruleset?: Ruleset | null }, qc) =>
+    api<Category>('PATCH', `/api/competitions/${id}/free-tableaux/${cid}`, patch, { rev: categoryRevOf(qc, id, cid) }),
+  // La discipline et le règlement passent aux combattants du tableau : inscriptions et réaffectation à recharger.
+  ['registrations', 'replacement']);
+export function useDeleteFreeTableau(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (cid: string) => api<{ returned: number }>('DELETE', `/api/competitions/${id}/free-tableaux/${cid}`, undefined, { rev: categoryRevOf(qc, id, cid) }),
+    onSuccess: () => Promise.all(['categories', 'schedule', 'registrations', 'replacement'].map((k) => qc.invalidateQueries({ queryKey: [k, id] }))),
+  });
+}
 export const useRedraw = (id: string) =>
   useCategoryMutation(id, (cid: string, qc) => api<Category>('POST', `/api/competitions/${id}/categories/${cid}/redraw`, undefined, { rev: categoryRevOf(qc, id, cid) }));
 export const useSwap = (id: string) =>
@@ -392,8 +412,8 @@ export interface ReplacementData {
   cases: Case[];
   /** Par inscription d'un cas. */
   fighters: Record<string, CaseFighter>;
-  /** Par cas : catégories où le déplacer à la main, avec les règles enfreintes (aucune : déplacement cohérent). */
-  moveTargets: Record<string, { categoryId: string; warnings: string[] }[]>;
+  /** Par cas : catégories où le déplacer à la main (`free` : tableau libre), avec les règles enfreintes (aucune : déplacement cohérent). */
+  moveTargets: Record<string, { categoryId: string; free: boolean; warnings: string[] }[]>;
   /** Les propositions refusées suivent les autres, marquées `refused`. */
   proposals: Record<string, (Proposal & { refused?: true; view: MoveView })[]>;
   /** Cartes mises de côté (de la session affichée), avec leur note. */
@@ -402,7 +422,7 @@ export interface ReplacementData {
   fingerprint: string;
   recasements: RecasementEntry[];
   /** Ce que « Repartir de zéro » ferait dans la session affichée. */
-  reset: { undo: number; kept: { name: string; toLabel: string; why: 'frozen' | 'started' }[]; blockedBy: string | null; clears: number; history: number; refusal: string | null; locked: boolean };
+  reset: { undo: number; manual: number; kept: { name: string; toLabel: string; why: 'frozen' | 'started' }[]; blockedBy: string | null; clears: number; history: number; refusal: string | null; locked: boolean };
 }
 export interface PreviewData {
   steps: { proposal: Proposal; manual: boolean }[];
@@ -435,6 +455,16 @@ export const useApplyProposal = (id: string) => useReplacementAction<{ proposalI
 export const useRefuseProposal = (id: string) => useReplacementAction<{ proposalId: string }>(id, 'refuse');
 export const useUnrefuseProposal = (id: string) => useReplacementAction<{ proposalId: string }>(id, 'unrefuse');
 export const useUndoRecasement = (id: string) => useReplacementAction<{ recasementId: string }>(id, 'undo');
+export const useUndoManualMove = (id: string) => useReplacementAction<{ registrationId: string }>(id, 'undo-manual');
+export interface MoveTarget { categoryId: string; label: string; free: boolean; warnings: string[] }
+/** Catégories et tableaux libres où déplacer un inscrit à la main ; rechargé à chaque changement des données du jour. */
+export function useMoveTargets(id: string, registrationId: string | null) {
+  return useQuery({
+    queryKey: ['move-targets', id, registrationId],
+    queryFn: () => api<{ targets: MoveTarget[] }>('GET', `/api/competitions/${id}/replacement/move-targets/${registrationId}`),
+    enabled: registrationId !== null,
+  });
+}
 export const useManualMove = (id: string) => useReplacementAction<{ registrationId: string; categoryId: string }>(id, 'move');
 export const useSetAsideCase = (id: string) => useReplacementAction<{ caseId: string; note?: string }>(id, 'set-aside');
 export const useResumeCase = (id: string) => useReplacementAction<{ caseId: string }>(id, 'resume');

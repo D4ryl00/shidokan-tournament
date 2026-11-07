@@ -4,6 +4,7 @@ import { seedDev } from '../../scripts/seed-dev.js';
 import { buildApp } from '../../src/server/app.js';
 import { closeDb, openDb, type AppDb } from '../../src/server/db/client.js';
 import { backupDir } from '../../src/server/repositories/backups.js';
+import { syncCategories } from '../../src/server/repositories/categories.js';
 import { buildPackage, importPackage, PACKAGE_TABLES } from '../../src/server/sync/package.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
@@ -217,4 +218,33 @@ test('paquet d’une version d’avant les listes d’adresses : l’adresse uni
   expect(emails('clubs', clubs[0]!.id)).toEqual(['coach@tani.fr']);
   expect(emails('clubs', clubs[1]!.id)).toEqual([]);
   expect(emails('club_directory', clubs[0]!.directory_club_id)).toEqual(['fiche@tani.fr']);
+});
+
+test('tableau arrangé et tableaux libres (vide, non vide) : gardés par l’export puis l’import d’un paquet', async () => {
+  const a = await seeded();
+  const b = openDb(tmpDbPath());
+  opened.push(b);
+  const arranged = (a.db.$client.prepare("select id from categories where competition_id = ? and bracket_json is not null order by id limit 1").get(a.id) as { id: string }).id;
+  a.db.$client.prepare('update categories set arranged = 1 where id = ?').run(arranged);
+  const key = (name: string) => JSON.stringify({ discipline: 'karate', ruleset: 'jiyu', sex: 'X', ageBandCodes: [], weightClassIds: [], free: name });
+  const insert = a.db.$client.prepare("insert into categories (id, competition_id, key_string, key_json, label, status, seed) values (?, ?, ?, ?, ?, 'provisional', 5)");
+  insert.run('libre-vide', a.id, `karate|jiyu|X|||libre:Vide`, key('Vide'), 'Vide');
+  insert.run('libre-plein', a.id, `karate|jiyu|X|||libre:Plein`, key('Plein'), 'Plein');
+  const moved = (a.db.$client.prepare("select id from registrations where competition_id = ? and discipline = 'karate' and ruleset = 'jiyu' and category_id is not null limit 1").get(a.id) as { id: string }).id;
+  a.db.$client.prepare("update registrations set category_id = 'libre-plein', placement_locked = 1 where id = ?").run(moved);
+  const rows = (d: AppDb) =>
+    d.$client.prepare("select id, key_json, label, arranged, bracket_json from categories where id in (?, 'libre-vide', 'libre-plein') order by id").all(arranged);
+  const expected = rows(a.db);
+  expect(expected).toHaveLength(3);
+
+  await importPackage(b, tmpDbPath(), buildPackage(a.db, a.id, { handOver: false, role: 'local' }), null, new Date(), { backup: false });
+  expect(rows(b)).toEqual(expected);
+  expect(b.$client.prepare('select category_id, placement_locked from registrations where id = ?').get(moved)).toEqual({ category_id: 'libre-plein', placement_locked: 1 });
+
+  // La synchronisation des catégories qui suit ne les défait pas.
+  await syncCategories(b, a.id);
+  expect(b.$client.prepare("select id, arranged from categories where id in (?, 'libre-vide', 'libre-plein') order by id").all(arranged)).toEqual(
+    (expected as { id: string; arranged: number }[]).map(({ id, arranged }) => ({ id, arranged })),
+  );
+  expect(b.$client.prepare('select category_id from registrations where id = ?').get(moved)).toEqual({ category_id: 'libre-plein' });
 });

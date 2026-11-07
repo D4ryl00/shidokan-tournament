@@ -23,8 +23,9 @@ export function kataScore(notes: number[]): number | null {
   return Math.round((kept.reduce((s, n) => s + n, 0) / kept.length) * 100) / 100;
 }
 
-export function kataBracket(entrants: Entrant[], bronzeCount: 1 | 2, seed: number): KataBracket {
-  const shuffled = shuffle(entrants, seededRandom(seed));
+/** `order` : ordre de passage imposé (sans tirage). */
+export function kataBracket(entrants: Entrant[], bronzeCount: 1 | 2, seed: number, order?: Entrant[]): KataBracket {
+  const shuffled = order ?? shuffle(entrants, seededRandom(seed));
   return { kind: 'kata', entrants: shuffled, order: shuffled.map((e) => e.registrationId), bronzeCount, seed };
 }
 

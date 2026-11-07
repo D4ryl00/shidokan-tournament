@@ -1,0 +1,1 @@
+ALTER TABLE `categories` ADD `arranged` integer DEFAULT false NOT NULL;

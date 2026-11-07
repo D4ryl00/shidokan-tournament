@@ -8,10 +8,12 @@ import type { AgeLinkKind, CategoryGrid, Sex, WeightClass } from '../../domain/t
 import { parseWeightLabel } from '../../domain/weights.js';
 import { ApiError, useGrid, useGridTemplates, useLoadTemplate, useReplaceGrid, useSaveTemplate } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { FreeTableauxSection } from '../components/FreeTableauxSection.js';
 import { OpenCategoriesMatrix } from '../components/OpenCategoriesMatrix.js';
 import { IconTrash } from '../components/ui/icons.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
+import { usePoste } from '../poste.js';
 import { useUnsaved } from '../unsaved.js';
 import { HELP } from '../help.js';
 
@@ -39,7 +41,19 @@ function normalizeWeightClasses(classes: WeightClass[]): WeightClass[] {
   return parsed;
 }
 
+/** Table centrale : seulement les tableaux libres (la grille et ses modèles se modifient à l'organisation). */
 export function GridEditorPage() {
+  const { id = '' } = useParams();
+  const [poste] = usePoste(id);
+  if (poste.kind !== 'table') return <GridEditor />;
+  return (
+    <SectionCard title={HELP['grille.libres'].title} help="grille.libres">
+      <FreeTableauxSection competitionId={id} />
+    </SectionCard>
+  );
+}
+
+function GridEditor() {
   const { id = '' } = useParams();
   const { data } = useGrid(id);
   const replace = useReplaceGrid(id);
@@ -147,6 +161,7 @@ export function GridEditorPage() {
       </SectionCard>
 
       <SectionCard title={HELP['grille.tranches'].title} help="grille.tranches">
+        <Table.ScrollContainer minWidth={380}>
         <Table className="sk-cell">
           <Table.Thead>
             <Table.Tr>
@@ -170,6 +185,7 @@ export function GridEditorPage() {
             ))}
           </Table.Tbody>
         </Table>
+        </Table.ScrollContainer>
       </SectionCard>
 
       </SimpleGrid>
@@ -179,6 +195,10 @@ export function GridEditorPage() {
           <OpenCategoriesMatrix competitionId={id} grid={data} />
         </SectionCard>
       )}
+
+      <SectionCard title={HELP['grille.libres'].title} help="grille.libres">
+        <FreeTableauxSection competitionId={id} />
+      </SectionCard>
 
       <SectionCard title={HELP['grille.passages'].title} help="grille.passages">
         <Stack>

@@ -24,7 +24,7 @@ export type HelpTopicId =
   | 'combats'
   | 'podiums'
   | 'reglages'
-  | 'grille'
+  | 'categories'
   | 'fiche-club.en-ligne'
   | 'fiche-club.envoyer'
   | 'fiche-club.importer'
@@ -55,6 +55,7 @@ export type HelpTopicId =
   | 'grille.poids'
   | 'grille.tranches'
   | 'grille.ouvertes'
+  | 'grille.libres'
   | 'grille.passages'
   | 'grille.modeles';
 
@@ -138,7 +139,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Sur le serveur en ligne, chacun se connecte avec son e-mail et son mot de passe. Le PC de la compétition, lui, ne demande pas de connexion.',
       [
         'Organisateur : tout.',
-        'Table centrale : inscriptions, clubs, pesée, réaffectations, tableaux, sessions à lancer et résultats de toutes les zones ; pas les réglages, la grille, les imports ni les invitations.',
+        'Table centrale : inscriptions, clubs, pesée, réaffectations, tableaux, tableaux libres, sessions à lancer et résultats de toutes les zones ; pas les réglages, la grille (sauf les tableaux libres, dans l’onglet Catégories), les imports ni les invitations.',
         'Zone : résultats, notes de kata et départages des combats de sa zone seulement. Un compte Zone est attaché à une zone d’une compétition : pour la compétition suivante, changez son rôle (« Changer le rôle ») ou créez-en un autre.',
       ],
       [
@@ -432,12 +433,15 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         '« Appliquer le plan » applique les déplacements sans validation et ceux que vous avez validés ; les autres restent en attente.',
         '② Chaque cas (combattant sans adversaire, poids hors catégorie…) reçoit des propositions, de la meilleure à la moins bonne. « Aperçu » montre qui rencontrera qui avant de valider. « Refuser » écarte une proposition de la carte (elle reste en grisé, « Rétablir » la reprend).',
         '« Déplacer manuellement vers… » ne liste que les catégories cohérentes avec les réglages (âge, poids, règlement, mixité). « Toutes les catégories » ajoute les autres, marquées « ⚠ N règles enfreintes » : le détail s’affiche avant de confirmer.',
+        'Les tableaux libres (créés dans l’onglet Catégories) figurent aussi dans cette liste, dans le groupe « Tableaux libres ».',
+        'Un combattant placé à la main qui se retrouve seul (dans un tableau libre ou dans sa catégorie) reçoit une carte « Sans adversaire » sans proposition : le calcul ne le déplace jamais. Déplacez-le vous-même, ou « Annuler son déplacement manuel » pour le remettre dans sa catégorie.',
+        '« Repartir de zéro » annule aussi les déplacements manuels (la fenêtre indique « dont N déplacements manuels »). Les tableaux libres restent, vides.',
       ],
       'Poids hors catégorie : la proposition « ⚖ Poids » l’envoie dans la catégorie de son poids réel. Si elle est vide, il y serait seul : elle passe alors en dernier, après les catégories où il aurait un adversaire (sa catégorie de poids est corrigée dans tous les cas).',
       'Sous le nom du combattant : sa tranche d’âge, sa discipline et son règlement, sa catégorie de poids, son poids (pesé ou approximatif) et les disciplines qu’il accepte.',
       'Catégorie fermée : le combattant est inscrit dans une catégorie que vous n’avez pas ouverte ; déplacez-le ou choisissez « Ne combat pas ».',
       'Split : un combattant seul peut aussi recevoir un combattant d’une autre catégorie (ou deux de la même, « pour donner une poule à… »), s’il en reste au moins deux au départ et si ce déplacement respecte les règles actives (âge, discipline, mixité, écart de poids…) : on propose d’abord les moins coûteux, puis les plus proches en poids. Jamais en kata. Sans autre règle que l’écart de poids réglé, c’est un cas simple.',
-      'Badges : ⚖ Poids (catégorie de poids voisine), ⚖ Poids + (écart au-delà du seuil), ↑ Âge (tranche voisine), ⇄ Sen./Vét., ↑ Min./Adultes, ⚥ Mixte, Shobu → Jiyu, ⇄ Discipline, ↩ Retour, ✋ Manuel. Cliquez un badge validé pour son détail.',
+      'Badges : ⚖ Poids (catégorie de poids voisine), ⚖ Poids + (écart au-delà du seuil), ↑ Âge (tranche voisine), ⇄ Sen./Vét., ↑ Min./Adultes, ⚥ Mixte, Shobu → Jiyu, ⇄ Discipline, ↩ Retour, ✋ Placé à la main. Cliquez un badge validé pour son détail.',
       'Seul un déplacement qui ne change que la catégorie de poids, dans l’écart réglé, se fait sans validation ; tous les autres se valident à la main. « Pré-accord coach » rappelle que le club a accepté d’avance les déplacements d’âge et de poids.',
       'Avec des sessions : choisissez la session en haut de l’écran (la même que pour la pesée). Les cas, les compteurs et le plan d’ensemble ne portent que sur ses catégories.',
       'Le badge « ↪ change de session : Matin → Dimanche » signale une proposition qui ferait passer le combattant dans une catégorie d’une autre session. Elle n’est jamais appliquée sans votre validation : validez-la une par une. Le combattant repasse alors « non pesé » dans sa nouvelle session, à pointer à sa pesée ; son poids déjà relevé est gardé.',
@@ -469,7 +473,8 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       [
         'Provisoire (gris) : avant la pesée et la réaffectation. Prête (bleu) : vérifiée, on peut l’imprimer. Lancée (orange) : un résultat est saisi, le tableau est figé. Terminée (vert) : podium connu.',
         'Format, repêchage et combat pour la 3e place se changent tant que la catégorie n’est pas lancée.',
-        'Cliquez deux combattants pour les échanger.',
+        'Cliquez deux combattants pour les échanger : l’échange est gardé quand le tableau est refait (arrivée, retrait), jusqu’à « Nouveau tirage ».',
+        'Un clic sur un combattant ouvre aussi « Déplacer vers… » sous le tableau : une autre catégorie, ou un tableau libre (créé dans l’onglet Catégories). Cochez « Toutes les catégories » pour voir celles dont les règles seraient enfreintes ; l’aperçu les liste avant de confirmer. Le combattant porte alors « Placé à la main » ; « Annuler son déplacement manuel » le remet dans sa catégorie.',
         '« Déverrouiller » rouvre une catégorie lancée (le tableau peut être refait si ses inscrits ont changé).',
         'Session figée : ses tableaux ne changent plus d’eux-mêmes. Si un combattant devient absent, « Régénérer (renuméroté à la suite) » refait le tableau et lui donne de nouveaux numéros, après le dernier numéro de sa zone : réimprimez-le (il porte « mis à jour à … »).',
       ],
@@ -652,9 +657,9 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Le nombre de médailles de bronze en kata et le nombre de rounds du triathlon.',
     details: ['Kata : un ou deux bronzes (les suivants du tour 1).'],
   },
-  grille: {
-    title: 'Grille âge / poids',
-    short: 'Les tranches d’âge et les catégories de poids de la compétition ; la grille FFK est déjà remplie.',
+  categories: {
+    title: 'Catégories',
+    short: 'La grille âge / poids de la compétition (déjà remplie avec la grille FFK), les catégories ouvertes et les tableaux libres.',
     details: [
       'Modifiez-la seulement si votre compétition s’écarte de la grille FFK. Cliquez « Enregistrer la grille » après vos changements.',
       'Une catégorie de poids qui contient des inscrits ne peut pas être supprimée.',
@@ -681,6 +686,15 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Une case = une tranche d’âge, un sexe, une discipline et son règlement. Le réglage vaut pour cette compétition seulement ; tout est ouvert au départ.',
       'Les combattants déjà inscrits dans une catégorie que vous fermez apparaissent en Réaffectation : vous les déplacez ou choisissez « Ne combat pas ».',
       'Une catégorie déjà lancée ne se ferme plus. La case d’une ligne (ou d’une colonne) ferme ou rouvre toute la ligne.',
+    ],
+  },
+  'grille.libres': {
+    title: 'Tableaux libres',
+    short: 'Des tableaux hors grille (gala, démonstration…) où l’on place des combattants à la main, avec leur propre session.',
+    details: [
+      'Un tableau libre a un nom, une discipline et un règlement. Il reste « En attente » tant qu’on ne le met pas dans une session.',
+      'Supprimer un tableau libre renvoie ses combattants dans leur catégorie précédente.',
+      'Un tableau lancé ne change plus de nom, de discipline ni de règlement : déverrouillez-le dans l’onglet Tableaux.',
     ],
   },
   'grille.passages': {

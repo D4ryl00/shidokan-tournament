@@ -23,6 +23,7 @@ import { NotFoundError, RegistrationLockedError, RegistrationValidationError } f
 import { CategoryLockedError, syncCategories } from './repositories/categories.js';
 import { StaleProposalError } from './repositories/replacement.js';
 import { categoryRoutes } from './routes/categories.js';
+import { freeTableauRoutes } from './routes/free-tableaux.js';
 import { closedCategoryRoutes } from './routes/closed-categories.js';
 import { replacementRoutes } from './routes/replacement.js';
 import { resultRoutes } from './routes/results.js';
@@ -238,6 +239,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(registrationRoutes, { db });
   await app.register(ffkImportRoutes, { db });
   await app.register(categoryRoutes, { db });
+  await app.register(freeTableauRoutes, { db });
   await app.register(closedCategoryRoutes, { db });
   await app.register(replacementRoutes, { db });
   await app.register(resultRoutes, { db });

@@ -3,13 +3,13 @@ import { notifications } from '@mantine/notifications';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import type { Case, CaseKind, Proposal, ProposalType } from '../../domain/replacement/index.js';
-import type { Wave } from '../../domain/waves.js';
 import {
   useApplyProposal,
   useCategories,
   useCompetition,
   useGrid,
   useManualMove,
+  useUndoManualMove,
   usePreviewReplacement,
   usePlan,
   useResetRules,
@@ -42,6 +42,7 @@ import { PlanView, WARN_ALERT, type PlanFighter } from '../components/replacemen
 import type { RuleId } from '../../domain/settings.js';
 import { ruleNumber, rulesView } from '../../domain/replacement/rules.js';
 import { MoveBlocks } from '../components/replacement/MoveBlocks.js';
+import { WaveChangeWarning } from '../components/replacement/WaveChangeWarning.js';
 import { clearPlanChoices, usePlanCardDecisions, usePlanChoices } from '../usePlanChoices.js';
 import { useSelectedWave } from '../useSelectedWave.js';
 import type { CategoryGrid } from '../../domain/types.js';
@@ -58,38 +59,6 @@ type Dialog =
 
 const CASE_KINDS: Record<CaseKind, string> = { closed: 'Catégorie fermée', alone: 'Sans adversaire', weight_out: 'Poids hors catégorie', weight_gap: 'Écart de poids', return: 'Retour possible' };
 const kg = (x: number) => Number(x.toFixed(1)).toString().replace('.', ',');
-
-/**
- * Ce qu'entraîne un changement de vague : le combattant (et ceux que sa catégorie emmène) repasse « non pesé »
- * dans sa nouvelle vague ; vague d'arrivée déjà clôturée ou catégorie en attente signalées.
- */
-function WaveChangeWarning({ proposal, waves, name }: { proposal: Proposal | undefined; waves: Wave[]; name: (registrationId: string) => string }) {
-  if (!proposal || (!proposal.waveChange && proposal.waveShifts.length === 0)) return null;
-  const waveName = (w: string | null) => waves.find((x) => x.id === w)?.name ?? 'en attente';
-  const where = (to: string | null) => (to === null ? 'dans une catégorie en attente (dans aucune session)' : `dans la session « ${waveName(to)} »`);
-  const then = (to: string | null) =>
-    to === null
-      ? 'il n’apparaîtra dans aucune pesée tant qu’elle n’est pas placée dans une session (écran Sessions).'
-      : waves.find((w) => w.id === to)?.weighInClosed
-        ? 'la pesée de cette session est déjà clôturée : pointez-le à la main dans l’écran Pesée.'
-        : 'à pointer (et à peser si besoin) dans cette session.';
-  return (
-    <Alert color="grape" data-testid="wave-change-warning">
-      <Stack gap={4}>
-        {proposal.waveChange && (
-          <Text size="sm">
-            {name(proposal.registrationId)} passera {where(proposal.waveChange.to)} : {then(proposal.waveChange.to)} Son poids déjà relevé est gardé.
-          </Text>
-        )}
-        {proposal.waveShifts.map((x) => (
-          <Text size="sm" key={x.registrationId}>
-            {x.label}, dont la catégorie change de session, passera {where(x.to)} : {then(x.to)}
-          </Text>
-        ))}
-      </Stack>
-    </Alert>
-  );
-}
 
 /** Le combattant d'un cas en une ligne : tranche d'âge, sexe, discipline, règlement, catégorie de poids, poids, préférences. */
 function FighterDetail({ f, grid }: { f: CaseFighter | undefined; grid: CategoryGrid | undefined }) {
@@ -241,6 +210,7 @@ export function ReplacementPage() {
   // Change à chaque « Repartir de zéro » : la liste des règles et le plan repartent sans les choix du poste.
   const [resets, setResets] = useState(0);
   const move = useManualMove(id);
+  const undoManual = useUndoManualMove(id);
   const withdraw = useWithdrawRegistration(id);
   const setAside = useSetAsideCase(id);
   const resume = useResumeCase(id);
@@ -258,7 +228,7 @@ export function ReplacementPage() {
     ? null
     : data.reset.locked
       ? 'La session est lancée : rouvrez-la pour repartir de zéro.'
-      : data.reset.undo + data.reset.clears + data.reset.history === 0
+      : data.reset.undo + data.reset.manual + data.reset.clears + data.reset.history === 0
         ? 'Rien à défaire dans cette session.'
         : null;
   const canReset = resetBlocked === null;
@@ -303,10 +273,14 @@ export function ReplacementPage() {
       };
     };
     const targets = data.moveTargets[caseId] ?? [];
-    const ok = targets.filter((t) => t.warnings.length === 0).map(option).filter((o) => o !== null);
-    if (!all) return ok;
-    const others = targets.filter((t) => t.warnings.length > 0).map(option).filter((o) => o !== null);
-    return [{ group: 'Cohérentes avec les réglages', items: ok }, { group: 'Règles enfreintes (avertissement)', items: others }].filter((g) => g.items.length > 0);
+    const items = (pred: (t: { free: boolean; warnings: string[] }) => boolean) => targets.filter(pred).map(option).filter((o) => o !== null);
+    const free = items((t) => t.free);
+    const ok = items((t) => !t.free && t.warnings.length === 0);
+    const others = items((t) => !t.free && t.warnings.length > 0);
+    const groups = all
+      ? [{ group: 'Cohérentes avec les réglages', items: ok }, { group: 'Règles enfreintes (avertissement)', items: others }, { group: 'Tableaux libres', items: free }]
+      : [{ group: 'Catégories', items: ok }, { group: 'Tableaux libres', items: free }];
+    return groups.filter((g) => g.items.length > 0);
   };
   /** Combattant d'une ligne du plan : nom et club. */
   const fighter = (rid: string): PlanFighter => {
@@ -350,7 +324,14 @@ export function ReplacementPage() {
           </Stack>
         </Group>
         <Stack gap="xs">
-          {open.length === 0 && <Text size="sm" c="red.6" fw={500}>{c.kind === 'closed' ? 'Aucune solution automatique : déplacer manuellement ou choisir « Ne combat pas ».' : 'Aucune solution automatique : déplacer manuellement ou laisser sans adversaire.'}</Text>}
+          {c.alert && (
+            <Text size="sm" c="dimmed" data-testid="case-alert-hint">
+              {data.fighters[c.registrationId]?.sex === 'F'
+                ? 'Placée à la main : le calcul ne la déplace pas. Déplacez-la vous-même ou annulez son déplacement manuel.'
+                : 'Placé à la main : le calcul ne le déplace pas. Déplacez-le vous-même ou annulez son déplacement manuel.'}
+            </Text>
+          )}
+          {open.length === 0 && !c.alert && <Text size="sm" c="red.6" fw={500}>{c.kind === 'closed' ? 'Aucune solution automatique : déplacer manuellement ou choisir « Ne combat pas ».' : 'Aucune solution automatique : déplacer manuellement ou laisser sans adversaire.'}</Text>}
           {proposals.map((p) => {
             if (p.refused) {
               return (
@@ -418,6 +399,14 @@ export function ReplacementPage() {
               Déplacer…
             </Button>
           </Group>
+          {c.alert && (
+            <Group gap="xs">
+              <Button size="xs" variant="subtle" color="orange" data-testid="case-undo-manual" loading={undoManual.isPending}
+                onClick={() => undoManual.mutate({ registrationId: c.registrationId }, { onSuccess: () => done('Déplacement manuel annulé.') })}>
+                Annuler son déplacement manuel
+              </Button>
+            </Group>
+          )}
           {c.kind === 'closed' && (
             <Group gap="xs">
               <Button size="xs" variant="default" data-testid="case-withdraw"
@@ -509,7 +498,7 @@ export function ReplacementPage() {
       </SectionCard>
 
       <SectionCard title={HELP['recasement.valides'].title} help="recasement.valides"
-        actions={(data.recasements.length > 0 || data.reset.undo + data.reset.clears + data.reset.history + data.reset.kept.length > 0) && (
+        actions={(data.recasements.length > 0 || data.reset.undo + data.reset.manual + data.reset.clears + data.reset.history + data.reset.kept.length > 0) && (
           <Group gap="xs">
             {data.recasements.length > 0 && (
               <Group gap="xs" data-testid="recasement-filters">
@@ -619,6 +608,7 @@ export function ReplacementPage() {
         <Stack>
           <Text>
             {plural(data.reset.undo, 'réaffectation validée est annulée', 'réaffectations validées sont annulées')}
+            {data.reset.manual > 0 && ` (dont ${plural(data.reset.manual, 'déplacement manuel', 'déplacements manuels')})`}
             {sessionName ? ` dans la session ${sessionName} (celles décidées depuis cette session)` : ''} : chaque combattant retrouve sa catégorie d’avant.
             {' '}Les refus, les cartes mises de côté et l’historique sont effacés. Les règles ne changent pas.
           </Text>

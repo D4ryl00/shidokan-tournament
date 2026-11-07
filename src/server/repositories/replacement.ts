@@ -506,10 +506,33 @@ export async function undoRecasement(db: AppDb, competitionId: string, recasemen
   await recomputeKeys(db, competitionId, () => touched);
 }
 
+/** Dernière réaffectation validée d'une inscription (ordre d'insertion), ou `undefined`. */
+export function lastValidatedRecasement(db: AppDb, competitionId: string, registrationId: string): { id: string; type: string } | undefined {
+  return db
+    .select({ id: recasements.id, type: recasements.type, n: sql<number>`rowid` })
+    .from(recasements)
+    .where(and(eq(recasements.competitionId, competitionId), eq(recasements.registrationId, registrationId), eq(recasements.status, 'validated')))
+    .all()
+    .sort((a, b) => b.n - a.n)
+    .map(({ id, type }) => ({ id, type }))[0];
+}
+
+/**
+ * Annule le déplacement manuel d'un combattant : sa réaffectation validée la plus récente, qui doit être de type M (même
+ * opération que l'annulation depuis l'historique, mêmes refus).
+ */
+export async function undoManualMove(db: AppDb, competitionId: string, registrationId: string): Promise<void> {
+  const last = lastValidatedRecasement(db, competitionId, registrationId);
+  if (!last || last.type !== 'M') throw new RegistrationValidationError(["Le dernier déplacement de ce combattant n'est pas manuel."]);
+  await undoRecasement(db, competitionId, last.id);
+}
+
 /** Ce que « Repartir de zéro » ferait dans une session (fenêtre de confirmation). */
 export interface ResetPreview {
   /** Réaffectations annulées (inscriptions encore là). */
   undo: number;
+  /** Dont déplacements manuels (type M). */
+  manual: number;
   /** Réaffectations laissées en place : vers une session lancée (`frozen`) ou une catégorie commencée (`started`). */
   kept: { name: string; toLabel: string; why: 'frozen' | 'started' }[];
   /** Combattant réaffecté ensuite depuis une autre session : la remise à zéro est refusée en entier. */
@@ -616,8 +639,9 @@ async function resetSorting(db: AppDb, competitionId: string, waveId: string | n
   const proposalReg = (id: string) => id.slice(id.indexOf(':') + 1).split(/[>+]/)[0]!;
   const refusalRows = scoped(db.select().from(refusals).where(eq(refusals.competitionId, competitionId)).all(), (x) => proposalReg(x.proposalId));
   const asideRows = scoped(db.select().from(setAsideCases).where(eq(setAsideCases.competitionId, competitionId)).all(), (x) => x.caseId.slice(x.caseId.indexOf(':') + 1));
+  const undone = undo.filter((e) => current.has(e.row.registrationId));
   const preview: ResetPreview = {
-    undo: undo.filter((e) => current.has(e.row.registrationId)).length, kept, blockedBy, clears: refusalRows.length + asideRows.length,
+    undo: undone.length, manual: undone.filter((e) => e.row.type === 'M').length, kept, blockedBy, clears: refusalRows.length + asideRows.length,
     history: erase.length, refusal: null, locked,
   };
   const sorting = { preview, undo, erase, refusalRows, asideRows, current, state };

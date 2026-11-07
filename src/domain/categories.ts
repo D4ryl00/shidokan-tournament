@@ -1,5 +1,6 @@
 import type { Bracket, BracketFormat } from './brackets/index.js';
 import { DISCIPLINES, RULESETS } from './disciplines.js';
+import { normalizeName } from './names.js';
 import type { Fighter, Registration } from './registration.js';
 import type { CategoryGrid, DisciplineId, Ruleset, Sex } from './types.js';
 
@@ -13,6 +14,23 @@ export interface CategoryKey {
   sex: CategorySex;
   ageBandCodes: string[];
   weightClassIds: string[];
+  /** Tableau libre : nom choisi par l'organisateur ; sans tranche ni poids. */
+  free?: string;
+}
+
+export const FREE_NAME_MAX = 60;
+export const isFreeKey = (k: CategoryKey): boolean => k.free !== undefined;
+export const freeKey = (name: string, discipline: DisciplineId, ruleset: Ruleset | null): CategoryKey => ({
+  discipline, ruleset, sex: 'X', ageBandCodes: [], weightClassIds: [], free: name,
+});
+/** Espaces réduits à un seul, sans espace aux bords. */
+export const normalizeFreeName = (name: string): string => name.replace(/\s+/g, ' ').trim();
+export function freeNameError(name: string, existing: string[]): string | null {
+  const n = normalizeFreeName(name);
+  if (!n) return 'Donnez un nom au tableau libre.';
+  if (n.length > FREE_NAME_MAX) return `${FREE_NAME_MAX} caractères au plus.`;
+  if (existing.some((e) => normalizeName(e) === normalizeName(n))) return 'Un tableau libre porte déjà ce nom.';
+  return null;
 }
 
 export function naturalKey(
@@ -29,7 +47,8 @@ export function naturalKey(
 }
 
 export function keyString(k: CategoryKey): string {
-  return [k.discipline, k.ruleset ?? '', k.sex, [...k.ageBandCodes].sort().join('+'), [...k.weightClassIds].sort().join('+')].join('|');
+  const base = [k.discipline, k.ruleset ?? '', k.sex, [...k.ageBandCodes].sort().join('+'), [...k.weightClassIds].sort().join('+')].join('|');
+  return k.free === undefined ? base : `${base}|libre:${k.free}`;
 }
 
 const bandIndex = (grid: CategoryGrid, code: string) => {
@@ -63,6 +82,7 @@ export function categoryLabelParts(k: CategoryKey, grid: CategoryGrid): Category
 }
 
 export function categoryLabel(k: CategoryKey, grid: CategoryGrid): string {
+  if (k.free !== undefined) return k.free;
   const p = categoryLabelParts(k, grid);
   return [p.discipline, ...(p.ruleset ? [p.ruleset] : []), `${p.ages} ${p.sex}`, ...(p.weights ? [p.weights] : [])].join(' · ');
 }
@@ -73,6 +93,7 @@ const SEX_ORDER: CategorySex[] = ['F', 'M', 'X'];
 export function compareKeys(a: CategoryKey, b: CategoryKey, grid: CategoryGrid): number {
   const firstBand = (k: CategoryKey) => bandIndex(grid, bands(k, grid)[0] ?? '');
   const firstWeight = (k: CategoryKey) => (k.weightClassIds.length ? weightOf(grid, weights(k, grid)[0]!) : 0);
+  if (isFreeKey(a) || isFreeKey(b)) return Number(isFreeKey(a)) - Number(isFreeKey(b)) || (a.free ?? '').localeCompare(b.free ?? '');
   return (
     DISCIPLINE_ORDER.indexOf(a.discipline) - DISCIPLINE_ORDER.indexOf(b.discipline) ||
     (a.ruleset ?? '').localeCompare(b.ruleset ?? '') ||
@@ -115,6 +136,8 @@ export interface Category {
   effectiveFormat: BracketFormat | null;
   /** Catégorie lancée dont les inscrits ont changé depuis (tableau non régénéré). */
   stale: boolean;
+  /** Tableau arrangé à la main (échange) : refait en gardant les places quand ses inscrits changent. */
+  arranged: boolean;
   /** Heure de la dernière renumérotation après le lancement de sa vague (« mis à jour à HH:MM »). */
   numbersUpdatedAt: string | null;
   /** Numérotée dans une vague lancée : tableau, zone et vague ne changent plus sans confirmation. */

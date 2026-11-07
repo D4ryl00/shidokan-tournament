@@ -302,6 +302,7 @@ Tous réglables **pour chaque compétition**.
   - au clic : catégorie d'origine et d'arrivée, motif, qui a validé et quand ;
   - **filtres** par type et par état.
 - Le tableau de bord reste **uniquement à l'écran**, il n'est jamais imprimé.
+- ✅ (2026-11-06) **Déplacement manuel** : l'organisateur ou la Table centrale peut déplacer **n'importe quel inscrit** vers une autre catégorie ou vers un **tableau libre** (avec aperçu et avertissements), et l'annuler. Un combattant placé à la main n'est plus déplacé par la réaffectation automatique ; seul reste, s'il est seul, une **carte d'alerte** (« Placé à la main, seul dans sa catégorie »). « Repartir de zéro » rend la main au calcul. L'onglet « Grille » est renommé **« Catégories »**. Détail : `docs/superpowers/specs/2026-11-06-placements-manuels-design.md`.
 - 💡 Un **résumé** en haut de page : nombre de présents, d'absents, de cas en attente, de combattants sans adversaire, de catégories prêtes ou lancées.
 
 ## 11. Tableaux et poules
@@ -330,10 +331,12 @@ Tous réglables **pour chaque compétition**.
 - **Tirage au sort**, en **séparant les combattants d'un même club** au premier tour autant que possible.
 - Pour le kata : ordre de passage tiré au sort.
 - Tout tableau peut être **modifié à la main** (échanger deux combattants, changer de format) tant qu'il n'est pas lancé.
+- ✅ (2026-11-06) Un tableau **« modifié à la main »** garde ses échanges quand il est reconstruit (arrivée ou départ d'un combattant) : les paires échangées se rencontrent encore au premier combat autant que possible. « Nouveau tirage » les efface. Détail : `docs/superpowers/specs/2026-11-06-placements-manuels-design.md`.
 
 ### 11.3 Cycle de vie d'une catégorie 💡
 `provisoire` (avant la pesée) → `prête` (après le recasement) → `lancée` (premier résultat saisi) → `terminée`.
 - Un recasement ou une inscription **régénère** automatiquement les tableaux non lancés concernés.
+- ✅ (2026-11-06) La régénération d'un tableau arrangé à la main **conserve les places** des combattants restants. Détail : `docs/superpowers/specs/2026-11-06-placements-manuels-design.md`.
 - Une catégorie **lancée** est **verrouillée** : on ne peut plus y recaser personne. Un déverrouillage reste possible, avec avertissement.
 - ✅ (2026-10-22) Une catégorie d'une **vague figée** (« Figer et imprimer la vague ») est verrouillée de la même façon : son tableau ne se régénère plus sans confirmation (« Régénérer (renuméroté à la suite) »).
 

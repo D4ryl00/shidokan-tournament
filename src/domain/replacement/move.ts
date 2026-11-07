@@ -1,4 +1,4 @@
-import { keyString, naturalKey, type CategoryKey } from '../categories.js';
+import { isFreeKey, keyString, naturalKey, type CategoryKey } from '../categories.js';
 import type { CaseKind, CategoryState, Member, Proposal, State } from './types.js';
 
 const uniqSorted = (xs: string[]) => [...new Set(xs)].sort();
@@ -6,9 +6,11 @@ const uniqSorted = (xs: string[]) => [...new Set(xs)].sort();
 /**
  * Clé d'une catégorie d'après ses membres présents (union des tranches d'âge et des poids, mixte si besoin ;
  * tous les membres si tous sont absents) ; aliasKeys = clés naturelles de ses membres non verrouillés,
- * absents compris, pour que la synchronisation les y laisse.
+ * absents compris, pour que la synchronisation les y laisse. Un tableau libre n'est jamais modifié.
  */
 export function recompute(state: State, cat: CategoryState): void {
+  // Tableau libre : sa clé (nom, discipline, règlement) ne dépend pas de ses membres.
+  if (isFreeKey(cat.key)) return;
   const all = state.members.filter((m) => m.categoryId === cat.id);
   if (all.length === 0) return;
   const present = all.filter((m) => m.presence !== 'absent');
@@ -90,7 +92,8 @@ export function applyProposal(state: State, p: Move): State {
     recompute(next, cat);
   }
   next.categories = next.categories.filter(
-    (c) => c.status === 'started' || c.status === 'finished' || next.members.some((x) => x.categoryId === c.id),
+    // Un tableau libre vide reste : l'organisateur l'a créé pour le remplir à la main.
+    (c) => c.status === 'started' || c.status === 'finished' || isFreeKey(c.key) || next.members.some((x) => x.categoryId === c.id),
   );
   return next;
 }

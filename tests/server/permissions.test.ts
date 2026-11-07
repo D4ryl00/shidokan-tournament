@@ -23,7 +23,8 @@ type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 const TABLE_WRITES = [
   'POST /registrations', 'PUT /registrations/:rid', 'DELETE /registrations/:rid', 'POST /clubs', 'PATCH /clubs/:clubId', 'POST /clubs/from-directory',
   'PUT /weigh-in/:fighterId', 'POST /weigh-in/close',
-  'POST /replacement/preview', 'POST /replacement/apply', 'POST /replacement/plan', 'POST /replacement/plan/apply', 'POST /replacement/refuse', 'POST /replacement/unrefuse', 'POST /replacement/undo', 'POST /replacement/move', 'POST /replacement/withdraw', 'POST /replacement/set-aside', 'POST /replacement/resume',
+  'POST /replacement/preview', 'POST /replacement/apply', 'POST /replacement/plan', 'POST /replacement/plan/apply', 'POST /replacement/refuse', 'POST /replacement/unrefuse', 'POST /replacement/undo', 'POST /replacement/move', 'POST /replacement/undo-manual', 'POST /replacement/withdraw', 'POST /replacement/set-aside', 'POST /replacement/resume',
+  'POST /free-tableaux', 'PATCH /free-tableaux/:cid', 'DELETE /free-tableaux/:cid',
   'PUT /replacement/rules', 'POST /replacement/rules/reset', 'POST /replacement/reset',
   'PATCH /categories/:cid', 'POST /categories/:cid/redraw', 'POST /categories/:cid/swap', 'POST /categories/:cid/move', 'POST /categories/:cid/move/preview', 'POST /categories/:cid/regenerate',
   'POST /launch', 'POST /launch/reopen', 'POST /launch/number', 'POST /launch/number/preview',
@@ -165,6 +166,27 @@ test('zone : résultats, notes de kata et départage de sa zone seulement', asyn
   expect(patch.statusCode).toBe(403);
   expect(patch.json().error).toBe(FORBIDDEN);
   expect((await zone1('GET', `${base}/categories`)).statusCode).toBe(200);
+});
+
+test('tableaux libres et annulation d’un déplacement manuel : Table centrale oui, Zone 403', async () => {
+  const { table, zone1, base, a54 } = await setup();
+  const created = await table('POST', `${base}/free-tableaux`, { name: 'Gala', discipline: 'karate', ruleset: 'jiyu' });
+  expect(created.statusCode).toBe(201);
+  const cid = (created.json() as { id: string }).id;
+  const rid = a54.bracket!.entrants![0]!.registrationId;
+  for (const [method, url, payload] of [
+    ['POST', `${base}/free-tableaux`, { name: 'Autre', discipline: 'karate', ruleset: 'jiyu' }],
+    ['PATCH', `${base}/free-tableaux/${cid}`, { name: 'Gala 2' }],
+    ['DELETE', `${base}/free-tableaux/${cid}`, undefined],
+    ['POST', `${base}/replacement/undo-manual`, { registrationId: rid }],
+  ] as const) {
+    const res = await zone1(method, url, payload);
+    expect(res.statusCode, `${method} ${url}`).toBe(403);
+    expect(res.json().error).toBe(FORBIDDEN);
+  }
+  // Table centrale : permis (ici refusé par la session lancée, pas par le rôle).
+  expect((await table('PATCH', `${base}/free-tableaux/${cid}`, { name: 'Gala 2' })).statusCode).toBe(409);
+  expect((await table('DELETE', `${base}/free-tableaux/${cid}`)).statusCode).toBe(409);
 });
 
 test('zone : une autre compétition → 403 ; la liste des compétitions ne donne que la sienne', async () => {

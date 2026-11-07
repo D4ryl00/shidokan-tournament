@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { PassThrough } from 'node:stream';
 import { z } from 'zod';
-import { applyAll, applyProposal, casesOfWave, categoryWave, detectCases, isClosedTarget, isLocked, memberWave, moveView, stateFingerprint } from '../../domain/replacement/index.js';
+import { categoryLabel, compareKeys } from '../../domain/categories.js';
+import { applyAll, applyProposal, casesOfWave, categoryWave, detectCases, memberWave, moveTargetsFor, moveView, stateFingerprint } from '../../domain/replacement/index.js';
 import type { AppDb } from '../db/client.js';
 import { applyRulesView, rulesView, rulesViewSchema } from '../../domain/replacement/rules.js';
 import { getAppSettings } from '../repositories/app-settings.js';
@@ -27,12 +28,14 @@ import {
   unrefuseProposal,
   setWeighIn,
   undoRecasement,
+  undoManualMove,
   withdrawRegistration,
   setAsideCase,
   resumeCase,
   setAsideNotes,
   weighInList, fighterPresence } from '../repositories/replacement.js';
 import { PlanAbortedError, runPlanJob } from '../plan/runner.js';
+import { NotFoundError } from '../repositories/registrations.js';
 
 type P = { Params: { id: string } };
 /** Plan d'ensemble en flux : une ligne JSON par événement (progression, puis résultat ou erreur). */
@@ -85,7 +88,15 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
   app.get<P & { Querystring: { vague?: string } }>('/api/competitions/:id/replacement', async (req) => {
     const state = await loadState(db, req.params.id);
     const waveId = knownWave(state.waves, req.query.vague || undefined);
-    const cases = casesOfWave(state, detectCases(state), waveId);
+    const detected = detectCases(state);
+    const ofWave = new Set(casesOfWave(state, detected, waveId));
+    // Une carte d'alerte d'une catégorie en attente (sans session, ex. tableau libre) n'appartient à aucune session :
+    // elle est montrée, et comptée, dans chacune, pour que le combattant seul soit signalé quelque part.
+    const pending = (categoryId: string | null) => {
+      const cat = state.categories.find((x) => x.id === categoryId);
+      return cat !== undefined && categoryWave(state, cat) === null;
+    };
+    const cases = detected.filter((c) => ofWave.has(c) || (c.alert === true && pending(c.categoryId)));
     const proposals = allProposals(state, cases);
     const shown = displayedProposals(state, cases);
     const inWave = waveId ? state.members.filter((m) => memberWave(state, m) === waveId) : state.members;
@@ -104,15 +115,7 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
         return [c.registrationId, { sex, ageBandCode, discipline, ruleset, weightClassId, weighInKg, approxWeightKg, otherDisciplines, acceptsJiyuFirst, presence }];
       }),
     );
-    const moveTargets = Object.fromEntries(
-      cases.map((c) => {
-        const m = byRegistration.get(c.registrationId)!;
-        const targets = state.categories
-          .filter((t) => t.id !== m.categoryId && !isLocked(t) && !isClosedTarget(state, t.key))
-          .map((t) => ({ categoryId: t.id, warnings: manualProposal(state, m.registrationId, t.id).warnings }));
-        return [c.id, targets];
-      }),
-    );
+    const moveTargets = Object.fromEntries(cases.map((c) => [c.id, moveTargetsFor(state, c.registrationId)]));
     // Les compteurs ne comptent que les cartes à traiter (pas celles mises de côté).
     const aside = new Set(state.setAside);
     const active = cases.filter((c) => !aside.has(c.id));
@@ -241,6 +244,24 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
     const { waveId } = z.object({ waveId: z.string().optional() }).strict().parse(req.body ?? {});
     const state = await loadState(db, req.params.id);
     return { ok: true, ...(await resetReplacement(db, req.params.id, knownWave(state.waves, waveId))) };
+  });
+
+  /** Annule le déplacement manuel d'un combattant (sa réaffectation la plus récente, de type M). */
+  app.post<P>('/api/competitions/:id/replacement/undo-manual', async (req) => {
+    const { registrationId } = z.object({ registrationId: z.string() }).strict().parse(req.body);
+    await undoManualMove(db, req.params.id, registrationId);
+    return { ok: true };
+  });
+
+  /** Catégories où déplacer un combattant à la main (tableaux libres compris), avec les règles qu'enfreindrait chaque déplacement. */
+  app.get<{ Params: { id: string; registrationId: string } }>('/api/competitions/:id/replacement/move-targets/:registrationId', async (req) => {
+    const state = await loadState(db, req.params.id);
+    if (!state.members.some((m) => m.registrationId === req.params.registrationId)) throw new NotFoundError('Inscription introuvable');
+    const byId = new Map(state.categories.map((c) => [c.id, c]));
+    const targets = moveTargetsFor(state, req.params.registrationId)
+      .sort((a, b) => compareKeys(byId.get(a.categoryId)!.key, byId.get(b.categoryId)!.key, state.grid))
+      .map((t) => ({ categoryId: t.categoryId, label: categoryLabel(byId.get(t.categoryId)!.key, state.grid), free: t.free, warnings: t.warnings }));
+    return { targets };
   });
 
   app.post<P>('/api/competitions/:id/replacement/move', async (req) => {

@@ -5,13 +5,12 @@ import type { CombatBracket, Entrant, Match, ResolvedMatch, SlotSource } from '.
 const entrantSrc = (e: Entrant): SlotSource => ({ kind: 'entrant', registrationId: e.registrationId });
 const NO_OPTIONS = { repechage: false, thirdPlace: false };
 
-export function singleMatch(entrants: Entrant[], seed: number): CombatBracket {
-  return { ...singleElimination(entrants, NO_OPTIONS, seed), format: 'single_match' };
+export function singleMatch(entrants: Entrant[], seed: number, slots?: SlotSource[]): CombatBracket {
+  return { ...singleElimination(entrants, NO_OPTIONS, seed, slots), format: 'single_match' };
 }
 
-/** Trois manches entre les deux mêmes combattants ; la 3e n'est disputée qu'à 1-1. */
-export function bestOfThree(entrants: Entrant[], seed: number): CombatBracket {
-  const order = drawOrder(entrants, seed);
+/** Trois manches entre les deux mêmes combattants ; la 3e n'est disputée qu'à 1-1. `order` : ordre imposé (sans tirage). */
+export function bestOfThree(entrants: Entrant[], seed: number, order = drawOrder(entrants, seed)): CombatBracket {
   const base = { kind: 'combat' as const, format: 'best_of_three' as const, entrants: order, options: NO_OPTIONS, seed };
   if (order.length < 2) return { ...base, matches: [] };
   const [a, b] = [entrantSrc(order[0]!), entrantSrc(order[1]!)];
@@ -48,17 +47,15 @@ function circleMatches(ids: string[], pool: number, startOrder: number): Match[]
   return matches;
 }
 
-export function roundRobin(entrants: Entrant[], seed: number): CombatBracket {
-  const order = drawOrder(entrants, seed);
+export function roundRobin(entrants: Entrant[], seed: number, order = drawOrder(entrants, seed)): CombatBracket {
   const ids = order.map((e) => e.registrationId);
   return { kind: 'combat', format: 'round_robin', entrants: order, options: NO_OPTIONS, seed, pools: [ids], matches: circleMatches(ids, 0, 0) };
 }
 
 /** M1 A–B ; M2 perdant M1 – C ; M3 (finale) vainqueur M1 – vainqueur M2 ; 3e = perdant M2. */
-export function threeWithRepechage(entrants: Entrant[], seed: number): CombatBracket {
-  const order = drawOrder(entrants, seed);
+export function threeWithRepechage(entrants: Entrant[], seed: number, order = drawOrder(entrants, seed)): CombatBracket {
   const base = { kind: 'combat' as const, format: 'three_with_repechage' as const, entrants: order, options: NO_OPTIONS, seed };
-  if (order.length !== 3) return { ...roundRobin(entrants, seed), format: 'three_with_repechage' };
+  if (order.length !== 3) return { ...roundRobin(entrants, seed, order), format: 'three_with_repechage' };
   return {
     ...base,
     matches: [
@@ -69,16 +66,27 @@ export function threeWithRepechage(entrants: Entrant[], seed: number): CombatBra
   };
 }
 
-/** Poules de 3 ou 4 (serpentin dans l'ordre du tirage), puis les 2 premiers de chaque poule en élimination directe. */
-export function poolsThenBracket(entrants: Entrant[], seed: number, options = NO_OPTIONS): CombatBracket {
-  const order = drawOrder(entrants, seed);
-  const poolCount = Math.max(1, Math.ceil(order.length / 4));
+/** Poules de 3 ou 4 en serpentin dans l'ordre donné : ceil(n / 4) poules (au moins une). */
+export function serpentinePools(ids: string[]): string[][] {
+  const poolCount = Math.max(1, Math.ceil(ids.length / 4));
   const pools: string[][] = Array.from({ length: poolCount }, () => []);
-  order.forEach((e, i) => {
+  ids.forEach((id, i) => {
     const lap = Math.floor(i / poolCount);
     const idx = i % poolCount;
-    pools[lap % 2 === 0 ? idx : poolCount - 1 - idx]!.push(e.registrationId);
+    pools[lap % 2 === 0 ? idx : poolCount - 1 - idx]!.push(id);
   });
+  return pools;
+}
+
+/**
+ * Poules de 3 ou 4 (serpentin dans l'ordre du tirage), puis les 2 premiers de chaque poule en élimination directe.
+ * `imposed` : poules imposées (identifiants d'inscription), sans tirage.
+ */
+export function poolsThenBracket(entrants: Entrant[], seed: number, options = NO_OPTIONS, imposed?: string[][]): CombatBracket {
+  const byId = new Map(entrants.map((e) => [e.registrationId, e]));
+  const order = imposed ? imposed.flat().map((id) => byId.get(id)!) : drawOrder(entrants, seed);
+  const pools = imposed ?? serpentinePools(order.map((e) => e.registrationId));
+  const poolCount = pools.length;
   const matches: Match[] = [];
   pools.forEach((ids, p) => matches.push(...circleMatches(ids, p, matches.length)));
 

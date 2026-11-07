@@ -11,6 +11,8 @@ export interface KeyPart {
 
 /** Morceaux du libellé de `key` (joints, ils donnent `categoryLabel`) ; `changed` : différent dans `other`. */
 export function keyParts(key: CategoryKey, other: CategoryKey | null, grid: CategoryGrid): KeyPart[] {
+  // Un tableau libre se lit par son nom, comme dans `categoryLabel`.
+  if (key.free !== undefined) return [{ text: key.free, changed: other !== null && other.free !== key.free, sep: '' }];
   const a = categoryLabelParts(key, grid);
   const b = other ? categoryLabelParts(other, grid) : null;
   const part = (field: keyof CategoryLabelParts, sep: string): KeyPart[] => {

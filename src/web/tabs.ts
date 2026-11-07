@@ -11,5 +11,5 @@ export const COMPETITION_TABS = [
   { path: 'combats', label: 'Combats' },
   { path: 'podiums', label: 'Podiums' },
   { path: 'reglages', label: 'Réglages' },
-  { path: 'grille', label: 'Grille âge / poids' },
+  { path: 'categories', label: 'Catégories' },
 ] as const;

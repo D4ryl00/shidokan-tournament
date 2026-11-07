@@ -225,6 +225,13 @@
       "when": 1793912506867,
       "tag": "0031_coordonnees_clubs",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1794006495725,
+      "tag": "0032_tableaux_arranges",
+      "breakpoints": true
     }
   ]
 }

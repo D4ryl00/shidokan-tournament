@@ -49,8 +49,8 @@ export const registrationRev = (db: AppDb, registrationId: string) => {
 export const tableListRev = (db: AppDb, table: 'zones' | 'waves', competitionId: string) =>
   listRev(db.$client.prepare(`select id, version from ${table} where competition_id = ?`).all(competitionId) as { id: string; version: number | null }[]);
 
-/** Routes qui modifient le tableau d'une catégorie : contrôlées par la révision de la catégorie. */
-const CATEGORY_WRITES = /^\/api\/competitions\/:id\/categories\/:cid(\/(move|swap|redraw|regenerate))?$/;
+/** Routes qui modifient le tableau d'une catégorie (tableau libre compris) : contrôlées par la révision de la catégorie. */
+const CATEGORY_WRITES = /^\/api\/competitions\/:id\/(categories\/:cid(\/(move|swap|redraw|regenerate))?|free-tableaux\/:cid)$/;
 
 export function registerCategoryRevGuard(app: import('fastify').FastifyInstance, db: AppDb): void {
   app.addHook('preHandler', async (req) => {

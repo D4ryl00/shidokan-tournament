@@ -53,7 +53,7 @@ function AuthGate({ children }: { children: ReactNode }) {
   );
 }
 
-/** Anciens onglets « vagues » et « recasement » (renommés le 2026-10-23) : redirigés, avec le reste de l'adresse. */
+/** Anciens onglets « vagues » et « recasement » (renommés le 2026-10-23), et « grille » (devenu « categories ») : redirigés, avec le reste de l'adresse. */
 function RenamedTab({ to }: { to: string }) {
   const { search } = useLocation();
   return <Navigate to={`../${to}${search}`} relative="path" replace />;
@@ -89,7 +89,8 @@ function MainShell() {
               <Route path="combats" element={<MatchesPage />} />
               <Route path="podiums" element={<PodiumsPage />} />
               <Route path="reglages" element={<CompetitionSettingsPage />} />
-              <Route path="grille" element={<GridEditorPage />} />
+              <Route path="categories" element={<GridEditorPage />} />
+              <Route path="grille" element={<RenamedTab to="categories" />} />
             </Route>
           </Routes>
         </AppShell.Main>

@@ -4,6 +4,7 @@ import {
   compatibleFormats,
   defaultFormat,
   generateBracket,
+  keepPlaces,
   type Bracket,
   type BracketFormat,
   type Entrant,
@@ -11,6 +12,7 @@ import {
 import {
   categoryLabel,
   compareKeys,
+  isFreeKey,
   keyString,
   naturalKey,
   type Category,
@@ -84,29 +86,45 @@ function effectiveFormat(row: Row, key: CategoryKey, count: number, ctx: Context
   return defaultFormat(key.discipline, count, ctx.settings);
 }
 
-function buildBracket(row: Row, ctx: Context): Bracket {
+/** Format, inscrits actifs (triés) et options du tableau de la catégorie. */
+function bracketInputs(row: Row, ctx: Context) {
   const key = JSON.parse(row.keyJson) as CategoryKey;
   const ids = [...(ctx.active.get(row.id) ?? [])].sort();
-  const format = effectiveFormat(row, key, ids.length, ctx);
-  return generateBracket(
-    format,
-    ids.map((id) => ctx.entrants.get(id)!),
-    {
+  return {
+    format: effectiveFormat(row, key, ids.length, ctx),
+    entrants: ids.map((id) => ctx.entrants.get(id)!),
+    options: {
       repechage: row.repechage ?? ctx.settings.repechage,
       thirdPlace: row.thirdPlace ?? ctx.settings.thirdPlaceMatch,
       kataBronzeCount: ctx.settings.kataBronzeCount,
     },
-    row.seed,
-  );
+  };
+}
+
+/** Tableau tiré de la graine, sans tenir compte du tableau stocké. */
+function drawnBracket(row: Row, ctx: Context): Bracket {
+  const { format, entrants, options } = bracketInputs(row, ctx);
+  return generateBracket(format, entrants, options, row.seed);
+}
+
+/** Tableau à jour : un tableau arrangé à la main est refait en gardant ses places, les autres sont tirés. */
+function buildBracket(row: Row, ctx: Context): Bracket {
+  if (!row.arranged || !row.bracketJson) return drawnBracket(row, ctx);
+  const { format, entrants, options } = bracketInputs(row, ctx);
+  return keepPlaces(JSON.parse(row.bracketJson) as Bracket, entrants, format, options, row.seed);
 }
 
 const bracketMembers = (b: Bracket | null) => (b ? b.entrants.map((e) => e.registrationId).sort().join(',') : '');
 
-/** Le tableau stocké correspond-il encore à la composition et aux options ? (sinon régénération) */
+/**
+ * Le tableau stocké correspond-il encore à la composition, au format, aux options et à la graine ? (sinon régénération)
+ * Comparé à un tableau tiré, jamais refait par keepPlaces : membres, format, options et graine ne dépendent pas des places,
+ * et un tableau arrangé dont rien de cela ne change n'est donc jamais refait.
+ */
 function upToDate(row: Row, ctx: Context): boolean {
   if (!row.bracketJson) return false;
   const stored = JSON.parse(row.bracketJson) as Bracket;
-  const fresh = buildBracket(row, ctx);
+  const fresh = drawnBracket(row, ctx);
   if (bracketMembers(stored) !== bracketMembers(fresh)) return false;
   if (stored.kind !== fresh.kind) return false;
   if (stored.kind === 'combat' && fresh.kind === 'combat') {
@@ -117,7 +135,7 @@ function upToDate(row: Row, ctx: Context): boolean {
 
 /**
  * Place chaque inscription non verrouillée dans sa catégorie naturelle (créée si besoin), supprime les catégories
- * vides non lancées et régénère les tableaux non lancés qui ne correspondent plus.
+ * vides non lancées (sauf les tableaux libres) et régénère les tableaux non lancés qui ne correspondent plus.
  */
 export async function syncCategories(db: AppDb, competitionId: string, opts: { regenerate?: string } = {}): Promise<void> {
   const grid = await getGrid(db, competitionId);
@@ -142,6 +160,8 @@ export async function syncCategories(db: AppDb, competitionId: string, opts: { r
       }
     };
     for (const c of cats) {
+      // Tableau libre : on n'y arrive jamais par sa catégorie naturelle, seulement par un déplacement manuel.
+      if (isFreeKey(JSON.parse(c.keyJson) as CategoryKey)) continue;
       offer(c.keyString, c, true);
       for (const alias of JSON.parse(c.aliasKeys) as string[]) offer(alias, c, false);
     }
@@ -177,6 +197,7 @@ export async function syncCategories(db: AppDb, competitionId: string, opts: { r
           bracketJson: null,
           aliasKeys: '[]',
           stale: false,
+          arranged: false,
           zoneId: null,
           waveOverride: null,
           sortOrder: 0,
@@ -200,6 +221,15 @@ export async function syncCategories(db: AppDb, competitionId: string, opts: { r
       const count = ctx.members.get(row.id)?.length ?? 0;
       const key = JSON.parse(row.keyJson) as CategoryKey;
       const label = categoryLabel(key, grid);
+      // Tableau libre vide : gardé (il existe tant qu'on ne le supprime pas), sans tableau.
+      if (count === 0 && !kept(row) && isFreeKey(key)) {
+        if (row.bracketJson !== null || row.stale || row.arranged || label !== row.label) {
+          // Ses échanges ne valent plus : les prochains inscrits sont tirés à neuf.
+          t.update(categories).set({ bracketJson: null, stale: false, arranged: false, label }).where(eq(categories.id, row.id)).run();
+          t.delete(tieBreaks).where(eq(tieBreaks.categoryId, row.id)).run();
+        }
+        continue;
+      }
       if (count === 0 && !kept(row)) {
         t.delete(categories).where(eq(categories.id, row.id)).run();
         continue;
@@ -256,6 +286,7 @@ function toCategory(row: Row, ctx: Context): Category {
     aliasKeys: JSON.parse(row.aliasKeys) as string[],
     effectiveFormat: row.bracketJson ? ((JSON.parse(row.bracketJson) as Bracket).kind === 'kata' ? 'kata_two_rounds' : (JSON.parse(row.bracketJson) as { format: BracketFormat }).format) : effectiveFormat(row, key, (ctx.active.get(row.id) ?? []).length, ctx),
     stale: row.stale,
+    arranged: row.arranged,
     numbersUpdatedAt: row.numbersUpdatedAt,
     launchLocked: ctx.launched.has(row.id),
   };
@@ -280,7 +311,7 @@ function getRow(db: AppDb, competitionId: string, categoryId: string): Row {
   return row;
 }
 
-async function categoryById(db: AppDb, competitionId: string, categoryId: string): Promise<Category> {
+export async function categoryById(db: AppDb, competitionId: string, categoryId: string): Promise<Category> {
   const found = (await listCategories(db, competitionId)).find((c) => c.id === categoryId);
   if (!found) throw new NotFoundError('Catégorie introuvable');
   return found;
@@ -337,7 +368,8 @@ export async function redraw(db: AppDb, competitionId: string, categoryId: strin
   if (LOCKED.includes(row.status) || launchedCategoryIds(db, competitionId).has(categoryId)) throw new CategoryLockedError();
   let seed = newSeed();
   while (seed === row.seed) seed = newSeed();
-  db.update(categories).set({ seed }).where(eq(categories.id, categoryId)).run();
+  // Nouveau tirage : les échanges sont oubliés, le tableau est de nouveau tiré de la graine.
+  db.update(categories).set({ seed, arranged: false }).where(eq(categories.id, categoryId)).run();
   return categoryById(db, competitionId, categoryId);
 }
 
@@ -368,7 +400,7 @@ export async function swapEntrants(db: AppDb, competitionId: string, categoryId:
     }
     if (bracket.pools) bracket.pools = bracket.pools.map((p) => p.map(swap));
   }
-  db.update(categories).set({ bracketJson: JSON.stringify(bracket) }).where(eq(categories.id, categoryId)).run();
+  db.update(categories).set({ bracketJson: JSON.stringify(bracket), arranged: true }).where(eq(categories.id, categoryId)).run();
   db.delete(tieBreaks).where(eq(tieBreaks.categoryId, categoryId)).run();
   return categoryById(db, competitionId, categoryId);
 }

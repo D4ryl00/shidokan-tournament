@@ -1,7 +1,7 @@
 import { keyString, naturalKey, type CategoryKey } from '../categories.js';
 import type { RuleId } from '../settings.js';
 import { neighborWeightClasses } from '../weights.js';
-import { detectCases, isClosedMember, isLocked, keyLookup } from './detect.js';
+import { detectCases, isClosedMember, isLocked, isManualPlacement, keyLookup } from './detect.js';
 import { applyAll } from './move.js';
 import { proposalsFor, ruleProfile, rulesForMove } from './propose.js';
 import { ruleRank } from './rules.js';
@@ -34,7 +34,8 @@ export function aloneRegistrations(state: State, waveId: string | null): string[
     // Comme detectCases : un inscrit d'une catégorie fermée est seul, et n'est l'adversaire de personne.
     const open = active.filter((m) => !isClosedMember(state, m));
     out.push(...active.filter((m) => isClosedMember(state, m)).map((m) => m.registrationId));
-    if (open.length === 1) out.push(open[0]!.registrationId);
+    // Comme detectCases : un placé à la main seul est une carte d'alerte, pas un seul à recaser (un tableau libre, `isLocked`, non plus).
+    if (open.length === 1 && !isManualPlacement(open[0]!)) out.push(open[0]!.registrationId);
   }
   return sorted(out);
 }
@@ -63,9 +64,9 @@ const KIND_ORDER: CaseKind[] = ['return', 'weight_out', 'closed', 'alone'];
 export const moversOf = (p: Pick<Proposal, 'registrationId' | 'alsoMoved'>) => [p.registrationId, ...(p.alsoMoved ?? [])];
 
 const isOpen = (s: State, ctx: SearchContext, decided: ReadonlySet<string>) => (c: Case) =>
-  c.kind !== 'weight_gap' && !s.setAside.includes(c.id) && !decided.has(c.registrationId) && !ctx.excluded.has(c.registrationId);
+  c.kind !== 'weight_gap' && !c.alert && !s.setAside.includes(c.id) && !decided.has(c.registrationId) && !ctx.excluded.has(c.registrationId);
 
-/** Cas que le plan traite : ceux de la session, sans les cartes mises de côté, les écarts de poids ni les inscriptions décidées. */
+/** Cas que le plan traite : ceux de la session, sans les cartes mises de côté, les cartes d'alerte, les écarts de poids ni les inscriptions décidées. */
 export function openCases(s: State, ctx: SearchContext, decided: ReadonlySet<string>): Case[] {
   return casesOfWave(s, detectCases(s), ctx.waveId)
     .filter(isOpen(s, ctx, decided))
@@ -110,8 +111,8 @@ function categoryFor(s: State, ks: string): CategoryState | undefined {
   return lookup(ks);
 }
 
-/** Recasé parce qu'il était seul : il peut revenir dans sa catégorie d'origine dès qu'elle a un adversaire. */
-const mayReturn = (m: Member) => m.placementLocked && m.original !== null && m.presence !== 'absent' && (!m.original.reason || m.original.reason === 'alone');
+/** Recasé parce qu'il était seul (pas à la main) : il peut revenir dans sa catégorie d'origine dès qu'elle a un adversaire. */
+const mayReturn = (m: Member) => m.placementLocked && !isManualPlacement(m) && m.original !== null && m.presence !== 'absent' && (!m.original.reason || m.original.reason === 'alone');
 const homeKey = (m: Member) => keyString(naturalKey({ ...m.original! }, m));
 const weightOutKey = (s: State, m: Member) => {
   const wic = weighInClass(m, s);

@@ -3,7 +3,7 @@ import type { RuleId } from '../settings.js';
 import { categoryLabel, keyString, naturalKey, type CategoryKey } from '../categories.js';
 import { DISCIPLINES } from '../disciplines.js';
 import { neighborWeightClasses } from '../weights.js';
-import { categoryForKey, isClosedMember, isClosedTarget, isLocked, originalCategory } from './detect.js';
+import { categoryForKey, isClosedMember, isClosedTarget, isLocked, isLockedForManual, originalCategory } from './detect.js';
 import type { Case, CategoryState, Member, Proposal, ProposalType, State } from './types.js';
 import { isRuleOn, NO_VALIDATION_RULES, PRE_APPROVAL_RULES, ruleRank } from './rules.js';
 import { waveEffects } from './waves.js';
@@ -191,6 +191,8 @@ function order(m: Member): ProposalType[] {
 }
 
 export function proposalsFor(state: State, c: Case): Proposal[] {
+  // Carte d'alerte : jamais de proposition (l'organisateur décide à la main).
+  if (c.alert) return [];
   const m = state.members.find((x) => x.registrationId === c.registrationId);
   if (!m) return [];
   const current = state.categories.find((x) => x.id === m.categoryId);
@@ -425,7 +427,7 @@ function pullProposals(state: State, m: Member): {
 export function moveViolations(state: State, m: Member, t: CategoryState): string[] {
   const v: string[] = [];
   const { settings, grid } = state;
-  if (isLocked(t)) v.push('La catégorie est lancée.');
+  if (isLockedForManual(t)) v.push('La catégorie est lancée.');
   if (t.key.discipline !== m.discipline && !m.otherDisciplines.includes(t.key.discipline)) v.push('Discipline hors des préférences du combattant.');
   if (m.ruleset === 'jiyu' && t.key.ruleset === 'shobu') v.push('Passage de jiyu à shobu.');
   if (m.ruleset === 'shobu' && t.key.ruleset === 'jiyu' && !settings.shobuToJiyu) v.push('Passage de shobu à jiyu non autorisé (réglages).');

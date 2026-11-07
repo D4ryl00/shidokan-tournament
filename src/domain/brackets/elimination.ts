@@ -56,7 +56,11 @@ export function separateClubs(slots: SlotSource[], entrants: Entrant[]): SlotSou
 /** Tableau principal (phase 'main') ; identifiants w<tour>-<index>. Avec `entrants`, sépare les clubs au 1er tour. */
 export function winnersBracket(order: Entrant[] | SlotSource[], startOrder = 0, entrants?: Entrant[]): Match[] {
   const sources = (order as (Entrant | SlotSource)[]).map((x) => ('kind' in x ? x : ({ kind: 'entrant', registrationId: x.registrationId } as SlotSource)));
-  const slots = entrants ? separateClubs(firstRoundSlots(sources), entrants) : firstRoundSlots(sources);
+  return matchesFromSlots(entrants ? separateClubs(firstRoundSlots(sources), entrants) : firstRoundSlots(sources), startOrder);
+}
+
+/** Matchs du tableau principal à partir des cases du 1er tour (nombre de cases = puissance de 2). */
+export function matchesFromSlots(slots: SlotSource[], startOrder = 0): Match[] {
   const size = slots.length;
   const rounds = Math.log2(size);
   const matches: Match[] = [];
@@ -72,12 +76,13 @@ export function winnersBracket(order: Entrant[] | SlotSource[], startOrder = 0, 
   return matches;
 }
 
-export function singleElimination(entrants: Entrant[], options: { repechage: boolean; thirdPlace: boolean }, seed: number): CombatBracket {
-  const order = drawOrder(entrants, seed);
+/** `slots` : cases du 1er tour imposées (ni tirage ni séparation des clubs) ; `entrants` est alors gardé tel quel. */
+export function singleElimination(entrants: Entrant[], options: { repechage: boolean; thirdPlace: boolean }, seed: number, slots?: SlotSource[]): CombatBracket {
+  const order = slots ? entrants : drawOrder(entrants, seed);
   const base = { kind: 'combat' as const, format: 'single_elimination' as const, entrants: order, options, seed };
   if (order.length < 2) return { ...base, matches: [] };
-  const matches = winnersBracket(order, 0, order);
-  const rounds = Math.log2(nextPowerOfTwo(order.length));
+  const matches = slots ? matchesFromSlots(slots) : winnersBracket(order, 0, order);
+  const rounds = Math.log2(slots ? slots.length : nextPowerOfTwo(order.length));
   let n = matches.length;
   if (options.repechage && rounds >= 2) {
     // Repêchage FFK : les combattants battus par chaque finaliste avant la finale, en chaîne, dans l'ordre des tours.
@@ -99,13 +104,13 @@ export function singleElimination(entrants: Entrant[], options: { repechage: boo
   return { ...base, options: { ...options, thirdPlace: options.thirdPlace && !options.repechage }, matches };
 }
 
-/** Double élimination : tableau des gagnants, tableau des perdants, grande finale unique. */
-export function doubleElimination(entrants: Entrant[], seed: number): CombatBracket {
-  const order = drawOrder(entrants, seed);
+/** Double élimination : tableau des gagnants, tableau des perdants, grande finale unique. `slots` : comme singleElimination. */
+export function doubleElimination(entrants: Entrant[], seed: number, slots?: SlotSource[]): CombatBracket {
+  const order = slots ? entrants : drawOrder(entrants, seed);
   const base = { kind: 'combat' as const, format: 'double_elimination' as const, entrants: order, options: { repechage: false, thirdPlace: false }, seed };
   if (order.length < 2) return { ...base, matches: [] };
-  const matches = winnersBracket(order, 0, order);
-  const size = nextPowerOfTwo(order.length);
+  const matches = slots ? matchesFromSlots(slots) : winnersBracket(order, 0, order);
+  const size = slots ? slots.length : nextPowerOfTwo(order.length);
   const rounds = Math.log2(size);
   let n = matches.length;
   if (rounds >= 2) {

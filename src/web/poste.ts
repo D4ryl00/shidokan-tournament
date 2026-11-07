@@ -8,7 +8,7 @@ import { COMPETITION_TABS } from './tabs.js';
  */
 export type Poste = { kind: 'organisation' } | { kind: 'table' } | { kind: 'zone'; zoneId: string };
 
-const TABLE_TABS = new Set(['inscriptions', 'clubs', 'pesee', 'reaffectation', 'tableaux', 'combats', 'podiums']);
+const TABLE_TABS = new Set(['inscriptions', 'clubs', 'categories', 'pesee', 'reaffectation', 'tableaux', 'combats', 'podiums']);
 const ZONE_TABS = new Set(['combats', 'tableaux']);
 
 export function posteTabs(p: Poste): string[] {

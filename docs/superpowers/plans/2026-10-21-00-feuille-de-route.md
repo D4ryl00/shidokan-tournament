@@ -68,3 +68,6 @@ Faite le 2026-11-05 sur la branche `etape-35-editeur-riche` : voir le bilan. Res
 
 ## Étape 36 : coordonnées des clubs entre annuaire et compétitions
 Faite le 2026-11-06 sur la branche `coordonnees-clubs-annuaire` : voir le bilan. Les coordonnées saisies par un club ou dans l'onglet Clubs n'écrivent plus dans l'annuaire : elles deviennent des changements à examiner, et une fiche modifiée peut être reportée vers les compétitions à venir. Migration 0031.
+
+## Étape 37 : placements manuels et tableaux libres
+Faite le 2026-11-06 sur la branche `etape-37-placements-manuels` : voir le bilan. Déplacer n'importe quel inscrit vers une autre catégorie ou un tableau libre, avec annulation ; la réaffectation automatique ignore ces placements (cartes d'alerte) ; les tableaux arrangés gardent leurs échanges à la régénération ; onglet « Catégories ». Détail : `docs/superpowers/specs/2026-11-06-placements-manuels-design.md`.
