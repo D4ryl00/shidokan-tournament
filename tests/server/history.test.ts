@@ -460,3 +460,73 @@ test('« Ne combat pas » journalisé et annulable depuis l’historique', async
   expect(await contents()).toEqual(before);
   expect((await replacement()).recasements[0]!.status).toBe('undone');
 });
+
+// --- « Repartir de zéro » en cascade (spec §3.7) ---
+
+type ResetPreview = { undo: number; kept: { name: string; why: string }[]; blockedBy: string | null; history: number; refusal: string | null; cascade: string[] };
+const resetPreview = async () => (await replacement() as unknown as { reset: ResetPreview }).reset;
+
+test('repartir de zéro : le plan revient, l’échange de places plus récent part avec, le format d’une catégorie non touchée reste', async () => {
+  // GUERIN seule en -47 ; BLANC et une autre en -54 : le plan met GUERIN avec elles.
+  const guerin = await reg({ lastName: 'GUERIN', weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  const blanc = await reg({ lastName: 'BLANC', weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
+  await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
+  // Une catégorie que personne d'autre ne touche.
+  const other = await reg({ weightClassId: 'cadet:F:-61' });
+  await reg({ weightClassId: 'cadet:F:-61' });
+  await reg({ weightClassId: 'cadet:F:-61' });
+  const home = (await catOf(guerin.id))!;
+  const untouched = (await catOf(other.id))!;
+  const format = (await call('PATCH', `/categories/${untouched.id}`, { format: 'round_robin' })).json() as { historyId: string };
+  const moves = await applyPlan();
+  expect(moves.moves.map((m) => m.registrationId)).toEqual([guerin.id]);
+  const host = (await catOf(guerin.id))!;
+  expect(host.registrationIds).toContain(blanc.id);
+  const swap = await call('POST', `/categories/${host.id}/swap`, { a: blanc.id, b: guerin.id });
+  expect(swap.statusCode).toBe(200);
+  const places = (swap.json() as { historyId: string }).historyId;
+  const planId = (await history()).find((e) => e.kind === 'plan')!.id;
+
+  expect(await resetPreview()).toMatchObject({ undo: 1, kept: [], blockedBy: null, history: 2, refusal: null, cascade: [places] });
+  const res = await call('POST', '/replacement/reset');
+  expect(res.statusCode).toBe(200);
+  expect(res.json()).toEqual({ ok: true, undone: 1, kept: [] });
+  // GUERIN retourne dans sa catégorie (même id, même libellé) ; BLANC reste chez elle.
+  expect((await catOf(guerin.id))!).toMatchObject({ id: home.id, label: home.label });
+  expect((await catOf(blanc.id))!.registrationIds).not.toContain(guerin.id);
+  // Le plan et l'échange de places sont effacés de l'historique ; le format reste en place.
+  const after = await history();
+  expect(after.map((e) => e.id)).toEqual([format.historyId]);
+  expect(after[0]).toMatchObject({ kind: 'format', status: 'active' });
+  expect(after.some((e) => e.id === planId || e.id === places)).toBe(false);
+  expect((await categories()).find((c) => c.id === untouched.id)!.format).toBe('round_robin');
+  expect((await replacement()).recasements).toEqual([]);
+  await everyoneInBracket();
+});
+
+test('repartir de zéro : une cible dont la cascade touche une catégorie commencée reste, avec ce qui en dépend', async () => {
+  const { a, b, fromA, fromB, x } = await threeGroups();
+  // A part en -47 (chez B), puis B part en -61 : le second dépend du premier (même catégorie -47).
+  const h1 = await move(a.id, fromB.id);
+  const h2 = await move(b.id, x.id);
+  expect((await call('PATCH', `/categories/${x.id}`, { status: 'started' })).statusCode).toBe(200);
+  const p = await resetPreview();
+  expect(p).toMatchObject({ undo: 0, blockedBy: null, refusal: null, history: 0, cascade: [] });
+  expect(p.kept).toEqual([{ name: 'BETA x', toLabel: expect.any(String), why: 'started' }, { name: 'ALPHA x', toLabel: expect.any(String), why: 'started' }]);
+  expect((await call('POST', '/replacement/reset')).json()).toMatchObject({ ok: true, undone: 0 });
+  expect((await catOf(a.id))!.id).toBe(fromB.id);
+  expect((await catOf(b.id))!.id).toBe(x.id);
+  expect((await history()).map((e) => [e.id, e.status])).toEqual([[h2, 'active'], [h1, 'active']]);
+  expect(fromA.id).not.toBe(fromB.id);
+});
+
+test('repartir de zéro : un déplacement déjà annulé de la session est effacé, pas une ligne « Format » annulée', async () => {
+  const { a, x } = await threeGroups();
+  const h = await move(a.id, x.id);
+  expect((await undo([h], [h])).statusCode).toBe(200);
+  const f = (await call('PATCH', `/categories/${x.id}`, { format: 'round_robin' })).json() as { historyId: string };
+  expect((await undo([f.historyId], [f.historyId])).statusCode).toBe(200);
+  expect(await resetPreview()).toMatchObject({ undo: 0, history: 1, cascade: [] });
+  expect((await call('POST', '/replacement/reset')).statusCode).toBe(200);
+  expect((await history()).map((e) => [e.id, e.status])).toEqual([[f.historyId, 'undone']]);
+});

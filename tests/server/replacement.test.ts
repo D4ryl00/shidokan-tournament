@@ -1291,7 +1291,7 @@ describe('repartir de zéro', () => {
 });
 
 describe('repartir de zéro par session', () => {
-  type Preview = { undo: number; kept: { name: string; toLabel: string; why: string }[]; blockedBy: string | null; clears: number; history: number; refusal: string | null; locked: boolean };
+  type Preview = { undo: number; kept: { name: string; toLabel: string; why: string }[]; blockedBy: string | null; clears: number; history: number; refusal: string | null; locked: boolean; cascade: string[] };
   const layout = async () => (await categories()).map((c) => `${c.label} : ${[...c.registrationIds].sort().join(',')}`).sort();
   const log = async () => (await replacement()).recasements.map((x) => x.registrationId).sort();
   const preview = async (wave: string) => ((await call('GET', `/replacement?vague=${wave}`)).json() as { reset: Preview }).reset;
@@ -1327,7 +1327,7 @@ describe('repartir de zéro par session', () => {
     await validate(matin, m1.id);
     await validate(aprem, c1.id);
     const before = await log();
-    expect(await preview(matin)).toEqual({ undo: 1, manual: 0, kept: [], blockedBy: null, clears: 0, history: 1, refusal: null, locked: false });
+    expect(await preview(matin)).toEqual({ undo: 1, manual: 0, kept: [], blockedBy: null, clears: 0, history: 1, refusal: null, locked: false, cascade: [] });
     const res = await reset(matin);
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true, undone: 1, kept: [] });
@@ -1393,6 +1393,25 @@ describe('repartir de zéro par session', () => {
     expect(await layout()).toEqual(before);
   });
 
+  test('cascade : une action plus récente d’une autre session sur la même catégorie (autre combattant) bloque tout, avec son nom', async () => {
+    const { m1, matin, aprem } = await setup();
+    const cora = await reg({ lastName: 'CORA', weightClassId: 'cadet:F:-61', approxWeightKg: 58 });
+    await validate(matin, m1.id);
+    // CORA, décidée depuis l'après-midi, rejoint la catégorie où la réaffectation du matin a mis MINA.
+    const minimes = (await categories()).find((c) => c.registrationIds.includes(m1.id))!;
+    expect((await call('POST', '/replacement/move', { registrationId: cora.id, categoryId: minimes.id })).statusCode).toBe(200);
+    expect(await preview(matin)).toMatchObject({ blockedBy: 'CORA x', kept: [] });
+    const before = { layout: await layout(), log: await log() };
+    const res = await reset(matin);
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toContain('CORA x');
+    expect(await layout()).toEqual(before.layout);
+    expect(await log()).toEqual(before.log);
+    // Depuis l'après-midi, le déplacement de CORA s'annule seul (la réaffectation du matin est plus ancienne).
+    expect((await reset(aprem)).json()).toMatchObject({ ok: true, undone: 1 });
+    expect(await log()).toEqual([m1.id]);
+  });
+
   test('seulement des lignes déjà annulées : il reste l’historique à effacer', async () => {
     const { m1, matin } = await setup();
     await validate(matin, m1.id);
@@ -1418,6 +1437,8 @@ describe('repartir de zéro par session', () => {
     await call('POST', '/replacement/move', { registrationId: m1.id, categoryId: cadets.id });
     const raw = new Database(dbPath);
     raw.prepare('UPDATE recasements SET wave_id = NULL').run();
+    // Entrée reprise de l'ancien journal : sans session non plus (la règle de repli passe par son recasement).
+    raw.prepare('UPDATE history_entries SET wave_id = NULL').run();
     raw.close();
     expect((await reset(aprem)).json()).toMatchObject({ undone: 0 });
     expect(await log()).toEqual([m1.id]);

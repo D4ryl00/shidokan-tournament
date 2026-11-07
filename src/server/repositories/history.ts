@@ -107,7 +107,7 @@ export async function recorded<T>(
   });
 }
 
-interface Loaded extends CascadeEntry {
+export interface Loaded extends CascadeEntry {
   row: typeof historyEntries.$inferSelect;
   summary: HistorySummary;
   recasementIds: string[];
@@ -119,7 +119,7 @@ interface Loaded extends CascadeEntry {
 }
 
 /** Entrées de la compétition (ordre d'insertion), avec ce qu'il faut pour la cascade et les blocages. */
-function loadEntries(db: AppDb, competitionId: string): Loaded[] {
+export function loadEntries(db: AppDb, competitionId: string): Loaded[] {
   const rows = db
     .select({ ...getTableColumns(historyEntries), seq: sql<number>`rowid` })
     .from(historyEntries)
@@ -278,14 +278,22 @@ export async function undoHistory(db: AppDb, competitionId: string, ids: string[
     if (expect !== null && [...expect].sort().join('\n') !== set.map((e) => e.id).sort().join('\n')) throw new StaleProposalError(STALE);
     const reason = blockReason(set, ctx);
     if (reason) throw new CategoryLockedError(reason);
-    const undoneAt = new Date().toISOString();
-    db.transaction((tx) => {
-      for (const e of set) undoEntry(tx as unknown as AppDb, e, undoneAt);
-    });
-    // Reprises de l'ancien journal : leurs catégories n'ont pas d'état d'avant, leurs clés sont recalculées d'après leurs membres.
-    const legacy = [...new Set(set.filter((e) => e.legacy).flatMap((e) => e.categoryIds))];
-    if (legacy.length) await recomputeKeys(db, competitionId, () => legacy);
-    else await syncCategories(db, competitionId);
+    await undoEntries(db, competitionId, set);
     return { undone: set.map((e) => e.id) };
   });
+}
+
+/**
+ * Annule un lot déjà calculé (`undoSet`, plus récente d'abord) sans contrôle (blocages vérifiés par l'appelant), puis
+ * synchronise. Dans la transaction de l'appelant s'il y en a une.
+ */
+export async function undoEntries(db: AppDb, competitionId: string, set: Loaded[]): Promise<void> {
+  const undoneAt = new Date().toISOString();
+  db.transaction((tx) => {
+    for (const e of set) undoEntry(tx as unknown as AppDb, e, undoneAt);
+  });
+  // Reprises de l'ancien journal : leurs catégories n'ont pas d'état d'avant, leurs clés sont recalculées d'après leurs membres.
+  const legacy = [...new Set(set.filter((e) => e.legacy).flatMap((e) => e.categoryIds))];
+  if (legacy.length) await recomputeKeys(db, competitionId, () => legacy);
+  else await syncCategories(db, competitionId);
 }
