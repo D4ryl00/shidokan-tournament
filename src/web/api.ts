@@ -275,14 +275,14 @@ export function useCategories(id: string) {
   return useQuery({ queryKey: ['categories', id], queryFn: () => api<Category[]>('GET', `/api/competitions/${id}/categories`) });
 }
 
-function useCategoryMutation<T>(id: string, fn: (arg: T, qc: QC) => Promise<Category>) {
+function useCategoryMutation<T>(id: string, fn: (arg: T, qc: QC) => Promise<Category>, also: string[] = []) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (arg: T) => fn(arg, qc),
     onSuccess: (updated) => {
       // Nouvelle révision tout de suite en cache : un second clic rapide ne passe pas pour une écriture périmée.
       qc.setQueryData<Category[]>(['categories', id], (list) => list?.map((c) => (c.id === updated.id ? updated : c)));
-      return Promise.all(['categories', 'schedule'].map((k) => qc.invalidateQueries({ queryKey: [k, id] })));
+      return Promise.all(['categories', 'schedule', ...also].map((k) => qc.invalidateQueries({ queryKey: [k, id] })));
     },
   });
 }
@@ -301,7 +301,9 @@ export const useCreateFreeTableau = (id: string) => {
 };
 export const useUpdateFreeTableau = (id: string) =>
   useCategoryMutation(id, ({ cid, ...patch }: { cid: string; name?: string; discipline?: DisciplineId; ruleset?: Ruleset | null }, qc) =>
-    api<Category>('PATCH', `/api/competitions/${id}/free-tableaux/${cid}`, patch, { rev: categoryRevOf(qc, id, cid) }));
+    api<Category>('PATCH', `/api/competitions/${id}/free-tableaux/${cid}`, patch, { rev: categoryRevOf(qc, id, cid) }),
+  // La discipline et le règlement passent aux combattants du tableau : inscriptions et réaffectation à recharger.
+  ['registrations', 'replacement']);
 export function useDeleteFreeTableau(id: string) {
   const qc = useQueryClient();
   return useMutation({

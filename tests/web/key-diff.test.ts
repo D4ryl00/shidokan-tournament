@@ -35,6 +35,14 @@ test('keyParts : sans autre clé, rien de changé', () => {
   expect(changed(keyParts(key(['cadet'], 'F', ['cadet:F:-54']), null, grid))).toEqual([]);
 });
 
+test('keyParts : un tableau libre se lit par son nom', () => {
+  const from = key(['cadet'], 'F', ['cadet:F:-54']);
+  const gala: CategoryKey = { ...key([], 'X', []), free: 'Gala 1' };
+  expect(keyParts(gala, from, grid)).toEqual([{ text: 'Gala 1', changed: true, sep: '' }]);
+  expect(keyParts(gala, { ...gala }, grid)).toEqual([{ text: 'Gala 1', changed: false, sep: '' }]);
+  expect(keyParts(gala, null, grid)).toEqual([{ text: 'Gala 1', changed: false, sep: '' }]);
+});
+
 test('whyText : textes exacts, accordés', () => {
   expect(whyText({ kind: 'weight_out', weighInKg: 41, limitLabel: '-40', toleranceKg: 0.5 }, 'F')).toBe('Pesée à 41 kg : trop lourde pour -40 kg (tolérance 0,5 kg)');
   expect(whyText({ kind: 'weight_out', weighInKg: 45.3, limitLabel: '-45', toleranceKg: 0.3 }, 'M')).toBe('Pesé à 45,3 kg : trop lourd pour -45 kg (tolérance 0,3 kg)');

@@ -161,6 +161,7 @@ function GridEditor() {
       </SectionCard>
 
       <SectionCard title={HELP['grille.tranches'].title} help="grille.tranches">
+        <Table.ScrollContainer minWidth={380}>
         <Table className="sk-cell">
           <Table.Thead>
             <Table.Tr>
@@ -184,6 +185,7 @@ function GridEditor() {
             ))}
           </Table.Tbody>
         </Table>
+        </Table.ScrollContainer>
       </SectionCard>
 
       </SimpleGrid>

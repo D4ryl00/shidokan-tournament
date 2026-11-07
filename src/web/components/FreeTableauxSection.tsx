@@ -1,4 +1,4 @@
-import { Alert, Button, Group, Modal, NativeSelect, Stack, Table, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Group, Loader, Modal, NativeSelect, Stack, Table, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
 import { FREE_NAME_MAX, isFreeKey, type Category } from '../../domain/categories.js';
 import { DISCIPLINES, RULESETS } from '../../domain/disciplines.js';
@@ -20,7 +20,7 @@ const isLocked = (c: Category) => c.launchLocked || c.status === 'started' || c.
 
 /** Tableaux libres de la compétition : liste, ajout, modification (nom, discipline, règlement), session, suppression. */
 export function FreeTableauxSection({ competitionId }: { competitionId: string }) {
-  const { data: categories = [] } = useCategories(competitionId);
+  const { data: categories } = useCategories(competitionId);
   const { data: waves = [] } = useWaves(competitionId);
   const create = useCreateFreeTableau(competitionId);
   const update = useUpdateFreeTableau(competitionId);
@@ -28,7 +28,7 @@ export function FreeTableauxSection({ competitionId }: { competitionId: string }
   const setWave = useUpdateCategory(competitionId);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [deleting, setDeleting] = useState<Category | null>(null);
-  const free = categories.filter((c) => isFreeKey(c.key));
+  const free = (categories ?? []).filter((c) => isFreeKey(c.key));
   const editing = draft?.cid ? free.find((c) => c.id === draft.cid) : undefined;
   const locked = !!editing && isLocked(editing);
 
@@ -45,11 +45,14 @@ export function FreeTableauxSection({ competitionId }: { competitionId: string }
 
   return (
     <Stack gap="sm">
-      <ApiErrorAlert error={setWave.error ?? remove.error} />
-      {free.length === 0 ? (
+      <ApiErrorAlert error={setWave.error} />
+      {/* Pas d'« Aucun tableau libre » tant que les catégories ne sont pas chargées. */}
+      {!categories ? (
+        <Loader size="sm" />
+      ) : free.length === 0 ? (
         <EmptyState data-testid="free-none" title="Aucun tableau libre" text="Ajoutez-en un pour y placer des combattants à la main." />
       ) : (
-        <Table.ScrollContainer minWidth={560}>
+        <Table.ScrollContainer minWidth={760}>
           <Table className="sk-cell">
             <Table.Thead>
               <Table.Tr>
@@ -64,11 +67,11 @@ export function FreeTableauxSection({ competitionId }: { competitionId: string }
                   <Table.Td>{DISCIPLINES[c.key.discipline].label}</Table.Td>
                   <Table.Td>{c.key.ruleset ? RULESETS[c.key.ruleset].label : '—'}</Table.Td>
                   <Table.Td>
-                    <NativeSelect size="xs" aria-label={`Session de ${c.key.free}`} value={waveValue(c)} disabled={c.launchLocked}
+                    <NativeSelect size="xs" w={150} aria-label={`Session de ${c.key.free}`} value={waveValue(c)} disabled={c.launchLocked}
                       data={[{ value: WAVE_NONE, label: 'En attente' }, ...waves.map((w) => ({ value: w.id, label: w.name }))]}
                       onChange={(e) => setWave.mutate({ cid: c.id, waveOverride: e.currentTarget.value })} />
                   </Table.Td>
-                  <Table.Td>{plural(c.registrationIds.length, 'combattant')}</Table.Td>
+                  <Table.Td style={{ whiteSpace: 'nowrap' }}>{plural(c.registrationIds.length, 'combattant')}</Table.Td>
                   <Table.Td>
                     <Group gap="xs" wrap="nowrap" justify="flex-end">
                       <Button size="compact-sm" variant="default" onClick={() => setDraft({ cid: c.id, name: c.key.free ?? '', discipline: c.key.discipline, ruleset: c.key.ruleset })}>Modifier</Button>
@@ -108,14 +111,15 @@ export function FreeTableauxSection({ competitionId }: { competitionId: string }
         )}
       </Modal>
 
-      <Modal opened={deleting !== null} onClose={() => setDeleting(null)} title={`Supprimer le tableau libre « ${deleting?.key.free ?? ''} » ?`}>
+      <Modal opened={deleting !== null} onClose={() => { setDeleting(null); remove.reset(); }} title={`Supprimer le tableau libre « ${deleting?.key.free ?? ''} » ?`}>
         <Stack>
           <Text size="sm">
             {returned === 0 ? 'Aucun combattant à renvoyer : le tableau est vide.'
               : `${plural(returned, 'combattant')} ${returned > 1 ? 'retourneront' : 'retournera'} dans leur catégorie précédente.`}
           </Text>
+          <ApiErrorAlert error={remove.error} />
           <Group justify="flex-end">
-            <Button variant="default" onClick={() => setDeleting(null)}>Annuler</Button>
+            <Button variant="default" onClick={() => { setDeleting(null); remove.reset(); }}>Annuler</Button>
             <Button color="red" onClick={() => deleting && remove.mutate(deleting.id, { onSuccess: () => setDeleting(null) })} loading={remove.isPending}>Supprimer le tableau</Button>
           </Group>
         </Stack>

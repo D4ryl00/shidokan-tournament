@@ -139,7 +139,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Sur le serveur en ligne, chacun se connecte avec son e-mail et son mot de passe. Le PC de la compétition, lui, ne demande pas de connexion.',
       [
         'Organisateur : tout.',
-        'Table centrale : inscriptions, clubs, pesée, réaffectations, tableaux, sessions à lancer et résultats de toutes les zones ; pas les réglages, la grille, les imports ni les invitations.',
+        'Table centrale : inscriptions, clubs, pesée, réaffectations, tableaux, tableaux libres, sessions à lancer et résultats de toutes les zones ; pas les réglages, la grille (sauf les tableaux libres, dans l’onglet Catégories), les imports ni les invitations.',
         'Zone : résultats, notes de kata et départages des combats de sa zone seulement. Un compte Zone est attaché à une zone d’une compétition : pour la compétition suivante, changez son rôle (« Changer le rôle ») ou créez-en un autre.',
       ],
       [

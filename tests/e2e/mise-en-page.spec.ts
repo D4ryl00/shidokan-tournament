@@ -72,3 +72,26 @@ test('synchronisation avec Google (aperçu simulé) : rien de coupé sur un peti
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), String(width)).toBeLessThanOrEqual(0);
   }
 });
+
+test('téléphone (390 px) : le tableau des tableaux libres défile de côté, rien de coupé', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Mobile tableaux libres');
+  await request.put(`/api/competitions/${id}/waves`, { data: [
+    { name: 'Matin des minimes', rules: { ageBandCodes: ['minime'], disciplines: [] } },
+    { name: 'Après-midi', rules: { ageBandCodes: ['cadet'], disciplines: [] } },
+  ] });
+  for (const name of ['Gala de démonstration du soir', 'Gala 2']) {
+    expect((await request.post(`/api/competitions/${id}/free-tableaux`, { data: { name, discipline: 'shido-boxing', ruleset: 'jiyu' } })).status()).toBe(201);
+  }
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto(`/competitions/${id}/categories`);
+  const section = page.getByRole('group', { name: 'Tableaux libres', exact: true });
+  await expect(section.getByTestId('free-tableau')).toHaveCount(2);
+  expect(await clipped(page)).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+  // Le choix de la session garde sa largeur : le tableau défile au lieu de l'écraser.
+  const select = section.getByLabel('Session de Gala 2');
+  expect((await select.boundingBox())!.width).toBeGreaterThanOrEqual(140);
+  const cell = section.getByTestId('free-tableau').filter({ hasText: 'Gala 2' }).getByText('0 combattant');
+  // « 0 combattant » sur une seule ligne (pas coupé en deux par une colonne trop étroite).
+  expect(await cell.evaluate((el) => { const r = document.createRange(); r.selectNodeContents(el); return new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size; })).toBe(1);
+});
