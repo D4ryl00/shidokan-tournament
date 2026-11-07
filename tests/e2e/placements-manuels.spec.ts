@@ -173,6 +173,7 @@ test('alerte et remise à zéro', async ({ page, request }) => {
   const card = page.getByTestId('replacement-case').filter({ hasText: 'ALPHA' });
   await expect(card).toContainText('Sans adversaire');
   await expect(card).toContainText(/Seule? dans le tableau libre Gala 1/);
+  await expect(card.getByTestId('case-alert-hint')).toHaveText('Placée à la main : le calcul ne la déplace pas. Déplacez-la vous-même ou annulez son déplacement manuel.');
   await expect(card.getByTestId('replacement-proposal')).toHaveCount(0);
   await expect(card.getByTestId('manual-move-select')).toBeVisible();
   await expect(card.getByRole('button', { name: 'Annuler son déplacement manuel' })).toBeVisible();
@@ -190,4 +191,32 @@ test('alerte et remise à zéro', async ({ page, request }) => {
   const g = cats.find((c) => c.label.includes('Gala 1'));
   expect(g).toBeTruthy();
   expect(g!.registrationIds).toHaveLength(0);
+});
+
+test('Tableaux : déplacer vers un tableau libre en attente prévient du changement de session', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe gala en attente');
+  await request.put(`/api/competitions/${id}/waves`, { data: [
+    { name: 'Matin', rules: { ageBandCodes: ['minime'], disciplines: [] } },
+    { name: 'Après-midi', rules: { ageBandCodes: ['cadet'], disciplines: [] } },
+  ] });
+  for (const n of ['CADA', 'CADB', 'CADC']) await reg(request, id, n, 'cadet:F:-47');
+  expect((await request.post(`/api/competitions/${id}/free-tableaux`, { data: { name: 'Gala 1', discipline: 'karate', ruleset: 'jiyu' } })).status()).toBe(201);
+
+  await page.goto(`/competitions/${id}/tableaux`);
+  await page.getByTestId('brackets-wave').getByText('Après-midi', { exact: true }).click();
+  await page.getByTestId('category-row').filter({ hasText: '-47' }).click();
+  await page.getByTestId('bracket-entrant').filter({ hasText: 'CADA' }).first().click();
+  const panel = page.getByTestId('move-entrant-panel');
+  await panel.getByTestId('move-entrant-select').click();
+  // Comme sur les cartes de la Réaffectation : la cible dit sa session.
+  const option = page.getByRole('option', { name: /^Gala 1/ });
+  await expect(option).toContainText('· session en attente');
+  await option.click();
+  const previewed = page.waitForResponse((r) => r.url().includes('/replacement/preview') && r.request().method() === 'POST');
+  await panel.getByRole('button', { name: 'Déplacer…' }).click();
+  expect((await previewed).ok()).toBeTruthy();
+  const warning = page.getByRole('dialog').getByTestId('wave-change-warning');
+  await expect(warning).toBeVisible();
+  await expect(warning).toContainText('CADA');
+  await expect(warning).toContainText('dans une catégorie en attente (dans aucune session)');
 });

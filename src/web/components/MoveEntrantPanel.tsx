@@ -1,9 +1,10 @@
 import { Alert, Button, Card, Group, Modal, Select, Stack, Switch, Text } from '@mantine/core';
 import { useState } from 'react';
 import { plural } from '../../domain/plural.js';
-import { useCategories, useManualMove, useMoveTargets, usePreviewReplacement, useUndoManualMove } from '../api.js';
+import { useCategories, useManualMove, useMoveTargets, usePreviewReplacement, useUndoManualMove, useWaves } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { ProposalPreview } from './ProposalPreview.js';
+import { WaveChangeWarning } from './replacement/WaveChangeWarning.js';
 
 /**
  * Sous le tableau, pour l'inscrit choisi : le déplacer à la main vers une autre catégorie ou un tableau libre (avec aperçu avant
@@ -12,6 +13,7 @@ import { ProposalPreview } from './ProposalPreview.js';
 export function MoveEntrantPanel({ competitionId, registrationId, name, manual, onDone }: { competitionId: string; registrationId: string; name: string; manual: boolean; onDone?: () => void }) {
   const { data: categories = [] } = useCategories(competitionId);
   const { data } = useMoveTargets(competitionId, registrationId);
+  const { data: waves = [] } = useWaves(competitionId);
   const [target, setTarget] = useState<string | null>(null);
   const [all, setAll] = useState(false);
   const [open, setOpen] = useState(false);
@@ -23,9 +25,16 @@ export function MoveEntrantPanel({ competitionId, registrationId, name, manual, 
     const c = categories.find((x) => x.id === categoryId);
     return c ? c.registrationIds.length - c.absentIds.length : 0;
   };
+  // Comme sur les cartes de la Réaffectation : une cible d'une autre session (ou en attente) le dit.
+  const current = categories.find((x) => x.registrationIds.includes(registrationId));
+  const waveName = (w: string | null) => (w === null ? 'en attente' : (waves.find((x) => x.id === w)?.name ?? '?'));
+  const session = (categoryId: string) => {
+    const x = categories.find((k) => k.id === categoryId);
+    return waves.length > 0 && current && x && x.waveId !== current.waveId ? ` · session ${waveName(x.waveId)}` : '';
+  };
   const option = (t: { categoryId: string; label: string; warnings: string[] }) => ({
     value: t.categoryId,
-    label: `${t.label} (${size(t.categoryId)})${t.warnings.length ? ` ⚠ ${plural(t.warnings.length, 'règle enfreinte', 'règles enfreintes')}` : ''}`,
+    label: `${t.label} (${size(t.categoryId)})${session(t.categoryId)}${t.warnings.length ? ` ⚠ ${plural(t.warnings.length, 'règle enfreinte', 'règles enfreintes')}` : ''}`,
   });
   const targets = (data?.targets ?? []).filter((t) => all || t.warnings.length === 0);
   const groups = [
@@ -63,6 +72,7 @@ export function MoveEntrantPanel({ competitionId, registrationId, name, manual, 
           {preview.data?.warnings && preview.data.warnings.length > 0 && (
             <Alert color="orange" title="Règles enfreintes" data-testid="move-warnings">{preview.data.warnings.join(' ')}</Alert>
           )}
+          <WaveChangeWarning proposal={preview.data?.steps[0]?.proposal} waves={waves} name={() => name} />
           {preview.data && <ProposalPreview data={preview.data} />}
           <Group justify="flex-end">
             <Button variant="default" onClick={close}>Annuler</Button>

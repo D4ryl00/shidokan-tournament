@@ -3,7 +3,6 @@ import { notifications } from '@mantine/notifications';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import type { Case, CaseKind, Proposal, ProposalType } from '../../domain/replacement/index.js';
-import type { Wave } from '../../domain/waves.js';
 import {
   useApplyProposal,
   useCategories,
@@ -43,6 +42,7 @@ import { PlanView, WARN_ALERT, type PlanFighter } from '../components/replacemen
 import type { RuleId } from '../../domain/settings.js';
 import { ruleNumber, rulesView } from '../../domain/replacement/rules.js';
 import { MoveBlocks } from '../components/replacement/MoveBlocks.js';
+import { WaveChangeWarning } from '../components/replacement/WaveChangeWarning.js';
 import { clearPlanChoices, usePlanCardDecisions, usePlanChoices } from '../usePlanChoices.js';
 import { useSelectedWave } from '../useSelectedWave.js';
 import type { CategoryGrid } from '../../domain/types.js';
@@ -59,38 +59,6 @@ type Dialog =
 
 const CASE_KINDS: Record<CaseKind, string> = { closed: 'Catégorie fermée', alone: 'Sans adversaire', weight_out: 'Poids hors catégorie', weight_gap: 'Écart de poids', return: 'Retour possible' };
 const kg = (x: number) => Number(x.toFixed(1)).toString().replace('.', ',');
-
-/**
- * Ce qu'entraîne un changement de vague : le combattant (et ceux que sa catégorie emmène) repasse « non pesé »
- * dans sa nouvelle vague ; vague d'arrivée déjà clôturée ou catégorie en attente signalées.
- */
-function WaveChangeWarning({ proposal, waves, name }: { proposal: Proposal | undefined; waves: Wave[]; name: (registrationId: string) => string }) {
-  if (!proposal || (!proposal.waveChange && proposal.waveShifts.length === 0)) return null;
-  const waveName = (w: string | null) => waves.find((x) => x.id === w)?.name ?? 'en attente';
-  const where = (to: string | null) => (to === null ? 'dans une catégorie en attente (dans aucune session)' : `dans la session « ${waveName(to)} »`);
-  const then = (to: string | null) =>
-    to === null
-      ? 'il n’apparaîtra dans aucune pesée tant qu’elle n’est pas placée dans une session (écran Sessions).'
-      : waves.find((w) => w.id === to)?.weighInClosed
-        ? 'la pesée de cette session est déjà clôturée : pointez-le à la main dans l’écran Pesée.'
-        : 'à pointer (et à peser si besoin) dans cette session.';
-  return (
-    <Alert color="grape" data-testid="wave-change-warning">
-      <Stack gap={4}>
-        {proposal.waveChange && (
-          <Text size="sm">
-            {name(proposal.registrationId)} passera {where(proposal.waveChange.to)} : {then(proposal.waveChange.to)} Son poids déjà relevé est gardé.
-          </Text>
-        )}
-        {proposal.waveShifts.map((x) => (
-          <Text size="sm" key={x.registrationId}>
-            {x.label}, dont la catégorie change de session, passera {where(x.to)} : {then(x.to)}
-          </Text>
-        ))}
-      </Stack>
-    </Alert>
-  );
-}
 
 /** Le combattant d'un cas en une ligne : tranche d'âge, sexe, discipline, règlement, catégorie de poids, poids, préférences. */
 function FighterDetail({ f, grid }: { f: CaseFighter | undefined; grid: CategoryGrid | undefined }) {
@@ -356,7 +324,13 @@ export function ReplacementPage() {
           </Stack>
         </Group>
         <Stack gap="xs">
-          {c.alert && <Text size="sm" c="dimmed" data-testid="case-alert-hint">Placé à la main : le calcul ne le déplace pas. Déplacez-le vous-même ou annulez son déplacement manuel.</Text>}
+          {c.alert && (
+            <Text size="sm" c="dimmed" data-testid="case-alert-hint">
+              {data.fighters[c.registrationId]?.sex === 'F'
+                ? 'Placée à la main : le calcul ne la déplace pas. Déplacez-la vous-même ou annulez son déplacement manuel.'
+                : 'Placé à la main : le calcul ne le déplace pas. Déplacez-le vous-même ou annulez son déplacement manuel.'}
+            </Text>
+          )}
           {open.length === 0 && !c.alert && <Text size="sm" c="red.6" fw={500}>{c.kind === 'closed' ? 'Aucune solution automatique : déplacer manuellement ou choisir « Ne combat pas ».' : 'Aucune solution automatique : déplacer manuellement ou laisser sans adversaire.'}</Text>}
           {proposals.map((p) => {
             if (p.refused) {
