@@ -19,6 +19,7 @@ import type { Wave, WaveInput } from '../domain/waves.js';
 import type { AppSettingsPatch, PublicAppSettings } from '../domain/app-settings.js';
 import type { GoogleContactsView, SyncApply } from '../domain/google-contacts.js';
 import type { Zone, ZoneInput } from '../domain/zones.js';
+import type { HistoryEntryView } from '../domain/history/types.js';
 import type { PassagePlan } from '../domain/passages/index.js';
 
 import { ApiError, TAB_ID } from './apiError.js';
@@ -275,21 +276,24 @@ export function useCategories(id: string) {
   return useQuery({ queryKey: ['categories', id], queryFn: () => api<Category[]>('GET', `/api/competitions/${id}/categories`) });
 }
 
-function useCategoryMutation<T>(id: string, fn: (arg: T, qc: QC) => Promise<Category>, also: string[] = []) {
+/** Résultat d'une écriture de catégorie journalisée : la catégorie et l'action annulable (null si rien n'a changé). */
+export type CategoryWrite = Category & { historyId?: string | null };
+
+function useCategoryMutation<T>(id: string, fn: (arg: T, qc: QC) => Promise<CategoryWrite>, also: string[] = []) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (arg: T) => fn(arg, qc),
     onSuccess: (updated) => {
       // Nouvelle révision tout de suite en cache : un second clic rapide ne passe pas pour une écriture périmée.
       qc.setQueryData<Category[]>(['categories', id], (list) => list?.map((c) => (c.id === updated.id ? updated : c)));
-      return Promise.all(['categories', 'schedule', ...also].map((k) => qc.invalidateQueries({ queryKey: [k, id] })));
+      return Promise.all(['categories', 'schedule', 'history', ...also].map((k) => qc.invalidateQueries({ queryKey: [k, id] })));
     },
   });
 }
 
 export const useUpdateCategory = (id: string) =>
   useCategoryMutation(id, ({ cid, ...patch }: { cid: string; format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null; status?: CategoryStatus; unlock?: boolean; zoneId?: string | null; waveOverride?: string | null; order?: number }, qc) =>
-    api<Category>('PATCH', `/api/competitions/${id}/categories/${cid}`, patch, { rev: categoryRevOf(qc, id, cid) }),
+    api<CategoryWrite>('PATCH', `/api/competitions/${id}/categories/${cid}`, patch, { rev: categoryRevOf(qc, id, cid) }),
   );
 /** Tableaux libres (étape 37) : création sans révision, modification et suppression avec celle de la catégorie. */
 export const useCreateFreeTableau = (id: string) => {
@@ -301,7 +305,7 @@ export const useCreateFreeTableau = (id: string) => {
 };
 export const useUpdateFreeTableau = (id: string) =>
   useCategoryMutation(id, ({ cid, ...patch }: { cid: string; name?: string; discipline?: DisciplineId; ruleset?: Ruleset | null }, qc) =>
-    api<Category>('PATCH', `/api/competitions/${id}/free-tableaux/${cid}`, patch, { rev: categoryRevOf(qc, id, cid) }),
+    api<CategoryWrite>('PATCH', `/api/competitions/${id}/free-tableaux/${cid}`, patch, { rev: categoryRevOf(qc, id, cid) }),
   // La discipline et le règlement passent aux combattants du tableau : inscriptions et réaffectation à recharger.
   ['registrations', 'replacement']);
 export function useDeleteFreeTableau(id: string) {
@@ -312,10 +316,10 @@ export function useDeleteFreeTableau(id: string) {
   });
 }
 export const useRedraw = (id: string) =>
-  useCategoryMutation(id, (cid: string, qc) => api<Category>('POST', `/api/competitions/${id}/categories/${cid}/redraw`, undefined, { rev: categoryRevOf(qc, id, cid) }));
+  useCategoryMutation(id, (cid: string, qc) => api<CategoryWrite>('POST', `/api/competitions/${id}/categories/${cid}/redraw`, undefined, { rev: categoryRevOf(qc, id, cid) }));
 export const useSwap = (id: string) =>
   useCategoryMutation(id, ({ cid, a, b }: { cid: string; a: string; b: string }, qc) =>
-    api<Category>('POST', `/api/competitions/${id}/categories/${cid}/swap`, { a, b }, { rev: categoryRevOf(qc, id, cid) }));
+    api<CategoryWrite>('POST', `/api/competitions/${id}/categories/${cid}/swap`, { a, b }, { rev: categoryRevOf(qc, id, cid) }));
 
 // --- Pesée et recasement (étape 5) ---
 
@@ -430,6 +434,8 @@ export interface PreviewData {
   unresolved?: number;
   /** Déplacement manuel : règles enfreintes. */
   warnings?: string[];
+  /** Déplacement manuel : nouveaux face-à-face entre combattants du même club. */
+  sameClub?: string[];
 }
 
 /** Tableau de bord du recasement ; avec une vague, ses cas et ses compteurs seulement. */
@@ -449,7 +455,7 @@ export function usePreviewReplacement(id: string) {
 function useReplacementAction<T>(id: string, path: string) {
   const invalidate = useInvalidateDay(id);
   // En cas d'erreur (situation périmée…), les données sont rechargées aussi.
-  return useMutation({ mutationFn: (body: T) => api<{ warnings?: string[]; applied?: number }>('POST', `/api/competitions/${id}/replacement/${path}`, body), onSuccess: invalidate, onError: invalidate });
+  return useMutation({ mutationFn: (body: T) => api<{ warnings?: string[]; applied?: number; historyId?: string | null }>('POST', `/api/competitions/${id}/replacement/${path}`, body), onSuccess: invalidate, onError: invalidate });
 }
 export const useApplyProposal = (id: string) => useReplacementAction<{ proposalId: string; fingerprint: string }>(id, 'apply');
 export const useRefuseProposal = (id: string) => useReplacementAction<{ proposalId: string }>(id, 'refuse');
@@ -470,6 +476,45 @@ export const useSetAsideCase = (id: string) => useReplacementAction<{ caseId: st
 export const useResumeCase = (id: string) => useReplacementAction<{ caseId: string }>(id, 'resume');
 export const useWithdrawRegistration = (id: string) => useReplacementAction<{ registrationId: string; fingerprint: string }>(id, 'withdraw');
 export const useResetReplacement = (id: string) => useReplacementAction<{ waveId?: string }>(id, 'reset');
+
+export type { HistoryEntryView };
+/** Historique annulable de la session affichée (rechargé avec les données du jour). */
+export function useHistory(id: string, waveId: string | null) {
+  return useQuery({
+    queryKey: ['history', id, waveId],
+    queryFn: () => api<{ entries: HistoryEntryView[] }>('GET', `/api/competitions/${id}/history${waveId ? `?waveId=${encodeURIComponent(waveId)}` : ''}`),
+  });
+}
+/** Annule un lot (`ids` et leur cascade) ; `expect` est le lot affiché. Données rechargées aussi en cas d'erreur (lot périmé ou verrouillé). */
+export function useUndoHistory(id: string) {
+  const invalidate = useInvalidateDay(id);
+  return useMutation({
+    mutationFn: (body: { ids: string[]; expect: string[] }) => api<{ undone: string[] }>('POST', `/api/competitions/${id}/history/undo`, body),
+    onSuccess: invalidate,
+    onError: invalidate,
+  });
+}
+export function useExchangePreview(id: string) {
+  return useMutation({
+    mutationFn: (body: { a: string; b: string }) => api<{ warnings: string[]; sameClub: string[] }>('POST', `/api/competitions/${id}/replacement/exchange/preview`, body),
+  });
+}
+export const useExchange = (id: string) => {
+  const invalidate = useInvalidateDay(id);
+  return useMutation({
+    mutationFn: (body: { a: string; b: string }) => api<{ warnings: string[]; sameClub: string[]; historyId: string | null }>('POST', `/api/competitions/${id}/replacement/exchange`, body),
+    onSuccess: invalidate,
+    onError: invalidate,
+  });
+};
+/** Ce qu'emporterait la suppression d'un tableau libre (actions de l'historique concernées). */
+export function useFreeTableauDeletePreview(id: string, cid: string | null) {
+  return useQuery({
+    queryKey: ['free-delete-preview', id, cid],
+    queryFn: () => api<{ targets: string[] }>('GET', `/api/competitions/${id}/free-tableaux/${cid}/delete-preview`),
+    enabled: cid !== null,
+  });
+}
 
 export type { LadderProgress, LadderRow, PlanChoice, PlanMove, RulesView };
 /** Réponse de `POST /replacement/plan` (voir `planResponse`, côté serveur). */
