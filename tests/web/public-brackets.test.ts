@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { categoryPassages, filterCategories, finishedPodiums, NO_FILTERS } from '../../src/web/components/public/bracketsModel.js';
+import { categoryPassages, categoryText, filterCategories, finishedPodiums, kataText, NO_FILTERS } from '../../src/web/components/public/bracketsModel.js';
 import type { PublicCategory, PublicCompetition } from '../../src/domain/public/types.js';
 
 const cat = (id: string, over: Partial<PublicCategory>): PublicCategory => ({
@@ -39,4 +39,19 @@ test('categoryPassages : numéro, zone, noms et résultat', () => {
   expect(rows.map((r) => r.number)).toEqual([3, 5]);
   expect(rows[0]).toMatchObject({ zone: 'Tatami 1', a: 'MARTIN Léa', b: 'DUPONT Zoé', result: 'MARTIN Léa gagne · points 3-1', played: true });
   expect(rows[1]).toMatchObject({ b: null, result: '' });
+});
+
+test('categoryText : la discipline n’est pas répétée après un libellé qui la contient déjà', () => {
+  expect(categoryText('Kata · Minimes M', 'kata')).toBe('Kata · Minimes M');
+  expect(categoryText('Karaté · Jiyu · Cadets F · -54 kg', 'karate')).toBe('Karaté · Jiyu · Cadets F · -54 kg');
+  // Tableau libre : nom choisi, sans la discipline.
+  expect(categoryText('Coupe des petits', 'kata')).toBe('Coupe des petits · Kata');
+});
+
+test('kataText : note et place du tour 1, puis la note de la finale', () => {
+  expect(kataText({ round1: null, place: null, final: null })).toBeNull();
+  expect(kataText({ round1: 7.85, place: null, final: null })).toBe('Tour 1 : 7,85');
+  expect(kataText({ round1: 7.85, place: 3, final: null })).toBe('Tour 1 : 7,85 · 3e');
+  expect(kataText({ round1: 8, place: 1, final: 8.1 })).toBe('Tour 1 : 8 · 1er · Finale : 8,1');
+  expect(kataText({ round1: null, place: null, final: 8.5 })).toBe('Finale : 8,5');
 });

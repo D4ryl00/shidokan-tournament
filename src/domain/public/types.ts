@@ -51,6 +51,8 @@ export interface PublicQueueItem {
   bFrom: SideSource | null;
   state: 'played' | 'ready' | 'waiting';
   waveId: string | null;
+  /** Finale passée sur la zone des finales (à la fin de la file de sa vague) : la ligne « Finales de la session … » se place avant la première. */
+  finals: boolean;
 }
 
 export interface PublicCategory {
@@ -113,5 +115,7 @@ export interface FighterLine {
     opponent: { name: string; club: string } | { from: SideSource } | null;
   } | null;
   played: { number: number | null; opponent: string; won: boolean }[];
+  /** Kata seulement : note et place au tour 1 (null : pas encore noté, ou pas de tour 1 à deux katakas), note de la finale. */
+  kata?: { round1: number | null; place: number | null; final: number | null };
   state: 'upcoming' | 'waiting' | 'eliminated' | 'finished' | { medal: 1 | 2 | 3 };
 }

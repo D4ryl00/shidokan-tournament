@@ -34,6 +34,8 @@ export interface PublicSource {
   plan: PassagePlan;
   /** Catégories numérotées dans une vague actuellement lancée (`launchedCategoryIds`). */
   launchedCategoryIds: Iterable<string>;
+  /** Zone des finales des réglages (`settings.finalsZoneId`) ; absente ou null : aucune. */
+  finalsZoneId?: string | null;
 }
 
 export const HIDDEN_NAME = 'Combattant masqué';
@@ -256,7 +258,9 @@ export function toPublicCompetition(src: PublicSource): PublicCompetition {
       items: z.passages.flatMap((p): PublicQueueItem[] => {
         const st = states.get(p.categoryId)!;
         const bracket = bracketOf.get(p.categoryId)!;
-        const base = { number: p.number, categoryId: p.categoryId, waveId: p.waveId };
+        // Sur la zone des finales, les finales de la vague passent à la fin de sa file (voir `planPassages`).
+        const finals = z.zoneId === (src.finalsZoneId ?? null) && (p.matchId === 'kata:finale' || (bracket.kind === 'combat' && p.matchId !== null && finalMatchIds(bracket).includes(p.matchId)));
+        const base = { number: p.number, categoryId: p.categoryId, waveId: p.waveId, finals };
         // Bloc de kata, comme dans la file de l'organisation : terminé avec la catégorie (ou le tour 1 noté).
         if (p.matchId === null || p.matchId.startsWith('kata:')) {
           const kataPart = p.matchId === 'kata:tour1' ? ('tour1' as const) : p.matchId === 'kata:finale' ? ('finale' as const) : null;

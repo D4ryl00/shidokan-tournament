@@ -49,3 +49,36 @@ export function zoneViews(pub: PublicCompetition): ZoneView[] {
 export function waitingWaves(pub: PublicCompetition): string[] {
   return pub.waves.filter((w) => !w.launched).map((w) => `${w.name} : numéros au lancement de la session.`);
 }
+
+/**
+ * Session affichée en haut de l'onglet Zones : la première session lancée (dans l'ordre) qui a encore un passage à jouer ;
+ * toutes jouées : la dernière lancée, terminée. Aucune lancée : null.
+ */
+export function currentWave(pub: PublicCompetition): { name: string; done: boolean } | null {
+  const launched = pub.waves.filter((w) => w.launched);
+  if (launched.length === 0) return null;
+  const pending = new Set(pub.queues.flatMap((q) => q.items.filter((i) => i.state !== 'played').map((i) => i.waveId ?? null)));
+  const now = launched.find((w) => pending.has(w.id));
+  return now ? { name: now.name, done: false } : { name: launched[launched.length - 1]!.name, done: true };
+}
+
+/** « Finales de la session 1 » (session « Session 1 »), « Finales de la session Matin », « Finales de la session unique ». */
+export function finalsLabel(waveName: string): string {
+  return `Finales de la session ${waveName.trim().replace(/^session\s+/i, '')}`;
+}
+
+/**
+ * Lignes « Finales de la session … » d'une file (passages restants dans l'ordre) : avant la première finale de chaque
+ * session sur la zone des finales. Clé : l'index du passage dans `items`.
+ */
+export function finalsMarkers(pub: PublicCompetition, items: PublicQueueItem[]): Map<number, string> {
+  const out = new Map<number, string>();
+  const seen = new Set<string | null>();
+  items.forEach((item, i) => {
+    if (!item.finals || seen.has(item.waveId)) return;
+    seen.add(item.waveId);
+    const wave = pub.waves.find((w) => w.id === (item.waveId ?? null));
+    if (wave) out.set(i, finalsLabel(wave.name));
+  });
+  return out;
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toPublicCompetition } from '../../src/domain/public/view.js';
-import { involvesFollowed, sideText, waitingWaves, zoneViews } from '../../src/web/components/public/zoneRows.js';
+import { currentWave, finalsLabel, finalsMarkers, involvesFollowed, sideText, waitingWaves, zoneViews } from '../../src/web/components/public/zoneRows.js';
 import { source } from '../domain/public-fixtures.js';
 
 const pub = toPublicCompetition(source());
@@ -66,5 +66,38 @@ describe('involvesFollowed', () => {
 describe('waitingWaves', () => {
   it('une ligne par session non lancée', () => {
     expect(waitingWaves(pub)).toEqual(['Après-midi : numéros au lancement de la session.']);
+  });
+});
+
+describe('session en cours', () => {
+  it('la première session lancée qui a encore un passage ; toutes jouées : la dernière, terminée ; aucune : rien', () => {
+    expect(currentWave(pub)).toEqual({ name: 'Matin', done: false });
+    const played = structuredClone(pub);
+    played.queues = played.queues.map((q) => ({ ...q, items: q.items.map((i) => ({ ...i, state: 'played' as const })) }));
+    expect(currentWave(played)).toEqual({ name: 'Matin', done: true });
+    const none = structuredClone(pub);
+    none.waves = none.waves.map((w) => ({ ...w, launched: false }));
+    expect(currentWave(none)).toBeNull();
+  });
+});
+
+describe('finales de la session', () => {
+  it('libellé sans répéter « session »', () => {
+    expect(finalsLabel('Session 1')).toBe('Finales de la session 1');
+    expect(finalsLabel('Session unique')).toBe('Finales de la session unique');
+    expect(finalsLabel('Matin')).toBe('Finales de la session Matin');
+  });
+
+  it('une ligne avant la première finale de chaque session, rien sans finale', () => {
+    const base = pub.queues.find((q) => q.zoneId === 'z2')!.items;
+    const own = { ...base[0]!, finals: false };
+    const final = (n: number, waveId: string) => ({ ...base[1]!, number: n, waveId, finals: true });
+    const two = structuredClone(pub);
+    two.waves = [{ id: 'w1', name: 'Session 1', launched: true }, { id: 'w2', name: 'Session 2', launched: true }];
+    expect([...finalsMarkers(two, [own, final(5, 'w1'), final(6, 'w1'), { ...own, number: 7, waveId: 'w2' }, final(8, 'w2')])]).toEqual([
+      [1, 'Finales de la session 1'],
+      [4, 'Finales de la session 2'],
+    ]);
+    expect(finalsMarkers(pub, base).size).toBe(0);
   });
 });

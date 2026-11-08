@@ -1,7 +1,28 @@
 import { searchPublic } from '../../../domain/public/follow.js';
-import type { PublicCategory, PublicCompetition } from '../../../domain/public/types.js';
+import type { FighterLine, PublicCategory, PublicCompetition } from '../../../domain/public/types.js';
 import type { DisciplineId } from '../../../domain/types.js';
+import { DISCIPLINES } from '../../../domain/disciplines.js';
 import type { EntrantInfo } from '../BracketView.js';
+
+/**
+ * Libellé d'une catégorie avec sa discipline, sans la répéter : un libellé de la grille commence déjà par elle
+ * (« Kata · Minimes M »), un tableau libre peut ne pas la contenir (« Coupe des petits » → « Coupe des petits · Kata »).
+ */
+export function categoryText(label: string, discipline: DisciplineId): string {
+  const d = DISCIPLINES[discipline].label;
+  return label.toLocaleLowerCase('fr').startsWith(d.toLocaleLowerCase('fr')) ? label : `${label} · ${d}`;
+}
+
+const placeText = (n: number) => (n === 1 ? '1er' : `${n}e`);
+const scoreText = (n: number) => n.toLocaleString('fr-FR');
+
+/** Ligne de kata d'un combattant suivi : « Tour 1 : 7,85 · 3e · Finale : 8,1 » ; null tant que rien n'est noté. */
+export function kataText(k: NonNullable<FighterLine['kata']>): string | null {
+  const parts: string[] = [];
+  if (k.round1 !== null) parts.push(`Tour 1 : ${scoreText(k.round1)}${k.place !== null ? ` · ${placeText(k.place)}` : ''}`);
+  if (k.final !== null) parts.push(`Finale : ${scoreText(k.final)}`);
+  return parts.length ? parts.join(' · ') : null;
+}
 
 export interface CategoryFilters {
   discipline: DisciplineId | 'all';

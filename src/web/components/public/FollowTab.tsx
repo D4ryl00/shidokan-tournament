@@ -2,10 +2,10 @@ import { Box, Button, Group, Stack, Text, TextInput, UnstyledButton } from '@man
 import { useMemo, useState } from 'react';
 import { fighterTimeline, searchPublic, type FighterLine, type PublicFighter } from '../../../domain/public/follow.js';
 import type { PublicCompetition } from '../../../domain/public/types.js';
-import { disciplineLabel } from '../../labels.js';
 import { followedFighters, type Pins } from '../../publicPins.js';
 import { StatusBadge, type Tone } from '../ui/StatusBadge.js';
 import { EmptyState } from '../ui/EmptyState.js';
+import { categoryText, kataText } from './bracketsModel.js';
 import { sourceText } from './sourceText.js';
 
 const MAX_RESULTS = 20;
@@ -39,7 +39,7 @@ function LineView({ line, pub }: { line: FighterLine; pub: PublicCompetition }) 
   return (
     <Stack gap={4} pt={6} style={{ borderTop: '1px solid var(--sk-line)' }} data-testid="public-follow-line">
       <Group justify="space-between" wrap="nowrap" align="flex-start" gap="xs">
-        <Text size="sm" c="dimmed" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{line.label} · {disciplineLabel(line.discipline)}</Text>
+        <Text size="sm" c="dimmed" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{categoryText(line.label, line.discipline)}</Text>
         <StatusBadge tone={badge.tone} data-testid="public-follow-state">{badge.text}</StatusBadge>
       </Group>
       {line.played.map((p, i) => (
@@ -50,6 +50,7 @@ function LineView({ line, pub }: { line: FighterLine; pub: PublicCompetition }) 
           <StatusBadge tone={p.won ? 'ok' : 'danger'}>{p.won ? 'Gagné' : 'Perdu'}</StatusBadge>
         </Group>
       ))}
+      {line.kata && kataText(line.kata) && <Text size="sm" data-testid="public-follow-kata">{kataText(line.kata)}</Text>}
       {n && (
         <Box data-testid="public-follow-next">
           <Group gap="md" align="baseline" wrap="wrap">
@@ -98,7 +99,7 @@ function ResultRow({ pub, f, followed, pins, onPins }: { pub: PublicCompetition;
       style={{ background: 'var(--sk-card)', border: '1px solid var(--sk-card-line)', borderRadius: 'var(--mantine-radius-md)' }}>
       <Box style={{ minWidth: 0 }}>
         <Text fw={700} style={{ overflowWrap: 'anywhere' }}>{f.name}</Text>
-        <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{[f.club, ...lines.map((l) => `${l.label} · ${disciplineLabel(l.discipline)}`)].filter(Boolean).join(' · ')}</Text>
+        <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{[f.club, ...lines.map((l) => categoryText(l.label, l.discipline))].filter(Boolean).join(' · ')}</Text>
       </Box>
       <StarButton on={pinned || via} locked={via} name={f.name} onClick={toggle} />
     </Group>

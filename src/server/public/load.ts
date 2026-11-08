@@ -5,7 +5,7 @@ import { publicPhase, toPublicCompetition, todayInParis, type PublicCategoryResu
 import type { AppDb } from '../db/client.js';
 import { clubs, competitions, fighters, registrations } from '../db/schema.js';
 import { readCategories } from '../repositories/categories.js';
-import { listCompetitions } from '../repositories/competitions.js';
+import { getCompetition, listCompetitions } from '../repositories/competitions.js';
 import { launchedCategoryIds, launchedWaveKeys } from '../repositories/launch-state.js';
 import { passagePlan } from '../repositories/passages.js';
 import { getResults } from '../repositories/results.js';
@@ -74,6 +74,7 @@ export async function loadPublicSource(db: AppDb, id: string, now: Date): Promis
     lastResultAt: lastResultAt(db, id),
     plan: await passagePlan(db, id, categories),
     launchedCategoryIds: launched,
+    finalsZoneId: (await getCompetition(db, id))?.settings.finalsZoneId ?? null,
   };
 }
 

@@ -1,5 +1,5 @@
 import { resolveBracket } from '../brackets/index.js';
-import { resolveKata } from '../brackets/kata.js';
+import { kataScore, resolveKata } from '../brackets/kata.js';
 import { normalizeName } from '../names.js';
 import type { FighterLine, PublicCategory, PublicCompetition, PublicFighter, PublicQueueItem } from './types.js';
 
@@ -74,6 +74,9 @@ function line(pub: PublicCompetition, c: PublicCategory, rid: string): FighterLi
   const played: FighterLine['played'] = [];
   let candidates: Located[];
   let lost = false;
+  let kata: FighterLine['kata'];
+  /** Kata : tour 1 noté et pas en finale (ni à départager) — plus rien à disputer. */
+  let kataOut = false;
   if (c.bracket.kind === 'combat') {
     const { matches } = resolveBracket(c.bracket, c.results, c.tieBreaks.pools);
     for (const m of [...matches].sort((x, y) => x.order - y.order)) {
@@ -88,8 +91,18 @@ function line(pub: PublicCompetition, c: PublicCategory, rid: string): FighterLi
   } else {
     // Finale de kata : seulement pour un finaliste connu (tour 1 noté, ou deux katakas).
     const scores = c.kataScores ?? { round1: {}, final: {} };
-    const finalists = c.bracket.order.length <= 2 ? c.bracket.order : resolveKata(c.bracket, scores, c.tieBreaks.kata, c.tieBreaks.kataFinal).finalists;
-    candidates = here.filter((l) => l.item.kataPart !== 'finale' || (l.item.state === 'ready' && finalists.includes(rid)));
+    const twoOnly = c.bracket.order.length <= 2;
+    const resolved = twoOnly ? null : resolveKata(c.bracket, scores, c.tieBreaks.kata, c.tieBreaks.kataFinal);
+    const finalists = resolved ? resolved.finalists : c.bracket.order;
+    const ranking = (resolved?.round1Ranking ?? []).filter((r) => !c.absentIds.includes(r.registrationId));
+    const mine = ranking.findIndex((r) => r.registrationId === rid);
+    const round1Score = mine >= 0 ? ranking[mine]!.score : null;
+    const round1Done = !twoOnly && ranking.length > 0 && ranking.every((r) => r.score !== null);
+    const final = scores.final[rid]?.length ? kataScore(scores.final[rid]!) : null;
+    kata = { round1: round1Score, place: round1Done && round1Score !== null ? mine + 1 : null, final };
+    const tied = c.podium.ties.some((t) => t.includes(rid));
+    kataOut = round1Done && !finalists.includes(rid) && !tied;
+    candidates = kataOut ? [] : here.filter((l) => l.item.kataPart !== 'finale' || (l.item.state === 'ready' && finalists.includes(rid)));
   }
   if (c.absentIds.includes(rid)) candidates = [];
   // Un combat jouable d'abord, puis sur la zone de la catégorie (les finales viennent à la fin de la zone des finales).
@@ -119,9 +132,11 @@ function line(pub: PublicCompetition, c: PublicCategory, rid: string): FighterLi
   else if (next) state = 'upcoming';
   else if (c.status === 'finished') state = 'eliminated';
   else if (c.bracket.kind === 'combat' && c.bracket.format === 'single_elimination' && !c.bracket.options.repechage && lost) state = 'eliminated';
+  // Hors de la finale après le tour 1 : bronze (place de podium, la médaille s'affiche dès que le podium la donne) ou plus en lice.
+  else if (kataOut) state = c.bracket.kind === 'kata' && (kata?.place ?? Infinity) <= 2 + c.bracket.bronzeCount ? 'finished' : 'eliminated';
   else if (c.status === 'upcoming') state = 'upcoming';
   else state = 'waiting';
-  return { categoryId: c.id, label: c.label, discipline: c.discipline, next, played, state };
+  return { categoryId: c.id, label: c.label, discipline: c.discipline, next, played, ...(kata ? { kata } : {}), state };
 }
 
 /** Une ligne par catégorie publique du combattant (plusieurs disciplines : plusieurs lignes) ; masqué ou inconnu : aucune. */

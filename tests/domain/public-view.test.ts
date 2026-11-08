@@ -89,12 +89,27 @@ describe('toPublicCompetition', () => {
       [14, 'played'],
       [15, 'ready'],
     ]);
-    expect(z1.find((i) => i.number === 12)).toEqual({ number: 12, categoryId: 'A', matchId: 'w1-0', kataPart: null, a: 'r2', b: 'r3', aFrom: null, bFrom: null, state: 'ready', waveId: 'w1' });
+    expect(z1.find((i) => i.number === 12)).toEqual({ number: 12, categoryId: 'A', matchId: 'w1-0', kataPart: null, a: 'r2', b: 'r3', aFrom: null, bFrom: null, state: 'ready', waveId: 'w1', finals: false });
     const z2 = view.queues.find((q) => q.zoneId === 'z2')!.items;
     expect(z2).toEqual([
-      { number: 1, categoryId: 'B', matchId: null, kataPart: null, a: null, b: null, aFrom: null, bFrom: null, state: 'ready', waveId: 'w1' },
-      { number: 5, categoryId: 'A', matchId: 'w2-0', kataPart: null, a: null, b: 'r1', aFrom: { kind: 'winner', number: 12, zoneId: 'z1' }, bFrom: null, state: 'waiting', waveId: 'w1' },
+      { number: 1, categoryId: 'B', matchId: null, kataPart: null, a: null, b: null, aFrom: null, bFrom: null, state: 'ready', waveId: 'w1', finals: false },
+      { number: 5, categoryId: 'A', matchId: 'w2-0', kataPart: null, a: null, b: 'r1', aFrom: { kind: 'winner', number: 12, zoneId: 'z1' }, bFrom: null, state: 'waiting', waveId: 'w1', finals: false },
     ]);
+  });
+
+  test('finals of the session on the finals zone are flagged (combat finals and kata finals), nowhere else', () => {
+    const base = source();
+    const plan = { ...base.plan, zones: [...base.plan.zones.filter((z) => z.zoneId !== 'z2'), { zoneId: 'z2', passages: [
+      { number: 1, categoryId: 'B', matchId: 'kata:tour1', noRest: false, waveId: 'w1' },
+      { number: 5, categoryId: 'A', matchId: 'w2-0', noRest: false, waveId: 'w1' },
+      { number: 6, categoryId: 'B', matchId: 'kata:finale', noRest: false, waveId: 'w1' },
+    ] }] };
+    const flags = (v: ReturnType<typeof toPublicCompetition>) => v.queues.map((q) => [q.zoneId, q.items.filter((i) => i.finals).map((i) => i.number)]);
+    expect(flags(toPublicCompetition(source({ plan, finalsZoneId: 'z2' })))).toEqual([['z1', []], ['z2', [5, 6]], ['z3', []]]);
+    // Sans zone des finales : rien (la finale d'une catégorie sur une autre zone n'est pas « les finales de la session »).
+    expect(flags(toPublicCompetition(source({ plan, finalsZoneId: null })))).toEqual([['z1', []], ['z2', []], ['z3', []]]);
+    // La zone des finales joue aussi ses propres catégories : seuls les combats pour la 1re place sont des finales.
+    expect(flags(toPublicCompetition(source({ finalsZoneId: 'z3' })))).toEqual([['z1', []], ['z2', []], ['z3', [4]]]);
   });
 
   test('category contents: numbers, zones of moved finals, results, status, podium, medals', () => {

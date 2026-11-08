@@ -1,9 +1,9 @@
 import { Box, Group, Select, Stack, Table, Text, TextInput } from '@mantine/core';
 import { useMemo, useState } from 'react';
 import type { DisciplineId } from '../../../domain/types.js';
-import { finishedPodiums, highlightedRegistrations } from '../../components/public/bracketsModel.js';
+import { categoryText, finishedPodiums, highlightedRegistrations } from '../../components/public/bracketsModel.js';
 import { EmptyState } from '../../components/ui/EmptyState.js';
-import { DISCIPLINE_OPTIONS, disciplineLabel } from '../../labels.js';
+import { DISCIPLINE_OPTIONS } from '../../labels.js';
 import type { PublicTabProps } from './tabProps.js';
 
 const cardStyle = { background: 'var(--sk-card)', border: '1px solid var(--sk-card-line)', borderRadius: 'var(--mantine-radius-md)' } as const;
@@ -24,8 +24,7 @@ export function ResultsTab({ pub, followed }: PublicTabProps) {
         data={[{ value: 'all', label: 'Toutes' }, ...DISCIPLINE_OPTIONS]} data-testid="public-results-discipline" />
       {podiums.length === 0 ? <EmptyState title="Aucun podium pour le moment." data-testid="public-results-empty" /> : podiums.map(({ category: c, lines }) => (
         <Stack key={c.id} gap={2} p="sm" data-testid="public-podium" style={cardStyle}>
-          <Text fw={700} style={{ overflowWrap: 'anywhere' }}>{c.label}</Text>
-          <Text size="xs" c="dimmed">{disciplineLabel(c.discipline)}</Text>
+          <Text fw={700} style={{ overflowWrap: 'anywhere' }}>{categoryText(c.label, c.discipline)}</Text>
           {lines.map((l) => {
             const e = pub.entrants[l.registrationId];
             const on = highlighted.has(l.registrationId);
