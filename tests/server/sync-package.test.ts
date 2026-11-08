@@ -260,3 +260,16 @@ test('tableau arrangé et tableaux libres (vide, non vide) : gardés par l’exp
   );
   expect(b.$client.prepare('select category_id from registrations where id = ?').get(moved)).toEqual({ category_id: 'libre-plein' });
 });
+
+test('historique : exporté puis reçu dans l’ordre d’insertion (celui de la cascade), quel que soit l’index utilisé', async () => {
+  const a = await seeded();
+  const b = await seeded();
+  // Identifiants à rebours de l'ordre d'insertion, et un index qui ferait lire les lignes par identifiant.
+  for (const h of ['h-3', 'h-2', 'h-1']) a.db.$client.exec(`INSERT INTO history_entries (id, competition_id, kind, summary_json) VALUES ('${h}-${a.id}', '${a.id}', 'manual', '{}')`);
+  a.db.$client.exec('CREATE INDEX test_history_by_id ON history_entries (competition_id, id)');
+  const pkg = buildPackage(a.db, a.id, { handOver: false, role: 'local' });
+  expect(pkg.tables.history_entries!.map((r) => r.id)).toEqual(['h-3', 'h-2', 'h-1'].map((h) => `${h}-${a.id}`));
+  await importPackage(b.db, b.dbPath, pkg, null);
+  const received = b.db.$client.prepare('select id from history_entries where competition_id = ? order by rowid').all(a.id) as { id: string }[];
+  expect(received.map((r) => r.id)).toEqual(['h-3', 'h-2', 'h-1'].map((h) => `${h}-${a.id}`));
+});

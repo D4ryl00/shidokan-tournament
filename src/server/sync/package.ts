@@ -87,8 +87,10 @@ const competitionColumn = (table: string) => (table === 'competitions' ? 'id' : 
 export function buildPackage(db: AppDb, competitionId: string, opts: { handOver: boolean; role: InstanceRole }): SyncPackage {
   const me = getInstance(db);
   const tables: SyncPackage['tables'] = {};
+  // Ordre d'insertion explicite : l'import réinsère les lignes dans cet ordre, et l'historique (cascade) comme les réaffectations
+  // (la plus récente d'un combattant) se lisent dans l'ordre du `rowid`.
   for (const t of PACKAGE_TABLES) {
-    tables[t] = db.$client.prepare(`select * from "${t}" where ${competitionColumn(t)} = ?`).all(competitionId) as Record<string, unknown>[];
+    tables[t] = db.$client.prepare(`select * from "${t}" where ${competitionColumn(t)} = ? order by rowid`).all(competitionId) as Record<string, unknown>[];
   }
   tables.competitions = tables.competitions!.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => !OWNER_COLUMNS.includes(k))));
   if (tables.competitions!.length !== 1) throw new PackageError('Compétition introuvable');
