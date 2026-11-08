@@ -299,3 +299,20 @@ test('supprimer : un membre arrivé par un échange renvoie aussi l’autre comb
   expect((await catOf(b.id))!.id).toBe(fromB.id);
   expect((await categories()).some((c) => c.id === free.id)).toBe(false);
 });
+
+test('supprimer : une ligne « Tableau libre » faite quand il était vide part avec, le tableau ne revient pas', async () => {
+  const free = await freeTableau();
+  const patched = await call('PATCH', `/free-tableaux/${free.id}`, { discipline: 'kata', ruleset: null });
+  expect(patched.statusCode).toBe(200);
+  const line = (patched.json() as { historyId: string | null }).historyId!;
+  expect(line).toBeTruthy();
+  const { targets } = (await call('GET', `/free-tableaux/${free.id}/delete-preview`)).json() as { targets: string[] };
+  expect(targets).toEqual([line]);
+  expect((await call('DELETE', `/free-tableaux/${free.id}?expect=${line}`)).statusCode).toBe(200);
+  expect((await categories()).some((c) => c.id === free.id)).toBe(false);
+  // La ligne est partie avec la suppression : l'annuler après coup ne recrée pas le tableau vide.
+  const { entries } = (await call('GET', '/history')).json() as { entries: { id: string; status: string }[] };
+  expect(entries.find((e) => e.id === line)!.status).toBe('undone');
+  expect((await undoEntry(call, line)).statusCode).toBe(409);
+  expect((await categories()).some((c) => c.id === free.id)).toBe(false);
+});

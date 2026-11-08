@@ -6,7 +6,7 @@ import { atomically } from '../db/atomic.js';
 import type { AppDb } from '../db/client.js';
 import { categories, registrations, tieBreaks } from '../db/schema.js';
 import { CategoryLockedError, categoryById, syncCategories, wavePerCategory, type Journaled } from './categories.js';
-import { entryOfRecasement, recorded, undoHistory } from './history.js';
+import { entryOfRecasement, loadEntries, recorded, undoHistory } from './history.js';
 import { launchedCategoryIds } from './launch-state.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
 import { lastValidatedRecasement, loadState } from './replacement.js';
@@ -121,7 +121,11 @@ export async function updateFreeTableau(
   return { ...(await categoryById(db, competitionId, categoryId)), historyId };
 }
 
-/** Entrée de la dernière réaffectation manuelle (`M`) de chaque membre du tableau libre ; erreur si l'un n'y a pas été placé ainsi. */
+/**
+ * Actions à annuler pour supprimer un tableau libre : la dernière réaffectation manuelle (`M`) de chaque membre (erreur si l'un
+ * n'y a pas été placé ainsi), et toute action encore en place qui touche le tableau (discipline, format…, faites même quand il
+ * était vide) : aucune ne pourrait, annulée après coup, le faire revenir.
+ */
 export async function freeTableauDeleteTargets(db: AppDb, competitionId: string, categoryId: string): Promise<string[]> {
   const row = freeRow(db, competitionId, categoryId);
   const members = db
@@ -137,6 +141,7 @@ export async function freeTableauDeleteTargets(db: AppDb, competitionId: string,
     if (!entry) throw new RegistrationValidationError(['Un combattant de ce tableau n’y a pas été placé par un déplacement manuel annulable : suppression refusée.']);
     targets.add(entry);
   }
+  for (const e of loadEntries(db, competitionId)) if (e.active && e.categoryIds.includes(row.id)) targets.add(e.id);
   return [...targets];
 }
 
