@@ -96,7 +96,8 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   // Historique : tiroir à droite ; au-dessus de `lg`, la page se resserre pour lui laisser la place.
   const [historyOpen, setHistoryOpen] = useState(false);
   const wide = useMediaQuery('(min-width: 75em)');
-  const { data: history } = useHistory(id, scope === 'wave' ? waveId : null);
+  // Le compteur du bouton « Historique » : pas sur un poste de Zone (ni bouton ni historique).
+  const { data: history } = useHistory(id, scope === 'wave' ? waveId : null, !readOnlyPoste);
   const historyCount = (history?.entries ?? []).filter((e) => e.status === 'active').length;
 
   const { data: registrations = [] } = useRegistrations(id);

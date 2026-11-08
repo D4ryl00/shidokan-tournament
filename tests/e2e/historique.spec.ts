@@ -110,3 +110,37 @@ test('tiroir de la Liste utilisable, suppression d’un tableau libre avec sa ca
   const hist = (await (await request.get(`/api/competitions/${id}/history`)).json()) as { entries: { status: string }[] };
   expect(hist.entries.map((e) => e.status)).toEqual(['undone', 'undone']);
 });
+
+test('historique illisible : message d’erreur au lieu d’un chargement sans fin, « Réessayer » le recharge', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe journal illisible');
+  await seed(request, id);
+  let failing = true;
+  await page.route(`**/api/competitions/${id}/history**`, (route) =>
+    failing ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Erreur interne du serveur' }) }) : route.continue());
+  await page.goto(`/competitions/${id}/reaffectation`);
+  const error = page.getByTestId('history-error');
+  await expect(error).toContainText('L’historique n’a pas pu être chargé.', { timeout: 15000 });
+  await expect(error).toContainText('Erreur interne du serveur');
+  failing = false;
+  await error.getByRole('button', { name: 'Réessayer' }).click();
+  await expect(page.getByTestId('history-panel').getByTestId('history-entry')).toHaveCount(2);
+  await expect(error).toHaveCount(0);
+});
+
+test('page sans historique (Pesée) : l’historique n’est pas chargé', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe poste sans journal');
+  await seed(request, id);
+  const asked: string[] = [];
+  page.on('request', (r) => { if (r.url().includes(`/api/competitions/${id}/history`)) asked.push(r.url()); });
+  const weighIn = page.waitForResponse((r) => r.url().includes(`/api/competitions/${id}/weigh-in`) && r.request().method() === 'GET');
+  await page.goto(`/competitions/${id}/pesee`);
+  expect((await weighIn).ok()).toBeTruthy();
+  // Un changement des données du jour (autre poste) : toujours rien.
+  await reg(request, id, 'CADD', 'cadet:F:-47');
+  await page.waitForLoadState('networkidle');
+  expect(asked).toEqual([]);
+  // La Réaffectation, elle, le charge.
+  await page.goto(`/competitions/${id}/reaffectation`);
+  await expect(page.getByTestId('history-panel').getByTestId('history-entry')).toHaveCount(2);
+  expect(asked.length).toBeGreaterThan(0);
+});

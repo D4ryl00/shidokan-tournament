@@ -23,9 +23,11 @@ export const useUndoHighlight = () => useContext(Ctx);
 type Pick = { targets: string[]; alsoOnly: boolean };
 
 export function UndoHighlightProvider({ competitionId, children }: { competitionId: string; children: ReactNode }) {
-  const { data } = useHistory(competitionId, null);
   const [hover, setHover] = useState<string[]>([]);
   const [pinned, setPinned] = useState<Pick | null>(null);
+  // Chargé seulement pendant qu'une annulation se prépare (survol, fenêtre ouverte) : les pages sans historique (Zone, Pesée…)
+  // ne le chargent pas, ni à chaque changement.
+  const { data } = useHistory(competitionId, null, (pinned?.targets.length ?? hover.length) > 0);
   const show = useCallback((t: string[]) => setHover(t), []);
   const clear = useCallback(() => setHover([]), []);
   const pin = useCallback((targets: string[], alsoOnly = false) => setPinned({ targets, alsoOnly }), []);

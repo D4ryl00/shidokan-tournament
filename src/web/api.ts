@@ -479,11 +479,15 @@ export const useWithdrawRegistration = (id: string) => useReplacementAction<{ re
 export const useResetReplacement = (id: string) => useReplacementAction<{ waveId?: string; expect: string[] }>(id, 'reset');
 
 export type { HistoryEntryView };
-/** Historique annulable de la session affichée (rechargé avec les données du jour). */
-export function useHistory(id: string, waveId: string | null) {
+/**
+ * Historique annulable de la session affichée (rechargé avec les données du jour). `enabled: false` : seulement ce qui est déjà
+ * en cache (chargé par un panneau ou une fenêtre ouverts), sans le charger ni le recharger.
+ */
+export function useHistory(id: string, waveId: string | null, enabled = true) {
   return useQuery({
     queryKey: ['history', id, waveId],
     queryFn: () => api<{ entries: HistoryEntryView[] }>('GET', `/api/competitions/${id}/history${waveId ? `?waveId=${encodeURIComponent(waveId)}` : ''}`),
+    enabled,
   });
 }
 /** Annule un lot (`ids` et leur cascade) ; `expect` est le lot affiché. Données rechargées aussi en cas d'erreur (lot périmé ou verrouillé). */

@@ -1,9 +1,9 @@
-import { Box, Button, Drawer, Group, Loader, SegmentedControl, Stack, Text } from '@mantine/core';
+import { Alert, Box, Button, Drawer, Group, Loader, SegmentedControl, Stack, Text } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { useState } from 'react';
 import { filterOfKind, type HistoryFilter } from '../../../domain/history/types.js';
 import type { HistoryEntryView } from '../../../domain/history/types.js';
-import { useHistory } from '../../api.js';
+import { ApiError, useHistory } from '../../api.js';
 import { StatusBadge } from '../ui/StatusBadge.js';
 import { alsoText, HistoryEntryCard, useHoverTargets } from './HistoryEntryCard.js';
 import { lotOf, hhmm } from './lot.js';
@@ -54,9 +54,19 @@ function PlanBlock({ items, all, onSee }: { items: HistoryEntryView[]; all: Hist
 }
 
 function HistoryList({ competitionId, waveId, onSee }: { competitionId: string; waveId: string | null; onSee?: (categoryIds: string[]) => void }) {
-  const { data } = useHistory(competitionId, waveId);
+  const { data, error, refetch, isFetching } = useHistory(competitionId, waveId);
   const { data: everything } = useHistory(competitionId, null);
   const [filter, setFilter] = useState<HistoryFilter>('all');
+  if (!data && error) {
+    return (
+      <Alert color="red" title="L’historique n’a pas pu être chargé." data-testid="history-error">
+        <Stack gap="xs" align="flex-start">
+          <Text size="sm">{error instanceof ApiError ? error.message : 'Vérifiez la connexion au serveur.'}</Text>
+          <Button size="compact-sm" variant="light" color="red" loading={isFetching} onClick={() => void refetch()}>Réessayer</Button>
+        </Stack>
+      </Alert>
+    );
+  }
   if (!data) return <Loader size="sm" />;
   const all = everything?.entries ?? data.entries;
   const shown = data.entries.filter((e) => filter === 'all' || filterOfKind(e.kind) === filter);
