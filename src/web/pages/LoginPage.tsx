@@ -1,4 +1,5 @@
-import { Button, Card, Center, Modal, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core';
+import { Anchor, Button, Card, Center, Modal, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core';
+import { Link } from 'react-router';
 import { useState } from 'react';
 import { useLogin } from '../api.js';
 import { useDocumentTitle } from '../documentTitle.js';
@@ -22,7 +23,7 @@ function LoginForm() {
   );
 }
 
-/** Connexion des organisateurs (application en ligne). */
+/** Connexion des organisateurs (application en ligne), avec le retour à l'accueil public. */
 export function LoginPage() {
   useDocumentTitle('Connexion');
   return (
@@ -36,6 +37,8 @@ export function LoginPage() {
         <Card withBorder padding="xl" w="100%">
           <LoginForm />
         </Card>
+        {/* Seulement sans session, donc sur le serveur en ligne, où « / » est l'accueil public. */}
+        <Anchor component={Link} to="/" size="sm" data-testid="login-back-public">← Retour aux compétitions</Anchor>
       </Stack>
     </Center>
   );

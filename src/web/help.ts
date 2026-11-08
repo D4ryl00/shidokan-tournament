@@ -709,6 +709,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Des tableaux hors grille (gala, démonstration…) où l’on place des combattants à la main, avec leur propre session.',
     details: [
       'Un tableau libre a un nom, une discipline et un règlement. Il reste « En attente » tant qu’on ne le met pas dans une session.',
+      'Son nom est affiché tel quel sur la page publique d’une compétition publique : n’y mettez pas le nom d’une personne (un combattant masqué y serait reconnu).',
       'Supprimer un tableau libre renvoie ses combattants dans leur catégorie précédente.',
       'Un tableau lancé ne change plus de nom, de discipline ni de règlement : déverrouillez-le dans l’onglet Tableaux.',
     ],

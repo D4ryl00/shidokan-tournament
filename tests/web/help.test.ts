@@ -129,3 +129,7 @@ test('réglages : la voie Google d’abord, avec l’avertissement de Google ann
   expect(text).toContain('application non validée');
   expect(text).not.toMatch(/OAuth/);
 });
+
+test('tableaux libres : leur nom est public, pas de nom de personne', () => {
+  expect(HELP['grille.libres'].details.flat().join(' ')).toContain('n’y mettez pas le nom d’une personne');
+});
