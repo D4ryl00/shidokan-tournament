@@ -18,12 +18,13 @@ function publicFighters(pub: PublicCompetition): PublicFighter[] {
 }
 
 /**
- * Recherche par nom, prénom ou club, sans accents ni majuscules (au moins 2 caractères) ; chaque mot cherché doit se
- * trouver. Un combattant masqué n'est jamais trouvé, ni compté dans son club.
+ * Recherche par nom, prénom ou club, sans accents ni majuscules (au moins un mot de 2 caractères : les espaces ne
+ * comptent pas, des lettres isolées ne suffisent pas) ; chaque mot cherché doit se trouver. Un combattant masqué n'est
+ * jamais trouvé, ni compté dans son club.
  */
 export function searchPublic(pub: PublicCompetition, q: string): { clubs: { clubId: string; club: string; count: number }[]; fighters: PublicFighter[] } {
   const words = normalizeName(q).split(' ').filter(Boolean);
-  if (words.join(' ').length < 2) return { clubs: [], fighters: [] };
+  if (!words.some((w) => Array.from(w).length >= 2)) return { clubs: [], fighters: [] };
   const matches = (text: string) => {
     const t = normalizeName(text);
     return words.every((w) => t.includes(w));
@@ -108,7 +109,7 @@ function line(pub: PublicCompetition, c: PublicCategory, rid: string): FighterLi
       number: item.number,
       zoneId: best.zoneId,
       before: best.before,
-      opponent: entrant ? { name: entrant.name, club: entrant.club } : from ? { from: { kind: from.kind, number: from.number } } : null,
+      opponent: entrant ? { name: entrant.name, club: entrant.club } : from ? { from: { kind: from.kind, number: from.number, zoneId: from.zoneId } } : null,
     };
   }
   const medal = medalOf(c, rid);

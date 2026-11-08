@@ -44,7 +44,7 @@ test('hashPassword / verifyPassword : bon et mauvais mot de passe ; deux emprein
 test('serveur : toutes les routes /api non publiques répondent 401 sans session', async () => {
   const { app: a } = await serverApp();
   await a.ready();
-  const PUBLIC = [/^\/api\/health$/, /^\/api\/auth\/me$/, /^\/api\/auth\/login$/, /^\/api\/inscription(\/|$)/, /^\/api\/sync\/remote\//];
+  const PUBLIC = [/^\/api\/health$/, /^\/api\/auth\/me$/, /^\/api\/auth\/login$/, /^\/api\/inscription(\/|$)/, /^\/api\/sync\/remote\//, /^\/api\/public\//];
   const list = routes(a).filter((r) => r.url.startsWith('/api/') && r.method !== 'HEAD' && !PUBLIC.some((p) => p.test(r.url)));
   expect(list.length).toBeGreaterThan(40);
   for (const r of list) {

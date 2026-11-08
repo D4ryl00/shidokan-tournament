@@ -31,8 +31,11 @@ export interface PublicEntrant {
   hidden: boolean;
 }
 
-/** Côté d'un combat pas encore connu : « vainqueur du n° 12 » (numéro null : combat d'origine sans numéro). */
-export type SideSource = { kind: 'winner' | 'loser'; number: number | null };
+/**
+ * Côté d'un combat pas encore connu : « vainqueur du n° 12 » (numéro null : combat d'origine sans numéro). Les numéros
+ * sont propres à chaque zone : `zoneId` est la zone du combat d'origine (null : sans numéro).
+ */
+export type SideSource = { kind: 'winner' | 'loser'; number: number | null; zoneId: string | null };
 
 export interface PublicQueueItem {
   number: number;

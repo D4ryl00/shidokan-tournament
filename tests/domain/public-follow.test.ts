@@ -17,6 +17,10 @@ describe('searchPublic', () => {
   test('au moins 2 caractères', () => {
     expect(searchPublic(pub, 'm')).toEqual({ clubs: [], fighters: [] });
     expect(searchPublic(pub, '  é ')).toEqual({ clubs: [], fighters: [] });
+    // Les espaces ne comptent pas : des lettres isolées ne font pas une recherche.
+    expect(searchPublic(pub, 'a b')).toEqual({ clubs: [], fighters: [] });
+    expect(searchPublic(pub, 'l   m')).toEqual({ clubs: [], fighters: [] });
+    expect(names(searchPublic(pub, 'le m'))).toContain('MARTIN Léa');
   });
 
   test('un club, avec le nombre de combattants non masqués', () => {
@@ -51,7 +55,7 @@ describe('fighterTimeline', () => {
       categoryId: 'A',
       label: 'Karaté -45 kg',
       discipline: 'karate',
-      next: { number: 5, zoneId: 'z2', before: 1, opponent: { from: { kind: 'winner', number: 12 } } },
+      next: { number: 5, zoneId: 'z2', before: 1, opponent: { from: { kind: 'winner', number: 12, zoneId: 'z1' } } },
       played: [{ number: 11, opponent: 'FAURE Jade', won: true }],
       state: 'upcoming',
     });

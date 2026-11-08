@@ -1,5 +1,5 @@
 import { resolveBracket, type Bracket, type Entrant, type KataScores, type Match, type MatchResult, type Podium, type ResolvedMatch, type SlotSource } from '../brackets/index.js';
-import type { Category } from '../categories.js';
+import { activeEntrantCount, type Category } from '../categories.js';
 import { finalMatchIds, waveKey, type PassagePlan } from '../passages/index.js';
 import { categoryProgress, medalTable, validResults, type CategoryProgress, type ResultRecord } from '../results.js';
 import type { PublicCategory, PublicCompetition, PublicEntrant, PublicPhase, PublicQueueItem, SideSource } from './types.js';
@@ -143,7 +143,11 @@ export function toPublicCompetition(src: PublicSource): PublicCompetition {
     : [...src.waves].sort((a, b) => a.order - b.order).map((w) => ({ id: w.id, name: w.name, launched: launchedWaves.has(w.id) }));
   const launchedWaveIds = new Set(waves.filter((w) => w.launched).map((w) => waveKey(w.id)));
 
-  const cats = src.categories.filter((c): c is Category & { bracket: Bracket } => !!c.bracket && launchedCats.has(c.id) && launchedWaveIds.has(waveKey(c.waveId)));
+  // À disputer comme pour l'organisation (`playableCategory` : un tableau et au moins 2 combattants), numérotée et dans une
+  // vague actuellement lancée.
+  const cats = src.categories.filter(
+    (c): c is Category & { bracket: Bracket } => !!c.bracket && activeEntrantCount(c) >= 2 && launchedCats.has(c.id) && launchedWaveIds.has(waveKey(c.waveId)),
+  );
   const publicIds = new Set(cats.map((c) => c.id));
 
   // Inscrits des catégories publiques.
@@ -177,7 +181,7 @@ export function toPublicCompetition(src: PublicSource): PublicCompetition {
     .filter((z) => zoneOrder.has(z.zoneId))
     .sort((a, b) => zoneOrder.get(a.zoneId)! - zoneOrder.get(b.zoneId)!)
     .map((z) => ({ zoneId: z.zoneId, passages: z.passages.filter((p) => publicIds.has(p.categoryId)).sort((a, b) => a.number - b.number) }));
-  const numberOf = new Map(planZones.flatMap((z) => z.passages.map((p) => [`${p.categoryId}:${p.matchId ?? 'kata'}`, p.number] as const)));
+  const numberOf = new Map(planZones.flatMap((z) => z.passages.map((p) => [`${p.categoryId}:${p.matchId ?? 'kata'}`, { number: p.number, zoneId: z.zoneId }] as const)));
 
   const empty: PublicCategoryResults = { records: [], kataScores: null, tieBreaks: { pools: {}, kata: [], kataFinal: [] } };
   const states = new Map<string, CategoryState>();
@@ -214,7 +218,8 @@ export function toPublicCompetition(src: PublicSource): PublicCompetition {
         }
       }
     }
-    const status = progress.status === 'finished' ? 'finished' : progress.status === 'started' || res.records.length > 0 ? 'started' : 'upcoming';
+    // Sur les résultats valables seulement : un résultat écarté (ancien tableau) ne fait pas commencer la catégorie.
+    const status = progress.status === 'finished' ? 'finished' : progress.played > 0 ? 'started' : 'upcoming';
     return {
       id: c.id,
       label: c.label,
@@ -240,8 +245,11 @@ export function toPublicCompetition(src: PublicSource): PublicCompetition {
   });
 
   const bracketOf = new Map(cats.map((c) => [c.id, c.bracket]));
-  const from = (categoryId: string, side: SlotSource, known: string | null): SideSource | null =>
-    known === null && (side.kind === 'winner' || side.kind === 'loser') ? { kind: side.kind, number: numberOf.get(`${categoryId}:${side.matchId}`) ?? null } : null;
+  const from = (categoryId: string, side: SlotSource, known: string | null): SideSource | null => {
+    if (known !== null || (side.kind !== 'winner' && side.kind !== 'loser')) return null;
+    const origin = numberOf.get(`${categoryId}:${side.matchId}`);
+    return { kind: side.kind, number: origin?.number ?? null, zoneId: origin?.zoneId ?? null };
+  };
   const queues = planZones
     .map((z) => ({
       zoneId: z.zoneId,

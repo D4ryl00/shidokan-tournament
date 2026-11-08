@@ -93,7 +93,7 @@ describe('toPublicCompetition', () => {
     const z2 = view.queues.find((q) => q.zoneId === 'z2')!.items;
     expect(z2).toEqual([
       { number: 1, categoryId: 'B', matchId: null, kataPart: null, a: null, b: null, aFrom: null, bFrom: null, state: 'ready', waveId: 'w1' },
-      { number: 5, categoryId: 'A', matchId: 'w2-0', kataPart: null, a: null, b: 'r1', aFrom: { kind: 'winner', number: 12 }, bFrom: null, state: 'waiting', waveId: 'w1' },
+      { number: 5, categoryId: 'A', matchId: 'w2-0', kataPart: null, a: null, b: 'r1', aFrom: { kind: 'winner', number: 12, zoneId: 'z1' }, bFrom: null, state: 'waiting', waveId: 'w1' },
     ]);
   });
 
@@ -132,6 +132,25 @@ describe('toPublicCompetition', () => {
     const after = toPublicCompetition(source({ plan, results: { ...base.results, B: { records: [], kataScores: scores, tieBreaks: { pools: {}, kata: [], kataFinal: [] } } } }));
     expect(after.queues.map((q) => q.items.map((i) => [i.number, i.state]))).toEqual([[[3, 'played']], [[9, 'ready']]]);
     expect(after.categories.find((c) => c.id === 'B')).toMatchObject({ status: 'started', kataScores: scores });
+  });
+
+  test('a launched category with fewer than 2 active entrants is not public', () => {
+    const base = source();
+    // Comme `playableCategory` de l'organisation : un tableau et au moins 2 combattants présents.
+    const d = base.categories.find((c) => c.id === 'D')!;
+    const lone = { ...d, status: 'ready' as const, absentIds: ['r21'] };
+    const noBracket = { ...base.categories.find((c) => c.id === 'E')!, status: 'ready' as const, bracket: null };
+    const view = toPublicCompetition(source({ categories: [...base.categories.filter((c) => c.id !== 'D' && c.id !== 'E'), lone, noBracket] }));
+    expect(view.categories.map((c) => c.id).sort()).toEqual(['A', 'B', 'F']);
+    expect(view.queues.flatMap((q) => q.items).some((i) => i.categoryId === 'D' || i.categoryId === 'E')).toBe(false);
+  });
+
+  test('ignored results alone do not start a category', () => {
+    const base = source();
+    // Résultat d'un ancien tableau (inscrits différents) : écarté, la catégorie n'a pas commencé.
+    const stale = { records: [{ matchId: 'w1-0', winner: 'a' as const, method: 'points' as const, entrantA: 'rX', entrantB: 'rY' }], kataScores: null, tieBreaks: { pools: {}, kata: [], kataFinal: [] } };
+    const view = toPublicCompetition(source({ results: { ...base.results, D: stale } }));
+    expect(view.categories.find((c) => c.id === 'D')).toMatchObject({ status: 'upcoming', results: {} });
   });
 
   test('competition without waves: implicit session', () => {

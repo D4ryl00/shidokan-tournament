@@ -37,7 +37,7 @@ const ZONE_WRITES = [
 ].map((r) => r.replace(' ', ' /api/competitions/:id'));
 const DENIED_GETS = ['/invitations', '/invitations/preview', '/invitations/:clubId/links', '/mail-attachments', '/mail-attachments/:attachmentId', '/received-copies', '/export.json'].map((p) => `/api/competitions/:id${p}`);
 const COMMON = ['GET /api/competitions', 'POST /api/auth/logout', 'PUT /api/users/me/password'];
-const PUBLIC = [/^\/api\/health$/, /^\/api\/auth\/me$/, /^\/api\/auth\/login$/, /^\/api\/inscription(\/|$)/, /^\/api\/sync\/remote\//];
+const PUBLIC = [/^\/api\/health$/, /^\/api\/auth\/me$/, /^\/api\/auth\/login$/, /^\/api\/inscription(\/|$)/, /^\/api\/sync\/remote\//, /^\/api\/public\//];
 
 /** Rôle serveur, organisateur ; compétition (Tatami 1 et 2) : -54 et kata sur Tatami 1, -61 sur Tatami 2, lancée ; une autre compétition. */
 async function setup() {
