@@ -56,3 +56,43 @@ test('visibility travels in the sync package', async () => {
   const row = dbB.$client.prepare('select visibility from competitions where id = ?').get(a.id) as { visibility: string };
   expect(row.visibility).toBe('public');
 });
+
+async function withFighter(app: Awaited<ReturnType<typeof appWithCompetition>>['app'], id: string) {
+  const club = (await app.inject({ method: 'POST', url: `/api/competitions/${id}/clubs`, payload: { name: 'Tani Dojo' } })).json();
+  const base = { clubId: club.id, lastName: 'MARTIN', firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', source: 'onsite' };
+  const karate = { ...base, discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54' };
+  const kata = { ...base, discipline: 'kata', ruleset: null, weightClassId: null };
+  const regs = [];
+  for (const payload of [karate, kata]) {
+    const res = await app.inject({ method: 'POST', url: `/api/competitions/${id}/registrations`, payload });
+    expect(res.statusCode).toBe(201);
+    regs.push(res.json().row);
+  }
+  return regs as Array<{ id: string; fighterId: string }>;
+}
+
+test('hide then show a fighter name', async () => {
+  const { app, id } = await appWithCompetition();
+  const regs = await withFighter(app, id);
+  const fighterId = regs[0]!.fighterId;
+  expect(regs[1]!.fighterId).toBe(fighterId);
+  const url = `/api/competitions/${id}/fighters/${fighterId}/public-name`;
+  const flags = async () => ((await app.inject({ method: 'GET', url: `/api/competitions/${id}/registrations` })).json() as Array<{ publicNameHidden: boolean }>).map((r) => r.publicNameHidden);
+  expect(await flags()).toEqual([false, false]);
+  expect((await app.inject({ method: 'PUT', url, payload: { hidden: true } })).statusCode).toBe(204);
+  expect(await flags()).toEqual([true, true]);
+  expect((await app.inject({ method: 'PUT', url, payload: { hidden: false } })).statusCode).toBe(204);
+  expect(await flags()).toEqual([false, false]);
+  await app.close();
+});
+
+test('hiding a fighter of another competition is 404', async () => {
+  const a = await appWithCompetition();
+  const regs = await withFighter(a.app, a.id);
+  const other = (await a.app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Autre', date: '2026-12-06' } })).json() as { id: string };
+  const res = await a.app.inject({ method: 'PUT', url: `/api/competitions/${other.id}/fighters/${regs[0]!.fighterId}/public-name`, payload: { hidden: true } });
+  expect(res.statusCode).toBe(404);
+  const unknown = await a.app.inject({ method: 'PUT', url: `/api/competitions/${a.id}/fighters/inconnu/public-name`, payload: { hidden: true } });
+  expect(unknown.statusCode).toBe(404);
+  await a.app.close();
+});

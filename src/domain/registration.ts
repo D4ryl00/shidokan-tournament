@@ -81,6 +81,8 @@ export interface RegistrationInput {
 export interface RegistrationRow extends Registration {
   fighter: Fighter;
   club: Club | null;
+  /** Nom masqué sur la page publique (propre au combattant, donc le même sur toutes ses inscriptions). */
+  publicNameHidden: boolean;
   /** Révision (inscription et combattant) : protection contre les écrasements entre postes. */
   rev: string;
 }

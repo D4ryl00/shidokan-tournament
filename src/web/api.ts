@@ -182,6 +182,15 @@ export function useDeleteRegistration(id: string) {
   });
 }
 
+/** Masque ou réaffiche le nom d'un combattant sur la page publique (toutes ses inscriptions). */
+export function useSetPublicNameHidden(id: string) {
+  const invalidate = useInvalidateRegistrations(id);
+  return useMutation({
+    mutationFn: ({ fighterId, hidden }: { fighterId: string; hidden: boolean }) => api<void>('PUT', `/api/competitions/${id}/fighters/${fighterId}/public-name`, { hidden }),
+    onSuccess: invalidate,
+  });
+}
+
 async function upload<T>(url: string, file: File): Promise<T> {
   const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: await file.arrayBuffer() });
   if (!res.ok) {

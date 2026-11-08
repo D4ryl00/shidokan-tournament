@@ -27,6 +27,7 @@ const TABLE_WRITES = new Set([
     'PUT /replacement/rules', 'POST /replacement/rules/reset', 'POST /replacement/reset',
     'PATCH /categories/:cid', 'POST /categories/:cid/redraw', 'POST /categories/:cid/swap', 'POST /categories/:cid/move', 'POST /categories/:cid/move/preview', 'POST /categories/:cid/regenerate',
     'POST /launch', 'POST /launch/reopen', 'POST /launch/number', 'POST /launch/number/preview',
+    'PUT /fighters/:fighterId/public-name',
   ].map((r) => r.replace(' ', ` ${C}`)),
   ...ZONE_WRITES,
 ]);

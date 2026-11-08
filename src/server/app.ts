@@ -69,6 +69,7 @@ import { sweepAttachmentFiles } from './repositories/mail-attachments.js';
 import { startRetention } from './repositories/retention.js';
 import { ffkImportRoutes } from './routes/ffk-import.js';
 import { registrationRoutes } from './routes/registrations.js';
+import { fighterRoutes } from './routes/fighters.js';
 import { UnreadableFileError } from './spreadsheet/read.js';
 import { APP_VERSION } from './version.js';
 
@@ -238,6 +239,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   });
 
   await app.register(registrationRoutes, { db });
+  await app.register(fighterRoutes, { db });
   await app.register(ffkImportRoutes, { db });
   await app.register(categoryRoutes, { db });
   await app.register(freeTableauRoutes, { db });

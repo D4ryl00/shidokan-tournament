@@ -263,6 +263,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Le crayon modifie une inscription, la croix la supprime (impossible si sa catégorie a déjà commencé).',
         'Une inscription sur place le jour J se saisit ici, avec la case « Inscription sur place ».',
         'Club : choisissez-le dans la liste (clubs de la compétition et de l’annuaire) ou laissez vide. Un club absent de la liste s’ajoute avec l’option « Ajouter le club « … » », proposée quand le nom tapé n’y est pas.',
+        'En modification, « Masquer le nom sur la page publique » remplace le nom du combattant par « Combattant masqué » pour le public (son club reste affiché). Le réglage vaut pour toutes ses lignes et s’applique tout de suite ; un badge « nom masqué en ligne » le rappelle dans la liste.',
       ],
       'La colonne « Origine » indique d’où vient la ligne : fiche club, export FFK ou saisie.',
     ],

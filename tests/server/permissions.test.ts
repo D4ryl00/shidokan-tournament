@@ -28,6 +28,7 @@ const TABLE_WRITES = [
   'PUT /replacement/rules', 'POST /replacement/rules/reset', 'POST /replacement/reset',
   'PATCH /categories/:cid', 'POST /categories/:cid/redraw', 'POST /categories/:cid/swap', 'POST /categories/:cid/move', 'POST /categories/:cid/move/preview', 'POST /categories/:cid/regenerate',
   'POST /launch', 'POST /launch/reopen', 'POST /launch/number', 'POST /launch/number/preview',
+  'PUT /fighters/:fighterId/public-name',
   'PUT /categories/:cid/results/:matchId', 'DELETE /categories/:cid/results/:matchId', 'PUT /categories/:cid/kata/:rid/:round', 'PUT /categories/:cid/tie-break',
 ].map((r) => r.replace(' ', ' /api/competitions/:id'));
 /** Écritures d'un compte Zone, sur sa zone. */

@@ -81,7 +81,7 @@ export function RegistrationsPage() {
           <Table.Tbody>
             {filtered.map((r) => (
               <Table.Tr key={r.id} data-testid="registration-row">
-                <Table.Td style={{ whiteSpace: 'nowrap' }}><Text span fw={600} size="sm">{r.fighter.lastName}</Text> <Text span size="sm">{r.fighter.firstName}</Text></Table.Td>
+                <Table.Td style={{ whiteSpace: 'nowrap' }}><Text span fw={600} size="sm">{r.fighter.lastName}</Text> <Text span size="sm">{r.fighter.firstName}</Text>{r.publicNameHidden && <> <StatusBadge tone="neutral" data-testid="registration-name-hidden-badge" title="Son nom est remplacé par « Combattant masqué » sur la page publique">nom masqué en ligne</StatusBadge></>}</Table.Td>
                 <Table.Td><Text size="sm" miw={120} maw={220}>{r.club?.name ?? '—'}</Text></Table.Td>
                 <Table.Td>{r.fighter.sex}</Table.Td>
                 <Table.Td style={{ whiteSpace: 'nowrap' }}>{ageBandLabel(grid, r.fighter.ageBandCode)}</Table.Td>
