@@ -1,10 +1,12 @@
 import { Alert, Anchor, Box, Group, Loader, Stack, Text, Title } from '@mantine/core';
+import { useMemo } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { PublicHeader } from '../../components/public/PublicHeader.js';
 import { EmptyState } from '../../components/ui/EmptyState.js';
 import { useDocumentTitle } from '../../documentTitle.js';
 import { isGone, usePublicCompetition } from '../../publicApi.js';
 import { usePublicEvents } from '../../publicLive.js';
+import { followedFighters, usePins } from '../../publicPins.js';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert.js';
 import { BracketsTab } from './BracketsTab.js';
 import { FollowedTab } from './FollowedTab.js';
@@ -22,8 +24,6 @@ const TABS: { name: PublicTabName; label: string; Component: (p: PublicTabProps)
   { name: 'resultats', label: 'Résultats', Component: ResultsTab },
 ];
 
-/** Suivis : aucun pour l'instant (Task 6). */
-const NO_FOLLOWED = new Set<string>();
 const hhmm = (d: Date) => d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 
 /** Page publique d'une compétition : en-tête, puis un onglet (`?onglet=`, « suivis » par défaut ; compétition passée : tableaux et résultats). */
@@ -32,6 +32,7 @@ export function PublicCompetitionPage() {
   const { data, isLoading, error, dataUpdatedAt } = usePublicCompetition(id);
   const { connected, lastUpdate } = usePublicEvents(id);
   const [search] = useSearchParams();
+  const [pins, setPins] = usePins(id);
   const gone = isGone(data);
   useDocumentTitle(data && !gone ? data.name : undefined);
 
@@ -40,6 +41,7 @@ export function PublicCompetitionPage() {
   const requested = search.get('onglet');
   const active = tabs.find((t) => t.name === requested) ?? tabs[0]!;
   const updated = lastUpdate ?? (dataUpdatedAt ? new Date(dataUpdatedAt) : null);
+  const followed = useMemo(() => new Set(pub ? followedFighters(pub, pins) : []), [pub, pins]);
   const launched = !!pub?.waves.some((w) => w.launched);
 
   return (
@@ -74,7 +76,7 @@ export function PublicCompetitionPage() {
               ))}
             </nav>
             {!launched && pub.phase !== 'past' && <Text size="sm" c="dimmed" data-testid="public-not-launched">Numéros et horaires au lancement de la session.</Text>}
-            <active.Component pub={pub} followed={NO_FOLLOWED} />
+            <active.Component pub={pub} followed={followed} pins={pins} onPins={setPins} />
           </>
         )}
       </Stack>

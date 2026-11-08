@@ -1,7 +1,7 @@
-import { Text } from '@mantine/core';
+import { FollowTab } from '../../components/public/FollowTab.js';
 import type { PublicTabProps } from './tabProps.js';
 
-/** Onglet « Suivis » : emplacement, rempli plus tard (Task 6). */
-export function FollowedTab(_props: PublicTabProps) {
-  return <Text c="dimmed" size="sm" data-testid="tab-FollowedTab">Suivis : bientôt disponible.</Text>;
+/** Onglet « Suivis » de la page publique. */
+export function FollowedTab(props: PublicTabProps) {
+  return <FollowTab {...props} />;
 }

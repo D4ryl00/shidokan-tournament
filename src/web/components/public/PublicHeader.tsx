@@ -11,13 +11,12 @@ export function PublicHeader() {
       <UnstyledButton component={Link} to="/public" aria-label="Shidokan France — compétitions" style={{ minWidth: 0 }}>
         <Group gap="xs" wrap="nowrap">
           <Logo size={32} />
-          <Text fw={800} size="lg" className="sk-ellipsis" style={{ letterSpacing: '-0.01em' }}>Shidokan France</Text>
+          <Text fw={800} size="lg" className="sk-ellipsis" visibleFrom="xs" style={{ letterSpacing: '-0.01em' }}>Shidokan France</Text>
         </Group>
       </UnstyledButton>
       <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
         <Button component={Link} to="/connexion" size="compact-md" data-testid="organiser-login">
-          <Text span visibleFrom="xs" inherit>Connexion organisateurs</Text>
-          <Text span hiddenFrom="xs" inherit>Connexion</Text>
+          Connexion organisateurs
         </Button>
         <ThemeToggle />
       </Group>
