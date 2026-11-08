@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { PublicCompetition, PublicCompetitionSummary } from '../domain/public/types.js';
 import { api, ApiError } from './api.js';
+import { publicRetry, publicRetryDelay } from './publicStatus.js';
 
 /** Réponse de la liste publique : trois blocs. */
 export interface PublicList {
@@ -15,7 +16,7 @@ export const isGone = (r: PublicCompetitionResult | undefined): r is { gone: tru
 
 /** Liste des compétitions affichées (sans compte). */
 export const usePublicList = () =>
-  useQuery({ queryKey: ['public', 'list'], queryFn: () => api<PublicList>('GET', '/api/public/competitions') });
+  useQuery({ queryKey: ['public', 'list'], queryFn: () => api<PublicList>('GET', '/api/public/competitions'), retry: publicRetry, retryDelay: publicRetryDelay });
 
 /** Vue publique d'une compétition ; le navigateur gère l'ETag (304) tout seul. */
 export const usePublicCompetition = (id: string) =>
@@ -29,4 +30,7 @@ export const usePublicCompetition = (id: string) =>
         throw e;
       }
     },
+    // Réseau coupé (téléphone dans la salle) : réessayé sans fin ; les données déjà à l'écran restent.
+    retry: publicRetry,
+    retryDelay: publicRetryDelay,
   });

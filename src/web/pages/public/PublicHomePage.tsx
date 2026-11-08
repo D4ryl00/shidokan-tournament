@@ -5,7 +5,7 @@ import { PublicHeader } from '../../components/public/PublicHeader.js';
 import { EmptyState } from '../../components/ui/EmptyState.js';
 import { useDocumentTitle } from '../../documentTitle.js';
 import { usePublicList } from '../../publicApi.js';
-import { ApiErrorAlert } from '../../components/ApiErrorAlert.js';
+import { PublicError } from '../../components/public/PublicError.js';
 
 export const frDate = (iso: string, short = false) =>
   new Date(`${iso}T12:00:00`).toLocaleDateString('fr-FR', short ? { day: 'numeric', month: 'short', year: 'numeric' } : { day: 'numeric', month: 'long', year: 'numeric' });
@@ -30,15 +30,15 @@ const place = (c: PublicCompetitionSummary) => [frDate(c.date), c.location].filt
 /** Accueil public : les compétitions du jour, à venir et passées, sans compte. */
 export function PublicHomePage() {
   useDocumentTitle('Compétitions');
-  const { data, isLoading, error } = usePublicList();
+  const { data, isLoading, error, failureReason } = usePublicList();
   const empty = !!data && data.today.length + data.upcoming.length + data.past.length === 0;
   return (
     <Box mih="100vh" style={{ background: 'var(--sk-bg)' }}>
       <PublicHeader />
       <Stack gap="lg" p="md" maw={720} mx="auto">
         <Title order={1} fz="h3">Compétitions</Title>
-        {isLoading && <Group justify="center" py="xl"><Loader /></Group>}
-        <ApiErrorAlert error={error} />
+        {isLoading && !failureReason && <Group justify="center" py="xl"><Loader /></Group>}
+        <PublicError error={error ?? failureReason} hasData={!!data} />
         {empty && <EmptyState title="Aucune compétition affichée pour le moment." data-testid="public-empty" />}
         {data && (
           <>
@@ -59,7 +59,7 @@ export function PublicHomePage() {
                 <Stack gap={2}>
                   <Text fw={700}>{c.name}</Text>
                   <Text size="sm" c="dimmed">{place(c)}</Text>
-                  <Text size="sm" c="dimmed">Les tableaux seront affichés le jour J.</Text>
+                  <Text size="sm" c="dimmed">Numéros et horaires au lancement de la session.</Text>
                 </Stack>
               )}
             </Block>

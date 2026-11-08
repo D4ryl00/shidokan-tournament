@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { isGone, type PublicCompetitionResult } from './publicApi.js';
+import { received, type Received } from './publicStatus.js';
 
 /**
  * Page publique mise à jour toute seule : le serveur prévient quand la compétition change, et les données `['public', …]` sont
@@ -9,10 +10,9 @@ import { isGone, type PublicCompetitionResult } from './publicApi.js';
  * - Flux en erreur sans reprise du navigateur : reconnexion après une attente croissante, puis relecture.
  * - Onglet caché : flux fermé ; rouvert, avec relecture, quand il revient.
  */
-export function usePublicEvents(competitionId: string): { connected: boolean; lastUpdate: Date | null } {
+export function usePublicEvents(competitionId: string): boolean {
   const qc = useQueryClient();
   const [connected, setConnected] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   useEffect(() => {
     if (!competitionId || typeof EventSource === 'undefined') return;
     let source: EventSource | null = null;
@@ -33,7 +33,6 @@ export function usePublicEvents(competitionId: string): { connected: boolean; la
         if (stopped) return;
         void qc.invalidateQueries({ queryKey: ['public'] }).then(() => {
           if (stopped) return;
-          setLastUpdate(new Date());
           if (isGone(qc.getQueryData<PublicCompetitionResult>(['public', competitionId]))) {
             stopped = true;
             close();
@@ -75,5 +74,15 @@ export function usePublicEvents(competitionId: string): { connected: boolean; la
       if (timer) clearTimeout(timer);
     };
   }, [competitionId, qc]);
-  return { connected, lastUpdate };
+  return connected;
+}
+
+/**
+ * « mis à jour à HH:MM » : l'heure où des données nouvelles sont arrivées. Une relecture qui ne rapporte rien de neuf (304,
+ * reconnexion, téléphone déverrouillé) ne la change pas : un serveur resté sur d'anciennes données le montre.
+ */
+export function useReceivedAt<T>(data: T | undefined): Date | null {
+  const ref = useRef<Received<T> | null>(null);
+  ref.current = received(ref.current, data, new Date());
+  return ref.current?.at ?? null;
 }
