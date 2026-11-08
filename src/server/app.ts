@@ -101,6 +101,15 @@ export interface AppOptions {
 
 const NOT_FOUND = { error: 'Compétition introuvable' };
 
+/**
+ * Adresses à ne pas indexer : les réponses `/api/public/*`, la page publique (`/public…`) et, sur le serveur en ligne, `/`
+ * (l'accueil public tant qu'aucun organisateur n'est connecté, ce que voit un robot).
+ */
+export function isNoIndexPath(url: string, role: InstanceRole): boolean {
+  const p = url.split('?')[0]!;
+  return p.startsWith('/api/public/') || p === '/public' || p.startsWith('/public/') || (role === 'serveur' && (p === '/' || p === '/index.html'));
+}
+
 export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   const role = opts.role ?? 'local';
   const clubServices = opts.clubServices ?? role === 'serveur';
@@ -112,6 +121,10 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   sweepAttachmentFiles(db, opts.dbPath);
   // Avant tout autre contrôle : sur un PC, le refus l'emporte sur la connexion, la main ailleurs et la compétition inconnue.
   if (!clubServices) registerClubServicesRefusal(app);
+  // Pages et réponses publiques hors des moteurs de recherche (noms complets d'enfants) ; posé sur la réponse brute, flux compris.
+  app.addHook('onRequest', async (req, reply) => {
+    if (isNoIndexPath(req.url, role)) reply.raw.setHeader('X-Robots-Tag', 'noindex, nofollow');
+  });
   registerGuard(app, db, role);
   registerPermissions(app, db, role);
   registerReadOnlyGuard(app, db, role);

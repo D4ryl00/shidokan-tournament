@@ -308,8 +308,14 @@ function toCategory(row: Row, ctx: Context): Category {
   };
 }
 
+/** Catégories à jour : synchronisées avec les inscriptions (écriture si besoin), puis lues. */
 export async function listCategories(db: AppDb, competitionId: string): Promise<Category[]> {
   await syncCategories(db, competitionId);
+  return readCategories(db, competitionId);
+}
+
+/** Catégories telles qu'enregistrées, sans synchronisation : lecture seule (page publique, sans session). */
+export async function readCategories(db: AppDb, competitionId: string): Promise<Category[]> {
   const grid = await getGrid(db, competitionId);
   const ctx = await loadContext(db, competitionId);
   return db

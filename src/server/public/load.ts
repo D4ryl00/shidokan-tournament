@@ -4,7 +4,7 @@ import type { PublicCompetition, PublicCompetitionSummary } from '../../domain/p
 import { publicPhase, toPublicCompetition, todayInParis, type PublicCategoryResults, type PublicSource } from '../../domain/public/view.js';
 import type { AppDb } from '../db/client.js';
 import { clubs, competitions, fighters, registrations } from '../db/schema.js';
-import { listCategories } from '../repositories/categories.js';
+import { readCategories } from '../repositories/categories.js';
 import { listCompetitions } from '../repositories/competitions.js';
 import { launchedCategoryIds, launchedWaveKeys } from '../repositories/launch-state.js';
 import { passagePlan } from '../repositories/passages.js';
@@ -37,7 +37,8 @@ function lastResultAt(db: AppDb, competitionId: string): Record<string, string> 
 
 /**
  * Données d'une compétition publique, lues champ par champ pour la vue publique ; null si elle est inconnue ou privée.
- * Seules les catégories numérotées dans une vague lancée ont leurs résultats chargés.
+ * Seules les catégories numérotées dans une vague lancée ont leurs résultats chargés. Rien n'est écrit (pas de
+ * synchronisation des catégories) : une lecture publique ne change pas l'empreinte de la compétition.
  */
 export async function loadPublicSource(db: AppDb, id: string, now: Date): Promise<PublicSource | null> {
   const competition = db
@@ -46,7 +47,8 @@ export async function loadPublicSource(db: AppDb, id: string, now: Date): Promis
     .where(eq(competitions.id, id))
     .get();
   if (!competition || competition.visibility !== 'public') return null;
-  const categories = await listCategories(db, id);
+  // Lecture seule : aucune écriture sans session (les catégories d'une vague lancée sont figées de toute façon).
+  const categories = await readCategories(db, id);
   const launched = launchedCategoryIds(db, id);
   const results: Record<string, PublicCategoryResults> = {};
   for (const c of categories) {

@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, expect, test } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
@@ -6,8 +8,10 @@ import { closeDb, openDb } from '../../src/server/db/client.js';
 import { todayInParis } from '../../src/domain/public/view.js';
 import { competitionChanged, everythingChanged } from '../../src/server/events.js';
 import { forgetPublicCache, publicCompetition, publicList } from '../../src/server/public/cache.js';
+import { createRegistration } from '../../src/server/repositories/registrations.js';
+import { competitionFingerprint } from '../../src/server/sync/package.js';
 import type { PublicCompetition, PublicCompetitionSummary } from '../../src/domain/public/types.js';
-import { tmpDbPath } from '../helpers/tmp-db.js';
+import { tmpDbPath, tmpDir } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance | null = null;
 afterEach(async () => {
@@ -201,15 +205,50 @@ test('public routes need no session', async () => {
   }
 });
 
+test('public pages and responses are not indexed (X-Robots-Tag)', async () => {
+  const { a, visit, pub, id, launch } = await setup();
+  await launch();
+  const first = await visit(pub);
+  const notModified = await visit(pub, { 'if-none-match': String(first.headers.etag) });
+  expect(notModified.statusCode).toBe(304);
+  for (const res of [first, notModified, await visit('/api/public/competitions'), await visit('/api/public/competitions/inconnu')]) {
+    expect(res.headers['x-robots-tag']).toBe('noindex, nofollow');
+  }
+  expect((await openEvents(`/api/public/competitions/${id}/events`)).robots).toBe('noindex, nofollow');
+  // Les routes des organisateurs ne sont pas concernées.
+  expect((await a.inject({ method: 'GET', url: '/api/competitions' })).headers['x-robots-tag']).toBeUndefined();
+});
+
+test('the SPA page is not indexed on /public… and, on the server, on / (public home)', async () => {
+  const dist = tmpDir('sk-dist-');
+  fs.writeFileSync(path.join(dist, 'index.html'), '<!doctype html><title>Shidokan</title>');
+  const html = async (role: 'serveur' | 'local', url: string) => {
+    const one = await buildApp({ dbPath: tmpDbPath(), role, webDistDir: dist });
+    try {
+      const res = await one.inject({ method: 'GET', url });
+      expect(res.statusCode, url).toBe(200);
+      expect(res.body, url).toContain('Shidokan');
+      return res.headers['x-robots-tag'];
+    } finally {
+      await one.close();
+    }
+  };
+  for (const url of ['/', '/public', '/public/abc', '/public/abc?onglet=zones']) expect(await html('serveur', url), url).toBe('noindex, nofollow');
+  expect(await html('local', '/public/abc')).toBe('noindex, nofollow');
+  expect(await html('serveur', '/connexion')).toBeUndefined();
+  expect(await html('serveur', '/competitions/abc/reglages')).toBeUndefined();
+  expect(await html('local', '/')).toBeUndefined();
+});
+
 /** Ouvre le flux public sur un vrai port et lit le statut (le flux reste ouvert : il est coupé aussitôt). */
-async function openEvents(path: string): Promise<{ statusCode: number; contentType: string | null }> {
+async function openEvents(path: string): Promise<{ statusCode: number; contentType: string | null; robots: string | null }> {
   const a = app!;
   if (!a.server.listening) await a.listen({ port: 0, host: '127.0.0.1' });
   const port = (a.server.address() as { port: number }).port;
   const controller = new AbortController();
   const res = await fetch(`http://127.0.0.1:${port}${path}`, { signal: controller.signal });
   controller.abort();
-  return { statusCode: res.status, contentType: res.headers.get('content-type') };
+  return { statusCode: res.status, contentType: res.headers.get('content-type'), robots: res.headers.get('x-robots-tag') };
 }
 
 test('public event stream: change without origin', async () => {
@@ -265,6 +304,27 @@ test('cached until a change on the bus, whatever its source (package import, res
     competitionChanged(id);
     expect((await visit(pub)).json()).toMatchObject({ location: 'Annecy' });
     expect((await visit('/api/public/competitions')).body).toContain('Annecy');
+  } finally {
+    closeDb(db);
+  }
+});
+
+test('a public read writes nothing: categories left unsynced stay as they are (rescue fingerprint unchanged)', async () => {
+  const { visit, orga, pub, base, launch, dbPath, id } = await setup();
+  await launch();
+  const db = openDb(dbPath);
+  try {
+    // Inscription écrite hors des routes : les catégories ne sont pas resynchronisées (comme après une pesée juste avant une coupure).
+    const club = ((await orga('GET', `${base}/clubs`)).json() as { id: string }[])[0]!.id;
+    await createRegistration(db, id, {
+      clubId: club, lastName: 'TARDIF', firstName: 'Zoé', sex: 'M', ageBandCode: 'cadet', discipline: 'kata', ruleset: null, weightClassId: null, source: 'manual',
+    });
+    const categoryCount = () => (db.$client.prepare('select count(*) as n from categories where competition_id = ?').get(id) as { n: number }).n;
+    const before = { fingerprint: competitionFingerprint(db, id), categories: categoryCount() };
+    competitionChanged(id);
+    expect((await visit(pub)).statusCode).toBe(200);
+    expect((await visit('/api/public/competitions')).statusCode).toBe(200);
+    expect({ fingerprint: competitionFingerprint(db, id), categories: categoryCount() }).toEqual(before);
   } finally {
     closeDb(db);
   }
