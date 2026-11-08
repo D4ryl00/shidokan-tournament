@@ -23,3 +23,15 @@
 @media (max-width: 359.98px) {
   .sk-brand-name { display: none; }
 }
+
+/* Pages publiques (mode spectateur) : barre d'onglets en bas sur téléphone, en haut au-delà de 768 px. */
+.sk-pub-tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; background: var(--sk-bar); border-top: 1px solid var(--sk-line); padding-bottom: env(safe-area-inset-bottom); }
+.sk-pub-tab { flex: 1; text-align: center; padding: 12px 4px; font-size: 13px; font-weight: 600; color: var(--sk-muted); text-decoration: none; border-top: 3px solid transparent; min-width: 0; }
+.sk-pub-tab[aria-current="page"] { color: var(--sk-accent); border-top-color: var(--sk-accent); }
+.sk-pub-body { padding-bottom: 80px; }
+@media (min-width: 768px) {
+  .sk-pub-tabs { position: static; border-top: 0; border-bottom: 1px solid var(--sk-line); background: transparent; padding-bottom: 0; }
+  .sk-pub-tab { flex: 0 0 auto; padding: 10px 18px; border-top: 0; border-bottom: 3px solid transparent; margin-bottom: -1px; }
+  .sk-pub-tab[aria-current="page"] { border-bottom-color: var(--sk-accent); }
+  .sk-pub-body { padding-bottom: 0; }
+}

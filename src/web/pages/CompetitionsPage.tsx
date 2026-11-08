@@ -43,6 +43,7 @@ export function CompetitionsPage() {
 
   const actions = organiser && (
     <>
+      <Button component={Link} to="/public" variant="default" data-testid="public-page-link">Voir la page publique</Button>
       <ServerCompetitionsButton />
       <ImportCompetitionButton />
       <Button data-testid="new-competition" onClick={() => setOpen(true)}>Nouvelle compétition</Button>
