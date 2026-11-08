@@ -1,9 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, expect, test } from 'vitest';
-import { CONTACTS_SCOPE, DEFAULT_APP_SETTINGS, hasContactsScope } from '../../src/domain/app-settings.js';
+import { CONTACTS_SCOPE, DEFAULT_APP_SETTINGS, hasContactsScope, PREVIOUS_DEFAULT_PRIVACY_NOTICES } from '../../src/domain/app-settings.js';
 import { rulesView } from '../../src/domain/replacement/rules.js';
 import { defaultSettings } from '../../src/domain/settings.js';
 import { openDb, closeDb } from '../../src/server/db/client.js';
+import { appSettings } from '../../src/server/db/schema.js';
 import { getAppSettings } from '../../src/server/repositories/app-settings.js';
 import { buildApp } from '../../src/server/app.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
@@ -22,7 +23,7 @@ test('valeurs par défaut (textes exacts)', async () => {
   const s = await get();
   expect(s).toMatchObject({ smtp: null, privacyContact: '', retentionMonths: 13, directoryInactiveYears: 3 });
   expect(s.privacyNotice).toBe(
-    'Les informations saisies sur cette page sont traitées par Shidokan France pour organiser la compétition (inscriptions, catégories, tableaux). Le poids, le grade et les coordonnées du coach sont effacés 13 mois après la compétition ; les résultats (nom, club, catégorie, classement) sont conservés comme archive sportive. Pour toute question, ou pour exercer vos droits sur ces données : {contact}.',
+    'Les informations saisies sur cette page sont traitées par Shidokan France pour organiser la compétition (inscriptions, catégories, tableaux). Le poids, le grade et les coordonnées du coach sont effacés 13 mois après la compétition ; les résultats (nom, club, catégorie, classement) sont conservés comme archive sportive. Les tableaux et les résultats (nom, prénom, club, catégorie, résultats des combats) sont publiés sur le site des compétitions ; l’organisateur masque le nom d’un combattant sur simple demande. Pour toute question, ou pour exercer vos droits sur ces données : {contact}.',
   );
   expect(s.invitationMail.subject).toBe('Inscriptions — {competition}');
   expect(s.invitationMail.body).toBe(DEFAULT_APP_SETTINGS.invitationMail.body);
@@ -155,4 +156,15 @@ test('message d’une compétition : remplacé en entier, filtré tel qu’il se
   expect((await patchMail(rich)).statusCode).toBe(200);
   expect((await app.inject({ method: 'PATCH', url, payload: { settings: { repechage: true } } })).statusCode).toBe(200);
   expect(await stored()).toEqual(rich);
+});
+
+test('old default privacy notice is replaced, a custom one is kept', async () => {
+  const db = openDb(tmpDbPath());
+  const store = (text: string) => db.insert(appSettings).values({ key: 'privacyNotice', valueJson: JSON.stringify(text) }).onConflictDoUpdate({ target: appSettings.key, set: { valueJson: JSON.stringify(text) } }).run();
+  store(PREVIOUS_DEFAULT_PRIVACY_NOTICES[0]!);
+  expect(getAppSettings(db).privacyNotice).toBe(DEFAULT_APP_SETTINGS.privacyNotice);
+  expect(DEFAULT_APP_SETTINGS.privacyNotice).toContain('publiés');
+  store('Ma mention : {contact}.');
+  expect(getAppSettings(db).privacyNotice).toBe('Ma mention : {contact}.');
+  closeDb(db);
 });

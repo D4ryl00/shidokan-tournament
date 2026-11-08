@@ -99,13 +99,21 @@ const PREVIOUS_DEFAULT_INVITATION_MAILS: MailTemplate[] = [
 export const currentInvitationMail = (t: MailTemplate): MailTemplate =>
   PREVIOUS_DEFAULT_INVITATION_MAILS.some((p) => p.subject === t.subject && p.body === t.body) ? DEFAULT_INVITATION_MAIL : t;
 
+const DEFAULT_PRIVACY_NOTICE =
+  'Les informations saisies sur cette page sont traitées par Shidokan France pour organiser la compétition (inscriptions, catégories, tableaux). Le poids, le grade et les coordonnées du coach sont effacés 13 mois après la compétition ; les résultats (nom, club, catégorie, classement) sont conservés comme archive sportive. Les tableaux et les résultats (nom, prénom, club, catégorie, résultats des combats) sont publiés sur le site des compétitions ; l’organisateur masque le nom d’un combattant sur simple demande. Pour toute question, ou pour exercer vos droits sur ces données : {contact}.';
+
+/** Anciens textes par défaut de la mention : remplacés par le texte actuel s'ils n'ont pas été modifiés. */
+export const PREVIOUS_DEFAULT_PRIVACY_NOTICES: string[] = [
+  'Les informations saisies sur cette page sont traitées par Shidokan France pour organiser la compétition (inscriptions, catégories, tableaux). Le poids, le grade et les coordonnées du coach sont effacés 13 mois après la compétition ; les résultats (nom, club, catégorie, classement) sont conservés comme archive sportive. Pour toute question, ou pour exercer vos droits sur ces données : {contact}.',
+];
+export const currentPrivacyNotice = (text: string): string => (PREVIOUS_DEFAULT_PRIVACY_NOTICES.includes(text) ? DEFAULT_PRIVACY_NOTICE : text);
+
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   smtp: null,
   mailMode: 'smtp',
   google: null,
   googleContacts: { account: null, label: null, pending: [] },
-  privacyNotice:
-    'Les informations saisies sur cette page sont traitées par Shidokan France pour organiser la compétition (inscriptions, catégories, tableaux). Le poids, le grade et les coordonnées du coach sont effacés 13 mois après la compétition ; les résultats (nom, club, catégorie, classement) sont conservés comme archive sportive. Pour toute question, ou pour exercer vos droits sur ces données : {contact}.',
+  privacyNotice: DEFAULT_PRIVACY_NOTICE,
   privacyContact: '',
   retentionMonths: 13,
   directoryInactiveYears: 3,
