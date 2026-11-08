@@ -186,7 +186,13 @@ export function useDeleteRegistration(id: string) {
 export function useSetPublicNameHidden(id: string) {
   const invalidate = useInvalidateRegistrations(id);
   return useMutation({
-    mutationFn: ({ fighterId, hidden }: { fighterId: string; hidden: boolean }) => api<void>('PUT', `/api/competitions/${id}/fighters/${fighterId}/public-name`, { hidden }),
+    // Avec `rid`, rend la révision à jour de cette inscription : la route touche le combattant, donc change la révision de ses lignes.
+    mutationFn: async ({ fighterId, hidden, rid }: { fighterId: string; hidden: boolean; rid?: string }) => {
+      await api<void>('PUT', `/api/competitions/${id}/fighters/${fighterId}/public-name`, { hidden });
+      if (!rid) return null;
+      const rows = await api<RegistrationRow[]>('GET', `/api/competitions/${id}/registrations`);
+      return rows.find((r) => r.id === rid)?.rev ?? null;
+    },
     onSuccess: invalidate,
   });
 }

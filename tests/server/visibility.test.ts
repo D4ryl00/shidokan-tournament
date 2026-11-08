@@ -92,7 +92,24 @@ test('hiding a fighter of another competition is 404', async () => {
   const other = (await a.app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Autre', date: '2026-12-06' } })).json() as { id: string };
   const res = await a.app.inject({ method: 'PUT', url: `/api/competitions/${other.id}/fighters/${regs[0]!.fighterId}/public-name`, payload: { hidden: true } });
   expect(res.statusCode).toBe(404);
+  const flagsOf = async (competition: string) => (await a.app.inject({ method: 'GET', url: `/api/competitions/${competition}/registrations` })).json() as Array<{ publicNameHidden: boolean }>;
+  expect((await flagsOf(a.id)).map((r) => r.publicNameHidden)).toEqual([false, false]);
   const unknown = await a.app.inject({ method: 'PUT', url: `/api/competitions/${a.id}/fighters/inconnu/public-name`, payload: { hidden: true } });
   expect(unknown.statusCode).toBe(404);
   await a.app.close();
+});
+
+test('toggling the name then saving the registration: fresh rev passes, stale rev is 409', async () => {
+  const { app, id } = await appWithCompetition();
+  const regs = await withFighter(app, id);
+  const list = async () => (await app.inject({ method: 'GET', url: `/api/competitions/${id}/registrations` })).json() as Array<{ id: string; rev: string; clubId?: string; fighter: { clubId: string }; discipline: string; ruleset: string | null; weightClassId: string | null }>;
+  const before = (await list()).find((r) => r.id === regs[0]!.id)!;
+  expect((await app.inject({ method: 'PUT', url: `/api/competitions/${id}/fighters/${regs[0]!.fighterId}/public-name`, payload: { hidden: true } })).statusCode).toBe(204);
+  const after = (await list()).find((r) => r.id === regs[0]!.id)!;
+  expect(after.rev).not.toBe(before.rev);
+  const payload = { clubId: before.fighter.clubId, lastName: 'MARTIN', firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline: before.discipline, ruleset: before.ruleset, weightClassId: before.weightClassId, source: 'onsite' };
+  const put = (rev: string) => app.inject({ method: 'PUT', url: `/api/competitions/${id}/registrations/${before.id}`, headers: { 'if-match': `"${rev}"` }, payload });
+  expect((await put(before.rev)).statusCode).toBe(409);
+  expect((await put(after.rev)).statusCode).toBe(200);
+  await app.close();
 });

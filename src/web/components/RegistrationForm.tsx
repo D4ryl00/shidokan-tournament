@@ -72,7 +72,7 @@ export function RegistrationForm({ competitionId, edit, onDone }: { competitionI
   const [nameHidden, setNameHiddenState] = useState(edit?.publicNameHidden ?? false);
   const [f, setF] = useState<FormState>(edit ? fromRow(edit) : EMPTY);
   // Révision à l'ouverture du formulaire : une modification faite entre-temps sur un autre poste n'est pas écrasée.
-  const [openRev] = useState(edit?.rev);
+  const [openRev, setOpenRev] = useState(edit?.rev);
   const [warning, setWarning] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const lastNameRef = useRef<HTMLInputElement>(null);
@@ -192,7 +192,8 @@ export function RegistrationForm({ competitionId, edit, onDone }: { competitionI
             checked={nameHidden} disabled={setNameHidden.isPending}
             onChange={(e) => {
               const hidden = e.currentTarget.checked;
-              setNameHidden.mutate({ fighterId: edit.fighterId, hidden }, { onSuccess: () => setNameHiddenState(hidden) });
+              // Le combattant change de version : la révision de la ligne est reprise, sinon « Enregistrer » serait refusé.
+              setNameHidden.mutate({ fighterId: edit.fighterId, hidden, rid: edit.id }, { onSuccess: (rev) => { setNameHiddenState(hidden); if (rev) setOpenRev(rev); } });
             }} />
         )}
         {warning && <Alert color="yellow" data-testid="registration-warning">{warning}</Alert>}
