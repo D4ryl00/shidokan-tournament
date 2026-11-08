@@ -71,7 +71,7 @@ export function useDeleteCompetition() {
 export function useUpdateCompetition(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (patch: Partial<CompetitionInput> & { settings?: unknown }) =>
+    mutationFn: (patch: Partial<CompetitionInput> & { settings?: unknown; visibility?: 'private' | 'public' }) =>
       api<Competition>('PATCH', `/api/competitions/${id}`, patch),
     onSuccess: (c, patch) => {
       qc.setQueryData(['competitions', id], c);

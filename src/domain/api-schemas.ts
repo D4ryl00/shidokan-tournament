@@ -16,7 +16,7 @@ export const competitionCreateSchema = z
   })
   .strict();
 
-export const competitionPatchSchema = competitionCreateSchema.omit({ zoneCount: true }).partial().extend({ settings: z.unknown().optional() }).strict();
+export const competitionPatchSchema = competitionCreateSchema.omit({ zoneCount: true }).partial().extend({ settings: z.unknown().optional(), visibility: z.enum(['private', 'public']).optional() }).strict();
 
 const sex = z.enum(['M', 'F']);
 export const categoryGridSchema = z

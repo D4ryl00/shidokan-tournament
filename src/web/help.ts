@@ -42,6 +42,7 @@ export type HelpTopicId =
   | 'podiums.clubs'
   | 'parametres.sauvegardes'
   | 'reglages.competition'
+  | 'reglages.visibilite'
   | 'reglages.echanges'
   | 'synchronisation'
   | 'jour-j'
@@ -591,6 +592,15 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     title: 'Compétition',
     short: 'Nom, date et lieu de la compétition.',
     details: ['Ces informations figurent sur les fiches club et les feuilles imprimées.'],
+  },
+  'reglages.visibilite': {
+    title: 'Visibilité',
+    short: 'Privée : visible des seuls organisateurs. Publique : une page ouverte à tous, sans compte, affichée sur la page d’accueil.',
+    details: [
+      'Une compétition est privée tant que vous ne la rendez pas publique ; vous pouvez la remettre en privé à tout moment.',
+      'Sur la page publique, les tableaux et les numéros d’une session n’apparaissent qu’au lancement de cette session.',
+      'Jamais en public : poids, grade, licence, coordonnées des coachs, état de pesée ou de présence, raisons de retrait, comptes, liens des clubs et notes internes.',
+    ],
   },
   'reglages.zones': {
     title: 'Zones de combat',

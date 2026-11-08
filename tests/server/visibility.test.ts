@@ -1,0 +1,58 @@
+import { afterEach, expect, test } from 'vitest';
+import { buildApp } from '../../src/server/app.js';
+import { closeDb, openDb, type AppDb } from '../../src/server/db/client.js';
+import { buildPackage, importPackage } from '../../src/server/sync/package.js';
+import { tmpDbPath } from '../helpers/tmp-db.js';
+
+const opened: AppDb[] = [];
+afterEach(() => {
+  for (const d of opened.splice(0)) closeDb(d);
+});
+
+async function appWithCompetition() {
+  const dbPath = tmpDbPath();
+  const app = await buildApp({ dbPath, role: 'local' });
+  const created = await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22' } });
+  const { id } = created.json() as { id: string };
+  return { app, dbPath, id };
+}
+
+test('a new competition is private', async () => {
+  const { app, id } = await appWithCompetition();
+  const c = (await app.inject({ method: 'GET', url: `/api/competitions/${id}` })).json();
+  expect(c.visibility).toBe('private');
+  await app.close();
+});
+
+test('PATCH visibility public then private', async () => {
+  const { app, id } = await appWithCompetition();
+  const url = `/api/competitions/${id}`;
+  expect((await app.inject({ method: 'PATCH', url, payload: { visibility: 'public' } })).statusCode).toBe(200);
+  expect((await app.inject({ method: 'GET', url })).json().visibility).toBe('public');
+  expect((await app.inject({ method: 'PATCH', url, payload: { visibility: 'private' } })).statusCode).toBe(200);
+  expect((await app.inject({ method: 'GET', url })).json().visibility).toBe('private');
+  await app.close();
+});
+
+test('PATCH rejects an unknown visibility', async () => {
+  const { app, id } = await appWithCompetition();
+  const res = await app.inject({ method: 'PATCH', url: `/api/competitions/${id}`, payload: { visibility: 'brouillon' } });
+  expect(res.statusCode).toBe(400);
+  await app.close();
+});
+
+test('visibility travels in the sync package', async () => {
+  const a = await appWithCompetition();
+  await a.app.inject({ method: 'PATCH', url: `/api/competitions/${a.id}`, payload: { visibility: 'public' } });
+  await a.app.close();
+  const dbA = openDb(a.dbPath);
+  opened.push(dbA);
+  const pkg = buildPackage(dbA, a.id, { handOver: false, role: 'local' });
+  const b = await appWithCompetition();
+  await b.app.close();
+  const dbB = openDb(b.dbPath);
+  opened.push(dbB);
+  await importPackage(dbB, b.dbPath, pkg, null);
+  const row = dbB.$client.prepare('select visibility from competitions where id = ?').get(a.id) as { visibility: string };
+  expect(row.visibility).toBe('public');
+});

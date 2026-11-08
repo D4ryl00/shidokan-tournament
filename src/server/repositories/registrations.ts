@@ -167,6 +167,7 @@ function findOrCreateFighter(
     licence: input.licence ?? null,
     grade: input.grade ?? null,
     weighInKg: null,
+    publicNameHidden: false,
     version: null,
     updatedAt: null,
   };

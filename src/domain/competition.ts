@@ -6,6 +6,8 @@ export interface Competition {
   date: string;
   location: string | null;
   settings: CompetitionSettings;
+  /** Privée (défaut) ou publique : une compétition publique a une page ouverte à tous, sans compte. */
+  visibility: 'private' | 'public';
   createdAt: string;
 }
 
