@@ -1,11 +1,12 @@
 import { Box, Button, Group, Stack, Text, TextInput, UnstyledButton } from '@mantine/core';
 import { useMemo, useState } from 'react';
 import { fighterTimeline, searchPublic, type FighterLine, type PublicFighter } from '../../../domain/public/follow.js';
-import type { PublicCompetition, SideSource } from '../../../domain/public/types.js';
+import type { PublicCompetition } from '../../../domain/public/types.js';
 import { disciplineLabel } from '../../labels.js';
 import { followedFighters, type Pins } from '../../publicPins.js';
 import { StatusBadge, type Tone } from '../ui/StatusBadge.js';
 import { EmptyState } from '../ui/EmptyState.js';
+import { sourceText } from './sourceText.js';
 
 const MAX_RESULTS = 20;
 const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
@@ -17,14 +18,6 @@ function stateBadge(s: FighterLine['state']): { tone: Tone; text: string } {
   if (s === 'waiting') return { tone: 'neutral', text: 'En attente' };
   if (s === 'eliminated') return { tone: 'danger', text: 'Plus en lice' };
   return { tone: 'neutral', text: 'Terminé' };
-}
-
-/** « vainqueur du n° 12 » ; la zone est ajoutée quand elle diffère de celle du combat (les numéros sont propres à chaque zone). */
-function sourceText(from: SideSource, zoneId: string, pub: PublicCompetition): string {
-  const who = from.kind === 'winner' ? 'vainqueur' : 'perdant';
-  if (from.number === null) return `le ${who} du combat précédent`;
-  const zone = from.zoneId !== null && from.zoneId !== zoneId ? pub.zones.find((z) => z.id === from.zoneId)?.name : undefined;
-  return `le ${who} du n° ${from.number}${zone ? `, ${zone}` : ''}`;
 }
 
 function StarButton({ on, locked, name, onClick }: { on: boolean; locked?: boolean; name: string; onClick: () => void }) {
