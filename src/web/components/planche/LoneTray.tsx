@@ -23,7 +23,7 @@ export function LoneTray({ items, entrants, badges, badgeDetails, chipProps, sel
     <Card withBorder padding="sm" data-testid="planche-tray" style={{ borderColor: 'var(--sk-card-line)' }}>
       <Stack gap="xs">
         <Text fw={700} size="sm">Sans adversaire ({items.length})</Text>
-        <Text size="xs" c="dimmed">À glisser vers une catégorie, ou sur un combattant pour échanger.</Text>
+        {chipProps && <Text size="xs" c="dimmed">À glisser vers une catégorie, ou sur un combattant pour échanger.</Text>}
         {items.length === 0 && <Text size="sm" c="dimmed" data-testid="planche-tray-empty">Tout le monde a un adversaire.</Text>}
         {items.map((it) => (
           <Stack key={it.category.id} gap={2} data-category-of={it.category.id}>

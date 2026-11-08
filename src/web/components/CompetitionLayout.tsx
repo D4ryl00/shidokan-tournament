@@ -25,6 +25,17 @@ const labelOf = (tab: string) => COMPETITION_TABS.find((t) => t.path === tab)?.l
 /** Hauteur de la barre d'une compétition (la page défile dessous). */
 export const COMPETITION_BAR_HEIGHT = 56;
 
+/** Publie la hauteur réelle de la barre collante (elle passe à la ligne sur un téléphone) dans `--sk-bar-h`, pour ce qui se colle dessous. */
+function publishBarHeight(el: HTMLElement | null) {
+  if (!el) return;
+  const root = document.documentElement;
+  const set = () => root.style.setProperty('--sk-bar-h', `${el.getBoundingClientRect().height}px`);
+  set();
+  const ro = new ResizeObserver(set);
+  ro.observe(el);
+  return () => { ro.disconnect(); root.style.removeProperty('--sk-bar-h'); };
+}
+
 export function CompetitionLayout() {
   const { id = '' } = useParams();
   const { data, isLoading } = useCompetition(id);
@@ -85,6 +96,7 @@ export function CompetitionLayout() {
     <Stack gap="md">
       <Box
         className="no-print"
+        ref={publishBarHeight}
         style={{
           position: 'sticky', top: 0, zIndex: 100, minHeight: COMPETITION_BAR_HEIGHT, margin: 'calc(-1 * var(--app-shell-padding)) calc(-1 * var(--app-shell-padding)) 0',
           padding: '6px var(--mantine-spacing-lg)', background: 'var(--sk-bar)', borderBottom: '1px solid var(--sk-line)', display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-xs) var(--mantine-spacing-md)',

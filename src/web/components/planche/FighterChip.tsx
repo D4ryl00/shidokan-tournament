@@ -29,8 +29,8 @@ export function FighterChip({ id, info, badge, badgeDetail, sameClub = false, ma
         borderRadius: 6, padding: '3px 8px', minWidth: 0, backgroundColor: matched ? 'var(--sk-chip)' : 'var(--sk-card)',
         cursor: locked ? 'default' : 'grab', ...extra?.style,
       }}>
-      <Group gap={6} wrap="nowrap" justify="space-between">
-        <Text size="sm" fw={matched ? 700 : 500} lh={1.25} className="sk-ellipsis">{info?.name ?? '?'}</Text>
+      <Group gap={2} wrap="wrap" justify="space-between" align="flex-start">
+        <Text size="sm" fw={matched ? 700 : 500} lh={1.25} style={{ overflowWrap: 'anywhere', minWidth: 0 }}>{info?.name ?? '?'}</Text>
         {badge && <ReplacementBadge type={badge} size="xs" detail={badgeDetail} />}
       </Group>
       <Text size="xs" lh={1.2} c={sameClub ? 'orange' : 'dimmed'} fw={sameClub ? 600 : undefined} data-testid={sameClub ? 'same-club' : undefined} className="sk-ellipsis">

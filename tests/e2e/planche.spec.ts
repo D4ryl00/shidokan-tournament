@@ -147,3 +147,42 @@ test('planche : échange de places annulé, clic-clic, historique en cascade, re
   expect(await clipped(page)).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+for (const [label, size] of [['bureau', { width: 1280, height: 600 }], ['360 px', { width: 360, height: 700 }]] as const) {
+  test(`planche : le bandeau reste visible sous la barre et ne décale rien (${label})`, async ({ page, request }) => {
+    const id = await createCompetition(page, `Coupe bandeau ${label}`);
+    const ids = await seed(request, id);
+    await page.setViewportSize(size);
+    await page.goto(`/competitions/${id}/tableaux`);
+    const target = chip(page, card(page, ids.c54), 'CARO');
+    await expect(target).toBeVisible();
+    const tray = page.getByTestId('planche-tray').getByTestId('planche-chip').filter({ hasText: 'SOLO' });
+    await tray.scrollIntoViewIfNeeded();
+    await page.evaluate(() => window.scrollBy(0, 150));
+    const before = await target.boundingBox();
+    await tray.click();
+    const banner = page.getByTestId('planche-banner');
+    await expect(banner).toBeVisible();
+    const bar = (await page.locator('div.no-print').first().boundingBox())!;
+    const box = (await banner.boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(bar.y + bar.height - 1);
+    expect(box.y + box.height).toBeLessThanOrEqual(size.height);
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(size.width);
+    // Rien ne bouge : le second clic tombera sur ce que l'on visait.
+    const after = await target.boundingBox();
+    expect(after!.y).toBeCloseTo(before!.y, 0);
+    expect(await clipped(page)).toEqual([]);
+  });
+}
+
+test('planche : un poste de zone voit le bac sans la consigne de glisser', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe bac zone');
+  await seed(request, id);
+  const [zone] = (await (await request.get(`/api/competitions/${id}/zones`)).json()) as { id: string }[];
+  await page.addInitScript(([k, v]) => localStorage.setItem(k!, v!), [`poste:${id}`, JSON.stringify({ kind: 'zone', zoneId: zone!.id })]);
+  await page.goto(`/competitions/${id}/tableaux`);
+  const tray = page.getByTestId('planche-tray');
+  await expect(tray).toContainText('Sans adversaire');
+  await expect(tray).not.toContainText('À glisser');
+});

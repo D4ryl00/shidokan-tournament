@@ -46,22 +46,39 @@ export function DropConfirmDialog({ competitionId, drop: asked, categories, entr
     if (asked.kind === 'exchange' && asked.target) previewExchange({ a: asked.source, b: asked.target });
   }, [asked, previewMove, previewExchange, resetMove, resetExchange, resetMoveAction, resetExchangeAction]);
 
-  const name = (id: string) => entrants.get(id)?.name ?? '?';
-  const label = (cid: string) => categories.find((c) => c.id === cid)?.label ?? '?';
+  // Noms et libellés figés à l'ouverture : après la confirmation, les catégories rechargées ne doivent pas changer ce que l'on lit.
+  const snap = useRef<{ drop: PendingDrop; names: Map<string, string>; labels: Map<string, string> } | null>(null);
+  if (asked && snap.current?.drop !== asked) {
+    snap.current = {
+      drop: asked,
+      names: new Map([...entrants].map(([k, e]) => [k, e.name])),
+      labels: new Map(categories.map((c) => [c.id, c.label])),
+    };
+  }
+  const name = (id: string) => snap.current?.names.get(id) ?? entrants.get(id)?.name ?? '?';
+  const label = (cid: string) => snap.current?.labels.get(cid) ?? categories.find((c) => c.id === cid)?.label ?? '?';
   const isExchange = drop?.kind === 'exchange';
   const moves: [string, string, string][] = !drop ? [] : isExchange && drop.target ? [[drop.source, drop.from, drop.to], [drop.target, drop.to, drop.from]] : [[drop.source, drop.from, drop.to]];
 
   // Échange : chacun son changement de session ; ceux que leur catégorie emmène sont signalés avec le premier.
   const exchangeWaves = (): WaveEffects[] => {
-    const all = exchangePreview.data?.waveMoves ?? [];
+    const all = (frozen.current ? frozen.current.exchange : exchangePreview.data)?.waveMoves ?? [];
     const own = (rid: string) => all.find((x) => x.registrationId === rid);
     const change = (rid: string) => { const x = own(rid); return x ? { from: x.from, to: x.to } : null; };
     const others = all.filter((x) => !moves.some(([rid]) => rid === x.registrationId));
     return moves.map(([rid], i) => ({ registrationId: rid, waveChange: change(rid), waveShifts: i === 0 ? others : [] }));
   };
 
+  // L'aperçu confirmé reste affiché tant que la fenêtre est ouverte : une fois l'action lancée, il n'est plus recalculé.
+  const frozen = useRef<{ drop: PendingDrop; exchange: typeof exchangePreview.data; move: typeof movePreview.data } | null>(null);
+  const confirming = move.isPending || exchange.isPending || move.isSuccess || exchange.isSuccess;
+  if (!confirming) frozen.current = null;
+  else if (!frozen.current || frozen.current.drop !== drop) frozen.current = { drop: drop as PendingDrop, exchange: exchangePreview.data, move: movePreview.data };
+  const exData = frozen.current ? frozen.current.exchange : exchangePreview.data;
+  const mvData = frozen.current ? frozen.current.move : movePreview.data;
+
   const pending = isExchange ? exchangePreview.isPending : movePreview.isPending;
-  const ready = isExchange ? !!exchangePreview.data : !!movePreview.data;
+  const ready = isExchange ? !!exData : !!mvData;
   const confirm = () => {
     if (!drop) return;
     if (drop.kind === 'exchange' && drop.target) {
@@ -69,7 +86,7 @@ export function DropConfirmDialog({ competitionId, drop: asked, categories, entr
       void exchange.mutateAsync({ a, b }).then((r) => { onClose(); undoToast(`Échangés : ${name(a)} ↔ ${name(b)}`, r.historyId, r.sameClub); }, () => {});
       return;
     }
-    const sameClub = movePreview.data?.sameClub ?? [];
+    const sameClub = mvData?.sameClub ?? [];
     void move.mutateAsync({ registrationId: drop.source, categoryId: drop.to })
       .then((r) => { onClose(); undoToast(`Déplacement de ${name(drop.source)} vers ${label(drop.to)}`, r.historyId ?? null, sameClub); }, () => {});
   };
@@ -85,11 +102,11 @@ export function DropConfirmDialog({ competitionId, drop: asked, categories, entr
         ))}
         <ApiErrorAlert error={isExchange ? exchangePreview.error ?? exchange.error : movePreview.error ?? move.error} />
         {isExchange ? (
-          <MoveConsequences pending={pending} warnings={exchangePreview.data?.warnings} sameClub={exchangePreview.data?.sameClub}
-            waveEffects={exchangePreview.data ? exchangeWaves() : []} waves={waves} name={name} />
+          <MoveConsequences pending={pending} warnings={exData?.warnings} sameClub={exData?.sameClub}
+            waveEffects={exData ? exchangeWaves() : []} waves={waves} name={name} />
         ) : (
-          <MoveConsequences pending={pending} warnings={movePreview.data?.warnings} sameClub={movePreview.data?.sameClub}
-            waveEffects={[movePreview.data?.steps[0]?.proposal]} waves={waves} name={name} preview={movePreview.data} />
+          <MoveConsequences pending={pending} warnings={mvData?.warnings} sameClub={mvData?.sameClub}
+            waveEffects={[mvData?.steps[0]?.proposal]} waves={waves} name={name} preview={mvData} />
         )}
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>Annuler</Button>
