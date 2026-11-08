@@ -97,6 +97,34 @@ test('spectateur : compétition privée invisible, rendue publique, suivi d’un
     expect(await v.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), tab).toBeLessThanOrEqual(0);
   }
 
+  // 8. Sur téléphone : depuis Zones, un passage ouvre son tableau à l'écran ; Retour revient sur Zones ; un autre onglet repart du haut.
+  await v.setViewportSize({ width: 360, height: 640 });
+  await v.goto(`/public/${id}?onglet=zones`);
+  await expect(v.getByTestId('public-zones-session')).toHaveText('Session unique');
+  await v.getByTestId('public-zone-passage').first().click();
+  await expect(v).toHaveURL(new RegExp(`onglet=tableaux&categorie=${cat.id}`));
+  await expect(v.getByTestId('public-category')).toBeInViewport();
+  await v.goBack();
+  await expect(v.getByTestId('public-tab-zones')).toHaveAttribute('aria-current', 'page');
+  await v.goto(`/public/${id}?onglet=tableaux`);
+  const item = v.getByTestId('public-category-item').first();
+  await item.click();
+  await expect(item).toHaveAttribute('aria-expanded', 'true');
+  // Le tableau s'ouvre juste sous la catégorie touchée, à l'écran.
+  await expect(v.getByTestId('public-category')).toBeInViewport();
+  const [itemBox, detailBox] = [await item.boundingBox(), await v.getByTestId('public-category').boundingBox()];
+  expect(detailBox!.y).toBeGreaterThanOrEqual(itemBox!.y + itemBox!.height);
+  expect(detailBox!.y - (itemBox!.y + itemBox!.height)).toBeLessThan(20);
+  await v.evaluate(() => window.scrollTo(0, 200));
+  await v.getByTestId('public-tab-resultats').click();
+  await expect(v.getByTestId('public-tab-resultats')).toHaveAttribute('aria-current', 'page');
+  await expect.poll(() => v.evaluate(() => window.scrollY)).toBe(0);
+  // Page de connexion ouverte depuis l'accueil public : un lien y ramène (aucune connexion faite).
+  await v.getByTestId('organiser-login').click();
+  await expect(v.getByTestId('login-email')).toBeVisible();
+  await v.getByTestId('login-back-public').click();
+  await expect(v.getByRole('heading', { name: 'Compétitions' })).toBeVisible();
+
   // 6. Repassée en privée : la page ouverte l'annonce.
   await v.goto(`/public/${id}`);
   await expect(v.getByRole('heading', { name: NAME })).toBeVisible();

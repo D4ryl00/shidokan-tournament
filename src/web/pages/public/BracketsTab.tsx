@@ -1,5 +1,5 @@
-import { Box, Group, Paper, SegmentedControl, Select, Stack, Text, TextInput, UnstyledButton } from '@mantine/core';
-import { useMemo, useState } from 'react';
+import { Box, Group, Paper, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, UnstyledButton } from '@mantine/core';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { ALL_FORMAT_LABELS } from '../../../domain/brackets/format-labels.js';
 import type { PublicCategory, PublicCompetition } from '../../../domain/public/types.js';
@@ -66,7 +66,7 @@ function CategoryDetail({ pub, c, highlighted }: { pub: PublicCompetition; c: Pu
   );
 }
 
-/** Onglet « Tableaux » : filtres, liste des catégories, puis le tableau (lecture seule) et les combats de la catégorie ouverte. */
+/** Onglet « Tableaux » : filtres, liste des catégories ; sous la catégorie ouverte, son tableau (lecture seule) et ses combats. */
 export function BracketsTab({ pub, followed }: PublicTabProps) {
   const [params, setParams] = useSearchParams();
   const [filters, setFilters] = useState<CategoryFilters>(NO_FILTERS);
@@ -81,35 +81,56 @@ export function BracketsTab({ pub, followed }: PublicTabProps) {
   const shown = filterCategories(pub.categories, filters);
   const waves = pub.waves.filter((w) => pub.categories.some((c) => (c.waveId ?? '') === (w.id ?? '')));
   const zones = pub.zones.filter((z) => pub.categories.some((c) => c.zoneId === z.id));
-  const select = (value: string | null) => setParams((p) => { const n = new URLSearchParams(p); if (value) n.set('categorie', value); else n.delete('categorie'); return n; }, { replace: true });
+  // Arrivée par `categorie` (depuis Zones ou Suivis) ou toucher dans la liste : la catégorie ouverte est amenée en haut de l'écran.
+  const scrollPending = useRef(openId !== null);
+  const openRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!scrollPending.current || !openRef.current) return;
+    scrollPending.current = false;
+    openRef.current.scrollIntoView({ block: 'start' });
+  }, [openId]);
+  const select = (value: string | null) => {
+    scrollPending.current = value !== null;
+    setParams((p) => { const n = new URLSearchParams(p); if (value) n.set('categorie', value); else n.delete('categorie'); return n; }, { replace: true });
+  };
   const set = <K extends keyof CategoryFilters>(k: K, v: string | null) => setFilters({ ...filters, [k]: v ?? 'all' });
-  const all = { value: 'all', label: 'Tous' };
+  const allF = { value: 'all', label: 'Toutes' };
+  const allM = { value: 'all', label: 'Tous' };
+  const openShown = open !== null && shown.some((c) => c.id === open.id);
 
   if (pub.categories.length === 0) return <EmptyState title="Aucun tableau pour le moment." data-testid="public-brackets-empty" />;
   return (
     <Stack gap="sm" data-testid="public-brackets">
       <TextInput value={q} onChange={(e) => setQ(e.currentTarget.value)} placeholder="Chercher un combattant ou un club (surligné)" aria-label="Chercher dans les tableaux" data-testid="public-brackets-search" />
-      <Group gap="xs" grow wrap="wrap">
-        <Select size="xs" label="Discipline" allowDeselect={false} value={filters.discipline} onChange={(v) => set('discipline', v)} data={[all, ...DISCIPLINE_OPTIONS]} data-testid="public-filter-discipline" />
-        <Select size="xs" label="Session" allowDeselect={false} value={filters.waveId} onChange={(v) => set('waveId', v)} data={[all, ...waves.map((w) => ({ value: w.id ?? '', label: w.name }))]} data-testid="public-filter-wave" />
-        <Select size="xs" label="Zone" allowDeselect={false} value={filters.zoneId} onChange={(v) => set('zoneId', v)} data={[all, ...zones.map((z) => ({ value: z.id, label: z.name }))]} data-testid="public-filter-zone" />
+      {/* Deux par ligne sur téléphone : « Toutes » tient sans être coupé. */}
+      <SimpleGrid cols={{ base: 2, xs: 4 }} spacing="xs" verticalSpacing={4}>
+        <Select size="xs" label="Discipline" allowDeselect={false} value={filters.discipline} onChange={(v) => set('discipline', v)} data={[allF, ...DISCIPLINE_OPTIONS]} data-testid="public-filter-discipline" />
+        <Select size="xs" label="Session" allowDeselect={false} value={filters.waveId} onChange={(v) => set('waveId', v)} data={[allF, ...waves.map((w) => ({ value: w.id ?? '', label: w.name }))]} data-testid="public-filter-wave" />
+        <Select size="xs" label="Zone" allowDeselect={false} value={filters.zoneId} onChange={(v) => set('zoneId', v)} data={[allF, ...zones.map((z) => ({ value: z.id, label: z.name }))]} data-testid="public-filter-zone" />
         <Select size="xs" label="État" allowDeselect={false} value={filters.status} onChange={(v) => set('status', v)}
-          data={[all, ...(Object.keys(CATEGORY_STATUS_LABELS) as PublicCategory['status'][]).map((s) => ({ value: s, label: CATEGORY_STATUS_LABELS[s] }))]} data-testid="public-filter-status" />
-      </Group>
+          data={[allM, ...(Object.keys(CATEGORY_STATUS_LABELS) as PublicCategory['status'][]).map((s) => ({ value: s, label: CATEGORY_STATUS_LABELS[s] }))]} data-testid="public-filter-status" />
+      </SimpleGrid>
       {shown.length === 0 && <Text size="sm" c="dimmed" data-testid="public-brackets-none">Aucune catégorie avec ces filtres.</Text>}
       <Stack gap={4}>
         {shown.map((c) => (
-          <Paper key={c.id} withBorder={false} style={{ ...cardStyle, borderColor: c.id === open?.id ? 'var(--sk-accent)' : undefined }}>
-            <UnstyledButton onClick={() => select(c.id === open?.id ? null : c.id)} aria-expanded={c.id === open?.id} data-testid="public-category-item" style={{ display: 'block', width: '100%', padding: '8px 12px' }}>
-              <Group justify="space-between" wrap="nowrap" align="flex-start" gap="xs">
-                <Text size="sm" fw={600} style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{c.label}</Text>
-                <StatusBadge tone={STATUS_TONES[c.status]}>{CATEGORY_STATUS_LABELS[c.status]}</StatusBadge>
-              </Group>
-            </UnstyledButton>
-          </Paper>
+          <Fragment key={c.id}>
+            {/* Marge du haut : l'élément amené en haut de l'écran reste sous la barre collante (60 px). */}
+            <Paper ref={c.id === open?.id ? openRef : undefined} withBorder={false} data-testid="public-category-row"
+              style={{ ...cardStyle, borderColor: c.id === open?.id ? 'var(--sk-accent)' : undefined, scrollMarginTop: 72 }}>
+              <UnstyledButton onClick={() => select(c.id === open?.id ? null : c.id)} aria-expanded={c.id === open?.id} data-testid="public-category-item" style={{ display: 'block', width: '100%', padding: '8px 12px' }}>
+                <Group justify="space-between" wrap="nowrap" align="flex-start" gap="xs">
+                  <Text size="sm" fw={600} style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{c.label}</Text>
+                  <StatusBadge tone={STATUS_TONES[c.status]}>{CATEGORY_STATUS_LABELS[c.status]}</StatusBadge>
+                </Group>
+              </UnstyledButton>
+            </Paper>
+            {/* Le tableau s'ouvre juste sous la catégorie touchée. */}
+            {c.id === open?.id && <CategoryDetail key={open.id} pub={pub} c={open} highlighted={highlighted} />}
+          </Fragment>
         ))}
       </Stack>
-      {open && <CategoryDetail key={open.id} pub={pub} c={open} highlighted={highlighted} />}
+      {/* Ouverte mais écartée par les filtres : montrée après la liste. */}
+      {open && !openShown && <CategoryDetail key={open.id} pub={pub} c={open} highlighted={highlighted} />}
     </Stack>
   );
 }
