@@ -27,8 +27,6 @@ import {
   refuseProposal,
   unrefuseProposal,
   setWeighIn,
-  undoRecasement,
-  undoManualMove,
   withdrawRegistration,
   setAsideCase,
   resumeCase,
@@ -236,23 +234,11 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
     return { ok: true };
   });
 
-  app.post<P>('/api/competitions/:id/replacement/undo', async (req) => {
-    const { recasementId } = z.object({ recasementId: z.string() }).parse(req.body);
-    await undoRecasement(db, req.params.id, recasementId);
-    return { ok: true };
-  });
-
+  /** `expect` : le lot de l'aperçu (`reset.lot`) ; un lot différent (autre poste) est refusé, rien n'est fait. */
   app.post<P>('/api/competitions/:id/replacement/reset', async (req) => {
-    const { waveId } = z.object({ waveId: z.string().optional() }).strict().parse(req.body ?? {});
+    const { waveId, expect } = z.object({ waveId: z.string().optional(), expect: z.array(z.string()).max(10000) }).strict().parse(req.body ?? {});
     const state = await loadState(db, req.params.id);
-    return { ok: true, ...(await resetReplacement(db, req.params.id, knownWave(state.waves, waveId))) };
-  });
-
-  /** Annule le déplacement manuel d'un combattant (sa réaffectation la plus récente, de type M). */
-  app.post<P>('/api/competitions/:id/replacement/undo-manual', async (req) => {
-    const { registrationId } = z.object({ registrationId: z.string() }).strict().parse(req.body);
-    await undoManualMove(db, req.params.id, registrationId);
-    return { ok: true };
+    return { ok: true, ...(await resetReplacement(db, req.params.id, knownWave(state.waves, waveId), expect)) };
   });
 
   /** Catégories où déplacer un combattant à la main (tableaux libres compris), avec les règles qu'enfreindrait chaque déplacement. */

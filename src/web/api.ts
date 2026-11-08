@@ -428,7 +428,7 @@ export interface ReplacementData {
   fingerprint: string;
   recasements: RecasementEntry[];
   /** Ce que « Repartir de zéro » ferait dans la session affichée. */
-  reset: { undo: number; manual: number; kept: { name: string; toLabel: string; why: 'frozen' | 'started' }[]; blockedBy: string | null; clears: number; history: number; refusal: string | null; locked: boolean; cascade: string[] };
+  reset: { undo: number; manual: number; kept: { name: string; toLabel: string; why: 'frozen' | 'started' }[]; blockedBy: string | null; clears: number; history: number; refusal: string | null; locked: boolean; cascade: string[]; lot: string[] };
 }
 export interface PreviewData {
   steps: { proposal: Proposal; manual: boolean }[];
@@ -462,8 +462,6 @@ function useReplacementAction<T>(id: string, path: string) {
 export const useApplyProposal = (id: string) => useReplacementAction<{ proposalId: string; fingerprint: string }>(id, 'apply');
 export const useRefuseProposal = (id: string) => useReplacementAction<{ proposalId: string }>(id, 'refuse');
 export const useUnrefuseProposal = (id: string) => useReplacementAction<{ proposalId: string }>(id, 'unrefuse');
-export const useUndoRecasement = (id: string) => useReplacementAction<{ recasementId: string }>(id, 'undo');
-export const useUndoManualMove = (id: string) => useReplacementAction<{ registrationId: string }>(id, 'undo-manual');
 export interface MoveTarget { categoryId: string; label: string; free: boolean; warnings: string[] }
 /** Catégories et tableaux libres où déplacer un inscrit à la main ; rechargé à chaque changement des données du jour. */
 export function useMoveTargets(id: string, registrationId: string | null) {
@@ -477,7 +475,8 @@ export const useManualMove = (id: string) => useReplacementAction<{ registration
 export const useSetAsideCase = (id: string) => useReplacementAction<{ caseId: string; note?: string }>(id, 'set-aside');
 export const useResumeCase = (id: string) => useReplacementAction<{ caseId: string }>(id, 'resume');
 export const useWithdrawRegistration = (id: string) => useReplacementAction<{ registrationId: string; fingerprint: string }>(id, 'withdraw');
-export const useResetReplacement = (id: string) => useReplacementAction<{ waveId?: string }>(id, 'reset');
+/** « Repartir de zéro » ; `expect` : le lot de l'aperçu (`reset.lot`), refusé s'il a changé (données rechargées). */
+export const useResetReplacement = (id: string) => useReplacementAction<{ waveId?: string; expect: string[] }>(id, 'reset');
 
 export type { HistoryEntryView };
 /** Historique annulable de la session affichée (rechargé avec les données du jour). */

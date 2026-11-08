@@ -33,7 +33,7 @@ import { listWaves } from './waves.js';
 import { launchedCategoryIds, launchedWaveKeys } from './launch-state.js';
 import type { Wave } from '../../domain/waves.js';
 import { CategoryLockedError, listCategories, markArranged, syncCategories } from './categories.js';
-import { entryOfRecasement, loadEntries, recorded, undoEntries, undoHistory, type EntrySpec, type Loaded } from './history.js';
+import { HISTORY_STALE, loadEntries, recorded, undoEntries, type EntrySpec, type Loaded } from './history.js';
 import { closedSet } from './closed-categories.js';
 import { getManagement } from '../sync/ownership.js';
 import { getCompetition, getGrid } from './competitions.js';
@@ -539,17 +539,6 @@ export function restoreSnapshot(t: AppDb, registrationId: string, snapshot: Reca
   for (const r of snapshot.presences ?? []) t.update(registrations).set({ presence: r.presence }).where(eq(registrations.id, r.id)).run();
 }
 
-/**
- * Annule une réaffectation (route `/replacement/undo`) : l'entrée de l'historique qui la porte, en cascade (actions plus
- * récentes qui touchent les mêmes catégories, de proche en proche), tout ou rien, mêmes blocages que l'historique.
- */
-export async function undoRecasement(db: AppDb, competitionId: string, recasementId: string): Promise<void> {
-  const rec = db.select({ status: recasements.status }).from(recasements).where(and(eq(recasements.id, recasementId), eq(recasements.competitionId, competitionId))).get();
-  const entry = rec?.status === 'validated' ? entryOfRecasement(db, competitionId, recasementId) : undefined;
-  if (!entry) throw new NotFoundError('Réaffectation introuvable');
-  await undoHistory(db, competitionId, [entry], null);
-}
-
 /** Dernière réaffectation validée d'une inscription (ordre d'insertion), ou `undefined`. */
 export function lastValidatedRecasement(db: AppDb, competitionId: string, registrationId: string): { id: string; type: string } | undefined {
   return db
@@ -559,16 +548,6 @@ export function lastValidatedRecasement(db: AppDb, competitionId: string, regist
     .all()
     .sort((a, b) => b.n - a.n)
     .map(({ id, type }) => ({ id, type }))[0];
-}
-
-/**
- * Annule le déplacement manuel d'un combattant : sa réaffectation validée la plus récente, qui doit être de type M, par
- * l'historique (en cascade, mêmes refus).
- */
-export async function undoManualMove(db: AppDb, competitionId: string, registrationId: string): Promise<void> {
-  const last = lastValidatedRecasement(db, competitionId, registrationId);
-  if (!last || last.type !== 'M') throw new RegistrationValidationError(["Le dernier déplacement de ce combattant n'est pas manuel."]);
-  await undoRecasement(db, competitionId, last.id);
 }
 
 /** Ce que « Repartir de zéro » ferait dans une session (fenêtre de confirmation). */
@@ -591,6 +570,8 @@ export interface ResetPreview {
   locked: boolean;
   /** Lignes Places / Tirage / Format / Tableau libre annulées (et effacées) avec, en cascade ; plus récente d'abord. */
   cascade: string[];
+  /** Lot affiché : toutes les lignes d'historique annulées (cibles et cascade), plus récente d'abord ; renvoyé en `expect`. */
+  lot: string[];
 }
 
 const RESET_LOCKED = 'Une catégorie concernée a déjà commencé ou sa session est lancée : rouvrez-la pour repartir de zéro.';
@@ -694,7 +675,7 @@ async function resetSorting(db: AppDb, competitionId: string, waveId: string | n
   const undone = lot.flatMap(recasementsOf).filter((r) => r.status === 'validated' && current.has(r.registrationId));
   const preview: ResetPreview = {
     undo: undone.length, manual: undone.filter((r) => r.type === 'M').length, kept, blockedBy, clears: refusalRows.length + asideRows.length,
-    history: erase.length, refusal: null, locked, cascade: lot.filter((e) => !isResetKind(e)).map((e) => e.id),
+    history: erase.length, refusal: null, locked, cascade: lot.filter((e) => !isResetKind(e)).map((e) => e.id), lot: lot.map((e) => e.id),
   };
   const sorting = { preview, lot, erase, refusalRows, asideRows, restored: [...new Set(undone.map((r) => r.registrationId))], isFrozen };
   // Essai à blanc (écritures annulées) : un combattant qui retournerait dans une catégorie commencée ou d'une session lancée.
@@ -755,12 +736,19 @@ export async function resetPreview(db: AppDb, competitionId: string, waveId: str
  * qui en dépend), avec les Places / Tirage / Format plus récents qui touchent les mêmes catégories ; puis efface leurs lignes
  * d'historique, les refus et les cartes mises de côté de la session. Tout ou rien : refusé si la session est lancée, si un
  * combattant a été réaffecté ensuite depuis une autre session, ou si un combattant retournerait dans une catégorie commencée
- * ou d'une session lancée.
+ * ou d'une session lancée. `expect` : le lot affiché (`ResetPreview.lot`) ; s'il diffère (un autre poste a agi entre-temps),
+ * rien n'est fait.
  */
-export async function resetReplacement(db: AppDb, competitionId: string, waveId: string | null): Promise<{ undone: number; kept: ResetPreview['kept'] }> {
+export async function resetReplacement(
+  db: AppDb,
+  competitionId: string,
+  waveId: string | null,
+  expect: string[],
+): Promise<{ undone: number; kept: ResetPreview['kept'] }> {
   return atomically(db, async () => {
     const sorting = await resetSorting(db, competitionId, waveId, { trial: false });
     const { preview } = sorting;
+    if ([...expect].sort().join('\n') !== [...preview.lot].sort().join('\n')) throw new StaleProposalError(HISTORY_STALE);
     if (preview.locked) throw new CategoryLockedError(RESET_LOCKED);
     if (preview.blockedBy) {
       throw new StaleProposalError(`${preview.blockedBy} a été réaffecté ensuite depuis une autre session : annulez d’abord ce déplacement-là (historique), puis recommencez.`);

@@ -23,7 +23,7 @@ type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 const TABLE_WRITES = [
   'POST /registrations', 'PUT /registrations/:rid', 'DELETE /registrations/:rid', 'POST /clubs', 'PATCH /clubs/:clubId', 'POST /clubs/from-directory',
   'PUT /weigh-in/:fighterId', 'POST /weigh-in/close',
-  'POST /replacement/preview', 'POST /replacement/apply', 'POST /replacement/plan', 'POST /replacement/plan/apply', 'POST /replacement/refuse', 'POST /replacement/unrefuse', 'POST /replacement/undo', 'POST /replacement/move', 'POST /replacement/exchange', 'POST /replacement/exchange/preview', 'POST /replacement/undo-manual', 'POST /replacement/withdraw', 'POST /replacement/set-aside', 'POST /replacement/resume', 'POST /history/undo',
+  'POST /replacement/preview', 'POST /replacement/apply', 'POST /replacement/plan', 'POST /replacement/plan/apply', 'POST /replacement/refuse', 'POST /replacement/unrefuse', 'POST /replacement/move', 'POST /replacement/exchange', 'POST /replacement/exchange/preview', 'POST /replacement/withdraw', 'POST /replacement/set-aside', 'POST /replacement/resume', 'POST /history/undo',
   'POST /free-tableaux', 'PATCH /free-tableaux/:cid', 'DELETE /free-tableaux/:cid',
   'PUT /replacement/rules', 'POST /replacement/rules/reset', 'POST /replacement/reset',
   'PATCH /categories/:cid', 'POST /categories/:cid/redraw', 'POST /categories/:cid/swap', 'POST /categories/:cid/move', 'POST /categories/:cid/move/preview', 'POST /categories/:cid/regenerate',
@@ -169,16 +169,15 @@ test('zone : résultats, notes de kata et départage de sa zone seulement', asyn
 });
 
 test('tableaux libres et annulation d’un déplacement manuel : Table centrale oui, Zone 403', async () => {
-  const { table, zone1, base, a54 } = await setup();
+  const { table, zone1, base } = await setup();
   const created = await table('POST', `${base}/free-tableaux`, { name: 'Gala', discipline: 'karate', ruleset: 'jiyu' });
   expect(created.statusCode).toBe(201);
   const cid = (created.json() as { id: string }).id;
-  const rid = a54.bracket!.entrants![0]!.registrationId;
   for (const [method, url, payload] of [
     ['POST', `${base}/free-tableaux`, { name: 'Autre', discipline: 'karate', ruleset: 'jiyu' }],
     ['PATCH', `${base}/free-tableaux/${cid}`, { name: 'Gala 2' }],
     ['DELETE', `${base}/free-tableaux/${cid}`, undefined],
-    ['POST', `${base}/replacement/undo-manual`, { registrationId: rid }],
+    ['POST', `${base}/history/undo`, { ids: ['x'], expect: ['x'] }],
   ] as const) {
     const res = await zone1(method, url, payload);
     expect(res.statusCode, `${method} ${url}`).toBe(403);

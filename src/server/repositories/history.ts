@@ -20,7 +20,7 @@ export interface EntrySpec {
   registrations?: string[];
 }
 
-const STALE = 'Un autre poste a modifié ces tableaux : la liste est mise à jour.';
+export const HISTORY_STALE = 'Un autre poste a modifié ces tableaux : la liste est mise à jour.';
 
 type CategoryRow = typeof categories.$inferSelect;
 /** Ligne de catégorie gardée pour l'annulation : toutes les colonnes sauf la version de la ligne. */
@@ -274,8 +274,8 @@ export async function undoHistory(db: AppDb, competitionId: string, ids: string[
     const known = new Set(all.map((e) => e.id));
     if (ids.some((id) => !known.has(id))) throw new NotFoundError('Action introuvable dans l’historique');
     const set = undoSet(all, ids);
-    if (set.length === 0) throw new StaleProposalError(STALE);
-    if (expect !== null && [...expect].sort().join('\n') !== set.map((e) => e.id).sort().join('\n')) throw new StaleProposalError(STALE);
+    if (set.length === 0) throw new StaleProposalError(HISTORY_STALE);
+    if (expect !== null && [...expect].sort().join('\n') !== set.map((e) => e.id).sort().join('\n')) throw new StaleProposalError(HISTORY_STALE);
     const reason = blockReason(set, ctx);
     if (reason) throw new CategoryLockedError(reason);
     await undoEntries(db, competitionId, set);

@@ -174,12 +174,14 @@ test('alerte et remise à zéro', async ({ page, request }) => {
   const gala = (await (await request.post(`/api/competitions/${id}/free-tableaux`, { data: { name: 'Gala 1', discipline: 'karate', ruleset: 'jiyu' } })).json()) as { id: string };
   const regs = (await (await request.get(`/api/competitions/${id}/registrations`)).json()) as { id: string; fighter: { lastName: string } }[];
   const idOf = (n: string) => regs.find((r) => r.fighter.lastName === n)!.id;
+  let bravoMove = '';
   for (const n of ['ALPHA', 'BRAVO']) {
     const res = await request.post(`/api/competitions/${id}/replacement/move`, { data: { registrationId: idOf(n), categoryId: gala.id } });
     expect(res.ok()).toBeTruthy();
+    bravoMove = ((await res.json()) as { historyId: string }).historyId;
   }
-  // Annuler BRAVO : ALPHA reste seul, placé à la main, dans Gala 1.
-  expect((await request.post(`/api/competitions/${id}/replacement/undo-manual`, { data: { registrationId: idOf('BRAVO') } })).ok()).toBeTruthy();
+  // Annuler BRAVO (la dernière action, sans cascade) par l'historique : ALPHA reste seul, placé à la main, dans Gala 1.
+  expect((await request.post(`/api/competitions/${id}/history/undo`, { data: { ids: [bravoMove], expect: [bravoMove] } })).ok()).toBeTruthy();
 
   await page.goto(`/competitions/${id}/reaffectation`);
   const card = page.getByTestId('replacement-case').filter({ hasText: 'ALPHA' });

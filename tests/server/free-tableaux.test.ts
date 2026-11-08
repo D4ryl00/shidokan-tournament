@@ -1,12 +1,15 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
+import { lastMoveEntry, resetAsShown, undoEntry, undoLastMove } from '../helpers/history-undo.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
 let base: string;
+let dbPath: string;
 beforeEach(async () => {
-  app = await buildApp({ dbPath: tmpDbPath() });
+  dbPath = tmpDbPath();
+  app = await buildApp({ dbPath });
   base = `/api/competitions/${(await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22' } })).json().id}`;
 });
 afterEach(async () => app.close());
@@ -114,9 +117,7 @@ test('réaffectation : rien ne bouge dans un tableau libre, alerte si seul', asy
   await move(b.id, free.id);
   await applyPlan();
   expect((await categories()).find((c) => c.id === free.id)!.registrationIds).toEqual([a.id, b.id].sort());
-  const res = await call('POST', '/replacement/undo-manual', { registrationId: b.id });
-  expect(res.statusCode).toBe(200);
-  expect(res.json()).toEqual({ ok: true });
+  expect((await undoLastMove(call, dbPath, b.id)).statusCode).toBe(200);
   const r = await replacement();
   const card = r.cases.find((c) => c.registrationId === a.id)!;
   expect(card).toMatchObject({ kind: 'alone', alert: true });
@@ -133,7 +134,7 @@ test('alerte d’un tableau libre en attente : visible et comptée dans chaque s
   const free = await freeTableau();
   await move(a.id, free.id);
   await move(b.id, free.id);
-  expect((await call('POST', '/replacement/undo-manual', { registrationId: b.id })).statusCode).toBe(200);
+  expect((await undoLastMove(call, dbPath, b.id)).statusCode).toBe(200);
   expect((await categories()).find((c) => c.id === free.id)!.waveId).toBeNull();
   for (const wave of [matin!.id, aprem!.id]) {
     const r = (await call('GET', `/replacement?vague=${wave}`)).json() as Replacement & { fighters: Record<string, unknown>; moveTargets: Record<string, unknown> };
@@ -154,8 +155,10 @@ test('tableau libre vidé : plus arrangé, le suivant est tiré à neuf', async 
   expect(swap.statusCode).toBe(200);
   expect((swap.json() as Cat).arranged).toBe(true);
   // Annuler l'arrivée de A emporte celle de B, plus récente sur le même tableau (cascade de l'historique).
-  expect((await call('POST', '/replacement/undo-manual', { registrationId: a.id })).statusCode).toBe(200);
-  expect((await call('POST', '/replacement/undo-manual', { registrationId: b.id })).statusCode).toBe(400);
+  const arrivalB = lastMoveEntry(dbPath, b.id);
+  expect((await undoLastMove(call, dbPath, a.id)).statusCode).toBe(200);
+  // Déjà emportée : rien à annuler.
+  expect((await undoEntry(call, arrivalB)).statusCode).toBe(409);
   expect((await categories()).find((c) => c.id === free.id)).toMatchObject({ registrationIds: [], bracket: null, arranged: false });
   // Le premier arrivant est tiré à neuf (l'ancien arrangement est oublié) ; le suivant, déplacé à la main, garde les places (spec §2.6).
   await move(a.id, free.id);
@@ -235,7 +238,7 @@ test('supprimer : refusé en entier si un combattant ne peut pas revenir', async
   expect((await categories()).find((c) => c.id === free.id)!.registrationIds).toEqual([a.id, b.id].sort());
 });
 
-test('undo-manual : retour dans la catégorie du plan, plus un placement manuel ; second refusé', async () => {
+test('annuler un déplacement manuel : retour dans la catégorie du plan, plus un placement manuel ; second refusé', async () => {
   await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
   await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
   await applyPlan();
@@ -246,12 +249,13 @@ test('undo-manual : retour dans la catégorie du plan, plus un placement manuel 
   const free = await freeTableau();
   await move(x, free.id);
   expect(await regOf(x)).toMatchObject({ placementLocked: true, recasementType: 'M' });
-  expect((await call('POST', '/replacement/undo-manual', { registrationId: x })).statusCode).toBe(200);
+  const manual = lastMoveEntry(dbPath, x);
+  expect((await undoEntry(call, manual)).statusCode).toBe(200);
   expect((await catOf(x))!.id).toBe(planCat.id);
   expect((await regOf(x)).recasementType).toBe(planned.type);
-  const again = await call('POST', '/replacement/undo-manual', { registrationId: x });
-  expect(again.statusCode).toBe(400);
-  expect(again.json().issues).toEqual(["Le dernier déplacement de ce combattant n'est pas manuel."]);
+  const again = await undoEntry(call, manual);
+  expect(again.statusCode).toBe(409);
+  expect(again.json()).toMatchObject({ error: 'Un autre poste a modifié ces tableaux : la liste est mise à jour.' });
 });
 
 test('Repartir de zéro : défait les déplacements manuels, le tableau libre reste, vide', async () => {
@@ -261,7 +265,7 @@ test('Repartir de zéro : défait les déplacements manuels, le tableau libre re
   await move(b.id, free.id);
   const r = await replacement();
   expect(r.reset).toMatchObject({ undo: 2, manual: 2 });
-  expect((await call('POST', '/replacement/reset', {})).statusCode).toBe(200);
+  expect((await resetAsShown(call)).statusCode).toBe(200);
   expect((await catOf(a.id))!.id).toBe(fromA.id);
   expect((await catOf(b.id))!.id).toBe(fromB.id);
   expect((await categories()).find((c) => c.id === free.id)).toMatchObject({ label: 'Gala 1', registrationIds: [], bracket: null });

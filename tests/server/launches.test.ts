@@ -1,12 +1,15 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
+import { undoRecasement } from '../helpers/history-undo.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
 let base: string;
+let dbPath: string;
 beforeEach(async () => {
-  app = await buildApp({ dbPath: tmpDbPath() });
+  dbPath = tmpDbPath();
+  app = await buildApp({ dbPath });
   base = `/api/competitions/${(await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22' } })).json().id}`;
 });
 afterEach(async () => app.close());
@@ -255,7 +258,7 @@ describe('session lancée (relecture)', () => {
     await call('POST', '/replacement/apply', { proposalId: r.proposals[r.cases[0]!.id]![0]!.id });
     await launch(null);
     const entry = ((await call('GET', '/replacement')).json() as { recasements: { id: string }[] }).recasements[0]!;
-    const undo = await call('POST', '/replacement/undo', { recasementId: entry.id });
+    const undo = await undoRecasement(call, dbPath, entry.id);
     expect(undo.statusCode).toBe(409);
     const more = (await many(1, { weightClassId: 'cadet:F:-61' }))[0]!;
     const move = await call('POST', '/replacement/move', { registrationId: more.id, categoryId: big.id });

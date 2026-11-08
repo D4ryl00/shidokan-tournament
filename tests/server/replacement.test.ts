@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
 import { rulesView } from '../../src/domain/replacement/rules.js';
 import { defaultSettings } from '../../src/domain/settings.js';
+import { resetAsShown, undoRecasement } from '../helpers/history-undo.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
@@ -106,7 +107,7 @@ test('fusion de deux seules, journal, plus de cas ; retour quand un adversaire a
   const first = r.recasements.find((x) => x.type === 'A')!;
   const cat47 = cats.find((c) => c.registrationIds.includes(a.id))!;
   await call('PATCH', `/categories/${cat47.id}`, { status: 'started' });
-  expect((await call('POST', '/replacement/undo', { recasementId: first.id })).statusCode).toBe(409);
+  expect((await undoRecasement(call, dbPath, first.id)).statusCode).toBe(409);
 });
 
 test('propositions des cartes : avec leur vue (pourquoi, départ, arrivée)', async () => {
@@ -123,7 +124,7 @@ test('annulation : remet l’inscription en place', async () => {
   let r = await replacement();
   await call('POST', '/replacement/apply', { proposalId: r.proposals[r.cases.find((x) => x.registrationId === a.id)!.id]![0]!.id });
   r = await replacement();
-  expect((await call('POST', '/replacement/undo', { recasementId: r.recasements[0]!.id })).statusCode).toBe(200);
+  expect((await undoRecasement(call, dbPath, r.recasements[0]!.id)).statusCode).toBe(200);
   expect((await categories()).map((c) => c.registrationIds.length)).toEqual([1, 1]);
   r = await replacement();
   expect(r.recasements[0]!.status).toBe('undone');
@@ -412,7 +413,7 @@ test('annulation : clé de catégorie recalculée ; seulement la réaffectation 
   if (cCase && r.proposals[cCase.id]?.length) await call('POST', '/replacement/apply', { proposalId: r.proposals[cCase.id]![0]!.id });
   r = await replacement();
   const first = r.recasements.find((x) => x.registrationId === a.id)!;
-  await call('POST', '/replacement/undo', { recasementId: first.id });
+  await undoRecasement(call, dbPath, first.id);
   const host = (await categories()).find((x) => x.registrationIds.includes(b.id))!;
   const grid = (await call('GET', '/grid')).json() as { weightClasses: { id: string; label: string }[] };
   void grid;
@@ -434,7 +435,7 @@ test('annulation d’une ancienne réaffectation : la plus récente de la même 
   r = await replacement();
   const older = r.recasements.filter((x) => x.registrationId === a.id).sort((x, y) => x.id.localeCompare(y.id));
   const firstApplied = r.recasements.filter((x) => x.registrationId === a.id).at(-1)!;
-  expect((await call('POST', '/replacement/undo', { recasementId: firstApplied.id })).statusCode).toBe(200);
+  expect((await undoRecasement(call, dbPath, firstApplied.id)).statusCode).toBe(200);
   expect((await replacement()).recasements.filter((x) => x.registrationId === a.id).map((x) => x.status)).toEqual(['undone', 'undone']);
   expect((await categories()).find((c) => c.registrationIds.includes(a.id))!.label).toContain('-47');
   void older;
@@ -547,9 +548,10 @@ test('annulation : ordre fiable même si deux réaffectations ont la même heure
   const [newest, oldest] = (await replacement()).recasements;
   expect(newest!.type).toBe('M');
   // La plus ancienne emporte la plus récente (cascade) : les deux sont annulées, dans l'ordre d'insertion malgré la même heure.
-  expect((await call('POST', '/replacement/undo', { recasementId: oldest!.id })).statusCode).toBe(200);
+  expect((await undoRecasement(call, dbPath, oldest!.id)).statusCode).toBe(200);
   expect((await replacement()).recasements.map((x) => x.status)).toEqual(['undone', 'undone']);
-  expect((await call('POST', '/replacement/undo', { recasementId: newest!.id })).statusCode).toBe(404);
+  // Déjà annulée par la cascade : refusée, rien à annuler.
+  expect((await undoRecasement(call, dbPath, newest!.id)).statusCode).toBe(409);
 });
 
 test('absence : la clé recalculée ne rejoint jamais celle d’une autre catégorie (pas de déplacement silencieux)', async () => {
@@ -750,7 +752,7 @@ describe('réaffectation par session', () => {
     await call('POST', '/replacement/apply', { proposalId: r.proposals[r.cases[0]!.id]![0]!.id });
     expect((await regRow(mini.id)).presence).toBe('unknown');
     const entry = (await replacement()).recasements[0]!;
-    expect((await call('POST', '/replacement/undo', { recasementId: entry.id })).statusCode).toBe(200);
+    expect((await undoRecasement(call, dbPath, entry.id)).statusCode).toBe(200);
     expect((await regRow(mini.id)).presence).toBe('present');
     // La catégorie vidée par le recasement a été supprimée : l'annulation la recrée (nouvel identifiant).
     expect((await categories()).find((c) => c.registrationIds.includes(mini.id))!.label).toContain('Minimes');
@@ -763,7 +765,7 @@ describe('réaffectation par session', () => {
     const r = await ofWave(matin);
     await call('POST', '/replacement/apply', { proposalId: r.proposals[r.cases[0]!.id]![0]!.id });
     expect((await regRow(mini.id)).presence).toBe('unknown');
-    expect((await call('POST', '/replacement/reset')).statusCode).toBe(200);
+    expect((await resetAsShown(call)).statusCode).toBe(200);
     expect((await regRow(mini.id)).presence).toBe('present');
     expect(await waveOfReg(mini.id)).toBe(matin);
   });
@@ -859,7 +861,7 @@ describe('réaffectation par session', () => {
     expect((await regRow(mini.id)).presence).toBe('unknown');
     expect((await regRow(last.registrationId)).presence).toBe('present');
     const entry = (await replacement()).recasements.find((x) => x.registrationId === last.registrationId)!;
-    await call('POST', '/replacement/undo', { recasementId: entry.id });
+    await undoRecasement(call, dbPath, entry.id);
     expect(await waveOfReg(mini.id)).toBe(aprem);
     expect((await regRow(mini.id)).presence).toBe('present');
   });
@@ -871,7 +873,7 @@ describe('réaffectation par session', () => {
     const r = await replacement();
     await call('POST', '/replacement/apply', { proposalId: r.proposals[r.cases.find((c) => c.registrationId === a.id)!.id]![0]!.id });
     await call('PUT', `/weigh-in/${a.fighterId}`, { presence: 'absent' });
-    await call('POST', '/replacement/undo', { recasementId: (await replacement()).recasements[0]!.id });
+    await undoRecasement(call, dbPath, (await replacement()).recasements[0]!.id);
     expect((await regRow(a.id)).presence).toBe('absent');
   });
 });
@@ -940,7 +942,7 @@ test('annuler « ne combat pas » après réouverture : catégorie normale, pas 
   await withdraw(a.id);
   await closeCadet(false);
   const entry = (await replacement()).recasements[0]!;
-  expect((await call('POST', '/replacement/undo', { recasementId: entry.id })).statusCode).toBe(200);
+  expect((await undoRecasement(call, dbPath, entry.id)).statusCode).toBe(200);
   expect((await categories()).some((c) => c.registrationIds.includes(a.id))).toBe(true);
   const rows = (await call('GET', '/registrations')).json() as { id: string; withdrawn: boolean }[];
   expect(rows.find((r) => r.id === a.id)!.withdrawn).toBe(false);
@@ -998,7 +1000,7 @@ test("ne combat pas : tombe quand l'inscription passe dans une catégorie ouvert
   expect(rows.find((r) => r.id === a.id)!.withdrawn).toBe(false);
   expect((await categories()).some((c) => c.registrationIds.includes(a.id))).toBe(true);
   const entry = (await replacement()).recasements.find((r) => r.type === 'W')!;
-  await call('POST', '/replacement/undo', { recasementId: entry.id });
+  await undoRecasement(call, dbPath, entry.id);
   const after = (await call('GET', '/registrations')).json() as { id: string; discipline: string }[];
   expect(after.find((r) => r.id === a.id)!.discipline).toBe('shido-boxing');
 });
@@ -1107,7 +1109,7 @@ describe('annulation et valeurs d’origine', () => {
     await moveElsewhere(a.id);
     correctOriginal(a.id, 'cadet:F:-47');
     const [entry] = (await replacement()).recasements;
-    expect((await call('POST', '/replacement/undo', { recasementId: entry!.id })).statusCode).toBe(200);
+    expect((await undoRecasement(call, dbPath, entry!.id)).statusCode).toBe(200);
     const r = await registration(a.id);
     expect(r.weightClassId).toBe('cadet:F:-47');
     expect(r.recasementType).toBeNull();
@@ -1121,7 +1123,7 @@ describe('annulation et valeurs d’origine', () => {
     await moveElsewhere(a.id);
     correctOriginal(a.id, 'cadet:F:-47');
     for (const entry of (await replacement()).recasements) {
-      expect((await call('POST', '/replacement/undo', { recasementId: entry.id })).statusCode).toBe(200);
+      expect((await undoRecasement(call, dbPath, entry.id)).statusCode).toBe(200);
     }
     expect((await registration(a.id)).weightClassId).toBe('cadet:F:-47');
   });
@@ -1132,7 +1134,7 @@ describe('repartir de zéro', () => {
   const regs = async () => (await call('GET', '/registrations')).json() as RegRow[];
   /** Catégories comparables : libellé et membres, dans un ordre stable. */
   const layout = async () => (await categories()).map((c) => `${c.label} : ${[...c.registrationIds].sort().join(',')}`).sort();
-  const reset = () => call('POST', '/replacement/reset');
+  const reset = () => resetAsShown(call);
 
   test('rétablit les catégories d’avant toute réaffectation et efface l’historique', async () => {
     await reg({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
@@ -1295,7 +1297,7 @@ describe('repartir de zéro par session', () => {
   const layout = async () => (await categories()).map((c) => `${c.label} : ${[...c.registrationIds].sort().join(',')}`).sort();
   const log = async () => (await replacement()).recasements.map((x) => x.registrationId).sort();
   const preview = async (wave: string) => ((await call('GET', `/replacement?vague=${wave}`)).json() as { reset: Preview }).reset;
-  const reset = (waveId: string) => call('POST', '/replacement/reset', { waveId });
+  const reset = (waveId: string) => resetAsShown(call, waveId);
   /** Matin : deux minimes seules, voisines ; après-midi : deux cadettes seules, voisines. */
   async function setup() {
     const m1 = await reg({ lastName: 'MINA', ageBandCode: 'minime', weightClassId: 'minime:F:-40', approxWeightKg: 39 });
@@ -1327,7 +1329,7 @@ describe('repartir de zéro par session', () => {
     await validate(matin, m1.id);
     await validate(aprem, c1.id);
     const before = await log();
-    expect(await preview(matin)).toEqual({ undo: 1, manual: 0, kept: [], blockedBy: null, clears: 0, history: 1, refusal: null, locked: false, cascade: [] });
+    expect(await preview(matin)).toEqual({ undo: 1, manual: 0, kept: [], blockedBy: null, clears: 0, history: 1, refusal: null, locked: false, cascade: [], lot: [expect.any(String)] });
     const res = await reset(matin);
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true, undone: 1, kept: [] });
@@ -1416,7 +1418,7 @@ describe('repartir de zéro par session', () => {
     const { m1, matin } = await setup();
     await validate(matin, m1.id);
     const entry = (await replacement()).recasements[0]!;
-    await call('POST', '/replacement/undo', { recasementId: entry.id });
+    await undoRecasement(call, dbPath, entry.id);
     expect(await preview(matin)).toMatchObject({ undo: 0, clears: 0, history: 1 });
     expect((await reset(matin)).statusCode).toBe(200);
     expect((await replacement()).recasements).toEqual([]);

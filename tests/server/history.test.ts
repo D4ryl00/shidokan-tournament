@@ -6,6 +6,7 @@ import { buildApp } from '../../src/server/app.js';
 import { closeDb, openDb } from '../../src/server/db/client.js';
 import { historyEntries, registrations as registrationsTable } from '../../src/server/db/schema.js';
 import { recorded } from '../../src/server/repositories/history.js';
+import { resetAsShown, undoRecasement } from '../helpers/history-undo.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
@@ -427,7 +428,7 @@ test('réaffectation à l’unité journalisée ; annuler une réaffectation anc
   r = await replacement();
   const first = r.recasements.find((x) => x.registrationId === a.id && x.type !== 'M')!;
   expect((await entry(hApply!.id)).cascade).toEqual([hMove]);
-  const res = await call('POST', '/replacement/undo', { recasementId: first.id });
+  const res = await undoRecasement(call, dbPath, first.id);
   expect(res.statusCode).toBe(200);
   for (const id of [hApply!.id, hMove]) expect((await entry(id)).status).toBe('undone');
   expect((await replacement()).recasements.filter((x) => x.registrationId === a.id).map((x) => x.status)).toEqual(['undone', 'undone']);
@@ -435,8 +436,8 @@ test('réaffectation à l’unité journalisée ; annuler une réaffectation anc
   expect((await catOf(b.id))!.id).toBe(fromB.id);
   const now = (await contents()).filter((c) => !c.registrationIds.includes(senior.id));
   expect(now).toEqual(before);
-  // Déjà annulée : introuvable (comme avant).
-  expect((await call('POST', '/replacement/undo', { recasementId: first.id })).statusCode).toBe(404);
+  // Déjà annulée : refusée, rien à annuler (la liste est mise à jour).
+  expect((await undoRecasement(call, dbPath, first.id)).statusCode).toBe(409);
 });
 
 test('« Ne combat pas » journalisé et annulable depuis l’historique', async () => {
@@ -488,7 +489,7 @@ test('repartir de zéro : le plan revient, l’échange de places plus récent p
   const planId = (await history()).find((e) => e.kind === 'plan')!.id;
 
   expect(await resetPreview()).toMatchObject({ undo: 1, kept: [], blockedBy: null, history: 2, refusal: null, cascade: [places] });
-  const res = await call('POST', '/replacement/reset');
+  const res = await resetAsShown(call);
   expect(res.statusCode).toBe(200);
   expect(res.json()).toEqual({ ok: true, undone: 1, kept: [] });
   // GUERIN retourne dans sa catégorie (même id, même libellé) ; BLANC reste chez elle.
@@ -504,6 +505,36 @@ test('repartir de zéro : le plan revient, l’échange de places plus récent p
   await everyoneInBracket();
 });
 
+test('repartir de zéro : refusé si une ligne Places est arrivée depuis l’aperçu (rien n’est effacé), accepté avec le lot à jour', async () => {
+  const guerin = await reg({ lastName: 'GUERIN', weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+  const blanc = await reg({ lastName: 'BLANC', weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
+  await reg({ weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
+  const home = (await catOf(guerin.id))!;
+  await applyPlan();
+  const planId = (await history()).find((e) => e.kind === 'plan')!.id;
+  // Aperçu affiché : le plan seul.
+  const shown = (await replacement() as unknown as { reset: { lot: string[] } }).reset.lot;
+  expect(shown).toEqual([planId]);
+  // Un autre poste échange deux places dans la catégorie d'arrivée pendant que la fenêtre est ouverte.
+  const host = (await catOf(guerin.id))!;
+  const swap = await call('POST', `/categories/${host.id}/swap`, { a: blanc.id, b: guerin.id });
+  expect(swap.statusCode).toBe(200);
+  const places = (swap.json() as { historyId: string }).historyId;
+  const stale = await call('POST', '/replacement/reset', { expect: shown });
+  expect(stale.statusCode).toBe(409);
+  expect(stale.json()).toEqual({ error: 'Un autre poste a modifié ces tableaux : la liste est mise à jour.' });
+  // Rien n'a bougé : GUERIN toujours chez BLANC, le plan et l'échange de places toujours en place.
+  expect((await catOf(guerin.id))!.id).toBe(host.id);
+  expect((await history()).filter((e) => e.status === 'active').map((e) => e.id)).toEqual([places, planId]);
+  expect((await replacement()).recasements).toHaveLength(1);
+  // Avec le lot à jour (plan et échange de places) : accepté.
+  expect((await replacement() as unknown as { reset: { lot: string[] } }).reset.lot).toEqual([places, planId]);
+  expect((await resetAsShown(call)).statusCode).toBe(200);
+  expect((await catOf(guerin.id))!.id).toBe(home.id);
+  expect(await history()).toEqual([]);
+  await everyoneInBracket();
+});
+
 test('repartir de zéro : une cible dont la cascade touche une catégorie commencée reste, avec ce qui en dépend', async () => {
   const { a, b, fromA, fromB, x } = await threeGroups();
   // A part en -47 (chez B), puis B part en -61 : le second dépend du premier (même catégorie -47).
@@ -513,7 +544,7 @@ test('repartir de zéro : une cible dont la cascade touche une catégorie commen
   const p = await resetPreview();
   expect(p).toMatchObject({ undo: 0, blockedBy: null, refusal: null, history: 0, cascade: [] });
   expect(p.kept).toEqual([{ name: 'BETA x', toLabel: expect.any(String), why: 'started' }, { name: 'ALPHA x', toLabel: expect.any(String), why: 'started' }]);
-  expect((await call('POST', '/replacement/reset')).json()).toMatchObject({ ok: true, undone: 0 });
+  expect((await resetAsShown(call)).json()).toMatchObject({ ok: true, undone: 0 });
   expect((await catOf(a.id))!.id).toBe(fromB.id);
   expect((await catOf(b.id))!.id).toBe(x.id);
   expect((await history()).map((e) => [e.id, e.status])).toEqual([[h2, 'active'], [h1, 'active']]);
@@ -527,6 +558,6 @@ test('repartir de zéro : un déplacement déjà annulé de la session est effac
   const f = (await call('PATCH', `/categories/${x.id}`, { format: 'round_robin' })).json() as { historyId: string };
   expect((await undo([f.historyId], [f.historyId])).statusCode).toBe(200);
   expect(await resetPreview()).toMatchObject({ undo: 0, history: 1, cascade: [] });
-  expect((await call('POST', '/replacement/reset')).statusCode).toBe(200);
+  expect((await resetAsShown(call)).statusCode).toBe(200);
   expect((await history()).map((e) => [e.id, e.status])).toEqual([[f.historyId, 'undone']]);
 });

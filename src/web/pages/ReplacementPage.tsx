@@ -593,7 +593,7 @@ export function ReplacementPage() {
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setDialog(null)}>Non</Button>
             <Button color="red" data-testid="replacement-reset-confirm" loading={resetAll.isPending} disabled={data.reset.blockedBy !== null || data.reset.refusal !== null}
-              onClick={() => resetAll.mutate(waveId ? { waveId } : {}, {
+              onClick={() => resetAll.mutate(waveId ? { waveId, expect: data.reset.lot } : { expect: data.reset.lot }, {
                 onSuccess: () => {
                   clearPlanChoices(id, waveId);
                   setResets((n) => n + 1);
