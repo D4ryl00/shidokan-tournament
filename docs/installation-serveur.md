@@ -4,6 +4,7 @@ Cette procédure met l'application en ligne, à l'adresse `https://competitions.
 
 - L'image est publiée sur Docker Hub (`d4ryl00/shidokan-tournament`) : il n'y a rien à compiler sur le serveur.
 - En ligne, l'application tourne en **rôle serveur** : les organisateurs se connectent avec un compte (e-mail et mot de passe). Les pages des clubs (`/inscription/…`) s'ouvrent seulement avec leur lien personnel.
+- Sans session, l'adresse `/` est la **page publique** (mode spectateur) : elle montre, à tous et sans compte, les compétitions rendues publiques. Une compétition est **privée** tant qu'un organisateur ne la rend pas publique (Réglages → Visibilité → Publique) ; avant, elle n'apparaît pas. Les organisateurs passent par le bouton « Connexion organisateurs » (`/connexion`).
 - Le PC de la compétition, lui, ne demande pas de connexion : voir la [vue d'ensemble](guide-utilisateur.md#1-vue-densemble).
 
 ## Ce qu'il faut
@@ -55,7 +56,7 @@ Avec l'envoi par Google, l'adresse de redirection déclarée chez Google doit au
 docker compose exec -it app node dist/server/cli.js add-user votre.adresse@exemple.fr
 ```
 
-Le mot de passe est demandé deux fois, sans s'afficher (10 caractères au moins). Connectez-vous ensuite sur `https://competitions.shidokanfrance.com`. Les autres comptes se créent depuis l'application, menu **Comptes**, avec un rôle :
+Le mot de passe est demandé deux fois, sans s'afficher (10 caractères au moins). Connectez-vous ensuite sur `https://competitions.shidokanfrance.com/connexion` (sans session, `/` montre la page publique). Les autres comptes se créent depuis l'application, menu **Comptes**, avec un rôle :
 - **Organisateur** : tout ;
 - **Table centrale** : inscriptions, clubs, pesée, réaffectations, tableaux, sessions à lancer et résultats de toutes les zones ;
 - **Zone** : résultats, notes de kata et départages de **sa zone**, dans **une** compétition. Pour la compétition suivante, changez son rôle (« Changer le rôle ») ou créez un autre compte.
