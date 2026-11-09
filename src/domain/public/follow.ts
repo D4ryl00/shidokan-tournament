@@ -99,7 +99,7 @@ function line(pub: PublicCompetition, c: PublicCategory, rid: string): FighterLi
     const round1Score = mine >= 0 ? ranking[mine]!.score : null;
     const round1Done = !twoOnly && ranking.length > 0 && ranking.every((r) => r.score !== null);
     const final = scores.final[rid]?.length ? kataScore(scores.final[rid]!) : null;
-    kata = { round1: round1Score, place: round1Done && round1Score !== null ? mine + 1 : null, final };
+    kata = { round1: round1Score, place: round1Done && round1Score !== null ? ranking.findIndex((r) => r.score === round1Score) + 1 : null, final };
     const tied = c.podium.ties.some((t) => t.includes(rid));
     kataOut = round1Done && !finalists.includes(rid) && !tied;
     candidates = kataOut ? [] : here.filter((l) => l.item.kataPart !== 'finale' || (l.item.state === 'ready' && finalists.includes(rid)));

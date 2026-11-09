@@ -154,6 +154,10 @@ describe('fighterTimeline', () => {
     const whole = view({ r5: [8], r6: [7], r7: [6], r9: [5] }, { ...base.plan, zones: [{ zoneId: 'z2', passages: [{ number: 1, categoryId: 'B', matchId: null, noRest: false, waveId: 'w1' }] }] });
     expect(lineOf(whole, 'f5')).toMatchObject({ next: null, state: 'eliminated' });
     expect(lineOf(whole, 'f1')).toMatchObject({ next: { number: 1 }, state: 'upcoming' });
+    // Notes égales : la même place (1re, 2e, 3e, 3e), pas deux places différentes.
+    const equal = view({ r5: [8], r6: [7], r7: [6], r9: [6] });
+    expect(lineOf(equal, 'f4')).toMatchObject({ kata: { round1: 6, place: 3 } });
+    expect(lineOf(equal, 'f5')).toMatchObject({ kata: { round1: 6, place: 3 } });
     // Finale notée : la note de la finale aussi.
     expect(lineOf(view({ r5: [8], r6: [7], r7: [6], r9: [5] }, split, { r5: [9], r6: [8.5] }), 'f2')).toMatchObject({ kata: { round1: 7, place: 2, final: 8.5 }, state: { medal: 2 } });
   });
