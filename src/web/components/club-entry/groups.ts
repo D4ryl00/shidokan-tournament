@@ -2,25 +2,30 @@ import type { ClubFormLine, CombatDiscipline } from '../../../domain/club-form.j
 import { DISCIPLINES } from '../../../domain/disciplines.js';
 import { normalizeName } from '../../../domain/names.js';
 import { plural } from '../../../domain/plural.js';
-import type { Sex } from '../../../domain/types.js';
+import type { Ruleset, Sex } from '../../../domain/types.js';
 
 /** Regroupement de la liste « Vos combattants » de la page du club. */
-export type GroupMode = 'age' | 'discipline' | 'name';
+export type GroupMode = 'category' | 'age' | 'name';
 export const GROUP_MODES: { value: GroupMode; label: string }[] = [
+  { value: 'category', label: 'Catégorie' },
   { value: 'age', label: 'Âge' },
-  { value: 'discipline', label: 'Discipline' },
   { value: 'name', label: 'Nom (A→Z)' },
 ];
 
-/** Ce que le titre du groupe dit déjà, donc que la ligne ne répète pas. */
-export type Hidden = 'age' | CombatDiscipline | 'kata' | null;
+/** Ce que les titres disent déjà, donc que la ligne ne répète pas : la tranche d'âge, la discipline de combat (et son règlement), le kata. */
+export interface Hidden { age: boolean; combat: boolean; kata: boolean }
+
+/** Discipline et règlement (« Karaté · Jiyu »), au-dessus de ses cartes de catégorie. */
+export interface LineSection { key: string; title: string; short: string; sub: string | null; size: number }
 
 export interface LineGroup<L> {
   id: string;
+  /** Par catégorie : la section (discipline et règlement) de la carte. */
+  section: LineSection | null;
   /** null : liste unique, sans titre (tri par nom). */
   title: string | null;
   sub: string | null;
-  /** « 3 combattants », ou « 3 inscrits » par discipline (un combattant peut être dans deux groupes). */
+  /** « 3 combattants ». */
   count: string;
   hide: Hidden;
   lines: L[];
@@ -34,7 +39,11 @@ interface Context {
 }
 
 const COMBATS: CombatDiscipline[] = ['karate', 'shido-boxing', 'shido-mix', 'triathlon'];
+const RULESETS: (Ruleset | null)[] = ['jiyu', 'shobu', null];
+const RULESET_TEXT: Record<Ruleset, string> = { jiyu: 'Jiyu', shobu: 'Shobu' };
 const SEXES: (Sex | null)[] = ['F', 'M', null];
+const NO_AGE = 'Sans tranche d’âge';
+const SHOWN: Hidden = { age: false, combat: false, kata: false };
 const byName = (a: ClubFormLine, b: ClubFormLine) => a.lastName.localeCompare(b.lastName, 'fr') || a.firstName.localeCompare(b.firstName, 'fr');
 
 export function groupClubLines<L extends { line: ClubFormLine }>(all: L[], ctx: Context): LineGroup<L>[] {
@@ -51,22 +60,31 @@ export function groupClubLines<L extends { line: ClubFormLine }>(all: L[], ctx: 
   const byCategory = (a: L, b: L) =>
     ageRank(a.line.ageBandCode) - ageRank(b.line.ageBandCode) || SEXES.indexOf(a.line.sex) - SEXES.indexOf(b.line.sex)
     || weightRank(a.line.weightClassId) - weightRank(b.line.weightClassId) || byName(a.line, b.line);
+  const group = (id: string, section: LineSection | null, title: string | null, sub: string | null, hide: Hidden, items: L[], sort: (a: L, b: L) => number): LineGroup<L>[] =>
+    items.length ? [{ id, section, title, sub, hide, count: plural(items.length, 'combattant'), lines: [...items].sort(sort) }] : [];
 
-  const count = (n: number) => (ctx.mode === 'discipline' ? plural(n, 'inscrit') : plural(n, 'combattant'));
-  const group = (id: string, title: string | null, sub: string | null, hide: Hidden, items: L[], sort: (a: L, b: L) => number): LineGroup<L>[] =>
-    items.length ? [{ id, title, sub, hide, count: count(items.length), lines: [...items].sort(sort) }] : [];
-
-  if (ctx.mode === 'name') return group('tous', null, null, null, lines, (a, b) => byName(a.line, b.line));
-  if (ctx.mode === 'age') {
-    const known = new Set(ctx.ageBands.map((b) => b.code));
-    return [
-      ...ctx.ageBands.flatMap((b) => group(`age-${b.code}`, b.label, b.ages, 'age', lines.filter((l) => l.line.ageBandCode === b.code), byCategory)),
-      ...group('age-aucune', 'Sans tranche d’âge', null, null, lines.filter((l) => !l.line.ageBandCode || !known.has(l.line.ageBandCode)), byCategory),
-    ];
-  }
-  return [
-    ...COMBATS.flatMap((d) => group(`discipline-${d}`, DISCIPLINES[d].label, null, d, lines.filter((l) => l.line.combat === d), byCategory)),
-    ...group('discipline-kata', DISCIPLINES.kata.label, 'sans catégorie de poids', 'kata', lines.filter((l) => l.line.kata), byCategory),
-    ...group('discipline-aucune', 'Sans discipline', null, null, lines.filter((l) => !l.line.combat && !l.line.kata), byCategory),
+  // Une carte par tranche d'âge (dans l'ordre de la grille), puis celle des lignes sans tranche connue.
+  const known = new Set(ctx.ageBands.map((b) => b.code));
+  const byAge = (prefix: string, section: LineSection | null, hide: Hidden, items: L[]): LineGroup<L>[] => [
+    ...ctx.ageBands.flatMap((b) => group(`${prefix}-${b.code}`, section, b.label, b.ages, hide, items.filter((l) => l.line.ageBandCode === b.code), byCategory)),
+    ...group(`${prefix}-aucune`, section, NO_AGE, null, hide, items.filter((l) => !l.line.ageBandCode || !known.has(l.line.ageBandCode)), byCategory),
   ];
+
+  if (ctx.mode === 'name') return group('tous', null, null, null, SHOWN, lines, (a, b) => byName(a.line, b.line));
+  if (ctx.mode === 'age') return byAge('age', null, { ...SHOWN, age: true }, lines);
+
+  // Par catégorie : chaque discipline de combat, jiyu puis shobu, puis le kata ; à l'intérieur, des plus jeunes aux plus âgés.
+  const sections: { key: string; title: string; short: string; sub: string | null; hide: Hidden; items: L[] }[] = [
+    ...COMBATS.flatMap((d) => RULESETS.map((r) => ({
+      key: r ? `${d}-${r}` : d,
+      title: r ? `${DISCIPLINES[d].label} · ${RULESET_TEXT[r]}` : DISCIPLINES[d].label,
+      short: r ? `${DISCIPLINES[d].label} ${r}` : DISCIPLINES[d].label,
+      sub: null,
+      hide: { age: true, combat: true, kata: false },
+      items: lines.filter((l) => l.line.combat === d && l.line.ruleset === r),
+    }))),
+    { key: 'kata', title: DISCIPLINES.kata.label, short: DISCIPLINES.kata.label, sub: 'sans catégorie de poids', hide: { age: true, combat: true, kata: true }, items: lines.filter((l) => l.line.kata) },
+    { key: 'aucune', title: 'Sans discipline', short: 'Sans discipline', sub: null, hide: { ...SHOWN, age: true }, items: lines.filter((l) => !l.line.combat && !l.line.kata) },
+  ];
+  return sections.flatMap(({ hide, items, ...s }) => (items.length ? byAge(s.key, { ...s, size: items.length }, hide, items) : []));
 }

@@ -76,42 +76,56 @@ test('inscription en ligne : annuaire → invitation → le coach inscrit, modif
   await shot(coach, '3-formulaire');
   await coach.getByTestId('line-save').click();
   await coach.reload();
-  await expect(coach.getByTestId('club-line')).toHaveCount(1);
-  // Regroupée par âge par défaut : la tranche est dans le titre du groupe, pas répétée sur la ligne.
-  await expect(coach.getByTestId('club-group-title')).toHaveText(['Cadets']);
-  await expect(coach.getByTestId('club-line-tags').locator('.sk-tag')).toHaveText(['F', '-54 kg', 'Karaté jiyu', 'Kata']);
+  // Rangée par catégorie par défaut : discipline et règlement en titre de section, une carte par tranche d'âge ;
+  // en combat et en kata, la combattante est dans les deux sections. La ligne ne répète pas ce que disent les titres.
+  await expect(coach.getByTestId('club-section-title')).toHaveText(['Karaté · Jiyu', 'Kata']);
+  await expect(coach.getByTestId('club-group-title')).toHaveText(['Cadets', 'Cadets']);
+  await expect(coach.getByTestId('club-line')).toHaveCount(2);
+  await expect(coach.getByTestId('club-line').first().getByTestId('club-line-tags')).toHaveText('F-54 kgaussi en Kata');
+  await expect(coach.getByTestId('club-line').last().getByTestId('club-line-tags')).toHaveText('Faussi en Karaté jiyu');
   await shot(coach, '4-liste');
 
   // 4. Modifier (Boxing), ajouter puis supprimer un second combattant.
-  await coach.getByTestId('club-line').getByRole('button', { name: 'Modifier' }).click();
+  await coach.getByTestId('club-line').first().getByRole('button', { name: 'Modifier' }).click();
   await coach.getByTestId('club-line-form').getByRole('group', { name: 'Discipline de combat' }).getByText('Boxing', { exact: true }).click();
   // Poids actuel hors de la catégorie choisie : avertissement, l'enregistrement passe quand même.
   await coach.getByTestId('line-weight').fill('58');
   const outside = 'Le poids actuel (58 kg) est en dehors de la catégorie -54 kg : il correspond à -61 kg.';
   await expect(coach.getByTestId('line-weight-warning')).toHaveText(outside);
   await coach.getByTestId('line-save').click();
-  await expect(coach.getByTestId('club-line-tags').locator('.sk-tag')).toHaveText(['F', '-54 kg · 58 kg', 'Shido-boxing jiyu', 'Kata']);
-  await expect(coach.getByTestId('line-notice')).toHaveText(outside);
+  await expect(coach.getByTestId('club-section-title')).toHaveText(['Shido-boxing · Jiyu', 'Kata']);
+  await expect(coach.getByTestId('club-line').first().getByTestId('club-line-tags').locator('.sk-tag')).toHaveText(['F', '-54 kg · 58 kg']);
+  // L'avertissement de poids concerne le combat : pas sur la carte du kata.
+  await expect(coach.getByTestId('line-notice')).toHaveText([outside]);
   await coach.getByTestId('add-fighter').click();
   await fillFighter(coach, { last: 'DURAND', first: 'Hugo', sex: 'Masculin', age: 'Seniors (18 à 34 ans)', kg: '75', kata: true });
   await coach.getByTestId('line-save').click();
-  await expect(coach.getByTestId('club-line')).toHaveCount(2);
-  // Regroupements : par âge (sommaire en pastilles), par discipline (en combat et en kata : dans les deux groupes), recherche.
+  await expect(coach.getByTestId('club-line')).toHaveCount(3);
+  await expect(coach.getByTestId('club-group-title')).toHaveText(['Cadets', 'Cadets', 'Seniors']);
+  // Sommaire : une pastille par discipline et règlement, avec le nombre de combattants de la section.
+  await expect(coach.getByTestId('club-jumps')).toHaveText('Shido-boxing jiyu1Kata2');
+  // Une carte se replie sur son titre, qui garde le nombre de combattants.
+  const seniors = coach.getByTestId('club-group').filter({ has: coach.getByTestId('club-group-title').getByText('Seniors', { exact: true }) });
+  await seniors.getByRole('button', { name: /Seniors/ }).click();
+  await expect(seniors.getByTestId('club-line')).toHaveCount(0);
+  await expect(seniors).toContainText('1 combattant');
+  await seniors.getByRole('button', { name: /Seniors/ }).click();
+  // Par âge : un combattant par ligne, avec ses disciplines.
+  await coach.getByTestId('club-group-mode').getByText('Âge', { exact: true }).click();
+  await expect(coach.getByTestId('club-group-title')).toHaveText(['Cadets', 'Seniors']);
+  await expect(coach.getByTestId('club-line').first().getByTestId('club-line-tags').locator('.sk-tag')).toHaveText(['F', '-54 kg · 58 kg', 'Shido-boxing jiyu', 'Kata']);
   await expect(coach.getByTestId('club-jumps')).toHaveText('Cadets1Seniors1');
-  await coach.getByTestId('club-group-mode').getByText('Discipline', { exact: true }).click();
-  await expect(coach.getByTestId('club-group-title')).toHaveText(['Shido-boxing', 'Kata']);
-  await expect(coach.getByTestId('club-group').filter({ has: coach.getByTestId('club-group-title').getByText('Kata', { exact: true }) }).getByTestId('club-line')).toHaveText([/MARTIN Léa.*aussi en Shido-boxing/, /DURAND Hugo/]);
   await coach.getByTestId('club-search').fill('hugo');
   await expect(coach.getByTestId('club-line')).toHaveText([/DURAND Hugo/]);
   await coach.getByTestId('club-search').fill('');
   await coach.reload();
-  await expect(coach.getByTestId('club-group-title')).toHaveText(['Shido-boxing', 'Kata']); // choix gardé sur l'appareil
-  await coach.getByTestId('club-group-mode').getByText('Âge', { exact: true }).click();
+  await expect(coach.getByTestId('club-group-title')).toHaveText(['Cadets', 'Seniors']); // choix gardé sur l'appareil
+  await coach.getByTestId('club-group-mode').getByText('Catégorie', { exact: true }).click();
   await shot(coach, '4b-groupes');
   await coach.getByTestId('club-line').filter({ hasText: 'DURAND' }).getByRole('button', { name: 'Modifier' }).click();
   await coach.getByTestId('line-delete').click();
   await coach.getByTestId('line-delete-confirm').click();
-  await expect(coach.getByTestId('club-line')).toHaveCount(1);
+  await expect(coach.getByTestId('club-line')).toHaveCount(2);
 
   // 5. L'organisateur voit les inscriptions « En ligne ».
   await page.goto(`/competitions/${id}/inscriptions`);

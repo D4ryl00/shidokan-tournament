@@ -1,6 +1,6 @@
 import { Accordion, Alert, Box, Button, Card, Checkbox, Container, Group, Loader, SegmentedControl, SimpleGrid, Stack, Text, TextInput, Title, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useParams } from 'react-router';
 import { PRE_APPROVAL_TEXT, kgText, orderedPrefs, weightWarning, type ClubFormLine } from '../../domain/club-form.js';
 import { useClubEntry, useSaveClubHeader, type ClubEntryHeader, type ClubEntryView, type ClubLine } from '../api.js';
@@ -65,10 +65,10 @@ function HeaderForm({ token, view }: { token: string; view: ClubEntryView }) {
 
 const MODE_KEY = 'inscription:regroupement';
 const savedMode = (): GroupMode => {
-  try { const v = localStorage.getItem(MODE_KEY); return GROUP_MODES.some((m) => m.value === v) ? (v as GroupMode) : 'age'; } catch { return 'age'; }
+  try { const v = localStorage.getItem(MODE_KEY); return GROUP_MODES.some((m) => m.value === v) ? (v as GroupMode) : 'category'; } catch { return 'category'; }
 };
 
-/** Étiquettes d'une ligne : sexe, tranche d'âge, poids, disciplines ; sans ce que le titre du groupe dit déjà (`hide`). */
+/** Étiquettes d'une ligne : sexe, tranche d'âge, poids, disciplines ; sans ce que les titres disent déjà (`hide`). */
 function LineTags({ line, view, hide }: { line: ClubFormLine; view: ClubEntryView; hide: Hidden }) {
   const age = view.ageBands.find((b) => b.code === line.ageBandCode)?.label ?? line.ageBandCode;
   const weightClass = view.weightClasses.find((w) => w.id === line.weightClassId);
@@ -76,13 +76,13 @@ function LineTags({ line, view, hide }: { line: ClubFormLine; view: ClubEntryVie
   return (
     <Group gap={5} data-testid="club-line-tags">
       {line.sex && <span className="sk-tag" data-kind="sex" title={SEX_LABELS[line.sex]}>{line.sex}</span>}
-      {hide !== 'age' && age && <span className="sk-tag">{age}</span>}
-      {hide !== 'kata' && weight && <span className="sk-tag">{weight}</span>}
-      {line.combat && hide !== 'kata' && (hide === line.combat
-        ? line.ruleset && <span className="sk-tag">{RULESET_LABEL[line.ruleset]}</span>
-        : <span className="sk-tag" data-kind="discipline">{disciplineLabel(line.combat)}{line.ruleset ? ` ${RULESET_LABEL[line.ruleset]}` : ''}</span>)}
-      {line.kata && hide !== 'kata' && <span className="sk-tag" data-kind="discipline">Kata</span>}
-      {hide === 'kata' && line.combat && <Text span size="xs" c="dimmed">aussi en {disciplineLabel(line.combat)}</Text>}
+      {!hide.age && age && <span className="sk-tag">{age}</span>}
+      {!hide.kata && weight && <span className="sk-tag">{weight}</span>}
+      {line.combat && !hide.combat && <span className="sk-tag" data-kind="discipline">{disciplineLabel(line.combat)}{line.ruleset ? ` ${RULESET_LABEL[line.ruleset]}` : ''}</span>}
+      {line.kata && !hide.kata && (hide.combat
+        ? <Text span size="xs" c="dimmed">aussi en Kata</Text>
+        : <span className="sk-tag" data-kind="discipline">Kata</span>)}
+      {hide.kata && line.combat && <Text span size="xs" c="dimmed">aussi en {disciplineLabel(line.combat)}{line.ruleset ? ` ${RULESET_LABEL[line.ruleset]}` : ''}</Text>}
     </Group>
   );
 }
@@ -93,8 +93,8 @@ function LineRow({ l, view, hide, onEdit }: { l: ClubLine; view: ClubEntryView; 
       <Stack gap={4} style={{ minWidth: 0 }}>
         <Text fw={700}>{l.line.lastName} {l.line.firstName}</Text>
         <LineTags line={l.line} view={view} hide={hide} />
-        {l.line.combat && hide !== 'kata' && <Text size="xs" c="dimmed" data-testid="club-line-reclass">{reclassText(l.line)}</Text>}
-        {[...l.notices, weightWarning(l.line, view.weightClasses)].filter((n) => n !== null).map((n) => <Text key={n} size="xs" c="var(--sk-warn-text)" data-testid="line-notice">{n}</Text>)}
+        {l.line.combat && !hide.kata && <Text size="xs" c="dimmed" data-testid="club-line-reclass">{reclassText(l.line)}</Text>}
+        {[...l.notices, hide.kata ? null : weightWarning(l.line, view.weightClasses)].filter((n) => n !== null).map((n) => <Text key={n} size="xs" c="var(--sk-warn-text)" data-testid="line-notice">{n}</Text>)}
         {!l.editable && (
           <Group gap={6} mt={2}>
             <StatusBadge tone="neutral" size="sm">Verrouillé</StatusBadge>
@@ -107,7 +107,10 @@ function LineRow({ l, view, hide, onEdit }: { l: ClubLine; view: ClubEntryView; 
   );
 }
 
-/** « Vos combattants » : regroupés par âge, par discipline ou par nom (choix gardé sur l'appareil), avec recherche et sommaire. */
+/**
+ * « Vos combattants » : par catégorie (défaut : discipline et règlement, puis une carte par tranche d'âge), par âge ou par nom
+ * (choix gardé sur l'appareil), avec recherche et sommaire.
+ */
 function ClubLinesList({ view, onEdit }: { view: ClubEntryView; onEdit: (l: ClubLine) => void }) {
   const [mode, setMode] = useState<GroupMode>(savedMode);
   const [query, setQuery] = useState('');
@@ -119,6 +122,12 @@ function ClubLinesList({ view, onEdit }: { view: ClubEntryView; onEdit: (l: Club
   const fold = (id: string) => setFolded((f) => { const n = new Set(f); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const groups = groupClubLines(view.lines, { mode, query, ageBands: view.ageBands, weightClasses: view.weightClasses });
   const domId = (id: string) => `club-group-${id}`;
+  const scrollTo = (id: string) => () => document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  // Par catégorie : une pastille par discipline et règlement (une par carte en ferait des dizaines) ; par âge : une par tranche.
+  const jumps = mode === 'name' ? [] : mode === 'category'
+    ? groups.filter((g, i) => g.section && g.section !== groups[i - 1]?.section)
+      .map((g) => ({ key: g.section!.key, label: g.section!.short, count: g.section!.size, onClick: scrollTo(domId(`section-${g.section!.key}`)) }))
+    : groups.map((g) => ({ key: g.id, label: g.title ?? '', count: g.lines.length, onClick: scrollTo(domId(g.id)) }));
   return (
     <Stack gap="sm">
       {view.lines.length > 1 && (
@@ -131,15 +140,20 @@ function ClubLinesList({ view, onEdit }: { view: ClubEntryView; onEdit: (l: Club
             style={{ flex: '1 1 180px', minWidth: 0 }} styles={{ input: { fontSize: 16 } }} data-testid="club-search" />
         </Group>
       )}
-      {mode !== 'name' && groups.length > 1 && (
-        <JumpLinks label="Aller au groupe" data-testid="club-jumps"
-          items={groups.map((g) => ({ key: g.id, label: g.title ?? '', count: g.lines.length, onClick: () => document.getElementById(domId(g.id))?.scrollIntoView({ block: 'start', behavior: 'smooth' }) }))} />
-      )}
+      {jumps.length > 1 && <JumpLinks label="Aller au groupe" data-testid="club-jumps" items={jumps} />}
       {groups.length === 0 && <EmptyState title={`Aucun combattant ne correspond à « ${query.trim()} ».`} />}
-      {groups.map((g) => {
+      {groups.map((g, i) => {
         const open = g.title === null || !folded.has(g.id);
+        const section = g.section && g.section !== groups[i - 1]?.section ? g.section : null;
         return (
-          <Card key={g.id} id={domId(g.id)} withBorder padding={0} style={{ scrollMarginTop: 12 }} data-testid="club-group">
+          <Fragment key={g.id}>
+          {section && (
+            <Group gap={8} align="baseline" mt={i === 0 ? 0 : 'sm'} id={domId(`section-${section.key}`)} style={{ scrollMarginTop: 12 }} data-testid="club-section">
+              <Text fw={700} size="sm" tt="uppercase" c="dimmed" style={{ letterSpacing: 0.4 }} data-testid="club-section-title">{section.title}</Text>
+              {section.sub && <Text size="xs" c="dimmed">{section.sub}</Text>}
+            </Group>
+          )}
+          <Card id={domId(g.id)} withBorder padding={0} style={{ scrollMarginTop: 12 }} data-testid="club-group">
             {g.title !== null && (
               <UnstyledButton onClick={() => fold(g.id)} aria-expanded={open} px="md" py="sm"
                 style={{ display: 'flex', alignItems: 'baseline', gap: 10, background: 'var(--sk-row)', borderBottom: open ? '1px solid var(--sk-card-line)' : 0 }}>
@@ -151,6 +165,7 @@ function ClubLinesList({ view, onEdit }: { view: ClubEntryView; onEdit: (l: Club
             )}
             {open && g.lines.map((l) => <LineRow key={l.fighterId} l={l} view={view} hide={g.hide} onEdit={onEdit} />)}
           </Card>
+          </Fragment>
         );
       })}
     </Stack>
