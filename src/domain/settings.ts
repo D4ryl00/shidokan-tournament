@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { mailTemplateSchema } from './mail-template-schema.js';
+import { defaultSchedule, scheduleSettingsSchema } from './schedule/durations.js';
 
 export const COMBAT_FORMATS = [
   'single_match',
@@ -54,6 +55,8 @@ export const competitionSettingsSchema = z
     kataBronzeCount: z.union([z.literal(1), z.literal(2)]),
     triathlonRounds: z.union([z.literal(3), z.literal(6)]),
     passageOrder: z.enum(PASSAGE_ORDER_MODES),
+    /** Durées des combats par groupe d'âge, temps de changement et passage de kata (horaires du mode spectateur). */
+    schedule: scheduleSettingsSchema,
     /** Zone où passent les combats pour la 1re place (null : aucune). */
     finalsZoneId: z.string().nullable(),
     kataFinalsOnFinalsZone: z.boolean(),
@@ -89,6 +92,7 @@ export function defaultSettings(): CompetitionSettings {
     kataBronzeCount: 2,
     triathlonRounds: 3,
     passageOrder: 'rounds',
+    schedule: defaultSchedule(),
     finalsZoneId: null,
     kataFinalsOnFinalsZone: false,
     invitationMail: null,

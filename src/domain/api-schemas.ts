@@ -58,6 +58,7 @@ const FIELD_LABELS: Record<string, string> = {
   weighInToleranceKg: 'tolérance de pesée',
   kataBronzeCount: 'nombre de bronzes en kata',
   triathlonRounds: 'rounds de triathlon',
+  schedule: 'durées des combats',
   settings: 'réglages',
   mixSexes: 'mixité',
   ageBandCodes: "tranches d'âge",

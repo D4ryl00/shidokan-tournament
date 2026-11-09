@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import { ZodError } from 'zod';
 import { RULE_IDS, defaultSettings, mergeSettings, readStoredSettings } from '../../src/domain/settings.js';
+import { defaultSchedule } from '../../src/domain/schedule/durations.js';
 
 test('réglages par défaut (spec §9.2, §8, §11.1, §12, §4.1)', () => {
   expect(defaultSettings()).toEqual({
@@ -17,6 +18,7 @@ test('réglages par défaut (spec §9.2, §8, §11.1, §12, §4.1)', () => {
     kataBronzeCount: 2,
     triathlonRounds: 3,
     passageOrder: 'rounds',
+    schedule: defaultSchedule(),
     finalsZoneId: null,
     kataFinalsOnFinalsZone: false,
     invitationMail: null,
