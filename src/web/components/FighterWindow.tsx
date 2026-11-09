@@ -38,7 +38,7 @@ function OpenWindow({ competitionId, mode, onClose }: { competitionId: string; m
       </Modal>
     );
   }
-  return <Steps competitionId={competitionId} mode={mode} line={fighter.data ?? null} onClose={onClose} />;
+  return <Steps competitionId={competitionId} mode={mode} line={mode.kind === 'edit' ? (fighter.data ?? null) : null} onClose={onClose} />;
 }
 
 function Steps({ competitionId, mode, line, onClose }: {

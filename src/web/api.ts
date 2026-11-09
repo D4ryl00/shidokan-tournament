@@ -1194,6 +1194,7 @@ export const useFighterLine = (competitionId: string, fighterId: string) =>
   useQuery({
     queryKey: ['club-lines', competitionId, fighterId],
     queryFn: () => api<ClubLine>('GET', `/api/competitions/${competitionId}/fighters/${fighterId}/line`),
+    enabled: fighterId !== '',
     gcTime: 0,
     refetchOnWindowFocus: false,
   });
