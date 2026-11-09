@@ -230,7 +230,7 @@ test('POST /clubs/new creates the directory entry and the competition club', asy
   expect((await app.inject({ method: 'GET', url: `${base}/clubs` })).json().map((c: { id: string }) => c.id)).toEqual([club.id]);
 });
 
-test('duplicate directory name is refused', async () => {
+test('duplicate affiliation number is refused and nothing is created', async () => {
   // L'annuaire refuse un numéro déjà pris (il accepte deux fiches de même nom) : rien n'est créé, ni fiche ni club.
   await app.inject({ method: 'POST', url: `${base}/clubs/new`, payload: NEW_CLUB });
   const dup = await app.inject({ method: 'POST', url: `${base}/clubs/new`, payload: { ...NEW_CLUB, name: 'Autre Dojo' } });
@@ -239,4 +239,30 @@ test('duplicate directory name is refused', async () => {
   expect((await app.inject({ method: 'GET', url: '/api/club-directory' })).json()).toHaveLength(1);
   expect((await app.inject({ method: 'GET', url: `${base}/clubs` })).json()).toHaveLength(1);
   expect((await app.inject({ method: 'POST', url: `${base}/clubs/new`, payload: { ...NEW_CLUB, name: '  ' } })).statusCode).toBe(400);
+});
+
+const SAME_NAME = 'Un club de ce nom existe déjà : choisissez-le dans la liste.';
+const counts = async () => ({
+  directory: (await app.inject({ method: 'GET', url: '/api/club-directory' })).json() as { id: string; competitions: number }[],
+  clubs: (await app.inject({ method: 'GET', url: `${base}/clubs` })).json() as { id: string; coachName: string | null }[],
+});
+
+test('POST /clubs/new refuses the name of a club of the competition: nothing created or re-pointed', async () => {
+  await app.inject({ method: 'POST', url: `${base}/clubs/new`, payload: NEW_CLUB });
+  const before = await counts();
+  const res = await app.inject({ method: 'POST', url: `${base}/clubs/new`, payload: { ...NEW_CLUB, name: ' tani  DOJO ', affiliationNumber: null, coachName: 'Autre' } });
+  expect(res.statusCode).toBe(409);
+  expect(res.json().error).toBe(SAME_NAME);
+  expect(await counts()).toEqual(before);
+});
+
+test('POST /clubs/new refuses the name of an annuaire entry: nothing created', async () => {
+  const entry = (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...NEW_CLUB, name: 'Budo Collines', affiliationNumber: null } })).json();
+  const res = await app.inject({ method: 'POST', url: `${base}/clubs/new`, payload: { ...NEW_CLUB, name: 'Budo Collines', affiliationNumber: null } });
+  expect(res.statusCode).toBe(409);
+  expect(res.json().error).toBe(SAME_NAME);
+  const after = await counts();
+  expect(after.directory.map((e) => e.id)).toEqual([entry.id]);
+  expect(after.directory[0]!.competitions).toBe(0);
+  expect(after.clubs).toEqual([]);
 });

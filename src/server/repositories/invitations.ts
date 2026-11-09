@@ -3,6 +3,7 @@ import { and, count, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { AppDb } from '../db/client.js';
 import { clubChanges, clubDirectory, clubInvitations, clubs, competitions, fighters, mailLog } from '../db/schema.js';
 import type { Club, DirectoryInput } from '../../domain/registration.js';
+import { normalizeName } from '../../domain/names.js';
 import { createDirectoryEntry } from './directory.js';
 import { NotFoundError, toClub } from './registrations.js';
 
@@ -171,6 +172,11 @@ export function clubFromDirectory(db: AppDb, competitionId: string, entryId: str
 export function createCompetitionClub(db: AppDb, competitionId: string, input: DirectoryInput): Club {
   return db.transaction((tx) => {
     const t = tx as unknown as AppDb;
+    // Un nom déjà connu (club de la compétition ou fiche d'annuaire active) : on refuse, le club se choisit dans la liste.
+    const nameKey = normalizeName(input.name);
+    const inCompetition = t.select().from(clubs).where(and(eq(clubs.competitionId, competitionId), eq(clubs.nameKey, nameKey))).get();
+    const inDirectory = t.select().from(clubDirectory).where(and(eq(clubDirectory.nameKey, nameKey), eq(clubDirectory.archived, false))).get();
+    if (inCompetition || inDirectory) throw new InvitationConflictError('Un club de ce nom existe déjà : choisissez-le dans la liste.');
     const entry = createDirectoryEntry(t, input);
     return toClub(clubForEntry(t, competitionId, directoryEntry(t, entry.id)));
   });
