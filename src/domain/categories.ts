@@ -1,6 +1,7 @@
 import type { Bracket, BracketFormat } from './brackets/index.js';
 import { DISCIPLINES, RULESETS } from './disciplines.js';
 import { normalizeName } from './names.js';
+import type { CategoryDurations } from './schedule/durations.js';
 import type { Fighter, Registration } from './registration.js';
 import type { CategoryGrid, DisciplineId, Ruleset, Sex } from './types.js';
 
@@ -142,6 +143,8 @@ export interface Category {
   numbersUpdatedAt: string | null;
   /** Numérotée dans une vague lancée : tableau, zone et vague ne changent plus sans confirmation. */
   launchLocked: boolean;
+  /** Durées de ce tableau (tout ou partie) ; null : celles de la compétition. */
+  durations: CategoryDurations | null;
 }
 
 /** Combattants à disputer : présents avant le lancement, inscrits du tableau ensuite (un absent tardif ne compte pas). */

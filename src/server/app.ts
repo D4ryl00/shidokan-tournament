@@ -29,6 +29,7 @@ import { replacementRoutes } from './routes/replacement.js';
 import { historyRoutes } from './routes/history.js';
 import { resultRoutes } from './routes/results.js';
 import { waveRoutes } from './routes/waves.js';
+import { waveScheduleRoutes } from './routes/wave-schedules.js';
 import { launchRoutes } from './routes/launches.js';
 import { publicRoutes } from './routes/public.js';
 import { zoneRoutes } from './routes/zones.js';
@@ -263,6 +264,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(resultRoutes, { db });
   await app.register(zoneRoutes, { db });
   await app.register(waveRoutes, { db });
+  await app.register(waveScheduleRoutes, { db });
   await app.register(launchRoutes, { db });
   // Mode spectateur : pages publiques en lecture seule (sans connexion).
   await app.register(publicRoutes, { db });

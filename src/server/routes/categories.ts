@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { categoryDurationsSchema } from '../../domain/schedule/durations.js';
 import type { AppDb } from '../db/client.js';
 import { listCategories, redraw, swapEntrants, updateCategory } from '../repositories/categories.js';
 import { getCompetition } from '../repositories/competitions.js';
@@ -15,6 +16,7 @@ const patchSchema = z
     waveOverride: z.string().nullable().optional(),
     order: z.number().int().min(0).max(1000).optional(),
     unlock: z.boolean().optional(),
+    durations: categoryDurationsSchema.nullable().optional(),
   })
   .strict();
 

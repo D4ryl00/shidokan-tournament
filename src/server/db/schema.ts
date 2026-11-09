@@ -424,6 +424,8 @@ export const categories = sqliteTable('categories', {
   sortOrder: integer('sort_order').notNull().default(0),
   /** Heure de la dernière renumérotation après le lancement de sa vague (imprimée « mis à jour à HH:MM »). */
   numbersUpdatedAt: text('numbers_updated_at'),
+  /** Durées de ce tableau (`CategoryDurations` en JSON) ; null : celles de la compétition. */
+  durationsJson: text('durations_json'),
   ...rowMeta(),
 });
 
@@ -438,6 +440,22 @@ export const waveLaunches = sqliteTable(
     launched: integer('launched', { mode: 'boolean' }).notNull(),
     restartNumbering: integer('restart_numbering', { mode: 'boolean' }).notNull().default(false),
     launchedAt: text('launched_at').notNull(),
+    ...rowMeta(),
+  },
+  (t) => [primaryKey({ columns: [t.competitionId, t.waveKey] })],
+);
+
+/** Heures d'une session (`wave_key` '' : session unique d'une compétition sans session), au format HH:MM. */
+export const waveSchedules = sqliteTable(
+  'wave_schedules',
+  {
+    competitionId: text('competition_id')
+      .notNull()
+      .references(() => competitions.id, { onDelete: 'cascade' }),
+    waveKey: text('wave_key').notNull(),
+    plannedStart: text('planned_start'),
+    actualStart: text('actual_start'),
+    finalsStart: text('finals_start'),
     ...rowMeta(),
   },
   (t) => [primaryKey({ columns: [t.competitionId, t.waveKey] })],

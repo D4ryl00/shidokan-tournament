@@ -246,6 +246,13 @@
       "when": 1794165273040,
       "tag": "0034_mode_spectateur",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1794237017202,
+      "tag": "0035_horaires",
+      "breakpoints": true
     }
   ]
 }

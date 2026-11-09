@@ -19,6 +19,7 @@ import {
   type CategoryKey,
   type CategoryStatus,
 } from '../../domain/categories.js';
+import { categoryDurationsSchema, type CategoryDurations } from '../../domain/schedule/durations.js';
 import type { CompetitionSettings } from '../../domain/settings.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import { ALL_FORMAT_LABELS } from '../../domain/brackets/format-labels.js';
@@ -206,6 +207,7 @@ export async function syncCategories(db: AppDb, competitionId: string, opts: { r
           waveOverride: null,
           sortOrder: 0,
           numbersUpdatedAt: null,
+          durationsJson: null,
           version: null,
           updatedAt: null,
         };
@@ -305,6 +307,7 @@ function toCategory(row: Row, ctx: Context): Category {
     arranged: row.arranged,
     numbersUpdatedAt: row.numbersUpdatedAt,
     launchLocked: ctx.launched.has(row.id),
+    durations: parseDurations(row.durationsJson),
   };
 }
 
@@ -349,6 +352,17 @@ export async function wavePerCategory(db: AppDb, competitionId: string, category
   return c ? categoryWave(state, c) : null;
 }
 
+/** Durées enregistrées d'un tableau ; null si vides ou illisibles. */
+function parseDurations(json: string | null): CategoryDurations | null {
+  if (!json) return null;
+  try {
+    const parsed = categoryDurationsSchema.safeParse(JSON.parse(json));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 const optionLabel = (v: boolean | null) => (v === null ? 'Comme la compétition' : v ? 'Oui' : 'Non');
 const formatLabel = (f: BracketFormat | null) => (f === null ? 'Automatique' : ALL_FORMAT_LABELS[f]);
 
@@ -365,7 +379,7 @@ export async function updateCategory(
   db: AppDb,
   competitionId: string,
   categoryId: string,
-  patch: { format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null; status?: CategoryStatus; zoneId?: string | null; waveOverride?: string | null; order?: number; unlock?: boolean },
+  patch: { format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null; status?: CategoryStatus; zoneId?: string | null; waveOverride?: string | null; order?: number; unlock?: boolean; durations?: CategoryDurations | null },
 ): Promise<Journaled> {
   const row = getRow(db, competitionId, categoryId);
   const detail = formatChange(row, patch);
@@ -419,6 +433,7 @@ async function applyCategoryPatch(
     set.waveOverride = patch.waveOverride;
   }
   if (patch.order !== undefined) set.sortOrder = patch.order;
+  if (patch.durations !== undefined) set.durationsJson = patch.durations === null ? null : JSON.stringify(patch.durations);
   if (Object.keys(set).length) db.update(categories).set(set).where(eq(categories.id, categoryId)).run();
   return categoryById(db, competitionId, categoryId);
 }

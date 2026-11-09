@@ -124,7 +124,7 @@ export function category(id: string, label: string, discipline: DisciplineId, wa
     stale: false,
     arranged: false,
     numbersUpdatedAt: null,
-    launchLocked: true,
+    launchLocked: true, durations: null,
   };
 }
 

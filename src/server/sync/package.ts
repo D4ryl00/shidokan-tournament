@@ -30,7 +30,7 @@ export interface SyncPackage {
 /** Tables d'une compétition qui voyagent, dans un ordre compatible avec les clés étrangères (la compétition d'abord). */
 export const PACKAGE_TABLES = [
   'competitions', 'age_bands', 'weight_classes', 'age_links', 'closed_categories', 'waves', 'zones', 'clubs', 'fighters', 'registrations', 'categories',
-  'wave_launches', 'frozen_passages', 'recasements', 'history_entries', 'refusals', 'set_aside_cases', 'match_results', 'kata_scores', 'tie_breaks',
+  'wave_launches', 'wave_schedules', 'frozen_passages', 'recasements', 'history_entries', 'refusals', 'set_aside_cases', 'match_results', 'kata_scores', 'tie_breaks',
 ];
 /** Cases fermées tirées de l'ancienne case « Proposée sur la fiche club » d'une compétition (même règle que la migration 0021). */
 const CLOSED_FROM_CLUB_FORM = `
@@ -73,7 +73,7 @@ const REFERENCES: [table: string, column: string, target: string][] = [
   ['categories', 'zone_id', 'zones'], ['categories', 'wave_override', 'waves'], ['frozen_passages', 'zone_id', 'zones'],
   ['frozen_passages', 'category_id', 'categories'], ['match_results', 'category_id', 'categories'], ['match_results', 'entrant_a', 'registrations'],
   ['match_results', 'entrant_b', 'registrations'], ['kata_scores', 'category_id', 'categories'], ['kata_scores', 'registration_id', 'registrations'],
-  ['tie_breaks', 'category_id', 'categories'], ['recasements', 'registration_id', 'registrations'], ['history_entries', 'wave_id', 'waves'], ['wave_launches', 'wave_key', 'waves'],
+  ['tie_breaks', 'category_id', 'categories'], ['recasements', 'registration_id', 'registrations'], ['history_entries', 'wave_id', 'waves'], ['wave_launches', 'wave_key', 'waves'], ['wave_schedules', 'wave_key', 'waves'],
 ];
 
 /** Valeur acceptée dans une ligne : texte, nombre fini dans l'intervalle des entiers sûrs, ou vide. */

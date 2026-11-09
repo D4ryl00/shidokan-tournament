@@ -273,3 +273,29 @@ test('historique : exporté puis reçu dans l’ordre d’insertion (celui de la
   const received = b.db.$client.prepare('select id from history_entries where competition_id = ? order by rowid').all(a.id) as { id: string }[];
   expect(received.map((r) => r.id)).toEqual(['h-3', 'h-2', 'h-1'].map((h) => `${h}-${a.id}`));
 });
+
+test('package carries wave_schedules and durations', async () => {
+  const a = await seeded();
+  const b = await seeded();
+  const cat = a.db.$client.prepare('select id from categories where competition_id = ? limit 1').get(a.id) as { id: string };
+  const durations = JSON.stringify({ bracket: { rounds: 3, roundSec: 100, restSec: 30, overtimeSec: 60 }, matches: {} });
+  a.db.$client.prepare('update categories set durations_json = ? where id = ?').run(durations, cat.id);
+  a.db.$client.exec(`INSERT INTO wave_schedules (competition_id, wave_key, planned_start, actual_start, finals_start) VALUES ('${a.id}', 'wave-${a.id}', '09:30', '09:41', '14:00')`);
+  const pkg = buildPackage(a.db, a.id, { handOver: false, role: 'local' });
+  expect(pkg.tables.wave_schedules).toHaveLength(1);
+  await importPackage(b.db, b.dbPath, pkg, null);
+  expect(b.db.$client.prepare('select wave_key, planned_start, actual_start, finals_start from wave_schedules where competition_id = ?').all(a.id)).toEqual([
+    { wave_key: `wave-${a.id}`, planned_start: '09:30', actual_start: '09:41', finals_start: '14:00' },
+  ]);
+  expect(b.db.$client.prepare('select durations_json as d from categories where id = ?').get(cat.id)).toEqual({ d: durations });
+  expect(snapshot(b.db, a.id)).toEqual(snapshot(a.db, a.id));
+});
+
+test('a package without wave_schedules imports with no times', async () => {
+  const a = await seeded();
+  const b = await seeded();
+  const pkg = buildPackage(a.db, a.id, { handOver: false, role: 'local' });
+  delete pkg.tables.wave_schedules;
+  await importPackage(b.db, b.dbPath, pkg, null);
+  expect(b.db.$client.prepare('select count(*) as n from wave_schedules where competition_id = ?').get(a.id)).toEqual({ n: 0 });
+});

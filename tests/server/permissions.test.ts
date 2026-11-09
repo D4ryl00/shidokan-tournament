@@ -28,7 +28,7 @@ const TABLE_WRITES = [
   'PUT /replacement/rules', 'POST /replacement/rules/reset', 'POST /replacement/reset',
   'PATCH /categories/:cid', 'POST /categories/:cid/redraw', 'POST /categories/:cid/swap', 'POST /categories/:cid/move', 'POST /categories/:cid/move/preview', 'POST /categories/:cid/regenerate',
   'POST /launch', 'POST /launch/reopen', 'POST /launch/number', 'POST /launch/number/preview',
-  'PUT /fighters/:fighterId/public-name',
+  'PUT /fighters/:fighterId/public-name', 'PUT /wave-schedules',
   'PUT /categories/:cid/results/:matchId', 'DELETE /categories/:cid/results/:matchId', 'PUT /categories/:cid/kata/:rid/:round', 'PUT /categories/:cid/tie-break',
 ].map((r) => r.replace(' ', ' /api/competitions/:id'));
 /** Écritures d'un compte Zone, sur sa zone. */
@@ -100,6 +100,15 @@ test('routeAccess : chaque route enregistrée a la décision attendue pour la Ta
   // Chaque motif listé existe vraiment (une route renommée ne passe pas inaperçue).
   const keys = new Set(routes.map((r) => `${r.method} ${r.pattern}`));
   for (const k of [...TABLE_WRITES, ...COMMON]) expect(keys.has(k), k).toBe(true);
+});
+
+test('PUT wave-schedules : permis à la Table centrale, refusé à un compte Zone', async () => {
+  const { table, zone1, base } = await setup();
+  const url = `${base}/wave-schedules`;
+  expect((await table('PUT', url, { waveId: null, plannedStart: '09:30' })).statusCode).toBe(200);
+  const denied = await zone1('PUT', url, { waveId: null, plannedStart: '09:30' });
+  expect(denied.statusCode).toBe(403);
+  expect(denied.json().error).toBe(FORBIDDEN);
 });
 
 test('images et filtre du message aux clubs : réservés à l’organisateur (Table centrale, Zone et sans session refusées)', async () => {
