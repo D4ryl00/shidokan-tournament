@@ -16,7 +16,7 @@ test('planned start drives the first wave', () => {
   const t = buildTimeline(input({ now: null, waves: [wave('s1', h(9, 30))], zones: [{ zoneId: 'z', items: [item('a', 's1', 300), item('b', 's1', 300)] }] }));
   expect(t.starts.get('a')).toBe(h(9, 30));
   expect(t.starts.get('b')).toBe(h(9, 36));
-  expect(t.waveStarts.get('s1')).toEqual({ at: h(9, 30), estimated: false });
+  expect(t.waveStarts.get('s1')).toBeNull();
 });
 
 test('actual start beats planned', () => {
@@ -118,4 +118,13 @@ test('drift compares with planned times only', () => {
   expect(zoneDrift(input({ now: null, waves: [wave('s1', null)], zones: [{ zoneId: 'z', items }] }), 'z')).toBeNull();
   const done = input({ now: null, waves: [wave('s1', h(9, 30))], zones: [{ zoneId: 'z', items: [item('a', 's1', 300, h(9, 50))] }] });
   expect(zoneDrift(done, 'z')).toBeNull();
+});
+
+test('drift follows wave order, not queue order', () => {
+  const inp = input({
+    now: null,
+    waves: [wave('s1', h(9, 0)), wave('s2', h(13, 0))],
+    zones: [{ zoneId: 'z', items: [item('s2-1', 's2', 300), item('s2-2', 's2', 300), item('s1-3', 's1', 300, h(9, 20)), item('s1-4', 's1', 300)] }],
+  });
+  expect(zoneDrift(inp, 'z')).toBe(h(9, 21) - h(9, 6));
 });

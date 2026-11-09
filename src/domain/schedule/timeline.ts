@@ -34,12 +34,14 @@ export function buildTimeline(input: TimelineInput): Timeline {
   for (const w of input.waves) {
     const played = input.zones.flatMap((z) => z.items).filter((i) => i.waveKey === w.key && i.endedAt !== null);
     const estimate = played.length > 0 ? Math.min(...played.map((i) => i.endedAt! - i.durationSec)) : null;
-    const begin: { at: number; estimated: boolean } | null =
+    // waveStarts : saisi ou estimé d'après le premier résultat, sinon null (l'heure prévue seule n'est pas un démarrage).
+    const shown: { at: number; estimated: boolean } | null =
       w.actualStart !== null ? { at: w.actualStart, estimated: false }
       : estimate !== null ? { at: estimate, estimated: true }
-      : w.plannedStart !== null ? { at: w.plannedStart, estimated: false }
       : null;
-    waveStarts.set(w.key, begin);
+    waveStarts.set(w.key, shown);
+    // Départ servant de point de départ du curseur : l'heure prévue est le dernier recours.
+    const begin = shown ? shown.at : w.plannedStart;
     const started = w.actualStart !== null || played.length > 0;
     const floor = started && now !== null ? now : -Infinity;
 
@@ -47,7 +49,7 @@ export function buildTimeline(input: TimelineInput): Timeline {
     const cursor = new Map<string, number | null>();
     const lastEnd = new Map<string, number | null>();
     const lines = input.zones.map((z) => ({ zoneId: z.zoneId, items: z.items.filter((i) => i.waveKey === w.key) }));
-    for (const l of lines) { cursor.set(l.zoneId, begin ? begin.at : null); lastEnd.set(l.zoneId, null); }
+    for (const l of lines) { cursor.set(l.zoneId, begin); lastEnd.set(l.zoneId, null); }
     const nonFinalsEnds: number[] = [];
 
     const place = (zoneId: string, it: TimelineItem): number | null => {
@@ -110,7 +112,12 @@ export function buildTimeline(input: TimelineInput): Timeline {
  */
 export function zoneDrift(input: TimelineInput, zoneId: string): number | null {
   const zone = input.zones.find((z) => z.zoneId === zoneId);
-  const next = zone?.items.find((i) => i.endedAt === null);
+  // Prochain passage non joué dans l'ordre des sessions, puis de la file (les numéros peuvent reprendre à 1).
+  let next: TimelineItem | undefined;
+  for (const w of input.waves) {
+    next = zone?.items.find((i) => i.waveKey === w.key && i.endedAt === null);
+    if (next) break;
+  }
   if (!next) return null;
   const planned = buildTimeline({
     ...input,
