@@ -150,6 +150,29 @@ Les onglets de l'étape **Jour J** :
 
 Pendant la journée, s'il y a internet : Réglages de la compétition → « Échanges avec le serveur » → « Envoyer une copie au serveur » (copie de secours ; le PC garde la main).
 
+### Les heures et les durées (ce que voit le public)
+
+Si la compétition est **publique** (Réglages), les spectateurs voient des heures de passage. Elles sont **estimées** à partir des durées que vous réglez ; rien n'est à saisir pour qu'elles apparaissent, mais plus vous renseignez, plus elles sont justes.
+
+**Où saisir**
+- **Durées des combats** : Réglages de la compétition → carte « Durées des combats ». Pour chaque tranche d'âge (moins de 14 ans, 14 à 17 ans, 18 ans et plus, triathlon) : round, repos et prolongation, écrits `m:ss` (par exemple `1:30`). Plus « Changement entre deux combats » (60 s par défaut) et « Kata : durée d'un passage » (90 s). Tout s'enregistre avec « Enregistrer » de la page. La prolongation n'entre pas dans les heures : un combat est compté en rounds et repos seulement.
+- **Une catégorie différente** : Jour J → Tableaux, bloc « Durées des combats » de la catégorie (par exemple des finales plus longues). Un réglage de catégorie passe avant celui de la compétition, et un réglage de combat passe avant les deux.
+- **Heures d'une session** : Jour J → Combats, ligne « Horaires » de la session. « Début prévu » se saisit à tout moment (c'est ce que le public voit avant le lancement : « Session 1 · 9:30 » sur l'accueil, dans « À venir »). Une fois la session lancée apparaissent « Démarrée à », avec le bouton « Maintenant », et « Finales à ». Chaque heure s'enregistre en sortant du champ (« Horaire enregistré ») ; vider le champ l'efface. La Table centrale peut aussi les saisir.
+
+**Comment l'heure est estimée**
+- Chaque session se calcule **seule** : le retard de l'une n'est pas reporté sur la suivante tant qu'elle n'a pas démarré (saisissez son « Début prévu »).
+- **Début d'une session lancée** : l'heure de « Démarrée à » si vous l'avez saisie ; sinon une estimation tirée du premier résultat saisi (« démarrée vers … ») ; sinon le « Début prévu ». Sans aucune de ces trois informations, le public ne voit aucune heure.
+- Les combats se suivent zone par zone, dans l'ordre des sessions puis des numéros. Chaque passage dure la durée du combat, plus le temps de changement après lui. Le prochain combat sans résultat ne part jamais avant « maintenant » (le jour de la compétition seulement) ; un résultat saisi dans le désordre ne fait jamais reculer l'heure.
+- **Finales** : à l'heure de « Finales à » si elle est saisie, sinon à la fin des combats éliminatoires.
+- « Prévoir une pause » dans l'ordre de passage n'entre pas dans le calcul.
+
+**Ce que voit le spectateur**
+- Accueil : l'heure prévue de chaque session à venir.
+- Onglet **Zones** : en-tête « Session 1 · prévue 9:30 · démarrée 9:41 » (« démarrée vers » si l'heure est estimée), « vers 10:05 » sur chaque passage, une pastille « en retard de N min », « en avance de N min » ou « à l'heure » (écart de moins de 3 minutes) par zone, et « Finales de la session … à partir de … ».
+- Onglet **Suivis** : « Zone · n° · vers 10:05 » et « Durée prévue : 2 × 1 min 30 » pour le prochain combat d'un combattant suivi.
+- Onglet **Tableaux** : la durée des combats et l'heure estimée de la finale de chaque catégorie.
+- Une compétition passée (Historique) n'affiche ni heures ni durées. Les heures se recalculent dans le navigateur de chaque spectateur à chaque résultat saisi : elles avancent toutes seules.
+
 ### La planche des tableaux (Jour J → Tableaux)
 
 L'onglet **Tableaux** s'ouvre sur la **Planche** : toutes les catégories d'un coup, une carte par catégorie, avec les combattants en pastilles (nom et club). Le sélecteur « Planche / Liste » ramène à l'ancienne page, la **Liste**, qui sert aux réglages d'une catégorie (format, repêchage, « Marquer prête », impression). Un poste est retenu dans son choix.
