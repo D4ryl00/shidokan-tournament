@@ -29,6 +29,7 @@ const TABLE_WRITES = [
   'PATCH /categories/:cid', 'POST /categories/:cid/redraw', 'POST /categories/:cid/swap', 'POST /categories/:cid/move', 'POST /categories/:cid/move/preview', 'POST /categories/:cid/regenerate',
   'POST /launch', 'POST /launch/reopen', 'POST /launch/number', 'POST /launch/number/preview',
   'PUT /fighters/:fighterId/public-name', 'PUT /wave-schedules',
+  'POST /clubs/:clubId/lines', 'PUT /clubs/:clubId/lines/:fighterId', 'DELETE /clubs/:clubId/lines/:fighterId',
   'PUT /categories/:cid/results/:matchId', 'DELETE /categories/:cid/results/:matchId', 'PUT /categories/:cid/kata/:rid/:round', 'PUT /categories/:cid/tie-break',
 ].map((r) => r.replace(' ', ' /api/competitions/:id'));
 /** Écritures d'un compte Zone, sur sa zone. */
@@ -239,4 +240,24 @@ test('changements de coordonnées des clubs : Table centrale et Zone refusées, 
   expect((await table('PATCH', `${base}/clubs/${club.id}`, { coachPhone: '0611111111' })).statusCode).toBe(200);
   const changes = (await orga('GET', '/api/club-changes')).json() as { clubId: string; origin: string }[];
   expect(changes).toMatchObject([{ clubId: club.id, origin: 'competition' }]);
+});
+
+test('lignes de combattants de l’organisateur : permises à la Table centrale, refusées à un compte Zone', async () => {
+  const { table, zone1, base } = await setup();
+  const clubId = (await table('POST', `${base}/clubs`, { name: 'Tani Dojo' })).json().id as string;
+  const line = { lastName: 'MARTIN', firstName: 'Léa', sex: 'F', ageBandCode: 'senior', weightClassId: 'senior:F:-55', weightKg: null, combats: ['karate'], kata: false, grade: null, ruleset: 'jiyu', prefs: {}, shobuKeep: null };
+  const created = await table('POST', `${base}/clubs/${clubId}/lines`, { line, publicNameHidden: false });
+  expect(created.statusCode, created.body).toBe(201);
+  const { fighterId } = created.json() as { fighterId: string };
+  const fresh = ((await table('GET', `${base}/fighters/${fighterId}/line`)).json() as { version: string }).version;
+  expect((await zone1('GET', `${base}/fighters/${fighterId}/line`)).statusCode).toBe(200);
+  const put = await table('PUT', `${base}/clubs/${clubId}/lines/${fighterId}`, { line, version: fresh, publicNameHidden: true });
+  expect(put.statusCode, put.body).toBe(200);
+  for (const [method, url, payload] of [['POST', `${base}/clubs/${clubId}/lines`, { line, publicNameHidden: false }], ['PUT', `${base}/clubs/${clubId}/lines/${fighterId}`, { line, version: 'x', publicNameHidden: false }], ['DELETE', `${base}/clubs/${clubId}/lines/${fighterId}?version=x`, undefined]] as const) {
+    const res = await zone1(method, url, payload);
+    expect(res.statusCode, `${method} ${url}`).toBe(403);
+    expect(res.json().error).toBe(FORBIDDEN);
+  }
+  const now = ((await table('GET', `${base}/fighters/${fighterId}/line`)).json() as { version: string }).version;
+  expect((await table('DELETE', `${base}/clubs/${clubId}/lines/${fighterId}?version=${encodeURIComponent(now)}`)).statusCode).toBe(204);
 });

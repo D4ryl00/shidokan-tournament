@@ -1,5 +1,5 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import { lineToRows, WEIGHT_MISSING, type ClubFormLine } from '../../domain/club-form.js';
+import { closedEntryWarning, lineToRows, WEIGHT_MISSING, type ClubFormLine } from '../../domain/club-form.js';
 import { closedSummary, columnLabel, entryKey, isEntryClosed, offeredAgeBands } from '../../domain/closed-categories.js';
 import { enteredValues, registrationsToLine } from '../../domain/club-line.js';
 import { renderPrivacyNotice } from '../../domain/app-settings.js';
@@ -20,8 +20,14 @@ export interface ClubAccess {
   competitionId: string;
   clubId: string;
 }
+/** Qui écrit la ligne : le coach (lien personnel) ou l'organisateur (écran Inscriptions). */
+export type LineWriter = { kind: 'coach' } | { kind: 'organiser' };
 export interface ClubLine {
   fighterId: string;
+  /** Club actuel du combattant ('' s'il n'en a pas). */
+  clubId: string;
+  /** Nom masqué sur la page publique (vaut pour toutes ses inscriptions). */
+  publicNameHidden: boolean;
   /** Empreinte du combattant et de ses inscriptions (ids et versions) : une écriture sur une empreinte périmée est refusée,
    *  y compris quand l'organisateur a supprimé une inscription entre-temps. */
   version: string;
@@ -41,6 +47,8 @@ export interface ClubEntryHeader {
 export interface ClubEntryView {
   competition: { name: string; date: string; location: string | null; deadline: string | null; status: 'closed' | 'open' | 'frozen' };
   editable: boolean;
+  /** Plusieurs disciplines de combat le même jour autorisées (réglage de la compétition). */
+  multipleCombats: boolean;
   club: ClubEntryHeader & { name: string };
   /** `ages` : « 14 à 15 ans ». */
   ageBands: { code: string; label: string; ages: string; isMinor: boolean }[];
@@ -76,7 +84,6 @@ export const CLOSED_ENTRY = (label: string) => `${label} : catégorie non ouvert
 const CLOSED_NOTICE = (label: string) => `${label} : cette catégorie n’est plus ouverte, l’organisateur vous contactera.`;
 const WITHDRAWN_NOTICE = (label: string) => `Ne combattra pas en ${label} : catégorie non ouverte.`;
 export const WEIGHT_CLASS_MISSING = 'Catégorie de poids manquante.';
-export const FFK_IDENTITY = 'Le sexe et la catégorie d’âge viennent de l’export FFK : contactez l’organisateur pour les changer.';
 
 function competitionRow(db: AppDb, access: ClubAccess) {
   const c = db.select().from(competitions).where(eq(competitions.id, access.competitionId)).get();
@@ -95,7 +102,7 @@ function assertWritable(db: AppDb, access: ClubAccess): void {
 }
 
 /** Ligne d'un combattant du club, avec sa version et son verrou. */
-function lineOf(db: AppDb, fighter: typeof fighters.$inferSelect): ClubLine {
+function lineOf(db: AppDb, fighter: typeof fighters.$inferSelect, viewer: LineWriter['kind'] = 'coach'): ClubLine {
   const regs = db.select().from(registrations).where(eq(registrations.fighterId, fighter.id)).all();
   const catIds = regs.map((r) => r.categoryId).filter((x): x is string => !!x);
   const locked = catIds.length > 0 && db.select().from(categories).where(inArray(categories.id, catIds)).all().some((c) => c.status === 'started' || c.status === 'finished');
@@ -111,9 +118,20 @@ function lineOf(db: AppDb, fighter: typeof fighters.$inferSelect): ClubLine {
   const notices = regs.flatMap((r) => {
     const cell = { ageBandCode: fighter.ageBandCode, sex: fighter.sex, discipline: r.discipline, ruleset: r.ruleset };
     if (r.withdrawnReason) return [WITHDRAWN_NOTICE(columnLabel(cell))];
-    return !r.placementLocked && isEntryClosed(closed, cell) ? [CLOSED_NOTICE(columnLabel(cell))] : [];
+    if (r.placementLocked || !isEntryClosed(closed, cell)) return [];
+    // L'organisateur peut choisir une catégorie fermée : il reçoit l'avertissement des fiches, le coach la mention de contact.
+    return [viewer === 'organiser' ? closedEntryWarning(cell, closed)! : CLOSED_NOTICE(columnLabel(cell))];
   });
-  return locked ? { fighterId: fighter.id, version, line, editable: false, reason: LOCKED_REASON, notices } : { fighterId: fighter.id, version, line, editable, reason, notices };
+  const base = { fighterId: fighter.id, clubId: fighter.clubId ?? '', publicNameHidden: fighter.publicNameHidden, version, line, notices };
+  return locked ? { ...base, editable: false, reason: LOCKED_REASON } : { ...base, editable, reason };
+}
+
+/** Ligne d'un combattant pour l'écran Inscriptions (organisateur). Sans club : pas de ligne éditable, l'écran passe d'abord par l'étape club. */
+export function fighterLine(db: AppDb, competitionId: string, fighterId: string): ClubLine {
+  const fighter = db.select().from(fighters).where(and(eq(fighters.id, fighterId), eq(fighters.competitionId, competitionId))).get();
+  if (!fighter) throw new NotFoundError('Combattant introuvable');
+  const line = lineOf(db, fighter, 'organiser');
+  return fighter.clubId ? line : { ...line, editable: false, reason: null };
 }
 
 function headerOf(db: AppDb, club: typeof clubs.$inferSelect): ClubEntryView['club'] {
@@ -127,6 +145,7 @@ function headerOf(db: AppDb, club: typeof clubs.$inferSelect): ClubEntryView['cl
 export async function getClubEntry(db: AppDb, access: ClubAccess): Promise<ClubEntryView> {
   const c = competitionRow(db, access);
   const club = clubRow(db, access);
+  const multipleCombats = (await getCompetition(db, access.competitionId))!.settings.multipleCombatDisciplinesPerDay;
   const grid = await getGrid(db, access.competitionId);
   const closed = closedSet(db, access.competitionId);
   const lines = db
@@ -141,6 +160,7 @@ export async function getClubEntry(db: AppDb, access: ClubAccess): Promise<ClubE
   return {
     competition: { name: c.name, date: c.date, location: c.location, deadline: c.clubEntryDeadline, status: c.clubEntryStatus },
     editable: isEditable(c),
+    multipleCombats,
     club: headerOf(db, club),
     ageBands: ageBands.map((b) => ({ code: b.code, label: b.label, ages: ageRangeText(b), isMinor: b.isMinor })),
     weightClasses: grid.weightClasses
@@ -202,9 +222,13 @@ function duplicateOf(db: AppDb, clubId: string, line: ClubFormLine, exceptId: st
     .find((f) => f.sex === line.sex && f.id !== exceptId);
 }
 
-/** Ligne existante du club, vérifiée avant une écriture : version à jour, ni verrouillée ni en lecture seule. */
-function checkedLine(db: AppDb, clubId: string, fighterId: string, expectedVersion: string) {
-  const fighter = db.select().from(fighters).where(and(eq(fighters.id, fighterId), eq(fighters.clubId, clubId))).get();
+/** Ligne existante, vérifiée avant une écriture : version à jour, ni verrouillée ni en lecture seule. `clubId` : club où elle doit être (null : n'importe lequel de la compétition). */
+function checkedLine(db: AppDb, competitionId: string, clubId: string | null, fighterId: string, expectedVersion: string) {
+  const fighter = db
+    .select()
+    .from(fighters)
+    .where(and(eq(fighters.id, fighterId), eq(fighters.competitionId, competitionId), ...(clubId ? [eq(fighters.clubId, clubId)] : [])))
+    .get();
   if (!fighter) throw new NotFoundError('Combattant introuvable');
   const current = lineOf(db, fighter);
   if (current.version !== expectedVersion) throw new StaleLineError();
@@ -212,49 +236,62 @@ function checkedLine(db: AppDb, clubId: string, fighterId: string, expectedVersi
   return fighter;
 }
 
-/** Crée (fighterId null) ou modifie la ligne d'un combattant du club : ses inscriptions suivent la ligne (combat et/ou kata). */
-export async function saveClubLine(db: AppDb, access: ClubAccess, fighterId: string | null, line: ClubFormLine, expectedVersion: string | null): Promise<ClubLine> {
-  assertWritable(db, access);
+/** Crée (fighterId null) ou modifie la ligne d'un combattant : ses inscriptions suivent la ligne (combats et/ou kata). L'organisateur peut aussi le changer de club. */
+export async function saveClubLine(
+  db: AppDb,
+  access: ClubAccess,
+  fighterId: string | null,
+  line: ClubFormLine,
+  expectedVersion: string | null,
+  opts: { writer: LineWriter; publicNameHidden?: boolean },
+): Promise<ClubLine> {
+  const coach = opts.writer.kind === 'coach';
+  if (coach) assertWritable(db, access);
   const club = clubRow(db, access);
   const competition = (await getCompetition(db, access.competitionId))!;
-  const rows = lineToRows(line, 1, await getGrid(db, access.competitionId), competition.settings.weighInToleranceKg, new Set(), { multipleCombats: competition.settings.multipleCombatDisciplinesPerDay });
+  // Le coach ne touche que les combattants de son club ; l'organisateur, ceux de toute la compétition (il peut les changer de club).
+  const existing = fighterId
+    ? db.select().from(fighters).where(and(eq(fighters.id, fighterId), eq(fighters.competitionId, access.competitionId), ...(coach ? [eq(fighters.clubId, club.id)] : []))).get()
+    : undefined;
+  const registered = existing ? db.select().from(registrations).where(eq(registrations.fighterId, existing.id)).all() : [];
+  // Plusieurs combats avec le réglage désactivé : seulement s'ils étaient tous déjà enregistrés pour ce combattant.
+  const alreadyEntered = new Set(registered.map((r) => enteredValues({ ...r, otherDisciplines: [] }).discipline));
+  const multipleCombats = competition.settings.multipleCombatDisciplinesPerDay || line.combats.every((d) => alreadyEntered.has(d));
+  const rows = lineToRows(line, 1, await getGrid(db, access.competitionId), competition.settings.weighInToleranceKg, new Set(), { multipleCombats });
   // En ligne, le coach choisit la catégorie de poids : le poids actuel est facultatif.
   const errors = rows.flatMap((r) => r.errors).filter((e) => e !== WEIGHT_MISSING);
   if (line.combats.length && !line.weightClassId) errors.unshift(WEIGHT_CLASS_MISSING);
   if (errors.length || rows.some((r) => !r.input)) throw new RegistrationValidationError(errors);
-  const inputs = rows.map((r) => ({ ...r.input!, clubId: club.id, source: 'online' as const }));
-  // Une catégorie fermée ne s'ouvre pas en ligne, sauf pour une inscription déjà enregistrée qui y était.
-  const closed = closedSet(db, access.competitionId);
-  const known = new Set<string>();
-  const existing = fighterId ? db.select().from(fighters).where(and(eq(fighters.id, fighterId), eq(fighters.clubId, club.id))).get() : undefined;
-  if (existing) {
-    for (const r of db.select().from(registrations).where(eq(registrations.fighterId, existing.id)).all()) {
-      known.add(entryKey({ ageBandCode: existing.ageBandCode, sex: existing.sex, ...enteredValues({ ...r, otherDisciplines: [] }) }));
-    }
+  // La source d'une inscription existante est gardée par `upsertFighterRegistration` ; celle d'une nouvelle dépend de l'auteur.
+  const source = coach ? ('online' as const) : ('onsite' as const);
+  const inputs = rows.map((r) => ({ ...r.input!, clubId: club.id, source }));
+  // Une catégorie fermée ne s'ouvre pas en ligne, sauf pour une inscription déjà enregistrée qui y était ; l'organisateur peut la choisir.
+  if (coach) {
+    const closed = closedSet(db, access.competitionId);
+    const known = new Set<string>();
+    if (existing) for (const r of registered) known.add(entryKey({ ageBandCode: existing.ageBandCode, sex: existing.sex, ...enteredValues({ ...r, otherDisciplines: [] }) }));
+    const refused = inputs
+      .map((i) => ({ ageBandCode: i.ageBandCode, sex: i.sex, discipline: i.discipline, ruleset: i.ruleset }))
+      .filter((cell) => isEntryClosed(closed, cell) && !known.has(entryKey(cell)));
+    if (refused.length) throw new RegistrationValidationError(refused.map((cell) => CLOSED_ENTRY(columnLabel(cell))));
   }
-  const refused = inputs
-    .map((i) => ({ ageBandCode: i.ageBandCode, sex: i.sex, discipline: i.discipline, ruleset: i.ruleset }))
-    .filter((cell) => isEntryClosed(closed, cell) && !known.has(entryKey(cell)));
-  if (refused.length) throw new RegistrationValidationError(refused.map((cell) => CLOSED_ENTRY(columnLabel(cell))));
   const savedId = db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     const duplicate = duplicateOf(t, club.id, line, fighterId);
     if (duplicate) throw new RegistrationValidationError([`${duplicate.lastName} ${duplicate.firstName} est déjà dans la liste.`]);
     const fields = {
       lastName: line.lastName.trim(), firstName: line.firstName.trim(), nameKey: normalizeName(`${line.lastName} ${line.firstName}`),
-      sex: line.sex!, ageBandCode: line.ageBandCode!,
+      sex: line.sex!, ageBandCode: line.ageBandCode!, clubId: club.id,
       ...(line.kata ? { grade: line.grade?.trim() || null } : {}),
+      ...(opts.publicNameHidden === undefined ? {} : { publicNameHidden: opts.publicNameHidden }),
     };
     let id = fighterId;
     if (id) {
-      const current = checkedLine(t, club.id, id, expectedVersion ?? '');
-      // L'export FFK fait foi pour le sexe et l'âge (comme à l'import d'une fiche) : sa catégorie de poids en dépend.
-      const ffk = t.select().from(registrations).where(and(eq(registrations.fighterId, id), eq(registrations.ffkConfirmed, true))).get();
-      if (ffk && (current.sex !== fields.sex || current.ageBandCode !== fields.ageBandCode)) throw new RegistrationValidationError([FFK_IDENTITY]);
+      checkedLine(t, access.competitionId, coach ? club.id : null, id, expectedVersion ?? '');
       t.update(fighters).set(fields).where(eq(fighters.id, id)).run();
     } else {
       id = crypto.randomUUID();
-      t.insert(fighters).values({ id, competitionId: access.competitionId, clubId: club.id, licence: null, grade: null, weighInKg: null, ...fields }).run();
+      t.insert(fighters).values({ id, competitionId: access.competitionId, licence: null, grade: null, weighInKg: null, ...fields }).run();
     }
     const kept = new Set<string>();
     for (const input of inputs) kept.add(upsertFighterRegistration(t, access.competitionId, id, input, kept));
@@ -262,16 +299,16 @@ export async function saveClubLine(db: AppDb, access: ClubAccess, fighterId: str
     if (dropped.length) t.delete(registrations).where(inArray(registrations.id, dropped.map((r) => r.id))).run();
     return id;
   });
-  return lineOf(db, db.select().from(fighters).where(eq(fighters.id, savedId)).get()!);
+  return lineOf(db, db.select().from(fighters).where(eq(fighters.id, savedId)).get()!, opts.writer.kind);
 }
 
 /** Retire un combattant du club : ses inscriptions et lui. */
-export async function deleteClubLine(db: AppDb, access: ClubAccess, fighterId: string, expectedVersion: string): Promise<void> {
-  assertWritable(db, access);
+export async function deleteClubLine(db: AppDb, access: ClubAccess, fighterId: string, expectedVersion: string, opts: { writer: LineWriter }): Promise<void> {
+  if (opts.writer.kind === 'coach') assertWritable(db, access);
   const club = clubRow(db, access);
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
-    checkedLine(t, club.id, fighterId, expectedVersion);
+    checkedLine(t, access.competitionId, club.id, fighterId, expectedVersion);
     t.delete(registrations).where(eq(registrations.fighterId, fighterId)).run();
     t.delete(fighters).where(eq(fighters.id, fighterId)).run();
   });

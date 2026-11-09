@@ -43,7 +43,7 @@ export function registrationsToLine(fighter: LineFighter, regs: LineRegistration
     ageBandCode: fighter.ageBandCode,
     weightClassId: entered?.weightClassId ?? null,
     weightKg: combat?.approxWeightKg ?? kata?.approxWeightKg ?? null,
-    combats: combatRegs.map((r) => enteredValues(r).discipline as CombatDiscipline),
+    combats: [...new Set(combatRegs.map((r) => enteredValues(r).discipline as CombatDiscipline))],
     kata: !!kata,
     grade: kata ? fighter.grade : null,
     ruleset: entered?.ruleset ?? null,

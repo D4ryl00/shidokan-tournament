@@ -59,16 +59,16 @@ export async function clubEntryRoutes(app: FastifyInstance, { db }: { db: AppDb 
 
   app.post<T>('/api/inscription/:token/lines', async (req, reply) => {
     const a = access(req.params.token);
-    const { line } = z.object({ line: clubFormLineSchema }).parse(req.body);
-    const saved = await saveClubLine(db, a, null, line, null);
+    const { line, publicNameHidden } = z.object({ line: clubFormLineSchema, publicNameHidden: z.boolean().optional() }).parse(req.body);
+    const saved = await saveClubLine(db, a, null, line, null, { writer: { kind: 'coach' }, publicNameHidden });
     await resync(a.competitionId);
     return reply.status(201).send(saved);
   });
 
   app.put<TF>('/api/inscription/:token/lines/:fighterId', async (req) => {
     const a = access(req.params.token);
-    const { line, version } = z.object({ line: clubFormLineSchema, version: z.string().min(1) }).parse(req.body);
-    const saved = await saveClubLine(db, a, req.params.fighterId, line, version);
+    const { line, version, publicNameHidden } = z.object({ line: clubFormLineSchema, version: z.string().min(1), publicNameHidden: z.boolean().optional() }).parse(req.body);
+    const saved = await saveClubLine(db, a, req.params.fighterId, line, version, { writer: { kind: 'coach' }, publicNameHidden });
     await resync(a.competitionId);
     return saved;
   });
@@ -76,7 +76,7 @@ export async function clubEntryRoutes(app: FastifyInstance, { db }: { db: AppDb 
   app.delete<TF & { Querystring: { version?: string } }>('/api/inscription/:token/lines/:fighterId', async (req, reply) => {
     const a = access(req.params.token);
     const { version } = z.object({ version: z.string().min(1) }).parse(req.query);
-    await deleteClubLine(db, a, req.params.fighterId, version);
+    await deleteClubLine(db, a, req.params.fighterId, version, { writer: { kind: 'coach' } });
     await resync(a.competitionId);
     return reply.status(204).send();
   });

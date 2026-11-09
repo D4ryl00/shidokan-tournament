@@ -61,3 +61,9 @@ test('deux inscriptions de combat → une ligne éditable à deux combats, valeu
   expect(out).toMatchObject({ editable: true, reason: null });
   expect(out.line).toMatchObject({ combats: ['shido-boxing', 'shido-mix'], ruleset: 'shobu', prefs: { 'shido-mix': 1 }, shobuKeep: 'discipline' });
 });
+
+test('deux inscriptions qui partagent une discipline saisie → une seule entrée dans combats', () => {
+  const reg = (originalJson: string | null): LineRegistration => ({ discipline: 'karate', ruleset: 'jiyu', weightClassId: 'senior:M:-75', approxWeightKg: 70, otherDisciplines: [], acceptsJiyuFirst: null, originalJson });
+  const { line } = registrationsToLine({ lastName: 'X', firstName: 'Y', sex: 'M', ageBandCode: 'senior', grade: null }, [reg(null), reg(JSON.stringify({ discipline: 'karate', ruleset: 'jiyu', weightClassId: 'senior:M:-75' }))]);
+  expect(line.combats).toEqual(['karate']);
+});

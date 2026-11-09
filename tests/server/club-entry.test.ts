@@ -225,16 +225,14 @@ test('inscription supprimée par l’organisateur pendant que le coach a le form
   expect((await registrations()).map((r) => r.discipline)).toEqual(['kata']);
 });
 
-test('combattant confirmé par l’export FFK : sexe et catégorie d’âge non modifiables par le coach (400)', async () => {
+test('combattant confirmé par l’export FFK : sexe et catégorie d’âge modifiables par le coach', async () => {
   await add({ ...LINE, kata: false, grade: null });
   const [reg] = await registrations();
   raw('update registrations set ffk_confirmed = 1 where id = ?', reg!.id);
   const [line] = (await view()).lines;
   const res = await put(line!.fighterId, { ...LINE, kata: false, grade: null, sex: 'M', weightClassId: 'senior:M:-84', weightKg: 80 }, line!.version);
-  expect(res.statusCode).toBe(400);
-  expect(res.json().issues).toEqual(['Le sexe et la catégorie d’âge viennent de l’export FFK : contactez l’organisateur pour les changer.']);
-  const again = await put(line!.fighterId, { ...LINE, kata: false, grade: null, ageBandCode: 'junior', weightClassId: 'junior:F:-53' }, line!.version);
-  expect(again.statusCode).toBe(400);
+  expect(res.statusCode, res.body).toBe(200);
+  expect(res.json().line).toMatchObject({ sex: 'M' });
 });
 
 test('en-tête : n° d’affiliation d’une autre fiche de l’annuaire → 400, rien n’est relié ni écrasé', async () => {
