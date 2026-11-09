@@ -3,7 +3,7 @@ import { notifications } from '@mantine/notifications';
 import { Fragment, useState } from 'react';
 import { useParams } from 'react-router';
 import { PRE_APPROVAL_TEXT, kgText, orderedPrefs, weightWarning, type ClubFormLine } from '../../domain/club-form.js';
-import { useClubEntry, useSaveClubHeader, type ClubEntryHeader, type ClubEntryView, type ClubLine } from '../api.js';
+import { useClubEntry, useCoachLineOps, useSaveClubHeader, type ClubEntryHeader, type ClubEntryView, type ClubLine } from '../api.js';
 import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { ClubLineForm } from '../components/ClubLineForm.js';
@@ -181,6 +181,7 @@ export function ClubEntryPage() {
   const { data: view, error, isLoading } = useClubEntry(token);
   useDocumentTitle(view ? `Inscriptions · ${view.competition.name}` : 'Inscriptions');
   const [editing, setEditing] = useState<ClubLine | 'new' | null>(null);
+  const coachOps = useCoachLineOps(token);
 
   const close = (message?: string) => {
     setEditing(null);
@@ -242,7 +243,7 @@ export function ClubEntryPage() {
             )}
             {view.lines.length > 0 && <ClubLinesList view={view} onEdit={setEditing} />}
             <Text size="xs" c="dimmed" mt="lg" data-testid="privacy-notice">{view.privacyNotice}</Text>
-            <ClubLineForm key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.fighterId} token={token} line={editing === 'new' ? null : editing}
+            <ClubLineForm key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.fighterId} ops={coachOps} mode="coach" multipleCombats={view.multipleCombats} line={editing === 'new' ? null : editing}
               ageBands={view.ageBands} weightClasses={view.weightClasses} closed={view.closed} opened={editing !== null} onClose={close} />
           </>
         )}

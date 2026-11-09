@@ -1166,7 +1166,7 @@ export const useUpdateClubEntrySettings = (id: string) =>
 // Page d'inscription d'un club (lien personnel, sans compte).
 /** Refus après lesquels la page du club est rechargée et le formulaire fermé. */
 export const RELOAD_STATUSES = new Set([403, 404, 409]);
-export interface ClubLine { fighterId: string; version: string; line: ClubFormLine; editable: boolean; reason: string | null; notices: string[] }
+export interface ClubLine { fighterId: string; clubId: string; publicNameHidden: boolean; version: string; line: ClubFormLine; editable: boolean; reason: string | null; notices: string[] }
 export interface ClubEntryHeader { coachName: string | null; coachPhone: string | null; coachEmails: string[]; preApproval: boolean; affiliationNumber: string | null }
 export interface ClubEntryView {
   competition: { name: string; date: string; location: string | null; deadline: string | null; status: 'closed' | 'open' | 'frozen' };
@@ -1179,6 +1179,8 @@ export interface ClubEntryView {
   /** Cases fermées (`entryKey`). */
   closed: string[];
   closedSummary: string[];
+  /** Plusieurs disciplines de combat par combattant (réglage de la compétition). */
+  multipleCombats: boolean;
   lines: ClubLine[];
   privacyNotice: string;
 }
@@ -1198,14 +1200,48 @@ function useClubEntryMutation<V, R>(token: string, fn: (v: V) => Promise<R>) {
 }
 export const useSaveClubHeader = (token: string) =>
   useClubEntryMutation(token, (header: ClubEntryHeader) => api<ClubEntryView['club']>('PATCH', `/api/inscription/${token}/club`, header));
-export const useSaveClubLine = (token: string) =>
-  useClubEntryMutation(token, ({ fighterId, line, version }: { fighterId: string | null; line: ClubFormLine; version: string | null }) =>
-    fighterId
-      ? api<ClubLine>('PUT', `/api/inscription/${token}/lines/${fighterId}`, { line, version })
-      : api<ClubLine>('POST', `/api/inscription/${token}/lines`, { line }));
-export const useDeleteClubLine = (token: string) =>
-  useClubEntryMutation(token, ({ fighterId, version }: { fighterId: string; version: string }) =>
-    api<void>('DELETE', `/api/inscription/${token}/lines/${fighterId}?version=${encodeURIComponent(version)}`));
+/** Écriture d'une ligne de combattant : la même fenêtre sert au coach (lien) et à l'organisateur (écran Inscriptions). */
+export interface LineOps {
+  save(args: { fighterId: string | null; line: ClubFormLine; version: string | null; publicNameHidden: boolean }): Promise<ClubLine>;
+  remove(args: { fighterId: string; version: string }): Promise<void>;
+  pending: boolean;
+  error: Error | null;
+}
+type SaveArgs = Parameters<LineOps['save']>[0];
+type RemoveArgs = Parameters<LineOps['remove']>[0];
+
+function useLineOps(write: { save: (a: SaveArgs) => Promise<ClubLine>; remove: (a: RemoveArgs) => Promise<void> }, reload: () => unknown): LineOps {
+  const options = {
+    onSuccess: reload,
+    onError: (e: Error) => (e instanceof ApiError && RELOAD_STATUSES.has(e.status) ? reload() : undefined),
+  };
+  const save = useMutation({ mutationFn: write.save, ...options });
+  const remove = useMutation({ mutationFn: write.remove, ...options });
+  return { save: save.mutateAsync, remove: remove.mutateAsync, pending: save.isPending || remove.isPending, error: save.error ?? remove.error };
+}
+
+export const useCoachLineOps = (token: string): LineOps => {
+  const qc = useQueryClient();
+  return useLineOps({
+    save: ({ fighterId, line, version, publicNameHidden }) =>
+      fighterId
+        ? api<ClubLine>('PUT', `/api/inscription/${token}/lines/${fighterId}`, { line, version, publicNameHidden })
+        : api<ClubLine>('POST', `/api/inscription/${token}/lines`, { line, publicNameHidden }),
+    remove: ({ fighterId, version }) => api<void>('DELETE', `/api/inscription/${token}/lines/${fighterId}?version=${encodeURIComponent(version)}`),
+  }, () => qc.invalidateQueries({ queryKey: ['inscription', token] }));
+};
+
+export const useOrganiserLineOps = (competitionId: string, clubId: string): LineOps => {
+  const qc = useQueryClient();
+  const base = `/api/competitions/${competitionId}/clubs/${clubId}/lines`;
+  return useLineOps({
+    save: ({ fighterId, line, version, publicNameHidden }) =>
+      fighterId
+        ? api<ClubLine>('PUT', `${base}/${fighterId}`, { line, version, publicNameHidden })
+        : api<ClubLine>('POST', base, { line, publicNameHidden }),
+    remove: ({ fighterId, version }) => api<void>('DELETE', `${base}/${fighterId}?version=${encodeURIComponent(version)}`),
+  }, () => Promise.all(['registrations', 'clubs', 'club-lines'].map((key) => qc.invalidateQueries({ queryKey: [key, competitionId] }))));
+};
 
 // Connexion des organisateurs (rôle serveur) et comptes.
 export type UserRole = 'organisateur' | 'table' | 'zone';

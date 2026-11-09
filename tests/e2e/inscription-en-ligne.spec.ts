@@ -438,3 +438,26 @@ test('invité sans lien : la fenêtre Accès le dit, supprimer le dernier lien g
   await page.getByTestId('invite-select').fill(club);
   await expect(page.getByRole('option', { name: club })).toBeVisible();
 });
+
+test('le coach masque le nom d’un combattant', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe nom masqué');
+  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
+  const entry = (await (await request.post('/api/club-directory', { data: { ...EMPTY, name: `Dojo masqué ${Date.now()}` } })).json()) as { id: string };
+  const link = await inviteWithLink(request, id, entry.id);
+  await request.patch(`/api/competitions/${id}/club-entry`, { data: { status: 'open', deadline: '2026-11-15' } });
+
+  await page.goto(`/inscription/${link.token}`);
+  await page.getByTestId('add-fighter').click();
+  await fillFighter(page, { last: 'DISCRET', first: 'Noé', sex: 'Masculin', age: 'Seniors (18 à 34 ans)', kg: '75', kata: true });
+  await expect(page.getByTestId('line-name-hidden')).not.toBeChecked();
+  await page.getByTestId('line-name-hidden').check();
+  await page.getByTestId('line-save').click();
+  await expect(page.getByTestId('club-line')).toHaveCount(1);
+
+  // La case est relue à la réouverture, et l'organisateur voit le nom masqué en ligne (le public lit « Combattant masqué »).
+  await page.getByTestId('club-line').getByRole('button', { name: 'Modifier' }).click();
+  await expect(page.getByTestId('line-name-hidden')).toBeChecked();
+  await page.getByRole('button', { name: 'Annuler' }).click();
+  await page.goto(`/competitions/${id}/inscriptions`);
+  await expect(page.getByTestId('registration-row').filter({ hasText: 'DISCRET' }).getByTestId('registration-name-hidden-badge')).toBeVisible();
+});
