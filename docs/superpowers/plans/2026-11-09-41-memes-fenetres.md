@@ -46,7 +46,7 @@
   - `lineToRows(line, lineNumber, grid, tolerance, closed = new Set(), opts: LineOptions = {}): ClubFormRow[]` — une ligne d'inscription par combat (dans l'ordre), puis le kata.
   - `parseClubForm(cells, grid, tolerance?, closed?, opts: LineOptions = {})`, `parseClubFormLines(header, lines, grid, tolerance, closed?, opts: LineOptions = {})`
   - `export const ONE_COMBAT_ONLY = 'Une seule discipline de combat par combattant à cette compétition.'`
-  - `tidyReclass` retire des `prefs` **toutes** les disciplines de `combats` ; `shobuKeep` gardé si au moins un combat est en shobu et qu'il reste un choix.
+  - `tidyReclass` retire des `prefs` **toutes** les disciplines de `combats` ; `shobuKeep` gardé si le règlement est shobu et qu'il reste un choix.
   - `weightWarning(line: Pick<ClubFormLine, 'ageBandCode' | 'sex' | 'weightClassId' | 'weightKg' | 'combats'>, …)` : rien si `combats` est vide.
 
 - [ ] **Step 1: Write the failing tests** (`tests/domain/club-form.test.ts`, nouveau `describe('plusieurs combats')`)
