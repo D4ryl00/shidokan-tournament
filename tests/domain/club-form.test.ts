@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   CLUB_FORM_COLUMNS,
+  CLUB_FORM_SECOND_COMBAT_COLUMN,
   CLUB_FORM_LEGACY_COLUMNS,
   ageBandAbbreviation,
   ageBandAbbreviations,
@@ -23,6 +24,7 @@ import {
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 
 const grid = ffkDefaultGrid();
+const CLUB_FORM_COLUMNS_ROW_INDEX = 10;
 
 type Line = (string | number | null)[];
 function sheet(header: (string | null)[], lines: Line[]): unknown[][] {
@@ -229,6 +231,34 @@ describe('nouveau format (une ligne par combattant)', () => {
     const [combat, kata] = r.rows.map((x) => x.input!);
     expect(combat).toMatchObject({ discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54', approxWeightKg: 53.5, otherDisciplines: ['shido-mix', 'shido-boxing'], acceptsJiyuFirst: null });
     expect(kata).toMatchObject({ discipline: 'kata', ruleset: null, weightClassId: null, otherDisciplines: [], grade: '1er kyu' });
+  });
+
+  describe('2e discipline de combat (colonne en fin de ligne)', () => {
+    const withSecond = (over: Partial<Record<number, string | number | null>>, second: string | null): unknown[][] => {
+      const cells = sheetNew([line(over)]);
+      cells[CLUB_FORM_COLUMNS_ROW_INDEX]![14] = CLUB_FORM_SECOND_COMBAT_COLUMN;
+      cells[CLUB_FORM_FIRST_ROW - 1]![14] = second;
+      return cells;
+    };
+    test('reading a form with a second combat', () => {
+      const r = parseClubForm(withSecond({ 3: 'Seniors', 8: 'Shobu' }, 'Boxing'), grid, tol, new Set(), { multipleCombats: true });
+      expect(r.rows.map((x) => x.errors)).toEqual([[], [], []]);
+      expect(r.rows.map((x) => x.input!.discipline)).toEqual(['karate', 'shido-boxing', 'kata']);
+      expect(r.rows.slice(0, 2).map((x) => x.input!.ruleset)).toEqual(['shobu', 'shobu']);
+    });
+    test('second combat equal to the first is ignored with a warning', () => {
+      const r = parseClubForm(withSecond({}, 'Karaté'), grid, tol, new Set(), { multipleCombats: true });
+      expect(r.rows.map((x) => x.input!.discipline)).toEqual(['karate', 'kata']);
+      expect(r.rows[0]!.warnings).toContain('2e discipline de combat identique à la première (ignorée).');
+    });
+    test('réglage désactivé : la colonne est lue, la règle d’enregistrement refuse', () => {
+      const r = parseClubForm(withSecond({}, 'Boxing'), grid, tol);
+      expect(r.rows[0]!.errors).toContain(ONE_COMBAT_ONLY);
+    });
+    test('second combat illisible : avertissement', () => {
+      const r = parseClubForm(withSecond({}, 'Zumba'), grid, tol, new Set(), { multipleCombats: true });
+      expect(r.rows[0]!.warnings.join(' ')).toContain('2e discipline de combat incompréhensible');
+    });
   });
 
   test('poids actuel → catégorie de poids, tolérance de pesée comprise', () => {

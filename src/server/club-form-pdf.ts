@@ -167,7 +167,7 @@ export async function buildClubFormPdf(competition: Competition, grid: CategoryG
   const both = new Set([0, 1, 2, 4, 6]);
   const head1 = ['Nom', 'Prénom', 'Sexe', 'Catégorie d’âge', 'Poids actuel (kg)', 'Disciplines', 'Grade (si kata)', 'Règlement', 'Si seul : autre discipline ?', 'Shobu : si seul, d’abord…'];
   const head2: Record<number, string> = {
-    3: 'une seule case', 5: 'kata et/ou une discipline de combat', 7: 'combat', 8: '1, 2, 3 · vide = non', 9: 'une seule case',
+    3: 'une seule case', 5: competition.settings.multipleCombatDisciplinesPerDay ? 'kata et/ou une ou plusieurs disciplines de combat' : 'kata et/ou une discipline de combat', 7: 'combat', 8: '1, 2, 3 · vide = non', 9: 'une seule case',
   };
   for (let i = 0; i < COLUMNS.length; i++) {
     const h = both.has(i) ? h1 + h2 : h1;

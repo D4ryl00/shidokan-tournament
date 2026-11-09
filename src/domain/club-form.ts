@@ -36,6 +36,8 @@ export const CLUB_FORM_COLUMNS = [
   'Triathlon',
   'Shobu : si seul, d’abord…',
 ] as const;
+/** Colonne ajoutée à la fin quand la compétition autorise plusieurs combats par jour ; reconnue à son libellé. */
+export const CLUB_FORM_SECOND_COMBAT_COLUMN = '2e discipline de combat';
 export const CLUB_FORM_RECLASS_HEADER = 'Si seul : autre discipline ? 1, 2, 3, vide = non';
 /** Valeurs de la dernière colonne : ce qu'on propose d'abord à un combattant shobu qui a accepté une autre discipline. */
 export const SHOBU_KEEP_LABELS = { ruleset: 'Autre discipline', discipline: 'Passer en jiyu' } as const;
@@ -253,7 +255,7 @@ export function lineToRows(line: ClubFormLine, lineNumber: number, grid: Categor
 }
 
 const COMBAT_LABELS = new Set<DisciplineId>(['karate', 'shido-boxing', 'shido-mix', 'triathlon']);
-function cellsToLine(row: unknown[], grid: CategoryGrid, triathlonColumn: boolean): { line: ClubFormLine; warnings: string[]; errors: string[] } {
+function cellsToLine(row: unknown[], grid: CategoryGrid, triathlonColumn: boolean, secondCombatColumn = -1): { line: ClubFormLine; warnings: string[]; errors: string[] } {
   const [lastName, firstName, sexCell, ageCell, weightCell, combatCell, kataCell, gradeCell, rulesetCell, prefK, prefB, prefM] = row;
   // Les fiches envoyées avant l'ajout du triathlon ont une colonne de moins.
   const prefT = triathlonColumn ? row[12] : null;
@@ -269,6 +271,15 @@ function cellsToLine(row: unknown[], grid: CategoryGrid, triathlonColumn: boolea
   // « Kata » écrit dans la colonne de combat : c'est une inscription en kata.
   const kataInCombat = combatRaw === 'kata';
   if (text(combatCell) && !combat && !kataInCombat) warnings.push(`Discipline de combat incompréhensible : « ${text(combatCell)} » (ignorée).`);
+  const combats: CombatDiscipline[] = combat ? [combat] : [];
+  const secondCell = secondCombatColumn >= 0 ? row[secondCombatColumn] : null;
+  if (text(secondCell)) {
+    const secondRaw = disciplineFromLabel(secondCell);
+    const second = secondRaw && COMBAT_LABELS.has(secondRaw) ? (secondRaw as CombatDiscipline) : null;
+    if (!second) warnings.push(`2e discipline de combat incompréhensible : « ${text(secondCell)} » (ignorée).`);
+    else if (combats.includes(second)) warnings.push('2e discipline de combat identique à la première (ignorée).');
+    else combats.push(second);
+  }
   const kataText = normalizeName(text(kataCell));
   const kataYes = kataText === 'KATA' || kataText === 'K' || kataText === '✓' ? true : parseYesNo(kataCell);
   if (kataText && kataYes === null) warnings.push(`Case Kata incomprise : « ${text(kataCell)} » (Oui ou Non) — pas d'inscription en kata.`);
@@ -288,7 +299,7 @@ function cellsToLine(row: unknown[], grid: CategoryGrid, triathlonColumn: boolea
   return {
     line: {
       lastName: text(lastName), firstName: text(firstName), sex, ageBandCode, weightClassId: null,
-      weightKg, combats: combat ? [combat] : [], kata: kataYes === true || kataInCombat, grade: textOrNull(gradeCell), ruleset: rulesetFromLabel(rulesetCell), prefs, shobuKeep,
+      weightKg, combats, kata: kataYes === true || kataInCombat, grade: textOrNull(gradeCell), ruleset: rulesetFromLabel(rulesetCell), prefs, shobuKeep,
     },
     warnings,
     errors,
@@ -426,7 +437,9 @@ export function parseClubForm(cells: unknown[][], grid: CategoryGrid, tolerance:
   // Nouveau format reconnu à sa 5e colonne (« Poids actuel ») ; sinon, ancien format.
   const isNew = normalizeName(text(cells[columnsRow]?.[4])).startsWith('POIDS ACTUEL');
   const triathlonColumn = isNew && normalizeName(text(cells[columnsRow]?.[12])) === 'TRIATHLON';
-  const width = !isNew ? CLUB_FORM_LEGACY_COLUMNS.length : triathlonColumn ? CLUB_FORM_COLUMNS.length : CLUB_FORM_COLUMNS.length - 1;
+  const secondCombatColumn = !isNew ? -1 : (cells[columnsRow] ?? []).findIndex((c) => normalizeName(text(c)) === normalizeName(CLUB_FORM_SECOND_COMBAT_COLUMN));
+  const baseWidth = !isNew ? CLUB_FORM_LEGACY_COLUMNS.length : triathlonColumn ? CLUB_FORM_COLUMNS.length : CLUB_FORM_COLUMNS.length - 1;
+  const width = Math.max(baseWidth, secondCombatColumn + 1);
   const rows: ClubFormRow[] = [];
   const seen = new Map<string, number>();
   const combatByFighter = new Map<string, Set<DisciplineId>>();
@@ -435,7 +448,7 @@ export function parseClubForm(cells: unknown[][], grid: CategoryGrid, tolerance:
     if (row.slice(0, width).every((c) => text(c) === '')) continue;
     const parsedRows = isNew
       ? (() => {
-          const { line, warnings, errors } = cellsToLine(row, grid, triathlonColumn);
+          const { line, warnings, errors } = cellsToLine(row, grid, triathlonColumn, secondCombatColumn);
           // Une valeur illisible prime sur « manquant » (même ligne, un seul message par case).
           if (errors.length) return [{ line: r + 1, label: `${line.lastName} ${line.firstName}`.trim(), input: null, errors, warnings }];
           const out = lineToRows(line, r + 1, grid, tolerance, closed, opts);

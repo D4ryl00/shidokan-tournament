@@ -82,3 +82,17 @@ test('note de reclassement, sans « non ouvert », une seule page', async () => 
   pdf = (await app.inject({ method: 'GET', url: `${base}/club-form.pdf` })).rawPayload;
   expect(await pages(pdf)).toBe(1);
 });
+
+test('fiche papier PDF : réglage activé, plusieurs cases de combat ; désactivé, inchangée', async () => {
+  const text = async () => pdfText((await app.inject({ method: 'GET', url: `${base}/club-form.pdf` })).rawPayload).replace(/\s+/g, ' ');
+  const off = await text();
+  expect(off).toContain('kata et/ou une discipline de combat');
+  expect(off).not.toContain('plusieurs disciplines de combat');
+  const settings = (await app.inject({ method: 'GET', url: base })).json().settings;
+  expect((await app.inject({ method: 'PATCH', url: base, payload: { settings: { ...settings, multipleCombatDisciplinesPerDay: true } } })).statusCode).toBe(200);
+  const on = await text();
+  expect(on).toContain('kata et/ou une ou plusieurs disciplines de combat');
+  expect(on).not.toContain('kata et/ou une discipline de combat');
+  expect(on).toContain('Règlement');
+  expect(on).toContain('une seule case');
+});

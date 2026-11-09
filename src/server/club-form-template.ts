@@ -5,6 +5,7 @@ import {
   CLUB_FORM_COLUMNS,
   CLUB_FORM_HEADER_FIELDS,
   CLUB_FORM_RECLASS_HEADER,
+  CLUB_FORM_SECOND_COMBAT_COLUMN,
   CLUB_FORM_ROWS,
   CLUB_FORM_TITLE,
   PRE_APPROVAL_TEXT,
@@ -36,12 +37,15 @@ export function logoPng(): Buffer | null {
 }
 
 const COMBAT = (['karate', 'shido-boxing', 'shido-mix', 'triathlon'] as const).map((d) => DISCIPLINES[d].label);
-const WIDTHS = [3.2, 2.8, 1.9, 2.8, 1.7, 2.8, 1.6, 2.0, 1.8, 1.3, 1.3, 1.3, 1.6, 3.0];
-const LAST = WIDTHS.length - 1;
+const BASE_WIDTHS = [3.2, 2.8, 1.9, 2.8, 1.7, 2.8, 1.6, 2.0, 1.8, 1.3, 1.3, 1.3, 1.6, 3.0];
 
 /** Feuilles « Fiche club » (à remplir, une ligne par combattant) et « Aide ». */
 export function buildClubFormTemplate(competition: Competition, grid: CategoryGrid, closed: ReadonlySet<string>): OdsSheet[] {
   const offered = offeredAgeBands(grid, closed);
+  const multiple = competition.settings.multipleCombatDisciplinesPerDay;
+  // Réglage activé : une colonne de plus tout à la fin (les index des autres colonnes ne bougent pas).
+  const WIDTHS = multiple ? [...BASE_WIDTHS, 2.8] : BASE_WIDTHS;
+  const LAST = WIDTHS.length - 1;
   const validations = {
     sexe: ['Féminin', 'Masculin'],
     age: offered.map((b) => b.label),
@@ -61,14 +65,14 @@ export function buildClubFormTemplate(competition: Competition, grid: CategoryGr
       return [
         c(label, { style: 'label' }),
         c(null, { style: 'input', colSpan: 4, ...(last ? { validation: 'ouinon' } : { text: true }) }),
-        ...(last ? [c(`« Oui » : ${PRE_APPROVAL_TEXT}`, { style: 'note', colSpan: 9 })] : []),
+        ...(last ? [c(`« Oui » : ${PRE_APPROVAL_TEXT}`, { style: 'note', colSpan: WIDTHS.length - 5 })] : []),
       ];
     }),
     [c('Reclassement : si un combattant se retrouve seul dans sa catégorie, l’organisation cherche à lui trouver un adversaire.', { style: 'noteTitle', colSpan: WIDTHS.length })],
     [c('Autre discipline : numérotez 1, 2, 3 celles qu’il accepte, jamais celle où il est déjà inscrit. Vide = il reste dans sa discipline. Exemple : inscrit en karaté, Boxing 1 et Mix 2 = d’abord le boxing, sinon le mix.', { style: 'noteText', colSpan: WIDTHS.length })],
     [c(`Shobu : si vous avez numéroté une discipline, choisissez ce qu’on lui propose d’abord : « ${SHOBU_KEEP_LABELS.ruleset} » (il reste en shobu) ou « ${SHOBU_KEEP_LABELS.discipline} » (il reste dans sa discipline).`, { style: 'noteText', colSpan: WIDTHS.length })],
-    [...Array.from({ length: 9 }, () => c(null)), c(CLUB_FORM_RECLASS_HEADER, { style: 'header', colSpan: 4 }), c(null)],
-    CLUB_FORM_COLUMNS.map((label) => c(label, { style: 'header' })),
+    [...Array.from({ length: 9 }, () => c(null)), c(CLUB_FORM_RECLASS_HEADER, { style: 'header', colSpan: 4 }), c(null), ...(multiple ? [c(null)] : [])],
+    [...CLUB_FORM_COLUMNS, ...(multiple ? [CLUB_FORM_SECOND_COMBAT_COLUMN] : [])].map((label) => c(label, { style: 'header' })),
   ];
   for (let i = 0; i < CLUB_FORM_ROWS; i++) {
     const input = (extra: Partial<OdsCell> = {}) => c(null, { style: 'input', ...extra });
@@ -76,12 +80,14 @@ export function buildClubFormTemplate(competition: Competition, grid: CategoryGr
       input(), input(), input({ validation: 'sexe' }), input({ validation: 'age' }), input({ text: true }), input({ validation: 'combat' }),
       input({ validation: 'ouinon' }), input({ text: true }), input({ validation: 'reglement' }),
       input({ validation: 'ordre' }), input({ validation: 'ordre' }), input({ validation: 'ordre' }), input({ validation: 'ordre' }), input({ validation: 'priorite' }),
+      ...(multiple ? [input({ validation: 'combat' })] : []),
     ]);
   }
 
   const help: OdsCell[][] = [
     [c('Comment remplir la fiche', { bold: true })],
     [c('Une ligne par combattant. S’il fait du kata et une discipline de combat, mettez Kata « Oui » et choisissez la discipline de combat sur la même ligne.')],
+    ...(multiple ? [[c('Plusieurs combats : choisissez la 2e discipline de combat dans la dernière colonne. Le règlement (Jiyu ou Shobu) vaut pour tous les combats du combattant.')]] : []),
     [c('Poids actuel : le poids du combattant aujourd’hui, en kg (la catégorie de poids en est déduite).')],
     [c('Grade : seulement pour le kata, pour information des arbitres.')],
     [],
