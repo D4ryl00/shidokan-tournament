@@ -37,3 +37,16 @@
   .sk-pub-tab[aria-current="page"] { border-bottom-color: var(--sk-accent); }
   .sk-pub-body { padding-bottom: 16px; }
 }
+
+/* Sommaire en pastilles (JumpLinks) : aller à une section de la page. Le même style sur toutes les pages. */
+.sk-jumps { display: flex; flex-wrap: wrap; gap: 6px; }
+.sk-jump { display: inline-flex; align-items: baseline; gap: 5px; border: 0; border-radius: 999px; padding: 4px 11px; background: var(--sk-chip); color: var(--sk-chip-text); font: inherit; font-size: 13px; font-weight: 500; line-height: 1.4; text-decoration: none; cursor: pointer; font-variant-numeric: tabular-nums; }
+.sk-jump:hover { box-shadow: inset 0 0 0 1px var(--sk-accent); }
+.sk-jump:focus-visible { outline: 2px solid var(--sk-accent); outline-offset: 2px; }
+.sk-jump-count { opacity: 0.7; }
+
+/* Page du club : liste des combattants regroupée (une carte par groupe, une ligne par combattant). */
+.sk-club-row + .sk-club-row { border-top: 1px solid var(--sk-line); }
+.sk-tag { display: inline-flex; align-items: center; border-radius: 6px; padding: 1px 7px; font-size: 12px; line-height: 1.5; background: var(--sk-line); color: var(--sk-soft); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sk-tag[data-kind='discipline'] { background: var(--sk-chip); color: var(--sk-chip-text); font-weight: 600; }
+.sk-tag[data-kind='sex'] { font-weight: 700; min-width: 22px; justify-content: center; }

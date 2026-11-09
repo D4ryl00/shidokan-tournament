@@ -20,6 +20,7 @@ import { useUnsaved } from '../unsaved.js';
 import { settingsPatch } from '../settingsPatch.js';
 import { SyncPanel } from '../components/SyncPanel.js';
 import { HELP } from '../help.js';
+import { JumpLinks } from '../components/ui/JumpLinks.js';
 
 const FORMAT_OPTIONS = Object.entries(FORMAT_LABELS).map(([value, label]) => ({ value, label }));
 const ALL_DISCIPLINES = Object.keys(DISCIPLINES) as DisciplineId[];
@@ -144,11 +145,8 @@ export function CompetitionSettingsPage() {
 
   return (
     <Stack data-testid="settings-form" gap="lg">
-      <Group gap="xs" data-testid="settings-summary">
-        {Object.entries(SECTIONS).map(([topic, aid]) => (
-          <Button key={aid} component="a" href={`#${aid}`} size="compact-sm" variant="subtle">{HELP[topic as keyof typeof SECTIONS].title}</Button>
-        ))}
-      </Group>
+      <JumpLinks data-testid="settings-summary"
+        items={Object.entries(SECTIONS).map(([topic, aid]) => ({ key: aid, label: HELP[topic as keyof typeof SECTIONS].title, href: `#${aid}` }))} />
       <SectionCard id="competition" title={HELP['reglages.competition'].title} help="reglages.competition">
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
           <TextInput label="Nom" style={{ gridColumn: '1 / -1' }} value={info.name} onChange={(e) => setInfo({ ...info, name: e.currentTarget.value })} />

@@ -1,4 +1,4 @@
-import { Anchor, Box, Grid, Group, Paper, SimpleGrid, Stack, Text } from '@mantine/core';
+import { Box, Grid, Paper, SimpleGrid, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { newSameClubSentences } from '../../../domain/brackets/same-club.js';
@@ -19,6 +19,7 @@ import { LoneTray } from './LoneTray.js';
 import { cardTitle, isLockedCategory, LOCKED_DROP, loneFighters, plancheFilter, plancheGroups, shownOnPlanche, type PlancheSort } from './model.js';
 import { PlancheToolbar, type Scope } from './PlancheToolbar.js';
 import { useDragMove, type DragAttrs, type PlancheAction } from './useDragMove.js';
+import { JumpLinks } from '../ui/JumpLinks.js';
 
 export interface SeeRequest { ids: string[]; n: number }
 
@@ -142,11 +143,8 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
         </Paper>
       )}
       {groups.length > 0 && (
-        <Group gap="md" data-testid="planche-jumps">
-          {groups.map((g, i) => (
-            <Anchor key={g.key} component="button" type="button" size="sm" data-testid="planche-jump" onClick={() => jump(i)}>{g.title} ({g.categories.length})</Anchor>
-          ))}
-        </Group>
+        <JumpLinks data-testid="planche-jumps" itemTestId="planche-jump" label="Aller au groupe"
+          items={groups.map((g, i) => ({ key: g.key, label: g.title, count: g.categories.length, onClick: () => jump(i) }))} />
       )}
       <Grid gutter="md">
         <Grid.Col span={{ base: 12, md: 3 }}>

@@ -19,6 +19,7 @@ import { PageHeader } from '../components/ui/PageHeader.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
 import { RuleLadder } from '../components/replacement/RuleLadder.js';
 import type { RulesView } from '../../domain/replacement/rules.js';
+import { JumpLinks } from '../components/ui/JumpLinks.js';
 
 const saved = () => notifications.show({ color: 'green', message: 'Réglages enregistrés.' });
 
@@ -280,9 +281,7 @@ export function AppSettingsPage() {
   return (
     <Stack gap="lg">
       <PageHeader title={HELP.parametres.title} help={server ? 'parametres' : 'parametres.pc'} />
-      <Group gap="xs" data-testid="settings-summary">
-        {sections.map((x) => <Button key={x.id} component="a" href={`#${x.id}`} size="compact-sm" variant="subtle">{x.label}</Button>)}
-      </Group>
+      <JumpLinks data-testid="settings-summary" items={sections.map((x) => ({ key: x.id, label: x.label, href: `#${x.id}` }))} />
       {data && me && (
         <>
           {server && <MailCard settings={data} />}
