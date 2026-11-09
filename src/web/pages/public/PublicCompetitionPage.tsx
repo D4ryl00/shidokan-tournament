@@ -1,4 +1,5 @@
 import { Alert, Anchor, Box, Group, Loader, Stack, Text, Title } from '@mantine/core';
+import { publicTimes } from '../../../domain/public/times.js';
 import { useLayoutEffect, useMemo } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { PublicHeader } from '../../components/public/PublicHeader.js';
@@ -7,6 +8,7 @@ import { useDocumentTitle } from '../../documentTitle.js';
 import { isGone, usePublicCompetition } from '../../publicApi.js';
 import { usePublicEvents, useReceivedAt } from '../../publicLive.js';
 import { followedFighters, usePins } from '../../publicPins.js';
+import { useNow } from '../../components/public/useNow.js';
 import { PublicError } from '../../components/public/PublicError.js';
 import { BracketsTab } from './BracketsTab.js';
 import { FollowedTab } from './FollowedTab.js';
@@ -42,6 +44,8 @@ export function PublicCompetitionPage() {
   const requested = search.get('onglet');
   const active = tabs.find((t) => t.name === requested) ?? tabs[0]!;
   const followed = useMemo(() => new Set(pub ? followedFighters(pub, pins) : []), [pub, pins]);
+  const now = useNow(pub?.date ?? '');
+  const times = useMemo(() => (pub ? publicTimes(pub, now) : null), [pub, now]);
   const launched = !!pub?.waves.some((w) => w.launched);
   // Autre onglet : en haut de la page (avant l'effet d'un onglet qui amène lui-même un élément à l'écran). Corps entre
   // accolades : `scrollTo` rend une promesse dans les navigateurs récents, et un effet ne doit rien rendre d'autre qu'une fonction.
@@ -81,7 +85,7 @@ export function PublicCompetitionPage() {
               ))}
             </nav>
             {!launched && pub.phase !== 'past' && <Text size="sm" c="dimmed" data-testid="public-not-launched">Numéros et horaires au lancement de la session.</Text>}
-            <active.Component pub={pub} followed={followed} pins={pins} onPins={setPins} />
+            <active.Component pub={pub} times={times!} followed={followed} pins={pins} onPins={setPins} />
           </>
         )}
       </Stack>

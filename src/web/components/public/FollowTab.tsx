@@ -1,7 +1,9 @@
 import { Box, Button, Group, Stack, Text, TextInput, UnstyledButton } from '@mantine/core';
 import { useMemo, useState } from 'react';
 import { fighterTimeline, searchPublic, type FighterLine, type PublicFighter } from '../../../domain/public/follow.js';
+import type { PublicTimes } from '../../../domain/public/times.js';
 import type { PublicCompetition } from '../../../domain/public/types.js';
+import { minSecText, timingText } from '../../../domain/schedule/durations.js';
 import { followedFighters, type Pins } from '../../publicPins.js';
 import { StatusBadge, type Tone } from '../ui/StatusBadge.js';
 import { EmptyState } from '../ui/EmptyState.js';
@@ -31,11 +33,25 @@ function StarButton({ on, locked, name, onClick }: { on: boolean; locked?: boole
   );
 }
 
-function LineView({ line, pub }: { line: FighterLine; pub: PublicCompetition }) {
+/** « Durée prévue : 2 × 1 min 30 » ; kata : « 3 passages · 1 min 30 chacun » ; rien si la durée n'est pas connue. */
+function durationText(pub: PublicCompetition, line: FighterLine): string | null {
+  const n = line.next;
+  if (!n || pub.phase === 'past') return null;
+  if (line.discipline === 'kata') {
+    if (n.kataPassages === null || n.kataPassages <= 0) return null;
+    const each = pub.categories.find((c) => c.id === line.categoryId)?.kataPassageSec ?? Math.round(n.durationSec / n.kataPassages);
+    return `Durée prévue : ${plural(n.kataPassages, 'passage', 'passages')} · ${minSecText(each)} chacun`;
+  }
+  return n.timing ? `Durée prévue : ${timingText(n.timing)}` : null;
+}
+
+function LineView({ line, pub, times }: { line: FighterLine; pub: PublicCompetition; times: PublicTimes }) {
   const badge = stateBadge(line.state);
   const zone = (id: string) => pub.zones.find((z) => z.id === id)?.name ?? 'Zone';
   const kata = line.discipline === 'kata';
   const n = line.next;
+  const at = n ? times.at(n.key) : null;
+  const duration = durationText(pub, line);
   return (
     <Stack gap={4} pt={6} style={{ borderTop: '1px solid var(--sk-line)' }} data-testid="public-follow-line">
       <Group justify="space-between" wrap="nowrap" align="flex-start" gap="xs">
@@ -56,6 +72,7 @@ function LineView({ line, pub }: { line: FighterLine; pub: PublicCompetition }) 
           <Group gap="md" align="baseline" wrap="wrap">
             <Text span size="sm">{zone(n.zoneId)}</Text>
             <Text span size="sm">{kata ? 'Bloc n° ' : 'n° '}<Text span fz={26} fw={800} inherit className="num" style={{ fontSize: 26 }}>{n.number}</Text></Text>
+            {at && <Text span fz={20} fw={700} data-testid="public-follow-at">vers {at}</Text>}
           </Group>
           <Text size="sm" c="dimmed">
             {n.before === 0 ? (kata ? 'Prochain passage de la zone' : 'Prochain combat de la zone') : kata ? `${plural(n.before, 'passage', 'passages')} avant le sien` : `${plural(n.before, 'combat', 'combats')} avant le sien`}
@@ -64,13 +81,14 @@ function LineView({ line, pub }: { line: FighterLine; pub: PublicCompetition }) 
               : 'from' in n.opponent ? sourceText(n.opponent.from, n.zoneId, pub)
               : `${n.opponent.name} (${n.opponent.club})`)}
           </Text>
+          {duration && <Text size="sm" c="dimmed" data-testid="public-follow-duration">{duration}</Text>}
         </Box>
       )}
     </Stack>
   );
 }
 
-function FighterCard({ pub, fighterId, name, club, pins, onPins }: { pub: PublicCompetition; fighterId: string; name: string; club: string; pins: Pins; onPins: (p: Pins) => void }) {
+function FighterCard({ pub, times, fighterId, name, club, pins, onPins }: { pub: PublicCompetition; times: PublicTimes; fighterId: string; name: string; club: string; pins: Pins; onPins: (p: Pins) => void }) {
   const lines = useMemo(() => fighterTimeline(pub, fighterId), [pub, fighterId]);
   const viaClub = !pins.fighters.includes(fighterId);
   return (
@@ -84,7 +102,7 @@ function FighterCard({ pub, fighterId, name, club, pins, onPins }: { pub: Public
         <StarButton on locked={viaClub} name={name} onClick={() => onPins({ ...pins, fighters: pins.fighters.filter((f) => f !== fighterId) })} />
       </Group>
       {lines.length === 0 ? <Text size="sm" c="dimmed">Pas encore dans un tableau de session lancée.</Text>
-        : lines.map((l) => <LineView key={l.categoryId} line={l} pub={pub} />)}
+        : lines.map((l) => <LineView key={l.categoryId} line={l} pub={pub} times={times} />)}
     </Stack>
   );
 }
@@ -107,7 +125,7 @@ function ResultRow({ pub, f, followed, pins, onPins }: { pub: PublicCompetition;
 }
 
 /** Onglet « Suivis » : recherche d'un combattant ou d'un club, puis une carte par combattant suivi (prochain combat en avant). */
-export function FollowTab({ pub, pins, onPins, followed }: { pub: PublicCompetition; pins: Pins; onPins: (p: Pins) => void; followed: Set<string> }) {
+export function FollowTab({ pub, times, pins, onPins, followed }: { pub: PublicCompetition; times: PublicTimes; pins: Pins; onPins: (p: Pins) => void; followed: Set<string> }) {
   const [q, setQ] = useState('');
   const searching = q.trim() !== '';
   const found = useMemo(() => searchPublic(pub, q), [pub, q]);
@@ -151,7 +169,7 @@ export function FollowTab({ pub, pins, onPins, followed }: { pub: PublicCompetit
         <EmptyState title="Cherchez un combattant ou un club pour le suivre." icon="★" data-testid="public-follow-empty" />
       ) : (
         <Stack gap="sm" data-testid="public-follow-cards">
-          {cards.map((c) => <FighterCard key={c.id} pub={pub} fighterId={c.id} name={c.name} club={c.club} pins={pins} onPins={onPins} />)}
+          {cards.map((c) => <FighterCard key={c.id} pub={pub} times={times} fighterId={c.id} name={c.name} club={c.club} pins={pins} onPins={onPins} />)}
         </Stack>
       )}
     </Stack>

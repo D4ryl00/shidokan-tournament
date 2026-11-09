@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { toPublicCompetition } from '../../src/domain/public/view.js';
-import { currentWave, finalsLabel, finalsMarkers, involvesFollowed, sideText, waitingWaves, zoneViews } from '../../src/web/components/public/zoneRows.js';
+import type { PublicTimes } from '../../src/domain/public/times.js';
+import { currentWave, driftText, finalsLabel, finalsMarkers, involvesFollowed, sideText, waitingWaves, waveHeaderText, zoneViews } from '../../src/web/components/public/zoneRows.js';
 import { source } from '../domain/public-fixtures.js';
 
 const pub = toPublicCompetition(source());
@@ -64,40 +65,55 @@ describe('involvesFollowed', () => {
 });
 
 describe('waitingWaves', () => {
-  it('une ligne par session non lancée', () => {
-    expect(waitingWaves(pub)).toEqual(['Après-midi : numéros au lancement de la session.']);
+  it('une ligne par session non lancée, avec l’heure prévue si elle est connue', () => {
+    const d = structuredClone(pub);
+    const w = d.waves.find((x) => !x.launched)!;
+    w.plannedStart = null;
+    expect(waitingWaves(d)).toEqual([`${w.name} : numéros et horaires au lancement de la session.`]);
+    w.plannedStart = '13:30';
+    expect(waitingWaves(d)).toEqual([`${w.name} : numéros et horaires au lancement de la session, prévu vers 13:30.`]);
+    w.plannedStart = '09:05';
+    expect(waitingWaves(d)).toEqual([`${w.name} : numéros et horaires au lancement de la session, prévu vers 9:05.`]);
+  });
+
+  it('compétition passée : aucune heure', () => {
+    const d = structuredClone(pub);
+    d.phase = 'past';
+    d.waves.forEach((w) => { w.plannedStart = '13:30'; });
+    expect(waitingWaves(d).every((t) => !t.includes('prévu vers'))).toBe(true);
   });
 });
 
-describe('session en cours', () => {
-  it('la première session lancée qui a encore un passage ; toutes jouées : la dernière, terminée ; aucune : rien', () => {
-    expect(currentWave(pub)).toEqual({ name: 'Matin', done: false });
-    const played = structuredClone(pub);
-    played.queues = played.queues.map((q) => ({ ...q, items: q.items.map((i) => ({ ...i, state: 'played' as const })) }));
-    expect(currentWave(played)).toEqual({ name: 'Matin', done: true });
-    const none = structuredClone(pub);
-    none.waves = none.waves.map((w) => ({ ...w, launched: false }));
-    expect(currentWave(none)).toBeNull();
+describe('driftText', () => {
+  it('retard, avance, à l’heure (moins de 3 min d’écart, -0 compris)', () => {
+    expect(driftText(12)).toBe('en retard de 12 min');
+    expect(driftText(-5)).toBe('en avance de 5 min');
+    expect(driftText(2)).toBe('à l\'heure');
+    expect(driftText(-2)).toBe('à l\'heure');
+    expect(driftText(-0)).toBe('à l\'heure');
+    expect(driftText(3)).toBe('en retard de 3 min');
   });
 });
 
-describe('finales de la session', () => {
-  it('libellé sans répéter « session »', () => {
+describe('finalsLabel', () => {
+  it('avec l’heure de début des finales, sans elle', () => {
     expect(finalsLabel('Session 1')).toBe('Finales de la session 1');
-    expect(finalsLabel('Session unique')).toBe('Finales de la session unique');
-    expect(finalsLabel('Matin')).toBe('Finales de la session Matin');
+    expect(finalsLabel('Session 1', '11:10')).toBe('Finales de la session 1 à partir de 11:10');
+    expect(finalsLabel('Session 1', null)).toBe('Finales de la session 1');
   });
+});
 
-  it('une ligne avant la première finale de chaque session, rien sans finale', () => {
-    const base = pub.queues.find((q) => q.zoneId === 'z2')!.items;
-    const own = { ...base[0]!, finals: false };
-    const final = (n: number, waveId: string) => ({ ...base[1]!, number: n, waveId, finals: true });
-    const two = structuredClone(pub);
-    two.waves = [{ id: 'w1', name: 'Session 1', launched: true, plannedStart: null, actualStart: null, finalsStart: null }, { id: 'w2', name: 'Session 2', launched: true, plannedStart: null, actualStart: null, finalsStart: null }];
-    expect([...finalsMarkers(two, [own, final(5, 'w1'), final(6, 'w1'), { ...own, number: 7, waveId: 'w2' }, final(8, 'w2')])]).toEqual([
-      [1, 'Finales de la session 1'],
-      [4, 'Finales de la session 2'],
-    ]);
-    expect(finalsMarkers(pub, base).size).toBe(0);
+describe('waveHeaderText', () => {
+  const times = (start: { clock: string; estimated: boolean } | null): PublicTimes =>
+    ({ at: () => null, waveStart: () => start, finalsAt: () => null, categoryFinalAt: () => null, drift: () => null });
+  const wave = { id: 'w1', plannedStart: '09:30' };
+  it('prévue et démarrée, démarrée estimée, parties absentes omises', () => {
+    expect(waveHeaderText(pub, wave, times({ clock: '9:41', estimated: false }))).toBe(' · prévue 9:30 · démarrée 9:41');
+    expect(waveHeaderText(pub, wave, times({ clock: '9:41', estimated: true }))).toBe(' · prévue 9:30 · démarrée vers 9:41');
+    expect(waveHeaderText(pub, wave, times(null))).toBe(' · prévue 9:30');
+    expect(waveHeaderText(pub, { id: 'w1', plannedStart: null }, times(null))).toBe('');
+  });
+  it('compétition passée : rien', () => {
+    expect(waveHeaderText({ ...pub, phase: 'past' }, wave, times({ clock: '9:41', estimated: false }))).toBe('');
   });
 });

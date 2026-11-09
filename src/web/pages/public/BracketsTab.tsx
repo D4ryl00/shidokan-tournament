@@ -2,6 +2,8 @@ import { Box, Group, Paper, SegmentedControl, Select, SimpleGrid, Stack, Text, T
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { ALL_FORMAT_LABELS } from '../../../domain/brackets/format-labels.js';
+import type { PublicTimes } from '../../../domain/public/times.js';
+import { minSecText, timingText } from '../../../domain/schedule/durations.js';
 import type { PublicCategory, PublicCompetition } from '../../../domain/public/types.js';
 import { BracketView } from '../../components/BracketView.js';
 import {
@@ -16,11 +18,17 @@ import type { PublicTabProps } from './tabProps.js';
 const STATUS_TONES: Record<PublicCategory['status'], Tone> = { upcoming: 'neutral', started: 'warn', finished: 'ok' };
 const cardStyle = { background: 'var(--sk-card)', border: '1px solid var(--sk-card-line)', borderRadius: 'var(--mantine-radius-md)' } as const;
 
-/** Zone · format d'un tableau (« Tatami 1 · Élimination directe »). */
-function headline(pub: PublicCompetition, c: PublicCategory): string {
+/**
+ * Zone · format d'un tableau (« Tatami 1 · Élimination directe »), puis durée et heure de la finale
+ * (« · 2 × 1 min 30 · finale vers 11:40 ») ; rien de tout cela pour une compétition passée.
+ */
+function headline(pub: PublicCompetition, c: PublicCategory, times: PublicTimes): string {
   const zone = pub.zones.find((z) => z.id === c.zoneId)?.name;
   const format = c.bracket.kind === 'kata' ? ALL_FORMAT_LABELS.kata_two_rounds : ALL_FORMAT_LABELS[c.bracket.format];
-  return [zone, format].filter(Boolean).join(' · ');
+  const past = pub.phase === 'past';
+  const duration = past ? null : c.bracket.kind === 'kata' ? (c.kataPassageSec ? `${minSecText(c.kataPassageSec)} par passage` : null) : c.timing ? timingText(c.timing) : null;
+  const final = past ? null : times.categoryFinalAt(c.id);
+  return [zone, format, duration, final ? `finale vers ${final}` : null].filter(Boolean).join(' · ');
 }
 
 function Passages({ pub, c }: { pub: PublicCompetition; c: PublicCategory }) {
@@ -43,7 +51,7 @@ function Passages({ pub, c }: { pub: PublicCompetition; c: PublicCategory }) {
   );
 }
 
-function CategoryDetail({ pub, c, highlighted }: { pub: PublicCompetition; c: PublicCategory; highlighted: Set<string> }) {
+function CategoryDetail({ pub, times, c, highlighted }: { pub: PublicCompetition; times: PublicTimes; c: PublicCategory; highlighted: Set<string> }) {
   const [view, setView] = useState<'tableau' | 'combats'>('tableau');
   const entrants = useMemo(() => entrantInfos(pub), [pub]);
   return (
@@ -53,7 +61,7 @@ function CategoryDetail({ pub, c, highlighted }: { pub: PublicCompetition; c: Pu
           <Text fw={700} style={{ overflowWrap: 'anywhere', minWidth: 0 }}>{c.label}</Text>
           <StatusBadge tone={STATUS_TONES[c.status]}>{CATEGORY_STATUS_LABELS[c.status]}</StatusBadge>
         </Group>
-        <Text size="sm" c="dimmed" data-testid="public-category-head">{headline(pub, c)}</Text>
+        <Text size="sm" c="dimmed" data-testid="public-category-head">{headline(pub, c, times)}</Text>
       </Box>
       <SegmentedControl size="xs" value={view} onChange={(v) => setView(v as typeof view)} data={[{ value: 'tableau', label: 'Tableau' }, { value: 'combats', label: 'Combats' }]} data-testid="public-category-view" />
       {view === 'combats' ? <Passages pub={pub} c={c} /> : (
@@ -67,7 +75,7 @@ function CategoryDetail({ pub, c, highlighted }: { pub: PublicCompetition; c: Pu
 }
 
 /** Onglet « Tableaux » : filtres, liste des catégories ; sous la catégorie ouverte, son tableau (lecture seule) et ses combats. */
-export function BracketsTab({ pub, followed }: PublicTabProps) {
+export function BracketsTab({ pub, times, followed }: PublicTabProps) {
   const [params, setParams] = useSearchParams();
   const [filters, setFilters] = useState<CategoryFilters>(NO_FILTERS);
   const [q, setQ] = useState('');
@@ -125,12 +133,12 @@ export function BracketsTab({ pub, followed }: PublicTabProps) {
               </UnstyledButton>
             </Paper>
             {/* Le tableau s'ouvre juste sous la catégorie touchée. */}
-            {c.id === open?.id && <CategoryDetail key={open.id} pub={pub} c={open} highlighted={highlighted} />}
+            {c.id === open?.id && <CategoryDetail key={open.id} pub={pub} times={times} c={open} highlighted={highlighted} />}
           </Fragment>
         ))}
       </Stack>
       {/* Ouverte mais écartée par les filtres : montrée après la liste. */}
-      {open && !openShown && <CategoryDetail key={open.id} pub={pub} c={open} highlighted={highlighted} />}
+      {open && !openShown && <CategoryDetail key={open.id} pub={pub} times={times} c={open} highlighted={highlighted} />}
     </Stack>
   );
 }

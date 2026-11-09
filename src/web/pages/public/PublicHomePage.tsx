@@ -5,6 +5,7 @@ import { PublicHeader } from '../../components/public/PublicHeader.js';
 import { EmptyState } from '../../components/ui/EmptyState.js';
 import { useDocumentTitle } from '../../documentTitle.js';
 import { usePublicList } from '../../publicApi.js';
+import { clockText } from '../../components/public/zoneRows.js';
 import { PublicError } from '../../components/public/PublicError.js';
 
 export const frDate = (iso: string, short = false) =>
@@ -59,6 +60,9 @@ export function PublicHomePage() {
                 <Stack gap={2}>
                   <Text fw={700}>{c.name}</Text>
                   <Text size="sm" c="dimmed">{place(c)}</Text>
+                  {c.waves.filter((w) => w.plannedStart).map((w) => (
+                    <Text key={w.name} size="sm" c="dimmed" data-testid="public-upcoming-wave">{w.name} · {clockText(w.plannedStart!)}</Text>
+                  ))}
                   <Text size="sm" c="dimmed">Numéros et horaires au lancement de la session.</Text>
                 </Stack>
               )}

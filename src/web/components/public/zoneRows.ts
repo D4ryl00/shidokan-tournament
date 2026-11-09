@@ -1,5 +1,6 @@
 import { zoneQueue } from '../../../domain/public/follow.js';
 import type { PublicCompetition, PublicQueueItem } from '../../../domain/public/types.js';
+import type { PublicTimes } from '../../../domain/public/times.js';
 import { sourceText } from './sourceText.js';
 
 /** Nombre de passages suivants montrés avant « voir les N suivants ». */
@@ -45,40 +46,64 @@ export function zoneViews(pub: PublicCompetition): ZoneView[] {
     });
 }
 
-/** Sessions non lancées : leurs numéros ne sont pas publics. */
+/** « 09:30 » → « 9:30 » (même écriture que les heures calculées). */
+export const clockText = (hhmm: string): string => `${Number(hhmm.split(':')[0])}:${hhmm.split(':')[1]}`;
+
+/** « prévue 9:30 · démarrée 9:41 » (« démarrée vers 9:41 » si estimée) ; parties absentes omises ; rien pour une compétition passée. */
+export function waveHeaderText(pub: PublicCompetition, wave: { id: string | null; plannedStart: string | null }, times: PublicTimes): string {
+  if (pub.phase === 'past') return '';
+  const start = times.waveStart(wave.id);
+  const parts = [
+    wave.plannedStart ? `prévue ${clockText(wave.plannedStart)}` : null,
+    start ? `démarrée ${start.estimated ? 'vers ' : ''}${start.clock}` : null,
+  ].filter((p): p is string => p !== null);
+  return parts.map((p) => ` · ${p}`).join('');
+}
+
+/** Sessions non lancées : leurs numéros ne sont pas publics, seulement l'heure prévue (jamais pour une compétition passée). */
 export function waitingWaves(pub: PublicCompetition): string[] {
-  return pub.waves.filter((w) => !w.launched).map((w) => `${w.name} : numéros au lancement de la session.`);
+  return pub.waves.filter((w) => !w.launched).map((w) => {
+    const base = `${w.name} : numéros et horaires au lancement de la session`;
+    return w.plannedStart && pub.phase !== 'past' ? `${base}, prévu vers ${clockText(w.plannedStart)}.` : `${base}.`;
+  });
+}
+
+/** Avance ou retard d'une zone en minutes (+ = en retard). Moins de 3 min d'écart (et -0) : « à l'heure », sans clignoter. */
+export function driftText(min: number): string {
+  if (Math.abs(min) < 3) return 'à l\'heure';
+  return min > 0 ? `en retard de ${min} min` : `en avance de ${-min} min`;
 }
 
 /**
  * Session affichée en haut de l'onglet Zones : la première session lancée (dans l'ordre) qui a encore un passage à jouer ;
  * toutes jouées : la dernière lancée, terminée. Aucune lancée : null.
  */
-export function currentWave(pub: PublicCompetition): { name: string; done: boolean } | null {
+export function currentWave(pub: PublicCompetition): { id: string | null; name: string; plannedStart: string | null; done: boolean } | null {
   const launched = pub.waves.filter((w) => w.launched);
   if (launched.length === 0) return null;
   const pending = new Set(pub.queues.flatMap((q) => q.items.filter((i) => i.state !== 'played').map((i) => i.waveId ?? null)));
   const now = launched.find((w) => pending.has(w.id));
-  return now ? { name: now.name, done: false } : { name: launched[launched.length - 1]!.name, done: true };
+  const w = now ?? launched[launched.length - 1]!;
+  return { id: w.id, name: w.name, plannedStart: w.plannedStart, done: !now };
 }
 
 /** « Finales de la session 1 » (session « Session 1 »), « Finales de la session Matin », « Finales de la session unique ». */
-export function finalsLabel(waveName: string): string {
-  return `Finales de la session ${waveName.trim().replace(/^session\s+/i, '')}`;
+export function finalsLabel(waveName: string, at?: string | null): string {
+  return `Finales de la session ${waveName.trim().replace(/^session\s+/i, '')}${at ? ` à partir de ${at}` : ''}`;
 }
 
 /**
  * Lignes « Finales de la session … » d'une file (passages restants dans l'ordre) : avant la première finale de chaque
  * session sur la zone des finales. Clé : l'index du passage dans `items`.
  */
-export function finalsMarkers(pub: PublicCompetition, items: PublicQueueItem[]): Map<number, string> {
+export function finalsMarkers(pub: PublicCompetition, items: PublicQueueItem[], finalsAt?: (waveId: string | null) => string | null): Map<number, string> {
   const out = new Map<number, string>();
   const seen = new Set<string | null>();
   items.forEach((item, i) => {
     if (!item.finals || seen.has(item.waveId)) return;
     seen.add(item.waveId);
     const wave = pub.waves.find((w) => w.id === (item.waveId ?? null));
-    if (wave) out.set(i, finalsLabel(wave.name));
+    if (wave) out.set(i, finalsLabel(wave.name, finalsAt?.(item.waveId ?? null)));
   });
   return out;
 }
