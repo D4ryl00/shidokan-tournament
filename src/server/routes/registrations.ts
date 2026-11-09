@@ -1,6 +1,5 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { cleanEmails } from '../../domain/emails.js';
 import { emailList } from './fields.js';
 import { clubFormFileNames } from '../../domain/mail-attachments.js';
 import { NotAClubFormError, parseClubForm, parseClubFormLines } from '../../domain/club-form.js';
@@ -16,12 +15,14 @@ import {
   deleteRegistration,
   clubFormRemovals,
   importClubForm,
+  getCompetitionClub,
   listClubs,
   listRegistrations,
   updateClub,
   updateRegistration,
   upsertClub,
 } from '../repositories/registrations.js';
+import { getDirectoryEntry } from '../repositories/directory.js';
 import { directorySchema } from './directory.js';
 import { UnreadableFileError, readWorkbook } from '../spreadsheet/read.js';
 import { writeOds } from '../spreadsheet/ods.js';
@@ -45,15 +46,18 @@ export const clubFormLineSchema = z.object({
   shobuKeep: z.enum(['ruleset', 'discipline']).nullable(),
 });
 
-/** Fiche papier saisie à l'écran : en-tête du club et lignes (un combattant par ligne). */
+/** Fiche papier saisie à l'écran : le club (sans coordonnées), le pré-accord et les lignes (un combattant par ligne). */
 const paperEntrySchema = z.object({
-  header: z.object({
-    club: z.string().trim().min(1, 'Le nom du club est obligatoire.'),
-    coachName: z.string().trim().nullable(),
-    coachPhone: z.string().trim().nullable(),
-    coachEmails: z.array(z.string().trim().max(200)).max(50).transform(cleanEmails),
-    preApproval: z.boolean(),
-  }),
+  header: z.object({ clubId: z.string().min(1), preApproval: z.boolean() }).strict(),
+  lines: z.array(clubFormLineSchema).max(200),
+});
+
+/** L'aperçu accepte aussi une fiche de l'annuaire (`directoryId`) : le club n'entre dans la compétition qu'à l'enregistrement. */
+const paperPreviewSchema = z.object({
+  header: z
+    .object({ clubId: z.string().min(1).optional(), directoryId: z.string().min(1).optional(), preApproval: z.boolean() })
+    .strict()
+    .refine((h) => (h.clubId === undefined) !== (h.directoryId === undefined), 'Un club ou une fiche d’annuaire, pas les deux.'),
   lines: z.array(clubFormLineSchema).max(200),
 });
 
@@ -181,8 +185,11 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
       .send(buf);
   });
 
-  async function parseEntry(competitionId: string, body: unknown) {
-    const { header, lines } = paperEntrySchema.parse(body);
+  async function parseEntry(competitionId: string, schema: typeof paperEntrySchema | typeof paperPreviewSchema, body: unknown) {
+    const { header: h, lines } = schema.parse(body) as z.infer<typeof paperPreviewSchema>;
+    const name = h.clubId !== undefined ? getCompetitionClub(db, competitionId, h.clubId).name : getDirectoryEntry(db, h.directoryId!).name;
+    // Sans coordonnées : la saisie papier n'en écrit aucune (voir `importClubForm`).
+    const header = { club: name, coachName: null, coachPhone: null, coachEmails: [], preApproval: h.preApproval };
     const settings = (await getCompetition(db, competitionId))!.settings;
     const tolerance = settings.weighInToleranceKg;
     return parseClubFormLines(header, lines, await getGrid(db, competitionId), tolerance, closedSet(db, competitionId), { multipleCombats: settings.multipleCombatDisciplinesPerDay });
@@ -190,13 +197,14 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
 
   // Une fiche papier se saisit page par page : chaque saisie s'ajoute (une ligne déjà saisie est mise à jour), rien n'est retiré.
   app.post<P>('/api/competitions/:id/club-forms/entry/preview', async (req) => {
-    const parse = await parseEntry(req.params.id, req.body);
+    const parse = await parseEntry(req.params.id, paperPreviewSchema, req.body);
     return { ...parse, removals: [] };
   });
 
   app.post<P>('/api/competitions/:id/club-forms/entry/import', async (req) => {
-    const parse = await parseEntry(req.params.id, req.body);
-    return { ...(await importClubForm(db, req.params.id, parse, { replace: false })), parse };
+    const parse = await parseEntry(req.params.id, paperEntrySchema, req.body);
+    const { clubId } = (req.body as { header: { clubId: string } }).header;
+    return { ...(await importClubForm(db, req.params.id, parse, { replace: false, clubId, coordinates: false })), parse };
   });
 
   app.post<P>('/api/competitions/:id/club-forms/preview', async (req) => {

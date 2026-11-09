@@ -340,11 +340,12 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Recopiez une fiche papier ligne par ligne (page par page), cliquez « Vérifier », puis « Enregistrer la fiche ».',
     details: [
       [
+        'Choisissez d’abord le club dans la liste (ses clubs, puis l’annuaire) ou « Ajouter un club ». Ses coordonnées se modifient dans l’annuaire : la saisie n’y touche pas. Le pré-accord du coach est repris du club (décoché pour un club de l’annuaire) et reste modifiable.',
         'Le tableau suit la fiche papier, dans le même ordre : une ligne par combattant.',
-        'Cliquez les cases cochées sur la fiche ; un second clic décoche.',
+        'Cliquez les cases cochées sur la fiche ; un second clic décoche. Si la compétition autorise plusieurs combats par combattant, plusieurs disciplines de combat se cochent, avec un seul règlement.',
         'Kata et combat sur une même ligne donnent deux inscriptions. La catégorie de poids est déduite du poids actuel.',
         '« Ajouter une ligne » pour les fiches de plus de 5 combattants.',
-        'Rien n’est enregistré avant « Enregistrer la fiche » ; quitter la page abandonne la saisie.',
+        'Rien n’est enregistré avant « Enregistrer la fiche » (un club de l’annuaire n’entre dans la compétition qu’à ce moment) ; quitter la page abandonne la saisie.',
       ],
       'Une fiche de plusieurs pages se saisit page par page : chaque page s’ajoute aux inscriptions déjà enregistrées pour ce club, et une ligne déjà saisie est mise à jour (pas de doublon). Rien n’est retiré : pour retirer un combattant, supprimez-le dans l’onglet Inscriptions.',
     ],

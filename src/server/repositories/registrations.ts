@@ -89,6 +89,13 @@ export async function upsertClub(db: AppDb, competitionId: string, data: ClubUps
   return upsertClubSync(db, competitionId, data);
 }
 
+/** Un club de la compétition, par identifiant (404 s'il n'en fait pas partie). */
+export function getCompetitionClub(db: AppDb, competitionId: string, clubId: string): Club {
+  const row = db.select().from(clubs).where(and(eq(clubs.id, clubId), eq(clubs.competitionId, competitionId))).get();
+  if (!row) throw new NotFoundError('Club introuvable');
+  return toClub(row);
+}
+
 export async function updateClub(db: AppDb, competitionId: string, clubId: string, patch: Partial<ClubData>): Promise<Club> {
   const row = db.select().from(clubs).where(and(eq(clubs.id, clubId), eq(clubs.competitionId, competitionId))).get();
   if (!row) throw new NotFoundError('Club introuvable');
@@ -330,13 +337,27 @@ export async function importClubForm(
   db: AppDb,
   competitionId: string,
   parse: ClubFormParse,
-  /** false : les inscriptions absentes de cette fiche sont gardées (fiche papier saisie page par page). */
-  opts: { replace: boolean } = { replace: true },
+  opts: {
+    /** false : les inscriptions absentes de cette fiche sont gardées (fiche papier saisie page par page). */
+    replace: boolean;
+    /** Le club est pris par identifiant (et non par le nom de la fiche) ; 404 s'il n'est pas dans la compétition. */
+    clubId?: string;
+    /** false : ni coach, ni téléphone, ni e-mails écrits ; seul le pré-accord l'est (fiche papier, sans coordonnées). */
+    coordinates?: boolean;
+  } = { replace: true },
 ): Promise<{ club: Club; imported: number; replaced: number; skipped: number }> {
   return db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     const { club: name, ...coach } = parse.header;
-    const club = upsertClubSync(t, competitionId, { name, ...coach });
+    const withCoordinates = opts.coordinates !== false;
+    const data = withCoordinates ? { name, ...coach } : { name, preApproval: coach.preApproval };
+    let club: Club;
+    if (opts.clubId) {
+      const { name: _name, ...patch } = data;
+      getCompetitionClub(t, competitionId, opts.clubId);
+      t.update(clubs).set(patch).where(eq(clubs.id, opts.clubId)).run();
+      club = getCompetitionClub(t, competitionId, opts.clubId);
+    } else club = upsertClubSync(t, competitionId, data);
     const clubFighters = t.select().from(fighters).where(eq(fighters.clubId, club.id)).all().map((f) => f.id);
     const previous = clubFighters.length
       ? t

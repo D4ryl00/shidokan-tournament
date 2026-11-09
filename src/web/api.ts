@@ -197,10 +197,13 @@ export function usePreviewClubForm(id: string) {
 }
 
 export type ClubFormPreview = ClubFormParse & { removals: { registrationId: string; label: string }[] };
-export type PaperEntry = { header: ClubFormHeader; lines: ClubFormLine[] };
+/** Saisie papier : le club de la compétition, sans coordonnées. */
+export type PaperEntry = { header: { clubId: string; preApproval: boolean }; lines: ClubFormLine[] };
+/** Pour « Vérifier » : aussi une fiche de l'annuaire (`directoryId`), dont le club n'entre dans la compétition qu'à l'enregistrement. */
+export type PaperPreview = { header: { clubId: string; preApproval: boolean } | { directoryId: string; preApproval: boolean }; lines: ClubFormLine[] };
 
 export function usePreviewPaperEntry(id: string) {
-  return useMutation({ mutationFn: (entry: PaperEntry) => api<ClubFormPreview>('POST', `/api/competitions/${id}/club-forms/entry/preview`, entry) });
+  return useMutation({ mutationFn: (entry: PaperPreview) => api<ClubFormPreview>('POST', `/api/competitions/${id}/club-forms/entry/preview`, entry) });
 }
 
 export function useImportPaperEntry(id: string) {

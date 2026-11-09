@@ -26,6 +26,11 @@ function getRow(db: AppDb, id: string): Row {
   return row;
 }
 
+/** Une fiche d'annuaire par identifiant (404 si elle n'existe pas). */
+export function getDirectoryEntry(db: AppDb, id: string): DirectoryEntry {
+  return toEntry(db, getRow(db, id));
+}
+
 /** Refuse un numéro d'affiliation déjà porté par une autre fiche. */
 export function checkNumber(db: AppDb, number: string | null | undefined, selfId: string | null): void {
   if (!number) return;

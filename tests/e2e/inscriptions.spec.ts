@@ -78,6 +78,12 @@ async function addClub(page: Page, id: string, name: string): Promise<string> {
   return ((await res.json()) as { id: string }).id;
 }
 
+/** Saisie papier : choisit le club dans la liste. */
+async function choosePaperClub(page: Page, name: string) {
+  await page.getByTestId('club-picker').getByLabel('Club').click();
+  await page.getByRole('option', { name, exact: true }).click();
+}
+
 const MARTIN = { last: 'MARTIN', first: 'Léa', sex: 'Féminin', age: 'Cadets (14 à 15 ans)', weightClass: '-54 kg', combat: 'Karaté', ruleset: 'Jiyu' } as const;
 
 test('ajouter un combattant : club puis fenêtre du coach, inscriptions sur place', async ({ page }) => {
@@ -214,8 +220,9 @@ test('fiche papier : le bouton télécharge le PDF (une page)', async ({ page })
 
 test('saisie d’une fiche papier', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe saisie papier');
+  await addClub(page, id, 'Tani Dojo');
   await page.goto(`/competitions/${id}/fiche-club`);
-  await page.getByTestId('paper-entry-club').fill('Tani Dojo');
+  await choosePaperClub(page, 'Tani Dojo');
   const row = page.getByTestId('paper-entry-row').first();
   await row.getByLabel('Nom', { exact: true }).fill('MARTIN');
   await row.getByLabel('Prénom').fill('Léa');
@@ -236,12 +243,71 @@ test('saisie d’une fiche papier', async ({ page, request }) => {
   expect(regs.find((r) => r.discipline === 'karate')!.weightClassId).toBe('cadet:F:-54');
   // Une saisie commencée puis abandonnée n'écrit rien
   await page.goto(`/competitions/${id}/fiche-club`);
-  await page.getByTestId('paper-entry-club').fill('Autre club');
+  await addClub(page, id, 'Autre club');
+  await page.goto(`/competitions/${id}/fiche-club`);
+  await choosePaperClub(page, 'Autre club');
   await page.getByTestId('paper-entry-row').first().getByLabel('Nom', { exact: true }).fill('DURAND');
   await page.goto(`/competitions/${id}/inscriptions`);
   expect(((await (await request.get(`/api/competitions/${id}/registrations`)).json()) as unknown[]).length).toBe(2);
 });
 
+test('saisir une fiche papier : choisir le club, pré-accord repris du club', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe papier pré-accord');
+  await request.post(`/api/competitions/${id}/clubs`, { data: { name: 'Club accordé', preApproval: true } });
+  await addClub(page, id, 'Club sans accord');
+  await page.goto(`/competitions/${id}/fiche-club`);
+  const accord = page.getByRole('checkbox', { name: /Pré-accord du coach/ });
+  await choosePaperClub(page, 'Club accordé');
+  await expect(accord).toBeChecked();
+  await choosePaperClub(page, 'Club sans accord');
+  await expect(accord).not.toBeChecked();
+  await choosePaperClub(page, 'Club accordé');
+  await accord.uncheck();
+  const row = page.getByTestId('paper-entry-row').first();
+  await row.getByLabel('Nom', { exact: true }).fill('MARTIN');
+  await row.getByLabel('Prénom').fill('Léa');
+  await row.getByText('F', { exact: true }).click();
+  await row.getByText('C', { exact: true }).click();
+  await row.getByText('Kata', { exact: true }).click();
+  await page.getByTestId('paper-entry-check').click();
+  await page.getByTestId('paper-entry-save').click();
+  await expect(page.getByText('Club accordé : 1 inscription')).toBeVisible();
+  const clubs = (await (await request.get(`/api/competitions/${id}/clubs`)).json()) as { name: string; preApproval: boolean }[];
+  expect(clubs.find((c) => c.name === 'Club accordé')!.preApproval).toBe(false);
+});
+
+test('club de l’annuaire choisi puis saisie abandonnée : le club n’est pas dans la compétition', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe papier annuaire');
+  const name = `Dojo annuaire ${Date.now()}`;
+  await request.post('/api/club-directory', { data: { name, affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null } });
+  await page.goto(`/competitions/${id}/fiche-club`);
+  await choosePaperClub(page, name);
+  const row = page.getByTestId('paper-entry-row').first();
+  await row.getByLabel('Nom', { exact: true }).fill('MARTIN');
+  await row.getByLabel('Prénom').fill('Léa');
+  await row.getByText('F', { exact: true }).click();
+  await row.getByText('C', { exact: true }).click();
+  await row.getByText('Kata', { exact: true }).click();
+  await page.getByTestId('paper-entry-check').click();
+  await expect(page.getByTestId('paper-entry-preview')).toBeVisible();
+  // « Vérifier » n'écrit rien : abandonner laisse la compétition sans ce club.
+  await page.goto(`/competitions/${id}/inscriptions`);
+  const clubs = (await (await request.get(`/api/competitions/${id}/clubs`)).json()) as { name: string }[];
+  expect(clubs.map((c) => c.name)).not.toContain(name);
+  // « Enregistrer la fiche » fait entrer le club dans la compétition.
+  await page.goto(`/competitions/${id}/fiche-club`);
+  await choosePaperClub(page, name);
+  await page.getByTestId('paper-entry-row').first().getByLabel('Nom', { exact: true }).fill('MARTIN');
+  await page.getByTestId('paper-entry-row').first().getByLabel('Prénom').fill('Léa');
+  await page.getByTestId('paper-entry-row').first().getByText('F', { exact: true }).click();
+  await page.getByTestId('paper-entry-row').first().getByText('C', { exact: true }).click();
+  await page.getByTestId('paper-entry-row').first().getByText('Kata', { exact: true }).click();
+  await page.getByTestId('paper-entry-check').click();
+  await page.getByTestId('paper-entry-save').click();
+  await expect(page.getByText(`${name} : 1 inscription`)).toBeVisible();
+  const after = (await (await request.get(`/api/competitions/${id}/clubs`)).json()) as { name: string }[];
+  expect(after.map((c) => c.name)).toContain(name);
+});
 
 test('relecture (mineurs) : saisie papier — confirmation avant de quitter, noms accessibles', async ({ page }) => {
   const id = await createCompetition(page, 'Coupe saisie confirmation');

@@ -126,14 +126,18 @@ test('grade : enregistré sur le combattant, conservé si absent', async () => {
   expect(cleared.json().fighter.grade).toBeNull();
 });
 
-const ENTRY_HEADER = { club: 'Tani Dojo', coachName: 'Jean', coachPhone: null, coachEmails: [], preApproval: false };
+/** En-tête d'une saisie papier : le club « Tani Dojo » de la compétition (créé au besoin). */
+async function entryHeader(preApproval = false) {
+  const club = (await app.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Tani Dojo' } })).json();
+  return { clubId: club.id as string, preApproval };
+}
 const ENTRY_LINE = {
   lastName: 'MARTIN', firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', weightKg: 53.5, combats: ['karate'], kata: true, grade: '1er kyu',
   ruleset: 'jiyu', prefs: { 'shido-mix': 1 }, shobuKeep: null,
 };
 
 test('saisie papier : kata + karaté sur une ligne, catégorie déduite du poids', async () => {
-  const send = () => app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: ENTRY_HEADER, lines: [ENTRY_LINE] } });
+  const send = async () => app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: await entryHeader(), lines: [ENTRY_LINE] } });
   const res = await send();
   expect(res.statusCode).toBe(200);
   const rows = (await app.inject({ method: 'GET', url: `${base}/registrations` })).json() as { discipline: string; weightClassId: string | null; otherDisciplines: string[]; fighter: { grade: string | null }; club: { name: string } }[];
@@ -145,7 +149,7 @@ test('saisie papier : kata + karaté sur une ligne, catégorie déduite du poids
 });
 
 test('saisie papier : ligne invalide → erreur dans l’aperçu, rien d’écrit', async () => {
-  const res = await app.inject({ method: 'POST', url: `${base}/club-forms/entry/preview`, payload: { header: ENTRY_HEADER, lines: [{ ...ENTRY_LINE, sex: null }] } });
+  const res = await app.inject({ method: 'POST', url: `${base}/club-forms/entry/preview`, payload: { header: await entryHeader(), lines: [{ ...ENTRY_LINE, sex: null }] } });
   expect(res.statusCode).toBe(200);
   expect(res.json().rows[0].errors).toEqual(['Sexe manquant.']);
   expect((await app.inject({ method: 'GET', url: `${base}/registrations` })).json()).toEqual([]);
@@ -155,7 +159,7 @@ test('relecture : grade gardé quand kata et combat sont sur deux lignes', async
   const kataLine = { ...ENTRY_LINE, weightKg: null, combats: [], ruleset: null, prefs: {} };
   const combatLine = { ...ENTRY_LINE, kata: false, grade: null };
   for (const lines of [[kataLine, combatLine], [combatLine, kataLine]]) {
-    await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: ENTRY_HEADER, lines } });
+    await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: await entryHeader(), lines } });
     const rows = (await app.inject({ method: 'GET', url: `${base}/registrations` })).json() as { fighter: { grade: string | null } }[];
     expect(rows.map((r) => r.fighter.grade)).toEqual(['1er kyu', '1er kyu']);
   }
@@ -163,13 +167,13 @@ test('relecture : grade gardé quand kata et combat sont sur deux lignes', async
 
 test('relecture : une fiche papier saisie page par page s’ajoute (rien n’est retiré)', async () => {
   const page2 = { ...ENTRY_LINE, lastName: 'DURAND', kata: false };
-  await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: ENTRY_HEADER, lines: [ENTRY_LINE] } });
-  const preview = await app.inject({ method: 'POST', url: `${base}/club-forms/entry/preview`, payload: { header: ENTRY_HEADER, lines: [page2] } });
+  await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: await entryHeader(), lines: [ENTRY_LINE] } });
+  const preview = await app.inject({ method: 'POST', url: `${base}/club-forms/entry/preview`, payload: { header: await entryHeader(), lines: [page2] } });
   expect(preview.json().removals).toEqual([]);
-  await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: ENTRY_HEADER, lines: [page2] } });
+  await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: await entryHeader(), lines: [page2] } });
   expect((await app.inject({ method: 'GET', url: `${base}/registrations` })).json()).toHaveLength(3);
   // Ressaisir la page 1 met à jour sans doublon
-  await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: ENTRY_HEADER, lines: [ENTRY_LINE] } });
+  await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: await entryHeader(), lines: [ENTRY_LINE] } });
   expect((await app.inject({ method: 'GET', url: `${base}/registrations` })).json()).toHaveLength(3);
 });
 
@@ -187,7 +191,7 @@ test('relecture (mineurs) : import HTTP d’une fiche .ods au nouveau format', a
 });
 
 test("saisie d'une fiche papier : les catégories sont à jour dès l'enregistrement", async () => {
-  const res = await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: ENTRY_HEADER, lines: [ENTRY_LINE] } });
+  const res = await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: await entryHeader(), lines: [ENTRY_LINE] } });
   expect(res.statusCode).toBe(200);
   const rows = (await app.inject({ method: 'GET', url: `${base}/registrations` })).json() as { categoryId: string | null }[];
   expect(rows).toHaveLength(2);
@@ -265,4 +269,33 @@ test('POST /clubs/new refuses the name of an annuaire entry: nothing created', a
   expect(after.directory.map((e) => e.id)).toEqual([entry.id]);
   expect(after.directory[0]!.competitions).toBe(0);
   expect(after.clubs).toEqual([]);
+});
+
+test('paper entry no longer touches coordinates', async () => {
+  const { clubId: entryClubId } = await entryHeader();
+  await app.inject({ method: 'PATCH', url: `${base}/clubs/${entryClubId}`, payload: { coachName: 'Jean', coachPhone: '0600', coachEmails: ['a@club.fr'] } });
+  const res = await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: await entryHeader(true), lines: [ENTRY_LINE] } });
+  expect(res.statusCode).toBe(200);
+  const club = (await app.inject({ method: 'GET', url: `${base}/clubs` })).json().find((c: { id: string }) => c.id === entryClubId);
+  expect(club).toMatchObject({ coachName: 'Jean', coachPhone: '0600', coachEmails: ['a@club.fr'], preApproval: true });
+});
+
+test('paper entry with an unknown clubId → 404', async () => {
+  for (const route of ['import', 'preview']) {
+    const res = await app.inject({ method: 'POST', url: `${base}/club-forms/entry/${route}`, payload: { header: { clubId: 'nope', preApproval: false }, lines: [ENTRY_LINE] } });
+    expect(res.statusCode).toBe(404);
+  }
+  expect((await app.inject({ method: 'GET', url: `${base}/registrations` })).json()).toEqual([]);
+});
+
+test('paper entry preview with a directory club does not add it to the competition', async () => {
+  const dir = (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { name: 'Annuaire Dojo', affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null } })).json();
+  const before = (await app.inject({ method: 'GET', url: `${base}/clubs` })).json().length;
+  const res = await app.inject({ method: 'POST', url: `${base}/club-forms/entry/preview`, payload: { header: { directoryId: dir.id, preApproval: false }, lines: [ENTRY_LINE] } });
+  expect(res.statusCode).toBe(200);
+  expect(res.json().header.club).toBe('Annuaire Dojo');
+  expect((await app.inject({ method: 'GET', url: `${base}/clubs` })).json()).toHaveLength(before);
+  // L'enregistrement n'accepte pas de fiche d'annuaire : il faut un club de la compétition.
+  const imp = await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: { directoryId: dir.id, preApproval: false }, lines: [ENTRY_LINE] } });
+  expect(imp.statusCode).toBe(400);
 });
