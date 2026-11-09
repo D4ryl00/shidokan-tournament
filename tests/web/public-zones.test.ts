@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { toPublicCompetition } from '../../src/domain/public/view.js';
 import type { PublicTimes } from '../../src/domain/public/times.js';
-import { currentWave, driftText, finalsLabel, finalsMarkers, involvesFollowed, sideText, waitingWaves, waveHeaderText, zoneViews } from '../../src/web/components/public/zoneRows.js';
+import { currentWave, driftText, finalsLabel, finalsMarkers, involvesFollowed, sideText, versText, waitingWaves, waveHeaderText, zoneViews } from '../../src/web/components/public/zoneRows.js';
 import { source } from '../domain/public-fixtures.js';
 
 const pub = toPublicCompetition(source());
@@ -71,9 +71,9 @@ describe('waitingWaves', () => {
     w.plannedStart = null;
     expect(waitingWaves(d)).toEqual([`${w.name} : numéros et horaires au lancement de la session.`]);
     w.plannedStart = '13:30';
-    expect(waitingWaves(d)).toEqual([`${w.name} : numéros et horaires au lancement de la session, prévu vers 13:30.`]);
+    expect(waitingWaves(d)).toEqual([`${w.name} : numéros et horaires au lancement de la session, prévu vers\u00a013:30.`]);
     w.plannedStart = '09:05';
-    expect(waitingWaves(d)).toEqual([`${w.name} : numéros et horaires au lancement de la session, prévu vers 9:05.`]);
+    expect(waitingWaves(d)).toEqual([`${w.name} : numéros et horaires au lancement de la session, prévu vers\u00a09:05.`]);
   });
 
   it('compétition passée : aucune heure', () => {
@@ -88,10 +88,22 @@ describe('driftText', () => {
   it('retard, avance, à l’heure (moins de 3 min d’écart, -0 compris)', () => {
     expect(driftText(12)).toBe('en retard de 12 min');
     expect(driftText(-5)).toBe('en avance de 5 min');
-    expect(driftText(2)).toBe('à l\'heure');
-    expect(driftText(-2)).toBe('à l\'heure');
-    expect(driftText(-0)).toBe('à l\'heure');
+    expect(driftText(2)).toBe('à l’heure');
+    expect(driftText(-2)).toBe('à l’heure');
+    expect(driftText(-0)).toBe('à l’heure');
     expect(driftText(3)).toBe('en retard de 3 min');
+    expect(driftText(59)).toBe('en retard de 59 min');
+  });
+  it('une heure ou plus : en heures et minutes', () => {
+    expect(driftText(433)).toBe('en retard de 7 h 13');
+    expect(driftText(-65)).toBe('en avance de 1 h 05');
+    expect(driftText(60)).toBe('en retard de 1 h 00');
+  });
+});
+
+describe('versText', () => {
+  it('« vers » et l’heure ne se séparent pas (espace insécable)', () => {
+    expect(versText('9:30')).toBe('vers\u00a09:30');
   });
 });
 
@@ -105,11 +117,11 @@ describe('finalsLabel', () => {
 
 describe('waveHeaderText', () => {
   const times = (start: { clock: string; estimated: boolean } | null): PublicTimes =>
-    ({ at: () => null, waveStart: () => start, finalsAt: () => null, categoryFinalAt: () => null, drift: () => null });
+    ({ at: () => null, nextAt: () => null, waveStart: () => start, finalsAt: () => null, categoryFinalAt: () => null, drift: () => null });
   const wave = { id: 'w1', plannedStart: '09:30' };
   it('prévue et démarrée, démarrée estimée, parties absentes omises', () => {
     expect(waveHeaderText(pub, wave, times({ clock: '9:41', estimated: false }))).toBe(' · prévue 9:30 · démarrée 9:41');
-    expect(waveHeaderText(pub, wave, times({ clock: '9:41', estimated: true }))).toBe(' · prévue 9:30 · démarrée vers 9:41');
+    expect(waveHeaderText(pub, wave, times({ clock: '9:41', estimated: true }))).toBe(' · prévue 9:30 · démarrée vers\u00a09:41');
     expect(waveHeaderText(pub, wave, times(null))).toBe(' · prévue 9:30');
     expect(waveHeaderText(pub, { id: 'w1', plannedStart: null }, times(null))).toBe('');
   });

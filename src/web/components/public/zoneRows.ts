@@ -46,6 +46,9 @@ export function zoneViews(pub: PublicCompetition): ZoneView[] {
     });
 }
 
+/** « vers 9:30 », avec une espace insécable : l'heure ne part jamais seule à la ligne sur un écran étroit. */
+export const versText = (clock: string): string => `vers\u00a0${clock}`;
+
 /** « 09:30 » → « 9:30 » (même écriture que les heures calculées). */
 export const clockText = (hhmm: string): string => `${Number(hhmm.split(':')[0])}:${hhmm.split(':')[1]}`;
 
@@ -55,7 +58,7 @@ export function waveHeaderText(pub: PublicCompetition, wave: { id: string | null
   const start = times.waveStart(wave.id);
   const parts = [
     wave.plannedStart ? `prévue ${clockText(wave.plannedStart)}` : null,
-    start ? `démarrée ${start.estimated ? 'vers ' : ''}${start.clock}` : null,
+    start ? `démarrée ${start.estimated ? versText(start.clock) : start.clock}` : null,
   ].filter((p): p is string => p !== null);
   return parts.map((p) => ` · ${p}`).join('');
 }
@@ -64,14 +67,19 @@ export function waveHeaderText(pub: PublicCompetition, wave: { id: string | null
 export function waitingWaves(pub: PublicCompetition): string[] {
   return pub.waves.filter((w) => !w.launched).map((w) => {
     const base = `${w.name} : numéros et horaires au lancement de la session`;
-    return w.plannedStart && pub.phase !== 'past' ? `${base}, prévu vers ${clockText(w.plannedStart)}.` : `${base}.`;
+    return w.plannedStart && pub.phase !== 'past' ? `${base}, prévu ${versText(clockText(w.plannedStart))}.` : `${base}.`;
   });
 }
 
-/** Avance ou retard d'une zone en minutes (+ = en retard). Moins de 3 min d'écart (et -0) : « à l'heure », sans clignoter. */
+/**
+ * Avance ou retard d'une zone en minutes (+ = en retard). Moins de 3 min d'écart (et -0) : « à l’heure », sans clignoter ;
+ * une heure ou plus : « en retard de 7 h 13 ».
+ */
 export function driftText(min: number): string {
-  if (Math.abs(min) < 3) return 'à l\'heure';
-  return min > 0 ? `en retard de ${min} min` : `en avance de ${-min} min`;
+  const m = Math.abs(min);
+  if (m < 3) return 'à l’heure';
+  const amount = m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
+  return min > 0 ? `en retard de ${amount}` : `en avance de ${amount}`;
 }
 
 /**

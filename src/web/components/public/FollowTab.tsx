@@ -9,6 +9,7 @@ import { StatusBadge, type Tone } from '../ui/StatusBadge.js';
 import { EmptyState } from '../ui/EmptyState.js';
 import { categoryText, kataText } from './bracketsModel.js';
 import { sourceText } from './sourceText.js';
+import { versText } from './zoneRows.js';
 
 const MAX_RESULTS = 20;
 const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
@@ -50,7 +51,8 @@ function LineView({ line, pub, times }: { line: FighterLine; pub: PublicCompetit
   const zone = (id: string) => pub.zones.find((z) => z.id === id)?.name ?? 'Zone';
   const kata = line.discipline === 'kata';
   const n = line.next;
-  const at = n ? times.at(n.key) : null;
+  // Prochain combat de la zone : pas d'heure une fois sur le tatami (comme « À suivre » dans Zones).
+  const at = !n ? null : n.before === 0 ? times.nextAt(n.key) : times.at(n.key);
   const duration = durationText(pub, line);
   return (
     <Stack gap={4} pt={6} style={{ borderTop: '1px solid var(--sk-line)' }} data-testid="public-follow-line">
@@ -72,7 +74,7 @@ function LineView({ line, pub, times }: { line: FighterLine; pub: PublicCompetit
           <Group gap="md" align="baseline" wrap="wrap">
             <Text span size="sm">{zone(n.zoneId)}</Text>
             <Text span size="sm">{kata ? 'Bloc n° ' : 'n° '}<Text span fz={26} fw={800} inherit className="num" style={{ fontSize: 26 }}>{n.number}</Text></Text>
-            {at && <Text span fz={20} fw={700} data-testid="public-follow-at">vers {at}</Text>}
+            {at && <Text span fz={20} fw={700} data-testid="public-follow-at">{versText(at)}</Text>}
           </Group>
           <Text size="sm" c="dimmed">
             {n.before === 0 ? (kata ? 'Prochain passage de la zone' : 'Prochain combat de la zone') : kata ? `${plural(n.before, 'passage', 'passages')} avant le sien` : `${plural(n.before, 'combat', 'combats')} avant le sien`}

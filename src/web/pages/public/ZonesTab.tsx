@@ -3,7 +3,7 @@ import { Fragment, useState } from 'react';
 import { Link } from 'react-router';
 import type { PublicCompetition, PublicQueueItem } from '../../../domain/public/types.js';
 import { categoryText } from '../../components/public/bracketsModel.js';
-import { currentWave, driftText, finalsMarkers, involvesFollowed, sideText, waitingWaves, waveHeaderText, zoneViews, type ZoneView } from '../../components/public/zoneRows.js';
+import { currentWave, driftText, finalsMarkers, involvesFollowed, sideText, versText, waitingWaves, waveHeaderText, zoneViews, type ZoneView } from '../../components/public/zoneRows.js';
 import type { PublicTimes } from '../../../domain/public/times.js';
 import { passageKey } from '../../../domain/public/types.js';
 import { StatusBadge } from '../../components/ui/StatusBadge.js';
@@ -14,7 +14,8 @@ const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : 
 const cardStyle = { background: 'var(--sk-card)', border: '1px solid var(--sk-card-line)', borderRadius: 'var(--mantine-radius-md)' } as const;
 
 function PassageRow({ pub, times, item, zoneId, followed, big }: { pub: PublicCompetition; times: PublicTimes; item: PublicQueueItem; zoneId: string; followed: Set<string>; big?: boolean }) {
-  const at = times.at(passageKey(item));
+  // En tête de zone, pas d'heure une fois le passage sur le tatami (départ estimé déjà passé).
+  const at = big ? times.nextAt(passageKey(item)) : times.at(passageKey(item));
   const cat = pub.categories.find((c) => c.id === item.categoryId);
   const kata = item.matchId === null;
   const star = involvesFollowed(pub, item, followed);
@@ -29,7 +30,7 @@ function PassageRow({ pub, times, item, zoneId, followed, big }: { pub: PublicCo
         <Text span className="num" fw={700} fz={big ? 26 : 'sm'} style={{ flexShrink: 0, minWidth: big ? 44 : 32 }}>n° {item.number}</Text>
         <Box style={{ minWidth: 0, flex: 1 }}>
           {big && <StatusBadge tone="accent">À suivre</StatusBadge>}
-          {at && <Text size="xs" fw={700} data-testid="public-zone-at">vers {at}</Text>}
+          {at && <Text size="xs" fw={700} data-testid="public-zone-at">{versText(at)}</Text>}
           <Text size={big ? 'md' : 'sm'} fw={big ? 700 : 400} style={{ overflowWrap: 'anywhere' }}>{text}</Text>
           {!kata && cat && <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{categoryText(cat.label, cat.discipline)}</Text>}
         </Box>

@@ -10,6 +10,7 @@ import {
   categoryPassages, CATEGORY_STATUS_LABELS, entrantInfos, filterCategories, followedRegistrations, highlightedRegistrations, NO_FILTERS, toMap,
   type CategoryFilters,
 } from '../../components/public/bracketsModel.js';
+import { versText } from '../../components/public/zoneRows.js';
 import { EmptyState } from '../../components/ui/EmptyState.js';
 import { StatusBadge, type Tone } from '../../components/ui/StatusBadge.js';
 import { DISCIPLINE_OPTIONS } from '../../labels.js';
@@ -20,7 +21,7 @@ const cardStyle = { background: 'var(--sk-card)', border: '1px solid var(--sk-ca
 
 /**
  * Zone · format d'un tableau (« Tatami 1 · Élimination directe »), puis durée et heure de la finale
- * (« · 2 × 1 min 30 · finale vers 11:40 ») ; rien de tout cela pour une compétition passée.
+ * (« · 2 × 1 min 30 · finale vers 11:40 », insécable) ; rien de tout cela pour une compétition passée.
  */
 function headline(pub: PublicCompetition, c: PublicCategory, times: PublicTimes): string {
   const zone = pub.zones.find((z) => z.id === c.zoneId)?.name;
@@ -28,7 +29,7 @@ function headline(pub: PublicCompetition, c: PublicCategory, times: PublicTimes)
   const past = pub.phase === 'past';
   const duration = past ? null : c.bracket.kind === 'kata' ? (c.kataPassageSec ? `${minSecText(c.kataPassageSec)} par passage` : null) : c.timing ? timingText(c.timing) : null;
   const final = past ? null : times.categoryFinalAt(c.id);
-  return [zone, format, duration, final ? `finale vers ${final}` : null].filter(Boolean).join(' · ');
+  return [zone, format, duration, final ? `finale\u00a0${versText(final)}` : null].filter(Boolean).join(' · ');
 }
 
 function Passages({ pub, c }: { pub: PublicCompetition; c: PublicCategory }) {

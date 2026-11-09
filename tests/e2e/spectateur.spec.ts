@@ -100,7 +100,7 @@ test('spectateur : compétition privée invisible, rendue publique, suivi d’un
   // 7. Sur téléphone : depuis Zones, un passage ouvre son tableau à l'écran ; Retour revient sur Zones ; un autre onglet repart du haut.
   await v.setViewportSize({ width: 360, height: 640 });
   await v.goto(`/public/${id}?onglet=zones`);
-  await expect(v.getByTestId('public-zones-session')).toHaveText(/^Session unique(?: · démarrée vers \d{1,2}:\d{2})?$/);
+  await expect(v.getByTestId('public-zones-session')).toHaveText(/^Session unique(?: · démarrée vers\s\d{1,2}:\d{2})?$/);
   await v.getByTestId('public-zone-passage').first().click();
   await expect(v).toHaveURL(new RegExp(`onglet=tableaux&categorie=${cat.id}`));
   await expect(v.getByTestId('public-category')).toBeInViewport();
