@@ -65,7 +65,7 @@ export function CategoryDurations({ competitionId, category, readOnly }: { compe
   return (
     <SectionCard title="Durée des combats" help="tableaux.durees" data-testid="category-durations">
       <Stack gap="sm">
-        <Select size="sm" w={320} label="Durée des combats" disabled={readOnly || update.isPending} allowDeselect={false} data-testid="durations-mode"
+        <Select size="sm" w={320} maw="100%" label="Durée des combats" disabled={readOnly || update.isPending} allowDeselect={false} data-testid="durations-mode"
           data={[{ value: 'inherit', label: `Comme la compétition (${timingText(inherited)})` }, { value: 'own', label: 'Autre' }]}
           value={mode}
           onChange={(v) => {
@@ -98,7 +98,7 @@ export function CategoryDurations({ competitionId, category, readOnly }: { compe
             ))}
             {!readOnly && available.length > 0 && (
               <Stack gap="xs">
-                <Select size="sm" w={320} label="Ajouter une exception" placeholder="Choisir un combat" searchable data-testid="exception-match"
+                <Select size="sm" w={320} maw="100%" label="Ajouter une exception" placeholder="Choisir un combat" searchable data-testid="exception-match"
                   data={available.map((m) => ({ value: m.id, label: label(m.id) }))}
                   value={exception.matchId} onChange={(v) => setException({ matchId: v, timing: null })} />
                 {exception.matchId && newTiming && (
