@@ -292,9 +292,10 @@ const originalDiscipline = (r: { discipline: DisciplineId; originalJson: string 
 /**
  * Crée ou met à jour l'inscription du combattant pour la discipline (d'origine) de `input`, comme l'import d'une fiche :
  * une inscription existante garde son origine, une inscription confirmée FFK garde sa catégorie de poids, une inscription
- * réaffectée ne voit changer que ses valeurs d'origine. `exclude` : inscriptions déjà traitées. Renvoie l'id de l'inscription.
+ * réaffectée ne voit changer que ses valeurs d'origine. `exclude` : inscriptions déjà traitées. `weightClassWins` : la catégorie de poids
+ * de `input` l'emporte sur celle de l'export FFK (sexe ou âge changé par une ligne). Renvoie l'id de l'inscription.
  */
-export function upsertFighterRegistration(t: AppDb, competitionId: string, fighterId: string, input: RegistrationInput, exclude: Set<string>): string {
+export function upsertFighterRegistration(t: AppDb, competitionId: string, fighterId: string, input: RegistrationInput, exclude: Set<string>, opts: { weightClassWins?: boolean } = {}): string {
   const candidates = t
     .select()
     .from(registrations)
@@ -309,12 +310,13 @@ export function upsertFighterRegistration(t: AppDb, competitionId: string, fight
     return id;
   }
   const values = { ...registrationValues(input), source: same.source };
-  if (same.ffkConfirmed) values.weightClassId = same.weightClassId;
+  const keepFfkWeight = same.ffkConfirmed && !opts.weightClassWins;
+  if (keepFfkWeight) values.weightClassId = same.weightClassId;
   if (same.originalJson) {
     // Inscription réaffectée : la fiche met à jour les valeurs d'origine, pas le placement validé.
     const { discipline, ruleset, weightClassId, ...rest } = values;
     const original = JSON.parse(same.originalJson) as { weightClassId: string | null };
-    const fields = { discipline, ruleset, weightClassId: same.ffkConfirmed ? original.weightClassId : weightClassId };
+    const fields = { discipline, ruleset, weightClassId: keepFfkWeight ? original.weightClassId : weightClassId };
     t.update(registrations).set({ ...rest, originalJson: JSON.stringify({ ...original, ...fields }) }).where(eq(registrations.id, same.id)).run();
   } else t.update(registrations).set(values).where(eq(registrations.id, same.id)).run();
   return same.id;

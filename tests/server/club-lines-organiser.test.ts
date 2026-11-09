@@ -72,7 +72,18 @@ test('sex and age of an FFK-confirmed fighter can change (organiser)', async () 
   const l = await current(first.fighterId);
   const res = await put(l, { ...LINE, kata: false, grade: null, sex: 'M', weightClassId: 'senior:M:-84', weightKg: 80 });
   expect(res.statusCode, res.body).toBe(200);
-  expect(res.json().line.sex).toBe('M');
+  expect(res.json().line).toMatchObject({ sex: 'M', weightClassId: 'senior:M:-84' });
+  expect((await registrations())[0]!.weightClassId).toBe('senior:M:-84');
+});
+
+test('age band of an FFK-confirmed fighter can change: the line weight class wins (organiser)', async () => {
+  const first = (await post({ ...LINE, kata: false, grade: null })).json() as Line;
+  raw('update registrations set ffk_confirmed = 1');
+  const l = await current(first.fighterId);
+  const res = await put(l, { ...LINE, kata: false, grade: null, ageBandCode: 'junior', weightClassId: 'junior:F:-53' });
+  expect(res.statusCode, res.body).toBe(200);
+  expect(res.json().line).toMatchObject({ ageBandCode: 'junior', weightClassId: 'junior:F:-53' });
+  expect((await registrations())[0]!.weightClassId).toBe('junior:F:-53');
 });
 
 test('two combats refused when the setting is off, kept when already registered', async () => {

@@ -232,7 +232,19 @@ test('combattant confirmé par l’export FFK : sexe et catégorie d’âge modi
   const [line] = (await view()).lines;
   const res = await put(line!.fighterId, { ...LINE, kata: false, grade: null, sex: 'M', weightClassId: 'senior:M:-84', weightKg: 80 }, line!.version);
   expect(res.statusCode, res.body).toBe(200);
-  expect(res.json().line).toMatchObject({ sex: 'M' });
+  expect(res.json().line).toMatchObject({ sex: 'M', weightClassId: 'senior:M:-84' });
+  expect((await registrations())[0]!.weightClassId).toBe('senior:M:-84');
+});
+
+test('combattant confirmé par l’export FFK : changement de tranche d’âge → catégorie de poids de la ligne', async () => {
+  await add({ ...LINE, kata: false, grade: null });
+  const [reg] = await registrations();
+  raw('update registrations set ffk_confirmed = 1 where id = ?', reg!.id);
+  const [line] = (await view()).lines;
+  const res = await put(line!.fighterId, { ...LINE, kata: false, grade: null, ageBandCode: 'junior', weightClassId: 'junior:F:-53' }, line!.version);
+  expect(res.statusCode, res.body).toBe(200);
+  expect(res.json().line).toMatchObject({ ageBandCode: 'junior', weightClassId: 'junior:F:-53' });
+  expect((await registrations())[0]!.weightClassId).toBe('junior:F:-53');
 });
 
 test('en-tête : n° d’affiliation d’une autre fiche de l’annuaire → 400, rien n’est relié ni écrasé', async () => {

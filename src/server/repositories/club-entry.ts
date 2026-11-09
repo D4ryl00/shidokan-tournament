@@ -294,7 +294,9 @@ export async function saveClubLine(
       t.insert(fighters).values({ id, competitionId: access.competitionId, licence: null, grade: null, weighInKg: null, ...fields }).run();
     }
     const kept = new Set<string>();
-    for (const input of inputs) kept.add(upsertFighterRegistration(t, access.competitionId, id, input, kept));
+    // Sexe ou âge changé : la catégorie de poids de la ligne l'emporte sur celle de l'export FFK (qui ne correspond plus).
+    const identityChanged = !!existing && (existing.sex !== line.sex || existing.ageBandCode !== line.ageBandCode);
+    for (const input of inputs) kept.add(upsertFighterRegistration(t, access.competitionId, id, input, kept, { weightClassWins: identityChanged }));
     const dropped = t.select().from(registrations).where(eq(registrations.fighterId, id)).all().filter((r) => !kept.has(r.id));
     if (dropped.length) t.delete(registrations).where(inArray(registrations.id, dropped.map((r) => r.id))).run();
     return id;
