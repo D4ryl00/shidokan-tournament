@@ -14,8 +14,8 @@ const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : 
 const cardStyle = { background: 'var(--sk-card)', border: '1px solid var(--sk-card-line)', borderRadius: 'var(--mantine-radius-md)' } as const;
 
 function PassageRow({ pub, times, item, zoneId, followed, big }: { pub: PublicCompetition; times: PublicTimes; item: PublicQueueItem; zoneId: string; followed: Set<string>; big?: boolean }) {
-  // En tête de zone, pas d'heure une fois le passage sur le tatami (départ estimé déjà passé).
-  const at = big ? times.nextAt(passageKey(item)) : times.at(passageKey(item));
+  // Pas d'heure une fois le passage sur le tatami (`at` ne rend jamais une heure passée).
+  const at = times.at(passageKey(item));
   const cat = pub.categories.find((c) => c.id === item.categoryId);
   const kata = item.matchId === null;
   const star = involvesFollowed(pub, item, followed);

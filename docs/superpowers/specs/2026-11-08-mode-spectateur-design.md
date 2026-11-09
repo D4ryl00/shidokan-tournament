@@ -221,8 +221,10 @@ on ne suppose rien) :
    saisie ou un résultat), sa **fin** estimée n'est jamais avant maintenant (départ ≥ maintenant − sa durée) ; une vague pas
    encore démarrée garde ses heures prévues. Chaque combat suivant commence à la fin du précédent (durée + changement). Un
    combat sans résultat placé **avant** un combat joué de la même vague sur la zone (résultat ou notes saisis en retard)
-   n'a pas d'heure et ne décale rien, jusqu'à ce que son résultat soit saisi. Le combat en cours, en tête de zone, est
-   montré sans heure une fois son départ estimé passé (il est sur le tatami).
+   n'a pas d'heure et ne décale rien, jusqu'à ce que son résultat soit saisi. Aucune heure déjà passée n'est montrée
+   (Zones, Suivis, finale d'un tableau) : le combat dont le départ estimé est passé est sur le tatami, sans heure (vérification
+   sur iPhone du 2026-11-09 : avec un kata saisi en retard, le combat en cours n'était pas en tête de zone et gardait une
+   heure dépassée).
 4. Un combat dont les combattants ne sont pas encore connus (« vainqueur du n° 12 ») a quand même une heure.
 5. Finales d'une vague, sur la zone des finales : elles commencent au plus tard entre la fin de ce qui les précède sur cette
    zone et, soit l'heure fixée par l'organisateur pour la vague, soit à défaut la fin estimée la plus tardive des combats

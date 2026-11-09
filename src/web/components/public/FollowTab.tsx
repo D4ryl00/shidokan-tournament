@@ -51,8 +51,8 @@ function LineView({ line, pub, times }: { line: FighterLine; pub: PublicCompetit
   const zone = (id: string) => pub.zones.find((z) => z.id === id)?.name ?? 'Zone';
   const kata = line.discipline === 'kata';
   const n = line.next;
-  // Prochain combat de la zone : pas d'heure une fois sur le tatami (comme « À suivre » dans Zones).
-  const at = !n ? null : n.before === 0 ? times.nextAt(n.key) : times.at(n.key);
+  // Pas d'heure une fois sur le tatami (`at` ne rend jamais une heure passée).
+  const at = n ? times.at(n.key) : null;
   const duration = durationText(pub, line);
   return (
     <Stack gap={4} pt={6} style={{ borderTop: '1px solid var(--sk-line)' }} data-testid="public-follow-line">

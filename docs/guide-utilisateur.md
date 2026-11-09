@@ -170,8 +170,8 @@ Si la compétition est **publique** (Réglages), les spectateurs voient des heur
 
 **Ce que voit le spectateur**
 - Accueil : l'heure prévue de chaque session à venir.
-- Onglet **Zones** : en-tête « Session 1 · prévue 9:30 · démarrée 9:41 » (« démarrée vers » si l'heure est estimée), « vers 10:05 » sur chaque passage (pas sur le passage « À suivre » une fois son heure passée : il est sur le tatami), une pastille « en retard de N min » (« en retard de 1 h 05 » au-delà d'une heure), « en avance de N min » ou « à l’heure » (écart de moins de 3 minutes) par zone, et « Finales de la session … à partir de … ».
-- Onglet **Suivis** : « Zone · n° · vers 10:05 » et « Durée prévue : 2 × 1 min 30 » pour le prochain combat d'un combattant suivi (sans heure quand c'est le combat en cours de la zone).
+- Onglet **Zones** : en-tête « Session 1 · prévue 9:30 · démarrée 9:41 » (« démarrée vers » si l'heure est estimée), « vers 10:05 » sur chaque passage (jamais une heure déjà passée : ce passage-là est sur le tatami), une pastille « en retard de N min » (« en retard de 1 h 05 » au-delà d'une heure), « en avance de N min » ou « à l’heure » (écart de moins de 3 minutes) par zone, et « Finales de la session … à partir de … ».
+- Onglet **Suivis** : « Zone · n° · vers 10:05 » et « Durée prévue : 2 × 1 min 30 » pour le prochain combat d'un combattant suivi (sans heure quand c'est le combat en cours sur le tatami).
 - Onglet **Tableaux** : la durée des combats et l'heure estimée de la finale de chaque catégorie (rien une fois la finale jouée).
 - Une compétition passée (Historique) n'affiche ni heures ni durées. Les heures se recalculent dans le navigateur de chaque spectateur à chaque résultat saisi : elles avancent toutes seules.
 

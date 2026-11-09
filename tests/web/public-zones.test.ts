@@ -117,7 +117,7 @@ describe('finalsLabel', () => {
 
 describe('waveHeaderText', () => {
   const times = (start: { clock: string; estimated: boolean } | null): PublicTimes =>
-    ({ at: () => null, nextAt: () => null, waveStart: () => start, finalsAt: () => null, categoryFinalAt: () => null, drift: () => null });
+    ({ at: () => null, waveStart: () => start, finalsAt: () => null, categoryFinalAt: () => null, drift: () => null });
   const wave = { id: 'w1', plannedStart: '09:30' };
   it('prévue et démarrée, démarrée estimée, parties absentes omises', () => {
     expect(waveHeaderText(pub, wave, times({ clock: '9:41', estimated: false }))).toBe(' · prévue 9:30 · démarrée 9:41');

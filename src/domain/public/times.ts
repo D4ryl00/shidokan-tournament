@@ -6,27 +6,26 @@ import { passageKey, type PublicCompetition } from './types.js';
 
 /** Heures calculées d'une vue publique (spec §5.3). Tout est null pour une compétition passée. */
 export interface PublicTimes {
-  /** Heure de départ estimée d'un passage (`passageKey`), « H:MM ». */
-  at(key: string): string | null;
   /**
-   * Heure du passage en tête de zone (« À suivre », ou le prochain combat d'un suivi quand c'est lui) : seulement si son départ
-   * estimé est après maintenant ; sinon il est sur le tatami, sans heure.
+   * Heure de départ estimée d'un passage (`passageKey`), « H:MM » : seulement si elle est après maintenant. Un départ déjà passé
+   * est celui du combat sur le tatami (« À suivre », ou un passage sauté quand un résultat est saisi en retard) : jamais
+   * d'heure dépassée à l'écran.
    */
-  nextAt(key: string): string | null;
+  at(key: string): string | null;
   /** Démarrage d'une session : saisi, ou estimé d'après le premier résultat ; null sinon. */
   waveStart(waveId: string | null): { clock: string; estimated: boolean } | null;
   /** Départ estimé des finales d'une session, « H:MM ». */
   finalsAt(waveId: string | null): string | null;
   /**
    * Heure estimée de la finale d'une catégorie (bloc de finale d'un kata, ou bloc entier) : le premier passage de finale pas
-   * encore joué (au meilleur des trois : le premier combat de la série restant) ; null une fois la finale jouée.
+   * encore joué (au meilleur des trois : le premier combat de la série restant) ; null une fois la finale jouée ou sur le tatami.
    */
   categoryFinalAt(categoryId: string): string | null;
   /** Avance (négatif) ou retard (positif) d'une zone, en minutes arrondies. */
   drift(zoneId: string): number | null;
 }
 
-const NONE: PublicTimes = { at: () => null, nextAt: () => null, waveStart: () => null, finalsAt: () => null, categoryFinalAt: () => null, drift: () => null };
+const NONE: PublicTimes = { at: () => null, waveStart: () => null, finalsAt: () => null, categoryFinalAt: () => null, drift: () => null };
 
 /** Heure d'une session en secondes ; absente ou illisible (pas HH:MM) : null, jamais « NaN:NaN ». */
 const orNull = (hhmm: string | null) => (hhmm !== null && isClock(hhmm) ? clockToSeconds(hhmm) : null);
@@ -58,16 +57,10 @@ export function publicTimes(pub: PublicCompetition, now: number | null): PublicT
     })),
   };
   const timeline = buildTimeline(input);
-  const at = (key: string) => {
-    const s = timeline.starts.get(key);
-    return s === undefined ? null : secondsToClock(s);
-  };
+  /** Une heure à afficher : jamais une heure déjà passée le jour J. */
+  const shown = (s: number | undefined) => (s === undefined || (now !== null && s <= now) ? null : secondsToClock(s));
   return {
-    at,
-    nextAt: (key) => {
-      const s = timeline.starts.get(key);
-      return s === undefined || (now !== null && s <= now) ? null : secondsToClock(s);
-    },
+    at: (key) => shown(timeline.starts.get(key)),
     waveStart: (waveId) => {
       const w = timeline.waveStarts.get(waveKey(waveId));
       return w ? { clock: secondsToClock(w.at), estimated: w.estimated } : null;
@@ -90,7 +83,7 @@ export function publicTimes(pub: PublicCompetition, now: number | null): PublicT
         wanted = finale.length > 0 ? finale : items.filter((i) => i.kataPart === null);
       }
       const starts = unplayed(wanted).map((i) => timeline.starts.get(passageKey(i))).filter((s): s is number => s !== undefined);
-      return starts.length > 0 ? secondsToClock(Math.min(...starts)) : null;
+      return starts.length > 0 ? shown(Math.min(...starts)) : null;
     },
     drift: (zoneId) => {
       const d = zoneDrift(input, zoneId);

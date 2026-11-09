@@ -89,19 +89,35 @@ describe('publicTimes', () => {
     expect(t.waveStart('w1')).toBeNull();
   });
 
-  test('next time hidden once the passage is on the tatami', () => {
+  test('no time once the passage is on the tatami, anywhere', () => {
     const pub = made({ waves: [{ id: 'w1', name: 'Matin', launched: true, plannedStart: '09:30', actualStart: '09:30', finalsStart: null }] });
     const [first, second] = pub.queues[0]!.items;
     const h = (hh: number, mm: number) => hh * 3600 + mm * 60;
     // Avant 9:30 : le premier n'est pas encore sur le tatami.
-    expect(publicTimes(pub, h(9, 29)).nextAt(passageKey(first!))).toBe('9:30');
-    // Combat en cours : pas d'heure en tête de zone, l'heure du suivant ne bouge pas.
+    expect(publicTimes(pub, h(9, 29)).at(passageKey(first!))).toBe('9:30');
+    // Combat en cours : jamais une heure déjà passée (Zones, Suivis), l'heure du suivant ne bouge pas.
     const during = publicTimes(pub, h(9, 32));
-    expect(during.nextAt(passageKey(first!))).toBeNull();
-    expect(during.at(passageKey(first!))).toBe('9:30');
+    expect(during.at(passageKey(first!))).toBeNull();
     expect(during.at(passageKey(second!))).toBe('9:35');
     // Hors du jour J : l'heure reste.
-    expect(publicTimes(pub, null).nextAt(passageKey(first!))).toBe('9:30');
+    expect(publicTimes(pub, null).at(passageKey(first!))).toBe('9:30');
+  });
+
+  test('final of a category already on the tatami shows no time', () => {
+    const pub = made({
+      waves: [{ id: 'w1', name: 'Matin', launched: true, plannedStart: '09:30', actualStart: '09:30', finalsStart: null }],
+      queues: [
+        { zoneId: 'z1', items: [item({ number: 1, matchId: 'w1-0' })] },
+        { zoneId: 'z2', items: [item({ number: 5, matchId: 'w2-0', finals: true })] },
+      ],
+      finalsZoneId: 'z2',
+    });
+    const start = publicTimes(pub, null).categoryFinalAt('A');
+    expect(start).not.toBeNull();
+    const [hh, mm] = start!.split(':').map(Number);
+    const atStart = (hh! * 60 + mm!) * 60;
+    expect(publicTimes(pub, atStart - 60).categoryFinalAt('A')).toBe(start);
+    expect(publicTimes(pub, atStart + 60).categoryFinalAt('A')).toBeNull();
   });
 
   test('history shows no times', () => {
@@ -111,6 +127,5 @@ describe('publicTimes', () => {
     expect(t.drift('z1')).toBeNull();
     expect(t.waveStart('w1')).toBeNull();
     expect(t.finalsAt('w1')).toBeNull();
-    expect(t.nextAt(passageKey(pub.queues[0]!.items[0]!))).toBeNull();
   });
 });
