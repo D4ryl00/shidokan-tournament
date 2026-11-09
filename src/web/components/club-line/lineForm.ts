@@ -79,7 +79,11 @@ export function reclassChoices(form: ClubFormLine, ctx: LineFormContext): [PrefD
   });
 }
 
-export const kataOffered = (form: ClubFormLine, ctx: LineFormContext) => openFor(form, ctx)('kata', null);
+/** Le kata : l'organisateur le voit toujours (marqué s'il est fermé), le coach seulement ouvert ou déjà enregistré. */
+export function kataChoice(form: ClubFormLine, ctx: LineFormContext): { shown: boolean; label: string } {
+  const open = openFor(form, ctx)('kata', null);
+  return { shown: open || ctx.mode === 'organiser' || !!ctx.saved?.kata, label: open ? 'Kata' : `Kata${NOT_OPEN}` };
+}
 
 /**
  * Coche ou décoche un combat. Plusieurs combats ne se cochent que si le réglage le permet,
@@ -94,7 +98,11 @@ export function toggleCombat(form: ClubFormLine, combat: CombatDiscipline, ctx: 
 /** Applique une modification ; tranche ou sexe changé : la catégorie de poids et (pour le coach) les choix devenus fermés sont retirés. */
 export function applyChange(form: ClubFormLine, patch: Partial<ClubFormLine>, ctx: LineFormContext): ClubFormLine {
   const next = { ...form, ...patch };
-  if (patch.ageBandCode === undefined && patch.sex === undefined) return tidyReclass(next);
+  if (patch.ageBandCode === undefined && patch.sex === undefined) {
+    // Un règlement qui n'est plus proposé pour les combats cochés est retiré (sinon il resterait choisi, invisible).
+    if (patch.combats !== undefined && next.ruleset && !rulesetChoices(next, ctx).some(([r]) => r === next.ruleset)) next.ruleset = null;
+    return tidyReclass(next);
+  }
   // La catégorie de poids dépend de la tranche et du sexe.
   if (!ctx.weightClasses.some((w) => w.id === next.weightClassId && w.ageBandCode === next.ageBandCode && w.sex === next.sex)) next.weightClassId = null;
   const allowed = allowedFor(next, ctx);

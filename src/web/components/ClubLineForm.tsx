@@ -5,7 +5,7 @@ import { choosePref, kgText, orderedPrefs, weightWarning, type ClubFormLine, typ
 import { DISCIPLINES } from '../../domain/disciplines.js';
 import { ApiError, RELOAD_STATUSES, type ClubEntryView, type ClubLine, type LineOps } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
-import { ageBandChoices, applyChange, combatChoices, kataOffered, NOT_OPEN, reclassChoices, rulesetChoices, toggleCombat, type LineFormContext } from './club-line/lineForm.js';
+import { ageBandChoices, applyChange, combatChoices, kataChoice, reclassChoices, rulesetChoices, toggleCombat, type LineFormContext } from './club-line/lineForm.js';
 import { OneOf } from './PaperEntryTable.js';
 
 export const EMPTY_LINE: ClubFormLine = {
@@ -45,14 +45,13 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
   const hasCombat = form.combats.length > 0;
   const combats = combatChoices(form, ctx);
   const rulesets = rulesetChoices(form, ctx);
-  const kataOpen = kataOffered(form, ctx);
+  const kata = kataChoice(form, ctx);
   const otherChoices = reclassChoices(form, ctx);
   const chosen = orderedPrefs(form.prefs);
   // Un rang de plus s'affiche quand le précédent est choisi et qu'il reste une discipline à proposer.
   const shownRanks = ([1, 2, 3] as PrefRank[]).filter((rank) => rank === 1 || (chosen.length >= rank - 1 && otherChoices.length >= rank));
   const ownLabel = form.combats.map((c) => DISCIPLINES[c].label.toLowerCase()).join(' et ');
-  const kataShown = kataOpen || !!saved?.kata;
-  const nothingOpen = mode === 'coach' && !!band && !!form.sex && combats.length === 0 && !kataShown;
+    const nothingOpen = mode === 'coach' && !!band && !!form.sex && combats.length === 0 && !kata.shown;
   // Un refus parce que la ligne a changé ou disparu entre-temps (ou que les inscriptions sont closes) ferme le formulaire : la liste est rechargée.
   const onError = (e: unknown) => {
     if (e instanceof ApiError && RELOAD_STATUSES.has(e.status)) onClose(e.message);
@@ -90,7 +89,7 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
         </SimpleGrid>
         {warning && <Text size="sm" c="var(--sk-warn-text)" data-testid="line-weight-warning">{warning}</Text>}
         {/* Au moins une discipline : un combat, le kata, ou les deux (le poids et le règlement ne sont demandés que pour un combat). */}
-        <Input.Wrapper label="Disciplines" required labelElement="div" description={kataShown ? 'Un combat, le kata, ou les deux.' : undefined}>
+        <Input.Wrapper label="Disciplines" required labelElement="div" description={kata.shown ? 'Un combat, le kata, ou les deux.' : undefined}>
           <Stack gap="sm" mt={4}>
             <div role="group" aria-label="Discipline de combat">
               <Group gap={4} wrap="wrap">
@@ -99,15 +98,16 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
                 ))}
               </Group>
             </div>
-            {kataShown && (
-              <Checkbox data-testid="line-kata" label={kataOpen ? 'Kata' : `Kata${NOT_OPEN}`} checked={form.kata} onChange={(e) => set({ kata: e.currentTarget.checked })} />
+            {kata.shown && (
+              <Checkbox data-testid="line-kata" label={kata.label} checked={form.kata} onChange={(e) => set({ kata: e.currentTarget.checked })} />
             )}
           </Stack>
         </Input.Wrapper>
         {nothingOpen && <Text size="sm" c="var(--sk-warn-text)" data-testid="line-nothing-open">Aucune catégorie ouverte pour cette tranche d’âge à cette compétition.</Text>}
         {hasCombat && (
           <Input.Wrapper label="Règlement" required labelElement="div" role="group" aria-label="Règlement">
-            <OneOf value={form.ruleset} options={rulesets} onChange={(ruleset) => set({ ruleset })} />
+            {rulesets.length ? <OneOf value={form.ruleset} options={rulesets} onChange={(ruleset) => set({ ruleset })} />
+              : <Text size="sm" c="var(--sk-warn-text)" data-testid="line-no-ruleset">Aucun règlement commun à ces disciplines : décochez-en une.</Text>}
           </Input.Wrapper>
         )}
         {form.kata && <TextInput data-testid="line-grade" label="Grade (pour le kata)" value={form.grade ?? ''} onChange={(e) => set({ grade: e.currentTarget.value || null })} />}

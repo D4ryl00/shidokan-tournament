@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import type { ClubFormLine } from '../../src/domain/club-form.js';
 import { entryKey } from '../../src/domain/closed-categories.js';
-import { ageBandChoices, applyChange, combatChoices, reclassChoices, rulesetChoices, toggleCombat, type LineFormContext } from '../../src/web/components/club-line/lineForm.js';
+import { ageBandChoices, applyChange, combatChoices, kataChoice, reclassChoices, rulesetChoices, toggleCombat, type LineFormContext } from '../../src/web/components/club-line/lineForm.js';
 
 const bands = [
   { code: 'cadet', label: 'Cadets', ages: '14 à 15 ans', isMinor: true },
@@ -73,4 +73,26 @@ test('reclassement choices exclude every ticked combat', () => {
   const line = { ...blank, combats: ['karate' as const, 'shido-boxing' as const] };
   expect(labels(reclassChoices(line, ctx()))).toEqual(['Shido-mix-martial']);
   expect(labels(reclassChoices(line, ctx({ mode: 'organiser' })))).toEqual(['Shido-mix-martial', 'Triathlon (non ouverte)']);
+});
+
+test('kata: the organiser always sees it, marked when closed; the coach only when open or saved', () => {
+  const closed = new Set([shut('senior', 'kata', null)]);
+  expect(kataChoice(blank, ctx({ closed }))).toEqual({ shown: false, label: 'Kata (non ouverte)' });
+  expect(kataChoice(blank, ctx({ closed, mode: 'organiser' }))).toEqual({ shown: true, label: 'Kata (non ouverte)' });
+  expect(kataChoice({ ...blank }, ctx({ closed, saved: { ...blank, kata: true } })).shown).toBe(true);
+  expect(kataChoice(blank, ctx({ closed: new Set() }))).toEqual({ shown: true, label: 'Kata' });
+});
+
+test('ticking a combat clears a ruleset that is no longer offered, and its shobu priority', () => {
+  const c = ctx(); // karaté fermé en shobu
+  const line: ClubFormLine = { ...blank, combats: ['shido-boxing'], ruleset: 'shobu', prefs: { 'shido-mix': 1 }, shobuKeep: 'ruleset' };
+  const next = applyChange(line, { combats: toggleCombat(line, 'karate', c) }, c);
+  expect(next.combats).toEqual(['shido-boxing', 'karate']);
+  expect(next.ruleset).toBeNull();
+  expect(next.shobuKeep).toBeNull();
+  // Un règlement encore ouvert pour tous reste choisi.
+  expect(applyChange({ ...line, ruleset: 'jiyu' }, { combats: ['shido-boxing', 'karate'] }, c).ruleset).toBe('jiyu');
+  // Aucun règlement commun : rien n'est proposé.
+  const none = ctx({ closed: new Set([shut('senior', 'karate', 'jiyu'), shut('senior', 'shido-boxing', 'shobu')]) });
+  expect(rulesetChoices({ ...blank, combats: ['karate', 'shido-boxing'] }, none)).toEqual([]);
 });
