@@ -25,7 +25,8 @@ centrale et zones connectées) : c'est le serveur qui sert la page publique, ave
 - un parent tape « mart » dans la recherche, épingle « MARTIN Léa », et lit « Zone 2 · n° 14 · vers 10:55 · 3 combats
   avant le sien » ;
 - quand un résultat est saisi sur une zone, les téléphones ouverts se mettent à jour seuls, en quelques secondes ;
-- un retard pris le matin décale les heures annoncées de l'après-midi ;
+- un retard pris en début de session décale les heures annoncées pour la suite de cette session (✅ une session ne décale
+  pas la suivante : rien ne dit qu'elle la suit le même jour, ni sur la même zone sans pause) ;
 - un coach suit tout son club d'un geste ;
 - un an plus tard, on retrouve les podiums et les tableaux de la compétition dans l'historique.
 
@@ -206,14 +207,17 @@ Durée = rounds × durée d'un round + repos entre les rounds + temps de changem
 
 ### 5.3 Calcul 💡
 
-**Une seule ligne de temps par zone**, toutes vagues lancées à la suite, dans l'ordre de passage figé (c'est ce qui fait
-qu'un retard du matin décale l'après-midi) :
+**Une ligne de temps par vague et par zone**, dans l'ordre de passage figé. ✅ Les vagues sont **indépendantes** : un retard
+pris dans une vague ne décale pas la suivante (l'application ne sait pas si la suivante a lieu l'après-midi ou le lendemain ;
+on ne suppose rien) :
 
-1. Point de départ d'une vague sur une zone = le plus tard entre l'heure effective de démarrage de la vague (sinon son heure
-   prévue) et la fin estimée de la vague précédente sur cette zone.
+1. Point de départ d'une vague sur une zone = son heure effective de démarrage, sinon celle estimée d'après son premier
+   résultat (§5.1), sinon son heure prévue ; aucune : pas d'heures pour cette vague. La fin de la vague précédente n'entre
+   pas en compte.
 2. Pour les combats déjà joués, on prend l'heure de saisie du résultat (`match_results.created_at`, et l'équivalent pour le
    kata) comme heure de fin.
-3. Le premier combat sans résultat commence à `max(maintenant, fin du dernier combat joué)` ; puis chaque combat suivant
+3. Le premier combat sans résultat commence à `max(maintenant, fin du dernier combat joué)` — « maintenant » seulement pour
+   une vague **démarrée** (heure effective saisie ou un résultat) : une vague pas encore démarrée garde ses heures prévues ; puis chaque combat suivant
    commence à la fin du précédent (durée + changement).
 4. Un combat dont les combattants ne sont pas encore connus (« vainqueur du n° 12 ») a quand même une heure.
 5. Finales d'une vague, sur la zone des finales : elles commencent au plus tard entre la fin de ce qui les précède sur cette
