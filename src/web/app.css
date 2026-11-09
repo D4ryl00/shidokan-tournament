@@ -28,10 +28,12 @@
 .sk-pub-tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; background: var(--sk-bar); border-top: 1px solid var(--sk-line); padding-bottom: env(safe-area-inset-bottom); }
 .sk-pub-tab { flex: 1; text-align: center; padding: 12px 4px; font-size: 13px; font-weight: 600; color: var(--sk-muted); text-decoration: none; border-top: 3px solid transparent; min-width: 0; }
 .sk-pub-tab[aria-current="page"] { color: var(--sk-accent); border-top-color: var(--sk-accent); }
-.sk-pub-body { padding-bottom: 80px; }
+.sk-pub-body { padding: 16px 16px calc(80px + env(safe-area-inset-bottom)); }
+/* Champs des pages publiques : 16 px au moins, sinon Safari (iPhone) zoome la page au toucher du champ et ne dézoome pas. */
+.sk-pub input, .sk-pub select, .sk-pub textarea, .sk-pub .mantine-Input-input { font-size: 16px; }
 @media (min-width: 768px) {
   .sk-pub-tabs { position: static; border-top: 0; border-bottom: 1px solid var(--sk-line); background: transparent; padding-bottom: 0; }
   .sk-pub-tab { flex: 0 0 auto; padding: 10px 18px; border-top: 0; border-bottom: 3px solid transparent; margin-bottom: -1px; }
   .sk-pub-tab[aria-current="page"] { border-bottom-color: var(--sk-accent); }
-  .sk-pub-body { padding-bottom: 0; }
+  .sk-pub-body { padding-bottom: 16px; }
 }

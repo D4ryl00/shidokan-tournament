@@ -80,9 +80,11 @@ export function usePublicEvents(competitionId: string): boolean {
 /**
  * « mis à jour à HH:MM » : l'heure où des données nouvelles sont arrivées. Une relecture qui ne rapporte rien de neuf (304,
  * reconnexion, téléphone déverrouillé) ne la change pas : un serveur resté sur d'anciennes données le montre.
+ * `dataUpdatedAt` (React Query) est l'heure de réception : une page rouverte avec des données déjà en cache montre leur heure,
+ * pas celle de l'ouverture.
  */
-export function useReceivedAt<T>(data: T | undefined): Date | null {
+export function useReceivedAt<T>(data: T | undefined, dataUpdatedAt: number): Date | null {
   const ref = useRef<Received<T> | null>(null);
-  ref.current = received(ref.current, data, new Date());
+  ref.current = received(ref.current, data, new Date(dataUpdatedAt));
   return ref.current?.at ?? null;
 }

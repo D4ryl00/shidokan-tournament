@@ -87,7 +87,7 @@ test('spectateur : compétition privée invisible, rendue publique, suivi d’un
     if (tab === 'tableaux') expect(text).toContain('Combattant masqué');
   }
 
-  // 7. À 360 px, rien ne dépasse sur les quatre onglets (avant le retour en privé, qui vide la page).
+  // 6. À 360 px, rien ne dépasse sur les quatre onglets (avant le retour en privé, qui vide la page).
   await v.setViewportSize({ width: 360, height: 740 });
   for (const tab of TABS) {
     await v.goto(`/public/${id}?onglet=${tab}`);
@@ -97,7 +97,7 @@ test('spectateur : compétition privée invisible, rendue publique, suivi d’un
     expect(await v.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), tab).toBeLessThanOrEqual(0);
   }
 
-  // 8. Sur téléphone : depuis Zones, un passage ouvre son tableau à l'écran ; Retour revient sur Zones ; un autre onglet repart du haut.
+  // 7. Sur téléphone : depuis Zones, un passage ouvre son tableau à l'écran ; Retour revient sur Zones ; un autre onglet repart du haut.
   await v.setViewportSize({ width: 360, height: 640 });
   await v.goto(`/public/${id}?onglet=zones`);
   await expect(v.getByTestId('public-zones-session')).toHaveText('Session unique');
@@ -125,7 +125,20 @@ test('spectateur : compétition privée invisible, rendue publique, suivi d’un
   await v.getByTestId('login-back-public').click();
   await expect(v.getByRole('heading', { name: 'Compétitions' })).toBeVisible();
 
-  // 6. Repassée en privée : la page ouverte l'annonce.
+  // 8. iPhone (390 × 844) : la fin de chaque onglet se laisse remonter au-dessus de la barre d'onglets fixe ; champs à 16 px.
+  await v.setViewportSize({ width: 390, height: 844 });
+  for (const tab of TABS) {
+    await v.goto(`/public/${id}?onglet=${tab}`);
+    await expect(v.getByTestId(`public-tab-${tab}`)).toHaveAttribute('aria-current', 'page');
+    if (tab === 'tableaux') await openFirstCategory(v);
+    await v.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const [last, bar] = [await v.locator('.sk-pub-body > :last-child').boundingBox(), await v.locator('.sk-pub-tabs').boundingBox()];
+    expect(last!.y + last!.height, tab).toBeLessThanOrEqual(bar!.y);
+  }
+  await v.goto(`/public/${id}?onglet=suivis`);
+  expect(await v.getByTestId('public-search').evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(16);
+
+  // 9. Repassée en privée : la page ouverte l'annonce.
   await v.goto(`/public/${id}`);
   await expect(v.getByRole('heading', { name: NAME })).toBeVisible();
   await page.getByTestId('visibility').getByText('Privée', { exact: true }).click();

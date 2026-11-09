@@ -33,7 +33,7 @@ export function PublicHomePage() {
   const { data, isLoading, error, failureReason } = usePublicList();
   const empty = !!data && data.today.length + data.upcoming.length + data.past.length === 0;
   return (
-    <Box mih="100vh" style={{ background: 'var(--sk-bg)' }}>
+    <Box mih="100vh" className="sk-pub" style={{ background: 'var(--sk-bg)' }}>
       <PublicHeader />
       <Stack gap="lg" p="md" maw={720} mx="auto">
         <Title order={1} fz="h3">Compétitions</Title>

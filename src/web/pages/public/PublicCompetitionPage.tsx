@@ -29,9 +29,9 @@ const hhmm = (d: Date) => d.toLocaleTimeString('fr-FR', { hour: '2-digit', minut
 /** Page publique d'une compétition : en-tête, puis un onglet (`?onglet=`, « suivis » par défaut ; compétition passée : tableaux et résultats). */
 export function PublicCompetitionPage() {
   const { id = '' } = useParams();
-  const { data, isLoading, error, failureReason } = usePublicCompetition(id);
+  const { data, dataUpdatedAt, isLoading, error, failureReason } = usePublicCompetition(id);
   const connected = usePublicEvents(id);
-  const updated = useReceivedAt(data);
+  const updated = useReceivedAt(data, dataUpdatedAt);
   const [search] = useSearchParams();
   const [pins, setPins] = usePins(id);
   const gone = isGone(data);
@@ -50,12 +50,12 @@ export function PublicCompetitionPage() {
   }, [active.name]);
 
   return (
-    <Box mih="100vh" style={{ background: 'var(--sk-bg)' }}>
+    <Box mih="100vh" className="sk-pub" style={{ background: 'var(--sk-bg)' }}>
       <PublicHeader />
       {!connected && !gone && (
         <Alert color="yellow" radius={0} py={6} data-testid="public-offline">Connexion perdue, nouvel essai…</Alert>
       )}
-      <Stack gap="md" p="md" maw={900} mx="auto" className="sk-pub-body">
+      <Stack gap="md" maw={900} mx="auto" className="sk-pub-body">
         {isLoading && !failureReason && <Group justify="center" py="xl"><Loader /></Group>}
         <PublicError error={error ?? failureReason} hasData={!!data} />
         {gone && (
