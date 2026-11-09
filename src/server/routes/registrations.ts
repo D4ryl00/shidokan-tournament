@@ -36,7 +36,7 @@ export const clubFormLineSchema = z.object({
   // Absente des fiches papier saisies à l'écran : la catégorie y est déduite du poids.
   weightClassId: z.string().max(100).nullable().default(null),
   weightKg: z.number().positive().max(250).nullable(),
-  combat: z.enum(['karate', 'shido-boxing', 'shido-mix', 'triathlon']).nullable(),
+  combats: z.array(z.enum(['karate', 'shido-boxing', 'shido-mix', 'triathlon'])).max(4).refine((c) => new Set(c).size === c.length, 'Disciplines en double'),
   kata: z.boolean(),
   grade: z.string().trim().max(30).nullable(),
   ruleset: z.enum(['jiyu', 'shobu']).nullable(),
@@ -103,11 +103,12 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
     // Premier onglet qui est une fiche club (un coach peut ajouter des onglets). Un onglet reconnu (titre trouvé)
     // mais cassé est signalé : on ne lit pas à sa place un onglet suivant (copie ancienne, par exemple).
     const grid = await getGrid(db, competitionId);
-    const tolerance = (await getCompetition(db, competitionId))!.settings.weighInToleranceKg;
+    const settings = (await getCompetition(db, competitionId))!.settings;
+    const tolerance = settings.weighInToleranceKg;
     const GENERIC = "Ce fichier n'est pas une fiche club.";
     for (const sheet of sheets) {
       try {
-        return parseClubForm(sheet.cells, grid, tolerance, closedSet(db, competitionId));
+        return parseClubForm(sheet.cells, grid, tolerance, closedSet(db, competitionId), { multipleCombats: settings.multipleCombatDisciplinesPerDay });
       } catch (e) {
         if (!(e instanceof NotAClubFormError) || e.message !== GENERIC) throw e;
       }
@@ -178,8 +179,9 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
 
   async function parseEntry(competitionId: string, body: unknown) {
     const { header, lines } = paperEntrySchema.parse(body);
-    const tolerance = (await getCompetition(db, competitionId))!.settings.weighInToleranceKg;
-    return parseClubFormLines(header, lines, await getGrid(db, competitionId), tolerance, closedSet(db, competitionId));
+    const settings = (await getCompetition(db, competitionId))!.settings;
+    const tolerance = settings.weighInToleranceKg;
+    return parseClubFormLines(header, lines, await getGrid(db, competitionId), tolerance, closedSet(db, competitionId), { multipleCombats: settings.multipleCombatDisciplinesPerDay });
   }
 
   // Une fiche papier se saisit page par page : chaque saisie s'ajoute (une ligne déjà saisie est mise à jour), rien n'est retiré.

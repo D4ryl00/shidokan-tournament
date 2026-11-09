@@ -128,7 +128,7 @@ test('grade : enregistré sur le combattant, conservé si absent', async () => {
 
 const ENTRY_HEADER = { club: 'Tani Dojo', coachName: 'Jean', coachPhone: null, coachEmails: [], preApproval: false };
 const ENTRY_LINE = {
-  lastName: 'MARTIN', firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', weightKg: 53.5, combat: 'karate', kata: true, grade: '1er kyu',
+  lastName: 'MARTIN', firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', weightKg: 53.5, combats: ['karate'], kata: true, grade: '1er kyu',
   ruleset: 'jiyu', prefs: { 'shido-mix': 1 }, shobuKeep: null,
 };
 
@@ -152,7 +152,7 @@ test('saisie papier : ligne invalide → erreur dans l’aperçu, rien d’écri
 });
 
 test('relecture : grade gardé quand kata et combat sont sur deux lignes', async () => {
-  const kataLine = { ...ENTRY_LINE, weightKg: null, combat: null, ruleset: null, prefs: {} };
+  const kataLine = { ...ENTRY_LINE, weightKg: null, combats: [], ruleset: null, prefs: {} };
   const combatLine = { ...ENTRY_LINE, kata: false, grade: null };
   for (const lines of [[kataLine, combatLine], [combatLine, kataLine]]) {
     await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: ENTRY_HEADER, lines } });

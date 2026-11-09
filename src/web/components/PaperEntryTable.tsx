@@ -12,7 +12,7 @@ import { plural } from '../../domain/plural.js';
 import { EmailsInput } from './EmailsInput.js';
 
 const emptyLine = (): ClubFormLine => ({
-  lastName: '', firstName: '', sex: null, ageBandCode: null, weightClassId: null, weightKg: null, combat: null, kata: false, grade: null, ruleset: null, prefs: {}, shobuKeep: null,
+  lastName: '', firstName: '', sex: null, ageBandCode: null, weightClassId: null, weightKg: null, combats: [], kata: false, grade: null, ruleset: null, prefs: {}, shobuKeep: null,
 });
 const EMPTY_HEADER: ClubFormHeader = { club: '', coachName: null, coachPhone: null, coachEmails: [], preApproval: false };
 export const COMBATS: [CombatDiscipline, string][] = [['karate', 'Karaté'], ['shido-boxing', 'Boxing'], ['shido-mix', 'Mix'], ['triathlon', 'Triathlon']];
@@ -40,7 +40,7 @@ export function PaperEntryTable({ competitionId, grid }: { competitionId: string
   const offered = offeredAgeBands(grid, new Set((closedView?.closed ?? []).map(entryKey)));
   const abbr = ageBandAbbreviations(offered);
   const bands = offered.map((b) => [b.code, abbr.get(b.code)!] as [string, string]);
-  const isEmpty = (l: ClubFormLine) => !l.lastName && !l.firstName && !l.sex && !l.ageBandCode && l.weightKg === null && !l.combat && !l.kata && !l.grade && !l.ruleset && !Object.keys(l.prefs).length && !l.shobuKeep;
+  const isEmpty = (l: ClubFormLine) => !l.lastName && !l.firstName && !l.sex && !l.ageBandCode && l.weightKg === null && !l.combats.length && !l.kata && !l.grade && !l.ruleset && !Object.keys(l.prefs).length && !l.shobuKeep;
   useUnsaved('paper-entry', !!header.club.trim() || lines.some((l) => !isEmpty(l)));
 
   const changed = () => {
@@ -106,7 +106,7 @@ export function PaperEntryTable({ competitionId, grid }: { competitionId: string
                 </Table.Td>
                 <Table.Td role="group" aria-label={`Ligne ${i + 1} — Disciplines`} w={230}>
                   <Group gap={4}>
-                    <OneOf value={l.combat} options={COMBATS} onChange={(combat) => setLine(i, { combat })} />
+                    <OneOf value={l.combats[0] ?? null} options={COMBATS} onChange={(combat) => setLine(i, { combats: combat ? [combat] : [] })} />
                     <Chip size="xs" checked={l.kata} onChange={(kata) => setLine(i, { kata })}>Kata</Chip>
                   </Group>
                 </Table.Td>
@@ -115,7 +115,7 @@ export function PaperEntryTable({ competitionId, grid }: { competitionId: string
                 <Table.Td role="group" aria-label={`Ligne ${i + 1} — Si seul : autre discipline`}>
                   <Group gap={4} wrap="nowrap">
                     {PREFS.map(([d, label, short]) => (
-                      <NativeSelect key={d} size="xs" w={78} aria-label={`Reclassement ${label}`} data={['', '1', '2', '3']} disabled={l.combat === d}
+                      <NativeSelect key={d} size="xs" w={78} aria-label={`Reclassement ${label}`} data={['', '1', '2', '3']} disabled={l.combats.includes(d)}
                         leftSection={<Text size="xs" c="dimmed">{short}</Text>}
                         value={l.prefs[d] ? String(l.prefs[d]) : ''}
                         onChange={(e) => {

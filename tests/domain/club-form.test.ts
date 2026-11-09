@@ -14,6 +14,7 @@ import {
   rulesetFromLabel,
   choosePref,
   lineToRows,
+  ONE_COMBAT_ONLY,
   orderedPrefs,
   tidyReclass,
   weightWarning,
@@ -323,7 +324,7 @@ test('choix de reclassement : ordre, choix, retrait', () => {
 });
 
 test('reclassement rangé : sa propre discipline retirée, rangs recalculés, priorité shobu seulement si elle sert', () => {
-  const line = { combat: 'karate' as const, ruleset: 'shobu' as const, shobuKeep: 'discipline' as const };
+  const line = { combats: ['karate' as const], ruleset: 'shobu' as const, shobuKeep: 'discipline' as const };
   expect(tidyReclass({ ...line, prefs: { karate: 1, 'shido-mix': 2 } })).toEqual({ ...line, prefs: { 'shido-mix': 1 } });
   expect(tidyReclass({ ...line, prefs: { karate: 1 } })).toEqual({ ...line, prefs: {}, shobuKeep: null });
   expect(tidyReclass({ ...line, ruleset: 'jiyu', prefs: { 'shido-mix': 1 } })).toEqual({ ...line, ruleset: 'jiyu', prefs: { 'shido-mix': 1 }, shobuKeep: null });
@@ -366,7 +367,7 @@ test('relecture (mineurs) : abréviations sans doublon dans une grille', () => {
 });
 
 test("ligne dans une catégorie fermée : avertissement, pas d'erreur", () => {
-  const line = { lastName: 'PETIT', firstName: 'Zoé', sex: 'F' as const, ageBandCode: 'cadet', weightClassId: null, weightKg: 50, combat: 'shido-mix' as const, kata: false, grade: null, ruleset: 'jiyu' as const, prefs: {}, shobuKeep: null };
+  const line = { lastName: 'PETIT', firstName: 'Zoé', sex: 'F' as const, ageBandCode: 'cadet', weightClassId: null, weightKg: 50, combats: ['shido-mix' as const], kata: false, grade: null, ruleset: 'jiyu' as const, prefs: {}, shobuKeep: null };
   const [row] = lineToRows(line, 1, grid, { M: 0, F: 0 }, new Set(['cadet|F|shido-mix|jiyu']));
   expect(row!.errors).toEqual([]);
   expect(row!.input).not.toBeNull();
@@ -375,7 +376,7 @@ test("ligne dans une catégorie fermée : avertissement, pas d'erreur", () => {
 
 test('catégorie de poids choisie (en ligne) : elle fait foi, avec ou sans poids ; une catégorie d’une autre tranche est refusée', () => {
   const line: ClubFormLine = {
-    lastName: 'PETIT', firstName: 'Zoé', sex: 'F', ageBandCode: 'cadet', weightClassId: 'cadet:F:-61', weightKg: 50, combat: 'karate', kata: false, grade: null,
+    lastName: 'PETIT', firstName: 'Zoé', sex: 'F', ageBandCode: 'cadet', weightClassId: 'cadet:F:-61', weightKg: 50, combats: ['karate'], kata: false, grade: null,
     ruleset: 'jiyu', prefs: {}, shobuKeep: null,
   };
   expect(lineToRows(line, 1, grid, { M: 0, F: 0 })[0]!.input?.weightClassId).toBe('cadet:F:-61');
@@ -387,11 +388,41 @@ test('catégorie de poids choisie (en ligne) : elle fait foi, avec ou sans poids
 
 test('avertissement de poids : en dehors de la catégorie choisie (au-dessus ou au-dessous), rien sinon ni sans poids', () => {
   const classes = grid.weightClasses.filter((w) => w.ageBandCode === 'cadet').sort((a, b) => (a.maxKg ?? Infinity) - (b.maxKg ?? Infinity));
-  const line = { ageBandCode: 'cadet', sex: 'F' as const, weightClassId: 'cadet:F:+61', weightKg: 52.5, combat: 'karate' as const };
+  const line = { ageBandCode: 'cadet', sex: 'F' as const, weightClassId: 'cadet:F:+61', weightKg: 52.5, combats: ['karate' as const] };
   expect(weightWarning(line, classes)).toBe('Le poids actuel (52,5 kg) est en dehors de la catégorie +61 kg : il correspond à -54 kg.');
   expect(weightWarning({ ...line, weightClassId: 'cadet:F:-47' }, classes)).toBe('Le poids actuel (52,5 kg) est en dehors de la catégorie -47 kg : il correspond à -54 kg.');
   expect(weightWarning({ ...line, weightClassId: 'cadet:F:-54' }, classes)).toBeNull();
   expect(weightWarning({ ...line, weightClassId: 'cadet:F:-54', weightKg: 54 }, classes)).toBeNull();
   expect(weightWarning({ ...line, weightKg: null }, classes)).toBeNull();
-  expect(weightWarning({ ...line, combat: null }, classes)).toBeNull();
+  expect(weightWarning({ ...line, combats: [] }, classes)).toBeNull();
+});
+
+describe('plusieurs combats', () => {
+  const tol = { M: 0, F: 0 };
+  const base: ClubFormLine = { lastName: 'PETIT', firstName: 'Zoé', sex: 'F', ageBandCode: 'cadet', weightClassId: 'cadet:F:-54', weightKg: 50, combats: [], kata: false, grade: null, ruleset: null, prefs: {}, shobuKeep: null };
+  const two: ClubFormLine = { ...base, combats: ['karate', 'shido-boxing'], ruleset: 'jiyu', kata: true, prefs: { 'shido-mix': 1, karate: 2 }, shobuKeep: null };
+  test('deux combats et le kata donnent trois inscriptions, dans l’ordre', () => {
+    const rows = lineToRows(two, 1, grid, tol, new Set(), { multipleCombats: true });
+    expect(rows.map((r) => [r.input?.discipline, r.input?.ruleset])).toEqual([['karate', 'jiyu'], ['shido-boxing', 'jiyu'], ['kata', null]]);
+    // Reclassement commun, sans ses propres combats.
+    expect(rows[0]!.input!.otherDisciplines).toEqual(['shido-mix']);
+    expect(rows[1]!.input!.otherDisciplines).toEqual(['shido-mix']);
+  });
+  test('shobu : la priorité vaut pour chacun des combats', () => {
+    const rows = lineToRows({ ...two, ageBandCode: 'senior', weightClassId: 'senior:F:-55', ruleset: 'shobu', shobuKeep: 'discipline' }, 1, grid, tol, new Set(), { multipleCombats: true });
+    expect(rows.slice(0, 2).map((r) => r.input?.acceptsJiyuFirst)).toEqual([true, true]);
+  });
+  test('réglage désactivé : deux combats refusés', () => {
+    const rows = lineToRows(two, 1, grid, tol);
+    expect(rows[0]!.input).toBeNull();
+    expect(rows[0]!.errors).toContain(ONE_COMBAT_ONLY);
+  });
+  test('règlement manquant : chaque combat est en erreur', () => {
+    const rows = lineToRows({ ...two, ruleset: null }, 1, grid, tol, new Set(), { multipleCombats: true });
+    expect(rows[0]!.errors).toContain('Règlement manquant (Jiyu ou Shobu).');
+    expect(rows[1]!.errors).toContain('Règlement manquant (Jiyu ou Shobu).');
+  });
+  test('tidyReclass retire tous ses combats des choix', () => {
+    expect(tidyReclass(two).prefs).toEqual({ 'shido-mix': 1 });
+  });
 });

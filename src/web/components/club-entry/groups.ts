@@ -81,10 +81,10 @@ export function groupClubLines<L extends { line: ClubFormLine }>(all: L[], ctx: 
       short: r ? `${DISCIPLINES[d].label} ${r}` : DISCIPLINES[d].label,
       sub: null,
       hide: { age: true, combat: true, kata: false },
-      items: lines.filter((l) => l.line.combat === d && l.line.ruleset === r),
+      items: lines.filter((l) => l.line.combats.includes(d) && l.line.ruleset === r),
     }))),
     { key: 'kata', title: DISCIPLINES.kata.label, short: DISCIPLINES.kata.label, sub: 'sans catégorie de poids', hide: { age: true, combat: true, kata: true }, items: lines.filter((l) => l.line.kata) },
-    { key: 'aucune', title: 'Sans discipline', short: 'Sans discipline', sub: null, hide: { ...SHOWN, age: true }, items: lines.filter((l) => !l.line.combat && !l.line.kata) },
+    { key: 'aucune', title: 'Sans discipline', short: 'Sans discipline', sub: null, hide: { ...SHOWN, age: true }, items: lines.filter((l) => !l.line.combats.length && !l.line.kata) },
   ];
   return sections.flatMap(({ hide, items, ...s }) => (items.length ? byAge(s.key, { ...s, size: items.length }, hide, items) : []));
 }

@@ -217,10 +217,10 @@ export async function saveClubLine(db: AppDb, access: ClubAccess, fighterId: str
   assertWritable(db, access);
   const club = clubRow(db, access);
   const competition = (await getCompetition(db, access.competitionId))!;
-  const rows = lineToRows(line, 1, await getGrid(db, access.competitionId), competition.settings.weighInToleranceKg);
+  const rows = lineToRows(line, 1, await getGrid(db, access.competitionId), competition.settings.weighInToleranceKg, new Set(), { multipleCombats: competition.settings.multipleCombatDisciplinesPerDay });
   // En ligne, le coach choisit la catégorie de poids : le poids actuel est facultatif.
   const errors = rows.flatMap((r) => r.errors).filter((e) => e !== WEIGHT_MISSING);
-  if (line.combat && !line.weightClassId) errors.unshift(WEIGHT_CLASS_MISSING);
+  if (line.combats.length && !line.weightClassId) errors.unshift(WEIGHT_CLASS_MISSING);
   if (errors.length || rows.some((r) => !r.input)) throw new RegistrationValidationError(errors);
   const inputs = rows.map((r) => ({ ...r.input!, clubId: club.id, source: 'online' as const }));
   // Une catégorie fermée ne s'ouvre pas en ligne, sauf pour une inscription déjà enregistrée qui y était.

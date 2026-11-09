@@ -12,7 +12,7 @@ import { COMBATS, OneOf } from './PaperEntryTable.js';
 const RULESETS: [Ruleset, string][] = [['jiyu', 'Jiyu'], ['shobu', 'Shobu']];
 
 export const EMPTY_LINE: ClubFormLine = {
-  lastName: '', firstName: '', sex: null, ageBandCode: null, weightClassId: null, weightKg: null, combat: null, kata: false, grade: null, ruleset: null, prefs: {}, shobuKeep: null,
+  lastName: '', firstName: '', sex: null, ageBandCode: null, weightClassId: null, weightKg: null, combats: [], kata: false, grade: null, ruleset: null, prefs: {}, shobuKeep: null,
 };
 
 /** Formulaire d'un seul combattant de la page du club (création : `line` null). */
@@ -48,8 +48,9 @@ export function ClubLineForm({ token, line, ageBands, weightClasses, closed, ope
       if (!weightClasses.some((w) => w.id === next.weightClassId && w.ageBandCode === next.ageBandCode && w.sex === next.sex)) next.weightClassId = null;
       // Tranche ou sexe changé : un choix devenu fermé est retiré (le coach le voit, au lieu d'un refus à l'enregistrement).
       const open = openFor(next);
-      if (next.combat && !open(next.combat, 'jiyu') && !open(next.combat, 'shobu')) Object.assign(next, { combat: null, ruleset: null });
-      if (next.combat && next.ruleset && !open(next.combat, next.ruleset)) next.ruleset = null;
+      const chosenCombat = next.combats[0];
+      if (chosenCombat && !open(chosenCombat, 'jiyu') && !open(chosenCombat, 'shobu')) Object.assign(next, { combats: [], ruleset: null });
+      else if (chosenCombat && next.ruleset && !open(chosenCombat, next.ruleset)) next.ruleset = null;
       if (next.kata && !open('kata', null)) next.kata = false;
       next.prefs = Object.fromEntries(orderedPrefs(next.prefs).filter((d) => open(d, 'jiyu') || open(d, 'shobu')).map((d, i) => [d, i + 1]));
       return tidyReclass(next);
@@ -59,17 +60,20 @@ export function ClubLineForm({ token, line, ageBands, weightClasses, closed, ope
   const warning = weightWarning(form, weightClasses);
   const isOpen = openFor(form);
   const saved = line?.line;
+  // Pour l'instant un seul combat se choisit ici.
+  const combat = form.combats[0] ?? null;
+  const savedCombat = saved?.combats[0] ?? null;
   const NOT_OPEN = ' (non ouverte)';
   const combats = COMBATS.flatMap(([d, label]): [CombatDiscipline, string][] => {
     if (isOpen(d, 'jiyu') || isOpen(d, 'shobu')) return [[d, label]];
-    return saved?.combat === d ? [[d, label + NOT_OPEN]] : [];
+    return savedCombat === d ? [[d, label + NOT_OPEN]] : [];
   });
   const rulesets = RULESETS.flatMap(([r, label]): [Ruleset, string][] => {
-    if (!form.combat || isOpen(form.combat, r)) return [[r, label]];
-    return saved?.combat === form.combat && saved.ruleset === r ? [[r, label + NOT_OPEN]] : [];
+    if (!combat || isOpen(combat, r)) return [[r, label]];
+    return savedCombat === combat && saved?.ruleset === r ? [[r, label + NOT_OPEN]] : [];
   });
   const kataOpen = isOpen('kata', null);
-  const otherChoices = PREF_DISCIPLINES.filter((d) => d !== form.combat).flatMap((d): [PrefDiscipline, string][] => {
+  const otherChoices = PREF_DISCIPLINES.filter((d) => d !== combat).flatMap((d): [PrefDiscipline, string][] => {
     const { label } = DISCIPLINES[d];
     if (isOpen(d, 'jiyu') || isOpen(d, 'shobu')) return [[d, label]];
     return form.prefs[d] ? [[d, label + NOT_OPEN]] : [];
@@ -77,7 +81,7 @@ export function ClubLineForm({ token, line, ageBands, weightClasses, closed, ope
   const chosen = orderedPrefs(form.prefs);
   // Un rang de plus s'affiche quand le précédent est choisi et qu'il reste une discipline à proposer.
   const shownRanks = ([1, 2, 3] as PrefRank[]).filter((rank) => rank === 1 || (chosen.length >= rank - 1 && otherChoices.length >= rank));
-  const ownLabel = form.combat ? DISCIPLINES[form.combat].label.toLowerCase() : '';
+  const ownLabel = combat ? DISCIPLINES[combat].label.toLowerCase() : '';
   const kataShown = kataOpen || !!saved?.kata;
   const nothingOpen = !!band && !!form.sex && combats.length === 0 && !kataShown;
   // Un refus parce que la ligne a changé ou disparu entre-temps (ou que les inscriptions sont closes) ferme le formulaire : la liste est rechargée.
@@ -102,7 +106,7 @@ export function ClubLineForm({ token, line, ageBands, weightClasses, closed, ope
           <Select data-testid="line-age" label="Catégorie d’âge" required data={ageBands.map((b) => ({ value: b.code, label: `${b.label} (${b.ages})` }))} value={form.ageBandCode}
             onChange={(ageBandCode) => set({ ageBandCode })} />
           {/* Obligatoire pour un combat (le kata n'a pas de catégorie de poids). */}
-          <Select data-testid="line-weight-class" label="Catégorie de poids" required={!!form.combat} disabled={!classes.length}
+          <Select data-testid="line-weight-class" label="Catégorie de poids" required={!!combat} disabled={!classes.length}
             placeholder={classes.length ? undefined : 'Sexe et âge d’abord'}
             data={classes.map((w) => ({ value: w.id, label: `${w.label} kg` }))} value={form.weightClassId} onChange={(weightClassId) => set({ weightClassId })} />
           <TextInput data-testid="line-weight" label="Poids actuel (facultatif)" rightSection={<Text size="xs">kg</Text>} inputMode="decimal" value={weight}
@@ -118,7 +122,7 @@ export function ClubLineForm({ token, line, ageBands, weightClasses, closed, ope
         <Input.Wrapper label="Disciplines" required labelElement="div" description={kataShown ? 'Un combat, le kata, ou les deux.' : undefined}>
           <Stack gap="sm" mt={4}>
             <div role="group" aria-label="Discipline de combat">
-              <OneOf value={form.combat} options={combats} onChange={(combat) => set({ combat })} />
+              <OneOf value={combat} options={combats} onChange={(c) => set({ combats: c ? [c] : [] })} />
             </div>
             {kataShown && (
               <Checkbox data-testid="line-kata" label={kataOpen ? 'Kata' : `Kata${NOT_OPEN}`} checked={form.kata} onChange={(e) => set({ kata: e.currentTarget.checked })} />
@@ -126,13 +130,13 @@ export function ClubLineForm({ token, line, ageBands, weightClasses, closed, ope
           </Stack>
         </Input.Wrapper>
         {nothingOpen && <Text size="sm" c="var(--sk-warn-text)" data-testid="line-nothing-open">Aucune catégorie ouverte pour cette tranche d’âge à cette compétition.</Text>}
-        {form.combat && (
+        {combat && (
           <Input.Wrapper label="Règlement" required labelElement="div" role="group" aria-label="Règlement">
             <OneOf value={form.ruleset} options={rulesets} onChange={(ruleset) => set({ ruleset })} />
           </Input.Wrapper>
         )}
         {form.kata && <TextInput data-testid="line-grade" label="Grade (pour le kata)" value={form.grade ?? ''} onChange={(e) => set({ grade: e.currentTarget.value || null })} />}
-        {form.combat && otherChoices.length > 0 && (
+        {combat && otherChoices.length > 0 && (
           <Paper withBorder p="md" radius="md" data-testid="line-reclass" style={{ background: 'var(--sk-bg)' }}>
             <Stack gap="sm">
               <div>

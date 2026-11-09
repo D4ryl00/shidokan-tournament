@@ -14,14 +14,14 @@ const weightClasses = [
   { id: 'junior:M:-70', ageBandCode: 'junior', sex: 'M' as const, label: '-70', maxKg: 70 },
   { id: 'senior:M:-75', ageBandCode: 'senior', sex: 'M' as const, label: '-75', maxKg: 75 },
 ];
-const base: ClubFormLine = { lastName: '', firstName: '', sex: 'M', ageBandCode: 'cadet', weightClassId: null, weightKg: null, combat: null, kata: false, grade: null, ruleset: null, prefs: {}, shobuKeep: null };
+const base: ClubFormLine = { lastName: '', firstName: '', sex: 'M', ageBandCode: 'cadet', weightClassId: null, weightKg: null, combats: [], kata: false, grade: null, ruleset: null, prefs: {}, shobuKeep: null };
 const line = (id: string, o: Partial<ClubFormLine>) => ({ fighterId: id, line: { ...base, ...o } });
 
 const lines = [
-  line('roux', { lastName: 'ROUX', firstName: 'Nathan', ageBandCode: 'junior', weightClassId: 'junior:M:-70', combat: 'shido-mix', ruleset: 'jiyu' }),
-  line('dubois', { lastName: 'DUBOIS', firstName: 'Karim', ageBandCode: 'senior', weightClassId: 'senior:M:-75', combat: 'karate', ruleset: 'shobu' }),
-  line('chevalier', { lastName: 'CHEVALIER', firstName: 'Noé', weightClassId: 'cadet:M:-63', combat: 'karate', ruleset: 'jiyu' }),
-  line('bernard', { lastName: 'BERNARD', firstName: 'Hugo', weightClassId: 'cadet:M:-57', combat: 'karate', ruleset: 'jiyu', kata: true }),
+  line('roux', { lastName: 'ROUX', firstName: 'Nathan', ageBandCode: 'junior', weightClassId: 'junior:M:-70', combats: ['shido-mix'], ruleset: 'jiyu' }),
+  line('dubois', { lastName: 'DUBOIS', firstName: 'Karim', ageBandCode: 'senior', weightClassId: 'senior:M:-75', combats: ['karate'], ruleset: 'shobu' }),
+  line('chevalier', { lastName: 'CHEVALIER', firstName: 'Noé', weightClassId: 'cadet:M:-63', combats: ['karate'], ruleset: 'jiyu' }),
+  line('bernard', { lastName: 'BERNARD', firstName: 'Hugo', weightClassId: 'cadet:M:-57', combats: ['karate'], ruleset: 'jiyu', kata: true }),
   line('martin', { lastName: 'MARTIN', firstName: 'Léa', sex: 'F', weightClassId: 'cadet:F:-54', kata: true }),
   line('sans-age', { lastName: 'AUBRY', firstName: 'Zoé', ageBandCode: null }),
 ];

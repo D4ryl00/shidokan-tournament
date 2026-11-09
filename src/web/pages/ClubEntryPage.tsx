@@ -22,7 +22,7 @@ const RULESET_LABEL = { jiyu: 'jiyu', shobu: 'shobu' } as const;
 /** « Si sans adversaire : Shido-boxing, puis Shido-mix-martial » ou « … : reste en karaté ». */
 function reclassText(line: ClubFormLine): string {
   const choices = orderedPrefs(line.prefs).map(disciplineLabel);
-  return `Si sans adversaire : ${choices.length ? choices.join(', puis ') : `reste en ${disciplineLabel(line.combat!).toLowerCase()}`}`;
+  return `Si sans adversaire : ${choices.length ? choices.join(', puis ') : `reste en ${disciplineLabel(line.combats[0]!).toLowerCase()}`}`;
 }
 
 /** Coordonnées du club et pré-accord, enregistrés d'un bouton. */
@@ -78,11 +78,11 @@ function LineTags({ line, view, hide }: { line: ClubFormLine; view: ClubEntryVie
       {line.sex && <span className="sk-tag" data-kind="sex" title={SEX_LABELS[line.sex]}>{line.sex}</span>}
       {!hide.age && age && <span className="sk-tag">{age}</span>}
       {!hide.kata && weight && <span className="sk-tag">{weight}</span>}
-      {line.combat && !hide.combat && <span className="sk-tag" data-kind="discipline">{disciplineLabel(line.combat)}{line.ruleset ? ` ${RULESET_LABEL[line.ruleset]}` : ''}</span>}
+      {!hide.combat && line.combats.map((c) => <span key={c} className="sk-tag" data-kind="discipline">{disciplineLabel(c)}{line.ruleset ? ` ${RULESET_LABEL[line.ruleset]}` : ''}</span>)}
       {line.kata && !hide.kata && (hide.combat
         ? <Text span size="xs" c="dimmed">aussi en Kata</Text>
         : <span className="sk-tag" data-kind="discipline">Kata</span>)}
-      {hide.kata && line.combat && <Text span size="xs" c="dimmed">aussi en {disciplineLabel(line.combat)}{line.ruleset ? ` ${RULESET_LABEL[line.ruleset]}` : ''}</Text>}
+      {hide.kata && line.combats.length > 0 && <Text span size="xs" c="dimmed">aussi en {line.combats.map(disciplineLabel).join(', ')}{line.ruleset ? ` ${RULESET_LABEL[line.ruleset]}` : ''}</Text>}
     </Group>
   );
 }
@@ -93,7 +93,7 @@ function LineRow({ l, view, hide, onEdit }: { l: ClubLine; view: ClubEntryView; 
       <Stack gap={4} style={{ minWidth: 0 }}>
         <Text fw={700}>{l.line.lastName} {l.line.firstName}</Text>
         <LineTags line={l.line} view={view} hide={hide} />
-        {l.line.combat && !hide.kata && <Text size="xs" c="dimmed" data-testid="club-line-reclass">{reclassText(l.line)}</Text>}
+        {l.line.combats.length > 0 && !hide.kata && <Text size="xs" c="dimmed" data-testid="club-line-reclass">{reclassText(l.line)}</Text>}
         {[...l.notices, hide.kata ? null : weightWarning(l.line, view.weightClasses)].filter((n) => n !== null).map((n) => <Text key={n} size="xs" c="var(--sk-warn-text)" data-testid="line-notice">{n}</Text>)}
         {!l.editable && (
           <Group gap={6} mt={2}>
