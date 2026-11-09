@@ -216,15 +216,22 @@ on ne suppose rien) :
    pas en compte.
 2. Pour les combats déjà joués, on prend l'heure de saisie du résultat (`match_results.created_at`, et l'équivalent pour le
    kata) comme heure de fin.
-3. Le premier combat sans résultat commence à `max(maintenant, fin du dernier combat joué)` — « maintenant » seulement pour
-   une vague **démarrée** (heure effective saisie ou un résultat) : une vague pas encore démarrée garde ses heures prévues ; puis chaque combat suivant
-   commence à la fin du précédent (durée + changement).
+3. 💡 (relecture finale du 2026-11-09) Le premier combat sans résultat après le dernier combat joué est le **combat en
+   cours** : il commence à la fin du dernier combat joué (+ changement), et, dans une vague **démarrée** (heure effective
+   saisie ou un résultat), sa **fin** estimée n'est jamais avant maintenant (départ ≥ maintenant − sa durée) ; une vague pas
+   encore démarrée garde ses heures prévues. Chaque combat suivant commence à la fin du précédent (durée + changement). Un
+   combat sans résultat placé **avant** un combat joué de la même vague sur la zone (résultat ou notes saisis en retard)
+   n'a pas d'heure et ne décale rien, jusqu'à ce que son résultat soit saisi. Le combat en cours, en tête de zone, est
+   montré sans heure une fois son départ estimé passé (il est sur le tatami).
 4. Un combat dont les combattants ne sont pas encore connus (« vainqueur du n° 12 ») a quand même une heure.
 5. Finales d'une vague, sur la zone des finales : elles commencent au plus tard entre la fin de ce qui les précède sur cette
    zone et, soit l'heure fixée par l'organisateur pour la vague, soit à défaut la fin estimée la plus tardive des combats
-   non-finales de la vague sur les autres zones.
+   non-finales de la vague sur les autres zones. 💡 (relecture finale du 2026-11-09) Seule la première finale attend ; une
+   fois les finales commencées, elles s'enchaînent. La « finale vers » d'un tableau est celle de son premier combat de
+   finale pas encore joué (rien une fois la finale jouée).
 6. Heures arrondies à la minute ; « vers » devant. Avance / retard d'une zone = heure estimée du prochain combat − heure
-   qu'il aurait avec les seules heures prévues (sans résultat ni heure effective).
+   qu'il aurait avec les seules heures prévues (sans résultat ni heure effective) ; le prochain combat est le premier après
+   le dernier joué.
 7. Une vague pas encore lancée n'a pas d'heures par combat ; elle n'entre dans la ligne de temps qu'à son lancement.
 
 Le calcul est **pur** (domaine, testable sans base), comme `src/domain/passages/`.
