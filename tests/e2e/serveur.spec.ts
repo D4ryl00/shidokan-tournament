@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test.use({ baseURL: 'http://localhost:3101' });
 
 test('serveur : connexion obligatoire, puis les écrans habituels ; déconnexion ; la page d’un club s’ouvre sans connexion', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/connexion');
   await expect(page.getByTestId('login-submit')).toBeVisible();
   await page.getByTestId('login-email').fill('orga@e2e.example');
   await page.getByTestId('login-password').fill('mauvais-mot-de-passe');
@@ -24,7 +24,7 @@ test('serveur : connexion obligatoire, puis les écrans habituels ; déconnexion
 });
 
 test('serveur : session perdue pendant une saisie → reconnexion par-dessus l’écran, la saisie est gardée', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/connexion');
   await page.getByTestId('login-email').fill('orga@e2e.example');
   await page.getByTestId('login-password').fill('mot-de-passe-e2e');
   await page.getByTestId('login-submit').click();
@@ -46,7 +46,7 @@ test('serveur : session perdue pendant une saisie → reconnexion par-dessus l�
 
 // Une seule connexion pour tout l'envoi par Google : le serveur e2e limite les connexions à 10 par adresse en 15 minutes.
 test('serveur : envoi des mails — choix Google, bouton vers Google ; compte connecté puis « Déconnecter » ; retours de Google annoncés', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/connexion');
   await page.getByTestId('login-email').fill('orga@e2e.example');
   await page.getByTestId('login-password').fill('mot-de-passe-e2e');
   await page.getByTestId('login-submit').click();

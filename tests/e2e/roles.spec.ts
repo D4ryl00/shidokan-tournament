@@ -7,7 +7,7 @@ const PASSWORD = 'mot-de-passe-e2e';
 const COMPETITION = 'Coupe des rôles';
 
 async function login(page: Page, email: string, password = PASSWORD) {
-  await page.goto('/');
+  await page.goto('/connexion');
   await page.getByTestId('login-email').fill(email);
   await page.getByTestId('login-password').fill(password);
   await page.getByTestId('login-submit').click();

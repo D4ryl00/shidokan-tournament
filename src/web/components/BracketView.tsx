@@ -52,7 +52,8 @@ function roundTitle(phase: MatchPhase, round: number, rounds: number): string {
 }
 
 interface Props {
-  category: Category;
+  /** Seuls champs lus : la vue publique n'a qu'une catégorie réduite. */
+  category: Pick<Category, 'bracket' | 'registrationIds'>;
   entrants: Map<string, EntrantInfo>;
   /** Numéros de passage (zone) ; vide : catégorie sans numéro de passage (« c1 », « c2 »… propres à la catégorie). */
   numbers?: Map<string, number>;
@@ -78,6 +79,8 @@ interface Props {
   stale?: Set<string>;
   tieBreaks?: Record<number, string[]>;
   kataTieBreak?: string[];
+  /** Inscriptions surlignées (recherche de la vue publique). */
+  highlighted?: Set<string>;
 }
 
 export function BracketView(props: Props) {
@@ -114,6 +117,7 @@ function EntrantLine({ id, fallback, info, props, winner, inline }: { id: string
   const style: CSSProperties = {
     cursor: props.onSelect && id ? 'pointer' : undefined,
     outline: selected ? '2px solid var(--sk-accent)' : undefined,
+    background: id !== null && props.highlighted?.has(id) ? 'color-mix(in srgb, var(--sk-accent) 18%, transparent)' : undefined,
     borderRadius: 4,
     padding: '2px 4px',
     fontWeight: winner ? 700 : undefined,

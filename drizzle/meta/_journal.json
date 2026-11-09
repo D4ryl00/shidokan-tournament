@@ -239,6 +239,13 @@
       "when": 1794073828686,
       "tag": "0033_historique",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1794165273040,
+      "tag": "0034_mode_spectateur",
+      "breakpoints": true
     }
   ]
 }

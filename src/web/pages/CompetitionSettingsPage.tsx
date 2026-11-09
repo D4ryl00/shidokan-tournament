@@ -1,9 +1,9 @@
 import {
-  ActionIcon, Alert, Button, Checkbox, List, Modal, Group, MultiSelect, NumberInput, Select, SimpleGrid, Stack, Switch, Text, TextInput,
+  ActionIcon, Alert, Button, Checkbox, List, Modal, Group, MultiSelect, NumberInput, Select, SegmentedControl, SimpleGrid, Stack, Switch, Text, TextInput,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import type { CombatFormat, CompetitionSettings, PassageOrderMode } from '../../domain/settings.js';
 import { FORMAT_LABELS } from '../../domain/brackets/format-labels.js';
 import { DISCIPLINES } from '../../domain/disciplines.js';
@@ -155,6 +155,21 @@ export function CompetitionSettingsPage() {
           <DateField label="Date" value={info.date} onChange={(v) => v && setInfo({ ...info, date: v })} />
           <TextInput label="Lieu" value={info.location} onChange={(e) => setInfo({ ...info, location: e.currentTarget.value })} />
         </SimpleGrid>
+        <Stack gap={4} mt="md" data-testid="visibility-block">
+          <Text size="sm" fw={500}>Visibilité</Text>
+          <SegmentedControl data-testid="visibility" aria-label="Visibilité" value={competition?.visibility ?? 'private'}
+            disabled={update.isPending}
+            onChange={(v) => update.mutate({ visibility: v as 'private' | 'public' }, {
+              onSuccess: () => notifications.show({ color: 'green', message: v === 'public' ? 'Compétition publique' : 'Compétition privée' }),
+            })}
+            data={[{ value: 'private', label: 'Privée' }, { value: 'public', label: 'Publique' }]} />
+          <Text size="xs" c="dimmed">
+            Publique : affichée sur la page d’accueil, sans compte. Les tableaux et numéros n’y apparaissent qu’au lancement de chaque session.
+          </Text>
+          {competition?.visibility === 'public' && (
+            <Text size="sm"><Link to={`/public/${id}`} data-testid="visibility-link">Voir la page publique</Link></Text>
+          )}
+        </Stack>
       </SectionCard>
 
       <SectionCard id="zones" title={HELP['reglages.zones'].title} help="reglages.zones">

@@ -1,6 +1,6 @@
 import { notifications } from '@mantine/notifications';
 import {
-  Alert, Button, Checkbox, Group, Input, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput,
+  Alert, Button, Checkbox, Group, Input, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Switch, Text, TextInput,
 } from '@mantine/core';
 import { useRef, useState, type FormEvent } from 'react';
 import { DISCIPLINES } from '../../domain/disciplines.js';
@@ -8,7 +8,7 @@ import { weightClassesFor } from '../../domain/grid.js';
 import { normalizeName } from '../../domain/names.js';
 import { parsePreferences, type RegistrationInput, type RegistrationRow } from '../../domain/registration.js';
 import type { DisciplineId, Ruleset, Sex } from '../../domain/types.js';
-import { ApiError, useClubFromDirectory, useClubs, useCreateRegistration, useDirectoryClubs, useGrid, useUpdateRegistration, useUpsertClub } from '../api.js';
+import { ApiError, useClubFromDirectory, useClubs, useCreateRegistration, useDirectoryClubs, useGrid, useSetPublicNameHidden, useUpdateRegistration, useUpsertClub } from '../api.js';
 import { DISCIPLINE_OPTIONS, prefsLabel, prefsToCodes } from '../labels.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 
@@ -67,9 +67,12 @@ export function RegistrationForm({ competitionId, edit, onDone }: { competitionI
   const [clubSearch, setClubSearch] = useState('');
   const create = useCreateRegistration(competitionId);
   const update = useUpdateRegistration(competitionId);
+  const setNameHidden = useSetPublicNameHidden(competitionId);
+  // Enregistré tout de suite (pas avec le bouton) : la ligne reçue à l'ouverture ne se rafraîchit pas, on garde la valeur ici.
+  const [nameHidden, setNameHiddenState] = useState(edit?.publicNameHidden ?? false);
   const [f, setF] = useState<FormState>(edit ? fromRow(edit) : EMPTY);
   // Révision à l'ouverture du formulaire : une modification faite entre-temps sur un autre poste n'est pas écrasée.
-  const [openRev] = useState(edit?.rev);
+  const [openRev, setOpenRev] = useState(edit?.rev);
   const [warning, setWarning] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const lastNameRef = useRef<HTMLInputElement>(null);
@@ -184,9 +187,18 @@ export function RegistrationForm({ competitionId, edit, onDone }: { competitionI
             <Checkbox data-testid="reg-onsite" label="Inscription sur place" checked={f.onsite} onChange={(e) => set({ onsite: e.currentTarget.checked })} />
           )}
         </Group>
+        {edit && (
+          <Switch data-testid="reg-name-hidden" label="Masquer le nom sur la page publique" description="Le public voit « Combattant masqué » ; le club reste affiché."
+            checked={nameHidden} disabled={setNameHidden.isPending}
+            onChange={(e) => {
+              const hidden = e.currentTarget.checked;
+              // Le combattant change de version : la révision de la ligne est reprise, sinon « Enregistrer » serait refusé.
+              setNameHidden.mutate({ fighterId: edit.fighterId, hidden, rid: edit.id }, { onSuccess: (rev) => { setNameHiddenState(hidden); if (rev) setOpenRev(rev); } });
+            }} />
+        )}
         {warning && <Alert color="yellow" data-testid="registration-warning">{warning}</Alert>}
         {saved && <Text c="green" size="sm">{saved}</Text>}
-        <ApiErrorAlert error={create.error ?? update.error ?? upsertClub.error ?? fromDirectory.error} />
+        <ApiErrorAlert error={create.error ?? update.error ?? upsertClub.error ?? fromDirectory.error ?? setNameHidden.error} />
         <Group justify="flex-end">
           <Button data-testid="reg-submit" type="submit" loading={create.isPending || update.isPending}>
             {edit ? 'Enregistrer' : 'Ajouter (Entrée)'}

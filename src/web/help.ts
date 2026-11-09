@@ -42,6 +42,7 @@ export type HelpTopicId =
   | 'podiums.clubs'
   | 'parametres.sauvegardes'
   | 'reglages.competition'
+  | 'reglages.visibilite'
   | 'reglages.echanges'
   | 'synchronisation'
   | 'jour-j'
@@ -262,6 +263,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Le crayon modifie une inscription, la croix la supprime (impossible si sa catégorie a déjà commencé).',
         'Une inscription sur place le jour J se saisit ici, avec la case « Inscription sur place ».',
         'Club : choisissez-le dans la liste (clubs de la compétition et de l’annuaire) ou laissez vide. Un club absent de la liste s’ajoute avec l’option « Ajouter le club « … » », proposée quand le nom tapé n’y est pas.',
+        'En modification, « Masquer le nom sur la page publique » remplace le nom du combattant par « Combattant masqué » pour le public (son club reste affiché). Le réglage vaut pour toutes ses lignes et s’applique tout de suite ; un badge « nom masqué en ligne » le rappelle dans la liste.',
       ],
       'La colonne « Origine » indique d’où vient la ligne : fiche club, export FFK ou saisie.',
     ],
@@ -592,6 +594,15 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Nom, date et lieu de la compétition.',
     details: ['Ces informations figurent sur les fiches club et les feuilles imprimées.'],
   },
+  'reglages.visibilite': {
+    title: 'Visibilité',
+    short: 'Privée : visible des seuls organisateurs. Publique : une page ouverte à tous, sans compte, affichée sur la page d’accueil.',
+    details: [
+      'Une compétition est privée tant que vous ne la rendez pas publique ; vous pouvez la remettre en privé à tout moment.',
+      'Sur la page publique, les tableaux et les numéros d’une session n’apparaissent qu’au lancement de cette session.',
+      'Jamais en public : poids, grade, licence, coordonnées des coachs, état de pesée ou de présence, raisons de retrait, comptes, liens des clubs et notes internes.',
+    ],
+  },
   'reglages.zones': {
     title: 'Zones de combat',
     short: 'Les zones où se déroulent les combats (« Tatami 1 », « Ring »…) : nommez-les, rangez-les et cochez les disciplines que chacune accueille.',
@@ -698,6 +709,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Des tableaux hors grille (gala, démonstration…) où l’on place des combattants à la main, avec leur propre session.',
     details: [
       'Un tableau libre a un nom, une discipline et un règlement. Il reste « En attente » tant qu’on ne le met pas dans une session.',
+      'Son nom est affiché tel quel sur la page publique d’une compétition publique : n’y mettez pas le nom d’une personne (un combattant masqué y serait reconnu).',
       'Supprimer un tableau libre renvoie ses combattants dans leur catégorie précédente.',
       'Un tableau lancé ne change plus de nom, de discipline ni de règlement : déverrouillez-le dans l’onglet Tableaux.',
     ],

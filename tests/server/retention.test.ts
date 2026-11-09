@@ -54,6 +54,15 @@ test('compétition de plus de 13 mois : données d’organisation effacées, pal
   expect(one(db, "select purged_at from competitions where id = 'old'").purged_at).not.toBeNull();
 });
 
+test('le masquage du nom en ligne est gardé après la purge', () => {
+  const dbPath = tmpDbPath();
+  db = openDb(dbPath);
+  seedCompetition(db, 'old', '2026-11-22');
+  db.$client.exec("update fighters set public_name_hidden = 1 where id = 'old-f'");
+  purgeExpiredData(db, dbPath, NOW);
+  expect(one(db, "select public_name_hidden from fighters where id = 'old-f'").public_name_hidden).toBe(1);
+});
+
 test('compétition de 12 mois : rien', () => {
   const dbPath = tmpDbPath();
   db = openDb(dbPath);

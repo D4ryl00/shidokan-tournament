@@ -71,7 +71,7 @@ export function useDeleteCompetition() {
 export function useUpdateCompetition(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (patch: Partial<CompetitionInput> & { settings?: unknown }) =>
+    mutationFn: (patch: Partial<CompetitionInput> & { settings?: unknown; visibility?: 'private' | 'public' }) =>
       api<Competition>('PATCH', `/api/competitions/${id}`, patch),
     onSuccess: (c, patch) => {
       qc.setQueryData(['competitions', id], c);
@@ -178,6 +178,21 @@ export function useDeleteRegistration(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (rid: string) => api<void>('DELETE', `/api/competitions/${id}/registrations/${rid}`, undefined, { rev: registrationRevOf(qc, id, rid) }),
+    onSuccess: invalidate,
+  });
+}
+
+/** Masque ou réaffiche le nom d'un combattant sur la page publique (toutes ses inscriptions). */
+export function useSetPublicNameHidden(id: string) {
+  const invalidate = useInvalidateRegistrations(id);
+  return useMutation({
+    // Avec `rid`, rend la révision à jour de cette inscription : la route touche le combattant, donc change la révision de ses lignes.
+    mutationFn: async ({ fighterId, hidden, rid }: { fighterId: string; hidden: boolean; rid?: string }) => {
+      await api<void>('PUT', `/api/competitions/${id}/fighters/${fighterId}/public-name`, { hidden });
+      if (!rid) return null;
+      const rows = await api<RegistrationRow[]>('GET', `/api/competitions/${id}/registrations`);
+      return rows.find((r) => r.id === rid)?.rev ?? null;
+    },
     onSuccess: invalidate,
   });
 }

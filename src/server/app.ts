@@ -30,6 +30,7 @@ import { historyRoutes } from './routes/history.js';
 import { resultRoutes } from './routes/results.js';
 import { waveRoutes } from './routes/waves.js';
 import { launchRoutes } from './routes/launches.js';
+import { publicRoutes } from './routes/public.js';
 import { zoneRoutes } from './routes/zones.js';
 import { backupRoutes } from './routes/backups.js';
 import { directoryRoutes } from './routes/directory.js';
@@ -69,6 +70,7 @@ import { sweepAttachmentFiles } from './repositories/mail-attachments.js';
 import { startRetention } from './repositories/retention.js';
 import { ffkImportRoutes } from './routes/ffk-import.js';
 import { registrationRoutes } from './routes/registrations.js';
+import { fighterRoutes } from './routes/fighters.js';
 import { UnreadableFileError } from './spreadsheet/read.js';
 import { APP_VERSION } from './version.js';
 
@@ -99,6 +101,15 @@ export interface AppOptions {
 
 const NOT_FOUND = { error: 'Compétition introuvable' };
 
+/**
+ * Adresses à ne pas indexer : les réponses `/api/public/*`, la page publique (`/public…`) et, sur le serveur en ligne, `/`
+ * (l'accueil public tant qu'aucun organisateur n'est connecté, ce que voit un robot).
+ */
+export function isNoIndexPath(url: string, role: InstanceRole): boolean {
+  const p = url.split('?')[0]!;
+  return p.startsWith('/api/public/') || p === '/public' || p.startsWith('/public/') || (role === 'serveur' && (p === '/' || p === '/index.html'));
+}
+
 export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   const role = opts.role ?? 'local';
   const clubServices = opts.clubServices ?? role === 'serveur';
@@ -110,6 +121,10 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   sweepAttachmentFiles(db, opts.dbPath);
   // Avant tout autre contrôle : sur un PC, le refus l'emporte sur la connexion, la main ailleurs et la compétition inconnue.
   if (!clubServices) registerClubServicesRefusal(app);
+  // Pages et réponses publiques hors des moteurs de recherche (noms complets d'enfants) ; posé sur la réponse brute, flux compris.
+  app.addHook('onRequest', async (req, reply) => {
+    if (isNoIndexPath(req.url, role)) reply.raw.setHeader('X-Robots-Tag', 'noindex, nofollow');
+  });
   registerGuard(app, db, role);
   registerPermissions(app, db, role);
   registerReadOnlyGuard(app, db, role);
@@ -238,6 +253,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   });
 
   await app.register(registrationRoutes, { db });
+  await app.register(fighterRoutes, { db });
   await app.register(ffkImportRoutes, { db });
   await app.register(categoryRoutes, { db });
   await app.register(freeTableauRoutes, { db });
@@ -248,6 +264,8 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(zoneRoutes, { db });
   await app.register(waveRoutes, { db });
   await app.register(launchRoutes, { db });
+  // Mode spectateur : pages publiques en lecture seule (sans connexion).
+  await app.register(publicRoutes, { db });
   await app.register(backupRoutes, { db, dbPath: opts.dbPath });
   await app.register(directoryRoutes, { db });
   await app.register(clubChangeRoutes, { db, role });

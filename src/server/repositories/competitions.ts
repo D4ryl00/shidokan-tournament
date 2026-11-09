@@ -41,6 +41,7 @@ function toCompetition(row: Row): Competition {
     date: row.date,
     location: row.location,
     settings: readStoredSettings(stored),
+    visibility: row.visibility,
     createdAt: row.createdAt,
   };
 }
@@ -87,7 +88,7 @@ export async function getCompetition(db: AppDb, id: string): Promise<Competition
 export async function updateCompetition(
   db: AppDb,
   id: string,
-  patch: Partial<CompetitionInput> & { settings?: unknown },
+  patch: Partial<CompetitionInput> & { settings?: unknown; visibility?: 'private' | 'public' },
 ): Promise<Competition> {
   const current = getCompetitionSync(db, id);
   if (!current) throw new Error(`Compétition introuvable : ${id}`);
@@ -117,6 +118,7 @@ export async function updateCompetition(
       date: patch.date ?? current.date,
       location: patch.location === undefined ? current.location : patch.location,
       settingsJson: JSON.stringify(settings),
+      visibility: patch.visibility ?? current.visibility,
     })
     .where(eq(competitions.id, id))
     .run();

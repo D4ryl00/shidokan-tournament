@@ -45,7 +45,11 @@ export function cookieValue(req: FastifyRequest, name: string): string | null {
 // Le retour de Google est ouvert pour renvoyer vers les Réglages même si la session a expiré ; il exige un state lié à la session.
 const PUBLIC_ROUTES = new Set(['/api/health', '/api/auth/me', '/api/auth/login', '/api/app-settings/google/callback']);
 export const isPublicRoute = (route: string) =>
-  PUBLIC_ROUTES.has(route) || route === '/api/inscription/:token' || route.startsWith('/api/inscription/:token/') || route.startsWith('/api/sync/remote/'); // ouvertes par leur jeton
+  PUBLIC_ROUTES.has(route) ||
+  route === '/api/inscription/:token' ||
+  route.startsWith('/api/inscription/:token/') ||
+  route.startsWith('/api/sync/remote/') || // ouvertes par leur jeton
+  route.startsWith('/api/public/'); // mode spectateur : lecture seule des compétitions publiques
 const TOO_MANY = { error: 'Trop de requêtes : réessayez dans quelques minutes.' };
 
 /** Chemin décodé (`/%61pi` → `/api`), barres répétées réduites ; null si l'encodage est invalide. */

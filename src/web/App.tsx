@@ -18,6 +18,8 @@ import { FfkImportPage } from './pages/FfkImportPage.js';
 import { GridEditorPage } from './pages/GridEditorPage.js';
 import { LoginPage, ReloginModal } from './pages/LoginPage.js';
 import { MatchesPage } from './pages/MatchesPage.js';
+import { PublicCompetitionPage } from './pages/public/PublicCompetitionPage.js';
+import { PublicHomePage } from './pages/public/PublicHomePage.js';
 import { PodiumsPage } from './pages/PodiumsPage.js';
 import { PodiumsPrintPage, PrintPage } from './pages/PrintPage.js';
 import { RegistrationsPage } from './pages/RegistrationsPage.js';
@@ -32,6 +34,8 @@ export function App() {
         <Route path="/competitions/:id/impression" element={<AuthGate><PrintPage /></AuthGate>} />
         <Route path="/competitions/:id/impression/pesee" element={<AuthGate><WeighInSheets /></AuthGate>} />
         <Route path="/competitions/:id/impression/podiums" element={<AuthGate><PodiumsPrintPage /></AuthGate>} />
+        <Route path="/public" element={<PublicHomePage />} />
+        <Route path="/public/:id" element={<PublicCompetitionPage />} />
         <Route path="/inscription/:token" element={<ClubEntryPage />} />
         <Route path="*" element={<AuthGate><MainShell /></AuthGate>} />
       </Routes>
@@ -43,8 +47,10 @@ export function App() {
 function AuthGate({ children }: { children: ReactNode }) {
   const { data, isLoading } = useAuthMe();
   const expired = useAuthExpired();
+  const { pathname } = useLocation();
   if (isLoading) return <Center mih="100vh"><Loader /></Center>;
-  if (!data) return <LoginPage />;
+  // Sans session : la page publique sur `/`, la connexion sur `/connexion` (et partout ailleurs).
+  if (!data) return pathname === '/' ? <PublicHomePage /> : <LoginPage />;
   return (
     <>
       {children}
@@ -70,6 +76,7 @@ function MainShell() {
         <AppShell.Main>
           <Routes>
             <Route path="/" element={<CompetitionsPage />} />
+            <Route path="/connexion" element={<Navigate to="/" replace />} />
             <Route path="/annuaire" element={<DirectoryPage />} />
             <Route path="/annuaire/google" element={<DirectorySyncPage />} />
             <Route path="/comptes" element={<AccountsPage />} />

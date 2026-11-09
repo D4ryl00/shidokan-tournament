@@ -225,6 +225,7 @@ function TextsCard({ settings, withMessage }: { settings: PublicAppSettings; wit
         <Title order={4} fz="md">Données personnelles</Title>
         <Textarea label="Mention affichée sur la page des clubs" description="{contact} est remplacé par l’adresse de contact." autosize minRows={3} value={form.privacyNotice}
           onChange={(e) => set({ privacyNotice: e.currentTarget.value })} />
+        {!form.privacyNotice.includes('publiés') && <Alert color="orange" data-testid="privacy-published-hint">La mention ne dit pas que les résultats sont publiés sur la page publique.</Alert>}
         <TextInput data-testid="privacy-contact" label="Adresse de contact" placeholder="par exemple rgpd@shidokanfrance.com" value={form.privacyContact} maw={420} onChange={(e) => set({ privacyContact: e.currentTarget.value })} />
       </Stack>
       <Divider color="var(--sk-line)" />

@@ -29,6 +29,8 @@ export const competitions = sqliteTable('competitions', {
   serverFingerprint: text('server_fingerprint'),
   /** PC : main prise en secours, sans le serveur, depuis cette date (effacée quand le serveur est prévenu). */
   rescueSince: text('rescue_since'),
+  /** Mode spectateur : une compétition publique a sa page ouverte à tous, sans compte. Privée par défaut. */
+  visibility: text('visibility', { enum: ['private', 'public'] }).notNull().default('private'),
   ...rowMeta(),
 });
 
@@ -337,6 +339,8 @@ export const fighters = sqliteTable('fighters', {
   licence: text('licence'),
   grade: text('grade'),
   weighInKg: real('weigh_in_kg'),
+  /** Mode spectateur : le nom n'est pas affiché sur la page publique (« Combattant masqué »). */
+  publicNameHidden: integer('public_name_hidden', { mode: 'boolean' }).notNull().default(false),
   ...rowMeta(),
 });
 

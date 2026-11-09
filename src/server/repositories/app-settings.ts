@@ -1,4 +1,4 @@
-import { currentInvitationMail, DEFAULT_APP_SETTINGS, GOOGLE_CONNECT_FIRST, type AppSettings, type AppSettingsPatch, type GoogleContactsState, type GoogleSender, type MailMode, type PublicAppSettings } from '../../domain/app-settings.js';
+import { currentInvitationMail, currentPrivacyNotice, DEFAULT_APP_SETTINGS, GOOGLE_CONNECT_FIRST, type AppSettings, type AppSettingsPatch, type GoogleContactsState, type GoogleSender, type MailMode, type PublicAppSettings } from '../../domain/app-settings.js';
 import type { AppDb } from '../db/client.js';
 import { appSettings } from '../db/schema.js';
 
@@ -6,7 +6,7 @@ import { appSettings } from '../db/schema.js';
 export function getAppSettings(db: AppDb): AppSettings {
   const stored = Object.fromEntries(db.select().from(appSettings).all().map((r) => [r.key, JSON.parse(r.valueJson) as unknown]));
   const settings = { ...DEFAULT_APP_SETTINGS, ...stored } as AppSettings;
-  return { ...settings, invitationMail: currentInvitationMail(settings.invitationMail) };
+  return { ...settings, invitationMail: currentInvitationMail(settings.invitationMail), privacyNotice: currentPrivacyNotice(settings.privacyNotice) };
 }
 
 class SettingsError extends Error {
