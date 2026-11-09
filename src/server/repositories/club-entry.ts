@@ -131,7 +131,7 @@ export function fighterLine(db: AppDb, competitionId: string, fighterId: string)
   const fighter = db.select().from(fighters).where(and(eq(fighters.id, fighterId), eq(fighters.competitionId, competitionId))).get();
   if (!fighter) throw new NotFoundError('Combattant introuvable');
   const line = lineOf(db, fighter, 'organiser');
-  return fighter.clubId ? line : { ...line, editable: false, reason: null };
+  return fighter.clubId ? line : { ...line, editable: false, reason: line.reason === LOCKED_REASON ? LOCKED_REASON : null };
 }
 
 function headerOf(db: AppDb, club: typeof clubs.$inferSelect): ClubEntryView['club'] {

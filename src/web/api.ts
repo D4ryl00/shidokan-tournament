@@ -116,14 +116,6 @@ export function useClubs(id: string) {
   return useQuery({ queryKey: ['clubs', id], queryFn: () => api<Club[]>('GET', `/api/competitions/${id}/clubs`) });
 }
 
-export function useUpsertClub(id: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: Partial<Club> & { name: string }) => api<Club>('POST', `/api/competitions/${id}/clubs`, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['clubs', id] }),
-  });
-}
-
 /** Fiches de l'annuaire qui n'ont pas encore de club dans la compétition (choix du club d'une inscription). */
 export const useDirectoryClubs = (id: string) =>
   useQuery({ queryKey: ['directory-clubs', id], queryFn: () => api<{ id: string; name: string }[]>('GET', `/api/competitions/${id}/directory-clubs`) });
@@ -180,45 +172,11 @@ function useInvalidateRegistrations(id: string) {
   return () => Promise.all([qc.invalidateQueries({ queryKey: ['registrations', id] }), qc.invalidateQueries({ queryKey: ['clubs', id] })]);
 }
 
-export function useCreateRegistration(id: string) {
-  const invalidate = useInvalidateRegistrations(id);
-  return useMutation({
-    mutationFn: (input: RegistrationInput) =>
-      api<{ row: RegistrationRow; warning: string | null }>('POST', `/api/competitions/${id}/registrations`, input),
-    onSuccess: invalidate,
-  });
-}
-
-export function useUpdateRegistration(id: string) {
-  const invalidate = useInvalidateRegistrations(id);
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ rid, input, rev }: { rid: string; input: RegistrationInput; rev?: string }) =>
-      api<RegistrationRow & { warning: string | null }>('PUT', `/api/competitions/${id}/registrations/${rid}`, input, { rev: rev ?? registrationRevOf(qc, id, rid) }),
-    onSuccess: invalidate,
-  });
-}
-
 export function useDeleteRegistration(id: string) {
   const invalidate = useInvalidateRegistrations(id);
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (rid: string) => api<void>('DELETE', `/api/competitions/${id}/registrations/${rid}`, undefined, { rev: registrationRevOf(qc, id, rid) }),
-    onSuccess: invalidate,
-  });
-}
-
-/** Masque ou réaffiche le nom d'un combattant sur la page publique (toutes ses inscriptions). */
-export function useSetPublicNameHidden(id: string) {
-  const invalidate = useInvalidateRegistrations(id);
-  return useMutation({
-    // Avec `rid`, rend la révision à jour de cette inscription : la route touche le combattant, donc change la révision de ses lignes.
-    mutationFn: async ({ fighterId, hidden, rid }: { fighterId: string; hidden: boolean; rid?: string }) => {
-      await api<void>('PUT', `/api/competitions/${id}/fighters/${fighterId}/public-name`, { hidden });
-      if (!rid) return null;
-      const rows = await api<RegistrationRow[]>('GET', `/api/competitions/${id}/registrations`);
-      return rows.find((r) => r.id === rid)?.rev ?? null;
-    },
     onSuccess: invalidate,
   });
 }
@@ -1230,6 +1188,15 @@ export const useCoachLineOps = (token: string): LineOps => {
     remove: ({ fighterId, version }) => api<void>('DELETE', `/api/inscription/${token}/lines/${fighterId}?version=${encodeURIComponent(version)}`),
   }, () => qc.invalidateQueries({ queryKey: ['inscription', token] }));
 };
+
+/** Ligne d'un combattant (écran Inscriptions) : relue à chaque ouverture, la version sert à repérer une modification faite entre-temps. */
+export const useFighterLine = (competitionId: string, fighterId: string) =>
+  useQuery({
+    queryKey: ['club-lines', competitionId, fighterId],
+    queryFn: () => api<ClubLine>('GET', `/api/competitions/${competitionId}/fighters/${fighterId}/line`),
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+  });
 
 export const useOrganiserLineOps = (competitionId: string, clubId: string): LineOps => {
   const qc = useQueryClient();

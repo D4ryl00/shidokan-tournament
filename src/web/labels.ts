@@ -14,9 +14,6 @@ export function weightLabel(grid: CategoryGrid | undefined, id: string | null): 
   if (!id) return '—';
   return grid?.weightClasses.find((w) => w.id === id)?.label ?? '?';
 }
-export function prefsToCodes(prefs: DisciplineId[]): string {
-  return prefs.map((d) => DISCIPLINES[d].clubFormCode ?? '').join('');
-}
 export function prefsLabel(prefs: DisciplineId[]): string {
   return prefs.length ? prefs.map((d) => DISCIPLINES[d].label).join(' › ') : '—';
 }

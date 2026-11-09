@@ -257,16 +257,17 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
   },
   inscriptions: {
     title: 'Inscriptions',
-    short: 'La liste de tous les combattants inscrits ; ajoutez une inscription sur place ou corrigez une ligne.',
+    short: 'La liste de tous les combattants inscrits ; ajoutez un combattant sur place ou corrigez-en un.',
     details: [
       'Une ligne = un combattant dans une discipline. Un même combattant peut avoir plusieurs lignes (kata et combat, par exemple).',
       [
         'Recherche : tapez une partie du nom ou du club.',
         '« Sans inscription FFK » : inscriptions pas encore confirmées par l’export FFK (fiche club, saisie, inscription sur place).',
-        'Le crayon modifie une inscription, la croix la supprime (impossible si sa catégorie a déjà commencé).',
-        'Une inscription sur place le jour J se saisit ici, avec la case « Inscription sur place ».',
-        'Club : choisissez-le dans la liste (clubs de la compétition et de l’annuaire) ou laissez vide. Un club absent de la liste s’ajoute avec l’option « Ajouter le club « … » », proposée quand le nom tapé n’y est pas.',
-        'En modification, « Masquer le nom sur la page publique » remplace le nom du combattant par « Combattant masqué » pour le public (son club reste affiché). Le réglage vaut pour toutes ses lignes et s’applique tout de suite ; un badge « nom masqué en ligne » le rappelle dans la liste.',
+        'Le crayon ouvre la fenêtre du combattant, avec toutes ses inscriptions ; la corbeille supprime une inscription (impossible si sa catégorie a déjà commencé).',
+        '« Ajouter » se fait en deux étapes : le club (de la compétition ou de l’annuaire, ou « Ajouter un club »), puis la même fenêtre que celle du coach sur sa page. Les inscriptions saisies ici portent la mention « sur place ». « Enregistrer et ajouter un autre » garde le club.',
+        'Dans cette fenêtre, vous pouvez choisir une catégorie non ouverte (elle est marquée « non ouverte ») : l’inscription est enregistrée avec un avertissement.',
+        '« Changer de club », dans la fenêtre d’un combattant, le passe dans un autre club ; un combattant sans club commence par l’étape club.',
+        '« Masquer le nom sur la page publique » remplace le nom du combattant par « Combattant masqué » pour le public (son club reste affiché). Le réglage vaut pour toutes ses lignes ; un badge « nom masqué en ligne » le rappelle dans la liste.',
       ],
       'La colonne « Origine » indique d’où vient la ligne : fiche club, export FFK ou saisie.',
     ],

@@ -53,62 +53,152 @@ async function pick(page: Page, testId: string, option: string) {
   await page.getByRole('option', { name: option, exact: true }).click();
 }
 
-test('saisie rapide au clavier, sur place, avertissement, kata', async ({ page }) => {
-  const id = await createCompetition(page, 'Coupe saisie');
-  const directoryClub = `Dojo annuaire ${Date.now()}`;
-  await page.request.post('/api/club-directory', { data: { name: directoryClub, affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null } });
+/** Remplit la fenêtre du combattant (celle du coach) ; seuls les champs donnés sont touchés. */
+async function fillFighter(page: Page, f: { last?: string; first?: string; sex?: 'Féminin' | 'Masculin'; age?: string; weightClass?: string; combat?: string; ruleset?: string; kata?: boolean }) {
+  const form = page.getByTestId('club-line-form');
+  if (f.last) await form.getByTestId('line-last-name').fill(f.last);
+  if (f.first) await form.getByTestId('line-first-name').fill(f.first);
+  if (f.sex) await form.getByRole('group', { name: 'Sexe' }).getByText(f.sex, { exact: true }).click();
+  if (f.age) await pick(page, 'line-age', f.age);
+  if (f.weightClass) await pick(page, 'line-weight-class', f.weightClass);
+  if (f.combat) await form.getByRole('group', { name: 'Discipline de combat' }).getByText(f.combat, { exact: true }).click();
+  if (f.ruleset) await form.getByRole('group', { name: 'Règlement' }).getByText(f.ruleset, { exact: true }).click();
+  if (f.kata !== undefined) await (f.kata ? form.getByTestId('line-kata').check() : form.getByTestId('line-kata').uncheck());
+}
+
+/** Étape « Club » : choisit un club de la liste puis « Suivant ». */
+async function chooseClub(page: Page, name: string) {
+  await page.getByTestId('club-picker').getByLabel('Club').click();
+  await page.getByRole('option', { name, exact: true }).click();
+  await page.getByTestId('fighter-next').click();
+}
+
+async function addClub(page: Page, id: string, name: string): Promise<string> {
+  const res = await page.request.post(`/api/competitions/${id}/clubs`, { data: { name } });
+  return ((await res.json()) as { id: string }).id;
+}
+
+const MARTIN = { last: 'MARTIN', first: 'Léa', sex: 'Féminin', age: 'Cadets (14 à 15 ans)', weightClass: '-54 kg', combat: 'Karaté', ruleset: 'Jiyu' } as const;
+
+test('ajouter un combattant : club puis fenêtre du coach, inscriptions sur place', async ({ page }) => {
+  const id = await createCompetition(page, 'Fenêtre ajout combattant');
+  await addClub(page, id, 'Tani Dojo');
   await page.goto(`/competitions/${id}/inscriptions`);
   await page.getByTestId('registration-add').click();
+  await expect(page.getByTestId('fighter-next')).toBeDisabled();
+  await chooseClub(page, 'Tani Dojo');
+  await expect(page.getByRole('dialog', { name: 'Ajouter un combattant · Tani Dojo' })).toBeVisible();
+  await fillFighter(page, { ...MARTIN, kata: true });
+  await page.getByTestId('line-save').click();
+  await expect(page.getByTestId('club-line-form')).toHaveCount(0);
+  const rows = page.getByTestId('registration-row');
+  await expect(rows).toHaveCount(2);
+  for (const row of await rows.all()) await expect(row).toContainText('Sur place');
+  await expect(rows.filter({ hasText: 'Kata' })).toHaveCount(1);
+  await expect(rows.filter({ hasText: 'Tani Dojo' })).toHaveCount(2);
+});
 
-  // Club absent de l'annuaire : ajouté seulement par l'option explicite.
-  await page.getByTestId('reg-club').fill('Shinsengumi');
-  await page.getByRole('option', { name: 'Ajouter le club « Shinsengumi »' }).click();
-  await page.getByTestId('reg-lastname').fill('ALPHA');
-  await page.getByTestId('reg-firstname').fill('Anna');
-  await pick(page, 'reg-age', 'Cadets');
-  await pick(page, 'reg-weight', '-54');
-  await page.getByTestId('reg-prefs').fill('32');
-  await page.getByTestId('reg-firstname').press('Enter');
-  await expect(page.getByText('ALPHA Anna : inscription enregistrée.')).toBeVisible();
+test('ajouter un club depuis Inscriptions', async ({ page }) => {
+  const id = await createCompetition(page, 'Fenêtre ajout club');
+  const club = `Dojo ajouté ${Date.now()}`;
+  await page.goto(`/competitions/${id}/inscriptions`);
+  await page.getByTestId('registration-add').click();
+  await page.getByTestId('club-picker-new').click();
+  await page.getByTestId('directory-name').fill(club);
+  await page.getByTestId('directory-save').click();
+  await expect(page.getByTestId('club-picker').getByLabel('Club')).toHaveValue(club);
+  await page.goto('/');
+  await page.getByTestId('nav-directory').click();
+  await expect(page.getByTestId('directory-row').filter({ hasText: club })).toBeVisible();
+});
 
-  // Deuxième saisie : club, âge, sexe et discipline sont conservés.
-  await expect(page.getByTestId('reg-club')).toHaveValue('Shinsengumi');
-  await expect(page.getByTestId('reg-lastname')).toHaveValue('');
-  await page.getByTestId('reg-lastname').fill('BRAVO');
-  await page.getByTestId('reg-firstname').fill('Bea');
-  await pick(page, 'reg-weight', '-61');
-  await page.getByTestId('reg-onsite').check();
-  await page.getByTestId('reg-firstname').press('Enter');
-  await expect(page.getByText('BRAVO Bea : inscription enregistrée.')).toBeVisible();
+test('modifier un combattant ouvre la fenêtre entière ; décocher le kata retire l’inscription kata', async ({ page }) => {
+  const id = await createCompetition(page, 'Fenêtre modification');
+  await addClub(page, id, 'Tani Dojo');
+  await page.goto(`/competitions/${id}/inscriptions`);
+  await page.getByTestId('registration-add').click();
+  await chooseClub(page, 'Tani Dojo');
+  await fillFighter(page, { ...MARTIN, kata: true });
+  await page.getByTestId('line-save').click();
+  await expect(page.getByTestId('registration-row')).toHaveCount(2);
 
-  // Même combattante dans une 2e discipline de combat : avertissement.
-  await page.getByTestId('reg-lastname').fill('ALPHA');
-  await page.getByTestId('reg-firstname').fill('Anna');
-  await page.getByTestId('reg-onsite').uncheck();
-  await pick(page, 'reg-discipline', 'Shido-boxing');
-  await pick(page, 'reg-weight', '-54');
-  await page.getByTestId('reg-firstname').press('Enter');
-  await expect(page.getByTestId('registration-warning')).toContainText('une seule discipline de combat');
+  // Le crayon d'une ligne ouvre toutes les inscriptions du combattant.
+  await page.getByTestId('registration-row').filter({ hasText: 'Karaté' }).getByRole('button', { name: 'Modifier' }).click();
+  await expect(page.getByTestId('line-kata')).toBeChecked();
+  await expect(page.getByTestId('line-last-name')).toHaveValue('MARTIN');
+  await fillFighter(page, { kata: false });
+  await page.getByTestId('line-save').click();
+  await expect(page.getByTestId('club-line-form')).toHaveCount(0);
+  await expect(page.getByTestId('registration-row')).toHaveCount(1);
+  await expect(page.getByTestId('registration-row')).toContainText('Karaté');
+});
 
-  // Kata : ni règlement ni poids. Club choisi dans l'annuaire.
-  await pick(page, 'reg-discipline', 'Kata');
-  await expect(page.getByTestId('reg-ruleset')).toHaveCount(0);
-  await expect(page.getByTestId('reg-weight')).toHaveCount(0);
-  await page.getByTestId('reg-club').fill(directoryClub.toUpperCase());
-  await expect(page.getByRole('option', { name: /^Ajouter le club/ })).toHaveCount(0);
-  await page.getByRole('option', { name: directoryClub, exact: true }).click();
-  await page.getByTestId('reg-lastname').fill('CHARLIE');
-  await page.getByTestId('reg-firstname').fill('Cy');
-  await page.getByTestId('reg-firstname').press('Enter');
-  await expect(page.getByText('CHARLIE Cy : inscription enregistrée.')).toBeVisible();
-  await expect(page.getByTestId('reg-club')).toHaveValue(directoryClub);
+test('changer de club', async ({ page }) => {
+  const id = await createCompetition(page, 'Fenêtre changement de club');
+  await addClub(page, id, 'Tani Dojo');
+  await addClub(page, id, 'Autre Dojo');
+  await page.goto(`/competitions/${id}/inscriptions`);
+  await page.getByTestId('registration-add').click();
+  await chooseClub(page, 'Tani Dojo');
+  await fillFighter(page, MARTIN);
+  await page.getByTestId('line-save').click();
+  await expect(page.getByTestId('registration-row')).toContainText('Tani Dojo');
 
-  await page.keyboard.press('Escape');
-  await expect(page.getByTestId('registration-row')).toHaveCount(4);
-  await expect(page.getByTestId('registration-row').filter({ hasText: 'BRAVO' })).toContainText('Sur place');
-  await expect(page.getByTestId('registration-row').filter({ hasText: 'CHARLIE' })).toContainText(directoryClub);
-  await page.goto(`/competitions/${id}/clubs`);
-  await expect(page.getByTestId('club-row')).toHaveCount(2);
+  await page.getByTestId('registration-row').getByRole('button', { name: 'Modifier' }).click();
+  await page.getByTestId('fighter-change-club').click();
+  await chooseClub(page, 'Autre Dojo');
+  await page.getByTestId('line-save').click();
+  await expect(page.getByTestId('club-line-form')).toHaveCount(0);
+  await expect(page.getByTestId('registration-row')).toHaveCount(1);
+  await expect(page.getByTestId('registration-row')).toContainText('Autre Dojo');
+});
+
+test('deux postes : modification périmée', async ({ page, context }) => {
+  const id = await createCompetition(page, 'Fenêtre version périmée');
+  await addClub(page, id, 'Tani Dojo');
+  await page.goto(`/competitions/${id}/inscriptions`);
+  await page.getByTestId('registration-add').click();
+  await chooseClub(page, 'Tani Dojo');
+  await fillFighter(page, MARTIN);
+  await page.getByTestId('line-save').click();
+  await expect(page.getByTestId('registration-row')).toHaveCount(1);
+
+  const second = await context.newPage();
+  await second.goto(`/competitions/${id}/inscriptions`);
+  await second.getByTestId('registration-row').getByRole('button', { name: 'Modifier' }).click();
+  await expect(second.getByTestId('line-last-name')).toHaveValue('MARTIN');
+
+  // Le premier poste enregistre d'abord.
+  await page.getByTestId('registration-row').getByRole('button', { name: 'Modifier' }).click();
+  await expect(page.getByTestId('line-last-name')).toHaveValue('MARTIN');
+  await fillFighter(page, { weightClass: '-61 kg' });
+  await page.getByTestId('line-save').click();
+  await expect(page.getByTestId('club-line-form')).toHaveCount(0);
+
+  // Le second enregistre une version périmée : la fenêtre se ferme avec le message, la liste montre la valeur du premier.
+  await fillFighter(second, { weightClass: '-47 kg' });
+  await second.getByTestId('line-save').click();
+  await expect(second.getByTestId('club-line-form')).toHaveCount(0);
+  await expect(second.getByText('Ce combattant a été modifié entre-temps').first()).toBeVisible();
+  await expect(second.getByTestId('registration-row')).toContainText('-61');
+});
+
+test('Enregistrer et ajouter un autre garde le club', async ({ page }) => {
+  const id = await createCompetition(page, 'Fenêtre ajout enchaîné');
+  await addClub(page, id, 'Tani Dojo');
+  await page.goto(`/competitions/${id}/inscriptions`);
+  await page.getByTestId('registration-add').click();
+  await chooseClub(page, 'Tani Dojo');
+  await fillFighter(page, MARTIN);
+  await page.getByTestId('line-save-next').click();
+  // Fenêtre vide, même club.
+  await expect(page.getByTestId('line-last-name')).toHaveValue('');
+  await expect(page.getByRole('dialog', { name: 'Ajouter un combattant · Tani Dojo' })).toBeVisible();
+  await fillFighter(page, { last: 'PETIT', first: 'Noé', sex: 'Masculin', age: 'Cadets (14 à 15 ans)', weightClass: '-52 kg', combat: 'Karaté', ruleset: 'Jiyu' });
+  await page.getByTestId('line-save').click();
+  await expect(page.getByTestId('club-line-form')).toHaveCount(0);
+  await expect(page.getByTestId('registration-row')).toHaveCount(2);
+  await expect(page.getByTestId('registration-row').filter({ hasText: 'Tani Dojo' })).toHaveCount(2);
 });
 
 test('fiche papier : le bouton télécharge le PDF (une page)', async ({ page }) => {

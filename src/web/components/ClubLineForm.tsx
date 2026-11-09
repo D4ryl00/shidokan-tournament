@@ -26,8 +26,11 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
   onClose: (message?: string) => void;
   /** Remplace le titre par défaut. */
   title?: string;
-  /** Boutons de plus, à côté de « Enregistrer ». */
-  footerExtra?: ReactNode;
+  /**
+   * Boutons de plus, à côté de « Enregistrer ». Une fonction reçoit `saveThen` : il enregistre la ligne puis appelle `then`
+   * (avec l'avis éventuel du serveur) au lieu de fermer la fenêtre.
+   */
+  footerExtra?: ReactNode | ((saveThen: (then: (message?: string) => void) => void) => ReactNode);
 }) {
   const mobile = useMediaQuery('(max-width: 600px)');
   // Le parent remonte le formulaire (key) pour chaque combattant : l'état part de la ligne ouverte.
@@ -56,10 +59,10 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
   const onError = (e: unknown) => {
     if (e instanceof ApiError && RELOAD_STATUSES.has(e.status)) onClose(e.message);
   };
-  const submit = () =>
+  const submit = (then: (message?: string) => void = onClose) =>
     ops.save({ fighterId: line?.fighterId ?? null, line: form, version: line?.version ?? null, publicNameHidden: nameHidden })
       // L'organisateur peut choisir une catégorie fermée : le serveur l'enregistre avec un avis, qu'on lui montre.
-      .then((done) => onClose(mode === 'organiser' && done.notices.length ? done.notices.join(' ') : undefined), onError);
+      .then((done) => then(mode === 'organiser' && done.notices.length ? done.notices.join(' ') : undefined), onError);
   const doDelete = () => line && ops.remove({ fighterId: line.fighterId, version: line.version }).then(() => onClose(), onError);
 
   return (
@@ -156,8 +159,8 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
           ) : <span />}
           <Group gap="xs">
             <Button variant="default" onClick={() => onClose()}>Annuler</Button>
-            {footerExtra}
-            <Button data-testid="line-save" loading={ops.pending} onClick={submit}>Enregistrer</Button>
+            {typeof footerExtra === 'function' ? footerExtra(submit) : footerExtra}
+            <Button data-testid="line-save" loading={ops.pending} onClick={() => submit()}>Enregistrer</Button>
           </Group>
         </Group>
       </Stack>

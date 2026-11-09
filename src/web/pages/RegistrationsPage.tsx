@@ -5,7 +5,7 @@ import { normalizeName } from '../../domain/names.js';
 import { plural } from '../../domain/plural.js';
 import { SOURCE_LABELS, type RegistrationRow } from '../../domain/registration.js';
 import { useCategories, useDeleteRegistration, useGrid, useRegistrations } from '../api.js';
-import { RegistrationForm } from '../components/RegistrationForm.js';
+import { FighterWindow } from '../components/FighterWindow.js';
 import { ReplacementBadge, useRecasementDetails } from '../components/ReplacementBadge.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { IconEdit, IconSearch, IconTrash } from '../components/ui/icons.js';
@@ -21,8 +21,7 @@ export function RegistrationsPage() {
   const { data: grid } = useGrid(id);
   const { data: categories = [] } = useCategories(id);
   const remove = useDeleteRegistration(id);
-  const [adding, setAdding] = useState(false);
-  const [editing, setEditing] = useState<RegistrationRow | null>(null);
+  const [fighterWindow, setWindow] = useState<{ kind: 'add' } | { kind: 'edit'; fighterId: string } | null>(null);
   const [deleting, setDeleting] = useState<RegistrationRow | null>(null);
   const [search, setSearch] = useState('');
   const [club, setClub] = useState<string | null>(null);
@@ -51,10 +50,10 @@ export function RegistrationsPage() {
     <Stack gap="md">
       <PageHeader title={plural(rows.length, 'inscription')}
         summary={rows.length > 0 ? [plural(clubCount, 'club'), categories.length > 0 && plural(categories.length, 'catégorie')].filter(Boolean).join(' · ') : undefined}
-        actions={<Button data-testid="registration-add" onClick={() => setAdding(true)}>Ajouter</Button>} />
+        actions={<Button data-testid="registration-add" onClick={() => setWindow({ kind: 'add' })}>Ajouter</Button>} />
       {isLoading ? null : rows.length === 0 ? (
         <EmptyState title="Aucune inscription pour l’instant"
-          text="Elles arrivent par les inscriptions en ligne des clubs ou leurs fiches (onglet Fiche club), par l’import FFK, ou une à une avec « Ajouter »." />
+          text="Elles arrivent par les inscriptions en ligne des clubs ou leurs fiches (onglet Fiche club), par l’import FFK, ou un combattant à la fois avec « Ajouter »." />
       ) : (
       <>
       <Group gap="sm" wrap="wrap">
@@ -99,7 +98,7 @@ export function RegistrationsPage() {
                 </Table.Td>
                 <Table.Td>
                   <Group gap={2} wrap="nowrap" justify="flex-end">
-                    <ActionIcon variant="subtle" color="gray" aria-label="Modifier" title="Modifier" onClick={() => setEditing(r)}><IconEdit /></ActionIcon>
+                    <ActionIcon variant="subtle" color="gray" aria-label="Modifier" title="Modifier" onClick={() => setWindow({ kind: 'edit', fighterId: r.fighter.id })}><IconEdit /></ActionIcon>
                     <ActionIcon variant="subtle" color="red" aria-label="Supprimer" title="Supprimer" onClick={() => setDeleting(r)}><IconTrash /></ActionIcon>
                   </Group>
                 </Table.Td>
@@ -112,12 +111,7 @@ export function RegistrationsPage() {
       </>
       )}
 
-      <Modal opened={adding} onClose={() => setAdding(false)} title="Nouvelle inscription" size="xl">
-        <RegistrationForm competitionId={id} />
-      </Modal>
-      <Modal opened={editing !== null} onClose={() => setEditing(null)} title="Modifier l’inscription" size="xl">
-        {editing && <RegistrationForm competitionId={id} edit={editing} onDone={() => setEditing(null)} />}
-      </Modal>
+      <FighterWindow competitionId={id} opened={fighterWindow !== null} mode={fighterWindow ?? { kind: 'add' }} onClose={() => setWindow(null)} />
       <Modal opened={deleting !== null} onClose={() => setDeleting(null)} title="Supprimer l’inscription ?">
         <Stack>
           <Text>{deleting && `${deleting.fighter.lastName} ${deleting.fighter.firstName} — ${disciplineLabel(deleting.discipline)}`}</Text>

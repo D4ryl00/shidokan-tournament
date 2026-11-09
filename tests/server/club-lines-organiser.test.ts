@@ -195,6 +195,15 @@ test('delete removes the fighter; GET of an unknown fighter is 404; a fighter wi
   expect(await current(solo)).toMatchObject({ clubId: '', editable: false, reason: null });
 });
 
+test('a fighter without club whose category has started keeps the locked reason', async () => {
+  await manual('kata', { clubId: null, lastName: 'SOLO' });
+  const reg = (await registrations())[0]!;
+  raw("update categories set status = 'started' where id = ?", reg.categoryId);
+  const solo = await current(reg.fighter.id);
+  expect(solo).toMatchObject({ clubId: '', editable: false });
+  expect(solo.reason).toBeTruthy();
+});
+
 test('the « main ailleurs » guard refuses the organiser routes', async () => {
   const l = await current(((await post()).json() as Line).fighterId);
   raw("update competitions set owner_instance_id = 'autre-pc' where id = ?", compId);
