@@ -6,19 +6,21 @@ import { useCompetition, useGrid, usePassages, useUpdateCategory } from '../api.
 import { categoryPassages } from '../passages.js';
 import { roundTitle } from './BracketView.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
-import { MinSecInput } from './MinSecInput.js';
+import { MinSecInput, useInvalidFields } from './MinSecInput.js';
 import { IconTrash } from './ui/icons.js';
 import { SectionCard } from './ui/SectionCard.js';
 
 /** Rounds, round et repos d'une durée de combat (la prolongation reste celle de la compétition). */
-function TimingFields({ value, onChange, testId }: { value: CombatTiming; onChange: (t: CombatTiming) => void; testId: string }) {
+function TimingFields({ value, onChange, onValidity, testId }: {
+  value: CombatTiming; onChange: (t: CombatTiming) => void; onValidity: (key: string) => (valid: boolean) => void; testId: string;
+}) {
   return (
     <Group align="flex-start" gap="sm" data-testid={testId}>
       <NumberInput label="Rounds" size="sm" w={90} min={1} max={12} allowDecimal={false} value={value.rounds}
         error={value.rounds < 1 || value.rounds > 12 ? 'De 1 à 12' : null}
         onChange={(v) => onChange({ ...value, rounds: typeof v === 'number' ? v : 0 })} />
-      <MinSecInput label="Round" min={10} max={900} value={value.roundSec} onChange={(roundSec) => onChange({ ...value, roundSec })} />
-      <MinSecInput label="Repos" min={0} max={600} value={value.restSec} onChange={(restSec) => onChange({ ...value, restSec })} />
+      <MinSecInput label="Round" min={10} max={900} value={value.roundSec} onChange={(roundSec) => onChange({ ...value, roundSec })} onValidityChange={onValidity('round')} />
+      <MinSecInput label="Repos" min={0} max={600} value={value.restSec} onChange={(restSec) => onChange({ ...value, restSec })} onValidityChange={onValidity('rest')} />
     </Group>
   );
 }
@@ -36,6 +38,9 @@ export function CategoryDurations({ competitionId, category, readOnly }: { compe
   const update = useUpdateCategory(competitionId);
   const [draft, setDraft] = useState<CombatTiming | null>(null);
   const [exception, setException] = useState<{ matchId: string | null; timing: CombatTiming | null }>({ matchId: null, timing: null });
+  // Durée en erreur dans l'un des deux formulaires : son bouton attend qu'elle soit corrigée.
+  const ownFields = useInvalidFields();
+  const exceptionFields = useInvalidFields();
   const bracket = category.bracket?.kind === 'combat' ? category.bracket : null;
   if (category.key.discipline === 'kata' || !competition || !grid) return null;
 
@@ -75,8 +80,8 @@ export function CategoryDurations({ competitionId, category, readOnly }: { compe
         {mode === 'own' && editing && (
           readOnly ? <Text size="sm" data-testid="durations-own">{timingText(editing)}, repos {editing.restSec} s</Text> : (
             <Group align="flex-end" gap="sm">
-              <TimingFields testId="durations-own" value={editing} onChange={setDraft} />
-              <Button size="sm" data-testid="durations-save" loading={update.isPending} disabled={!validTiming(editing)}
+              <TimingFields testId="durations-own" value={editing} onChange={setDraft} onValidity={ownFields.field} />
+              <Button size="sm" data-testid="durations-save" loading={update.isPending} disabled={!validTiming(editing) || ownFields.invalid}
                 onClick={() => save({ bracket: { ...inherited, ...editing }, matches }, () => setDraft(null))}>Enregistrer</Button>
             </Group>
           )
@@ -103,8 +108,9 @@ export function CategoryDurations({ competitionId, category, readOnly }: { compe
                   value={exception.matchId} onChange={(v) => setException({ matchId: v, timing: null })} />
                 {exception.matchId && newTiming && (
                   <Group align="flex-end" gap="sm">
-                    <TimingFields testId="exception-timing" value={newTiming} onChange={(t) => setException({ matchId: exception.matchId, timing: t })} />
-                    <Button size="sm" data-testid="exception-add" loading={update.isPending} disabled={!validTiming(newTiming)}
+                    <TimingFields key={exception.matchId} testId="exception-timing" value={newTiming} onValidity={exceptionFields.field}
+                      onChange={(t) => setException({ matchId: exception.matchId, timing: t })} />
+                    <Button size="sm" data-testid="exception-add" loading={update.isPending} disabled={!validTiming(newTiming) || exceptionFields.invalid}
                       onClick={() => save({ bracket: durations?.bracket ?? null, matches: { ...matches, [exception.matchId!]: { ...pick!, ...newTiming } } },
                         () => setException({ matchId: null, timing: null }))}>
                       Ajouter

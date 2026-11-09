@@ -58,6 +58,11 @@ test('fight seconds and texts', () => {
   expect(parseMinSec('0:45')).toBe(45);
   expect(parseMinSec('1:75')).toBeNull();
   expect(parseMinSec('abc')).toBeNull();
+  // Secondes toujours sur deux chiffres : « 1:5 » est ambigu (5 s ou 50 s), donc refusé.
+  expect(parseMinSec('1:5')).toBeNull();
+  expect(parseMinSec('1:05')).toBe(65);
+  expect(parseMinSec('1:50')).toBe(110);
+  expect(parseMinSec('1:7x')).toBeNull();
 });
 test('kata passages', () => {
   expect(kataPassages(5, 'whole')).toBe(7); // tour 1 (5) + finale (2)

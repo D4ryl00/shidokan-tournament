@@ -20,7 +20,7 @@ import { useUnsaved } from '../unsaved.js';
 import { settingsPatch } from '../settingsPatch.js';
 import { SyncPanel } from '../components/SyncPanel.js';
 import { HELP } from '../help.js';
-import { MinSecInput } from '../components/MinSecInput.js';
+import { MinSecInput, useInvalidFields } from '../components/MinSecInput.js';
 import { AGE_GROUPS, type AgeGroup, type CombatTiming } from '../../domain/schedule/durations.js';
 import { JumpLinks } from '../components/ui/JumpLinks.js';
 
@@ -54,6 +54,8 @@ export function CompetitionSettingsPage() {
   const update = useUpdateCompetition(id);
   const [info, setInfo] = useState({ name: '', date: '', location: '' });
   const [s, setS] = useState<CompetitionSettings | null>(null);
+  // Durées en erreur : « Enregistrer » attend qu'elles soient corrigées (jamais une valeur que le champ ne montre pas).
+  const durationFields = useInvalidFields();
   const { data: savedZones } = useZones(id);
   const saveZones = useSaveZones(id);
   const { data: categories = [] } = useCategories(id);
@@ -118,6 +120,7 @@ export function CompetitionSettingsPage() {
 
   // Zones vérifiées avant tout envoi, puis enregistrées en premier : une erreur n'enregistre rien d'autre.
   const save = () => {
+    if (durationFields.invalid) return;
     const input = zones.map(({ id: zid, name, disciplines }) => (zid ? { id: zid, name, disciplines } : { name, disciplines }));
     const errors = validateZones(input);
     setZoneErrors(errors);
@@ -313,18 +316,18 @@ export function CompetitionSettingsPage() {
                     ? <Stack gap={2}><Text size="sm" fw={500}>Rounds</Text><Text size="sm">{s.triathlonRounds}</Text><Text size="xs" c="dimmed">réglé dans Rounds de triathlon</Text></Stack>
                     : <NumberInput label="Rounds" size="sm" min={1} max={12} allowDecimal={false} clampBehavior="none" value={t.rounds}
                         onChange={(v) => setT({ rounds: typeof v === 'number' ? v : 0 })} />}
-                  <MinSecInput label="Round" min={10} max={900} value={t.roundSec} onChange={(roundSec) => setT({ roundSec })} />
-                  <MinSecInput label="Repos" min={0} max={600} value={t.restSec} onChange={(restSec) => setT({ restSec })} />
-                  <MinSecInput label="Prolongation" min={0} max={900} value={t.overtimeSec} onChange={(overtimeSec) => setT({ overtimeSec })} />
+                  <MinSecInput label="Round" min={10} max={900} value={t.roundSec} onChange={(roundSec) => setT({ roundSec })} onValidityChange={durationFields.field(`${g}.round`)} />
+                  <MinSecInput label="Repos" min={0} max={600} value={t.restSec} onChange={(restSec) => setT({ restSec })} onValidityChange={durationFields.field(`${g}.rest`)} />
+                  <MinSecInput label="Prolongation" min={0} max={900} value={t.overtimeSec} onChange={(overtimeSec) => setT({ overtimeSec })} onValidityChange={durationFields.field(`${g}.overtime`)} />
                 </SimpleGrid>
               </Stack>
             );
           })}
           <Text size="xs" c="dimmed">La prolongation n’est pas comptée dans les heures.</Text>
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
-            <MinSecInput label="Changement entre deux combats" min={0} max={900} value={s.schedule.changeoverSec}
+            <MinSecInput label="Changement entre deux combats" min={0} max={900} value={s.schedule.changeoverSec} onValidityChange={durationFields.field('changeover')}
               onChange={(changeoverSec) => set({ schedule: { ...s.schedule, changeoverSec } })} />
-            <MinSecInput label="Kata : durée d’un passage" min={10} max={900} value={s.schedule.kataPassageSec}
+            <MinSecInput label="Kata : durée d’un passage" min={10} max={900} value={s.schedule.kataPassageSec} onValidityChange={durationFields.field('kata')}
               onChange={(kataPassageSec) => set({ schedule: { ...s.schedule, kataPassageSec } })} />
           </SimpleGrid>
         </Stack>
@@ -334,8 +337,9 @@ export function CompetitionSettingsPage() {
       {/* Barre d'enregistrement collée en bas : un seul « Enregistrer » pour toutes les sections au-dessus. */}
       <Group justify="space-between" className="no-print" data-testid="settings-save-bar"
         style={{ position: 'sticky', bottom: 0, zIndex: 50, padding: 'var(--mantine-spacing-sm) var(--mantine-spacing-md)', background: 'var(--sk-bar)', border: '1px solid var(--sk-card-line)', borderRadius: 'var(--mantine-radius-lg)' }}>
-        {dirty ? <StatusBadge tone="warn" data-testid="settings-unsaved">Modifications non enregistrées</StatusBadge> : <Text size="sm" c="dimmed">Aucune modification en cours</Text>}
-        <Button data-testid="settings-save" onClick={save} loading={saveZones.isPending || update.isPending}>
+        {durationFields.invalid ? <Text size="sm" c="red" data-testid="settings-invalid">Une durée est mal saisie : corrigez-la pour enregistrer.</Text>
+          : dirty ? <StatusBadge tone="warn" data-testid="settings-unsaved">Modifications non enregistrées</StatusBadge> : <Text size="sm" c="dimmed">Aucune modification en cours</Text>}
+        <Button data-testid="settings-save" onClick={save} loading={saveZones.isPending || update.isPending} disabled={durationFields.invalid}>
           Enregistrer
         </Button>
       </Group>

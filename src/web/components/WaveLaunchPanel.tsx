@@ -30,7 +30,9 @@ function ClockField({ label, description, value, onSave, testId, extra }: {
   const commit = (t: string) => { if (/^([01]\d|2[0-3]):[0-5]\d$/.test(t) ? t !== value : t === '' && value !== null) onSave(t === '' ? null : t); };
   return (
     <Group align="flex-end" gap="xs" wrap="nowrap">
-      <TimeInput size="sm" w={120} label={label} description={description} value={text} data-testid={testId}
+      {/* Champ de 120 px ; l'aide et l'erreur passent dessous, sur toute la largeur utile (une ou deux lignes, pas une colonne étroite). */}
+      <TimeInput size="sm" maw={260} styles={{ wrapper: { width: 120 } }} inputWrapperOrder={['label', 'input', 'description', 'error']}
+        label={label} description={description} value={text} data-testid={testId}
         error={valid ? null : 'Heure attendue : 14:30'}
         onChange={(e) => setText(e.currentTarget.value)} onBlur={() => commit(text)} />
       {extra && <Button size="sm" variant="default" onClick={() => { const t = nowInParis(); setText(t); commit(t); }}>{extra}</Button>}

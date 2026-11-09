@@ -31,8 +31,13 @@ test('horaires : durées et heure prévue réglées par l’organisateur, estima
   // 1. L'organisateur règle le changement entre deux combats (Réglages) et saisit le début prévu de la session (Combats).
   await page.goto(`/competitions/${id}/reglages`);
   const changeover = page.getByLabel('Changement entre deux combats');
+  // Une durée mal saisie bloque l'enregistrement : jamais une valeur que le champ ne montre pas.
+  await changeover.fill('0:30x');
+  await expect(page.getByTestId('settings-save')).toBeDisabled();
+  await expect(page.getByTestId('settings-invalid')).toBeVisible();
   await changeover.fill('0:30');
   await changeover.blur();
+  await expect(page.getByTestId('settings-save')).toBeEnabled();
   await page.getByRole('button', { name: 'Enregistrer' }).click();
   await page.reload();
   await expect(page.getByLabel('Changement entre deux combats')).toHaveValue('0:30');
@@ -60,25 +65,34 @@ test('horaires : durées et heure prévue réglées par l’organisateur, estima
   await expect(page.getByText('Horaire enregistré').first()).toBeVisible();
   await expect(page.getByTestId('wave-actual')).not.toHaveValue('');
 
-  // 4. Onglet Zones : en-tête, heure estimée d'un passage.
+  // 4. Onglet Zones : en-tête, heure estimée d'un passage. Le n° 1 est sur le tatami depuis « Maintenant » (démarrée à la
+  // minute) : « À suivre » sans heure ; le n° 2, lui, a la sienne.
   const cat = (await cats())[0]!;
   const first = cat.bracket.matches.find((m) => m.id === 'w1-0')!;
+  const second = cat.bracket.matches.find((m) => m.id === 'w1-1')!;
   const regs = (await (await request.get(`${base}/registrations`)).json()) as { id: string; fighter: { lastName: string } }[];
   const winnerSide = 'a';
   const winner = regs.find((r) => r.id === first.a.registrationId)!;
+  const other = regs.find((r) => r.id === second.a.registrationId)!;
   await v.goto(`/public/${id}?onglet=zones`);
   await expect(v.getByTestId('public-zones-session')).toContainText(/prévue 9:30 · démarrée \d{1,2}:\d{2}/, { timeout: 15_000 });
-  await expect(v.getByTestId('public-zone-at').first()).toHaveText(/vers \d{1,2}:\d{2}/);
   const firstPassage = v.getByTestId('public-zone').first().getByTestId('public-zone-passage').first();
   await expect(firstPassage).toContainText('n° 1');
+  await expect(firstPassage.getByTestId('public-zone-at')).toHaveCount(0);
+  await expect(v.getByTestId('public-zone-at').first()).toHaveText(/^vers\s\d{1,2}:\d{2}$/);
 
-  // 5. Suivis : un combattant épinglé, heure estimée et durée prévue.
+  // 5. Suivis : deux combattants épinglés. Celui du n° 1 (sur le tatami) : pas d'heure ; celui du n° 2 : heure estimée et durée.
   await v.goto(`/public/${id}?onglet=suivis`);
-  await v.getByTestId('public-search').fill(winner.fighter.lastName);
-  await v.getByTestId('public-search-fighter').filter({ hasText: winner.fighter.lastName }).getByTestId('public-star').click();
+  for (const r of [winner, other]) {
+    await v.getByTestId('public-search').fill(r.fighter.lastName);
+    await v.getByTestId('public-search-fighter').filter({ hasText: r.fighter.lastName }).getByTestId('public-star').click();
+  }
   await v.getByTestId('public-search').fill('');
-  await expect(v.getByTestId('public-follow-next')).toContainText(/vers \d{1,2}:\d{2}/);
-  await expect(v.getByTestId('public-follow-duration')).toContainText('Durée prévue : ');
+  const card = (r: typeof winner) => v.getByTestId('public-follow-card').filter({ hasText: r.fighter.lastName });
+  await expect(card(winner).getByTestId('public-follow-next')).toContainText('Prochain combat de la zone');
+  await expect(card(winner).getByTestId('public-follow-at')).toHaveCount(0);
+  await expect(card(other).getByTestId('public-follow-at')).toHaveText(/^vers\s\d{1,2}:\d{2}$/);
+  await expect(card(other).getByTestId('public-follow-duration')).toContainText('Durée prévue : ');
 
   // 6. Un résultat saisi par l'API met à jour Zones sans recharger : le passage suivant devient « À suivre ».
   await v.goto(`/public/${id}?onglet=zones`);
@@ -86,7 +100,7 @@ test('horaires : durées et heure prévue réglées par l’organisateur, estima
   expect((await request.put(`${base}/categories/${cat.id}/results/w1-0`, { data: { winner: winnerSide, method: 'points' } })).ok()).toBeTruthy();
   await expect(firstPassage).toContainText('n° 2', { timeout: 15_000 });
   await expect(firstPassage).toContainText('À suivre');
-  await expect(v.getByTestId('public-zone-at').first()).toHaveText(/vers \d{1,2}:\d{2}/);
+  await expect(v.getByTestId('public-zone-at').first()).toHaveText(/^vers\s\d{1,2}:\d{2}$/);
 
   // 7. À 360 px, rien n'est coupé sur Zones et Suivis.
   await v.setViewportSize({ width: 360, height: 740 });

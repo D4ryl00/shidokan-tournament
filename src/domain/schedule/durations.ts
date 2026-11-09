@@ -124,9 +124,9 @@ export function timingText(t: CombatTiming): string {
   return `${t.rounds} × ${minSecText(t.roundSec)}`;
 }
 
-/** « m » ou « m:ss » (ss < 60) en secondes ; null si illisible. */
+/** « m » ou « m:ss » (ss sur deux chiffres, < 60) en secondes ; null si illisible (« 1:5 » compris). */
 export function parseMinSec(text: string): number | null {
-  const m = /^\s*(\d{1,3})(?:\s*:\s*(\d{1,2}))?\s*$/.exec(text);
+  const m = /^\s*(\d{1,3})(?:\s*:\s*(\d{2}))?\s*$/.exec(text);
   if (!m) return null;
   const sec = m[2] === undefined ? 0 : Number(m[2]);
   if (sec >= 60) return null;
