@@ -21,7 +21,7 @@ type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 /** Écritures permises à la Table centrale (motifs sous /api/competitions/:id). */
 const TABLE_WRITES = [
-  'POST /registrations', 'PUT /registrations/:rid', 'DELETE /registrations/:rid', 'POST /clubs', 'PATCH /clubs/:clubId', 'POST /clubs/from-directory',
+  'POST /registrations', 'PUT /registrations/:rid', 'DELETE /registrations/:rid', 'POST /clubs', 'PATCH /clubs/:clubId', 'POST /clubs/from-directory', 'POST /clubs/new',
   'PUT /weigh-in/:fighterId', 'POST /weigh-in/close',
   'POST /replacement/preview', 'POST /replacement/apply', 'POST /replacement/plan', 'POST /replacement/plan/apply', 'POST /replacement/refuse', 'POST /replacement/unrefuse', 'POST /replacement/move', 'POST /replacement/exchange', 'POST /replacement/exchange/preview', 'POST /replacement/withdraw', 'POST /replacement/set-aside', 'POST /replacement/resume', 'POST /history/undo',
   'POST /free-tableaux', 'PATCH /free-tableaux/:cid', 'DELETE /free-tableaux/:cid',

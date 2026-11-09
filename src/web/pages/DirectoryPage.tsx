@@ -1,4 +1,4 @@
-import { Button, Checkbox, Group, Menu, Modal, Select, Stack, Table, Text, Textarea, TextInput } from '@mantine/core';
+import { Button, Checkbox, Group, Menu, Modal, Select, Stack, Table, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { normalizeName } from '../../domain/names.js';
@@ -7,57 +7,29 @@ import type { DirectoryEntry, DirectoryInput } from '../../domain/registration.j
 import { useAppSettings, useAuthMe, useClubChanges, useCreateDirectoryEntry, useDirectory, useMergeDirectoryEntries, useUpdateDirectoryEntry, type UpcomingLine } from '../api.js';
 import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { ClubEntryModal } from '../components/club-picker/ClubEntryModal.js';
 import { ClubChangePill, DirectoryChangesBanner } from '../components/club-changes/ClubChangeBanners.js';
 import { ApplyToClubsModal } from '../components/club-changes/ApplyToClubsModal.js';
 import { useClubChangeDialog } from '../components/club-changes/ClubChangeModal.js';
-import { EmailsInput, EmailsList } from '../components/EmailsInput.js';
+import { EmailsList } from '../components/EmailsInput.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { TableCard } from '../components/ui/TableCard.js';
 
-const EMPTY: DirectoryInput = { name: '', affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
-const orNull = (v: string | null) => v?.trim() || null;
-/** Texte gardé tel que tapé pendant la saisie (un `trim` à chaque touche mangerait l'espace qu'on vient de taper) ; nettoyé à l'enregistrement. */
-const typed = (v: string) => v || null;
-const cleaned = (f: DirectoryInput): DirectoryInput =>
-  ({ ...f, name: f.name.trim(), affiliationNumber: orNull(f.affiliationNumber), coachName: orNull(f.coachName), coachPhone: orNull(f.coachPhone), notes: orNull(f.notes) });
-
-/** Fenêtre de saisie d'une fiche (création ou modification). */
+/** Fenêtre de la fiche ouverte (création ou modification) ; après une modification, la page propose de reporter la fiche sur les compétitions à venir. */
 function EntryModal({ entry, onClose, onUpcoming }: { entry: DirectoryEntry | 'new' | null; onClose: () => void; onUpcoming: (entryId: string, lines: UpcomingLine[]) => void }) {
   const create = useCreateDirectoryEntry();
   const update = useUpdateDirectoryEntry();
-  // Le parent remonte la fenêtre (key) pour chaque fiche : l'état part de la fiche ouverte.
-  const [form, setForm] = useState<DirectoryInput>(
-    entry && entry !== 'new' ? { name: entry.name, affiliationNumber: entry.affiliationNumber, coachName: entry.coachName, coachPhone: entry.coachPhone, coachEmails: entry.coachEmails, notes: entry.notes } : EMPTY,
-  );
-  const set = (patch: Partial<DirectoryInput>) => setForm((f) => ({ ...f, ...patch }));
   // `mutateAsync` et non les rappels de `mutate` : fermée (Annuler, croix) pendant l'enregistrement, la fenêtre est remontée et un rappel de `mutate` serait
-  // perdu ; la fiche est pourtant enregistrée, et la page doit encore proposer le report. Un refus reste affiché dans la fenêtre (erreur de la mutation).
-  const save = () => {
-    if (entry === 'new') create.mutateAsync(cleaned(form)).then(onClose, () => {});
-    // La fiche est enregistrée : la fenêtre se ferme, puis la page propose de reporter la fiche sur les compétitions à venir s'il y a de quoi.
-    else if (entry) update.mutateAsync({ id: entry.id, ...cleaned(form) }).then((saved) => { onClose(); onUpcoming(saved.id, saved.upcoming); }, () => {});
-  };
+  // perdu ; la fiche est pourtant enregistrée, et la page doit encore proposer le report.
+  const submit = (input: DirectoryInput) =>
+    entry && entry !== 'new'
+      ? update.mutateAsync({ id: entry.id, ...input }).then((saved) => { onUpcoming(saved.id, saved.upcoming); })
+      : create.mutateAsync(input);
   return (
-    <Modal opened={entry !== null} onClose={onClose} title={entry === 'new' ? 'Ajouter un club' : 'Modifier le club'}>
-      <Stack>
-        <TextInput data-testid="directory-name" label="Nom" required value={form.name} onChange={(e) => set({ name: e.currentTarget.value })} />
-        <TextInput data-testid="directory-number" label="N° d’affiliation FFK" description="Les chiffres en tête du club dans l’export FFK."
-          value={form.affiliationNumber ?? ''} onChange={(e) => set({ affiliationNumber: typed(e.currentTarget.value) })} />
-        <TextInput label="Coach" value={form.coachName ?? ''} onChange={(e) => set({ coachName: typed(e.currentTarget.value) })} />
-        <TextInput label="Téléphone" value={form.coachPhone ?? ''} onChange={(e) => set({ coachPhone: typed(e.currentTarget.value) })} />
-        <EmailsInput data-testid="directory-email" value={form.coachEmails} onChange={(coachEmails) => set({ coachEmails })} />
-        <Textarea label="Notes" autosize minRows={2} value={form.notes ?? ''} onChange={(e) => set({ notes: typed(e.currentTarget.value) })} />
-        <ApiErrorAlert error={create.error ?? update.error} />
-        <Group justify="flex-end">
-          <Button variant="default" onClick={onClose}>Annuler</Button>
-          <Button data-testid="directory-save" onClick={save} loading={create.isPending || update.isPending} disabled={!form.name.trim()}>
-            Enregistrer
-          </Button>
-        </Group>
-      </Stack>
-    </Modal>
+    <ClubEntryModal opened={entry !== null} title={entry === 'new' ? 'Ajouter un club' : 'Modifier le club'} onClose={onClose} onSubmit={submit}
+      initial={entry && entry !== 'new' ? { name: entry.name, affiliationNumber: entry.affiliationNumber, coachName: entry.coachName, coachPhone: entry.coachPhone, coachEmails: entry.coachEmails, notes: entry.notes } : undefined} />
   );
 }
 

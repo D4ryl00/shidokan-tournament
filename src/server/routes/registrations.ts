@@ -10,7 +10,7 @@ import type { AppDb } from '../db/client.js';
 import { checkRev, registrationRev } from '../revisions.js';
 import { getCompetition, getGrid } from '../repositories/competitions.js';
 import { closedSet } from '../repositories/closed-categories.js';
-import { clubFromDirectory, directoryChoices } from '../repositories/invitations.js';
+import { clubFromDirectory, createCompetitionClub, directoryChoices } from '../repositories/invitations.js';
 import {
   createRegistration,
   deleteRegistration,
@@ -22,6 +22,7 @@ import {
   updateRegistration,
   upsertClub,
 } from '../repositories/registrations.js';
+import { directorySchema } from './directory.js';
 import { UnreadableFileError, readWorkbook } from '../spreadsheet/read.js';
 import { writeOds } from '../spreadsheet/ods.js';
 
@@ -135,6 +136,9 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
     const { directoryId } = z.object({ directoryId: z.string() }).strict().parse(req.body);
     return reply.status(201).send(clubFromDirectory(db, req.params.id, directoryId));
   });
+
+  // « Ajouter un club » : la fiche d'annuaire et le club de la compétition d'un coup (mêmes règles que l'annuaire).
+  app.post<P>('/api/competitions/:id/clubs/new', async (req, reply) => reply.status(201).send(createCompetitionClub(db, req.params.id, directorySchema.parse(req.body))));
 
   app.patch<{ Params: { id: string; clubId: string } }>('/api/competitions/:id/clubs/:clubId', async (req) =>
     updateClub(db, req.params.id, req.params.clubId, clubSchema.partial().parse(req.body)),

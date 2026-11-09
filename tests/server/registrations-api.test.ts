@@ -215,3 +215,28 @@ test('modifier une inscription vers une catégorie fermée : avertissement', asy
   const again = await app.inject({ method: 'PUT', url: `${base}/registrations/${row.id}`, payload: { ...input, firstName: 'Lou', discipline: 'karate', ruleset: 'jiyu', weightClassId: 'senior:F:-61' } });
   expect(again.json().warning ?? null).toBeNull();
 });
+
+const NEW_CLUB = { name: 'Tani Dojo', affiliationNumber: '0060893', coachName: 'Jean', coachPhone: '0600000000', coachEmails: ['jean@example.org'], notes: null };
+
+test('POST /clubs/new creates the directory entry and the competition club', async () => {
+  const res = await app.inject({ method: 'POST', url: `${base}/clubs/new`, payload: NEW_CLUB });
+  expect(res.statusCode).toBe(201);
+  const club = res.json();
+  expect(club).toMatchObject({ name: 'Tani Dojo', coachName: 'Jean', coachPhone: '0600000000', coachEmails: ['jean@example.org'] });
+  const entries = (await app.inject({ method: 'GET', url: '/api/club-directory' })).json();
+  expect(entries).toHaveLength(1);
+  // Le club est relié à la fiche (la fiche compte une compétition) : ni doublon d'annuaire, ni club orphelin.
+  expect(entries[0]).toMatchObject({ name: 'Tani Dojo', affiliationNumber: '0060893', competitions: 1 });
+  expect((await app.inject({ method: 'GET', url: `${base}/clubs` })).json().map((c: { id: string }) => c.id)).toEqual([club.id]);
+});
+
+test('duplicate directory name is refused', async () => {
+  // L'annuaire refuse un numéro déjà pris (il accepte deux fiches de même nom) : rien n'est créé, ni fiche ni club.
+  await app.inject({ method: 'POST', url: `${base}/clubs/new`, payload: NEW_CLUB });
+  const dup = await app.inject({ method: 'POST', url: `${base}/clubs/new`, payload: { ...NEW_CLUB, name: 'Autre Dojo' } });
+  expect(dup.statusCode).toBe(409);
+  expect(dup.json().error).toBe('Ce numéro d’affiliation est déjà celui de « Tani Dojo ».');
+  expect((await app.inject({ method: 'GET', url: '/api/club-directory' })).json()).toHaveLength(1);
+  expect((await app.inject({ method: 'GET', url: `${base}/clubs` })).json()).toHaveLength(1);
+  expect((await app.inject({ method: 'POST', url: `${base}/clubs/new`, payload: { ...NEW_CLUB, name: '  ' } })).statusCode).toBe(400);
+});

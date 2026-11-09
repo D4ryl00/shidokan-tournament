@@ -12,6 +12,7 @@ import type { Club, DirectoryEntry, DirectoryInput, RegistrationInput, Registrat
 import type { Case, MoveView, Presence, Proposal, ProposalType } from '../domain/replacement/index.js';
 import type { CategoryGrid, DisciplineId, Ruleset, Sex } from '../domain/types.js';
 import type { LadderProgress, LadderRow, PlanChoice, PlanMove } from '../domain/replacement/plan.js';
+import type { ClubChoice } from './components/club-picker/choice.js';
 import { fetchPlanStream } from './planStream.js';
 import { queriesAfterCompetitionPatch } from './settingsPatch.js';
 import { applyRulesView, type RulesView } from '../domain/replacement/rules.js';
@@ -136,6 +137,29 @@ export function useClubFromDirectory(id: string) {
       for (const key of ['clubs', 'directory-clubs']) qc.invalidateQueries({ queryKey: [key, id] });
     },
   });
+}
+
+/** « Ajouter un club » : crée la fiche d'annuaire et le club de la compétition d'un coup. */
+export function useCreateCompetitionClub(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: DirectoryInput) => api<Club>('POST', `/api/competitions/${id}/clubs/new`, input),
+    onSuccess: () => Promise.all(['clubs', 'directory-clubs', 'club-directory'].map((k) => qc.invalidateQueries({ queryKey: k === 'club-directory' ? [k] : [k, id] }))),
+  });
+}
+
+/** Club de compétition d'un choix du sélecteur de club : tel quel, ou créé depuis la fiche d'annuaire. À appeler à l'enregistrement, jamais au choix. */
+export function useResolveClub(id: string): (choice: ClubChoice) => Promise<Club> {
+  const qc = useQueryClient();
+  const { mutateAsync } = useClubFromDirectory(id);
+  return async (choice) => {
+    if (choice.kind === 'directory') return mutateAsync(choice.id);
+    // Le club est déjà de la compétition : on le relit (état à jour) sans rien écrire.
+    const clubs = await qc.fetchQuery({ queryKey: ['clubs', id], queryFn: () => api<Club[]>('GET', `/api/competitions/${id}/clubs`) });
+    const club = clubs.find((c) => c.id === choice.id);
+    if (!club) throw new Error('Club introuvable');
+    return club;
+  };
 }
 
 export function useUpdateClub(id: string) {

@@ -2,7 +2,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { and, count, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { AppDb } from '../db/client.js';
 import { clubChanges, clubDirectory, clubInvitations, clubs, competitions, fighters, mailLog } from '../db/schema.js';
-import type { Club } from '../../domain/registration.js';
+import type { Club, DirectoryInput } from '../../domain/registration.js';
+import { createDirectoryEntry } from './directory.js';
 import { NotFoundError, toClub } from './registrations.js';
 
 export const newToken = (): string => randomBytes(24).toString('base64url');
@@ -163,6 +164,15 @@ export function clubFromDirectory(db: AppDb, competitionId: string, entryId: str
   return db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     return toClub(clubForEntry(t, competitionId, directoryEntry(t, entryId)));
+  });
+}
+
+/** « Ajouter un club » : crée la fiche d'annuaire puis le club de la compétition, d'un seul bloc (un refus de la fiche ne laisse rien). */
+export function createCompetitionClub(db: AppDb, competitionId: string, input: DirectoryInput): Club {
+  return db.transaction((tx) => {
+    const t = tx as unknown as AppDb;
+    const entry = createDirectoryEntry(t, input);
+    return toClub(clubForEntry(t, competitionId, directoryEntry(t, entry.id)));
   });
 }
 

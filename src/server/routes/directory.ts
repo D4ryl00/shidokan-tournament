@@ -8,7 +8,7 @@ import { applyDirectoryToClubs, updateDirectoryEntryWithUpcoming } from '../repo
 import { createDirectoryEntry, listDirectory, mergeDirectoryEntries } from '../repositories/directory.js';
 
 const text = (max: number) => z.string().trim().max(max).transform((v) => v || null).nullable();
-const directorySchema = z
+export const directorySchema = z
   .object({
     name: z.string().trim().min(1, 'Le nom du club est obligatoire.').max(MAX.name),
     affiliationNumber: z.string().trim().regex(/^\d{7}$/, 'Le numéro d’affiliation FFK a 7 chiffres.').nullable(),
