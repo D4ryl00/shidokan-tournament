@@ -106,10 +106,10 @@ test('public list shows public competitions only', async () => {
   const res = await visit('/api/public/competitions');
   expect(res.statusCode).toBe(200);
   const body = res.json() as { today: PublicCompetitionSummary[]; upcoming: PublicCompetitionSummary[]; past: PublicCompetitionSummary[] };
-  expect(body.today).toEqual([{ id, name: 'Coupe du jour', date: today, location: 'Lyon', phase: 'today', launched: false }]);
+  expect(body.today).toEqual([{ id, name: 'Coupe du jour', date: today, location: 'Lyon', phase: 'today', launched: false, waves: [] }]);
   expect(body.upcoming.map((c) => c.id)).toEqual([soon, later]);
   expect(body.past.map((c) => c.id)).toEqual([old, older]);
-  expect(body.upcoming[0]).toEqual({ id: soon, name: 'Open d’hiver', date: '2099-01-10', location: null, phase: 'upcoming', launched: false });
+  expect(body.upcoming[0]).toEqual({ id: soon, name: 'Open d’hiver', date: '2099-01-10', location: null, phase: 'upcoming', launched: false, waves: [] });
   expect(res.body).not.toContain('Interne');
 });
 
@@ -126,7 +126,7 @@ test('nothing before launch', async () => {
   expect(after.categories.length).toBe(3);
   for (const c of after.categories) expect(Object.keys(c.numbers).length).toBeGreaterThan(0);
   expect(after.queues.length).toBe(2);
-  expect(after.waves).toEqual([{ id: null, name: 'Session unique', launched: true }]);
+  expect(after.waves).toEqual([{ id: null, name: 'Session unique', launched: true, plannedStart: null, actualStart: null, finalsStart: null }]);
   const list = (await visit('/api/public/competitions')).json() as { today: PublicCompetitionSummary[] };
   expect(list.today[0]).toMatchObject({ phase: 'today', launched: true });
 });
@@ -139,7 +139,7 @@ test('reopened wave disappears', async () => {
   const view = (await visit(pub)).json() as PublicCompetition;
   expect(view.categories).toEqual([]);
   expect(view.queues).toEqual([]);
-  expect(view.waves).toEqual([{ id: null, name: 'Session unique', launched: false }]);
+  expect(view.waves).toEqual([{ id: null, name: 'Session unique', launched: false, plannedStart: null, actualStart: null, finalsStart: null }]);
 });
 
 test('turning private again returns 404', async () => {
@@ -368,4 +368,27 @@ test('public event stream closes when the competition turns private', async () =
   // Le flux prévient (le téléphone relit et reçoit 404) puis se ferme de lui-même.
   expect(await Promise.race([reading, new Promise((r) => setTimeout(() => r('ouvert'), 2000))])).toBe('fermé');
   expect(text).toContain('event: change');
+});
+
+test('public view exposes wave times and durations', async () => {
+  const { orga, visit, base, pub, launch } = await setup();
+  await launch();
+  expect((await orga('PUT', `${base}/wave-schedules`, { waveId: null, plannedStart: '09:30', actualStart: '09:40' })).statusCode).toBe(200);
+  const view = (await visit(pub)).json() as PublicCompetition;
+  expect(view.waves[0]).toMatchObject({ plannedStart: '09:30', actualStart: '09:40', finalsStart: null });
+  const items = view.queues.flatMap((q) => q.items);
+  expect(items.length).toBeGreaterThan(0);
+  for (const i of items) expect(i.durationSec).toBeGreaterThan(0);
+  const list = (await visit('/api/public/competitions')).json() as { today: PublicCompetitionSummary[] };
+  expect(list.today[0]!.waves).toEqual([{ name: 'Session unique', plannedStart: '09:30' }]);
+});
+
+test('schedule change refreshes the cache', async () => {
+  const { orga, visit, base, pub, launch } = await setup();
+  await launch();
+  const before = String((await visit(pub)).headers.etag);
+  expect((await orga('PUT', `${base}/wave-schedules`, { waveId: null, plannedStart: '10:00' })).statusCode).toBe(200);
+  const after = await visit(pub, { 'if-none-match': before });
+  expect(after.statusCode).toBe(200);
+  expect(String(after.headers.etag)).not.toBe(before);
 });

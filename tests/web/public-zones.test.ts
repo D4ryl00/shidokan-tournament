@@ -93,7 +93,7 @@ describe('finales de la session', () => {
     const own = { ...base[0]!, finals: false };
     const final = (n: number, waveId: string) => ({ ...base[1]!, number: n, waveId, finals: true });
     const two = structuredClone(pub);
-    two.waves = [{ id: 'w1', name: 'Session 1', launched: true }, { id: 'w2', name: 'Session 2', launched: true }];
+    two.waves = [{ id: 'w1', name: 'Session 1', launched: true, plannedStart: null, actualStart: null, finalsStart: null }, { id: 'w2', name: 'Session 2', launched: true, plannedStart: null, actualStart: null, finalsStart: null }];
     expect([...finalsMarkers(two, [own, final(5, 'w1'), final(6, 'w1'), { ...own, number: 7, waveId: 'w2' }, final(8, 'w2')])]).toEqual([
       [1, 'Finales de la session 1'],
       [4, 'Finales de la session 2'],

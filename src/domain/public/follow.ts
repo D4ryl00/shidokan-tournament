@@ -1,7 +1,7 @@
 import { resolveBracket } from '../brackets/index.js';
 import { kataScore, resolveKata } from '../brackets/kata.js';
 import { normalizeName } from '../names.js';
-import type { FighterLine, PublicCategory, PublicCompetition, PublicFighter, PublicQueueItem } from './types.js';
+import { passageKey, type FighterLine, PublicCategory, PublicCompetition, PublicFighter, PublicQueueItem } from './types.js';
 
 export type { FighterLine, PublicFighter } from './types.js';
 
@@ -119,6 +119,10 @@ function line(pub: PublicCompetition, c: PublicCategory, rid: string): FighterLi
     const from = item.matchId === null ? null : mineA ? item.bFrom : item.aFrom;
     const entrant = other ? pub.entrants[other] : undefined;
     next = {
+      key: passageKey(item),
+      durationSec: item.durationSec,
+      timing: item.timing ? { ...item.timing } : null,
+      kataPassages: item.kataPassages,
       number: item.number,
       zoneId: best.zoneId,
       before: best.before,

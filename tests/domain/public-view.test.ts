@@ -36,8 +36,8 @@ describe('toPublicCompetition', () => {
     expect(view.zones).toEqual([]);
     expect(view.entrants).toEqual({});
     expect(view.waves).toEqual([
-      { id: 'w1', name: 'Matin', launched: false },
-      { id: 'w2', name: 'Après-midi', launched: false },
+      { id: 'w1', name: 'Matin', launched: false, plannedStart: null, actualStart: null, finalsStart: null },
+      { id: 'w2', name: 'Après-midi', launched: false, plannedStart: null, actualStart: null, finalsStart: null },
     ]);
   });
 
@@ -66,9 +66,9 @@ describe('toPublicCompetition', () => {
     for (const secret of ['41.5', '2e kyu', 'L123', 'coach@example.org', 'club@example.org', 'rev-secret', 'alias-internal', 'wc-internal', 'settingsJson', 'weighedKg']) {
       expect(json).not.toContain(secret);
     }
-    expect(Object.keys(view).sort()).toEqual(['categories', 'date', 'entrants', 'id', 'location', 'medals', 'name', 'phase', 'queues', 'waves', 'zones']);
+    expect(Object.keys(view).sort()).toEqual(['categories', 'changeoverSec', 'date', 'entrants', 'finalsZoneId', 'id', 'location', 'medals', 'name', 'phase', 'queues', 'waves', 'zones']);
     expect(Object.keys(view.categories[0]!).sort()).toEqual(
-      ['absentIds', 'bracket', 'discipline', 'finishedAt', 'id', 'kataScores', 'label', 'matchZones', 'numbers', 'podium', 'registrationIds', 'results', 'status', 'tieBreaks', 'waveId', 'zoneId'].sort(),
+      ['absentIds', 'bracket', 'discipline', 'finishedAt', 'id', 'kataPassageSec', 'kataScores', 'label', 'matchZones', 'numbers', 'podium', 'registrationIds', 'results', 'status', 'tieBreaks', 'timing', 'waveId', 'zoneId'].sort(),
     );
     expect(view).toMatchObject({ id: 'c1', name: 'Coupe Démo', date: '2026-11-22', location: 'Lyon', phase: 'today' });
   });
@@ -89,11 +89,11 @@ describe('toPublicCompetition', () => {
       [14, 'played'],
       [15, 'ready'],
     ]);
-    expect(z1.find((i) => i.number === 12)).toEqual({ number: 12, categoryId: 'A', matchId: 'w1-0', kataPart: null, a: 'r2', b: 'r3', aFrom: null, bFrom: null, state: 'ready', waveId: 'w1', finals: false });
+    expect(z1.find((i) => i.number === 12)).toEqual({ number: 12, categoryId: 'A', matchId: 'w1-0', kataPart: null, a: 'r2', b: 'r3', aFrom: null, bFrom: null, state: 'ready', waveId: 'w1', finals: false, durationSec: 210, timing: { rounds: 2, roundSec: 90, restSec: 30, overtimeSec: 60 }, kataPassages: null, endedAt: null });
     const z2 = view.queues.find((q) => q.zoneId === 'z2')!.items;
     expect(z2).toEqual([
-      { number: 1, categoryId: 'B', matchId: null, kataPart: null, a: null, b: null, aFrom: null, bFrom: null, state: 'ready', waveId: 'w1', finals: false },
-      { number: 5, categoryId: 'A', matchId: 'w2-0', kataPart: null, a: null, b: 'r1', aFrom: { kind: 'winner', number: 12, zoneId: 'z1' }, bFrom: null, state: 'waiting', waveId: 'w1', finals: false },
+      { number: 1, categoryId: 'B', matchId: null, kataPart: null, a: null, b: null, aFrom: null, bFrom: null, state: 'ready', waveId: 'w1', finals: false, durationSec: 5 * 90, timing: null, kataPassages: 5, endedAt: null },
+      { number: 5, categoryId: 'A', matchId: 'w2-0', kataPart: null, a: null, b: 'r1', aFrom: { kind: 'winner', number: 12, zoneId: 'z1' }, bFrom: null, state: 'waiting', waveId: 'w1', finals: false, durationSec: 210, timing: { rounds: 2, roundSec: 90, restSec: 30, overtimeSec: 60 }, kataPassages: null, endedAt: null },
     ]);
   });
 
@@ -178,8 +178,70 @@ describe('toPublicCompetition', () => {
         plan: { ...base.plan, zones: [{ zoneId: 'z1', passages: [{ number: 1, categoryId: 'D', matchId: 'w1-0', noRest: false, waveId: null }] }] },
       }),
     );
-    expect(view.waves).toEqual([{ id: null, name: 'Session unique', launched: true }]);
+    expect(view.waves).toEqual([{ id: null, name: 'Session unique', launched: true, plannedStart: null, actualStart: null, finalsStart: null }]);
     expect(view.categories.map((c) => c.id)).toEqual(['D']);
     expect(view.queues).toEqual([{ zoneId: 'z1', items: [expect.objectContaining({ number: 1, categoryId: 'D', state: 'played', waveId: null })] }]);
+  });
+});
+
+describe('durées et heures (lot 2)', () => {
+  const items = (view: ReturnType<typeof toPublicCompetition>) => view.queues.flatMap((q) => q.items);
+
+  test('queue items carry duration and end time', () => {
+    const view = toPublicCompetition(source({ endedAt: { A: { matches: { 'w1-1': '2026-11-22T09:20:00.000Z' }, round1: null, final: null } } }));
+    const played = items(view).find((i) => i.categoryId === 'A' && i.matchId === 'w1-1')!;
+    expect(played.state).toBe('played');
+    expect(played.durationSec).toBe(210);
+    expect(played.timing?.rounds).toBe(2);
+    expect(played.endedAt).toBe('2026-11-22T09:20:00.000Z');
+    const waiting = items(view).find((i) => i.categoryId === 'A' && i.matchId === 'w1-0')!;
+    expect(waiting.state).not.toBe('played');
+    expect(waiting.endedAt).toBeNull();
+  });
+
+  test('kata blocks carry passages', () => {
+    const base = source();
+    const b = base.categories.find((c) => c.id === 'B')!;
+    const five = ['r5', 'r6', 'r7', 'r40', 'r41'].map((registrationId) => ({ registrationId, clubId: null, label: registrationId }));
+    const kata = { ...b, registrationIds: five.map((e) => e.registrationId), bracket: { ...b.bracket!, entrants: five, order: five.map((e) => e.registrationId) } as never };
+    const view = toPublicCompetition({ ...base, categories: base.categories.map((c) => (c.id === 'B' ? kata : c)) });
+    const block = items(view).find((i) => i.categoryId === 'B')!;
+    expect(block.kataPassages).toBe(7);
+    expect(block.durationSec).toBe(7 * 90);
+    expect(block.timing).toBeNull();
+    const cat = view.categories.find((c) => c.id === 'B')!;
+    expect(cat.timing).toBeNull();
+    expect(cat.kataPassageSec).toBe(90);
+  });
+
+  test('match duration override reaches the item', () => {
+    const base = source();
+    const a = base.categories.find((c) => c.id === 'A')!;
+    const timing = { rounds: 3, roundSec: 90, restSec: 30, overtimeSec: 60 };
+    const view = toPublicCompetition({ ...base, categories: base.categories.map((c) => (c.id === 'A' ? { ...a, durations: { bracket: null, matches: { 'w2-0': timing } } } : c)) });
+    const final = items(view).find((i) => i.categoryId === 'A' && i.matchId === 'w2-0')!;
+    expect(final.timing?.rounds).toBe(3);
+    expect(final.durationSec).toBe(3 * 90 + 2 * 30);
+    expect(items(view).find((i) => i.categoryId === 'A' && i.matchId === 'w1-0')!.timing?.rounds).toBe(2);
+  });
+
+  test('unlaunched wave shows only its planned time', () => {
+    const all = { plannedStart: '14:00', actualStart: '14:05', finalsStart: '16:00' };
+    const view = toPublicCompetition(source({ waveSchedules: [{ waveId: 'w2', ...all }, { waveId: 'w1', plannedStart: '09:00', actualStart: '09:10', finalsStart: '11:00' }] }));
+    expect(view.waves.find((w) => w.id === 'w2')).toMatchObject({ launched: false, plannedStart: '14:00', actualStart: null, finalsStart: null });
+    expect(view.waves.find((w) => w.id === 'w1')).toMatchObject({ launched: true, plannedStart: '09:00', actualStart: '09:10', finalsStart: '11:00' });
+    expect(view.changeoverSec).toBe(60);
+  });
+
+  test('no schedule data leaks', () => {
+    const base = source();
+    const a = base.categories.find((c) => c.id === 'A')!;
+    const view = toPublicCompetition({ ...base, categories: base.categories.map((c) => (c.id === 'A' ? { ...a, durations: { bracket: null, matches: {} } } : c)) });
+    const json = JSON.stringify(view);
+    expect(json).not.toContain('durations');
+    expect(json).not.toContain('under14');
+    expect(json).not.toContain('"groups"');
+    // Prolongation : seulement dans les timings des passages, jamais un autre groupe (adultes : 120 s).
+    expect(json).not.toContain('"overtimeSec":120');
   });
 });

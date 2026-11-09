@@ -1,12 +1,14 @@
 import { eq } from 'drizzle-orm';
+import { defaultSchedule } from '../../domain/schedule/durations.js';
 import { waveKey } from '../../domain/passages/index.js';
 import type { PublicCompetition, PublicCompetitionSummary } from '../../domain/public/types.js';
 import { publicPhase, toPublicCompetition, todayInParis, type PublicCategoryResults, type PublicSource } from '../../domain/public/view.js';
 import type { AppDb } from '../db/client.js';
 import { clubs, competitions, fighters, registrations } from '../db/schema.js';
 import { readCategories } from '../repositories/categories.js';
-import { getCompetition, listCompetitions } from '../repositories/competitions.js';
+import { getCompetition, getGrid, listCompetitions } from '../repositories/competitions.js';
 import { launchedCategoryIds, launchedWaveKeys } from '../repositories/launch-state.js';
+import { listWaveSchedules } from '../repositories/wave-schedules.js';
 import { passagePlan } from '../repositories/passages.js';
 import { getResults } from '../repositories/results.js';
 import { listWaves } from '../repositories/waves.js';
@@ -35,6 +37,19 @@ function lastResultAt(db: AppDb, competitionId: string): Record<string, string> 
   return Object.fromEntries(rows.map((r) => [r.c, r.t]));
 }
 
+/** Heures de fin : par combat (`match_results.created_at`), par tour de kata (dernière note), pour les catégories données. */
+function endedAtOf(db: AppDb, competitionId: string, categoryIds: Set<string>): PublicSource['endedAt'] {
+  const out: PublicSource['endedAt'] = {};
+  const of = (c: string) => (out[c] ??= { matches: {}, round1: null, final: null });
+  const matches = db.$client.prepare('select category_id as c, match_id as m, created_at as t from match_results where competition_id = ?').all(competitionId) as { c: string; m: string; t: string }[];
+  for (const r of matches) if (categoryIds.has(r.c)) of(r.c).matches[r.m] = r.t;
+  const kata = db.$client
+    .prepare('select category_id as c, round as r, max(updated_at) as t from kata_scores where competition_id = ? group by category_id, round')
+    .all(competitionId) as { c: string; r: 'round1' | 'final'; t: string | null }[];
+  for (const r of kata) if (categoryIds.has(r.c) && r.t) of(r.c)[r.r] = r.t;
+  return out;
+}
+
 /**
  * Données d'une compétition publique, lues champ par champ pour la vue publique ; null si elle est inconnue ou privée.
  * Seules les catégories numérotées dans une vague lancée ont leurs résultats chargés. Rien n'est écrit (pas de
@@ -56,6 +71,7 @@ export async function loadPublicSource(db: AppDb, id: string, now: Date): Promis
     const r = await getResults(db, id, c.id);
     results[c.id] = { records: r.records, kataScores: r.kataScores, tieBreaks: r.tieBreaks };
   }
+  const settings = (await getCompetition(db, id))?.settings;
   return {
     today: todayInParis(now),
     competition: { id: competition.id, name: competition.name, date: competition.date, location: competition.location },
@@ -74,7 +90,12 @@ export async function loadPublicSource(db: AppDb, id: string, now: Date): Promis
     lastResultAt: lastResultAt(db, id),
     plan: await passagePlan(db, id, categories),
     launchedCategoryIds: launched,
-    finalsZoneId: (await getCompetition(db, id))?.settings.finalsZoneId ?? null,
+    finalsZoneId: settings?.finalsZoneId ?? null,
+    schedule: settings?.schedule ?? defaultSchedule(),
+    triathlonRounds: settings?.triathlonRounds ?? 3,
+    grid: await getGrid(db, id),
+    waveSchedules: listWaveSchedules(db, id),
+    endedAt: endedAtOf(db, id, launched),
   };
 }
 
@@ -96,9 +117,15 @@ export async function loadPublicList(db: AppDb, now: Date): Promise<PublicList> 
   const out: PublicList = { today: [], upcoming: [], past: [] };
   for (const c of await listCompetitions(db)) {
     if (c.visibility !== 'public') continue;
-    const launched = anyWaveLaunched(await listWaves(db, c.id), launchedWaveKeys(db, c.id));
+    const sessions = await listWaves(db, c.id);
+    const launched = anyWaveLaunched(sessions, launchedWaveKeys(db, c.id));
     const phase = publicPhase(c.date, today, launched);
-    out[phase].push({ id: c.id, name: c.name, date: c.date, location: c.location, phase, launched });
+    const planned = new Map(listWaveSchedules(db, c.id).map((w) => [w.waveId, w.plannedStart]));
+    // Sans session : une entrée « Session unique » si elle a une heure prévue.
+    const waves = sessions.length === 0
+      ? (planned.get(null) ? [{ name: 'Session unique', plannedStart: planned.get(null) ?? null }] : [])
+      : [...sessions].sort((a, b) => a.order - b.order).map((w) => ({ name: w.name, plannedStart: planned.get(w.id) ?? null }));
+    out[phase].push({ id: c.id, name: c.name, date: c.date, location: c.location, phase, launched, waves });
   }
   const byDate = (a: PublicCompetitionSummary, b: PublicCompetitionSummary) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name, 'fr');
   out.today.sort(byDate);

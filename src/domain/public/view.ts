@@ -1,8 +1,11 @@
 import { resolveBracket, type Bracket, type Entrant, type KataScores, type Match, type MatchResult, type Podium, type ResolvedMatch, type SlotSource } from '../brackets/index.js';
 import { activeEntrantCount, type Category } from '../categories.js';
 import { finalMatchIds, waveKey, type PassagePlan } from '../passages/index.js';
+import { ageGroupOf, combatTiming, fightSeconds, kataPassages, type ScheduleSettings } from '../schedule/durations.js';
+import type { WaveSchedule } from '../schedule/types.js';
+import type { CategoryGrid } from '../types.js';
 import { categoryProgress, medalTable, validResults, type CategoryProgress, type ResultRecord } from '../results.js';
-import type { PublicCategory, PublicCompetition, PublicEntrant, PublicPhase, PublicQueueItem, SideSource } from './types.js';
+import { type PublicCategory, type PublicCompetition, type PublicEntrant, type PublicPhase, type PublicQueueItem, type SideSource } from './types.js';
 
 /** Résultats d'une catégorie, tels que les charge l'organisation. */
 export interface PublicCategoryResults {
@@ -36,6 +39,15 @@ export interface PublicSource {
   launchedCategoryIds: Iterable<string>;
   /** Zone des finales des réglages (`settings.finalsZoneId`) ; absente ou null : aucune. */
   finalsZoneId?: string | null;
+  /** Réglages des durées de la compétition. */
+  schedule: ScheduleSettings;
+  triathlonRounds: 3 | 6;
+  /** Grille d'âges, pour le groupe d'âge de chaque tableau. */
+  grid: CategoryGrid;
+  /** Heures des sessions (`waveId` null : session unique). */
+  waveSchedules: WaveSchedule[];
+  /** Heures de fin (ISO) : par combat, et par tour de kata (dernière note) ; par catégorie publique. */
+  endedAt: Record<string, { matches: Record<string, string>; round1: string | null; final: string | null }>;
 }
 
 export const HIDDEN_NAME = 'Combattant masqué';
@@ -140,9 +152,21 @@ interface CategoryState {
 export function toPublicCompetition(src: PublicSource): PublicCompetition {
   const launchedWaves = new Set(src.launchedWaveKeys);
   const launchedCats = new Set(src.launchedCategoryIds);
+  // Heures d'une session : seule l'heure prévue sort d'une session non lancée.
+  const wave = (id: string | null, name: string, launched: boolean) => {
+    const sch = src.waveSchedules.find((x) => x.waveId === id);
+    return {
+      id,
+      name,
+      launched,
+      plannedStart: sch?.plannedStart ?? null,
+      actualStart: launched ? (sch?.actualStart ?? null) : null,
+      finalsStart: launched ? (sch?.finalsStart ?? null) : null,
+    };
+  };
   const waves = src.waves.length === 0
-    ? [{ id: null, name: IMPLICIT_WAVE, launched: launchedWaves.has(waveKey(null)) }]
-    : [...src.waves].sort((a, b) => a.order - b.order).map((w) => ({ id: w.id, name: w.name, launched: launchedWaves.has(w.id) }));
+    ? [wave(null, IMPLICIT_WAVE, launchedWaves.has(waveKey(null)))]
+    : [...src.waves].sort((a, b) => a.order - b.order).map((w) => wave(w.id, w.name, launchedWaves.has(w.id)));
   const launchedWaveIds = new Set(waves.filter((w) => w.launched).map((w) => waveKey(w.id)));
 
   // À disputer comme pour l'organisation (`playableCategory` : un tableau et au moins 2 combattants), numérotée et dans une
@@ -185,6 +209,12 @@ export function toPublicCompetition(src: PublicSource): PublicCompetition {
     .map((z) => ({ zoneId: z.zoneId, passages: z.passages.filter((p) => publicIds.has(p.categoryId)).sort((a, b) => a.number - b.number) }));
   const numberOf = new Map(planZones.flatMap((z) => z.passages.map((p) => [`${p.categoryId}:${p.matchId ?? 'kata'}`, { number: p.number, zoneId: z.zoneId }] as const)));
 
+  const settings = { schedule: src.schedule, triathlonRounds: src.triathlonRounds };
+  const timingOf = (c: Category, matchId: string | null) => {
+    const t = combatTiming(settings, ageGroupOf(c.key, src.grid), c.durations, matchId);
+    return { rounds: t.rounds, roundSec: t.roundSec, restSec: t.restSec, overtimeSec: t.overtimeSec };
+  };
+  const catById = new Map(cats.map((c) => [c.id, c]));
   const empty: PublicCategoryResults = { records: [], kataScores: null, tieBreaks: { pools: {}, kata: [], kataFinal: [] } };
   const states = new Map<string, CategoryState>();
   const categories: PublicCategory[] = cats.map((c) => {
@@ -243,6 +273,8 @@ export function toPublicCompetition(src: PublicSource): PublicCompetition {
       numbers,
       matchZones,
       podium: copyPodium(progress.podium),
+      timing: c.bracket.kind === 'combat' ? { ...timingOf(c, null) } : null,
+      kataPassageSec: c.bracket.kind === 'kata' ? src.schedule.kataPassageSec : null,
     };
   });
 
@@ -267,12 +299,18 @@ export function toPublicCompetition(src: PublicSource): PublicCompetition {
           const done = st.progress.status === 'finished' || (kataPart === 'tour1' && st.round1Done);
           const needsRound1 = kataPart === 'finale' && bracket.kind === 'kata' && bracket.order.length > 2 && !st.round1Done;
           const state = done ? 'played' : needsRound1 ? 'waiting' : 'ready';
-          return [{ ...base, matchId: null, kataPart, a: null, b: null, aFrom: null, bFrom: null, state }];
+          const passages = kataPassages(activeEntrantCount(catById.get(p.categoryId)!), kataPart === null ? 'whole' : kataPart);
+          const ended = src.endedAt[p.categoryId];
+          const stamps = (kataPart === 'tour1' ? [ended?.round1] : kataPart === 'finale' ? [ended?.final] : [ended?.round1, ended?.final]).filter((t): t is string => !!t);
+          const endedAt = state === 'played' && stamps.length > 0 ? [...stamps].sort().at(-1)! : null;
+          return [{ ...base, matchId: null, kataPart, a: null, b: null, aFrom: null, bFrom: null, state, durationSec: passages * src.schedule.kataPassageSec, timing: null, kataPassages: passages, endedAt }];
         }
         const m = st.matches.find((x) => x.id === p.matchId);
         // Exemption, ou 3e manche d'un meilleur des trois devenue inutile : rien à disputer.
         if (!m || m.bye || (m.optional && !m.playable && st.progress.podium.complete)) return [];
         const state = m.result ? 'played' : m.playable ? 'ready' : 'waiting';
+        const timing = timingOf(catById.get(p.categoryId)!, m.id);
+        const durationSec = fightSeconds(timing);
         return [{
           ...base,
           matchId: m.id,
@@ -282,6 +320,10 @@ export function toPublicCompetition(src: PublicSource): PublicCompetition {
           aFrom: from(p.categoryId, m.a, m.entrantA),
           bFrom: from(p.categoryId, m.b, m.entrantB),
           state,
+          durationSec,
+          timing,
+          kataPassages: null,
+          endedAt: state === 'played' ? (src.endedAt[p.categoryId]?.matches[m.id] ?? null) : null,
         }];
       }),
     }))
@@ -303,6 +345,8 @@ export function toPublicCompetition(src: PublicSource): PublicCompetition {
     location: src.competition.location,
     phase: publicPhase(src.competition.date, src.today, waves.some((w) => w.launched)),
     waves,
+    changeoverSec: src.schedule.changeoverSec,
+    finalsZoneId: src.finalsZoneId ?? null,
     zones,
     entrants,
     categories,

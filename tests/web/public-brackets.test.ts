@@ -5,7 +5,7 @@ import type { PublicCategory, PublicCompetition } from '../../src/domain/public/
 const cat = (id: string, over: Partial<PublicCategory>): PublicCategory => ({
   id, label: id, discipline: 'karate', waveId: 'w1', zoneId: 'z1', status: 'finished', finishedAt: null,
   bracket: { kind: 'kata', order: [] } as never, registrationIds: [], absentIds: [], results: {}, kataScores: null,
-  tieBreaks: { pools: {}, kata: [], kataFinal: [] }, numbers: {}, matchZones: {},
+  tieBreaks: { pools: {}, kata: [], kataFinal: [] }, numbers: {}, matchZones: {}, timing: null, kataPassageSec: null,
   podium: { first: 'r1', second: 'r2', thirds: ['r3'], complete: true, ties: [] }, ...over,
 });
 

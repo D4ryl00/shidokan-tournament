@@ -1,5 +1,6 @@
 import type { Bracket, KataScores, MatchResult, Podium } from '../brackets/index.js';
 import type { MedalRow } from '../results.js';
+import type { CombatTiming } from '../schedule/durations.js';
 import type { DisciplineId } from '../types.js';
 
 /**
@@ -16,6 +17,8 @@ export interface PublicCompetitionSummary {
   location: string | null;
   phase: PublicPhase;
   launched: boolean;
+  /** Sessions et leur heure prévue (seule heure montrée d'une session non lancée). */
+  waves: { name: string; plannedStart: string | null }[];
 }
 
 export interface PublicEntrant {
@@ -53,6 +56,19 @@ export interface PublicQueueItem {
   waveId: string | null;
   /** Finale passée sur la zone des finales (à la fin de la file de sa vague) : la ligne « Finales de la session … » se place avant la première. */
   finals: boolean;
+  /** Durée du passage, sans le temps de changement. */
+  durationSec: number;
+  /** Durée retenue du combat ; null : bloc de kata. */
+  timing: CombatTiming | null;
+  /** Bloc de kata : nombre de passages ; null : combat. */
+  kataPassages: number | null;
+  /** Heure de fin (ISO), seulement pour un passage joué. */
+  endedAt: string | null;
+}
+
+/** Clé d'un passage, commune à la vue et à la ligne de temps. */
+export function passageKey(item: { categoryId: string; matchId: string | null; kataPart: 'tour1' | 'finale' | null }): string {
+  return `${item.categoryId}:${item.matchId ?? (item.kataPart ? `kata:${item.kataPart}` : 'kata')}`;
 }
 
 export interface PublicCategory {
@@ -76,6 +92,10 @@ export interface PublicCategory {
   /** Combat joué sur une autre zone → « Zone des finales : Ring ». */
   matchZones: Record<string, string>;
   podium: Podium;
+  /** Durée du tableau (null pour un kata). */
+  timing: CombatTiming | null;
+  /** Kata : durée d'un passage. */
+  kataPassageSec: number | null;
 }
 
 export interface PublicCompetition {
@@ -84,7 +104,18 @@ export interface PublicCompetition {
   date: string;
   location: string | null;
   phase: PublicPhase;
-  waves: { id: string | null; name: string; launched: boolean }[];
+  waves: {
+    id: string | null;
+    name: string;
+    launched: boolean;
+    /** HH:MM. Seule l'heure prévue est montrée d'une session non lancée : les deux autres y sont null. */
+    plannedStart: string | null;
+    actualStart: string | null;
+    finalsStart: string | null;
+  }[];
+  /** Temps de changement entre deux passages, en secondes. */
+  changeoverSec: number;
+  finalsZoneId: string | null;
   zones: { id: string; name: string }[];
   entrants: Record<string, PublicEntrant>;
   /** Seulement celles d'une vague lancée. */
@@ -108,6 +139,11 @@ export interface FighterLine {
   label: string;
   discipline: DisciplineId;
   next: {
+    /** `passageKey` du passage. */
+    key: string;
+    durationSec: number;
+    timing: CombatTiming | null;
+    kataPassages: number | null;
     number: number;
     zoneId: string;
     /** Passages non joués avant lui sur sa zone. */

@@ -57,16 +57,16 @@ describe('fighterTimeline', () => {
       categoryId: 'A',
       label: 'Karaté -45 kg',
       discipline: 'karate',
-      next: { number: 5, zoneId: 'z2', before: 1, opponent: { from: { kind: 'winner', number: 12, zoneId: 'z1' } } },
+      next: { key: 'A:w2-0', durationSec: 210, timing: { rounds: 2, roundSec: 90, restSec: 30, overtimeSec: 60 }, kataPassages: null, number: 5, zoneId: 'z2', before: 1, opponent: { from: { kind: 'winner', number: 12, zoneId: 'z1' } } },
       played: [{ number: 11, opponent: 'FAURE Jade', won: true }],
       state: 'upcoming',
     });
-    expect(kata).toMatchObject({ categoryId: 'B', next: { number: 1, zoneId: 'z2', before: 0, opponent: null }, played: [], state: 'upcoming' });
+    expect(kata).toMatchObject({ categoryId: 'B', next: { key: 'B:kata', durationSec: 450, timing: null, kataPassages: 5, number: 1, zoneId: 'z2', before: 0, opponent: null }, played: [], state: 'upcoming' });
   });
 
   test('adversaire connu : nom et club (masqué compris)', () => {
     const [karate] = fighterTimeline(pub, 'f2');
-    expect(karate!.next).toEqual({ number: 12, zoneId: 'z1', before: 0, opponent: { name: 'Combattant masqué', club: 'Dojo Lyon' } });
+    expect(karate!.next).toEqual({ key: 'A:w1-0', durationSec: 210, timing: { rounds: 2, roundSec: 90, restSec: 30, overtimeSec: 60 }, kataPassages: null, number: 12, zoneId: 'z1', before: 0, opponent: { name: 'Combattant masqué', club: 'Dojo Lyon' } });
   });
 
   test('élimination directe sans repêchage, combat perdu : éliminé', () => {

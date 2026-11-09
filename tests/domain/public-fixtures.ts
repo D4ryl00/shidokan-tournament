@@ -5,6 +5,7 @@ import type { Category } from '../../src/domain/categories.js';
 import type { PassagePlan, PlannedPassage } from '../../src/domain/passages/index.js';
 import type { PublicSource } from '../../src/domain/public/view.js';
 import type { ResultRecord } from '../../src/domain/results.js';
+import { defaultSchedule } from '../../src/domain/schedule/durations.js';
 import type { DisciplineId } from '../../src/domain/types.js';
 
 /**
@@ -208,6 +209,11 @@ export function source(over: Partial<PublicSource> = {}): PublicSource {
     lastResultAt: { A: '2026-11-22T09:40:00.000Z', D: '2026-11-22T10:00:00.000Z', E: '2026-11-22T09:50:00.000Z' },
     plan: PLAN,
     launchedCategoryIds: ['A', 'B', 'D', 'E', 'F'],
+    schedule: defaultSchedule(),
+    triathlonRounds: 3,
+    grid: { ageBands: [{ code: 'MIN', label: 'Minimes', minAge: 12, maxAge: 13, isMinor: true, sortOrder: 1 }], weightClasses: [], ageLinks: [] },
+    waveSchedules: [],
+    endedAt: {},
     ...over,
   };
 }
