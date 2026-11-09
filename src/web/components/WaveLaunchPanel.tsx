@@ -1,9 +1,12 @@
 import { Alert, Button, Checkbox, Group, List, Modal, SegmentedControl, Stack, Table, Text } from '@mantine/core';
-import { useState } from 'react';
+import { TimeInput } from '@mantine/dates';
+import { notifications } from '@mantine/notifications';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { useLaunch, useLaunchStatus, useNumberPending, useNumberPreview, useReopen, useReplacement, useZones, type RenumberMode, type WaveState } from '../api.js';
+import { useLaunch, useLaunchStatus, useNumberPending, useNumberPreview, useReopen, useReplacement, useSetWaveSchedule, useWaveSchedules, useZones, type RenumberMode, type WaveState } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { StatusBadge, type Tone } from './ui/StatusBadge.js';
+import { HelpButton } from './Help.js';
 import { plural } from '../../domain/plural.js';
 
 const STATES: Record<WaveState, { label: string; tone: Tone }> = {
@@ -12,6 +15,28 @@ const STATES: Record<WaveState, { label: string; tone: Tone }> = {
   reopened: { label: 'Rouverte', tone: 'warn' },
   finished: { label: 'Terminée', tone: 'accent' },
 };
+
+/** Heure de Paris, « HH:MM ». */
+const nowInParis = () =>
+  new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date());
+
+/** Champ d'heure « HH:MM » : s'enregistre à la sortie du champ si l'heure est valide et a changé (vide : efface). */
+function ClockField({ label, description, value, onSave, testId, extra }: {
+  label: string; description?: string; value: string | null; onSave: (v: string | null) => void; testId: string; extra?: React.ReactNode;
+}) {
+  const [text, setText] = useState(value ?? '');
+  useEffect(() => setText(value ?? ''), [value]);
+  const valid = text === '' || /^([01]\d|2[0-3]):[0-5]\d$/.test(text);
+  const commit = (t: string) => { if (/^([01]\d|2[0-3]):[0-5]\d$/.test(t) ? t !== value : t === '' && value !== null) onSave(t === '' ? null : t); };
+  return (
+    <Group align="flex-end" gap="xs" wrap="nowrap">
+      <TimeInput size="sm" w={120} label={label} description={description} value={text} data-testid={testId}
+        error={valid ? null : 'Heure attendue : 14:30'}
+        onChange={(e) => setText(e.currentTarget.value)} onBlur={() => commit(text)} />
+      {extra && <Button size="sm" variant="default" onClick={() => { const t = nowInParis(); setText(t); commit(t); }}>{extra}</Button>}
+    </Group>
+  );
+}
 
 /**
  * Lancement d'une vague (null : vague implicite d'une compétition sans vague) : « Figer et imprimer la vague »,
@@ -30,6 +55,11 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
   const reopen = useReopen(competitionId);
   const number = useNumberPending(competitionId);
   const numberPreview = useNumberPreview(competitionId);
+  const schedules = useWaveSchedules(competitionId);
+  const setSchedule = useSetWaveSchedule(competitionId);
+  const times = schedules.data?.find((w) => w.waveId === waveId) ?? { waveId, plannedStart: null, actualStart: null, finalsStart: null };
+  const saveTime = (field: 'plannedStart' | 'actualStart' | 'finalsStart', v: string | null) =>
+    setSchedule.mutate({ waveId, [field]: v }, { onSuccess: () => notifications.show({ color: 'green', message: 'Horaire enregistré' }) });
   const printUrl = `/competitions/${competitionId}/impression?session=${encodeURIComponent(waveId ?? '')}`;
   if (!status) return null;
   const zoneName = (zid: string) => zones.find((z) => z.id === zid)?.name ?? '?';
@@ -62,6 +92,17 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
         )}
         {status.state === 'reopened' && <Button size="xs" data-testid="refreeze-open" onClick={openNumber}>Refiger la session…</Button>}
       </Group>
+      <Group align="flex-start" gap="md" data-testid="wave-times">
+        <Group gap={4} wrap="nowrap" align="center"><Text fw={600} size="sm">Horaires</Text><HelpButton topic="combats.horaires" /></Group>
+        <ClockField label="Début prévu" value={times.plannedStart} testId="wave-planned" onSave={(v) => saveTime('plannedStart', v)} />
+        {status.state !== 'preparation' && (
+          <>
+            <ClockField label="Démarrée à" value={times.actualStart} testId="wave-actual" extra="Maintenant" onSave={(v) => saveTime('actualStart', v)} />
+            <ClockField label="Finales à" description="vide : à la fin des combats éliminatoires" value={times.finalsStart} testId="wave-finals" onSave={(v) => saveTime('finalsStart', v)} />
+          </>
+        )}
+      </Group>
+      <ApiErrorAlert error={setSchedule.error} />
       {status.pending.length > 0 && status.state !== 'reopened' && (
         <Alert color="orange" data-testid="pending-alert" title={`${plural(status.pending.length, 'catégorie')} à numéroter`}>
           <Text size="sm" mb={6}>{status.pending.map((p) => p.label).join(', ')} : sans numéro de passage (catégorie nouvelle ou régénérée).</Text>

@@ -21,6 +21,8 @@ import type { GoogleContactsView, SyncApply } from '../domain/google-contacts.js
 import type { Zone, ZoneInput } from '../domain/zones.js';
 import type { HistoryEntryView } from '../domain/history/types.js';
 import type { PassagePlan } from '../domain/passages/index.js';
+import type { WaveSchedule } from '../domain/schedule/types.js';
+import type { CategoryDurations } from '../domain/schedule/durations.js';
 
 import { ApiError, TAB_ID } from './apiError.js';
 export { ApiError, TAB_ID };
@@ -307,9 +309,21 @@ function useCategoryMutation<T>(id: string, fn: (arg: T, qc: QC) => Promise<Cate
 }
 
 export const useUpdateCategory = (id: string) =>
-  useCategoryMutation(id, ({ cid, ...patch }: { cid: string; format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null; status?: CategoryStatus; unlock?: boolean; zoneId?: string | null; waveOverride?: string | null; order?: number }, qc) =>
+  useCategoryMutation(id, ({ cid, ...patch }: { cid: string; format?: BracketFormat | null; repechage?: boolean | null; thirdPlace?: boolean | null; status?: CategoryStatus; unlock?: boolean; zoneId?: string | null; waveOverride?: string | null; order?: number; durations?: CategoryDurations | null }, qc) =>
     api<CategoryWrite>('PATCH', `/api/competitions/${id}/categories/${cid}`, patch, { rev: categoryRevOf(qc, id, cid) }),
   );
+/** Heures des sessions (début prévu, démarrage réel, finales) ; une entrée par session ayant au moins une heure. */
+export const useWaveSchedules = (id: string, enabled = true) =>
+  useQuery({ queryKey: ['wave-schedules', id], queryFn: () => api<WaveSchedule[]>('GET', `/api/competitions/${id}/wave-schedules`), enabled });
+/** Enregistre une heure d'une session (null : l'efface) ; seuls les champs donnés changent. */
+export function useSetWaveSchedule(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { waveId: string | null; plannedStart?: string | null; actualStart?: string | null; finalsStart?: string | null }) =>
+      api<WaveSchedule>('PUT', `/api/competitions/${id}/wave-schedules`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wave-schedules', id] }),
+  });
+}
 /** Tableaux libres (étape 37) : création sans révision, modification et suppression avec celle de la catégorie. */
 export const useCreateFreeTableau = (id: string) => {
   const qc = useQueryClient();

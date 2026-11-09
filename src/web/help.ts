@@ -53,6 +53,9 @@ export type HelpTopicId =
   | 'reglages.pesee'
   | 'reglages.tableaux'
   | 'reglages.kata'
+  | 'reglages.durees'
+  | 'combats.horaires'
+  | 'tableaux.durees'
   | 'grille.poids'
   | 'grille.tranches'
   | 'grille.ouvertes'
@@ -467,6 +470,14 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Repartir de zéro annule d’un coup ce qui a été décidé depuis la session choisie (réaffectations, déplacements à la main, échanges, refus, cartes mises de côté) et efface ces lignes ; les actions Places, Tirage et Format plus récentes qui en dépendent partent avec. Les autres sessions ne bougent pas. Un combattant placé dans une session lancée ou une catégorie commencée reste où il est ; impossible si la session choisie est lancée.',
     ],
   },
+  'tableaux.durees': {
+    title: 'Durée des combats du tableau',
+    short: 'Comme la compétition, ou une durée propre au tableau, avec des exceptions combat par combat.',
+    details: [
+      'Durée d’un combat = rounds × durée d’un round + (rounds − 1) × repos. Un combat avec une exception prend sa durée, sinon le tableau, sinon la compétition.',
+      'Modifiable même quand le tableau est lancé ou commencé : les heures estimées des spectateurs sont recalculées (« vers 14:30 »).',
+    ],
+  },
   tableaux: {
     title: 'Tableaux',
     short: 'Les tableaux de chaque catégorie : vérifiez-les, changez le format si besoin, puis marquez-les prêts et imprimez.',
@@ -535,6 +546,15 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Pour corriger : rouvrez le combat et choisissez l’autre vainqueur. Les combats suivants déjà joués deviennent « à revoir ».',
         '« Effacer le résultat » remet le combat à disputer (une confirmation est demandée).',
       ],
+    ],
+  },
+  'combats.horaires': {
+    title: 'Horaires de la session',
+    short: 'Début prévu, heure de démarrage réelle et heure des finales : de quoi estimer les heures de passage.',
+    details: [
+      'Le début prévu est affiché aux spectateurs avant le lancement. Une fois la session lancée, « Démarrée à » (bouton « Maintenant ») sert de point de départ aux estimations.',
+      '« Finales à » : vide, les finales suivent la fin des combats éliminatoires.',
+      'Les heures affichées aux spectateurs sont des estimations (« vers 14:30 ») calculées avec les durées des combats ; chaque champ s’enregistre en le quittant.',
     ],
   },
   'combats.kata': {
@@ -666,6 +686,15 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Combat pour la 3e place : un seul bronze au lieu de deux (ignoré quand le repêchage est activé).',
       ],
       'Chaque catégorie peut changer de format dans l’onglet Tableaux.',
+    ],
+  },
+  'reglages.durees': {
+    title: 'Durées des combats',
+    short: 'Rounds, durée d’un round, repos et prolongation par groupe d’âge, pour estimer les heures de passage.',
+    details: [
+      'Durée d’un combat = rounds × durée d’un round + (rounds − 1) × repos. Le temps de changement s’ajoute après chaque passage ; la prolongation n’est pas comptée.',
+      'Un tableau peut avoir sa propre durée, et un combat la sienne (onglet Tableaux) : le combat l’emporte sur le tableau, qui l’emporte sur la compétition.',
+      'Les spectateurs voient des heures estimées (« vers 14:30 ») : elles se recalculent au fil des résultats.',
     ],
   },
   'reglages.kata': {

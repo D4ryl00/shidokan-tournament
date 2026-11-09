@@ -45,7 +45,7 @@ const PHASE_TITLES: Record<MatchPhase, string> = {
 };
 const poolName = (i: number) => String.fromCharCode(65 + i);
 
-function roundTitle(phase: MatchPhase, round: number, rounds: number): string {
+export function roundTitle(phase: MatchPhase, round: number, rounds: number): string {
   if (phase !== 'main') return `${PHASE_TITLES[phase]}${phase === 'repechage' || phase === 'losers' ? ` — tour ${round}` : ''}`;
   const fromEnd = rounds - round;
   return fromEnd === 0 ? 'Finale' : fromEnd === 1 ? 'Demi-finales' : fromEnd === 2 ? 'Quarts de finale' : `Tour ${round}`;
