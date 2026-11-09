@@ -30,10 +30,72 @@ test('first result estimates the start', () => {
   expect(t.starts.get('b')).toBe(h(9, 51));
 });
 
-test('now pushes unplayed passages', () => {
-  const t = buildTimeline(input({ now: h(10, 20), waves: [wave('s1', null, h(9, 30))], zones: [{ zoneId: 'z', items: [item('a', 's1', 3600), item('b', 's1', 300)] }] }));
-  expect(t.starts.get('a')).toBe(h(10, 20));
-  expect(t.starts.get('b')).toBe(h(10, 20) + 3600 + 60);
+test('a fight in progress that overruns pushes the next ones', () => {
+  // Combat en cours : sa fin estimée n'est jamais avant maintenant (départ ≥ maintenant − durée).
+  const t = buildTimeline(input({ now: h(10, 20), waves: [wave('s1', null, h(9, 30))], zones: [{ zoneId: 'z', items: [item('a', 's1', 300), item('b', 's1', 300)] }] }));
+  expect(t.starts.get('a')).toBe(h(10, 15));
+  expect(t.starts.get('b')).toBe(h(10, 21));
+});
+
+test('on time mid-fight: no drift, next estimate steady while now moves inside the fight', () => {
+  const at = (now: number) => input({ now, waves: [wave('s1', h(9, 30), h(9, 30))], zones: [{ zoneId: 'z', items: [item('a', 's1', 300), item('b', 's1', 300), item('c', 's1', 300)] }] });
+  for (const now of [h(9, 30), h(9, 33), h(9, 35)]) {
+    const t = buildTimeline(at(now));
+    expect(t.starts.get('a')).toBe(h(9, 30));
+    expect(t.starts.get('b')).toBe(h(9, 36));
+    expect(t.starts.get('c')).toBe(h(9, 42));
+    expect(zoneDrift(at(now), 'z')).toBe(0);
+  }
+  // Le combat déborde de 2 min : les suivants glissent d'autant.
+  const late = buildTimeline(at(h(9, 37)));
+  expect(late.starts.get('a')).toBe(h(9, 32));
+  expect(late.starts.get('b')).toBe(h(9, 38));
+  expect(zoneDrift(at(h(9, 37)), 'z')).toBe(120);
+});
+
+test('only the first unplayed passage after a result is in progress', () => {
+  // Le n° 2 vient de finir à 10:00 : le n° 3 part au changement, le n° 4 s'enchaîne (pas de plancher à maintenant).
+  const t = buildTimeline(input({
+    now: h(10, 0) + 30,
+    waves: [wave('s1', h(9, 0))],
+    zones: [{ zoneId: 'z', items: [item('1', 's1', 300, h(9, 55)), item('2', 's1', 300, h(10, 0)), item('3', 's1', 300), item('4', 's1', 300)] }],
+  }));
+  expect(t.starts.get('3')).toBe(h(10, 1));
+  expect(t.starts.get('4')).toBe(h(10, 7));
+});
+
+test('a passage entered late has no time and pushes nothing', () => {
+  // Kata n° 1 pas encore noté, combat n° 2 joué à 9:47 : le n° 1 n'a pas d'heure, le n° 3 part à 9:47 + changement.
+  const zones = [{ zoneId: 'z', items: [item('1', 's1', 300), item('2', 's1', 300, h(9, 47)), item('3', 's1', 300)] }];
+  for (const now of [null, h(9, 48), h(9, 50)]) {
+    const inp = input({ now, waves: [wave('s1', h(9, 36))], zones });
+    const t = buildTimeline(inp);
+    expect(t.starts.has('1')).toBe(false);
+    expect(t.starts.get('3')).toBe(h(9, 48));
+    expect(zoneDrift(inp, 'z')).toBe(0);
+  }
+  // Sur une autre zone, ce passage sans heure ne retarde pas les finales.
+  const t = buildTimeline(input({
+    now: h(10, 2),
+    finalsZoneId: 'f',
+    waves: [wave('s1', null, h(9, 0))],
+    zones: [
+      { zoneId: 'f', items: [item('f1', 's1', 300, h(9, 50)), item('fin1', 's1', 300, null, true)] },
+      { zoneId: 'o', items: [item('o1', 's1', 300), item('o2', 's1', 300, h(10, 0))] },
+    ],
+  }));
+  expect(t.starts.has('o1')).toBe(false);
+  expect(t.starts.get('fin1')).toBe(h(10, 0));
+});
+
+test('drift skips passages entered late', () => {
+  const inp = input({
+    now: null,
+    waves: [wave('s1', h(9, 0))],
+    zones: [{ zoneId: 'z', items: [item('1', 's1', 300), item('2', 's1', 300, h(9, 20)), item('3', 's1', 300)] }],
+  });
+  // Calculé sur le n° 3 (prévu 9:12, estimé 9:21), pas sur le n° 1 sans heure.
+  expect(zoneDrift(inp, 'z')).toBe(h(9, 21) - h(9, 12));
 });
 
 test('now does not move a wave not started', () => {
@@ -101,6 +163,21 @@ test('fixed finals time wins', () => {
   }));
   expect(t.starts.get('fin1')).toBe(h(12, 0));
   expect(t.finalsStarts.get('s1')).toBe(h(12, 0));
+});
+
+test('finals already begun do not wait again for the finals time', () => {
+  // « Finales à » 12:00, mais la première finale a fini à 11:35 : la suivante s'enchaîne, sans revenir à 12:00.
+  const t = buildTimeline(input({
+    now: null,
+    finalsZoneId: 'f',
+    waves: [wave('s1', h(9, 0), null, h(12, 0))],
+    zones: [
+      { zoneId: 'f', items: [item('f1', 's1', 300, h(10, 30)), item('fin1', 's1', 300, h(11, 35), true), item('fin2', 's1', 300, null, true)] },
+      { zoneId: 'o', items: [item('o1', 's1', 300, h(11, 0))] },
+    ],
+  }));
+  expect(t.starts.get('fin2')).toBe(h(11, 36));
+  expect(t.finalsStarts.get('s1')).toBe(h(11, 30));
 });
 
 test('no start known gives no times', () => {

@@ -1,25 +1,35 @@
 import { finalMatchIds, waveKey } from '../passages/index.js';
 import { clockToSeconds, isoToDaySeconds, secondsToClock } from '../schedule/clock.js';
 import { buildTimeline, zoneDrift, type TimelineInput } from '../schedule/timeline.js';
+import { isClock } from '../schedule/types.js';
 import { passageKey, type PublicCompetition } from './types.js';
 
 /** Heures calculées d'une vue publique (spec §5.3). Tout est null pour une compétition passée. */
 export interface PublicTimes {
   /** Heure de départ estimée d'un passage (`passageKey`), « H:MM ». */
   at(key: string): string | null;
+  /**
+   * Heure du passage en tête de zone (« À suivre », ou le prochain combat d'un suivi quand c'est lui) : seulement si son départ
+   * estimé est après maintenant ; sinon il est sur le tatami, sans heure.
+   */
+  nextAt(key: string): string | null;
   /** Démarrage d'une session : saisi, ou estimé d'après le premier résultat ; null sinon. */
   waveStart(waveId: string | null): { clock: string; estimated: boolean } | null;
   /** Départ estimé des finales d'une session, « H:MM ». */
   finalsAt(waveId: string | null): string | null;
-  /** Heure estimée de la finale d'une catégorie (bloc de finale d'un kata, ou bloc entier). */
+  /**
+   * Heure estimée de la finale d'une catégorie (bloc de finale d'un kata, ou bloc entier) : le premier passage de finale pas
+   * encore joué (au meilleur des trois : le premier combat de la série restant) ; null une fois la finale jouée.
+   */
   categoryFinalAt(categoryId: string): string | null;
   /** Avance (négatif) ou retard (positif) d'une zone, en minutes arrondies. */
   drift(zoneId: string): number | null;
 }
 
-const NONE: PublicTimes = { at: () => null, waveStart: () => null, finalsAt: () => null, categoryFinalAt: () => null, drift: () => null };
+const NONE: PublicTimes = { at: () => null, nextAt: () => null, waveStart: () => null, finalsAt: () => null, categoryFinalAt: () => null, drift: () => null };
 
-const orNull = (hhmm: string | null) => (hhmm === null ? null : clockToSeconds(hhmm));
+/** Heure d'une session en secondes ; absente ou illisible (pas HH:MM) : null, jamais « NaN:NaN ». */
+const orNull = (hhmm: string | null) => (hhmm !== null && isClock(hhmm) ? clockToSeconds(hhmm) : null);
 
 /** `now` : secondes depuis minuit le jour de la compétition (`nowOnDay`), null hors de ce jour. */
 export function publicTimes(pub: PublicCompetition, now: number | null): PublicTimes {
@@ -54,6 +64,10 @@ export function publicTimes(pub: PublicCompetition, now: number | null): PublicT
   };
   return {
     at,
+    nextAt: (key) => {
+      const s = timeline.starts.get(key);
+      return s === undefined || (now !== null && s <= now) ? null : secondsToClock(s);
+    },
     waveStart: (waveId) => {
       const w = timeline.waveStarts.get(waveKey(waveId));
       return w ? { clock: secondsToClock(w.at), estimated: w.estimated } : null;
@@ -66,6 +80,7 @@ export function publicTimes(pub: PublicCompetition, now: number | null): PublicT
       const c = pub.categories.find((x) => x.id === categoryId);
       if (!c) return null;
       const items = pub.queues.flatMap((q) => q.items).filter((i) => i.categoryId === categoryId);
+      const unplayed = (list: typeof items) => list.filter((i) => i.endedAt === null);
       let wanted: typeof items;
       if (c.bracket.kind === 'combat') {
         const finals = finalMatchIds(c.bracket);
@@ -74,8 +89,8 @@ export function publicTimes(pub: PublicCompetition, now: number | null): PublicT
         const finale = items.filter((i) => i.kataPart === 'finale');
         wanted = finale.length > 0 ? finale : items.filter((i) => i.kataPart === null);
       }
-      const starts = wanted.map((i) => timeline.starts.get(passageKey(i))).filter((s): s is number => s !== undefined);
-      return starts.length > 0 ? secondsToClock(Math.max(...starts)) : null;
+      const starts = unplayed(wanted).map((i) => timeline.starts.get(passageKey(i))).filter((s): s is number => s !== undefined);
+      return starts.length > 0 ? secondsToClock(Math.min(...starts)) : null;
     },
     drift: (zoneId) => {
       const d = zoneDrift(input, zoneId);

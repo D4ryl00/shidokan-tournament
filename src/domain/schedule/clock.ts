@@ -14,6 +14,12 @@ export function secondsToClock(sec: number): string {
   return `${h}:${String(m).padStart(2, '0')}`;
 }
 
+/** Créé une seule fois : appelé pour chaque résultat à chaque calcul des heures. */
+const PARIS = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+});
+
 /**
  * Secondes depuis minuit (heure de Paris) du jour `date` (AAAA-MM-JJ). Un instant d'un autre jour donne une valeur
  * < 0 ou ≥ 86 400 ; ISO illisible : null.
@@ -21,10 +27,7 @@ export function secondsToClock(sec: number): string {
 export function isoToDaySeconds(iso: string, date: string): number | null {
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return null;
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
-  }).formatToParts(at);
+  const parts = PARIS.formatToParts(at);
   const n = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? NaN);
   const [y, mo, d] = date.split('-').map(Number);
   const days = (Date.UTC(n('year'), n('month') - 1, n('day')) - Date.UTC(y!, mo! - 1, d!)) / 86_400_000;
