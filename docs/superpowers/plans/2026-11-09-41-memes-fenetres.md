@@ -41,8 +41,7 @@
 
 **Interfaces:**
 - Produces:
-  - `export interface LineCombat { discipline: CombatDiscipline; ruleset: Ruleset | null }`
-  - `ClubFormLine` : `combat` et `ruleset` remplacés par `combats: LineCombat[]` (ordre = ordre de saisie ; disciplines distinctes). Le reste ne change pas (`weightClassId` commun à tous les combats, `prefs`, `shobuKeep`).
+  - `ClubFormLine` : `combat` remplacé par `combats: CombatDiscipline[]` (ordre = ordre de saisie ; disciplines distinctes). `ruleset` reste unique et vaut pour tous les combats ; le reste ne change pas (`weightClassId` commun, `prefs`, `shobuKeep`).
   - `export interface LineOptions { multipleCombats?: boolean }` (défaut `false`)
   - `lineToRows(line, lineNumber, grid, tolerance, closed = new Set(), opts: LineOptions = {}): ClubFormRow[]` — une ligne d'inscription par combat (dans l'ordre), puis le kata.
   - `parseClubForm(cells, grid, tolerance?, closed?, opts: LineOptions = {})`, `parseClubFormLines(header, lines, grid, tolerance, closed?, opts: LineOptions = {})`
@@ -53,23 +52,24 @@
 - [ ] **Step 1: Write the failing tests** (`tests/domain/club-form.test.ts`, nouveau `describe('plusieurs combats')`)
 
 ```ts
-const two: ClubFormLine = { ...base, combats: [{ discipline: 'karate', ruleset: 'shobu' }, { discipline: 'shido-boxing', ruleset: 'jiyu' }], kata: true, prefs: { 'shido-mix': 1, karate: 2 }, shobuKeep: 'discipline' };
+const two: ClubFormLine = { ...base, combats: ['karate', 'shido-boxing'], ruleset: 'shobu', kata: true, prefs: { 'shido-mix': 1, karate: 2 }, shobuKeep: 'discipline' };
 test('deux combats et le kata donnent trois inscriptions, dans l’ordre', () => {
   const rows = lineToRows(two, 1, grid, tol, new Set(), { multipleCombats: true });
-  expect(rows.map((r) => [r.input?.discipline, r.input?.ruleset])).toEqual([['karate', 'shobu'], ['shido-boxing', 'jiyu'], ['kata', null]]);
-  // Reclassement commun, sans ses propres combats ; priorité shobu seulement sur le combat en shobu.
+  expect(rows.map((r) => [r.input?.discipline, r.input?.ruleset])).toEqual([['karate', 'shobu'], ['shido-boxing', 'shobu'], ['kata', null]]);
+  // Reclassement commun, sans ses propres combats ; priorité shobu sur chacun de ses combats.
   expect(rows[0]!.input!.otherDisciplines).toEqual(['shido-mix']);
   expect(rows[1]!.input!.otherDisciplines).toEqual(['shido-mix']);
   expect(rows[0]!.input!.acceptsJiyuFirst).toBe(true);
-  expect(rows[1]!.input!.acceptsJiyuFirst).toBeNull();
+  expect(rows[1]!.input!.acceptsJiyuFirst).toBe(true);
 });
 test('réglage désactivé : deux combats refusés', () => {
   const rows = lineToRows(two, 1, grid, tol);
   expect(rows[0]!.input).toBeNull();
   expect(rows[0]!.errors).toContain(ONE_COMBAT_ONLY);
 });
-test('règlement manquant sur un des combats', () => {
-  const rows = lineToRows({ ...two, combats: [two.combats[0]!, { discipline: 'shido-boxing', ruleset: null }] }, 1, grid, tol, new Set(), { multipleCombats: true });
+test('règlement manquant : chaque combat est en erreur', () => {
+  const rows = lineToRows({ ...two, ruleset: null }, 1, grid, tol, new Set(), { multipleCombats: true });
+  expect(rows[0]!.errors).toContain('Règlement manquant (Jiyu ou Shobu).');
   expect(rows[1]!.errors).toContain('Règlement manquant (Jiyu ou Shobu).');
 });
 test('tidyReclass retire tous ses combats des choix', () => {
@@ -77,10 +77,10 @@ test('tidyReclass retire tous ses combats des choix', () => {
 });
 ```
 
-`tests/domain/club-line.test.ts` : un combattant avec deux inscriptions de combat (karaté shobu réaffecté depuis boxing jiyu via `originalJson`, mix jiyu) donne `combats` = valeurs déclarées dans l'ordre d'inscription, `editable: true`, `reason: null` ; `prefs` lues sur le premier combat ; `shobuKeep` lu sur le premier combat en shobu.
+`tests/domain/club-line.test.ts` : un combattant avec deux inscriptions de combat (karaté shobu réaffecté depuis boxing shobu via `originalJson`, mix jiyu) donne `combats: ['shido-boxing', 'shido-mix']` (valeurs déclarées, ordre d'inscription), `ruleset: 'shobu'` (celui du premier combat), `editable: true`, `reason: null` ; `prefs` et `shobuKeep` lus sur le premier combat.
 
 - [ ] **Step 2: Run** `npx vitest run tests/domain/club-form.test.ts tests/domain/club-line.test.ts` — Expected: FAIL (types et comportement).
-- [ ] **Step 3: Implement** le nouveau type et les fonctions ci-dessus. `cellsToLine` lit encore une seule colonne de combat (la 2e colonne arrive en Task 3) et produit `combats: combat ? [{ discipline: combat, ruleset }] : []`. `checkRows` : l'avertissement « inscrit dans deux disciplines de combat » n'est émis que si le réglage est désactivé (passer `opts` jusqu'à lui) ; il couvre toujours deux **lignes** différentes du même combattant. Mettre à jour les appels (`clubFormLineSchema` : `combats: z.array(z.object({ discipline: z.enum([...]), ruleset: z.enum(['jiyu','shobu']).nullable() })).max(4)` ; les composants web gardent pour l'instant un seul choix : `OneOf` lit `combats[0]?.discipline` et écrit `[{ discipline, ruleset }]`). Les serveurs passent `{ multipleCombats: competition.settings.multipleCombatDisciplinesPerDay }` à `parseClubForm` / `parseClubFormLines` / `lineToRows`.
+- [ ] **Step 3: Implement** le nouveau type et les fonctions ci-dessus. `cellsToLine` lit encore une seule colonne de combat (la 2e colonne arrive en Task 3) et produit `combats: combat ? [combat] : []`. `checkRows` : l'avertissement « inscrit dans deux disciplines de combat » n'est émis que si le réglage est désactivé (passer `opts` jusqu'à lui) ; il couvre toujours deux **lignes** différentes du même combattant. Mettre à jour les appels (`clubFormLineSchema` : `combats: z.array(z.enum(['karate','shido-boxing','shido-mix','triathlon'])).max(4)` sans doublon ; les composants web gardent pour l'instant un seul choix : `OneOf` lit `combats[0] ?? null` et écrit `combat ? [combat] : []`). Les serveurs passent `{ multipleCombats: competition.settings.multipleCombatDisciplinesPerDay }` à `parseClubForm` / `parseClubFormLines` / `lineToRows`.
 - [ ] **Step 4: Run** `npm run typecheck && npm test` — Expected: tout passe (tests existants adaptés au nouveau champ, sans changement de comportement à un combat).
 - [ ] **Step 5: Commit** `feat(fiche-club): une ligne de combattant porte une liste de combats`
 
@@ -153,17 +153,17 @@ Règles par auteur :
 **Interfaces:**
 - Consumes: Task 1.
 - Produces:
-  - `export const CLUB_FORM_SECOND_COMBAT_COLUMNS = ['2e discipline de combat', 'Règlement du 2e combat'] as const` — ajoutées **à la fin** des colonnes quand le réglage est activé (les index existants ne bougent pas ; les anciennes fiches restent lisibles).
+  - `export const CLUB_FORM_SECOND_COMBAT_COLUMN = '2e discipline de combat'` — ajoutée **à la fin** des colonnes quand le réglage est activé (les index existants ne bougent pas ; les anciennes fiches restent lisibles). Le « Règlement » de la ligne vaut pour les deux combats.
   - `buildClubFormTemplate(competition, grid, closed)` et `buildClubFormPdf(competition, grid, closed)` lisent `competition.settings.multipleCombatDisciplinesPerDay`.
-  - `parseClubForm` reconnaît les deux colonnes par leur libellé (ligne d'en-tête) : présentes → `combats` reçoit un 2e combat s'il est rempli.
+  - `parseClubForm` reconnaît la colonne par son libellé (ligne d'en-tête) : présente → `combats` reçoit un 2e combat s'il est rempli.
 
 - [ ] **Step 1: Write the failing tests**
-  - `template with the setting on has the two extra columns, validated like the first combat` — en-tête ligne 13 se termine par `CLUB_FORM_SECOND_COMBAT_COLUMNS` ; listes de validation `combat` et `reglement`.
+  - `template with the setting on has the extra column, validated like the first combat` — en-tête ligne 13 se termine par `CLUB_FORM_SECOND_COMBAT_COLUMN` ; liste de validation `combat`.
   - `template with the setting off is unchanged` — mêmes colonnes qu'avant.
-  - `reading a form with a second combat` — cellules karaté/Shobu + 2e combat Boxing/Jiyu → `combats` à deux entrées → trois inscriptions avec le kata.
+  - `reading a form with a second combat` — karaté, Shobu, kata Oui, 2e combat Boxing → `combats: ['karate', 'shido-boxing']` → trois inscriptions (deux en shobu, plus le kata).
   - `second combat equal to the first is ignored with a warning` — avertissement `2e discipline de combat identique à la première (ignorée).`
   - `an old form (without the columns) still reads` (existant, garder vert).
-  - PDF, réglage activé : le texte d'aide de la colonne Disciplines devient `kata et/ou une ou plusieurs disciplines de combat` ; chaque case de combat a sa paire J / S (règlement par combat) ; réglage désactivé : PDF inchangé (test sur le texte extrait, comme les tests PDF existants).
+  - PDF, réglage activé : le texte d'aide de la colonne Disciplines devient `kata et/ou une ou plusieurs disciplines de combat` (le coach coche plusieurs cases) ; la colonne Règlement reste unique ; réglage désactivé : PDF inchangé (test sur le texte extrait, comme les tests PDF existants).
 - [ ] **Step 2: Run** `npx vitest run tests/domain/club-form.test.ts tests/server/club-form-pdf.test.ts tests/server/club-form-template.test.ts` — Expected: FAIL.
 - [ ] **Step 3: Implement.** Forme exacte du PDF laissée au constructeur dans ces contraintes (spec §5.6) ; vérifier le rendu en ouvrant le PDF généré (Chrome) et le .ods (LibreOffice headless : `/Applications/LibreOffice.app/Contents/MacOS/soffice`).
 - [ ] **Step 4: Run** `npm run typecheck && npm test` — Expected: PASS.
@@ -208,18 +208,18 @@ Règles par auteur :
   - `export interface LineOps { save(args: { fighterId: string | null; line: ClubFormLine; version: string | null; publicNameHidden: boolean }): Promise<ClubLine>; remove(args: { fighterId: string; version: string }): Promise<void>; pending: boolean; error: Error | null }`
   - `useCoachLineOps(token): LineOps`, `useOrganiserLineOps(competitionId, clubId): LineOps` (invalide `registrations`, `clubs`, `club-lines`).
   - `ClubLineForm` props : `{ ops: LineOps; mode: 'coach' | 'organiser'; multipleCombats: boolean; line: ClubLine | null; ageBands; weightClasses; closed: string[]; opened; onClose(message?: string); title?: string; footerExtra?: ReactNode }` — `title` remplace le titre par défaut, `footerExtra` reçoit « Enregistrer et ajouter un autre » (Task 6).
-  - `lineForm.ts` : `combatChoices(form, ctx)`, `rulesetChoices(form, discipline, ctx)`, `applyChange(form, patch, ctx): ClubFormLine` avec `ctx = { mode, multipleCombats, closed: Set<string>, ageBands, weightClasses, saved: ClubFormLine | null }`.
+  - `lineForm.ts` : `combatChoices(form, ctx)`, `rulesetChoices(form, ctx)`, `applyChange(form, patch, ctx): ClubFormLine` avec `ctx = { mode, multipleCombats, closed: Set<string>, ageBands, weightClasses, saved: ClubFormLine | null }`.
 
 Comportement :
 - `multipleCombats` faux : les combats restent un choix unique (`OneOf`, second clic décoche), règlement unique sous les combats — écran identique à aujourd'hui.
-- `multipleCombats` vrai : cases à choix multiple ; sous chaque combat coché, son « Règlement » (Jiyu / Shobu) ; un combat déjà enregistré reste affiché même si le réglage a été désactivé depuis (on peut le décocher, pas en cocher un nouveau au-delà d'un seul).
+- `multipleCombats` vrai : cases à choix multiple, un seul « Règlement » (Jiyu / Shobu) pour tous les combats ; une catégorie fermée pour ce règlement dans un des combats cochés n'est pas proposée au coach ; un combat déjà enregistré reste affiché même si le réglage a été désactivé depuis (on peut le décocher, pas en cocher un nouveau au-delà d'un seul).
 - `mode: 'organiser'` : combats, règlements, kata et tranches d'âge fermés **proposés** avec le suffixe ` (non ouverte)` ; `mode: 'coach'` : comme aujourd'hui (seulement la valeur enregistrée).
 - Case « Masquer le nom sur la page publique » (les deux modes), sous le grade, envoyée avec l'enregistrement.
 - Un refus « périmé » / lecture seule (`RELOAD_STATUSES`) ferme la fenêtre avec le message, comme aujourd'hui.
 
 - [ ] **Step 1: Write the failing tests** (`tests/web/line-form.test.ts`)
   - `organiser sees closed choices marked « (non ouverte) »`, `coach does not`.
-  - `multiple combats: ticking a second combat keeps the first, each with its ruleset`.
+  - `multiple combats: ticking a second combat keeps the first; one ruleset for both`.
   - `setting off: a saved second combat stays and can be unticked, a new one replaces` .
   - `changing the age band removes closed choices for the coach only`.
   - `reclassement choices exclude every ticked combat`.
@@ -277,7 +277,7 @@ Comportement :
   - `importClubForm(db, competitionId, parse, opts: { replace: boolean; clubId?: string; coordinates?: boolean })` — avec `clubId`, le club est pris par identifiant (pas par nom) ; `coordinates: false` : ni coach, ni téléphone, ni e-mails écrits ; `preApproval` toujours écrit. Défaut pour la saisie papier : `{ replace: false, clubId, coordinates: false }`.
   - `PaperEntry = { header: { clubId: string; preApproval: boolean }; lines: ClubFormLine[] }` côté web ; l'écran garde le `ClubChoice` et le résout à « Vérifier » / « Enregistrer la fiche » (`useResolveClub`).
 
-Comportement : `ClubPicker` à la place du champ Club (`paper-entry-club` → `club-picker`) ; Coach / Téléphone / E-mails retirés ; « Pré-accord du coach » prend `club.preApproval` au choix d'un club de la compétition, décochée pour un club de l'annuaire, modifiable ; combats en choix multiple + règlement par combat quand le réglage est activé (même `lineForm.ts` que Task 5 si possible).
+Comportement : `ClubPicker` à la place du champ Club (`paper-entry-club` → `club-picker`) ; Coach / Téléphone / E-mails retirés ; « Pré-accord du coach » prend `club.preApproval` au choix d'un club de la compétition, décochée pour un club de l'annuaire, modifiable ; combats en choix multiple (un seul règlement) quand le réglage est activé (même `lineForm.ts` que Task 5 si possible).
 
 - [ ] **Step 1: Write the failing tests**
   - Serveur : `paper entry no longer touches coordinates` — club avec coach/téléphone/e-mails → saisie → coordonnées inchangées, `preApproval` écrit.

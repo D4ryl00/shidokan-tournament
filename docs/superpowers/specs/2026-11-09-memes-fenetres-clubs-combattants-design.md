@@ -122,12 +122,14 @@ modèle .ods, saisie d'une fiche papier, import .ods. Réglage désactivé : un 
 
 - La ligne d'un combattant (`ClubFormLine`) passe d'un combat à une liste de combats ; `registrationsToLine` ne marque plus
   un combattant à deux combats en lecture seule (`TWO_COMBATS_REASON` disparaît quand le réglage le permet).
-- Un règlement (jiyu / shobu) **par combat** (choix de Claude : karaté shobu et boxing jiyu doivent pouvoir coexister). La
-  catégorie de poids est commune (la grille ne dépend pas de la discipline).
+- **Un seul règlement** (jiyu ou shobu) pour tous les combats du combattant (décision de l'organisateur). La catégorie de
+  poids est commune (la grille ne dépend pas de la discipline). Un combattant déjà inscrit dans deux combats à règlements
+  différents est montré avec le règlement de son premier combat ; l'enregistrer applique ce règlement à tous.
 - Reclassement : une seule liste de choix pour le combattant, sans ses propres disciplines de combat (choix de Claude) ;
-  « Que lui proposer d'abord ? » (shobu) s'applique à chacun de ses combats en shobu.
-- Fiche papier PDF et .ods, réglage activé : les cases de combat permettent d'en cocher plusieurs ; une colonne « Règlement »
-  par combat ou équivalent (forme laissée au constructeur, lisible par l'import, qui lit toujours les anciennes fiches).
+  « Que lui proposer d'abord ? » (shobu) s'applique à tous ses combats.
+- Fiche papier PDF, réglage activé : le coach peut cocher plusieurs cases dans « Disciplines » ; la colonne « Règlement »
+  reste unique. Modèle .ods, réglage activé : une colonne « 2e discipline de combat » en plus, en fin de ligne (l'import lit
+  toujours les anciennes fiches).
 - Réglage désactivé après coup : un combattant déjà inscrit dans deux combats les garde et les voit (comme une valeur déjà
   enregistrée) ; on ne peut que les réduire.
 
