@@ -1,6 +1,6 @@
 import { Alert, Button, Checkbox, Chip, Group, Input, Modal, NativeSelect, Paper, Radio, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { Children, useState, type ReactNode } from 'react';
+import { Children, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { choosePref, kgText, orderedPrefs, weightWarning, type ClubFormLine, type PrefDiscipline, type PrefRank } from '../../domain/club-form.js';
 import { DISCIPLINES } from '../../domain/disciplines.js';
 import { ApiError, RELOAD_STATUSES, type ClubEntryView, type ClubLine, type LineOps } from '../api.js';
@@ -8,12 +8,15 @@ import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { ageBandChoices, applyChange, combatChoices, kataChoice, reclassChoices, rulesetChoices, toggleCombat, type LineFormContext } from './club-line/lineForm.js';
 import { OneOf } from './PaperEntryTable.js';
 
+/** Suite d'un enregistrement : l'avis éventuel du serveur et la ligne enregistrée. */
+export type SavedThen = (message?: string, saved?: ClubLine) => void;
+
 export const EMPTY_LINE: ClubFormLine = {
   lastName: '', firstName: '', sex: null, ageBandCode: null, weightClassId: null, weightKg: null, combats: [], kata: false, grade: null, ruleset: null, prefs: {}, shobuKeep: null,
 };
 
 /** Fenêtre d'un combattant, pour le coach (page du club) et pour l'organisateur (création : `line` null). */
-export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weightClasses, closed, opened, onClose, title, footerExtra }: {
+export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weightClasses, closed, opened, onClose, title, footerExtra, onEnter }: {
   ops: LineOps;
   mode: 'coach' | 'organiser';
   multipleCombats: boolean;
@@ -30,7 +33,9 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
    * Boutons de plus, à côté de « Enregistrer ». Une fonction reçoit `saveThen` : il enregistre la ligne puis appelle `then`
    * (avec l'avis éventuel du serveur) au lieu de fermer la fenêtre.
    */
-  footerExtra?: ReactNode | ((saveThen: (then: (message?: string) => void) => void) => ReactNode);
+  footerExtra?: ReactNode | ((saveThen: (then: SavedThen) => void) => ReactNode);
+  /** Touche Entrée dans un champ (hors liste déroulante) : reçoit `saveThen`, comme `footerExtra`. Sans elle, Entrée ne fait rien. */
+  onEnter?: (saveThen: (then?: SavedThen) => void) => void;
 }) {
   const mobile = useMediaQuery('(max-width: 600px)');
   // Le parent remonte le formulaire (key) pour chaque combattant : l'état part de la ligne ouverte.
@@ -40,12 +45,22 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Ligne verrouillée (combats commencés…) : elle s'ouvre en lecture seule, avec la raison. L'organisateur y corrige encore
-  // le nom, le prénom, le grade et le nom masqué (`namesOnly`).
+  // le nom, le prénom, le grade, le nom masqué et les disciplines qui n'ont pas commencé (`partly`) ; sans combat commencé
+  // (kata seul), aussi le poids, le règlement et le reclassement.
   const locked = !!line && !line.editable;
-  const namesOnly = locked && !!line?.namesEditable;
-  const frozen = locked && !namesOnly;
+  const partly = locked && !!line?.partlyEditable;
+  const frozen = locked && !partly;
+  const started = new Set(partly ? line!.startedDisciplines : []);
+  const combatFrozen = frozen || [...started].some((d) => d !== 'kata');
+  const lastNameRef = useRef<HTMLInputElement>(null);
+  // Fenêtre remontée à vide (« Enregistrer et ajouter un autre ») : le curseur revient sur le nom.
+  useEffect(() => {
+    if (opened && !line) lastNameRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- au montage seulement
+  }, []);
   const saved = line?.line ?? null;
-  const ctx: LineFormContext = { mode, multipleCombats, closed: new Set(closed), ageBands, weightClasses, saved };
+  // L'organisateur coche plusieurs combats même si le réglage ne le prévoit pas (un avis le rappelle).
+  const ctx: LineFormContext = { mode, multipleCombats: multipleCombats || mode === 'organiser', closed: new Set(closed), ageBands, weightClasses, saved };
   const set = (patch: Partial<ClubFormLine>) => setForm((f) => applyChange(f, patch, ctx));
   const band = ageBands.find((b) => b.code === form.ageBandCode);
   const classes = weightClasses.filter((w) => w.ageBandCode === form.ageBandCode && w.sex === form.sex);
@@ -64,15 +79,23 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
   const onError = (e: unknown) => {
     if (e instanceof ApiError && RELOAD_STATUSES.has(e.status)) onClose(e.message);
   };
-  const submit = (then: (message?: string) => void = onClose) =>
+  const submit = (then: SavedThen = onClose) =>
     ops.save({ fighterId: line?.fighterId ?? null, line: form, version: line?.version ?? null, publicNameHidden: nameHidden })
       // L'organisateur peut choisir une catégorie fermée : le serveur l'enregistre avec un avis, qu'on lui montre.
-      .then((done) => then(mode === 'organiser' && done.notices.length ? done.notices.join(' ') : undefined), onError);
+      .then((done) => then(mode === 'organiser' && done.notices.length ? done.notices.join(' ') : undefined, done), onError);
+  // Entrée dans un champ : pas dans une liste déroulante (elle choisit), ni sur un bouton (il se clique), ni pendant une saisie IME.
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Enter' || !onEnter || frozen || ops.pending || e.nativeEvent.isComposing) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button, select, textarea, [aria-haspopup], [role="combobox"], [role="option"]')) return;
+    e.preventDefault();
+    onEnter(submit);
+  };
   const doDelete = () => line && ops.remove({ fighterId: line.fighterId, version: line.version }).then(() => onClose(), onError);
 
   return (
     <Modal opened={opened} onClose={() => onClose()} fullScreen={mobile} title={title ?? (line ? `${line.line.lastName} ${line.line.firstName}` : 'Ajouter un combattant')}>
-      <Stack data-testid="club-line-form">
+      <Stack data-testid="club-line-form" onKeyDown={onKeyDown}>
         {locked && line && <Alert color="orange" data-testid="line-locked">{line.reason ?? 'Cette ligne n’est pas modifiable.'}</Alert>}
         {/* Avant d'enregistrer : inscriptions qui ne tiennent pas sur la ligne, catégorie non ouverte… */}
         {!frozen && line && line.notices.length > 0 && (
@@ -81,7 +104,7 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
         <Stack>
             <Part disabled={frozen}>
             <SimpleGrid cols={{ base: 1, xs: 2 }}>
-              <TextInput data-testid="line-last-name" label="Nom" required value={form.lastName} onChange={(e) => set({ lastName: e.currentTarget.value })} />
+              <TextInput ref={lastNameRef} data-autofocus={!line || undefined} data-testid="line-last-name" label="Nom" required value={form.lastName} onChange={(e) => set({ lastName: e.currentTarget.value })} />
               <TextInput data-testid="line-first-name" label="Prénom" required value={form.firstName} onChange={(e) => set({ firstName: e.currentTarget.value })} />
             </SimpleGrid>
             </Part>
@@ -89,14 +112,15 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
             <Input.Wrapper label="Sexe" required labelElement="div" role="group" aria-label="Sexe">
               <OneOf value={form.sex} options={[['F', 'Féminin'], ['M', 'Masculin']]} onChange={(sex) => set({ sex })} />
             </Input.Wrapper>
+            </Part>
             <SimpleGrid cols={{ base: 1, xs: 2 }}>
-              <Select data-testid="line-age" label="Catégorie d’âge" required data={ageBandChoices(form, ctx)} value={form.ageBandCode}
+              <Select data-testid="line-age" label="Catégorie d’âge" required data={ageBandChoices(form, ctx)} value={form.ageBandCode} disabled={locked}
                 onChange={(ageBandCode) => set({ ageBandCode })} />
               {/* Obligatoire pour un combat (le kata n'a pas de catégorie de poids). */}
-              <Select data-testid="line-weight-class" label="Catégorie de poids" required={hasCombat} disabled={!classes.length}
+              <Select data-testid="line-weight-class" label="Catégorie de poids" required={hasCombat} disabled={!classes.length || combatFrozen}
                 placeholder={classes.length ? undefined : 'Sexe et âge d’abord'}
                 data={classes.map((w) => ({ value: w.id, label: `${w.label} kg` }))} value={form.weightClassId} onChange={(weightClassId) => set({ weightClassId })} />
-              <TextInput data-testid="line-weight" label="Poids actuel (facultatif)" rightSection={<Text size="xs">kg</Text>} inputMode="decimal" value={weight}
+              <TextInput data-testid="line-weight" label="Poids actuel (facultatif)" rightSection={<Text size="xs">kg</Text>} inputMode="decimal" value={weight} disabled={combatFrozen}
                 onChange={(e) => {
                   const raw = e.currentTarget.value;
                   setWeight(raw);
@@ -111,16 +135,20 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
                 <div role="group" aria-label="Discipline de combat">
                   <Group gap={4} wrap="wrap">
                     {combats.map(([d, label]) => (
-                      <Chip key={d} size="xs" checked={form.combats.includes(d)} onChange={() => set({ combats: toggleCombat(form, d, ctx) })}>{label}</Chip>
+                      <Chip key={d} size="xs" checked={form.combats.includes(d)} disabled={frozen || started.has(d)} onChange={() => set({ combats: toggleCombat(form, d, ctx) })}>{label}</Chip>
                     ))}
                   </Group>
                 </div>
                 {kata.shown && (
-                  <Checkbox data-testid="line-kata" label={kata.label} checked={form.kata} onChange={(e) => set({ kata: e.currentTarget.checked })} />
+                  <Checkbox data-testid="line-kata" label={kata.label} checked={form.kata} disabled={frozen || started.has('kata')} onChange={(e) => set({ kata: e.currentTarget.checked })} />
                 )}
               </Stack>
             </Input.Wrapper>
             {nothingOpen && <Text size="sm" c="var(--sk-warn-text)" data-testid="line-nothing-open">Aucune catégorie ouverte pour cette tranche d’âge à cette compétition.</Text>}
+            {mode === 'organiser' && !multipleCombats && form.combats.length > 1 && (
+              <Text size="sm" c="var(--sk-warn-text)" data-testid="line-multiple-off">Plusieurs combats : le réglage de la compétition n’en prévoit qu’un par jour. L’inscription est enregistrée quand même.</Text>
+            )}
+            <Part disabled={combatFrozen}>
             {hasCombat && (
               <Input.Wrapper label="Règlement" required labelElement="div" role="group" aria-label="Règlement">
                 {rulesets.length ? <OneOf value={form.ruleset} options={rulesets} onChange={(ruleset) => set({ ruleset })} />
@@ -133,7 +161,7 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
             <Checkbox data-testid="line-name-hidden" label="Masquer le nom sur la page publique" description="Le public voit « Combattant masqué » ; le club reste affiché."
               checked={nameHidden} onChange={(e) => setNameHidden(e.currentTarget.checked)} />
             </Part>
-            <Part disabled={locked}>
+            <Part disabled={combatFrozen}>
             {hasCombat && otherChoices.length > 0 && (
               <Paper withBorder p="md" radius="md" data-testid="line-reclass" style={{ background: 'var(--sk-bg)' }}>
                 <Stack gap="sm">

@@ -109,27 +109,28 @@ test('age band of an FFK-confirmed fighter can change: the line weight class win
   expect((await registrations())[0]!.weightClassId).toBe('junior:F:-53');
 });
 
-test('two combats refused when the setting is off, kept when already registered', async () => {
+const MULTIPLE_OFF = 'Plusieurs disciplines de combat, alors que le réglage de la compétition n’en prévoit qu’une par jour.';
+
+test('setting off: the organiser still enters two combats, with a notice; the coach is refused', async () => {
   await setMultiple(false);
   const two: ClubFormLine = { ...LINE, kata: false, grade: null, combats: ['karate', 'shido-boxing'] };
-  const refused = await post(two);
-  expect(refused.statusCode).toBe(400);
-  expect(refused.json().issues).toContain('Une seule discipline de combat par combattant à cette compétition.');
-  // Déjà inscrit en karaté + boxing (saisies séparées).
-  expect((await manual('karate')).statusCode).toBe(201);
-  expect((await manual('shido-boxing')).statusCode).toBe(201);
-  const fighterId = (await registrations())[0]!.fighter.id;
-  const l = await current(fighterId);
-  expect(l.line.combats.sort()).toEqual(['karate', 'shido-boxing']);
-  expect((await put(l, { ...l.line, kata: false, grade: null })).statusCode).toBe(200);
-  const one = await current(fighterId);
-  expect((await put(one, { ...one.line, combats: ['karate'] })).statusCode).toBe(200);
-  expect((await registrations()).map((r) => r.discipline)).toEqual(['karate']);
-  // Un combat de plus qui n'était pas enregistré : refusé.
-  const again = await current(fighterId);
-  const bad = await put(again, { ...again.line, combats: ['karate', 'shido-mix'] });
-  expect(bad.statusCode).toBe(400);
-  expect(bad.json().issues).toContain('Une seule discipline de combat par combattant à cette compétition.');
+  const res = await post(two);
+  expect(res.statusCode, res.body).toBe(201);
+  expect(res.json().notices).toContain(MULTIPLE_OFF);
+  expect((await registrations()).map((r) => r.discipline).sort()).toEqual(['karate', 'shido-boxing']);
+  // Un seul combat : plus d'avis.
+  const l = await current(res.json().fighterId);
+  expect((await put(l, { ...two, combats: ['karate'] })).json().notices).not.toContain(MULTIPLE_OFF);
+  // Le coach : refusé.
+  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
+  const entryId = (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, name: 'Coach Dojo' } })).json().id;
+  await app.inject({ method: 'POST', url: `${base}/invitations`, payload: { directoryIds: [entryId] } });
+  const [row] = (await app.inject({ method: 'GET', url: `${base}/invitations` })).json();
+  const t = (await app.inject({ method: 'POST', url: `${base}/invitations/${row.clubId}/links` })).json().token;
+  await app.inject({ method: 'PATCH', url: `${base}/club-entry`, payload: { status: 'open', deadline: '2026-11-15' } });
+  const coach = await app.inject({ method: 'POST', url: `/api/inscription/${t}/lines`, payload: { line: { ...two, lastName: 'COACH' } } });
+  expect(coach.statusCode).toBe(400);
+  expect(coach.json().issues).toContain('Une seule discipline de combat par combattant à cette compétition.');
 });
 
 test('two combats accepted when the setting is on (organiser and coach)', async () => {
@@ -146,39 +147,74 @@ test('two combats accepted when the setting is on (organiser and coach)', async 
   expect(res.statusCode, res.body).toBe(201);
 });
 
-const ORGANISER_LOCKED = 'Ses combats ont commencé : seuls le nom, le prénom, le grade et l’affichage du nom se corrigent ici ; pour la catégorie, passez par Réaffectation ou Tableaux.';
+const startKarate = async () => raw("update categories set status = 'started' where id = ?", (await registrations()).find((r) => r.discipline === 'karate')!.categoryId);
+const KARATE_STARTED = 'Karaté : commencé, ne se change plus ici (catégorie : Réaffectation ou Tableaux). Le nom, le prénom, le grade, l’affichage du nom et les autres disciplines se corrigent encore.';
 
-test('started category: the organiser corrects only the name, the grade and the public name', async () => {
+test('started category: names, grade and public name are corrected; the started combat and the identity stay', async () => {
   const l = (await post()).json() as Line;
   const regsBefore = await registrations();
-  raw("update categories set status = 'started' where id = ?", regsBefore.find((r) => r.discipline === 'karate')!.categoryId);
+  await startKarate();
   const cur = await current(l.fighterId);
-  expect(cur).toMatchObject({ editable: false, namesEditable: true, reason: ORGANISER_LOCKED });
-  // Le reste de la ligne est ignoré : la catégorie ne bouge pas.
-  const res = await put(cur, { ...LINE, lastName: ' MARTINEZ ', firstName: 'Léna', grade: '1er dan', weightClassId: 'senior:F:-61', sex: 'M', combats: [], kata: true }, true);
+  expect(cur).toMatchObject({ editable: false, partlyEditable: true, startedDisciplines: ['karate'], reason: KARATE_STARTED });
+  // Sexe, âge, poids, règlement : ignorés (un combat a commencé).
+  const res = await put(cur, { ...LINE, lastName: ' MARTINEZ ', firstName: 'Léna', grade: '1er dan', weightClassId: 'senior:F:-61', sex: 'M', ruleset: 'shobu' }, true);
   expect(res.statusCode, res.body).toBe(200);
-  expect(res.json()).toMatchObject({ editable: false, namesEditable: true, publicNameHidden: true, line: { lastName: 'MARTINEZ', firstName: 'Léna', grade: '1er dan', sex: 'F', weightClassId: 'senior:F:-55', combats: ['karate'] } });
+  expect(res.json()).toMatchObject({ editable: false, partlyEditable: true, publicNameHidden: true, line: { lastName: 'MARTINEZ', firstName: 'Léna', grade: '1er dan', sex: 'F', weightClassId: 'senior:F:-55', ruleset: 'jiyu', combats: ['karate'], kata: true } });
   const [f] = raw<{ last_name: string; first_name: string; grade: string; name_key: string }>('select last_name, first_name, grade, name_key from fighters');
-  expect(f).toMatchObject({ last_name: 'MARTINEZ', first_name: 'Léna', grade: '1er dan' });
-  expect(f!.name_key).toBe('MARTINEZ LENA');
+  expect(f).toMatchObject({ last_name: 'MARTINEZ', first_name: 'Léna', grade: '1er dan', name_key: 'MARTINEZ LENA' });
   expect((await registrations()).map((r) => [r.id, r.categoryId, r.weightClassId])).toEqual(regsBefore.map((r) => [r.id, r.categoryId, r.weightClassId]));
+});
+
+test('started category: another discipline is added or removed; the started one is untouched and cannot be removed', async () => {
+  await setMultiple(false);
+  const l = (await post({ ...LINE, kata: false, grade: null })).json() as Line;
+  const [karate] = await registrations();
+  await startKarate();
+  // Ajout d'un 2e combat et du kata (réglage désactivé : l'organisateur le peut, avec l'avis).
+  const cur = await current(l.fighterId);
+  const added = await put(cur, { ...cur.line, combats: ['karate', 'shido-boxing'], kata: true, grade: '2e kyu' });
+  expect(added.statusCode, added.body).toBe(200);
+  expect(added.json().notices).toContain(MULTIPLE_OFF);
+  const regs = await registrations();
+  expect(regs.map((r) => r.discipline).sort()).toEqual(['karate', 'kata', 'shido-boxing']);
+  expect(regs.find((r) => r.discipline === 'shido-boxing')).toMatchObject({ weightClassId: 'senior:F:-55', source: 'onsite' });
+  expect(regs.find((r) => r.id === karate!.id)).toMatchObject({ categoryId: karate!.categoryId, weightClassId: karate!.weightClassId });
+  // Le boxing retiré (pas commencé) : retiré. Le karaté retiré (commencé) : refusé.
+  const again = await current(l.fighterId);
+  expect((await put(again, { ...again.line, combats: ['karate'] })).statusCode).toBe(200);
+  expect((await registrations()).map((r) => r.discipline).sort()).toEqual(['karate', 'kata']);
+  const last = await current(l.fighterId);
+  const refused = await put(last, { ...last.line, combats: [] });
+  expect(refused.statusCode).toBe(409);
+  expect(refused.json().error).toBe('Karaté : commencé, ne se retire pas.');
+});
+
+test('only the kata has started: weight class and ruleset of a new combat are chosen; sex and age stay', async () => {
+  const l = (await post({ ...LINE, combats: [], ruleset: null, weightClassId: null })).json() as Line;
+  raw("update categories set status = 'started' where id = ?", (await registrations())[0]!.categoryId);
+  const cur = await current(l.fighterId);
+  expect(cur).toMatchObject({ partlyEditable: true, startedDisciplines: ['kata'] });
+  const res = await put(cur, { ...cur.line, combats: ['karate'], ruleset: 'shobu', weightClassId: 'senior:F:-61', ageBandCode: 'junior' });
+  expect(res.statusCode, res.body).toBe(200);
+  expect((await registrations()).find((r) => r.discipline === 'karate')).toMatchObject({ weightClassId: 'senior:F:-61' });
+  expect(res.json().line).toMatchObject({ ageBandCode: 'senior', ruleset: 'shobu' });
 });
 
 test('started category: no club change, no delete, no empty name, stale version refused', async () => {
   const other = (await app.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Autre club' } })).json().id as string;
   const l = (await post({ ...LINE, kata: false, grade: null })).json() as Line;
-  raw("update categories set status = 'started' where id = ?", (await registrations())[0]!.categoryId);
+  await startKarate();
   const cur = await current(l.fighterId);
-  const moved = await put(cur, LINE, false, other);
+  const moved = await put(cur, cur.line, false, other);
   expect(moved.statusCode).toBe(409);
-  expect(moved.json().error).toBe(ORGANISER_LOCKED);
+  expect(moved.json().error).toBe(KARATE_STARTED);
   const del = await app.inject({ method: 'DELETE', url: `${base}/clubs/${clubId}/lines/${cur.fighterId}?version=${encodeURIComponent(cur.version)}` });
   expect(del.statusCode).toBe(409);
-  expect((await put(cur, { ...LINE, lastName: '  ' })).statusCode).toBe(400);
-  expect((await put({ fighterId: cur.fighterId, version: 'perimee' }, { ...LINE, lastName: 'X' })).statusCode).toBe(409);
+  expect((await put(cur, { ...cur.line, lastName: '  ' })).statusCode).toBe(400);
+  expect((await put({ fighterId: cur.fighterId, version: 'perimee' }, { ...cur.line, lastName: 'X' })).statusCode).toBe(409);
   // Un homonyme du club est refusé comme d'habitude.
   await post({ ...LINE, lastName: 'DUPONT', kata: false, grade: null });
-  const dup = await put(cur, { ...LINE, lastName: 'DUPONT' });
+  const dup = await put(cur, { ...cur.line, lastName: 'DUPONT' });
   expect(dup.statusCode).toBe(400);
   expect(dup.json().issues).toEqual(['DUPONT Léa est déjà dans la liste.']);
 });
@@ -194,7 +230,7 @@ test('started category: the coach still cannot correct anything', async () => {
   const a = (await app.inject({ method: 'POST', url, payload: { line: { ...LINE, kata: false, grade: null } } })).json() as Line;
   raw("update categories set status = 'started' where id = ?", (await registrations())[0]!.categoryId);
   const view = (await app.inject({ method: 'GET', url: `/api/inscription/${t}` })).json() as { lines: Line[] };
-  expect(view.lines[0]).toMatchObject({ editable: false, namesEditable: false, reason: 'Ses combats ont commencé : contactez l’organisateur.' });
+  expect(view.lines[0]).toMatchObject({ editable: false, partlyEditable: false, reason: 'Ses combats ont commencé : contactez l’organisateur.' });
   const res = await app.inject({ method: 'PUT', url: `${url}/${a.fighterId}`, payload: { line: { ...LINE, lastName: 'AUTRE' }, version: view.lines[0]!.version } });
   expect(res.statusCode).toBe(409);
 });

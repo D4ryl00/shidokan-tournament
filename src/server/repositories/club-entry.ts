@@ -1,6 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import { closedEntryWarning, lineToRows, WEIGHT_MISSING, type ClubFormLine } from '../../domain/club-form.js';
+import { closedEntryWarning, lineToRows, WEIGHT_MISSING, type ClubFormLine, type CombatDiscipline } from '../../domain/club-form.js';
 import { closedSummary, columnLabel, entryKey, isEntryClosed, offeredAgeBands } from '../../domain/closed-categories.js';
+import { DISCIPLINES } from '../../domain/disciplines.js';
 import { enteredValues, registrationsToLine } from '../../domain/club-line.js';
 import { renderPrivacyNotice } from '../../domain/app-settings.js';
 import { getAppSettings } from './app-settings.js';
@@ -10,7 +11,7 @@ import type { DisciplineId, Sex } from '../../domain/types.js';
 import { assignAffiliationNumber, checkAffiliationNumber, linkClubResult } from '../db/club-directory.js';
 import type { AppDb } from '../db/client.js';
 import { categories, clubDirectory, clubs, competitions, fighters, registrations } from '../db/schema.js';
-import { getCompetition, getGrid } from './competitions.js';
+import { getCompetition, getCompetitionSync, getGrid } from './competitions.js';
 import { closedSet } from './closed-categories.js';
 import { clubValues, recordClubChange } from './club-changes.js';
 import { NotFoundError, RegistrationValidationError, upsertFighterRegistration } from './registrations.js';
@@ -33,8 +34,13 @@ export interface ClubLine {
   version: string;
   line: ClubFormLine;
   editable: boolean;
-  /** Combats commencés, vu par l'organisateur : la ligne est verrouillée sauf le nom, le prénom, le grade et le nom masqué. */
-  namesEditable: boolean;
+  /**
+   * Combats commencés, vu par l'organisateur : la ligne est verrouillée, sauf le nom, le prénom, le grade, le nom masqué et les
+   * disciplines qui n'ont pas commencé (ajouter, retirer) ; sans combat commencé (kata seul), aussi le poids, le règlement et le reclassement.
+   */
+  partlyEditable: boolean;
+  /** Disciplines (déclarées) dont la catégorie a commencé : elles ne se retirent ni ne se changent. */
+  startedDisciplines: DisciplineId[];
   reason: string | null;
   /** Mentions pour le coach (catégorie qui n'est plus ouverte…). */
   notices: string[];
@@ -82,8 +88,11 @@ export class LineReadOnlyError extends Error {
 }
 
 export const LOCKED_REASON = 'Ses combats ont commencé : contactez l’organisateur.';
-export const ORGANISER_LOCKED_REASON =
-  'Ses combats ont commencé : seuls le nom, le prénom, le grade et l’affichage du nom se corrigent ici ; pour la catégorie, passez par Réaffectation ou Tableaux.';
+/** Raison montrée à l'organisateur pour un combattant dont une discipline a commencé. */
+export const organiserLockedReason = (started: DisciplineId[]) =>
+  `${started.map((d) => DISCIPLINES[d].label).join(', ')} : commencé, ne se change plus ici (catégorie : Réaffectation ou Tableaux). ` +
+  'Le nom, le prénom, le grade, l’affichage du nom et les autres disciplines se corrigent encore.';
+export const MULTIPLE_COMBATS_OFF = 'Plusieurs disciplines de combat, alors que le réglage de la compétition n’en prévoit qu’une par jour.';
 export const CLOSED_ENTRY = (label: string) => `${label} : catégorie non ouverte à cette compétition.`;
 const CLOSED_NOTICE = (label: string) => `${label} : cette catégorie n’est plus ouverte, l’organisateur vous contactera.`;
 const WITHDRAWN_NOTICE = (label: string) => `Ne combattra pas en ${label} : catégorie non ouverte.`;
@@ -108,8 +117,9 @@ function assertWritable(db: AppDb, access: ClubAccess): void {
 /** Ligne d'un combattant du club, avec sa version et son verrou. */
 function lineOf(db: AppDb, fighter: typeof fighters.$inferSelect, viewer: LineWriter['kind'] = 'coach'): ClubLine {
   const regs = db.select().from(registrations).where(eq(registrations.fighterId, fighter.id)).all();
-  const catIds = regs.map((r) => r.categoryId).filter((x): x is string => !!x);
-  const locked = catIds.length > 0 && db.select().from(categories).where(inArray(categories.id, catIds)).all().some((c) => c.status === 'started' || c.status === 'finished');
+  const startedRegs = startedRegistrations(db, regs);
+  const locked = startedRegs.length > 0;
+  const startedDisciplines = [...new Set(startedRegs.map((r) => enteredValues({ ...r, otherDisciplines: [] }).discipline))];
   const { line, editable, reason, warnings } = registrationsToLine(
     fighter,
     regs.map((r) => ({
@@ -126,9 +136,21 @@ function lineOf(db: AppDb, fighter: typeof fighters.$inferSelect, viewer: LineWr
     // L'organisateur peut choisir une catégorie fermée : il reçoit l'avertissement des fiches, le coach la mention de contact.
     return [viewer === 'organiser' ? closedEntryWarning(cell, closed)! : CLOSED_NOTICE(columnLabel(cell))];
   })];
-  const base = { fighterId: fighter.id, clubId: fighter.clubId ?? '', publicNameHidden: fighter.publicNameHidden, version, line, notices, namesEditable: false };
+  // L'organisateur peut inscrire plusieurs combats malgré le réglage : il le voit rappelé.
+  if (viewer === 'organiser' && line.combats.length > 1 && !getCompetitionSync(db, fighter.competitionId)?.settings.multipleCombatDisciplinesPerDay) notices.push(MULTIPLE_COMBATS_OFF);
+  const base = { fighterId: fighter.id, clubId: fighter.clubId ?? '', publicNameHidden: fighter.publicNameHidden, version, line, notices, partlyEditable: false, startedDisciplines };
   if (!locked) return { ...base, editable, reason };
-  return viewer === 'organiser' ? { ...base, editable: false, namesEditable: true, reason: ORGANISER_LOCKED_REASON } : { ...base, editable: false, reason: LOCKED_REASON };
+  return viewer === 'organiser'
+    ? { ...base, editable: false, partlyEditable: true, reason: organiserLockedReason(startedDisciplines) }
+    : { ...base, editable: false, reason: LOCKED_REASON };
+}
+
+/** Inscriptions dont la catégorie a commencé (ou est terminée). */
+function startedRegistrations<R extends { categoryId: string | null }>(db: AppDb, regs: R[]): R[] {
+  const catIds = regs.map((r) => r.categoryId).filter((x): x is string => !!x);
+  if (!catIds.length) return [];
+  const started = new Set(db.select().from(categories).where(inArray(categories.id, catIds)).all().filter((c) => c.status === 'started' || c.status === 'finished').map((c) => c.id));
+  return regs.filter((r) => r.categoryId !== null && started.has(r.categoryId));
 }
 
 /** Ligne relue après le recalcul des catégories qui suit une écriture : sa version tient compte des inscriptions déplacées. */
@@ -143,7 +165,7 @@ export function fighterLine(db: AppDb, competitionId: string, fighterId: string)
   if (!fighter) throw new NotFoundError('Combattant introuvable');
   const line = lineOf(db, fighter, 'organiser');
   // Sans club et combats commencés : rien à corriger ici (l'étape club viendrait d'abord, et le club est verrouillé).
-  return fighter.clubId ? line : { ...line, editable: false, namesEditable: false, reason: line.reason === ORGANISER_LOCKED_REASON ? ORGANISER_LOCKED_REASON : null };
+  return fighter.clubId ? line : { ...line, editable: false, partlyEditable: false, reason: line.partlyEditable ? line.reason : null };
 }
 
 function headerOf(db: AppDb, club: typeof clubs.$inferSelect): ClubEntryView['club'] {
@@ -235,7 +257,7 @@ function duplicateOf(db: AppDb, clubId: string, line: ClubFormLine, exceptId: st
 }
 
 /** Ligne existante, vérifiée avant une écriture : version à jour, ni verrouillée ni en lecture seule. `clubId` : club où elle doit être (null : n'importe lequel de la compétition). */
-function checkedLine(db: AppDb, competitionId: string, clubId: string | null, fighterId: string, expectedVersion: string, viewer: LineWriter['kind'] = 'coach') {
+function checkedLine(db: AppDb, competitionId: string, clubId: string | null, fighterId: string, expectedVersion: string, viewer: LineWriter['kind'] = 'coach', partly = false) {
   const fighter = db
     .select()
     .from(fighters)
@@ -244,7 +266,7 @@ function checkedLine(db: AppDb, competitionId: string, clubId: string | null, fi
   if (!fighter) throw new NotFoundError('Combattant introuvable');
   const current = lineOf(db, fighter, viewer);
   if (current.version !== expectedVersion) throw new StaleLineError();
-  if (!current.editable) throw new LineReadOnlyError(current.reason ?? '');
+  if (!current.editable && !(partly && current.partlyEditable)) throw new LineReadOnlyError(current.reason ?? '');
   return fighter;
 }
 
@@ -253,10 +275,11 @@ export async function saveClubLine(
   db: AppDb,
   access: ClubAccess,
   fighterId: string | null,
-  line: ClubFormLine,
+  submitted: ClubFormLine,
   expectedVersion: string | null,
   opts: { writer: LineWriter; publicNameHidden?: boolean },
 ): Promise<ClubLine> {
+  let line = submitted;
   const coach = opts.writer.kind === 'coach';
   // Une seule lecture de la compétition (la route de l'organisateur ne la vérifie pas avant).
   const competition = await getCompetition(db, access.competitionId);
@@ -267,14 +290,21 @@ export async function saveClubLine(
   const existing = fighterId
     ? db.select().from(fighters).where(and(eq(fighters.id, fighterId), eq(fighters.competitionId, access.competitionId), ...(coach ? [eq(fighters.clubId, club.id)] : []))).get()
     : undefined;
+  // Combats commencés (organisateur) : ce qui a commencé reste tel quel, le reste de la ligne se corrige.
+  let partly: { startedIds: Set<string> } | null = null;
   if (existing && !coach) {
     const current = lineOf(db, existing, 'organiser');
-    if (current.namesEditable) return saveNamesOnly(db, club.id, existing, current, line, expectedVersion ?? '', opts.publicNameHidden);
+    if (current.partlyEditable) {
+      if (current.version !== expectedVersion) throw new StaleLineError();
+      if (existing.clubId !== club.id) throw new LineReadOnlyError(current.reason ?? '');
+      line = startedMerge(current, submitted);
+      partly = { startedIds: new Set(startedRegistrations(db, db.select().from(registrations).where(eq(registrations.fighterId, existing.id)).all()).map((r) => r.id)) };
+    }
   }
   const registered = existing ? db.select().from(registrations).where(eq(registrations.fighterId, existing.id)).all() : [];
-  // Plusieurs combats avec le réglage désactivé : seulement s'ils étaient tous déjà enregistrés pour ce combattant.
+  // Plusieurs combats avec le réglage désactivé : le coach, seulement s'ils étaient tous déjà enregistrés ; l'organisateur, toujours (avec un avis).
   const alreadyEntered = new Set(registered.map((r) => enteredValues({ ...r, otherDisciplines: [] }).discipline));
-  const multipleCombats = competition.settings.multipleCombatDisciplinesPerDay || line.combats.every((d) => alreadyEntered.has(d));
+  const multipleCombats = !coach || competition.settings.multipleCombatDisciplinesPerDay || line.combats.every((d) => alreadyEntered.has(d));
   const rows = lineToRows(line, 1, await getGrid(db, access.competitionId), competition.settings.weighInToleranceKg, new Set(), { multipleCombats });
   // En ligne, le coach choisit la catégorie de poids : le poids actuel est facultatif.
   const errors = rows.flatMap((r) => r.errors).filter((e) => e !== WEIGHT_MISSING);
@@ -305,17 +335,21 @@ export async function saveClubLine(
     };
     let id = fighterId;
     if (id) {
-      checkedLine(t, access.competitionId, coach ? club.id : null, id, expectedVersion ?? '', opts.writer.kind);
+      checkedLine(t, access.competitionId, coach ? club.id : null, id, expectedVersion ?? '', opts.writer.kind, !!partly);
       t.update(fighters).set(fields).where(eq(fighters.id, id)).run();
     } else {
       id = crypto.randomUUID();
       t.insert(fighters).values({ id, competitionId: access.competitionId, licence: null, grade: null, weighInKg: null, ...fields }).run();
     }
-    const kept = new Set<string>();
+    // Les inscriptions commencées ne sont ni réécrites ni retirées.
+    const kept = new Set<string>(partly?.startedIds ?? []);
     // Sexe ou âge changé par le coach : la catégorie de poids de la ligne l'emporte sur celle de l'export FFK (qui ne correspond plus) ;
     // le choix de l'organisateur l'emporte toujours.
     const identityChanged = !!existing && (existing.sex !== line.sex || existing.ageBandCode !== line.ageBandCode);
-    for (const input of inputs) kept.add(upsertFighterRegistration(t, access.competitionId, id, input, kept, { weightClassWins: !coach || identityChanged }));
+    for (const input of inputs) {
+      if (partly && startedDisciplineOf(t, partly.startedIds, input.discipline)) continue;
+      kept.add(upsertFighterRegistration(t, access.competitionId, id, input, kept, { weightClassWins: !coach || identityChanged }));
+    }
     const dropped = t.select().from(registrations).where(eq(registrations.fighterId, id)).all().filter((r) => !kept.has(r.id));
     if (dropped.length) t.delete(registrations).where(inArray(registrations.id, dropped.map((r) => r.id))).run();
     return id;
@@ -324,31 +358,27 @@ export async function saveClubLine(
 }
 
 /**
- * Combattant dont les combats ont commencé, corrigé par l'organisateur : seuls le nom, le prénom, le grade (s'il fait du kata)
- * et le nom masqué changent ; le reste de la ligne est ignoré, ses inscriptions et ses catégories ne bougent pas. Pas de changement de club.
+ * Ligne d'un combattant dont des disciplines ont commencé, telle que l'organisateur peut l'écrire : sexe et âge gardés ; poids,
+ * règlement et reclassement gardés dès qu'un combat a commencé ; une discipline commencée ne se retire pas.
  */
-function saveNamesOnly(
-  db: AppDb, clubId: string, fighter: typeof fighters.$inferSelect, current: ClubLine, line: ClubFormLine, expectedVersion: string, publicNameHidden: boolean | undefined,
-): ClubLine {
-  if (current.version !== expectedVersion) throw new StaleLineError();
-  if (fighter.clubId !== clubId) throw new LineReadOnlyError(current.reason ?? '');
-  const lastName = line.lastName.trim();
-  const firstName = line.firstName.trim();
-  if (!lastName) throw new RegistrationValidationError(['Le nom est obligatoire.']);
-  db.transaction((tx) => {
-    const t = tx as unknown as AppDb;
-    const duplicate = duplicateOf(t, clubId, { ...line, sex: fighter.sex }, fighter.id);
-    if (duplicate) throw new RegistrationValidationError([`${duplicate.lastName} ${duplicate.firstName} est déjà dans la liste.`]);
-    t.update(fighters)
-      .set({
-        lastName, firstName, nameKey: normalizeName(`${lastName} ${firstName}`),
-        ...(current.line.kata ? { grade: line.grade?.trim() || null } : {}),
-        ...(publicNameHidden === undefined ? {} : { publicNameHidden }),
-      })
-      .where(eq(fighters.id, fighter.id))
-      .run();
-  });
-  return lineOf(db, db.select().from(fighters).where(eq(fighters.id, fighter.id)).get()!, 'organiser');
+function startedMerge(current: ClubLine, submitted: ClubFormLine): ClubFormLine {
+  const started = current.startedDisciplines;
+  const removed = started.filter((d) => (d === 'kata' ? !submitted.kata : !submitted.combats.includes(d as CombatDiscipline)));
+  if (removed.length) throw new LineReadOnlyError(`${removed.map((d) => DISCIPLINES[d].label).join(', ')} : commencé, ne se retire pas.`);
+  const saved = current.line;
+  const combatStarted = started.some((d) => d !== 'kata');
+  return {
+    ...submitted,
+    sex: saved.sex,
+    ageBandCode: saved.ageBandCode,
+    ...(combatStarted ? { weightClassId: saved.weightClassId, weightKg: saved.weightKg, ruleset: saved.ruleset, prefs: saved.prefs, shobuKeep: saved.shobuKeep } : {}),
+  };
+}
+
+/** Vrai si l'une des inscriptions commencées a cette discipline déclarée. */
+function startedDisciplineOf(t: AppDb, startedIds: Set<string>, discipline: DisciplineId): boolean {
+  if (!startedIds.size) return false;
+  return t.select().from(registrations).where(inArray(registrations.id, [...startedIds])).all().some((r) => enteredValues({ ...r, otherDisciplines: [] }).discipline === discipline);
 }
 
 /** Retire un combattant du club : ses inscriptions et lui. */

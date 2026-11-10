@@ -7,7 +7,7 @@ import type { Club } from '../../domain/registration.js';
 import { useClosedCategories, useClubs, useCompetition, useFighterLine, useGrid, useOrganiserLineOps, useResolveClub } from '../api.js';
 import type { ClubLine } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
-import { ClubLineForm } from './ClubLineForm.js';
+import { ClubLineForm, type SavedThen } from './ClubLineForm.js';
 import { ClubPicker } from './club-picker/ClubPicker.js';
 import type { ClubChoice } from './club-picker/choice.js';
 
@@ -76,6 +76,12 @@ function Steps({ competitionId, mode, line, onClose }: {
     if (message) notifications.show({ color: 'yellow', message, autoClose: false });
     onClose();
   };
+  // « Enregistrer et ajouter un autre » (bouton ou Entrée) : une notification passagère confirme, la fenêtre repart à vide sur le même club.
+  const savedThenNext: SavedThen = (message, saved) => {
+    notifications.show({ color: 'green', message: saved ? `${saved.line.lastName} ${saved.line.firstName} : enregistré.` : 'Combattant enregistré.' });
+    if (message) notifications.show({ color: 'yellow', message, autoClose: false });
+    setRound((n) => n + 1);
+  };
 
   // Un combattant sans club n'est pas « verrouillé » : une fois son club choisi, sa fenêtre est éditable (sauf combats commencés).
   const formLine = line && !line.editable && !line.reason && chosenClubId ? { ...line, editable: true } : line;
@@ -108,17 +114,16 @@ function Steps({ competitionId, mode, line, onClose }: {
       ops={ops} mode="organiser" multipleCombats={competition?.settings.multipleCombatDisciplinesPerDay ?? false}
       line={formLine} ageBands={ageBands} weightClasses={weightClasses} closed={closed} opened={step === 'line'} onClose={done}
       title={mode.kind === 'add' ? `Ajouter un combattant · ${clubName ?? ''}` : clubName ? `${line?.line.lastName} ${line?.line.firstName} · ${clubName}` : undefined}
+      // Entrée : en ajout, « Enregistrer et ajouter un autre » ; en modification, « Enregistrer ».
+      onEnter={(saveThen) => (mode.kind === 'add' ? saveThen(savedThenNext) : saveThen())}
       footerExtra={(saveThen) => (
         <>
           {mode.kind === 'edit' && (
             <Button variant="subtle" data-testid="fighter-change-club" onClick={() => { setChoice(club ? { kind: 'club', id: club.id } : choice); setStep('club'); }}>Changer de club</Button>
           )}
           {mode.kind === 'add' && (
-            <Button variant="default" data-testid="line-save-next" loading={ops.pending}
-              onClick={() => saveThen((message) => {
-                if (message) notifications.show({ color: 'yellow', message, autoClose: false });
-                setRound((n) => n + 1);
-              })}>Enregistrer et ajouter un autre</Button>
+            <Button variant="default" data-testid="line-save-next" loading={ops.pending} title="Entrée"
+              onClick={() => saveThen(savedThenNext)}>Enregistrer et ajouter un autre</Button>
           )}
         </>
       )}

@@ -191,7 +191,7 @@ test('changer de club : le brouillon est gardé, Annuler revient à la fenêtre,
   await expect(page.getByTestId('registration-row')).toHaveCount(0);
 });
 
-test('combattant dont les combats ont commencé : seuls le nom, le prénom et le nom masqué se corrigent', async ({ page, request }) => {
+test('combattant dont le combat a commencé : nom corrigé, autre discipline ajoutée, le reste verrouillé', async ({ page, request }) => {
   const id = await createCompetition(page, 'Fenêtre combattant verrouillé');
   const clubId = await addClub(page, id, 'Tani Dojo');
   for (let i = 1; i <= 4; i++) {
@@ -208,17 +208,28 @@ test('combattant dont les combats ont commencé : seuls le nom, le prénom et le
   await page.goto(`/competitions/${id}/inscriptions`);
   await page.getByTestId('registration-row').filter({ hasText: 'NOM1' }).getByRole('button', { name: 'Modifier' }).click();
   await expect(page.getByTestId('line-locked')).toHaveText(
-    'Ses combats ont commencé : seuls le nom, le prénom, le grade et l’affichage du nom se corrigent ici ; pour la catégorie, passez par Réaffectation ou Tableaux.',
+    'Karaté : commencé, ne se change plus ici (catégorie : Réaffectation ou Tableaux). Le nom, le prénom, le grade, l’affichage du nom et les autres disciplines se corrigent encore.',
   );
+  const form = page.getByTestId('club-line-form');
   await expect(page.getByTestId('line-age')).toBeDisabled();
   await expect(page.getByTestId('line-weight-class')).toBeDisabled();
-  await expect(page.getByRole('group', { name: 'Sexe' }).getByRole('checkbox').first()).toBeDisabled();
+  await expect(form.getByRole('group', { name: 'Sexe' }).getByRole('checkbox').first()).toBeDisabled();
+  const combats = form.getByRole('group', { name: 'Discipline de combat' });
+  await expect(combats.getByRole('checkbox', { name: 'Karaté' })).toBeDisabled();
+  await expect(combats.getByRole('checkbox', { name: 'Boxing' })).toBeEnabled();
   for (const testId of ['line-delete', 'fighter-change-club', 'line-save-next']) await expect(page.getByTestId(testId)).toHaveCount(0);
   await page.getByTestId('line-last-name').fill('NOMCORRIGE');
   await page.getByTestId('line-name-hidden').check();
+  // Une autre discipline (réglage « plusieurs combats » désactivé : l'organisateur le peut, avec un avis), et le kata.
+  await combats.getByText('Boxing', { exact: true }).click();
+  await expect(page.getByTestId('line-multiple-off')).toBeVisible();
+  await page.getByTestId('line-kata').check();
   await page.getByTestId('line-save').click();
   await expect(page.getByTestId('club-line-form')).toHaveCount(0);
-  await expect(page.getByTestId('registration-row').filter({ hasText: 'NOMCORRIGE' })).toHaveCount(1);
+  const rows = page.getByTestId('registration-row').filter({ hasText: 'NOMCORRIGE' });
+  await expect(rows).toHaveCount(3);
+  await expect(rows.filter({ hasText: 'Shido-boxing' })).toHaveCount(1);
+  await expect(rows.filter({ hasText: 'Kata' })).toHaveCount(1);
 });
 
 test('deux postes : modification périmée', async ({ page, context }) => {
@@ -251,7 +262,7 @@ test('deux postes : modification périmée', async ({ page, context }) => {
   await expect(second.getByTestId('registration-row')).toContainText('-61');
 });
 
-test('Enregistrer et ajouter un autre garde le club', async ({ page }) => {
+test('Enregistrer et ajouter un autre (bouton ou Entrée) : notification, fenêtre vide, même club', async ({ page }) => {
   const id = await createCompetition(page, 'Fenêtre ajout enchaîné');
   await addClub(page, id, 'Tani Dojo');
   await page.goto(`/competitions/${id}/inscriptions`);
@@ -259,14 +270,41 @@ test('Enregistrer et ajouter un autre garde le club', async ({ page }) => {
   await chooseClub(page, 'Tani Dojo');
   await fillFighter(page, MARTIN);
   await page.getByTestId('line-save-next').click();
-  // Fenêtre vide, même club.
+  await expect(page.getByText('MARTIN Léa : enregistré.')).toBeVisible();
+  // Fenêtre vide (rien de gardé), même club, curseur sur le nom.
   await expect(page.getByTestId('line-last-name')).toHaveValue('');
+  await expect(page.getByTestId('line-last-name')).toBeFocused();
+  await expect(page.getByTestId('club-line-form').getByRole('group', { name: 'Sexe' }).getByRole('checkbox', { checked: true })).toHaveCount(0);
+  await expect(page.getByTestId('line-age')).toHaveValue('');
   await expect(page.getByRole('dialog', { name: 'Ajouter un combattant · Tani Dojo' })).toBeVisible();
+  // Entrée dans un champ : même chose.
   await fillFighter(page, { last: 'PETIT', first: 'Noé', sex: 'Masculin', age: 'Cadets (14 à 15 ans)', weightClass: '-52 kg', combat: 'Karaté', ruleset: 'Jiyu' });
-  await page.getByTestId('line-save').click();
-  await expect(page.getByTestId('club-line-form')).toHaveCount(0);
+  await page.getByTestId('line-first-name').press('Enter');
+  await expect(page.getByText('PETIT Noé : enregistré.')).toBeVisible();
+  await expect(page.getByTestId('line-last-name')).toHaveValue('');
+  // Entrée sur une fenêtre incomplète : refus affiché, rien d'enregistré, la saisie reste.
+  await page.getByTestId('line-last-name').fill('INCOMPLET');
+  await page.getByTestId('line-last-name').press('Enter');
+  await expect(page.getByTestId('club-line-form').getByRole('alert')).toBeVisible();
+  await expect(page.getByTestId('line-last-name')).toHaveValue('INCOMPLET');
+  await page.getByRole('button', { name: 'Annuler' }).click();
   await expect(page.getByTestId('registration-row')).toHaveCount(2);
   await expect(page.getByTestId('registration-row').filter({ hasText: 'Tani Dojo' })).toHaveCount(2);
+});
+
+test('modifier un combattant : Entrée enregistre et ferme', async ({ page }) => {
+  const id = await createCompetition(page, 'Fenêtre Entrée modification');
+  await addClub(page, id, 'Tani Dojo');
+  await page.goto(`/competitions/${id}/inscriptions`);
+  await page.getByTestId('registration-add').click();
+  await chooseClub(page, 'Tani Dojo');
+  await fillFighter(page, MARTIN);
+  await page.getByTestId('line-save').click();
+  await page.getByTestId('registration-row').getByRole('button', { name: 'Modifier' }).click();
+  await page.getByTestId('line-first-name').fill('Lison');
+  await page.getByTestId('line-first-name').press('Enter');
+  await expect(page.getByTestId('club-line-form')).toHaveCount(0);
+  await expect(page.getByTestId('registration-row').filter({ hasText: 'Lison' })).toHaveCount(1);
 });
 
 test('fiche papier : le bouton télécharge le PDF (une page)', async ({ page }) => {

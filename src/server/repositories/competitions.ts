@@ -46,7 +46,8 @@ function toCompetition(row: Row): Competition {
   };
 }
 
-function getCompetitionSync(db: AppDb, id: string): Competition | null {
+/** Compétition lue sans attente (dans une écriture ou une vue synchrone). */
+export function getCompetitionSync(db: AppDb, id: string): Competition | null {
   const row = db.select().from(competitions).where(eq(competitions.id, id)).get();
   return row ? toCompetition(row) : null;
 }
