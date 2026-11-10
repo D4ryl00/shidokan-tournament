@@ -44,6 +44,7 @@
     "jszip": "^3.10.2",
     "nodemailer": "^10.2.1",
     "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "5.7.284",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-router": "^7.18.4",
