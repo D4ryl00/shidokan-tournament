@@ -785,7 +785,7 @@ test('import .ods : coordonnées du fichier différentes de l’annuaire → un 
   expect(res.statusCode).toBe(200);
   const rows = changes().filter((c) => c.club_id === clubId);
   expect(rows).toHaveLength(1);
-  expect(JSON.parse(rows[0]!.values_json)).toMatchObject({ name: 'Tani Dojo', coachName: 'Paul', coachPhone: '0611111111', coachEmails: ['p@tani.example'] });
+  expect(JSON.parse(rows[0]!.values_json)).toMatchObject({ name: 'Tani Dojo', coachName: 'Paul', coachPhone: '0611111111', coachEmails: ['jean@tani.example', 'p@tani.example'] }); // les adresses du fichier s’ajoutent à celles du club
   expect(await pageView()).toMatchObject({ coachPhone: '0611111111' });
 });
 

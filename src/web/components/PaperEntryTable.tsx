@@ -167,7 +167,7 @@ export function PaperEntryTable({ competitionId, grid }: { competitionId: string
       <ApiErrorAlert error={preview.error ?? save.error ?? resolveError} />
       {preview.data && (
         <Stack data-testid="paper-entry-preview">
-          <ClubFormPreviewTable parse={preview.data} grid={grid} />
+          <ClubFormPreviewTable parse={preview.data} grid={grid} paper />
           <Group>
             <Button data-testid="paper-entry-save" onClick={doSave} loading={save.isPending || resolving} disabled={!preview.data.rows.some((r) => r.input)}>
               Enregistrer la fiche ({plural(preview.data.rows.filter((r) => r.input).length, 'inscription valide', 'inscriptions valides')})

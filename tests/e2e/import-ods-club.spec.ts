@@ -26,6 +26,7 @@ test('import .ods d’un club au nom différent : choisir le club existant', asy
   await page.getByTestId('club-form-club-step').getByTestId('club-picker').getByLabel('Club').click();
   await page.getByRole('option', { name: 'Tani Dojo', exact: true }).click();
   await expect(page.getByTestId('club-form-preview-row')).toHaveCount(1);
+  await expect(page.getByTestId('club-form-preview-header')).toContainText('Club : Tani Dojo (nom dans le fichier : Dojo de Tani (autre graphie))');
   await page.getByTestId('club-form-import').click();
   await expect(page.getByText('Tani Dojo : 1 inscription importée')).toBeVisible();
   expect(await clubsOf(page, id)).toEqual(['Tani Dojo']);

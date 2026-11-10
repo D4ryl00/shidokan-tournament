@@ -80,6 +80,7 @@ export class LineReadOnlyError extends Error {
 }
 
 export const LOCKED_REASON = 'Ses combats ont commencé : contactez l’organisateur.';
+export const ORGANISER_LOCKED_REASON = 'Ses combats ont commencé : corrigez dans Réaffectation ou Tableaux.';
 export const CLOSED_ENTRY = (label: string) => `${label} : catégorie non ouverte à cette compétition.`;
 const CLOSED_NOTICE = (label: string) => `${label} : cette catégorie n’est plus ouverte, l’organisateur vous contactera.`;
 const WITHDRAWN_NOTICE = (label: string) => `Ne combattra pas en ${label} : catégorie non ouverte.`;
@@ -123,7 +124,7 @@ function lineOf(db: AppDb, fighter: typeof fighters.$inferSelect, viewer: LineWr
     return [viewer === 'organiser' ? closedEntryWarning(cell, closed)! : CLOSED_NOTICE(columnLabel(cell))];
   });
   const base = { fighterId: fighter.id, clubId: fighter.clubId ?? '', publicNameHidden: fighter.publicNameHidden, version, line, notices };
-  return locked ? { ...base, editable: false, reason: LOCKED_REASON } : { ...base, editable, reason };
+  return locked ? { ...base, editable: false, reason: viewer === 'organiser' ? ORGANISER_LOCKED_REASON : LOCKED_REASON } : { ...base, editable, reason };
 }
 
 /** Ligne d'un combattant pour l'écran Inscriptions (organisateur). Sans club : pas de ligne éditable, l'écran passe d'abord par l'étape club. */
@@ -131,7 +132,7 @@ export function fighterLine(db: AppDb, competitionId: string, fighterId: string)
   const fighter = db.select().from(fighters).where(and(eq(fighters.id, fighterId), eq(fighters.competitionId, competitionId))).get();
   if (!fighter) throw new NotFoundError('Combattant introuvable');
   const line = lineOf(db, fighter, 'organiser');
-  return fighter.clubId ? line : { ...line, editable: false, reason: line.reason === LOCKED_REASON ? LOCKED_REASON : null };
+  return fighter.clubId ? line : { ...line, editable: false, reason: line.reason === ORGANISER_LOCKED_REASON ? ORGANISER_LOCKED_REASON : null };
 }
 
 function headerOf(db: AppDb, club: typeof clubs.$inferSelect): ClubEntryView['club'] {
@@ -223,14 +224,14 @@ function duplicateOf(db: AppDb, clubId: string, line: ClubFormLine, exceptId: st
 }
 
 /** Ligne existante, vérifiée avant une écriture : version à jour, ni verrouillée ni en lecture seule. `clubId` : club où elle doit être (null : n'importe lequel de la compétition). */
-function checkedLine(db: AppDb, competitionId: string, clubId: string | null, fighterId: string, expectedVersion: string) {
+function checkedLine(db: AppDb, competitionId: string, clubId: string | null, fighterId: string, expectedVersion: string, viewer: LineWriter['kind'] = 'coach') {
   const fighter = db
     .select()
     .from(fighters)
     .where(and(eq(fighters.id, fighterId), eq(fighters.competitionId, competitionId), ...(clubId ? [eq(fighters.clubId, clubId)] : [])))
     .get();
   if (!fighter) throw new NotFoundError('Combattant introuvable');
-  const current = lineOf(db, fighter);
+  const current = lineOf(db, fighter, viewer);
   if (current.version !== expectedVersion) throw new StaleLineError();
   if (!current.editable) throw new LineReadOnlyError(current.reason ?? '');
   return fighter;
@@ -287,16 +288,17 @@ export async function saveClubLine(
     };
     let id = fighterId;
     if (id) {
-      checkedLine(t, access.competitionId, coach ? club.id : null, id, expectedVersion ?? '');
+      checkedLine(t, access.competitionId, coach ? club.id : null, id, expectedVersion ?? '', opts.writer.kind);
       t.update(fighters).set(fields).where(eq(fighters.id, id)).run();
     } else {
       id = crypto.randomUUID();
       t.insert(fighters).values({ id, competitionId: access.competitionId, licence: null, grade: null, weighInKg: null, ...fields }).run();
     }
     const kept = new Set<string>();
-    // Sexe ou âge changé : la catégorie de poids de la ligne l'emporte sur celle de l'export FFK (qui ne correspond plus).
+    // Sexe ou âge changé par le coach : la catégorie de poids de la ligne l'emporte sur celle de l'export FFK (qui ne correspond plus) ;
+    // le choix de l'organisateur l'emporte toujours.
     const identityChanged = !!existing && (existing.sex !== line.sex || existing.ageBandCode !== line.ageBandCode);
-    for (const input of inputs) kept.add(upsertFighterRegistration(t, access.competitionId, id, input, kept, { weightClassWins: identityChanged }));
+    for (const input of inputs) kept.add(upsertFighterRegistration(t, access.competitionId, id, input, kept, { weightClassWins: !coach || identityChanged }));
     const dropped = t.select().from(registrations).where(eq(registrations.fighterId, id)).all().filter((r) => !kept.has(r.id));
     if (dropped.length) t.delete(registrations).where(inArray(registrations.id, dropped.map((r) => r.id))).run();
     return id;
@@ -310,7 +312,8 @@ export async function deleteClubLine(db: AppDb, access: ClubAccess, fighterId: s
   const club = clubRow(db, access);
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
-    checkedLine(t, access.competitionId, club.id, fighterId, expectedVersion);
+    // L'organisateur supprime un combattant de n'importe quel club de la compétition (la fenêtre peut avoir changé son club).
+    checkedLine(t, access.competitionId, opts.writer.kind === 'coach' ? club.id : null, fighterId, expectedVersion, opts.writer.kind);
     t.delete(registrations).where(eq(registrations.fighterId, fighterId)).run();
     t.delete(fighters).where(eq(fighters.id, fighterId)).run();
   });

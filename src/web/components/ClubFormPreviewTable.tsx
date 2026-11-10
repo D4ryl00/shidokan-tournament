@@ -5,15 +5,24 @@ import { ageBandLabel, disciplineLabel, prefsLabel, rulesetShort, weightLabel } 
 import { plural } from '../../domain/plural.js';
 import { joinEmails } from '../../domain/emails.js';
 import { CLOSED_WARNING_START } from '../../domain/club-form.js';
+import { previewHeader } from './previewHeader.js';
 
 /** Aperçu d'une fiche club (fichier importé ou fiche papier saisie) : une ligne par inscription, erreurs, remarques et retraits. */
-export function ClubFormPreviewTable({ parse, grid }: { parse: ClubFormPreview; grid: CategoryGrid | undefined }) {
+export function ClubFormPreviewTable({ parse, grid, paper, clubName }: {
+  parse: ClubFormPreview;
+  grid: CategoryGrid | undefined;
+  /** Fiche papier saisie : pas de coordonnées, le titre est le club choisi. */
+  paper?: boolean;
+  /** Fichier : le club choisi ou reconnu (son nom peut différer de celui du fichier). */
+  clubName?: string | null;
+}) {
+  const head = previewHeader(parse.header, { paper, clubName });
   const closedRows = parse.rows.filter((r) => r.warnings.some((w) => w.startsWith(CLOSED_WARNING_START))).length;
   return (
     <Stack>
-      <Alert title={`Club : ${parse.header.club}`} color="blue">
-        Coach : {parse.header.coachName ?? '—'} · {parse.header.coachPhone ?? '—'} · {parse.header.coachEmails.length ? joinEmails(parse.header.coachEmails) : '—'} · Pré-accord :{' '}
-        {parse.header.preApproval ? 'oui' : 'non'}
+      <Alert title={head.title} color="blue" data-testid="club-form-preview-header">
+        {head.showCoach && <>Coach : {parse.header.coachName ?? '—'} · {parse.header.coachPhone ?? '—'} · {parse.header.coachEmails.length ? joinEmails(parse.header.coachEmails) : '—'} · </>}
+        Pré-accord : {parse.header.preApproval ? 'oui' : 'non'}
       </Alert>
       {closedRows > 0 && (
         <Alert color="orange" data-testid="club-form-closed-summary">

@@ -3,6 +3,8 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import type { ClubFormLine } from '../../src/domain/club-form.js';
 import { buildApp } from '../../src/server/app.js';
+import { openDb } from '../../src/server/db/client.js';
+import { importClubForm } from '../../src/server/repositories/registrations.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
@@ -76,6 +78,27 @@ test('sex and age of an FFK-confirmed fighter can change (organiser)', async () 
   expect((await registrations())[0]!.weightClassId).toBe('senior:M:-84');
 });
 
+test('organiser changes the weight class of an FFK-confirmed fighter (same sex and age): the choice wins', async () => {
+  const first = (await post({ ...LINE, kata: false, grade: null })).json() as Line;
+  raw('update registrations set ffk_confirmed = 1');
+  const l = await current(first.fighterId);
+  const res = await put(l, { ...l.line, weightClassId: 'senior:F:-61' });
+  expect(res.statusCode, res.body).toBe(200);
+  expect(res.json().line).toMatchObject({ weightClassId: 'senior:F:-61' });
+  expect((await registrations())[0]!.weightClassId).toBe('senior:F:-61');
+});
+
+test('organiser weight class change on a reassigned FFK-confirmed registration: declared value updated, placement unchanged', async () => {
+  const l = (await post({ ...LINE, kata: false, grade: null })).json() as Line;
+  const [reg] = await registrations();
+  raw("update registrations set ffk_confirmed = 1, discipline = 'shido-mix', weight_class_id = 'senior:F:-68', original_json = ? where id = ?", JSON.stringify({ discipline: 'karate', ruleset: 'jiyu', weightClassId: 'senior:F:-55' }), reg!.id);
+  const cur = await current(l.fighterId);
+  expect((await put(cur, { ...cur.line, weightClassId: 'senior:F:-61' })).statusCode).toBe(200);
+  const [row] = raw<{ weight_class_id: string; original_json: string }>('select weight_class_id, original_json from registrations');
+  expect(row!.weight_class_id).toBe('senior:F:-68');
+  expect(JSON.parse(row!.original_json)).toMatchObject({ weightClassId: 'senior:F:-61' });
+});
+
 test('age band of an FFK-confirmed fighter can change: the line weight class wins (organiser)', async () => {
   const first = (await post({ ...LINE, kata: false, grade: null })).json() as Line;
   raw('update registrations set ffk_confirmed = 1');
@@ -127,8 +150,10 @@ test('started category: read-only for the organiser too', async () => {
   const l = (await post({ ...LINE, kata: false, grade: null })).json() as Line;
   raw("update categories set status = 'started' where id = ?", (await registrations())[0]!.categoryId);
   const cur = await current(l.fighterId);
-  expect(cur).toMatchObject({ editable: false, reason: 'Ses combats ont commencé : contactez l’organisateur.' });
-  expect((await put(cur, LINE)).statusCode).toBe(409);
+  expect(cur).toMatchObject({ editable: false, reason: 'Ses combats ont commencé : corrigez dans Réaffectation ou Tableaux.' });
+  const refused = await put(cur, LINE);
+  expect(refused.statusCode).toBe(409);
+  expect(refused.json().error).toBe('Ses combats ont commencé : corrigez dans Réaffectation ou Tableaux.');
 });
 
 test('reassigned registration: only the declared values change', async () => {
@@ -210,4 +235,20 @@ test('the « main ailleurs » guard refuses the organiser routes', async () => {
   expect((await post({ ...LINE, lastName: 'AUTRE' })).statusCode).toBe(409);
   expect((await put(l, LINE)).statusCode).toBe(409);
   expect((await app.inject({ method: 'DELETE', url: `${base}/clubs/${clubId}/lines/${l.fighterId}?version=x` })).statusCode).toBe(409);
+});
+
+test('delete with the fighter’s own club works for the organiser after a club change in the window', async () => {
+  const other = (await app.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Autre club' } })).json().id as string;
+  const l = await current(((await post()).json() as Line).fighterId);
+  // La fenêtre a choisi un autre club que celui du combattant : la suppression vise quand même le combattant.
+  expect((await app.inject({ method: 'DELETE', url: `${base}/clubs/${other}/lines/${l.fighterId}?version=${encodeURIComponent(l.version)}` })).statusCode).toBe(204);
+  expect(await registrations()).toEqual([]);
+});
+
+test('.ods import adds the file’s e-mails to the club’s, without duplicates', async () => {
+  raw('update clubs set coach_emails = ? where id = ?', JSON.stringify(['Coach@Tani.example', 'a@tani.example']), clubId);
+  const db = openDb(dbPath);
+  await importClubForm(db, compId, { header: { club: 'Tani Dojo', coachName: null, coachPhone: null, coachEmails: ['coach@tani.example', 'b@tani.example'], preApproval: false }, rows: [] }, { replace: true, clubId });
+  db.$client.close();
+  expect(JSON.parse(raw<{ coach_emails: string }>('select coach_emails from clubs where id = ?', clubId)[0]!.coach_emails)).toEqual(['Coach@Tani.example', 'a@tani.example', 'b@tani.example']);
 });

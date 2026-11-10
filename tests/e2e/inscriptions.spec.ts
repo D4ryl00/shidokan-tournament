@@ -29,6 +29,9 @@ test('fiche club : modèle, aperçu avec erreur, import, réimport corrigé', as
     ['DURAND', 'Hugo', 'Masculin', 'Seniors', '-75', 'Shido-boxing', 'Shobu', null, 'Oui', 74],
   ]));
   await expect(page.getByTestId('club-form-preview-row')).toHaveCount(3);
+  // Nom du fichier = club : le titre n'ajoute rien.
+  await expect(page.getByTestId('club-form-preview-header')).toContainText('Club : Tani Dojo');
+  await expect(page.getByTestId('club-form-preview-header')).not.toContainText('nom dans le fichier');
   // Le champ est vidé aussitôt lu : choisir de nouveau le même fichier (corrigé entre-temps) le relit.
   await expect(page.getByTestId('club-form-file')).toHaveValue('');
   await expect(page.getByTestId('club-form-row-error')).toContainText('réservé aux adultes');
@@ -160,6 +163,57 @@ test('changer de club', async ({ page }) => {
   await expect(page.getByTestId('registration-row')).toContainText('Autre Dojo');
 });
 
+test('changer de club : le brouillon est gardé, Annuler revient à la fenêtre, la suppression suit le club du combattant', async ({ page }) => {
+  const id = await createCompetition(page, 'Fenêtre brouillon club');
+  await addClub(page, id, 'Tani Dojo');
+  await addClub(page, id, 'Autre Dojo');
+  await page.goto(`/competitions/${id}/inscriptions`);
+  await page.getByTestId('registration-add').click();
+  await chooseClub(page, 'Tani Dojo');
+  await fillFighter(page, MARTIN);
+  await page.getByTestId('line-save').click();
+  await expect(page.getByTestId('registration-row')).toHaveCount(1);
+
+  await page.getByTestId('registration-row').getByRole('button', { name: 'Modifier' }).click();
+  await page.getByTestId('line-first-name').fill('Zoé');
+  await page.getByTestId('fighter-change-club').click();
+  await expect(page.getByRole('dialog', { name: 'Changer de club' })).toBeVisible();
+  // Annuler : retour à la fenêtre du combattant, brouillon compris.
+  await page.getByRole('dialog', { name: 'Changer de club' }).getByRole('button', { name: 'Annuler' }).click();
+  await expect(page.getByTestId('line-first-name')).toHaveValue('Zoé');
+  // Un autre club choisi : le brouillon suit, puis la suppression vise le combattant (et non le nouveau club).
+  await page.getByTestId('fighter-change-club').click();
+  await chooseClub(page, 'Autre Dojo');
+  await expect(page.getByTestId('line-first-name')).toHaveValue('Zoé');
+  await page.getByTestId('line-delete').click();
+  await page.getByTestId('line-delete-confirm').click();
+  await expect(page.getByTestId('club-line-form')).toHaveCount(0);
+  await expect(page.getByTestId('registration-row')).toHaveCount(0);
+});
+
+test('combattant dont les combats ont commencé : fenêtre en lecture seule avec la raison', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Fenêtre combattant verrouillé');
+  const clubId = await addClub(page, id, 'Tani Dojo');
+  for (let i = 1; i <= 4; i++) {
+    await request.post(`/api/competitions/${id}/registrations`, {
+      data: { clubId, lastName: `NOM${i}`, firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54', source: 'manual' },
+    });
+  }
+  const [zone] = (await (await request.get(`/api/competitions/${id}/zones`)).json()) as { id: string }[];
+  const [cat] = (await (await request.get(`/api/competitions/${id}/categories`)).json()) as { id: string }[];
+  await request.patch(`/api/competitions/${id}/categories/${cat!.id}`, { data: { status: 'ready', zoneId: zone!.id } });
+  await request.post(`/api/competitions/${id}/launch`, { data: { waveId: null } });
+  await request.put(`/api/competitions/${id}/categories/${cat!.id}/results/w1-0`, { data: { winner: 'a', method: 'points' } });
+
+  await page.goto(`/competitions/${id}/inscriptions`);
+  await page.getByTestId('registration-row').filter({ hasText: 'NOM1' }).getByRole('button', { name: 'Modifier' }).click();
+  await expect(page.getByTestId('line-locked')).toHaveText('Ses combats ont commencé : corrigez dans Réaffectation ou Tableaux.');
+  await expect(page.getByTestId('line-last-name')).toBeDisabled();
+  for (const testId of ['line-save', 'line-delete', 'fighter-change-club', 'line-save-next']) await expect(page.getByTestId(testId)).toHaveCount(0);
+  await page.getByRole('button', { name: 'Fermer' }).first().click();
+  await expect(page.getByTestId('club-line-form')).toHaveCount(0);
+});
+
 test('deux postes : modification périmée', async ({ page, context }) => {
   const id = await createCompetition(page, 'Fenêtre version périmée');
   await addClub(page, id, 'Tani Dojo');
@@ -221,7 +275,7 @@ test('fiche papier : le bouton télécharge le PDF (une page)', async ({ page })
 
 test('saisie d’une fiche papier', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe saisie papier');
-  await addClub(page, id, 'Tani Dojo');
+  await page.request.post(`/api/competitions/${id}/clubs`, { data: { name: 'Tani Dojo', coachName: 'Jean Coach' } });
   await page.goto(`/competitions/${id}/fiche-club`);
   await choosePaperClub(page, 'Tani Dojo');
   const row = page.getByTestId('paper-entry-row').first();
@@ -237,6 +291,11 @@ test('saisie d’une fiche papier', async ({ page, request }) => {
   await row.getByLabel('Reclassement Mix').selectOption('1');
   await page.getByTestId('paper-entry-check').click();
   await expect(page.getByTestId('paper-entry-preview').getByTestId('club-form-preview-row')).toHaveCount(2);
+  // L'en-tête de l'aperçu : le club choisi et le pré-accord, sans ligne de coach (la saisie papier n'a pas de coordonnées).
+  const head = page.getByTestId('paper-entry-preview').getByTestId('club-form-preview-header');
+  await expect(head).toContainText('Club : Tani Dojo');
+  await expect(head).toContainText('Pré-accord : non');
+  await expect(head).not.toContainText('Coach');
   await page.getByTestId('paper-entry-save').click();
   await expect(page.getByText('Tani Dojo : 2 inscriptions')).toBeVisible();
   const regs = (await (await request.get(`/api/competitions/${id}/registrations`)).json()) as { discipline: string; weightClassId: string | null }[];

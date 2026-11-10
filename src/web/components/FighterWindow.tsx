@@ -77,32 +77,36 @@ function Steps({ competitionId, mode, line, onClose }: {
     onClose();
   };
 
-  if (step === 'club') {
-    return (
-      <Modal opened onClose={onClose} title={mode.kind === 'add' ? 'Ajouter un combattant' : 'Changer de club'}>
+  // Un combattant sans club n'est pas « verrouillé » : une fois son club choisi, sa fenêtre est éditable (sauf combats commencés).
+  const formLine = line && !line.editable && !line.reason && chosenClubId ? { ...line, editable: true } : line;
+  const clubStep = (
+      <Modal opened onClose={onClose} title={mode.kind === 'add' ? 'Ajouter un combattant' : line?.clubId ? 'Changer de club' : 'Choisir le club'}>
         <Stack>
           <Text size="sm" c="dimmed">Choisissez le club du combattant, puis saisissez sa fiche.</Text>
           <ClubPicker competitionId={competitionId} value={choice} onChange={(c) => { setChoice(c); setError(null); }} />
           <ApiErrorAlert error={error} />
           <Group justify="flex-end">
-            <Button variant="default" onClick={onClose}>Annuler</Button>
+            {/* En modification, « Annuler » revient à la fenêtre du combattant (le brouillon y est gardé) ; sans club choisi, il n'y en a pas. */}
+            <Button variant="default" onClick={mode.kind === 'edit' && chosenClubId ? () => { setError(null); setStep('line'); } : onClose}>Annuler</Button>
             <Button data-testid="fighter-next" disabled={!choice} loading={resolving} onClick={next}>Suivant</Button>
           </Group>
         </Stack>
       </Modal>
-    );
-  }
+  );
 
   const ageBands = (grid?.ageBands ?? []).map((b) => ({ code: b.code, label: b.label, ages: ageRangeText(b), isMinor: b.isMinor }));
   const weightClasses = [...(grid?.weightClasses ?? [])]
     .sort((a, b) => (a.maxKg ?? Infinity) - (b.maxKg ?? Infinity))
     .map(({ id, ageBandCode, sex, label, maxKg }) => ({ id, ageBandCode, sex, label, maxKg }));
   const closed = (closedView?.closed ?? []).map(entryKey);
+  // Le formulaire reste monté pendant l'étape « Club » (fenêtre fermée) : le brouillon est gardé quand on y va et revient.
   return (
+    <>
+    {step === 'club' && clubStep}
     <ClubLineForm
       key={mode.kind === 'add' ? `add-${round}` : mode.fighterId}
       ops={ops} mode="organiser" multipleCombats={competition?.settings.multipleCombatDisciplinesPerDay ?? false}
-      line={line} ageBands={ageBands} weightClasses={weightClasses} closed={closed} opened onClose={done}
+      line={formLine} ageBands={ageBands} weightClasses={weightClasses} closed={closed} opened={step === 'line'} onClose={done}
       title={mode.kind === 'add' ? `Ajouter un combattant · ${clubName ?? ''}` : clubName ? `${line?.line.lastName} ${line?.line.firstName} · ${clubName}` : undefined}
       footerExtra={(saveThen) => (
         <>
@@ -119,5 +123,6 @@ function Steps({ competitionId, mode, line, onClose }: {
         </>
       )}
     />
+    </>
   );
 }

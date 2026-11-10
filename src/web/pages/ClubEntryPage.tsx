@@ -19,10 +19,10 @@ import { disciplineLabel, SEX_LABELS } from '../labels.js';
 
 const RULESET_LABEL = { jiyu: 'jiyu', shobu: 'shobu' } as const;
 
-/** « Si sans adversaire : Shido-boxing, puis Shido-mix-martial » ou « … : reste en karaté ». */
+/** « Si sans adversaire : Shido-boxing, puis Shido-mix-martial » ou « … : reste en karaté » (« reste dans ses disciplines » pour plusieurs combats). */
 function reclassText(line: ClubFormLine): string {
   const choices = orderedPrefs(line.prefs).map(disciplineLabel);
-  return `Si sans adversaire : ${choices.length ? choices.join(', puis ') : `reste en ${disciplineLabel(line.combats[0]!).toLowerCase()}`}`;
+  return `Si sans adversaire : ${choices.length ? choices.join(', puis ') : (line.combats.length > 1 ? 'reste dans ses disciplines' : `reste en ${disciplineLabel(line.combats[0]!).toLowerCase()}`)}`;
 }
 
 /** Coordonnées du club et pré-accord, enregistrés d'un bouton. */

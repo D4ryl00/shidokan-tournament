@@ -18,6 +18,7 @@ import type { AppDb } from '../db/client.js';
 import { withoutRowMeta } from '../db/row-versions.js';
 import { rowRev } from '../revisions.js';
 import { linkClub, linkClubResult } from '../db/club-directory.js';
+import { cleanEmails } from '../../domain/emails.js';
 import { clubValues, recordClubChange } from './club-changes.js';
 import { categories, clubAliases, clubDirectory, clubs, fighters, registrations } from '../db/schema.js';
 import { closedSet } from './closed-categories.js';
@@ -363,7 +364,8 @@ export async function importClubForm(
         preApproval: coach.preApproval,
         ...(withCoordinates && coach.coachName ? { coachName: coach.coachName } : {}),
         ...(withCoordinates && coach.coachPhone ? { coachPhone: coach.coachPhone } : {}),
-        ...(withCoordinates && coach.coachEmails.length ? { coachEmails: coach.coachEmails } : {}),
+        // Les adresses du fichier s'ajoutent à celles du club (doublons écartés, ordre gardé) : elles ne les remplacent pas.
+        ...(withCoordinates && coach.coachEmails.length ? { coachEmails: cleanEmails([...row.coachEmails, ...coach.coachEmails]) } : {}),
       };
       t.update(clubs).set(patch).where(eq(clubs.id, found.id)).run();
       linkClub(t, found.id);

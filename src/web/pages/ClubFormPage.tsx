@@ -2,7 +2,7 @@ import { Button, FileButton, Group, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useRef, useState } from 'react';
 import { useParams } from 'react-router';
-import { useAuthMe, useClubChanges, useGrid, useImportClubForm, usePreviewClubForm, useResolveClub, type ClubFormPreview } from '../api.js';
+import { useAuthMe, useClubChanges, useDirectoryClubs, useGrid, useImportClubForm, usePreviewClubForm, useResolveClub, type ClubFormPreview } from '../api.js';
 import { ClubPicker } from '../components/club-picker/ClubPicker.js';
 import type { ClubChoice } from '../components/club-picker/choice.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
@@ -24,6 +24,7 @@ export function ClubFormPage() {
   const preview = usePreviewClubForm(id);
   const importForm = useImportClubForm(id);
   const resolveClub = useResolveClub(id);
+  const { data: directory = [] } = useDirectoryClubs(id);
   const [file, setFile] = useState<File | null>(null);
   // Aperçu gardé ici : il reste affiché (avec le choix du club) pendant qu'il est relu avec le club choisi.
   const [parse, setParse] = useState<ClubFormPreview | null>(null);
@@ -34,6 +35,8 @@ export function ClubFormPage() {
   const resetFile = useRef<() => void>(null);
   const valid = parse?.rows.filter((r) => r.input).length ?? 0;
   const clubKnown = !unmatched || choice !== null;
+  // Club de l'aperçu : celui que le serveur a reconnu (nom, alias) ou relu pour le choix, sinon la fiche d'annuaire choisie.
+  const clubName = parse?.club?.name ?? (choice?.kind === 'directory' ? directory.find((d) => d.id === choice.id)?.name : undefined);
 
   const clear = () => {
     preview.reset();
@@ -120,9 +123,9 @@ export function ClubFormPage() {
                   prefill={{ name: parse.header.club, coachName: parse.header.coachName, coachPhone: parse.header.coachPhone, coachEmails: parse.header.coachEmails }} />
               </Stack>
             )}
-            {clubKnown && <ClubFormPreviewTable parse={parse} grid={grid} />}
+            {clubKnown && <ClubFormPreviewTable parse={parse} grid={grid} clubName={clubName} />}
             <Group>
-              <Button data-testid="club-form-import" onClick={doImport} loading={importForm.isPending} disabled={valid === 0 || !clubKnown || preview.isPending}>
+              <Button data-testid="club-form-import" onClick={doImport} loading={importForm.isPending} disabled={valid === 0 || !clubKnown || preview.isPending || preview.isError}>
                 Importer {plural(valid, 'inscription valide', 'inscriptions valides')}
               </Button>
               <Text size="sm" c="dimmed">Réimporter la fiche d’un club remplace les inscriptions de sa fiche précédente.</Text>

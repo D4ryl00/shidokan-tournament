@@ -266,7 +266,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Le crayon ouvre la fenêtre du combattant, avec toutes ses inscriptions ; la corbeille supprime une inscription (impossible si sa catégorie a déjà commencé).',
         '« Ajouter » se fait en deux étapes : le club (de la compétition ou de l’annuaire, ou « Ajouter un club »), puis la même fenêtre que celle du coach sur sa page. Les inscriptions saisies ici portent la mention « sur place ». « Enregistrer et ajouter un autre » garde le club.',
         'Dans cette fenêtre, vous pouvez choisir une catégorie non ouverte (elle est marquée « non ouverte ») : l’inscription est enregistrée avec un avertissement.',
-        '« Changer de club », dans la fenêtre d’un combattant, le passe dans un autre club ; un combattant sans club commence par l’étape club.',
+        '« Changer de club », dans la fenêtre d’un combattant, le passe dans un autre club ; un combattant sans club commence par l’étape club. Un combattant dont les combats ont commencé s’ouvre en lecture seule : corrigez dans Réaffectation ou Tableaux.',
         '« Masquer le nom sur la page publique » remplace le nom du combattant par « Combattant masqué » pour le public (son club reste affiché). Le réglage vaut pour toutes ses lignes ; un badge « nom masqué en ligne » le rappelle dans la liste.',
       ],
       'La colonne « Origine » indique d’où vient la ligne : fiche club, export FFK ou saisie.',
