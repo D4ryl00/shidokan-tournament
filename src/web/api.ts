@@ -13,6 +13,7 @@ import type { Case, MoveView, Presence, Proposal, ProposalType } from '../domain
 import type { CategoryGrid, DisciplineId, Ruleset, Sex } from '../domain/types.js';
 import type { LadderProgress, LadderRow, PlanChoice, PlanMove } from '../domain/replacement/plan.js';
 import type { ClubChoice } from './components/club-picker/choice.js';
+import type { FfkPdfRead } from '../domain/ffk-pdf-plan.js';
 import { fetchPlanStream } from './planStream.js';
 import { queriesAfterCompetitionPatch } from './settingsPatch.js';
 import { applyRulesView, type RulesView } from '../domain/replacement/rules.js';
@@ -1194,6 +1195,26 @@ export const useCoachLineOps = (token: string): LineOps => {
     remove: ({ fighterId, version }) => api<void>('DELETE', `/api/inscription/${token}/lines/${fighterId}?version=${encodeURIComponent(version)}`),
   }, () => qc.invalidateQueries({ queryKey: ['inscription', token] }));
 };
+
+/** Lecture du PDF « État des inscriptions » de la FFK par le coach (rien n'est écrit). */
+export const useReadFfkPdfCoach = (token: string) =>
+  useMutation<FfkPdfRead, ApiError, { file: File; discipline: DisciplineId }>({
+    mutationFn: ({ file, discipline }) => upload<FfkPdfRead>(`/api/inscription/${token}/ffk-pdf?discipline=${encodeURIComponent(discipline)}`, file),
+  });
+
+/** Lecture du PDF de la FFK par l'organisateur. */
+export const useReadFfkPdfOrganiser = (competitionId: string) =>
+  useMutation<FfkPdfRead, ApiError, { file: File; discipline: DisciplineId }>({
+    mutationFn: ({ file, discipline }) => upload<FfkPdfRead>(`/api/competitions/${competitionId}/ffk-pdf?discipline=${encodeURIComponent(discipline)}`, file),
+  });
+
+/** Fiches d'un club (organisateur) ; rechargées après chaque écriture de `useOrganiserLineOps` (clé `['club-lines', id]`). */
+export const useClubLines = (competitionId: string, clubId: string) =>
+  useQuery({
+    queryKey: ['club-lines', competitionId, 'club', clubId],
+    queryFn: () => api<ClubLine[]>('GET', `/api/competitions/${competitionId}/clubs/${clubId}/lines`),
+    enabled: clubId !== '',
+  });
 
 /** Ligne d'un combattant (écran Inscriptions) : relue à chaque ouverture, la version sert à repérer une modification faite entre-temps. */
 export const useFighterLine = (competitionId: string, fighterId: string) =>

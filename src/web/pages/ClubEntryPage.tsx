@@ -3,10 +3,11 @@ import { notifications } from '@mantine/notifications';
 import { Fragment, useState } from 'react';
 import { useParams } from 'react-router';
 import { PRE_APPROVAL_TEXT, kgText, orderedPrefs, weightWarning, type ClubFormLine } from '../../domain/club-form.js';
-import { useClubEntry, useCoachLineOps, useSaveClubHeader, type ClubEntryHeader, type ClubEntryView, type ClubLine } from '../api.js';
+import { useClubEntry, useCoachLineOps, useReadFfkPdfCoach, useSaveClubHeader, type ClubEntryHeader, type ClubEntryView, type ClubLine } from '../api.js';
 import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { ClubLineForm } from '../components/ClubLineForm.js';
+import { FfkImportWizard } from '../components/ffk-import/FfkImportWizard.js';
 import { Logo } from '../components/Logo.js';
 import { clubEntryStatusText } from '../components/OnlineEntryPanel.js';
 import { ThemeToggle } from '../components/ThemeToggle.js';
@@ -182,6 +183,8 @@ export function ClubEntryPage() {
   useDocumentTitle(view ? `Inscriptions · ${view.competition.name}` : 'Inscriptions');
   const [editing, setEditing] = useState<ClubLine | 'new' | null>(null);
   const coachOps = useCoachLineOps(token);
+  const [importing, setImporting] = useState(false);
+  const readPdf = useReadFfkPdfCoach(token);
 
   const close = (message?: string) => {
     setEditing(null);
@@ -224,7 +227,12 @@ export function ClubEntryPage() {
             <HeaderForm key={JSON.stringify(view.club)} token={token} view={view} />
             <Group justify="space-between" mt="sm">
               <Title order={2} fz="lg">{view.lines.length === 0 ? 'Vos combattants' : `Vos combattants (${view.lines.length})`}</Title>
-              {view.editable && <Button data-testid="add-fighter" onClick={() => setEditing('new')}>Ajouter un combattant</Button>}
+              {view.editable && (
+                <Group gap="xs">
+                  <Button variant="default" data-testid="ffk-import" onClick={() => setImporting(true)}>Importer le PDF de la FFK</Button>
+                  <Button data-testid="add-fighter" onClick={() => setEditing('new')}>Ajouter un combattant</Button>
+                </Group>
+              )}
             </Group>
             {view.closedSummary.length > 0 && (
               <Accordion variant="contained" radius="md" data-testid="club-entry-closed">
@@ -245,6 +253,12 @@ export function ClubEntryPage() {
             <Text size="xs" c="dimmed" mt="lg" data-testid="privacy-notice">{view.privacyNotice}</Text>
             <ClubLineForm key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.fighterId} ops={coachOps} mode="coach" multipleCombats={view.multipleCombats} line={editing === 'new' ? null : editing}
               ageBands={view.ageBands} weightClasses={view.weightClasses} closed={view.closed} opened={editing !== null} onClose={close} />
+            <FfkImportWizard opened={importing && view.editable} mode="coach" read={(file, discipline) => readPdf.mutateAsync({ file, discipline })}
+              lines={view.lines} ops={coachOps} multipleCombats={view.multipleCombats} ageBands={view.ageBands} weightClasses={view.weightClasses} closed={view.closed}
+              onClose={(message) => {
+                setImporting(false);
+                if (message) notifications.show({ color: 'green', message });
+              }} />
           </>
         )}
       </Stack>

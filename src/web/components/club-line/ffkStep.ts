@@ -29,7 +29,7 @@ export function ffkChoiceState(value: string | null, diff: FfkDiff): 'ffk' | 'fi
 }
 
 /** « A », « A et B », « A, B et C ». */
-function listFr(items: string[]): string {
+export function listFr(items: string[]): string {
   return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} et ${items[items.length - 1]}`;
 }
 
