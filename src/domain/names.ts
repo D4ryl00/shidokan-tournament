@@ -41,3 +41,8 @@ export function parseSex(v: unknown): Sex | null {
   if (['M', 'H', 'MASC', 'MASCULIN', 'MASCULINS', 'GARCON', 'HOMME', 'GARCONS', 'HOMMES'].includes(s)) return 'M';
   return null;
 }
+
+/** « JEAN-PIERRE » → « Jean-Pierre » : majuscule à chaque mot, minuscules ensuite. */
+export function titleCaseName(s: string): string {
+  return s.toLowerCase().replace(/(^|[\s\-‐–—'’])(\p{L})/gu, (_m, sep: string, c: string) => sep + c.toUpperCase());
+}

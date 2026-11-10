@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { normalizeName, parseSex, parseYesNo, splitFullName } from '../../src/domain/names.js';
+import { normalizeName, parseSex, parseYesNo, splitFullName, titleCaseName } from '../../src/domain/names.js';
 
 test.each([
   ["Côte-d'Azur  Éloïse", 'COTE D AZUR ELOISE'],
@@ -37,4 +37,12 @@ test.each([
   ['?', null], ['', null], [null, null],
 ])('parseSex(%s)', (v, r) => {
   expect(parseSex(v)).toBe(r);
+});
+
+test.each([
+  ['INES', 'Ines'],
+  ['JEAN PIERRE', 'Jean Pierre'],
+  ['JEAN-PIERRE', 'Jean-Pierre'],
+])('titleCaseName(%s)', (a, b) => {
+  expect(titleCaseName(a)).toBe(b);
 });
