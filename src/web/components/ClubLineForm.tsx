@@ -7,7 +7,7 @@ import { ApiError, RELOAD_STATUSES, type ClubEntryView, type ClubLine, type Line
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { ageBandChoices, applyChange, combatChoices, kataChoice, reclassChoices, rulesetChoices, toggleCombat, type LineFormContext } from './club-line/lineForm.js';
 import { FfkChoice } from './club-line/FfkChoice.js';
-import { ffkChoiceState, type FfkFormStep } from './club-line/ffkStep.js';
+import { ffkChoiceState, ffkValueAvailable, type FfkFormStep } from './club-line/ffkStep.js';
 import { OneOf } from './PaperEntryTable.js';
 
 /** Suite d'un enregistrement : l'avis éventuel du serveur et la ligne enregistrée. */
@@ -109,14 +109,19 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
     if (field === 'weightClassId') { const w = weightClasses.find((x) => x.id === v); return w ? `${w.label} kg` : v; }
     return v === 'shobu' ? 'Shobu' : 'Jiyu';
   };
+  const FIELD_LABELS = { ageBandCode: 'Catégorie d’âge', weightClassId: 'Catégorie de poids', ruleset: 'Règlement' } as const;
   const choice = (field: FfkFormStep['diffs'][number]['field']) => {
     const diff = ffk?.diffs.find((d) => d.field === field);
     if (!diff) return null;
+    const options = field === 'ageBandCode' ? ageBandChoices(form, ctx).map((o) => o.value)
+      : field === 'weightClassId' ? classes.map((w) => w.id) : rulesets.map(([r]) => r);
     return (
-      <FfkChoice state={ffkChoiceState(form[field], diff)} ffk={readable(field, diff.ffk)} fiche={readable(field, diff.fiche)} disabled={locked}
+      <FfkChoice label={FIELD_LABELS[field]} state={ffkChoiceState(form[field], diff)} ffk={readable(field, diff.ffk)} fiche={readable(field, diff.fiche)} disabled={locked}
+        unavailable={{ ffk: !ffkValueAvailable(diff.ffk, options), fiche: !ffkValueAvailable(diff.fiche, options) }}
         onPick={(which) => set({ [field]: which === 'ffk' ? diff.ffk : diff.fiche } as Partial<ClubFormLine>)} />
     );
   };
+
   const doDelete = () => line && ops.remove({ fighterId: line.fighterId, version: line.version }).then(() => onClose(), onError);
 
   return (
@@ -148,14 +153,20 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
             </Input.Wrapper>
             </Part>
             <SimpleGrid cols={{ base: 1, xs: 2 }}>
-              <Select data-testid="line-age" label={labelled('Catégorie d’âge', 'ageBandCode')} description={hint('ageBandCode')} required data={ageBandChoices(form, ctx)} value={form.ageBandCode} disabled={locked}
+              <Stack gap={4}>
+              <Select data-testid="line-age" label={labelled('Catégorie d’âge', 'ageBandCode')} required data={ageBandChoices(form, ctx)} value={form.ageBandCode} disabled={locked}
                 onChange={(ageBandCode) => set({ ageBandCode })} />
+              {hint('ageBandCode')}
               {choice('ageBandCode')}
+              </Stack>
+              <Stack gap={4}>
               {/* Obligatoire pour un combat (le kata n'a pas de catégorie de poids). */}
-              <Select data-testid="line-weight-class" label={labelled('Catégorie de poids', 'weightClassId')} description={hint('weightClassId')} required={hasCombat} disabled={!classes.length || combatFrozen}
+              <Select data-testid="line-weight-class" label={labelled('Catégorie de poids', 'weightClassId')} required={hasCombat} disabled={!classes.length || combatFrozen}
                 placeholder={classes.length ? undefined : 'Sexe et âge d’abord'}
                 data={classes.map((w) => ({ value: w.id, label: `${w.label} kg` }))} value={form.weightClassId} onChange={(weightClassId) => set({ weightClassId })} />
+              {hint('weightClassId')}
               {choice('weightClassId')}
+              </Stack>
               <TextInput data-testid="line-weight" label="Poids actuel (facultatif)" rightSection={<Text size="xs">kg</Text>} inputMode="decimal" value={weight} disabled={combatFrozen}
                 onChange={(e) => {
                   const raw = e.currentTarget.value;
