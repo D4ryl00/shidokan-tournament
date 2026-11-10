@@ -12,6 +12,7 @@ test('onglets de chaque poste, dans l’ordre des onglets', () => {
 test('onglet par défaut et redirection d’un onglet masqué', () => {
   expect(defaultTab({ kind: 'zone', zoneId: 'z1' })).toBe('combats');
   expect(defaultTab({ kind: 'table' })).toBe('inscriptions');
+  expect(defaultTab({ kind: 'organisation' })).toBe('inscriptions');
   expect(tabFor({ kind: 'zone', zoneId: 'z1' }, 'reglages')).toBe('combats');
   expect(tabFor({ kind: 'zone', zoneId: 'z1' }, 'tableaux')).toBe('tableaux');
   expect(tabFor({ kind: 'organisation' }, 'categories')).toBe('categories');

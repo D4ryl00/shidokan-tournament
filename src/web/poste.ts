@@ -18,7 +18,7 @@ export function posteTabs(p: Poste): string[] {
   return all;
 }
 
-export const defaultTab = (p: Poste) => (p.kind === 'zone' ? 'combats' : p.kind === 'table' ? 'inscriptions' : 'reglages');
+export const defaultTab = (p: Poste) => (p.kind === 'zone' ? 'combats' : p.kind === 'table' ? 'inscriptions' : 'inscriptions');
 /** L'onglet demandé s'il est permis à ce poste, sinon son onglet par défaut (une adresse qui n'est pas un onglet n'est pas touchée). */
 export const tabFor = (p: Poste, current: string) =>
   !COMPETITION_TABS.some((t) => t.path === current) || posteTabs(p).includes(current) ? current : defaultTab(p);

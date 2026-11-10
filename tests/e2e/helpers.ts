@@ -12,8 +12,12 @@ export async function createCompetition(page: Page, name: string): Promise<strin
   const row = page.getByTestId('competition-row').filter({ hasText: name });
   await expect(row).toBeVisible();
   await row.getByRole('link', { name }).click();
-  await expect(page).toHaveURL(/\/competitions\/[^/]+\/reglages$/);
-  return page.url().split('/')[4]!;
+  await expect(page).toHaveURL(/\/competitions\/[^/]+\/inscriptions$/);
+  const id = page.url().split('/')[4]!;
+  // Les tests partent des Réglages : la compétition s'ouvre sur Inscriptions, on y va ensuite.
+  await page.goto(`/competitions/${id}/reglages`);
+  await expect(page).toHaveURL(/\/reglages$/);
+  return id;
 }
 
 /** Étape de chaque onglet d'une compétition (barre du haut : Préparer, Jour J, Après). */

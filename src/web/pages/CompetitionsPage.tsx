@@ -73,7 +73,7 @@ export function CompetitionsPage() {
               {data.map((c) => (
                 <Table.Tr key={c.id} data-testid="competition-row">
                   <Table.Td maw={420}>
-                    <Anchor component={Link} to={`/competitions/${c.id}/reglages`} fw={600} className="sk-ellipsis" display="block" title={c.name}>{c.name}</Anchor>
+                    <Anchor component={Link} to={`/competitions/${c.id}/inscriptions`} fw={600} className="sk-ellipsis" display="block" title={c.name}>{c.name}</Anchor>
                   </Table.Td>
                   <Table.Td className="num" style={{ whiteSpace: 'nowrap' }}>{new Date(`${c.date}T12:00:00`).toLocaleDateString('fr-FR')}</Table.Td>
                   <Table.Td c={c.location ? undefined : 'dimmed'}>{c.location ?? '—'}</Table.Td>

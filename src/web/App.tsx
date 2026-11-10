@@ -82,7 +82,7 @@ function MainShell() {
             <Route path="/comptes" element={<AccountsPage />} />
             <Route path="/parametres" element={<AppSettingsPage />} />
             <Route path="/competitions/:id" element={<CompetitionLayout />}>
-              <Route index element={<Navigate to="reglages" replace />} />
+              <Route index element={<Navigate to="inscriptions" replace />} />
               <Route path="inscriptions" element={<RegistrationsPage />} />
               <Route path="clubs" element={<ClubsPage />} />
               <Route path="fiche-club" element={<ClubFormPage />} />
