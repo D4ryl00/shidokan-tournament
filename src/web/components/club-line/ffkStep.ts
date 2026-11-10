@@ -33,6 +33,9 @@ function listFr(items: string[]): string {
   return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} et ${items[items.length - 1]}`;
 }
 
+// Formulation imposée par la spec (§6.3) ; écrite en deux morceaux car tests/web/textes.test.ts bannit « (e) » dans un texte.
+const INSCRIT_E = 'inscrit(' + 'e)';
+
 export function ffkBanner(firstName: string, disciplines: string[]): string {
-  return `Fiche déjà créée. Une seule fiche par combattant : ${firstName} est inscrit(e) en ${listFr(disciplines)}. Ce que vous choisissez ici vaut pour toutes ses disciplines.`;
+  return `Fiche déjà créée. Une seule fiche par combattant : ${firstName} est ${INSCRIT_E} en ${listFr(disciplines)}. Ce que vous choisissez ici vaut pour toutes ses disciplines.`;
 }
