@@ -63,10 +63,11 @@ test('supprimer la dernière inscription supprime le combattant', async () => {
 });
 
 test('réimport de la fiche corrigée d’un club : remplace sans doublons, garde les saisies manuelles', async () => {
-  const first = await importClubForm(db, cid, form('Tani Dojo', ['A', 'B', 'C']));
+  const tani = await upsertClub(db, cid, { name: 'Tani Dojo' });
+  const first = await importClubForm(db, cid, form('Tani Dojo', ['A', 'B', 'C']), { replace: true, clubId: tani.id });
   expect(first).toMatchObject({ imported: 3, replaced: 0, skipped: 0 });
   await createRegistration(db, cid, input({ clubId: first.club.id, lastName: 'MANUEL' }));
-  const second = await importClubForm(db, cid, form('TANI DOJO', ['A', 'D'], true));
+  const second = await importClubForm(db, cid, form('TANI DOJO', ['A', 'D'], true), { replace: true, clubId: tani.id });
   expect(second).toMatchObject({ imported: 2, replaced: 3 });
   const rows = await listRegistrations(db, cid);
   expect(rows.map((r) => r.fighter.lastName).sort()).toEqual(['A', 'D', 'MANUEL']);
@@ -79,7 +80,8 @@ test('réimport de la fiche corrigée d’un club : remplace sans doublons, gard
 test('lignes en erreur comptées comme ignorées', async () => {
   const f = form('Tani', ['A']);
   f.rows.push({ line: 13, label: 'X', input: null, errors: ['x'], warnings: [] });
-  expect(await importClubForm(db, cid, f)).toMatchObject({ imported: 1, skipped: 1 });
+  const tani = await upsertClub(db, cid, { name: 'Tani' });
+  expect(await importClubForm(db, cid, f, { replace: true, clubId: tani.id })).toMatchObject({ imported: 1, skipped: 1 });
 });
 
 test('grille : une catégorie utilisée ne peut pas être supprimée, une vide oui', async () => {
@@ -105,11 +107,12 @@ test('renommer une catégorie utilisée se propage', async () => {
 });
 
 test('réimport : identifiants, licence et entité FFK conservés', async () => {
-  const first = await importClubForm(db, cid, form('Tani Dojo', ['A', 'B']));
+  const tani = await upsertClub(db, cid, { name: 'Tani Dojo' });
+  const first = await importClubForm(db, cid, form('Tani Dojo', ['A', 'B']), { replace: true, clubId: tani.id });
   const before = await listRegistrations(db, cid);
   db.$client.prepare('update fighters set licence = ?').run('LIC123');
   db.$client.prepare('update clubs set ffk_entity = ?').run('0060893 TANI DOJO');
-  await importClubForm(db, cid, form('Tani Dojo', ['A', 'B', 'C']));
+  await importClubForm(db, cid, form('Tani Dojo', ['A', 'B', 'C']), { replace: true, clubId: tani.id });
   const after = await listRegistrations(db, cid);
   const ids = (rows: typeof before, name: string) => rows.filter((r) => r.fighter.lastName === name).map((r) => [r.id, r.fighterId]);
   expect(ids(after, 'A')).toEqual(ids(before, 'A'));

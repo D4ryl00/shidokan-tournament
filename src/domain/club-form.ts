@@ -268,13 +268,13 @@ function cellsToLine(row: unknown[], grid: CategoryGrid, triathlonColumn: boolea
   if (text(ageCell) && !ageBandCode) errors.push(`Catégorie d'âge incompréhensible : « ${text(ageCell)} ».`);
   const combatRaw = disciplineFromLabel(combatCell);
   const combat = combatRaw && COMBAT_LABELS.has(combatRaw) ? (combatRaw as CombatDiscipline) : null;
-  // « Kata » écrit dans la colonne de combat : c'est une inscription en kata.
-  const kataInCombat = combatRaw === 'kata';
+  // « Kata » écrit dans une case de combat (la 1re ou la 2e) : c'est une inscription en kata.
+  const secondCell = secondCombatColumn >= 0 ? row[secondCombatColumn] : null;
+  const secondRaw = text(secondCell) ? disciplineFromLabel(secondCell) : null;
+  const kataInCombat = combatRaw === 'kata' || secondRaw === 'kata';
   if (text(combatCell) && !combat && !kataInCombat) warnings.push(`Discipline de combat incompréhensible : « ${text(combatCell)} » (ignorée).`);
   const combats: CombatDiscipline[] = combat ? [combat] : [];
-  const secondCell = secondCombatColumn >= 0 ? row[secondCombatColumn] : null;
-  if (text(secondCell)) {
-    const secondRaw = disciplineFromLabel(secondCell);
+  if (text(secondCell) && secondRaw !== 'kata') {
     const second = secondRaw && COMBAT_LABELS.has(secondRaw) ? (secondRaw as CombatDiscipline) : null;
     if (!second) warnings.push(`2e discipline de combat incompréhensible : « ${text(secondCell)} » (ignorée).`);
     else if (combats.includes(second)) warnings.push('2e discipline de combat identique à la première (ignorée).');

@@ -341,37 +341,33 @@ export async function importClubForm(
   opts: {
     /** false : les inscriptions absentes de cette fiche sont gardées (fiche papier saisie page par page). */
     replace: boolean;
-    /** Le club est pris par identifiant (et non par le nom de la fiche) ; 404 s'il n'est pas dans la compétition. */
-    clubId?: string;
+    /** Le club de la fiche, choisi ou reconnu par la route (le nom du fichier ne crée jamais de club) ; 404 s'il n'est pas dans la compétition. */
+    clubId: string;
     /** false : ni coach, ni téléphone, ni e-mails écrits ; seul le pré-accord l'est (fiche papier, sans coordonnées). */
     coordinates?: boolean;
-  } = { replace: true },
+  },
 ): Promise<{ club: Club; imported: number; replaced: number; skipped: number }> {
   return db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     const { club: name, ...coach } = parse.header;
     const withCoordinates = opts.coordinates !== false;
-    const found = opts.clubId ? getCompetitionClub(t, competitionId, opts.clubId) : matchFormClub(t, competitionId, name);
-    let club: Club;
-    if (!found) club = upsertClubSync(t, competitionId, withCoordinates ? { name, ...coach } : { name, preApproval: coach.preApproval });
-    else {
-      // Club déjà connu : le nom de la fiche n'est jamais écrit ; seules les valeurs non vides du fichier le sont (une case vide n'efface rien),
-      // et ce qui diffère alors de l'annuaire devient un changement à examiner, comme pour l'en-tête en ligne du coach.
-      const row = t.select().from(clubs).where(eq(clubs.id, found.id)).get()!;
-      const entry = row.directoryClubId ? t.select().from(clubDirectory).where(eq(clubDirectory.id, row.directoryClubId)).get() ?? null : null;
-      const before = clubValues(row, entry);
-      const patch = {
-        preApproval: coach.preApproval,
-        ...(withCoordinates && coach.coachName ? { coachName: coach.coachName } : {}),
-        ...(withCoordinates && coach.coachPhone ? { coachPhone: coach.coachPhone } : {}),
-        // Les adresses du fichier s'ajoutent à celles du club (doublons écartés, ordre gardé) : elles ne les remplacent pas.
-        ...(withCoordinates && coach.coachEmails.length ? { coachEmails: cleanEmails([...row.coachEmails, ...coach.coachEmails]) } : {}),
-      };
-      t.update(clubs).set(patch).where(eq(clubs.id, found.id)).run();
-      linkClub(t, found.id);
-      if (withCoordinates) recordClubChange(t, found.id, 'club', before);
-      club = getCompetitionClub(t, competitionId, found.id);
-    }
+    const found = getCompetitionClub(t, competitionId, opts.clubId);
+    // Club déjà connu : le nom de la fiche n'est jamais écrit ; seules les valeurs non vides du fichier le sont (une case vide n'efface rien),
+    // et ce qui diffère alors de l'annuaire devient un changement à examiner, comme pour l'en-tête en ligne du coach.
+    const row = t.select().from(clubs).where(eq(clubs.id, found.id)).get()!;
+    const entry = row.directoryClubId ? t.select().from(clubDirectory).where(eq(clubDirectory.id, row.directoryClubId)).get() ?? null : null;
+    const before = clubValues(row, entry);
+    const patch = {
+      preApproval: coach.preApproval,
+      ...(withCoordinates && coach.coachName ? { coachName: coach.coachName } : {}),
+      ...(withCoordinates && coach.coachPhone ? { coachPhone: coach.coachPhone } : {}),
+      // Les adresses du fichier s'ajoutent à celles du club (doublons écartés, ordre gardé) : elles ne les remplacent pas.
+      ...(withCoordinates && coach.coachEmails.length ? { coachEmails: cleanEmails([...row.coachEmails, ...coach.coachEmails]) } : {}),
+    };
+    t.update(clubs).set(patch).where(eq(clubs.id, found.id)).run();
+    linkClub(t, found.id);
+    if (withCoordinates) recordClubChange(t, found.id, 'club', before);
+    const club = getCompetitionClub(t, competitionId, found.id);
     const clubFighters = t.select().from(fighters).where(eq(fighters.clubId, club.id)).all().map((f) => f.id);
     const previous = clubFighters.length
       ? t

@@ -48,9 +48,10 @@ export const clubFormLineSchema = z.object({
 });
 
 /** Fiche papier saisie à l'écran : le club (sans coordonnées), le pré-accord et les lignes (un combattant par ligne). */
+const paperLines = z.array(clubFormLineSchema).max(200);
 const paperEntrySchema = z.object({
   header: z.object({ clubId: z.string().min(1), preApproval: z.boolean() }).strict(),
-  lines: z.array(clubFormLineSchema).max(200),
+  lines: paperLines,
 });
 
 /** L'aperçu accepte aussi une fiche de l'annuaire (`directoryId`) : le club n'entre dans la compétition qu'à l'enregistrement. */
@@ -59,8 +60,9 @@ const paperPreviewSchema = z.object({
     .object({ clubId: z.string().min(1).optional(), directoryId: z.string().min(1).optional(), preApproval: z.boolean() })
     .strict()
     .refine((h) => (h.clubId === undefined) !== (h.directoryId === undefined), 'Un club ou une fiche d’annuaire, pas les deux.'),
-  lines: z.array(clubFormLineSchema).max(200),
+  lines: paperLines,
 });
+type PaperEntry = { header: { clubId?: string; directoryId?: string; preApproval: boolean }; lines: z.infer<typeof paperLines> };
 
 export const registrationInputSchema = z
   .object({
@@ -186,8 +188,8 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
       .send(buf);
   });
 
-  async function parseEntry(competitionId: string, schema: typeof paperEntrySchema | typeof paperPreviewSchema, body: unknown) {
-    const { header: h, lines } = schema.parse(body) as z.infer<typeof paperPreviewSchema>;
+  /** Lignes d'une saisie papier déjà validée par son schéma. */
+  async function parseEntry(competitionId: string, { header: h, lines }: PaperEntry) {
     const name = h.clubId !== undefined ? getCompetitionClub(db, competitionId, h.clubId).name : getDirectoryEntry(db, h.directoryId!).name;
     // Sans coordonnées : la saisie papier n'en écrit aucune (voir `importClubForm`).
     const header = { club: name, coachName: null, coachPhone: null, coachEmails: [], preApproval: h.preApproval };
@@ -198,13 +200,14 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
 
   // Une fiche papier se saisit page par page : chaque saisie s'ajoute (une ligne déjà saisie est mise à jour), rien n'est retiré.
   app.post<P>('/api/competitions/:id/club-forms/entry/preview', async (req) => {
-    const parse = await parseEntry(req.params.id, paperPreviewSchema, req.body);
+    const parse = await parseEntry(req.params.id, paperPreviewSchema.parse(req.body));
     return { ...parse, removals: [] };
   });
 
   app.post<P>('/api/competitions/:id/club-forms/entry/import', async (req) => {
-    const parse = await parseEntry(req.params.id, paperEntrySchema, req.body);
-    const { clubId } = (req.body as { header: { clubId: string } }).header;
+    const entry = paperEntrySchema.parse(req.body);
+    const parse = await parseEntry(req.params.id, entry);
+    const { clubId } = entry.header;
     return { ...(await importClubForm(db, req.params.id, parse, { replace: false, clubId, coordinates: false })), parse };
   });
 

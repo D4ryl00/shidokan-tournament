@@ -2,13 +2,14 @@ import { PREF_DISCIPLINES, orderedPrefs, tidyReclass, type ClubFormLine, type Co
 import { entryKey } from '../../../domain/closed-categories.js';
 import { DISCIPLINES } from '../../../domain/disciplines.js';
 import type { DisciplineId, Ruleset } from '../../../domain/types.js';
+import type { ClubEntryView } from '../../api.js';
 
 export const NOT_OPEN = ' (non ouverte)';
 export const COMBAT_LABELS: [CombatDiscipline, string][] = [['karate', 'Karaté'], ['shido-boxing', 'Boxing'], ['shido-mix', 'Mix'], ['triathlon', 'Triathlon']];
 export const RULESET_LABELS: [Ruleset, string][] = [['jiyu', 'Jiyu'], ['shobu', 'Shobu']];
 
-export interface AgeBandInfo { code: string; label: string; ages: string; isMinor: boolean }
-export interface WeightClassInfo { id: string; ageBandCode: string; sex: 'F' | 'M'; label: string; maxKg: number | null }
+export type AgeBandInfo = ClubEntryView['ageBands'][number];
+export type WeightClassInfo = ClubEntryView['weightClasses'][number];
 
 /** Ce dont dépendent les choix de la fenêtre du combattant. */
 export interface LineFormContext {

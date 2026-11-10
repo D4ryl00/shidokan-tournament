@@ -33,6 +33,8 @@ export interface ClubLine {
   version: string;
   line: ClubFormLine;
   editable: boolean;
+  /** Combats commencés, vu par l'organisateur : la ligne est verrouillée sauf le nom, le prénom, le grade et le nom masqué. */
+  namesEditable: boolean;
   reason: string | null;
   /** Mentions pour le coach (catégorie qui n'est plus ouverte…). */
   notices: string[];
@@ -80,7 +82,8 @@ export class LineReadOnlyError extends Error {
 }
 
 export const LOCKED_REASON = 'Ses combats ont commencé : contactez l’organisateur.';
-export const ORGANISER_LOCKED_REASON = 'Ses combats ont commencé : corrigez dans Réaffectation ou Tableaux.';
+export const ORGANISER_LOCKED_REASON =
+  'Ses combats ont commencé : seuls le nom, le prénom, le grade et l’affichage du nom se corrigent ici ; pour la catégorie, passez par Réaffectation ou Tableaux.';
 export const CLOSED_ENTRY = (label: string) => `${label} : catégorie non ouverte à cette compétition.`;
 const CLOSED_NOTICE = (label: string) => `${label} : cette catégorie n’est plus ouverte, l’organisateur vous contactera.`;
 const WITHDRAWN_NOTICE = (label: string) => `Ne combattra pas en ${label} : catégorie non ouverte.`;
@@ -91,9 +94,9 @@ function competitionRow(db: AppDb, access: ClubAccess) {
   if (!c) throw new NotFoundError('Lien inconnu ou expiré.');
   return c;
 }
-function clubRow(db: AppDb, access: ClubAccess) {
+function clubRow(db: AppDb, access: ClubAccess, viewer: LineWriter['kind'] = 'coach') {
   const club = db.select().from(clubs).where(and(eq(clubs.id, access.clubId), eq(clubs.competitionId, access.competitionId))).get();
-  if (!club) throw new NotFoundError('Lien inconnu ou expiré.');
+  if (!club) throw new NotFoundError(viewer === 'coach' ? 'Lien inconnu ou expiré.' : 'Club introuvable');
   return club;
 }
 const isEditable = (c: { clubEntryStatus: string; ownerInstanceId: string | null }) => c.clubEntryStatus === 'open' && c.ownerInstanceId === null;
@@ -107,7 +110,7 @@ function lineOf(db: AppDb, fighter: typeof fighters.$inferSelect, viewer: LineWr
   const regs = db.select().from(registrations).where(eq(registrations.fighterId, fighter.id)).all();
   const catIds = regs.map((r) => r.categoryId).filter((x): x is string => !!x);
   const locked = catIds.length > 0 && db.select().from(categories).where(inArray(categories.id, catIds)).all().some((c) => c.status === 'started' || c.status === 'finished');
-  const { line, editable, reason } = registrationsToLine(
+  const { line, editable, reason, warnings } = registrationsToLine(
     fighter,
     regs.map((r) => ({
       discipline: r.discipline, ruleset: r.ruleset, weightClassId: r.weightClassId, approxWeightKg: r.approxWeightKg,
@@ -116,15 +119,22 @@ function lineOf(db: AppDb, fighter: typeof fighters.$inferSelect, viewer: LineWr
   );
   const version = [String(fighter.version ?? 0), ...regs.map((r) => `${r.id}:${r.version ?? 0}`).sort()].join('|');
   const closed = closedSet(db, fighter.competitionId);
-  const notices = regs.flatMap((r) => {
+  const notices = [...warnings, ...regs.flatMap((r) => {
     const cell = { ageBandCode: fighter.ageBandCode, sex: fighter.sex, discipline: r.discipline, ruleset: r.ruleset };
     if (r.withdrawnReason) return [WITHDRAWN_NOTICE(columnLabel(cell))];
     if (r.placementLocked || !isEntryClosed(closed, cell)) return [];
     // L'organisateur peut choisir une catégorie fermée : il reçoit l'avertissement des fiches, le coach la mention de contact.
     return [viewer === 'organiser' ? closedEntryWarning(cell, closed)! : CLOSED_NOTICE(columnLabel(cell))];
-  });
-  const base = { fighterId: fighter.id, clubId: fighter.clubId ?? '', publicNameHidden: fighter.publicNameHidden, version, line, notices };
-  return locked ? { ...base, editable: false, reason: viewer === 'organiser' ? ORGANISER_LOCKED_REASON : LOCKED_REASON } : { ...base, editable, reason };
+  })];
+  const base = { fighterId: fighter.id, clubId: fighter.clubId ?? '', publicNameHidden: fighter.publicNameHidden, version, line, notices, namesEditable: false };
+  if (!locked) return { ...base, editable, reason };
+  return viewer === 'organiser' ? { ...base, editable: false, namesEditable: true, reason: ORGANISER_LOCKED_REASON } : { ...base, editable: false, reason: LOCKED_REASON };
+}
+
+/** Ligne relue après le recalcul des catégories qui suit une écriture : sa version tient compte des inscriptions déplacées. */
+export function reloadLine(db: AppDb, saved: ClubLine, viewer: LineWriter['kind']): ClubLine {
+  const fighter = db.select().from(fighters).where(eq(fighters.id, saved.fighterId)).get();
+  return fighter ? lineOf(db, fighter, viewer) : saved;
 }
 
 /** Ligne d'un combattant pour l'écran Inscriptions (organisateur). Sans club : pas de ligne éditable, l'écran passe d'abord par l'étape club. */
@@ -132,7 +142,8 @@ export function fighterLine(db: AppDb, competitionId: string, fighterId: string)
   const fighter = db.select().from(fighters).where(and(eq(fighters.id, fighterId), eq(fighters.competitionId, competitionId))).get();
   if (!fighter) throw new NotFoundError('Combattant introuvable');
   const line = lineOf(db, fighter, 'organiser');
-  return fighter.clubId ? line : { ...line, editable: false, reason: line.reason === ORGANISER_LOCKED_REASON ? ORGANISER_LOCKED_REASON : null };
+  // Sans club et combats commencés : rien à corriger ici (l'étape club viendrait d'abord, et le club est verrouillé).
+  return fighter.clubId ? line : { ...line, editable: false, namesEditable: false, reason: line.reason === ORGANISER_LOCKED_REASON ? ORGANISER_LOCKED_REASON : null };
 }
 
 function headerOf(db: AppDb, club: typeof clubs.$inferSelect): ClubEntryView['club'] {
@@ -247,13 +258,19 @@ export async function saveClubLine(
   opts: { writer: LineWriter; publicNameHidden?: boolean },
 ): Promise<ClubLine> {
   const coach = opts.writer.kind === 'coach';
+  // Une seule lecture de la compétition (la route de l'organisateur ne la vérifie pas avant).
+  const competition = await getCompetition(db, access.competitionId);
+  if (!competition) throw new NotFoundError(coach ? 'Lien inconnu ou expiré.' : 'Compétition introuvable');
   if (coach) assertWritable(db, access);
-  const club = clubRow(db, access);
-  const competition = (await getCompetition(db, access.competitionId))!;
+  const club = clubRow(db, access, opts.writer.kind);
   // Le coach ne touche que les combattants de son club ; l'organisateur, ceux de toute la compétition (il peut les changer de club).
   const existing = fighterId
     ? db.select().from(fighters).where(and(eq(fighters.id, fighterId), eq(fighters.competitionId, access.competitionId), ...(coach ? [eq(fighters.clubId, club.id)] : []))).get()
     : undefined;
+  if (existing && !coach) {
+    const current = lineOf(db, existing, 'organiser');
+    if (current.namesEditable) return saveNamesOnly(db, club.id, existing, current, line, expectedVersion ?? '', opts.publicNameHidden);
+  }
   const registered = existing ? db.select().from(registrations).where(eq(registrations.fighterId, existing.id)).all() : [];
   // Plusieurs combats avec le réglage désactivé : seulement s'ils étaient tous déjà enregistrés pour ce combattant.
   const alreadyEntered = new Set(registered.map((r) => enteredValues({ ...r, otherDisciplines: [] }).discipline));
@@ -306,10 +323,38 @@ export async function saveClubLine(
   return lineOf(db, db.select().from(fighters).where(eq(fighters.id, savedId)).get()!, opts.writer.kind);
 }
 
+/**
+ * Combattant dont les combats ont commencé, corrigé par l'organisateur : seuls le nom, le prénom, le grade (s'il fait du kata)
+ * et le nom masqué changent ; le reste de la ligne est ignoré, ses inscriptions et ses catégories ne bougent pas. Pas de changement de club.
+ */
+function saveNamesOnly(
+  db: AppDb, clubId: string, fighter: typeof fighters.$inferSelect, current: ClubLine, line: ClubFormLine, expectedVersion: string, publicNameHidden: boolean | undefined,
+): ClubLine {
+  if (current.version !== expectedVersion) throw new StaleLineError();
+  if (fighter.clubId !== clubId) throw new LineReadOnlyError(current.reason ?? '');
+  const lastName = line.lastName.trim();
+  const firstName = line.firstName.trim();
+  if (!lastName) throw new RegistrationValidationError(['Le nom est obligatoire.']);
+  db.transaction((tx) => {
+    const t = tx as unknown as AppDb;
+    const duplicate = duplicateOf(t, clubId, { ...line, sex: fighter.sex }, fighter.id);
+    if (duplicate) throw new RegistrationValidationError([`${duplicate.lastName} ${duplicate.firstName} est déjà dans la liste.`]);
+    t.update(fighters)
+      .set({
+        lastName, firstName, nameKey: normalizeName(`${lastName} ${firstName}`),
+        ...(current.line.kata ? { grade: line.grade?.trim() || null } : {}),
+        ...(publicNameHidden === undefined ? {} : { publicNameHidden }),
+      })
+      .where(eq(fighters.id, fighter.id))
+      .run();
+  });
+  return lineOf(db, db.select().from(fighters).where(eq(fighters.id, fighter.id)).get()!, 'organiser');
+}
+
 /** Retire un combattant du club : ses inscriptions et lui. */
 export async function deleteClubLine(db: AppDb, access: ClubAccess, fighterId: string, expectedVersion: string, opts: { writer: LineWriter }): Promise<void> {
   if (opts.writer.kind === 'coach') assertWritable(db, access);
-  const club = clubRow(db, access);
+  const club = clubRow(db, access, opts.writer.kind);
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     // L'organisateur supprime un combattant de n'importe quel club de la compétition (la fenêtre peut avoir changé son club).

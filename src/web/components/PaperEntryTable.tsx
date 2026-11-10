@@ -12,12 +12,11 @@ import { ClubFormPreviewTable } from './ClubFormPreviewTable.js';
 import { plural } from '../../domain/plural.js';
 import { ClubPicker } from './club-picker/ClubPicker.js';
 import type { ClubChoice } from './club-picker/choice.js';
-import { toggleCombat, type LineFormContext } from './club-line/lineForm.js';
+import { COMBAT_LABELS, toggleCombat, type LineFormContext } from './club-line/lineForm.js';
 
 const emptyLine = (): ClubFormLine => ({
   lastName: '', firstName: '', sex: null, ageBandCode: null, weightClassId: null, weightKg: null, combats: [], kata: false, grade: null, ruleset: null, prefs: {}, shobuKeep: null,
 });
-export const COMBATS: [CombatDiscipline, string][] = [['karate', 'Karaté'], ['shido-boxing', 'Boxing'], ['shido-mix', 'Mix'], ['triathlon', 'Triathlon']];
 export const PREFS: [PrefDiscipline, string, string][] = [['karate', 'Karaté', 'Ka'], ['shido-boxing', 'Boxing', 'Bx'], ['shido-mix', 'Mix', 'Mx'], ['triathlon', 'Triathlon', 'Tri']];
 
 /** Cases à choix unique, comme sur la fiche : un second clic décoche. */
@@ -128,7 +127,7 @@ export function PaperEntryTable({ competitionId, grid }: { competitionId: string
                 </Table.Td>
                 <Table.Td role="group" aria-label={`Ligne ${i + 1} — Disciplines`} w={230}>
                   <Group gap={4}>
-                    {COMBATS.map(([d, label]) => (
+                    {COMBAT_LABELS.map(([d, label]) => (
                       <Chip key={d} size="xs" checked={l.combats.includes(d)} onChange={() => setLine(i, { combats: toggleCombat(l, d, combatCtx) })}>{label}</Chip>
                     ))}
                     <Chip size="xs" checked={l.kata} onChange={(kata) => setLine(i, { kata })}>Kata</Chip>

@@ -1,3 +1,4 @@
+import { DISCIPLINES } from './disciplines.js';
 import { PREF_DISCIPLINES, type ClubFormLine, type CombatDiscipline, type PrefDiscipline, type PrefRank } from './club-form.js';
 import type { DisciplineId, Ruleset, Sex } from './types.js';
 
@@ -27,8 +28,12 @@ export function enteredValues(r: LineRegistration): Entered {
   return { discipline, ruleset, weightClassId: weightClassId ?? null };
 }
 
-/** Ligne de fiche d'un combattant : l'inverse de `lineToRows`. */
-export function registrationsToLine(fighter: LineFighter, regs: LineRegistration[]): { line: ClubFormLine; editable: boolean; reason: string | null } {
+/**
+ * Ligne de fiche d'un combattant : l'inverse de `lineToRows`. Une ligne porte une seule inscription par discipline, un règlement
+ * et une catégorie de poids pour tous ses combats : des inscriptions d'avant (saisie manuelle, import FFK) qui n'y tiennent pas
+ * donnent un avertissement (`warnings`), car l'enregistrement de la ligne les ramène à elle.
+ */
+export function registrationsToLine(fighter: LineFighter, regs: LineRegistration[]): { line: ClubFormLine; editable: boolean; reason: string | null; warnings: string[] } {
   const combatRegs = regs.filter((r) => enteredValues(r).discipline !== 'kata');
   const kata = regs.find((r) => enteredValues(r).discipline === 'kata');
   const combat = combatRegs[0];
@@ -50,5 +55,25 @@ export function registrationsToLine(fighter: LineFighter, regs: LineRegistration
     prefs,
     shobuKeep,
   };
-  return { line, editable: true, reason: null };
+  return { line, editable: true, reason: null, warnings: lineWarnings(regs) };
+}
+
+const RULESET_NAMES: Record<Ruleset, string> = { jiyu: 'jiyu', shobu: 'shobu' };
+function lineWarnings(regs: LineRegistration[]): string[] {
+  const entered = regs.map(enteredValues);
+  const warnings: string[] = [];
+  const byDiscipline = new Map<DisciplineId, Entered[]>();
+  for (const e of entered) byDiscipline.set(e.discipline, [...(byDiscipline.get(e.discipline) ?? []), e]);
+  for (const [d, list] of byDiscipline) {
+    if (list.length < 2) continue;
+    const rulesets = [...new Set(list.map((e) => e.ruleset).filter((r): r is Ruleset => r !== null))].map((r) => RULESET_NAMES[r]);
+    const label = DISCIPLINES[d].label.toLowerCase();
+    warnings.push(`${list.length} inscriptions en ${label}${rulesets.length > 1 ? ` (${rulesets.join(' et ')})` : ''} : une seule sera gardée à l’enregistrement de ce combattant.`);
+  }
+  // Une inscription par discipline (le doublon a déjà son avertissement).
+  const combats = [...byDiscipline].filter(([d]) => d !== 'kata').map(([, list]) => list[0]!);
+  const rulesets = new Set(combats.map((e) => e.ruleset));
+  if (rulesets.size > 1) warnings.push('Règlements différents selon les combats : à l’enregistrement, tous ses combats prennent le règlement choisi ici.');
+  if (new Set(combats.map((e) => e.weightClassId)).size > 1) warnings.push('Catégories de poids différentes selon les combats : à l’enregistrement, tous ses combats prennent celle choisie ici.');
+  return warnings;
 }

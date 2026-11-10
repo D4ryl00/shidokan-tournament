@@ -146,14 +146,57 @@ test('two combats accepted when the setting is on (organiser and coach)', async 
   expect(res.statusCode, res.body).toBe(201);
 });
 
-test('started category: read-only for the organiser too', async () => {
+const ORGANISER_LOCKED = 'Ses combats ont commencé : seuls le nom, le prénom, le grade et l’affichage du nom se corrigent ici ; pour la catégorie, passez par Réaffectation ou Tableaux.';
+
+test('started category: the organiser corrects only the name, the grade and the public name', async () => {
+  const l = (await post()).json() as Line;
+  const regsBefore = await registrations();
+  raw("update categories set status = 'started' where id = ?", regsBefore.find((r) => r.discipline === 'karate')!.categoryId);
+  const cur = await current(l.fighterId);
+  expect(cur).toMatchObject({ editable: false, namesEditable: true, reason: ORGANISER_LOCKED });
+  // Le reste de la ligne est ignoré : la catégorie ne bouge pas.
+  const res = await put(cur, { ...LINE, lastName: ' MARTINEZ ', firstName: 'Léna', grade: '1er dan', weightClassId: 'senior:F:-61', sex: 'M', combats: [], kata: true }, true);
+  expect(res.statusCode, res.body).toBe(200);
+  expect(res.json()).toMatchObject({ editable: false, namesEditable: true, publicNameHidden: true, line: { lastName: 'MARTINEZ', firstName: 'Léna', grade: '1er dan', sex: 'F', weightClassId: 'senior:F:-55', combats: ['karate'] } });
+  const [f] = raw<{ last_name: string; first_name: string; grade: string; name_key: string }>('select last_name, first_name, grade, name_key from fighters');
+  expect(f).toMatchObject({ last_name: 'MARTINEZ', first_name: 'Léna', grade: '1er dan' });
+  expect(f!.name_key).toBe('MARTINEZ LENA');
+  expect((await registrations()).map((r) => [r.id, r.categoryId, r.weightClassId])).toEqual(regsBefore.map((r) => [r.id, r.categoryId, r.weightClassId]));
+});
+
+test('started category: no club change, no delete, no empty name, stale version refused', async () => {
+  const other = (await app.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Autre club' } })).json().id as string;
   const l = (await post({ ...LINE, kata: false, grade: null })).json() as Line;
   raw("update categories set status = 'started' where id = ?", (await registrations())[0]!.categoryId);
   const cur = await current(l.fighterId);
-  expect(cur).toMatchObject({ editable: false, reason: 'Ses combats ont commencé : corrigez dans Réaffectation ou Tableaux.' });
-  const refused = await put(cur, LINE);
-  expect(refused.statusCode).toBe(409);
-  expect(refused.json().error).toBe('Ses combats ont commencé : corrigez dans Réaffectation ou Tableaux.');
+  const moved = await put(cur, LINE, false, other);
+  expect(moved.statusCode).toBe(409);
+  expect(moved.json().error).toBe(ORGANISER_LOCKED);
+  const del = await app.inject({ method: 'DELETE', url: `${base}/clubs/${clubId}/lines/${cur.fighterId}?version=${encodeURIComponent(cur.version)}` });
+  expect(del.statusCode).toBe(409);
+  expect((await put(cur, { ...LINE, lastName: '  ' })).statusCode).toBe(400);
+  expect((await put({ fighterId: cur.fighterId, version: 'perimee' }, { ...LINE, lastName: 'X' })).statusCode).toBe(409);
+  // Un homonyme du club est refusé comme d'habitude.
+  await post({ ...LINE, lastName: 'DUPONT', kata: false, grade: null });
+  const dup = await put(cur, { ...LINE, lastName: 'DUPONT' });
+  expect(dup.statusCode).toBe(400);
+  expect(dup.json().issues).toEqual(['DUPONT Léa est déjà dans la liste.']);
+});
+
+test('started category: the coach still cannot correct anything', async () => {
+  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
+  const entryId = (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, name: 'Coach Dojo' } })).json().id;
+  await app.inject({ method: 'POST', url: `${base}/invitations`, payload: { directoryIds: [entryId] } });
+  const [row] = (await app.inject({ method: 'GET', url: `${base}/invitations` })).json();
+  const t = (await app.inject({ method: 'POST', url: `${base}/invitations/${row.clubId}/links` })).json().token;
+  await app.inject({ method: 'PATCH', url: `${base}/club-entry`, payload: { status: 'open', deadline: '2026-11-15' } });
+  const url = `/api/inscription/${t}/lines`;
+  const a = (await app.inject({ method: 'POST', url, payload: { line: { ...LINE, kata: false, grade: null } } })).json() as Line;
+  raw("update categories set status = 'started' where id = ?", (await registrations())[0]!.categoryId);
+  const view = (await app.inject({ method: 'GET', url: `/api/inscription/${t}` })).json() as { lines: Line[] };
+  expect(view.lines[0]).toMatchObject({ editable: false, namesEditable: false, reason: 'Ses combats ont commencé : contactez l’organisateur.' });
+  const res = await app.inject({ method: 'PUT', url: `${url}/${a.fighterId}`, payload: { line: { ...LINE, lastName: 'AUTRE' }, version: view.lines[0]!.version } });
+  expect(res.statusCode).toBe(409);
 });
 
 test('reassigned registration: only the declared values change', async () => {
@@ -251,4 +294,25 @@ test('.ods import adds the file’s e-mails to the club’s, without duplicates'
   await importClubForm(db, compId, { header: { club: 'Tani Dojo', coachName: null, coachPhone: null, coachEmails: ['coach@tani.example', 'b@tani.example'], preApproval: false }, rows: [] }, { replace: true, clubId });
   db.$client.close();
   expect(JSON.parse(raw<{ coach_emails: string }>('select coach_emails from clubs where id = ?', clubId)[0]!.coach_emails)).toEqual(['Coach@Tani.example', 'a@tani.example', 'b@tani.example']);
+});
+
+test('the version returned by a save is the one after the categories are rebuilt: a second save on it works (organiser and coach)', async () => {
+  const created = (await post({ ...LINE, kata: false, grade: null })).json() as Line;
+  const first = await put(created, { ...LINE, kata: false, grade: null, weightClassId: 'senior:F:-61' });
+  expect(first.statusCode, first.body).toBe(200);
+  const second = await put(first.json() as Line, { ...LINE, kata: false, grade: null, weightClassId: 'senior:F:-68' });
+  expect(second.statusCode, second.body).toBe(200);
+  // Coach
+  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
+  const entryId = (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, name: 'Coach Dojo' } })).json().id;
+  await app.inject({ method: 'POST', url: `${base}/invitations`, payload: { directoryIds: [entryId] } });
+  const [row] = (await app.inject({ method: 'GET', url: `${base}/invitations` })).json();
+  const t = (await app.inject({ method: 'POST', url: `${base}/invitations/${row.clubId}/links` })).json().token;
+  await app.inject({ method: 'PATCH', url: `${base}/club-entry`, payload: { status: 'open', deadline: '2026-11-15' } });
+  const url = `/api/inscription/${t}/lines`;
+  const c0 = (await app.inject({ method: 'POST', url, payload: { line: { ...LINE, lastName: 'COACH', kata: false, grade: null } } })).json() as Line;
+  const c1 = await app.inject({ method: 'PUT', url: `${url}/${c0.fighterId}`, payload: { line: { ...LINE, lastName: 'COACH', kata: false, grade: null, weightClassId: 'senior:F:-61' }, version: c0.version } });
+  expect(c1.statusCode, c1.body).toBe(200);
+  const c2 = await app.inject({ method: 'PUT', url: `${url}/${c0.fighterId}`, payload: { line: { ...LINE, lastName: 'COACH', kata: false, grade: null, weightClassId: 'senior:F:-68' }, version: (c1.json() as Line).version } });
+  expect(c2.statusCode, c2.body).toBe(200);
 });

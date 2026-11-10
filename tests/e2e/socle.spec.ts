@@ -6,8 +6,12 @@ test('créer une compétition avec accents', async ({ page }) => {
   await expect(page.getByRole('heading', { name: "Coupe Shidokan – Côte d'Azur" })).toBeVisible();
 });
 
-test('cliquer sur une compétition ouvre Inscriptions', async ({ page }) => {
-  const id = await createCompetition(page, 'Ouverture sur Inscriptions');
+test('cliquer sur une compétition (ou son adresse seule) ouvre Inscriptions', async ({ page }) => {
+  const name = 'Ouverture sur Inscriptions';
+  const id = await createCompetition(page, name);
+  await page.goto('/');
+  await page.getByTestId('competition-row').filter({ hasText: name }).getByRole('link', { name }).click();
+  await expect(page).toHaveURL(new RegExp(`/competitions/${id}/inscriptions$`));
   await page.goto(`/competitions/${id}`);
   await expect(page).toHaveURL(new RegExp(`/competitions/${id}/inscriptions$`));
 });

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
 import { competitionChanged } from '../events.js';
 import { syncCategories } from '../repositories/categories.js';
-import { deleteClubLine, fighterLine, saveClubLine } from '../repositories/club-entry.js';
+import { deleteClubLine, fighterLine, reloadLine, saveClubLine } from '../repositories/club-entry.js';
 import { getCompetition } from '../repositories/competitions.js';
 import { NotFoundError } from '../repositories/registrations.js';
 import { clubFormLineSchema } from './registrations.js';
@@ -29,19 +29,19 @@ export async function clubLineRoutes(app: FastifyInstance, { db }: { db: AppDb }
   });
 
   app.post<P>('/api/competitions/:id/clubs/:clubId/lines', async (req, reply) => {
-    const a = await access(req.params.id, req.params.clubId);
+    const a = { competitionId: req.params.id, clubId: req.params.clubId }; // saveClubLine vérifie la compétition
     const { line, publicNameHidden } = z.object({ line: clubFormLineSchema, publicNameHidden: z.boolean() }).parse(req.body);
     const saved = await saveClubLine(db, a, null, line, null, { writer, publicNameHidden });
     await resync(a.competitionId);
-    return reply.status(201).send(saved);
+    return reply.status(201).send(reloadLine(db, saved, 'organiser'));
   });
 
   app.put<PF>('/api/competitions/:id/clubs/:clubId/lines/:fighterId', async (req) => {
-    const a = await access(req.params.id, req.params.clubId);
+    const a = { competitionId: req.params.id, clubId: req.params.clubId }; // saveClubLine vérifie la compétition
     const { line, version, publicNameHidden } = z.object({ line: clubFormLineSchema, version: z.string().min(1), publicNameHidden: z.boolean() }).parse(req.body);
     const saved = await saveClubLine(db, a, req.params.fighterId, line, version, { writer, publicNameHidden });
     await resync(a.competitionId);
-    return saved;
+    return reloadLine(db, saved, 'organiser');
   });
 
   app.delete<PF & { Querystring: { version?: string } }>('/api/competitions/:id/clubs/:clubId/lines/:fighterId', async (req, reply) => {

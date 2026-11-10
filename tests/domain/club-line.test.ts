@@ -67,3 +67,19 @@ test('deux inscriptions qui partagent une discipline saisie → une seule entré
   const { line } = registrationsToLine({ lastName: 'X', firstName: 'Y', sex: 'M', ageBandCode: 'senior', grade: null }, [reg(null), reg(JSON.stringify({ discipline: 'karate', ruleset: 'jiyu', weightClassId: 'senior:M:-75' }))]);
   expect(line.combats).toEqual(['karate']);
 });
+
+const reg = (discipline: LineRegistration['discipline'], ruleset: LineRegistration['ruleset'], weightClassId: string | null): LineRegistration => ({
+  discipline, ruleset, weightClassId, approxWeightKg: null, otherDisciplines: [], acceptsJiyuFirst: null, originalJson: null,
+});
+const FIGHTER = { lastName: 'MARTIN', firstName: 'Léa', sex: 'F' as const, ageBandCode: 'senior', grade: null };
+
+test('inscriptions qui ne tiennent pas sur une ligne : avertissement avant l’enregistrement', () => {
+  expect(registrationsToLine(FIGHTER, [reg('karate', 'jiyu', 'senior:F:-55'), reg('kata', null, null)]).warnings).toEqual([]);
+  expect(registrationsToLine(FIGHTER, [reg('karate', 'jiyu', 'senior:F:-55'), reg('karate', 'shobu', 'senior:F:-55')]).warnings).toEqual([
+    '2 inscriptions en karaté (jiyu et shobu) : une seule sera gardée à l’enregistrement de ce combattant.',
+  ]);
+  expect(registrationsToLine(FIGHTER, [reg('karate', 'jiyu', 'senior:F:-55'), reg('shido-mix', 'shobu', 'senior:F:-61')]).warnings).toEqual([
+    'Règlements différents selon les combats : à l’enregistrement, tous ses combats prennent le règlement choisi ici.',
+    'Catégories de poids différentes selon les combats : à l’enregistrement, tous ses combats prennent celle choisie ici.',
+  ]);
+});

@@ -180,6 +180,27 @@ test('catégorie fermée : non proposée au club', async ({ page, request }) => 
   await expect(closedDetail).toBeVisible();
 });
 
+test('plusieurs combats en ligne : aucun règlement commun → le coach doit décocher une discipline', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe sans règlement commun');
+  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
+  const entry = (await (await request.post('/api/club-directory', { data: { ...EMPTY, name: `Dojo règlement ${Date.now()}` } })).json()) as { id: string };
+  const link = await inviteWithLink(request, id, entry.id);
+  await request.patch(`/api/competitions/${id}/club-entry`, { data: { status: 'open', deadline: '2026-11-15' } });
+  expect((await request.patch(`/api/competitions/${id}`, { data: { settings: { multipleCombatDisciplinesPerDay: true } } })).ok()).toBeTruthy();
+  const cells = [{ ageBandCode: 'senior', sex: 'F', discipline: 'karate', ruleset: 'jiyu' }, { ageBandCode: 'senior', sex: 'F', discipline: 'shido-boxing', ruleset: 'shobu' }];
+  expect((await request.put(`/api/competitions/${id}/closed-categories`, { data: { cells, closed: true } })).ok()).toBeTruthy();
+
+  await page.goto(`/inscription/${link.token}`);
+  await page.getByTestId('add-fighter').click();
+  await fillFighter(page, { last: 'MARTIN', first: 'Léa', sex: 'Féminin', age: 'Seniors (18 à 34 ans)', weightClass: '-55 kg', combat: 'Karaté' });
+  const form = page.getByTestId('club-line-form');
+  await expect(form.getByRole('group', { name: 'Règlement' }).getByText('Shobu', { exact: true })).toBeVisible();
+  await form.getByRole('group', { name: 'Discipline de combat' }).getByText('Boxing', { exact: true }).click();
+  await expect(form.getByTestId('line-no-ruleset')).toHaveText('Aucun règlement commun à ces disciplines : décochez-en une.');
+  await form.getByRole('group', { name: 'Discipline de combat' }).getByText('Boxing', { exact: true }).click();
+  await expect(form.getByTestId('line-no-ruleset')).toHaveCount(0);
+});
+
 test('reclassement en ligne : sa discipline n’est pas proposée, triathlon compris, choix résumé sur la carte', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe reclassement lisible');
   const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
@@ -439,7 +460,7 @@ test('invité sans lien : la fenêtre Accès le dit, supprimer le dernier lien g
   await expect(page.getByRole('option', { name: club })).toBeVisible();
 });
 
-test('le coach masque le nom d’un combattant', async ({ page, request }) => {
+test('le coach masque le nom d’un combattant : « Combattant masqué » sur la page publique', async ({ page, request, browser }) => {
   const id = await createCompetition(page, 'Coupe nom masqué');
   const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
   const entry = (await (await request.post('/api/club-directory', { data: { ...EMPTY, name: `Dojo masqué ${Date.now()}` } })).json()) as { id: string };
@@ -460,4 +481,23 @@ test('le coach masque le nom d’un combattant', async ({ page, request }) => {
   await page.getByRole('button', { name: 'Annuler' }).click();
   await page.goto(`/competitions/${id}/inscriptions`);
   await expect(page.getByTestId('registration-row').filter({ hasText: 'DISCRET' }).getByTestId('registration-name-hidden-badge')).toBeVisible();
+
+  // Page publique (tableaux lancés) : « Combattant masqué » à la place du nom, nulle part « DISCRET ».
+  const base = `/api/competitions/${id}`;
+  expect((await request.post(`${base}/registrations`, { data: { clubId: null, lastName: 'VISIBLE', firstName: 'Paul', sex: 'M', ageBandCode: 'senior', discipline: 'kata', ruleset: null, weightClassId: null, source: 'manual' } })).ok()).toBeTruthy();
+  const [zone] = (await (await request.get(`${base}/zones`)).json()) as { id: string }[];
+  for (const c of (await (await request.get(`${base}/categories`)).json()) as { id: string }[]) {
+    expect((await request.patch(`${base}/categories/${c.id}`, { data: { status: 'ready', zoneId: zone!.id } })).ok()).toBeTruthy();
+  }
+  expect((await request.post(`${base}/launch`, { data: { waveId: null } })).status()).toBe(204);
+  expect((await request.patch(base, { data: { visibility: 'public' } })).ok()).toBeTruthy();
+  const visitor = await browser.newContext({ baseURL: 'http://localhost:3101', storageState: { cookies: [], origins: [] } });
+  const v = await visitor.newPage();
+  await v.goto(`/public/${id}?onglet=tableaux`);
+  const item = v.getByTestId('public-category-item').first();
+  await expect(item).toBeVisible();
+  if ((await item.getAttribute('aria-expanded')) !== 'true') await item.click();
+  await expect(v.getByText('Combattant masqué').first()).toBeVisible();
+  expect(await v.locator('body').innerText()).not.toMatch(/discret|\bnoé\b/i);
+  await visitor.close();
 });

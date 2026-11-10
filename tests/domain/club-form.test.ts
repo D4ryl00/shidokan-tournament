@@ -24,6 +24,7 @@ import {
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 
 const grid = ffkDefaultGrid();
+/** Ligne (index 0) des en-têtes de colonnes dans les fiches de test, plus courtes que la vraie (`CLUB_FORM_COLUMNS_ROW`) : `locate` la trouve où qu'elle soit. */
 const CLUB_FORM_COLUMNS_ROW_INDEX = 10;
 
 type Line = (string | number | null)[];
@@ -32,14 +33,14 @@ function sheet(header: (string | null)[], lines: Line[]): unknown[][] {
   cells[0] = [CLUB_FORM_TITLE];
   cells[1] = ["Coupe Shidokan – Côte d'Azur — 22/11/2026"];
   CLUB_FORM_HEADER_FIELDS.forEach((label, i) => (cells[3 + i] = [label, header[i] ?? null]));
-  cells[10] = [...CLUB_FORM_LEGACY_COLUMNS];
+  cells[CLUB_FORM_COLUMNS_ROW_INDEX] = [...CLUB_FORM_LEGACY_COLUMNS];
   lines.forEach((l, i) => (cells[CLUB_FORM_FIRST_ROW - 1 + i] = l));
   return cells;
 }
 /** Même fiche, au nouveau format (une ligne par combattant). */
 function sheetNew(lines: Line[]): unknown[][] {
   const cells = sheet(HEADER_NEW, []);
-  cells[10] = [...CLUB_FORM_COLUMNS];
+  cells[CLUB_FORM_COLUMNS_ROW_INDEX] = [...CLUB_FORM_COLUMNS];
   lines.forEach((l, i) => (cells[CLUB_FORM_FIRST_ROW - 1 + i] = l));
   return cells;
 }
@@ -255,6 +256,11 @@ describe('nouveau format (une ligne par combattant)', () => {
       const r = parseClubForm(withSecond({}, 'Boxing'), grid, tol);
       expect(r.rows[0]!.errors).toContain(ONE_COMBAT_ONLY);
     });
+    test('« Kata » dans la 2e case de combat : inscription en kata, comme dans la 1re', () => {
+      const r = parseClubForm(withSecond({ 6: 'Non' }, 'Kata'), grid, tol, new Set(), { multipleCombats: true });
+      expect(r.rows.map((x) => x.input!.discipline)).toEqual(['karate', 'kata']);
+      expect(r.rows[0]!.warnings.join(' ')).not.toContain('incompréhensible');
+    });
     test('second combat illisible : avertissement', () => {
       const r = parseClubForm(withSecond({}, 'Zumba'), grid, tol, new Set(), { multipleCombats: true });
       expect(r.rows[0]!.warnings.join(' ')).toContain('2e discipline de combat incompréhensible');
@@ -330,7 +336,7 @@ test('inscrit en triathlon : ses autres disciplines sont gardées', () => {
 
 test('fiche déjà envoyée (sans colonne Triathlon) : toujours lue, avec ses anciens libellés', () => {
   const cells = sheet(HEADER_NEW, []);
-  cells[10] = ['Nom', 'Prénom', 'Sexe', "Catégorie d'âge", 'Poids actuel (kg)', 'Discipline de combat', 'Kata (Oui/Non)', 'Grade (si kata)', 'Règlement', 'Karaté', 'Boxing', 'Mix', 'Shobu : si reclassement, garder en priorité'];
+  cells[CLUB_FORM_COLUMNS_ROW_INDEX] = ['Nom', 'Prénom', 'Sexe', "Catégorie d'âge", 'Poids actuel (kg)', 'Discipline de combat', 'Kata (Oui/Non)', 'Grade (si kata)', 'Règlement', 'Karaté', 'Boxing', 'Mix', 'Shobu : si reclassement, garder en priorité'];
   const row = (keep: string): Line => ['DURAND', 'Hugo', 'Masculin', 'Seniors', '74', 'Karaté', 'Non', null, 'Shobu', null, '1', '2', keep];
   const read = (keep: string) => {
     cells[CLUB_FORM_FIRST_ROW - 1] = row(keep);

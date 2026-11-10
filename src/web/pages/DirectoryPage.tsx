@@ -23,12 +23,12 @@ function EntryModal({ entry, onClose, onUpcoming }: { entry: DirectoryEntry | 'n
   const update = useUpdateDirectoryEntry();
   // `mutateAsync` et non les rappels de `mutate` : fermée (Annuler, croix) pendant l'enregistrement, la fenêtre est remontée et un rappel de `mutate` serait
   // perdu ; la fiche est pourtant enregistrée, et la page doit encore proposer le report.
-  const submit = (input: DirectoryInput) =>
-    entry && entry !== 'new'
-      ? update.mutateAsync({ id: entry.id, ...input }).then((saved) => { onUpcoming(saved.id, saved.upcoming); })
-      : create.mutateAsync(input);
+  const submit = (input: DirectoryInput): Promise<{ id: string; upcoming: UpcomingLine[] } | null> =>
+    entry && entry !== 'new' ? update.mutateAsync({ id: entry.id, ...input }) : create.mutateAsync(input).then(() => null);
   return (
     <ClubEntryModal opened={entry !== null} title={entry === 'new' ? 'Ajouter un club' : 'Modifier le club'} onClose={onClose} onSubmit={submit}
+      // Après la fermeture : la proposition de report s'ouvre une fois la fiche fermée.
+      onSaved={(saved) => saved && onUpcoming(saved.id, saved.upcoming)}
       initial={entry && entry !== 'new' ? { name: entry.name, affiliationNumber: entry.affiliationNumber, coachName: entry.coachName, coachPhone: entry.coachPhone, coachEmails: entry.coachEmails, notes: entry.notes } : undefined} />
   );
 }

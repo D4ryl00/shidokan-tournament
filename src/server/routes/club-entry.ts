@@ -4,7 +4,7 @@ import { emailList } from './fields.js';
 import type { AppDb } from '../db/client.js';
 import { competitionChanged } from '../events.js';
 import { syncCategories } from '../repositories/categories.js';
-import { deleteClubLine, getClubEntry, saveClubLine, updateClubEntryHeader, type ClubAccess } from '../repositories/club-entry.js';
+import { deleteClubLine, getClubEntry, reloadLine, saveClubLine, updateClubEntryHeader, type ClubAccess } from '../repositories/club-entry.js';
 import { invitationStatus, resolveInvitation } from '../repositories/invitations.js';
 import { NotFoundError } from '../repositories/registrations.js';
 import { clubFormLineSchema } from './registrations.js';
@@ -62,7 +62,7 @@ export async function clubEntryRoutes(app: FastifyInstance, { db }: { db: AppDb 
     const { line, publicNameHidden } = z.object({ line: clubFormLineSchema, publicNameHidden: z.boolean().optional() }).parse(req.body);
     const saved = await saveClubLine(db, a, null, line, null, { writer: { kind: 'coach' }, publicNameHidden });
     await resync(a.competitionId);
-    return reply.status(201).send(saved);
+    return reply.status(201).send(reloadLine(db, saved, 'coach'));
   });
 
   app.put<TF>('/api/inscription/:token/lines/:fighterId', async (req) => {
@@ -70,7 +70,7 @@ export async function clubEntryRoutes(app: FastifyInstance, { db }: { db: AppDb 
     const { line, version, publicNameHidden } = z.object({ line: clubFormLineSchema, version: z.string().min(1), publicNameHidden: z.boolean().optional() }).parse(req.body);
     const saved = await saveClubLine(db, a, req.params.fighterId, line, version, { writer: { kind: 'coach' }, publicNameHidden });
     await resync(a.competitionId);
-    return saved;
+    return reloadLine(db, saved, 'coach');
   });
 
   app.delete<TF & { Querystring: { version?: string } }>('/api/inscription/:token/lines/:fighterId', async (req, reply) => {

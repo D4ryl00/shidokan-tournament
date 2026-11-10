@@ -101,6 +101,26 @@ test('aperçu d’un réimport : inscriptions qui seront retirées ; premier ong
   expect(preview.removals.map((r: { label: string }) => r.label)).toEqual(['DURAND Hugo — Karaté']);
 });
 
+test('aperçu avec ?clubId= : retraits comptés pour le club choisi (nom du fichier différent)', async () => {
+  const club = (await app.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Tani Dojo' } })).json() as { id: string };
+  const tpl = await template();
+  const two = fillClubForm(tpl, ['Tani Dojo', 'Jean', null, null, 'Non'], [
+    ['MARTIN', 'Léa', 'Féminin', 'Cadets', '-54', 'Karaté', 'Jiyu', null, null, null],
+    ['DURAND', 'Hugo', 'Masculin', 'Seniors', '-75', 'Karaté', 'Jiyu', null, null, null],
+  ]);
+  await upload(`${base}/club-forms/import`, two);
+  // Le fichier porte un autre nom : sans ?clubId=, aucun club reconnu, donc rien à retirer.
+  const renamed = fillClubForm(tpl, ['Dojo Tani (ancien nom)', 'Jean', null, null, 'Non'], [['MARTIN', 'Léa', 'Féminin', 'Cadets', '-54', 'Karaté', 'Jiyu', null, null, null]]);
+  const unmatched = (await upload(`${base}/club-forms/preview`, renamed)).json();
+  expect(unmatched.club).toBeNull();
+  expect(unmatched.removals).toEqual([]);
+  const chosen = (await upload(`${base}/club-forms/preview?clubId=${club.id}`, renamed)).json();
+  expect(chosen.club).toMatchObject({ id: club.id, name: 'Tani Dojo' });
+  expect(chosen.removals.map((r: { label: string }) => r.label)).toEqual(['DURAND Hugo — Karaté']);
+  // Un club inconnu de la compétition : 404.
+  expect((await upload(`${base}/club-forms/preview?clubId=inconnu`, renamed)).statusCode).toBe(404);
+});
+
 test('premier onglet « fiche club » cassé : son erreur est signalée (pas de lecture d’un onglet suivant)', async () => {
   const XLSX = await import('xlsx');
   const { CLUB_FORM_TITLE } = await import('../../src/domain/club-form.js');

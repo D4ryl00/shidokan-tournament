@@ -14,14 +14,16 @@ const cleaned = (f: DirectoryInput): DirectoryInput =>
 /**
  * Fenêtre de saisie d'un club (fiche d'annuaire) : « Ajouter un club » ou « Modifier le club », la même partout.
  * Le formulaire part de `initial` à chaque montage : le parent remonte la fenêtre (key) pour chaque ouverture.
- * `onSubmit` enregistre ; la fenêtre se ferme s'il réussit, un refus reste affiché dans la fenêtre.
+ * `onSubmit` enregistre ; la fenêtre se ferme s'il réussit (puis `onSaved` reçoit son résultat), un refus reste affiché dans la fenêtre.
  */
-export function ClubEntryModal({ opened, title, initial, onSubmit, onClose }: {
+export function ClubEntryModal<T>({ opened, title, initial, onSubmit, onClose, onSaved }: {
   opened: boolean;
   title: 'Ajouter un club' | 'Modifier le club';
   initial?: Partial<DirectoryInput>;
-  onSubmit: (input: DirectoryInput) => Promise<unknown>;
+  onSubmit: (input: DirectoryInput) => Promise<T>;
   onClose: () => void;
+  /** Appelé après la fermeture : une fenêtre qui suit (report sur les compétitions…) s'ouvre une fois celle-ci fermée. */
+  onSaved?: (result: T) => void;
 }) {
   const [form, setForm] = useState<DirectoryInput>({ ...EMPTY, ...initial });
   const [pending, setPending] = useState(false);
@@ -32,7 +34,7 @@ export function ClubEntryModal({ opened, title, initial, onSubmit, onClose }: {
     setPending(true);
     setError(null);
     onSubmit(cleaned(form)).then(
-      () => { setPending(false); onClose(); },
+      (result) => { setPending(false); onClose(); onSaved?.(result); },
       (e: unknown) => { setPending(false); setError(e); },
     );
   };

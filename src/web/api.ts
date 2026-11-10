@@ -8,7 +8,7 @@ import type { ClubFormHeader, ClubFormLine, ClubFormParse } from '../domain/club
 import type { ClosedCategoriesView, EntryCell } from '../domain/closed-categories.js';
 import type { ColumnMapping, FfkChoices, FfkImportPlan } from '../domain/ffk-import.js';
 import type { ClubField, ClubValues } from '../domain/club-changes.js';
-import type { Club, DirectoryEntry, DirectoryInput, RegistrationInput, RegistrationRow } from '../domain/registration.js';
+import type { Club, DirectoryEntry, DirectoryInput, RegistrationRow } from '../domain/registration.js';
 import type { Case, MoveView, Presence, Proposal, ProposalType } from '../domain/replacement/index.js';
 import type { CategoryGrid, DisciplineId, Ruleset, Sex } from '../domain/types.js';
 import type { LadderProgress, LadderRow, PlanChoice, PlanMove } from '../domain/replacement/plan.js';
@@ -1130,7 +1130,7 @@ export const useUpdateClubEntrySettings = (id: string) =>
 // Page d'inscription d'un club (lien personnel, sans compte).
 /** Refus après lesquels la page du club est rechargée et le formulaire fermé. */
 export const RELOAD_STATUSES = new Set([403, 404, 409]);
-export interface ClubLine { fighterId: string; clubId: string; publicNameHidden: boolean; version: string; line: ClubFormLine; editable: boolean; reason: string | null; notices: string[] }
+export interface ClubLine { fighterId: string; clubId: string; publicNameHidden: boolean; version: string; line: ClubFormLine; editable: boolean; namesEditable: boolean; reason: string | null; notices: string[] }
 export interface ClubEntryHeader { coachName: string | null; coachPhone: string | null; coachEmails: string[]; preApproval: boolean; affiliationNumber: string | null }
 export interface ClubEntryView {
   competition: { name: string; date: string; location: string | null; deadline: string | null; status: 'closed' | 'open' | 'frozen' };

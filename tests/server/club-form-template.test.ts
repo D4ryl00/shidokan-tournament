@@ -28,6 +28,14 @@ describe('modèle .ods et plusieurs combats', () => {
     expect(sheet.rows[CLUB_FORM_COLUMNS_ROW - 1]!.map((x) => x.value)).toEqual([...CLUB_FORM_COLUMNS]);
     expect(sheet.rows[CLUB_FORM_COLUMNS_ROW]).toHaveLength(CLUB_FORM_COLUMNS.length);
   });
+  test('la feuille d’aide explique la 2e case de combat seulement quand le réglage est activé', () => {
+    const helpText = (multiple: boolean) => {
+      const sheets = buildClubFormTemplate(competition(multiple), ffkDefaultGrid(), new Set());
+      return sheets.slice(1).flatMap((sh) => sh.rows.flat().map((x) => String(x.value ?? ''))).join('\n');
+    };
+    expect(helpText(true)).toContain('Plusieurs combats : choisissez la 2e discipline de combat dans la dernière colonne.');
+    expect(helpText(false)).not.toContain('Plusieurs combats');
+  });
   test('le .ods écrit et relu garde la colonne en dernière position', async () => {
     const cells = readWorkbook(await writeOds(buildClubFormTemplate(competition(true), ffkDefaultGrid(), new Set()))).sheets.find((x) => x.name === 'Fiche club')!.cells;
     expect(cells[CLUB_FORM_COLUMNS_ROW - 1]![CLUB_FORM_COLUMNS.length]).toBe(CLUB_FORM_SECOND_COMBAT_COLUMN);

@@ -7,7 +7,7 @@ import { buildApp } from '../../src/server/app.js';
 import { openDb } from '../../src/server/db/client.js';
 import { createCompetition } from '../../src/server/repositories/competitions.js';
 import { buildPackage, importPackage } from '../../src/server/sync/package.js';
-import { importClubForm } from '../../src/server/repositories/registrations.js';
+import { importClubForm, upsertClub } from '../../src/server/repositories/registrations.js';
 import { BLANK, buildFfkWorkbook, type FfkLine } from '../helpers/ffk-fixture.js';
 import { fillClubForm } from '../helpers/club-form-fill.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
@@ -208,7 +208,7 @@ test('import d’une fiche club après une saisie du coach : la fiche reste vide
   await a.save({ coachName: 'Paul', coachPhone: '0655555555' });
   const repoDb = openDb(dbPath);
   const parse: ClubFormParse = { header: { club: 'Vide Dojo', coachName: 'Paul', coachPhone: '0655555555', coachEmails: ['p@vide.example'], preApproval: false }, rows: [] };
-  await importClubForm(repoDb, a.other, parse);
+  await importClubForm(repoDb, a.other, parse, { replace: true, clubId: a.clubId });
   repoDb.$client.close();
   expect(await a.fiche()).toMatchObject({ coachName: null, coachPhone: null, coachEmails: [] });
   expect(changes().filter((c) => c.club_id === a.clubId)).toHaveLength(1);
@@ -229,7 +229,9 @@ test('import FFK après une saisie du coach : pas de ligne créée, la ligne exi
 test('import d’une fiche et import FFK d’un club neuf ne créent aucune ligne', async () => {
   const repoDb = openDb(dbPath);
   const other = (await createCompetition(repoDb, { name: 'Autre', date: inDays(32) })).id;
-  await importClubForm(repoDb, other, { header: { club: 'Neuf Dojo', coachName: 'Z', coachPhone: '0600', coachEmails: [], preApproval: false }, rows: [] });
+  // Le club est créé avant l'import (choix du club), avec les coordonnées de la fiche : rien à examiner.
+  const neuf = await upsertClub(repoDb, other, { name: 'Neuf Dojo', coachName: 'Z', coachPhone: '0600' });
+  await importClubForm(repoDb, other, { header: { club: 'Neuf Dojo', coachName: 'Z', coachPhone: '0600', coachEmails: [], preApproval: false }, rows: [] }, { replace: true, clubId: neuf.id });
   repoDb.$client.close();
   expect(changes()).toHaveLength(0);
   const file = buildFfkWorkbook({ 'Coupe Shidokan Karate': [['MARTIN LEA', null, 'L001', '0060999 AUTRE DOJO', 'Feminine', 'Karate', 'Cadet', -61, null], BLANK] });

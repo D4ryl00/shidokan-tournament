@@ -1,6 +1,6 @@
 import { Alert, Button, Checkbox, Chip, Group, Input, Modal, NativeSelect, Paper, Radio, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { useState, type ReactNode } from 'react';
+import { Children, useState, type ReactNode } from 'react';
 import { choosePref, kgText, orderedPrefs, weightWarning, type ClubFormLine, type PrefDiscipline, type PrefRank } from '../../domain/club-form.js';
 import { DISCIPLINES } from '../../domain/disciplines.js';
 import { ApiError, RELOAD_STATUSES, type ClubEntryView, type ClubLine, type LineOps } from '../api.js';
@@ -39,8 +39,11 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
   const [nameHidden, setNameHidden] = useState(line?.publicNameHidden ?? false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // Ligne verrouillée (combats commencés…) : elle s'ouvre en lecture seule, avec la raison.
+  // Ligne verrouillée (combats commencés…) : elle s'ouvre en lecture seule, avec la raison. L'organisateur y corrige encore
+  // le nom, le prénom, le grade et le nom masqué (`namesOnly`).
   const locked = !!line && !line.editable;
+  const namesOnly = locked && !!line?.namesEditable;
+  const frozen = locked && !namesOnly;
   const saved = line?.line ?? null;
   const ctx: LineFormContext = { mode, multipleCombats, closed: new Set(closed), ageBands, weightClasses, saved };
   const set = (patch: Partial<ClubFormLine>) => setForm((f) => applyChange(f, patch, ctx));
@@ -71,12 +74,18 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
     <Modal opened={opened} onClose={() => onClose()} fullScreen={mobile} title={title ?? (line ? `${line.line.lastName} ${line.line.firstName}` : 'Ajouter un combattant')}>
       <Stack data-testid="club-line-form">
         {locked && line && <Alert color="orange" data-testid="line-locked">{line.reason ?? 'Cette ligne n’est pas modifiable.'}</Alert>}
-        <fieldset disabled={locked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+        {/* Avant d'enregistrer : inscriptions qui ne tiennent pas sur la ligne, catégorie non ouverte… */}
+        {!frozen && line && line.notices.length > 0 && (
+          <Alert color="yellow" data-testid="line-notices"><Stack gap={4}>{line.notices.map((n) => <Text key={n} size="sm">{n}</Text>)}</Stack></Alert>
+        )}
         <Stack>
+            <Part disabled={frozen}>
             <SimpleGrid cols={{ base: 1, xs: 2 }}>
               <TextInput data-testid="line-last-name" label="Nom" required value={form.lastName} onChange={(e) => set({ lastName: e.currentTarget.value })} />
               <TextInput data-testid="line-first-name" label="Prénom" required value={form.firstName} onChange={(e) => set({ firstName: e.currentTarget.value })} />
             </SimpleGrid>
+            </Part>
+            <Part disabled={locked}>
             <Input.Wrapper label="Sexe" required labelElement="div" role="group" aria-label="Sexe">
               <OneOf value={form.sex} options={[['F', 'Féminin'], ['M', 'Masculin']]} onChange={(sex) => set({ sex })} />
             </Input.Wrapper>
@@ -118,9 +127,13 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
                   : <Text size="sm" c="var(--sk-warn-text)" data-testid="line-no-ruleset">Aucun règlement commun à ces disciplines : décochez-en une.</Text>}
               </Input.Wrapper>
             )}
+            </Part>
+            <Part disabled={frozen}>
             {form.kata && <TextInput data-testid="line-grade" label="Grade (pour le kata)" value={form.grade ?? ''} onChange={(e) => set({ grade: e.currentTarget.value || null })} />}
             <Checkbox data-testid="line-name-hidden" label="Masquer le nom sur la page publique" description="Le public voit « Combattant masqué » ; le club reste affiché."
               checked={nameHidden} onChange={(e) => setNameHidden(e.currentTarget.checked)} />
+            </Part>
+            <Part disabled={locked}>
             {hasCombat && otherChoices.length > 0 && (
               <Paper withBorder p="md" radius="md" data-testid="line-reclass" style={{ background: 'var(--sk-bg)' }}>
                 <Stack gap="sm">
@@ -150,8 +163,8 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
                 </Stack>
               </Paper>
             )}
+            </Part>
         </Stack>
-        </fieldset>
         <ApiErrorAlert error={ops.error} />
         <Group justify="space-between">
           {line && !locked ? (
@@ -165,12 +178,24 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
             )
           ) : <span />}
           <Group gap="xs">
-            <Button variant="default" onClick={() => onClose()}>{locked ? 'Fermer' : 'Annuler'}</Button>
+            <Button variant="default" onClick={() => onClose()}>{frozen ? 'Fermer' : 'Annuler'}</Button>
             {!locked && (typeof footerExtra === 'function' ? footerExtra(submit) : footerExtra)}
-            {!locked && <Button data-testid="line-save" loading={ops.pending} onClick={() => submit()}>Enregistrer</Button>}
+            {!frozen && <Button data-testid="line-save" loading={ops.pending} onClick={() => submit()}>Enregistrer</Button>}
           </Group>
         </Group>
       </Stack>
     </Modal>
+  );
+}
+
+/** Morceau de la fenêtre qu'une ligne verrouillée désactive (un `fieldset` désactivé ne se réactive pas plus bas : d'où plusieurs morceaux). */
+function Part({ disabled, children }: { disabled: boolean; children: ReactNode }) {
+  // Vide (pas de reclassement à proposer…) : rien, pour ne pas ajouter d'espace.
+  if (Children.toArray(children).length === 0) return null;
+  return (
+    // Estompé : les pastilles (Chip) ne montrent pas d'elles-mêmes qu'un `fieldset` désactivé les bloque.
+    <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, opacity: disabled ? 0.55 : 1 }}>
+      <Stack>{children}</Stack>
+    </fieldset>
   );
 }
