@@ -12,7 +12,7 @@ test('ffkChoiceState : la valeur FFK, celle de la fiche, ou une autre saisie', (
 
 test('ffkBanner : une, deux ou trois disciplines', () => {
   const end = ' Ce que vous choisissez ici vaut pour toutes ses disciplines.';
-  expect(ffkBanner('Jade', ['Karaté', 'Kata'])).toBe(`Fiche déjà créée. Une seule fiche par combattant : Jade est inscrit(e) en Karaté et Kata.${end}`);
-  expect(ffkBanner('Jade', ['Karaté'])).toBe(`Fiche déjà créée. Une seule fiche par combattant : Jade est inscrit(e) en Karaté.${end}`);
-  expect(ffkBanner('Jade', ['Karaté', 'Boxing', 'Kata'])).toBe(`Fiche déjà créée. Une seule fiche par combattant : Jade est inscrit(e) en Karaté, Boxing et Kata.${end}`);
+  expect(ffkBanner('Jade', ['Karaté', 'Kata'])).toBe(`Fiche déjà créée. Une seule fiche par combattant : celle de Jade est inscrite en Karaté et Kata.${end}`);
+  expect(ffkBanner('Jade', ['Karaté'])).toBe(`Fiche déjà créée. Une seule fiche par combattant : celle de Jade est inscrite en Karaté.${end}`);
+  expect(ffkBanner('Jade', ['Karaté', 'Boxing', 'Kata'])).toBe(`Fiche déjà créée. Une seule fiche par combattant : celle de Jade est inscrite en Karaté, Boxing et Kata.${end}`);
 });
