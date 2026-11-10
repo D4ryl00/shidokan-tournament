@@ -123,6 +123,7 @@ test('API inchangée : aucune nouvelle colonne dans les réponses', async () => 
   const created = await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22' } });
   const base = `/api/competitions/${created.json().id}`;
   const tpl = (await app.inject({ method: 'GET', url: `${base}/club-form.ods` })).rawPayload;
+  await app!.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Tani Dojo' } }); // le club de la fiche existe déjà
   const filled = fillClubForm(tpl, ['Tani Dojo', 'Jean', null, null, 'Oui'], [
     ['MARTIN', 'Léa', 'Féminin', 'Cadets', '-54', 'Karaté', 'Jiyu', '32', null, null],
     ['DURAND', 'Hugo', 'Masculin', 'Seniors', '-75', 'Karaté', 'Shobu', null, 'Oui', null],

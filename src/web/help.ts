@@ -331,6 +331,11 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Réimporter la fiche d’un club remplace les inscriptions de sa fiche précédente : l’aperçu liste celles qui seront retirées.',
         'Une inscription d’une catégorie qui a déjà commencé n’est jamais retirée.',
       ],
+      [
+        'Étape « Club de la fiche » : si le nom du club écrit dans le fichier ne correspond à aucun club de la compétition, choisissez le club (ou ajoutez-le) avant de voir l’aperçu. Aucun club n’est créé d’après le nom du fichier.',
+        'Le club choisi n’entre dans la compétition qu’à « Importer ».',
+        'Les coordonnées renseignées dans le fichier (coach, téléphone, e-mails) sont ajoutées au club ; une case vide n’efface rien. Ce qui diffère de l’annuaire devient un changement à examiner : ouvrez « Comparer » pour le décider.',
+      ],
       'Si le fichier est refusé, le message dit pourquoi (fiche modifiée, nom du club manquant…).',
       'Les fiches remplies avec l’ancien format (une ligne par inscription, catégorie de poids) sont toujours acceptées.',
     ],

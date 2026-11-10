@@ -75,6 +75,7 @@ test('aperçu sans effet, puis import, puis réimport sans doublon', async () =>
 
 test('fiche club importée avant : l’inscription de fiche est confirmée et garde son règlement', async () => {
   const tpl = (await app.inject({ method: 'GET', url: `${base}/club-form.ods` })).rawPayload;
+  await app!.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Tani Dojo' } }); // le club de la fiche existe déjà
   const form = fillClubForm(tpl, ['Tani Dojo', 'Coach', null, null, 'Non'], [
     ['MARTIN', 'Léa', 'Féminin', 'Cadets', '-54', 'Karaté', 'Shobu', '2', null, null],
   ]);
@@ -238,6 +239,7 @@ test('purge des fichiers envoyés : un aperçu ouvert survit à d’autres envoi
 
 test('réimport de fiche club après une réaffectation H : discipline d’origine reconnue, placement gardé, rien à retirer', async () => {
   const tpl = (await app.inject({ method: 'GET', url: `${base}/club-form.ods` })).rawPayload;
+  await app!.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Tani Dojo' } }); // le club de la fiche existe déjà
   const fiche = (poids: string) => fillClubForm(tpl, ['Tani Dojo', 'Coach', null, null, 'Non'], [
     ['SEUL', 'Karate', 'Masculin', 'Seniors', poids, 'Karaté', 'Shobu', '2', null, null],
     ['AUTRE', 'Boxe', 'Masculin', 'Seniors', '-75', 'Shido-boxing', 'Shobu', null, null, null],

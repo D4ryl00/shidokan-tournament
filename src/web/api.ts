@@ -181,7 +181,8 @@ export function useDeleteRegistration(id: string) {
   });
 }
 
-async function upload<T>(url: string, file: File): Promise<T> {
+async function upload<T>(url: string, file: File, clubId?: string): Promise<T> {
+  if (clubId) url += `?clubId=${encodeURIComponent(clubId)}`;
   const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: await file.arrayBuffer() });
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string; issues?: string[] };
@@ -192,11 +193,13 @@ async function upload<T>(url: string, file: File): Promise<T> {
 
 export function usePreviewClubForm(id: string) {
   return useMutation({
-    mutationFn: (file: File) => upload<ClubFormPreview>(`/api/competitions/${id}/club-forms/preview`, file),
+    // `clubId` : le club de la compétition choisi quand le nom de la fiche n'en désigne aucun (les retraits sont alors calculés pour lui).
+    mutationFn: ({ file, clubId }: { file: File; clubId?: string }) => upload<ClubFormPreview>(`/api/competitions/${id}/club-forms/preview`, file, clubId),
   });
 }
 
-export type ClubFormPreview = ClubFormParse & { removals: { registrationId: string; label: string }[] };
+/** `club` : le club de la compétition que désigne la fiche (nom, alias), ou null : l'organisateur le choisit. */
+export type ClubFormPreview = ClubFormParse & { club: Club | null; removals: { registrationId: string; label: string }[] };
 /** Saisie papier : le club de la compétition, sans coordonnées. */
 export type PaperEntry = { header: { clubId: string; preApproval: boolean }; lines: ClubFormLine[] };
 /** Pour « Vérifier » : aussi une fiche de l'annuaire (`directoryId`), dont le club n'entre dans la compétition qu'à l'enregistrement. */
@@ -218,8 +221,8 @@ export function useImportPaperEntry(id: string) {
 export function useImportClubForm(id: string) {
   const invalidate = useInvalidateRegistrations(id);
   return useMutation({
-    mutationFn: (file: File) =>
-      upload<{ club: Club; imported: number; replaced: number; skipped: number }>(`/api/competitions/${id}/club-forms/import`, file),
+    mutationFn: ({ file, clubId }: { file: File; clubId?: string }) =>
+      upload<{ club: Club; imported: number; replaced: number; skipped: number }>(`/api/competitions/${id}/club-forms/import`, file, clubId),
     onSuccess: invalidate,
   });
 }

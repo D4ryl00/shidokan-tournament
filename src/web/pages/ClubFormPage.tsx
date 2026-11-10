@@ -2,7 +2,9 @@ import { Button, FileButton, Group, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useRef, useState } from 'react';
 import { useParams } from 'react-router';
-import { useAuthMe, useClubChanges, useGrid, useImportClubForm, usePreviewClubForm } from '../api.js';
+import { useAuthMe, useClubChanges, useGrid, useImportClubForm, usePreviewClubForm, useResolveClub, type ClubFormPreview } from '../api.js';
+import { ClubPicker } from '../components/club-picker/ClubPicker.js';
+import type { ClubChoice } from '../components/club-picker/choice.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { CompetitionChangesBanner } from '../components/club-changes/ClubChangeBanners.js';
 import { useClubChangeDialog } from '../components/club-changes/ClubChangeModal.js';
@@ -21,31 +23,65 @@ export function ClubFormPage() {
   const comparison = useClubChangeDialog(changes);
   const preview = usePreviewClubForm(id);
   const importForm = useImportClubForm(id);
+  const resolveClub = useResolveClub(id);
   const [file, setFile] = useState<File | null>(null);
+  // Aperçu gardé ici : il reste affiché (avec le choix du club) pendant qu'il est relu avec le club choisi.
+  const [parse, setParse] = useState<ClubFormPreview | null>(null);
+  // Le nom de la fiche ne désigne aucun club de la compétition : l'organisateur choisit le club (résolu seulement à « Importer »).
+  const [unmatched, setUnmatched] = useState(false);
+  const [choice, setChoice] = useState<ClubChoice | null>(null);
+  const [resolveError, setResolveError] = useState<Error | null>(null);
   const resetFile = useRef<() => void>(null);
-  const parse = preview.data;
   const valid = parse?.rows.filter((r) => r.input).length ?? 0;
+  const clubKnown = !unmatched || choice !== null;
 
+  const clear = () => {
+    preview.reset();
+    setParse(null);
+    setUnmatched(false);
+    setChoice(null);
+    setResolveError(null);
+  };
   const onFile = (f: File | null) => {
     setFile(f);
     importForm.reset();
-    if (f) preview.mutate(f);
-    // Fichier gardé en mémoire : le champ est vidé pour qu'un nouveau choix du même fichier (corrigé entre-temps) soit relu.
-    if (f) resetFile.current?.();
+    clear();
+    if (f) {
+      preview.mutate({ file: f }, { onSuccess: (p) => { setParse(p); setUnmatched(p.club === null); } });
+      // Fichier gardé en mémoire : le champ est vidé pour qu'un nouveau choix du même fichier (corrigé entre-temps) soit relu.
+      resetFile.current?.();
+    }
   };
-  const doImport = () =>
-    file &&
-    importForm.mutate(file, {
+  // Un club de la compétition choisi : l'aperçu est relu pour lui, afin de montrer les inscriptions qui seraient retirées.
+  // Une fiche de l'annuaire n'a pas encore de club (donc rien à retirer) : rien n'est écrit avant « Importer ».
+  const pick = (next: ClubChoice | null) => {
+    setChoice(next);
+    setResolveError(null);
+    if (file) preview.mutate({ file, clubId: next?.kind === 'club' ? next.id : undefined }, { onSuccess: setParse });
+  };
+  const doImport = async () => {
+    if (!file) return;
+    let clubId = parse?.club?.id;
+    if (unmatched) {
+      try {
+        clubId = (await resolveClub(choice!)).id;
+      } catch (e) {
+        setResolveError(e as Error);
+        return;
+      }
+    }
+    importForm.mutate({ file, clubId }, {
       onSuccess: (r) => {
         notifications.show({
           color: 'green',
           message: `${r.club.name} : ${plural(r.imported, 'inscription importée', 'inscriptions importées')}, ${plural(r.replaced, 'remplacée', 'remplacées')}, ${plural(r.skipped, 'ignorée', 'ignorées')}.`,
         });
-        preview.reset();
+        clear();
         setFile(null);
         resetFile.current?.();
       },
     });
+  };
 
   return (
     <Stack gap="lg">
@@ -73,12 +109,20 @@ export function ClubFormPage() {
           </FileButton>
           {file && <Text size="sm" c="dimmed" className="sk-ellipsis" title={file.name}>{file.name}</Text>}
         </Group>
-        <ApiErrorAlert error={preview.error ?? importForm.error} />
+        <ApiErrorAlert error={preview.error ?? resolveError ?? importForm.error} />
         {parse && (
           <Stack>
-            <ClubFormPreviewTable parse={parse} grid={grid} />
+            {unmatched && (
+              <Stack gap="xs" data-testid="club-form-club-step">
+                <Text size="sm" fw={600}>Club de la fiche : « {parse.header.club} »</Text>
+                <Text size="sm" c="dimmed">Ce nom ne correspond à aucun club de la compétition : choisissez le club, ou ajoutez-le.</Text>
+                <ClubPicker competitionId={id} value={choice} onChange={pick}
+                  prefill={{ name: parse.header.club, coachName: parse.header.coachName, coachPhone: parse.header.coachPhone, coachEmails: parse.header.coachEmails }} />
+              </Stack>
+            )}
+            {clubKnown && <ClubFormPreviewTable parse={parse} grid={grid} />}
             <Group>
-              <Button data-testid="club-form-import" onClick={doImport} loading={importForm.isPending} disabled={valid === 0}>
+              <Button data-testid="club-form-import" onClick={doImport} loading={importForm.isPending} disabled={valid === 0 || !clubKnown || preview.isPending}>
                 Importer {plural(valid, 'inscription valide', 'inscriptions valides')}
               </Button>
               <Text size="sm" c="dimmed">Réimporter la fiche d’un club remplace les inscriptions de sa fiche précédente.</Text>

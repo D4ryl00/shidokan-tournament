@@ -19,7 +19,7 @@ import { withoutRowMeta } from '../db/row-versions.js';
 import { rowRev } from '../revisions.js';
 import { linkClub, linkClubResult } from '../db/club-directory.js';
 import { clubValues, recordClubChange } from './club-changes.js';
-import { categories, clubDirectory, clubs, fighters, registrations } from '../db/schema.js';
+import { categories, clubAliases, clubDirectory, clubs, fighters, registrations } from '../db/schema.js';
 import { closedSet } from './closed-categories.js';
 import { getCompetition, getGrid } from './competitions.js';
 import { NotFoundError } from './errors.js';
@@ -350,14 +350,26 @@ export async function importClubForm(
     const t = tx as unknown as AppDb;
     const { club: name, ...coach } = parse.header;
     const withCoordinates = opts.coordinates !== false;
-    const data = withCoordinates ? { name, ...coach } : { name, preApproval: coach.preApproval };
+    const found = opts.clubId ? getCompetitionClub(t, competitionId, opts.clubId) : matchFormClub(t, competitionId, name);
     let club: Club;
-    if (opts.clubId) {
-      const { name: _name, ...patch } = data;
-      getCompetitionClub(t, competitionId, opts.clubId);
-      t.update(clubs).set(patch).where(eq(clubs.id, opts.clubId)).run();
-      club = getCompetitionClub(t, competitionId, opts.clubId);
-    } else club = upsertClubSync(t, competitionId, data);
+    if (!found) club = upsertClubSync(t, competitionId, withCoordinates ? { name, ...coach } : { name, preApproval: coach.preApproval });
+    else {
+      // Club déjà connu : le nom de la fiche n'est jamais écrit ; seules les valeurs non vides du fichier le sont (une case vide n'efface rien),
+      // et ce qui diffère alors de l'annuaire devient un changement à examiner, comme pour l'en-tête en ligne du coach.
+      const row = t.select().from(clubs).where(eq(clubs.id, found.id)).get()!;
+      const entry = row.directoryClubId ? t.select().from(clubDirectory).where(eq(clubDirectory.id, row.directoryClubId)).get() ?? null : null;
+      const before = clubValues(row, entry);
+      const patch = {
+        preApproval: coach.preApproval,
+        ...(withCoordinates && coach.coachName ? { coachName: coach.coachName } : {}),
+        ...(withCoordinates && coach.coachPhone ? { coachPhone: coach.coachPhone } : {}),
+        ...(withCoordinates && coach.coachEmails.length ? { coachEmails: coach.coachEmails } : {}),
+      };
+      t.update(clubs).set(patch).where(eq(clubs.id, found.id)).run();
+      linkClub(t, found.id);
+      if (withCoordinates) recordClubChange(t, found.id, 'club', before);
+      club = getCompetitionClub(t, competitionId, found.id);
+    }
     const clubFighters = t.select().from(fighters).where(eq(fighters.clubId, club.id)).all().map((f) => f.id);
     const previous = clubFighters.length
       ? t
@@ -387,9 +399,22 @@ export async function importClubForm(
   });
 }
 
+/**
+ * Le club de la compétition que désigne le nom de la fiche : même nom (casse et accents ignorés), ou nom connu comme alias d'une entité FFK
+ * portée par un club de la compétition. Null si aucun : l'organisateur choisit alors le club.
+ */
+export function matchFormClub(db: AppDb, competitionId: string, name: string): Club | null {
+  const nameKey = normalizeName(name);
+  const own = db.select().from(clubs).where(and(eq(clubs.competitionId, competitionId), eq(clubs.nameKey, nameKey))).get();
+  if (own) return toClub(own);
+  const entity = db.select().from(clubAliases).where(eq(clubAliases.nameKey, nameKey)).get()?.clubEntity;
+  const byAlias = entity ? db.select().from(clubs).where(and(eq(clubs.competitionId, competitionId), eq(clubs.ffkEntity, entity))).get() : undefined;
+  return byAlias ? toClub(byAlias) : null;
+}
+
 /** Inscriptions de la fiche précédente de ce club qui disparaîtraient au réimport (aperçu). */
-export async function clubFormRemovals(db: AppDb, competitionId: string, parse: ClubFormParse): Promise<{ registrationId: string; label: string }[]> {
-  const club = db.select().from(clubs).where(and(eq(clubs.competitionId, competitionId), eq(clubs.nameKey, normalizeName(parse.header.club)))).get();
+export async function clubFormRemovals(db: AppDb, competitionId: string, parse: ClubFormParse, clubId?: string): Promise<{ registrationId: string; label: string }[]> {
+  const club = clubId ? getCompetitionClub(db, competitionId, clubId) : matchFormClub(db, competitionId, parse.header.club);
   if (!club) return [];
   const fs = new Map(db.select().from(fighters).where(eq(fighters.clubId, club.id)).all().map((f) => [f.id, f]));
   if (fs.size === 0) return [];

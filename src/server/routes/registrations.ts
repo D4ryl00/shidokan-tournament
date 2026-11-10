@@ -15,6 +15,7 @@ import {
   deleteRegistration,
   clubFormRemovals,
   importClubForm,
+  matchFormClub,
   getCompetitionClub,
   listClubs,
   listRegistrations,
@@ -207,13 +208,18 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
     return { ...(await importClubForm(db, req.params.id, parse, { replace: false, clubId, coordinates: false })), parse };
   });
 
-  app.post<P>('/api/competitions/:id/club-forms/preview', async (req) => {
+  // `?clubId=` : le club de la compétition choisi par l'organisateur quand le nom de la fiche n'en désigne aucun.
+  app.post<{ Params: { id: string }; Querystring: { clubId?: string } }>('/api/competitions/:id/club-forms/preview', async (req) => {
     const parse = await parseUpload(req.params.id, req.body);
-    return { ...parse, removals: await clubFormRemovals(db, req.params.id, parse) };
+    const { clubId } = req.query;
+    const club = clubId ? getCompetitionClub(db, req.params.id, clubId) : matchFormClub(db, req.params.id, parse.header.club);
+    return { ...parse, club, removals: await clubFormRemovals(db, req.params.id, parse, club?.id) };
   });
 
-  app.post<P>('/api/competitions/:id/club-forms/import', async (req) => {
+  app.post<{ Params: { id: string }; Querystring: { clubId?: string } }>('/api/competitions/:id/club-forms/import', async (req, reply) => {
     const parse = await parseUpload(req.params.id, req.body);
-    return { ...(await importClubForm(db, req.params.id, parse)), parse };
+    const clubId = req.query.clubId ?? matchFormClub(db, req.params.id, parse.header.club)?.id;
+    if (!clubId) return reply.status(400).send({ error: 'Choisissez le club de la fiche.' });
+    return { ...(await importClubForm(db, req.params.id, parse, { replace: true, clubId })), parse };
   });
 }

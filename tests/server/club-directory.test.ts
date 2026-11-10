@@ -85,6 +85,7 @@ test('import FFK : club créé → relié avec son numéro ; lien sûr vers un c
   app = await buildApp({ dbPath });
   const base = `/api/competitions/${(await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22' } })).json().id}`;
   const tpl = (await app.inject({ method: 'GET', url: `${base}/club-form.ods` })).rawPayload;
+  await app!.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Tani Dojo' } }); // le club de la fiche existe déjà
   const form = fillClubForm(tpl, ['Tani Dojo', 'Coach', null, null, 'Non'], [['MARTIN', 'Léa', 'Féminin', 'Cadets', '-54', 'Karaté', 'Jiyu', '2', null, null]]);
   const send = (url: string, file: Buffer) => app!.inject({ method: 'POST', url, payload: file, headers: { 'content-type': 'application/octet-stream', 'x-file-name': 'export.xlsx' } });
   expect((await send(`${base}/club-forms/import`, form)).statusCode).toBe(200);

@@ -17,6 +17,7 @@ const ffk = buildFfkWorkbook({
 });
 
 async function importClubForm(page: Page, id: string) {
+  await page.request.post(`/api/competitions/${id}/clubs`, { data: { name: 'Tani Dojo' } }); // le club de la fiche existe déjà
   await page.goto(`/competitions/${id}/fiche-club`);
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('club-form-download').click()]);
   const template = fs.readFileSync((await download.path())!);

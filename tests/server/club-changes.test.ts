@@ -9,6 +9,7 @@ import { createCompetition } from '../../src/server/repositories/competitions.js
 import { buildPackage, importPackage } from '../../src/server/sync/package.js';
 import { importClubForm } from '../../src/server/repositories/registrations.js';
 import { BLANK, buildFfkWorkbook, type FfkLine } from '../helpers/ffk-fixture.js';
+import { fillClubForm } from '../helpers/club-form-fill.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 /** Date locale `AAAA-MM-JJ` à n jours d'aujourd'hui : les compétitions « à venir » des tests le restent quelle que soit la date d'exécution. */
@@ -770,4 +771,46 @@ test('M5 : sur une compétition gérée ici, sans application, le changement est
   const [view] = await list();
   expect((await resolve(clubId, view!, { coachName: 'Jean', coachPhone: '0644444444', coachEmails: ['jean@tani.example'] })).statusCode).toBe(204);
   expect(changes()).toHaveLength(0);
+});
+
+/** Importe une fiche .ods du club « Tani Dojo » (en-tête : coach, téléphone, e-mail) dans la compétition. */
+async function importFiche(header: (string | null)[], query = '') {
+  const tpl = (await app.inject({ method: 'GET', url: `${base}/club-form.ods` })).rawPayload;
+  const file = fillClubForm(tpl, header, []);
+  return app.inject({ method: 'POST', url: `${base}/club-forms/import${query}`, payload: file, headers: { 'content-type': 'application/octet-stream' } });
+}
+
+test('import .ods : coordonnées du fichier différentes de l’annuaire → un changement à examiner, valeurs du fichier', async () => {
+  const res = await importFiche(['Tani Dojo', 'Paul', '0611111111', 'p@tani.example', 'Non']);
+  expect(res.statusCode).toBe(200);
+  const rows = changes().filter((c) => c.club_id === clubId);
+  expect(rows).toHaveLength(1);
+  expect(JSON.parse(rows[0]!.values_json)).toMatchObject({ name: 'Tani Dojo', coachName: 'Paul', coachPhone: '0611111111', coachEmails: ['p@tani.example'] });
+  expect(await pageView()).toMatchObject({ coachPhone: '0611111111' });
+});
+
+test('import .ods : les cases vides du fichier n’effacent rien et ne créent aucun changement', async () => {
+  const res = await importFiche(['Tani Dojo', null, null, null, 'Non']);
+  expect(res.statusCode).toBe(200);
+  expect(changes()).toHaveLength(0);
+  expect(await pageView()).toMatchObject({ coachPhone: '0600000000', coachEmails: ['jean@tani.example'] });
+});
+
+test('import .ods avec clubId : le club choisi reçoit les coordonnées, pas un club au nom du fichier', async () => {
+  const res = await importFiche(['Nom très différent', 'Paul', '0622222222', null, 'Non'], `?clubId=${clubId}`);
+  expect(res.statusCode).toBe(200);
+  expect(res.json().club.id).toBe(clubId);
+  expect(res.json().club.name).toBe('Tani Dojo');
+  const clubs = (await app.inject({ method: 'GET', url: `${base}/clubs` })).json() as { name: string }[];
+  expect(clubs.map((c) => c.name)).toEqual(['Tani Dojo']);
+  expect(changes().filter((c) => c.club_id === clubId)).toHaveLength(1);
+});
+
+test('import .ods : un nom connu comme alias de l’entité FFK du club désigne ce club (pas d’étape « club »)', async () => {
+  raw('update clubs set ffk_entity = ? where id = ?', '0060893 TANI DOJO KARATE', clubId);
+  raw('insert into club_aliases (name_key, club_entity) values (?, ?)', 'TANI KARATE CLUB', '0060893 TANI DOJO KARATE');
+  const tpl = (await app.inject({ method: 'GET', url: `${base}/club-form.ods` })).rawPayload;
+  const file = fillClubForm(tpl, ['Tani Karate Club', null, null, null, 'Non'], []);
+  const preview = (await app.inject({ method: 'POST', url: `${base}/club-forms/preview`, payload: file, headers: { 'content-type': 'application/octet-stream' } })).json();
+  expect(preview.club).toMatchObject({ id: clubId });
 });

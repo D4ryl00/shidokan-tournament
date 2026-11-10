@@ -20,6 +20,7 @@ const HEADER = ['Tani Dojo', 'Jean Coach', '0600000000', null, 'Oui'];
 
 test('fiche club : modèle, aperçu avec erreur, import, réimport corrigé', async ({ page }) => {
   const id = await createCompetition(page, 'Coupe fiche club');
+  await page.request.post(`/api/competitions/${id}/clubs`, { data: { name: 'Tani Dojo' } }); // le club de la fiche existe déjà
   const template = await downloadTemplate(page, id);
 
   await uploadForm(page, fillClubForm(template, HEADER, [

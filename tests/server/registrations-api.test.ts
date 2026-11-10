@@ -26,6 +26,7 @@ async function template(): Promise<Buffer> {
 }
 
 test('modèle, aperçu, import, liste', async () => {
+  await app.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Tani Dojo' } }); // le club de la fiche existe déjà
   const tpl = await template();
   expect(readWorkbook(tpl).sheets.map((s) => s.name)).toEqual(['Fiche club', 'Aide']);
   const filled = fillClubForm(tpl, ['Tani Dojo', 'Jean', null, null, 'Oui'], [
@@ -80,6 +81,7 @@ test('saisie manuelle, modification, suppression ; clubs', async () => {
 });
 
 test('aperçu d’un réimport : inscriptions qui seront retirées ; premier onglet « fiche club » lu', async () => {
+  await app.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Tani Dojo' } }); // le club de la fiche existe déjà
   const XLSX = await import('xlsx');
   const tpl = await template();
   const two = fillClubForm(tpl, ['Tani Dojo', 'Jean', null, null, 'Non'], [
@@ -178,6 +180,7 @@ test('relecture : une fiche papier saisie page par page s’ajoute (rien n’est
 });
 
 test('relecture (mineurs) : import HTTP d’une fiche .ods au nouveau format', async () => {
+  await app.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Tani Dojo' } }); // le club de la fiche existe déjà
   const filled = fillClubForm(await template(), ['Tani Dojo', 'Jean', null, null, 'Non'], [
     ['MARTIN', 'Léa', 'Féminin', 'Cadets', '54,4', 'Karaté', 'Oui', '1er kyu', 'Jiyu', null, '2', '1', null],
   ], 'new');
@@ -298,4 +301,27 @@ test('paper entry preview with a directory club does not add it to the competiti
   // L'enregistrement n'accepte pas de fiche d'annuaire : il faut un club de la compétition.
   const imp = await app.inject({ method: 'POST', url: `${base}/club-forms/entry/import`, payload: { header: { directoryId: dir.id, preApproval: false }, lines: [ENTRY_LINE] } });
   expect(imp.statusCode).toBe(400);
+});
+
+test('nom de club inconnu : import refusé sans clubId ; avec clubId, le club choisi est utilisé, pas le nom du fichier', async () => {
+  const club = (await app.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Tani Dojo' } })).json();
+  const file = fillClubForm(await template(), ['Dojo Inconnu', 'Jean', null, null, 'Non'], [['MARTIN', 'Léa', 'Féminin', 'Cadets', '-54', 'Karaté', 'Jiyu', null, null, null]]);
+  const preview = (await upload(`${base}/club-forms/preview`, file)).json();
+  expect(preview.club).toBeNull();
+  const refused = await upload(`${base}/club-forms/import`, file);
+  expect(refused.statusCode).toBe(400);
+  expect(refused.json().error).toBe('Choisissez le club de la fiche.');
+  expect((await app.inject({ method: 'GET', url: `${base}/clubs` })).json()).toHaveLength(1);
+  const done = await upload(`${base}/club-forms/import?clubId=${club.id}`, file);
+  expect(done.json()).toMatchObject({ imported: 1, club: { id: club.id, name: 'Tani Dojo' } });
+  expect((await app.inject({ method: 'GET', url: `${base}/clubs` })).json()).toHaveLength(1);
+  const foreign = await upload(`${base}/club-forms/import?clubId=nope`, file);
+  expect(foreign.statusCode).toBe(404);
+});
+
+test('club trouvé par son nom (accents, casse) : l’aperçu donne le club, pas d’étape club', async () => {
+  const club = (await app.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Épée Dojo' } })).json();
+  const file = fillClubForm(await template(), ['EPEE dojo', 'Jean', null, null, 'Non'], []);
+  const preview = (await upload(`${base}/club-forms/preview`, file)).json();
+  expect(preview.club).toMatchObject({ id: club.id });
 });
