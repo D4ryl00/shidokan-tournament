@@ -76,11 +76,11 @@ export async function buildFfkPdf(spec: FakeFfkPdf): Promise<Uint8Array> {
       index++;
       text(`1000000${index}A`, 40, top);
       text(name, 120, top);
-      text('LIGUE', 360, top - 5.5, 5);
-      text('REGIONALE', 360, top, 5);
-      text('TEST', 360, top + 5.5, 5);
+      text('LIGUE REGIONALE TEST', 360, top, 5);
       text(spec.entity.replace(/^\d+\s+/, ''), 520, top);
-      top += ROW_H;
+      text('COTE TEST DE', 360, top + 5.5, 5);
+      text('KARATE ET DA', 360, top + 11, 5);
+      top += ROW_H + 6;
       rowsOnPage++;
     }
     top += 10;

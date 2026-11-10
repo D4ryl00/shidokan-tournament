@@ -44,7 +44,7 @@ test('coach : PDF de 2 combattants lu et traduit dans la grille', async () => {
   const { fighters, duplicates } = res.json();
   expect(duplicates).toEqual([]);
   expect(fighters).toHaveLength(2);
-  expect(fighters[0]).toMatchObject({ fullName: expect.stringContaining('DURAND LEO'), sex: 'M', ageBandCode: 'senior', weightClassId: 'senior:M:-75' });
+  expect(fighters[0]).toMatchObject({ fullName: 'DURAND LEO', sex: 'M', ageBandCode: 'senior', weightClassId: 'senior:M:-75' });
 });
 
 test('coach : discipline absente ou inconnue → 400', async () => {
