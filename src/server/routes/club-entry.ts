@@ -4,10 +4,11 @@ import { emailList } from './fields.js';
 import type { AppDb } from '../db/client.js';
 import { competitionChanged } from '../events.js';
 import { syncCategories } from '../repositories/categories.js';
-import { deleteClubLine, getClubEntry, reloadLine, saveClubLine, updateClubEntryHeader, type ClubAccess } from '../repositories/club-entry.js';
+import { assertWritable, deleteClubLine, getClubEntry, reloadLine, saveClubLine, updateClubEntryHeader, type ClubAccess } from '../repositories/club-entry.js';
 import { invitationStatus, resolveInvitation } from '../repositories/invitations.js';
 import { NotFoundError } from '../repositories/registrations.js';
 import { clubFormLineSchema } from './registrations.js';
+import { ffkPdfRead, FFK_PDF_MAX_BYTES } from './ffk-pdf.js';
 
 type T = { Params: { token: string } };
 
@@ -34,7 +35,7 @@ const headerSchema = z
 export async function clubEntryRoutes(app: FastifyInstance, { db }: { db: AppDb }) {
   // Routes publiques (sans compte) : petites requêtes seulement, au lieu des 20 Mo des imports de l'organisateur.
   app.addHook('onRoute', (route) => {
-    route.bodyLimit = 64 * 1024;
+    route.bodyLimit ??= 64 * 1024;
   });
   // Les données sont déjà enregistrées : un échec du recalcul des catégories ne doit pas faire croire au coach que rien n'est passé.
   const resync = (competitionId: string) => {
@@ -71,6 +72,12 @@ export async function clubEntryRoutes(app: FastifyInstance, { db }: { db: AppDb 
     const saved = await saveClubLine(db, a, req.params.fighterId, line, version, { writer: { kind: 'coach' }, publicNameHidden });
     await resync(a.competitionId);
     return reloadLine(db, saved, 'coach');
+  });
+
+  app.post<T & { Querystring: { discipline?: string } }>('/api/inscription/:token/ffk-pdf', { bodyLimit: FFK_PDF_MAX_BYTES }, async (req) => {
+    const a = access(req.params.token);
+    assertWritable(db, a);
+    return ffkPdfRead(db, a.competitionId, req.query.discipline, req.body);
   });
 
   app.delete<TF & { Querystring: { version?: string } }>('/api/inscription/:token/lines/:fighterId', async (req, reply) => {

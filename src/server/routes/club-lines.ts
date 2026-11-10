@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
 import { competitionChanged } from '../events.js';
 import { syncCategories } from '../repositories/categories.js';
-import { deleteClubLine, fighterLine, reloadLine, saveClubLine } from '../repositories/club-entry.js';
+import { clubLines, deleteClubLine, fighterLine, reloadLine, saveClubLine } from '../repositories/club-entry.js';
 import { getCompetition } from '../repositories/competitions.js';
 import { NotFoundError } from '../repositories/registrations.js';
 import { clubFormLineSchema } from './registrations.js';
@@ -26,6 +26,11 @@ export async function clubLineRoutes(app: FastifyInstance, { db }: { db: AppDb }
   app.get<{ Params: { id: string; fighterId: string } }>('/api/competitions/:id/fighters/:fighterId/line', async (req) => {
     await access(req.params.id, '');
     return fighterLine(db, req.params.id, req.params.fighterId);
+  });
+
+  app.get<P>('/api/competitions/:id/clubs/:clubId/lines', async (req) => {
+    const a = await access(req.params.id, req.params.clubId);
+    return clubLines(db, a, 'organiser');
   });
 
   app.post<P>('/api/competitions/:id/clubs/:clubId/lines', async (req, reply) => {

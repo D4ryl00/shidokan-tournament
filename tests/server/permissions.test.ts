@@ -29,7 +29,7 @@ const TABLE_WRITES = [
   'PATCH /categories/:cid', 'POST /categories/:cid/redraw', 'POST /categories/:cid/swap', 'POST /categories/:cid/move', 'POST /categories/:cid/move/preview', 'POST /categories/:cid/regenerate',
   'POST /launch', 'POST /launch/reopen', 'POST /launch/number', 'POST /launch/number/preview',
   'PUT /fighters/:fighterId/public-name', 'PUT /wave-schedules',
-  'POST /clubs/:clubId/lines', 'PUT /clubs/:clubId/lines/:fighterId', 'DELETE /clubs/:clubId/lines/:fighterId',
+  'POST /clubs/:clubId/lines', 'PUT /clubs/:clubId/lines/:fighterId', 'DELETE /clubs/:clubId/lines/:fighterId', 'POST /ffk-pdf',
   'PUT /categories/:cid/results/:matchId', 'DELETE /categories/:cid/results/:matchId', 'PUT /categories/:cid/kata/:rid/:round', 'PUT /categories/:cid/tie-break',
 ].map((r) => r.replace(' ', ' /api/competitions/:id'));
 /** Écritures d'un compte Zone, sur sa zone. */
@@ -49,7 +49,7 @@ async function setup() {
   app = await buildApp({ dbPath, role: 'serveur' });
   const a = app;
   const orgaCookie = await loginAs(a, 'orga@example.org');
-  const as = (cookie: string) => (method: Method, url: string, payload?: unknown) => a.inject({ method, url, headers: { cookie }, payload: payload as object });
+  const as = (cookie: string) => (method: Method, url: string, payload?: unknown, headers: Record<string, string> = {}) => a.inject({ method, url, headers: { cookie, ...headers }, payload: payload as object });
   const orga = as(orgaCookie);
   const id = (await orga('POST', '/api/competitions', { name: 'Coupe', date: '2026-11-22' })).json().id as string;
   const other = (await orga('POST', '/api/competitions', { name: 'Open', date: '2026-12-06' })).json().id as string;
@@ -101,6 +101,19 @@ test('routeAccess : chaque route enregistrée a la décision attendue pour la Ta
   // Chaque motif listé existe vraiment (une route renommée ne passe pas inaperçue).
   const keys = new Set(routes.map((r) => `${r.method} ${r.pattern}`));
   for (const k of [...TABLE_WRITES, ...COMMON]) expect(keys.has(k), k).toBe(true);
+});
+
+const PDF = { 'content-type': 'application/octet-stream' };
+test('ffk-pdf : refusé à un compte Zone ; la lecture des fiches d’un club suit la règle de GET fighters/:fighterId/line', async () => {
+  const { table, zone1, orga, base } = await setup();
+  const clubId = (await orga('POST', `${base}/clubs`, { name: 'Tani Dojo' })).json().id as string;
+  const denied = await zone1('POST', `${base}/ffk-pdf?discipline=karate`, 'x', PDF);
+  expect(denied.statusCode).toBe(403);
+  expect(denied.json().error).toBe(FORBIDDEN);
+  expect((await table('POST', `${base}/ffk-pdf?discipline=karate`, 'x', PDF)).statusCode).not.toBe(403);
+  const fighterId = ((await orga('GET', `${base}/registrations`)).json() as { fighter: { id: string } }[])[0]!.fighter.id;
+  const reference = (await zone1('GET', `${base}/fighters/${fighterId}/line`)).statusCode;
+  expect((await zone1('GET', `${base}/clubs/${clubId}/lines`)).statusCode).toBe(reference);
 });
 
 test('PUT wave-schedules : permis à la Table centrale, refusé à un compte Zone', async () => {

@@ -110,7 +110,7 @@ function clubRow(db: AppDb, access: ClubAccess, viewer: LineWriter['kind'] = 'co
 }
 const isEditable = (c: { clubEntryStatus: string; ownerInstanceId: string | null }) => c.clubEntryStatus === 'open' && c.ownerInstanceId === null;
 
-function assertWritable(db: AppDb, access: ClubAccess): void {
+export function assertWritable(db: AppDb, access: ClubAccess): void {
   if (!isEditable(competitionRow(db, access))) throw new ClubEntryClosedError();
 }
 
@@ -176,19 +176,19 @@ function headerOf(db: AppDb, club: typeof clubs.$inferSelect): ClubEntryView['cl
   };
 }
 
+/** Lignes de tous les combattants d'un club (ordre alphabétique), vues par le coach ou par l'organisateur. */
+export function clubLines(db: AppDb, access: ClubAccess, viewer: LineWriter['kind']): ClubLine[] {
+  const club = clubRow(db, access, viewer);
+  return db.select().from(fighters).where(eq(fighters.clubId, club.id)).orderBy(fighters.nameKey).all().map((f) => lineOf(db, f, viewer));
+}
+
 export async function getClubEntry(db: AppDb, access: ClubAccess): Promise<ClubEntryView> {
   const c = competitionRow(db, access);
   const club = clubRow(db, access);
   const multipleCombats = (await getCompetition(db, access.competitionId))!.settings.multipleCombatDisciplinesPerDay;
   const grid = await getGrid(db, access.competitionId);
   const closed = closedSet(db, access.competitionId);
-  const lines = db
-    .select()
-    .from(fighters)
-    .where(eq(fighters.clubId, club.id))
-    .orderBy(fighters.nameKey)
-    .all()
-    .map((f) => lineOf(db, f));
+  const lines = clubLines(db, access, 'coach');
   // Tranches proposées, plus celle d'une ligne déjà enregistrée qui ne l'est plus (sa liste montre la valeur enregistrée).
   const ageBands = grid.ageBands.filter((b) => offeredAgeBands(grid, closed).includes(b) || lines.some((l) => l.line.ageBandCode === b.code));
   return {
