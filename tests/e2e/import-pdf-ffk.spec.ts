@@ -25,7 +25,7 @@ async function coachSetup(page: Page, request: APIRequestContext, name: string) 
 
 const lineOf = (request: APIRequestContext, token: string, line: object) => request.post(`/api/inscription/${token}/lines`, { data: { line } });
 const linesOf = async (request: APIRequestContext, token: string) =>
-  ((await (await request.get(`/api/inscription/${token}`)).json()) as { lines: { line: { lastName: string; weightKg: number | null; weightClassId: string | null; combats: string[] } }[] }).lines;
+  ((await (await request.get(`/api/inscription/${token}`)).json()) as { lines: { line: { lastName: string; weightKg: number | null; weightClassId: string | null; combats: string[]; kata: boolean } }[] }).lines;
 
 /** Ouvre la fenêtre d'import, choisit la discipline et le PDF. */
 async function choose(page: Page, file: Buffer, discipline: string) {
@@ -111,6 +111,39 @@ test.describe('coach', () => {
     const lines = await linesOf(request, token);
     expect(lines.map((l) => l.line.lastName).sort()).toEqual(['DURAND', 'MOREAU']);
     expect(lines.find((l) => l.line.lastName === 'DURAND')!.line.weightClassId).toBe('pupille:M:-35');
+  });
+
+  test('absents cochés : « Terminer » retire le karaté (kata gardé), supprime une fiche karaté seul, laisse l’absent décoché', async ({ page, request }) => {
+    const { token } = await coachSetup(page, request, 'Coupe PDF retraits');
+    expect((await lineOf(request, token, fighterLine('DURAND', 'Leo', 'senior', 'senior:M:-75'))).ok()).toBe(true);
+    expect((await lineOf(request, token, fighterLine('MOREAU', 'Hugo', 'senior', 'senior:M:-75', { kata: true }))).ok()).toBe(true);
+    expect((await lineOf(request, token, fighterLine('ROUX', 'Tom', 'senior', 'senior:M:-75'))).ok()).toBe(true);
+    expect((await lineOf(request, token, fighterLine('FAURE', 'Paul', 'senior', 'senior:M:-75'))).ok()).toBe(true);
+    await page.goto(`/inscription/${token}`);
+
+    // Le seul combattant du PDF est déjà à jour : on passe directement à la fin.
+    const win = await choose(page, await pdf('Senior Masculin -75 KG', ['DURAND LEO']), 'Karaté');
+    await expect(win.getByTestId('ffk-counts')).toContainText('1 déjà à jour');
+    await page.getByRole('button', { name: 'Continuer' }).click();
+
+    const end = page.getByTestId('ffk-end');
+    await expect(end.getByTestId('ffk-absent')).toHaveCount(3);
+    await expect(end.getByText('Seniors · -75 kg · aussi en Kata')).toBeVisible();
+    await expect(end.getByText('Seniors · -75 kg · seulement en karaté : cocher supprime sa fiche')).toHaveCount(2);
+    await end.getByRole('checkbox', { name: /MOREAU Hugo/ }).check();
+    await end.getByRole('checkbox', { name: /ROUX Tom/ }).check();
+    await expect(end.getByRole('checkbox', { name: /FAURE Paul/ })).not.toBeChecked();
+    await end.getByTestId('ffk-finish').click();
+    await expect(end).toBeHidden();
+    await expect(page.getByText('Import FFK : 0 ajouté · 0 mis à jour · 0 laissé tel quel · Karaté retiré de 2 fiches.')).toBeVisible();
+
+    const lines = await linesOf(request, token);
+    const byName = (n: string) => lines.find((l) => l.line.lastName === n)?.line;
+    expect(lines.map((l) => l.line.lastName).sort()).toEqual(['DURAND', 'FAURE', 'MOREAU']);
+    expect(byName('MOREAU')).toMatchObject({ combats: [], kata: true });
+    expect(byName('FAURE')).toMatchObject({ combats: ['karate'], kata: false });
+    expect(byName('DURAND')).toMatchObject({ combats: ['karate'] });
+    await expect(page.getByTestId('club-line')).toHaveCount(3);
   });
 });
 
