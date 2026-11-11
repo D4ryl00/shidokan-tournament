@@ -1040,6 +1040,10 @@ export interface UpcomingLine {
   clubValue: string | string[] | null;
   directoryValue: string | string[] | null;
 }
+/** Différences restées entre une fiche et les clubs des compétitions à venir, sans modification de la fiche : toutes en conflit. */
+export const fetchDirectoryUpcoming = (entryId: string) => api<UpcomingLine[]>('GET', `/api/club-directory/${entryId}/upcoming`);
+/** Fiche modifiée par la synchronisation Google dont des clubs de compétitions à venir diffèrent. */
+export interface GoogleUpcoming { entryId: string; name: string; lines: UpcomingLine[] }
 export interface ApplyResult { clubId: string; competitionName: string; status: 'applied' | 'refused'; message: string | null }
 export interface ApplyItem { clubId: string; fields: { field: ClubField; clubValue: UpcomingLine['clubValue']; directoryValue: UpcomingLine['directoryValue'] }[] }
 
@@ -1075,7 +1079,7 @@ export const useGoogleContactsPreview = (label: string | null | undefined) =>
 export function useApplyGoogleContacts() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: SyncApply) => api<{ updated: number; linked: number; created: number }>('POST', '/api/club-directory/google/apply', input),
+    mutationFn: (input: SyncApply) => api<{ updated: number; linked: number; created: number; upcoming: GoogleUpcoming[] }>('POST', '/api/club-directory/google/apply', input),
     onSuccess: () => Promise.all([['club-directory'], ['club-changes'], [GOOGLE_CONTACTS_KEY]].map((queryKey) => qc.invalidateQueries({ queryKey }))),
   });
 }

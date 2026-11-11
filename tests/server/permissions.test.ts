@@ -243,7 +243,7 @@ test('changements de coordonnées des clubs : Table centrale et Zone refusées, 
   const { orga, table, zone1, base } = await setup();
   const entryId = (await orga('POST', '/api/club-directory', { name: 'Tani Dojo', affiliationNumber: null, coachName: 'Jean', coachPhone: '0600000000', coachEmails: [], notes: null })).json().id as string;
   const club = (await orga('POST', `${base}/clubs/from-directory`, { directoryId: entryId })).json() as { id: string };
-  for (const [method, url] of [['GET', '/api/club-changes'], ['POST', `/api/club-changes/${club.id}/resolve`], ['POST', `/api/club-changes/${club.id}/ignore`], ['POST', `/api/club-directory/${entryId}/apply-to-clubs`], ['PATCH', `/api/club-directory/${entryId}`]] as const) {
+  for (const [method, url] of [['GET', '/api/club-changes'], ['POST', `/api/club-changes/${club.id}/resolve`], ['POST', `/api/club-changes/${club.id}/ignore`], ['POST', `/api/club-directory/${entryId}/apply-to-clubs`], ['GET', `/api/club-directory/${entryId}/upcoming`], ['PATCH', `/api/club-directory/${entryId}`]] as const) {
     for (const [name, who] of [['table', table], ['zone', zone1]] as const) {
       const res = await who(method, url, method === 'GET' ? undefined : {});
       expect(res.statusCode, `${name} ${method} ${url}`).toBe(403);

@@ -1,10 +1,11 @@
 import { Button, Checkbox, Group, Menu, Modal, Select, Stack, Table, Text, TextInput } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { normalizeName } from '../../domain/names.js';
 import { plural } from '../../domain/plural.js';
 import type { DirectoryEntry, DirectoryInput } from '../../domain/registration.js';
-import { useAppSettings, useAuthMe, useClubChanges, useCreateDirectoryEntry, useDirectory, useMergeDirectoryEntries, useUpdateDirectoryEntry, type UpcomingLine } from '../api.js';
+import { fetchDirectoryUpcoming, useAppSettings, useAuthMe, useClubChanges, useCreateDirectoryEntry, useDirectory, useMergeDirectoryEntries, useUpdateDirectoryEntry, type UpcomingLine } from '../api.js';
 import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { ClubEntryModal } from '../components/club-picker/ClubEntryModal.js';
@@ -77,7 +78,15 @@ export function DirectoryPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<DirectoryEntry | 'new' | null>(null);
   const [merging, setMerging] = useState<DirectoryEntry | null>(null);
-  const [applying, setApplying] = useState<{ entryId: string; lines: UpcomingLine[] } | null>(null);
+  const [applying, setApplying] = useState<{ entryId: string; lines: UpcomingLine[]; intro?: string } | null>(null);
+  // Fiche déjà à jour (synchronisation Google, décision passée) : ses différences restées avec les clubs des compétitions à venir.
+  const askUpcoming = (e: DirectoryEntry) =>
+    fetchDirectoryUpcoming(e.id).then(
+      (lines) => lines.length > 0
+        ? setApplying({ entryId: e.id, lines, intro: `Ces clubs de compétitions à venir diffèrent de la fiche « ${e.name} ». Choisissez « Prendre l’annuaire » pour y reporter la fiche.` })
+        : notifications.show({ message: `Aucun club d’une compétition à venir ne diffère de la fiche « ${e.name} ».` }),
+      (err: unknown) => notifications.show({ color: 'red', message: err instanceof Error ? err.message : String(err) }),
+    );
   const key = normalizeName(search);
   const shown = entries.filter((e) => (showArchived || !e.archived) && (!key || normalizeName(e.name).includes(key) || (e.affiliationNumber ?? '').includes(search.trim())));
 
@@ -136,6 +145,7 @@ export function DirectoryPage() {
                         <Menu.Target><Button size="compact-sm" variant="subtle" color="gray" aria-label="Autres actions">…</Button></Menu.Target>
                         <Menu.Dropdown>
                           <Menu.Item onClick={() => update.mutate({ id: e.id, archived: !e.archived })}>{e.archived ? 'Désarchiver' : 'Archiver'}</Menu.Item>
+                          {!e.archived && e.competitions > 0 && <Menu.Item onClick={() => void askUpcoming(e)}>Appliquer aux compétitions à venir…</Menu.Item>}
                           <Menu.Item onClick={() => setMerging(e)}>Fusionner avec…</Menu.Item>
                           {e.googleContactId && <Menu.Item onClick={() => update.mutate({ id: e.id, googleContactId: null })}>Ne plus synchroniser avec Google</Menu.Item>}
                         </Menu.Dropdown>
@@ -151,7 +161,7 @@ export function DirectoryPage() {
       )}
       <EntryModal key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.id} entry={editing} onClose={() => setEditing(null)}
         onUpcoming={(entryId, lines) => lines.length > 0 && setApplying({ entryId, lines })} />
-      {applying && <ApplyToClubsModal key={applying.entryId} entryId={applying.entryId} lines={applying.lines} onClose={() => setApplying(null)} />}
+      {applying && <ApplyToClubsModal key={applying.entryId} entryId={applying.entryId} lines={applying.lines} intro={applying.intro} onClose={() => setApplying(null)} />}
       {comparison.element}
       <MergeModal merged={merging} entries={entries} onClose={() => setMerging(null)} />
     </Stack>

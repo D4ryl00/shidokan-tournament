@@ -281,6 +281,37 @@ async function editEntry(page: Page, club: string, patch: { phone?: string; emai
 const clubIn = async (request: APIRequestContext, competitionId: string, name: string) =>
   ((await (await request.get(`/api/competitions/${competitionId}/clubs`)).json()) as { name: string; coachPhone: string | null; coachEmails: string[] }[]).find((c) => c.name === name)!;
 
+test('fiche déjà à jour (synchronisation Google) : « Appliquer aux compétitions à venir… » du menu propose les différences restées, en conflit', async ({ page, request }) => {
+  const a = await setup(page, request, 'reste');
+  const nothing = await (await request.post('/api/club-directory', { data: { name: `Dojo sans écart ${Date.now()}`, affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null } })).json() as { id: string };
+  await inviteWithLink(request, a.competitionId, nothing.id);
+  // La fiche change sans proposition (comme le faisait la synchronisation Google) : le club de la compétition garde l'ancien téléphone.
+  await page.goto('/annuaire');
+  expect((await request.patch(`/api/club-directory/${a.entry.id}`, { data: { coachPhone: '06 12 12 12 12' } })).ok()).toBe(true);
+
+  const openMenu = async (club: string) => {
+    await page.getByTestId('directory-row').filter({ hasText: club }).getByRole('button', { name: 'Autres actions' }).click();
+    await page.getByRole('menuitem', { name: 'Appliquer aux compétitions à venir…' }).click();
+    await expect(page.getByRole('menu')).toHaveCount(0);
+  };
+  const noName = ((await (await request.get('/api/club-directory')).json()) as { id: string; name: string }[]).find((e) => e.id === nothing.id)!.name;
+  await openMenu(noName);
+  await expect(page.getByText(`Aucun club d’une compétition à venir ne diffère de la fiche « ${noName} ».`)).toBeVisible();
+
+  await openMenu(a.club);
+  const dialog = page.getByRole('dialog', { name: 'Appliquer aux compétitions à venir ?' });
+  await expect(dialog).toContainText(`diffèrent de la fiche « ${a.club} »`);
+  const line = dialog.getByTestId(`apply-line-${a.competitionId}-coachPhone`);
+  await expect(line).toContainText('Conflit');
+  await expect(line).toContainText('06 11 22 33 44 → 06 12 12 12 12');
+  await expect(line.getByRole('radio', { name: 'Garder le club' })).toBeChecked();
+  await line.getByRole('radio', { name: 'Prendre l’annuaire' }).check();
+  await dialog.getByRole('button', { name: 'Appliquer', exact: true }).click();
+  await expect(dialog.getByTestId('apply-result')).toContainText('appliqué');
+  await dialog.getByRole('button', { name: 'Fermer' }).click();
+  expect((await clubIn(request, a.competitionId, a.club)).coachPhone).toBe('06 12 12 12 12');
+});
+
 test('fiche modifiée : fenêtre « Appliquer aux compétitions à venir ? », conflit gardé, passée absente, gérée ailleurs sans choix, résultat par compétition', async ({ page, request, playwright }) => {
   const a = await setup(page, request, 'report-a');
   const club = a.club;

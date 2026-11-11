@@ -113,7 +113,7 @@ export const GOOGLE_PREVIEW = (() => {
 })();
 
 /** Simule un compte Google connecté (avec le droit sur les contacts) et l'aperçu de la synchronisation ; rend les corps envoyés à « Appliquer ». */
-export async function mockGoogleContacts(page: Page, preview: object = GOOGLE_PREVIEW, { status = 'ok' }: { status?: 'ok' | 'reconnect' } = {}): Promise<{ applied: unknown[]; previews: unknown[] }> {
+export async function mockGoogleContacts(page: Page, preview: object = GOOGLE_PREVIEW, { status = 'ok', applyUpcoming = [] }: { status?: 'ok' | 'reconnect'; applyUpcoming?: unknown[] } = {}): Promise<{ applied: unknown[]; previews: unknown[] }> {
   const applied: unknown[] = [];
   const previews: unknown[] = [];
   await page.route('**/api/app-settings', async (route) => {
@@ -131,7 +131,7 @@ export async function mockGoogleContacts(page: Page, preview: object = GOOGLE_PR
   });
   await page.route('**/api/club-directory/google/apply', async (route) => {
     applied.push(route.request().postDataJSON());
-    await route.fulfill({ json: { updated: 0, linked: 1, created: 1 } });
+    await route.fulfill({ json: { updated: 0, linked: 1, created: 1, upcoming: applyUpcoming } });
   });
   return { applied, previews };
 }

@@ -491,6 +491,19 @@ test('PATCH fiche : apply, conflict, compétition passée absente, gérée aille
   expect(upcoming).toHaveLength(3);
 });
 
+test('GET upcoming : différences restées (fiche déjà modifiée, par Google par exemple) proposées en conflit, passée absente, fiche inconnue 404', async () => {
+  const past = await otherCompetition('Ancienne', inDays(-300));
+  const none = await app.inject({ method: 'GET', url: `/api/club-directory/${entryId}/upcoming` });
+  expect(none.statusCode).toBe(200);
+  expect(none.json()).toEqual([]);
+  raw("update club_directory set coach_phone = '0612121212' where id = ?", entryId);
+  const lines = (await app.inject({ method: 'GET', url: `/api/club-directory/${entryId}/upcoming` })).json() as Line[];
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toMatchObject({ clubId, field: 'coachPhone', kind: 'conflict', clubValue: '0600000000', directoryValue: '0612121212', managedHere: true });
+  expect(lines.find((l) => l.clubId === past.clubId)).toBeUndefined();
+  expect((await app.inject({ method: 'GET', url: '/api/club-directory/inconnu/upcoming' })).statusCode).toBe(404);
+});
+
 test('PATCH fiche : numéro refusé → 409 et upcoming sans objet', async () => {
   await createEntry({ name: 'Autre Dojo', affiliationNumber: '0060893' });
   const res = await patchEntry({ affiliationNumber: '0060893' });

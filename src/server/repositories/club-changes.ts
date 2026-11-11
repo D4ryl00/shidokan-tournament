@@ -305,12 +305,14 @@ export interface UpcomingLine {
  * Après la modification d'une fiche : si un champ comparé a changé (par rapport à `before`, ses valeurs d'avant), pour chaque club relié d'une
  * compétition à venir, tous les champs sur lesquels il diffère de la nouvelle fiche. `apply` si le club avait la valeur d'avant, sinon `conflict`
  * (y compris une différence restée d'une comparaison fermée sans rien appliquer). Une fiche archivée ne propose rien.
+ * `before` null : demandé depuis la fiche, sans modification (valeurs d'avant inconnues, par exemple une fiche déjà changée par la
+ * synchronisation Google) ; toutes les différences sont proposées, en conflit.
  */
-export function upcomingDifferences(db: AppDb, entryId: string, before: ClubValues): UpcomingLine[] {
+export function upcomingDifferences(db: AppDb, entryId: string, before: ClubValues | null): UpcomingLine[] {
   const entry = db.select().from(clubDirectory).where(eq(clubDirectory.id, entryId)).get();
   if (!entry || entry.archived) return [];
   const directory = directoryValues(entry);
-  if (!differingFields(directory, before).length) return [];
+  if (before && !differingFields(directory, before).length) return [];
   const lines: UpcomingLine[] = [];
   const candidates = db
     .select({ club: clubs, competition: competitions })
@@ -325,11 +327,17 @@ export function upcomingDifferences(db: AppDb, entryId: string, before: ClubValu
     for (const field of differing) {
       lines.push({
         clubId: club.id, competitionId: competition.id, competitionName: competition.name, competitionDate: competition.date, managedHere: management.managedHere,
-        ownerName: management.ownerName, field, kind: propagationKind(field, values, before), clubValue: values[field], directoryValue: directory[field],
+        ownerName: management.ownerName, field, kind: before ? propagationKind(field, values, before) : 'conflict', clubValue: values[field], directoryValue: directory[field],
       });
     }
   }
   return lines.sort((a, b) => a.competitionDate.localeCompare(b.competitionDate) || a.competitionName.localeCompare(b.competitionName) || a.clubId.localeCompare(b.clubId));
+}
+
+/** Différences restées entre une fiche et les clubs des compétitions à venir, sans modification de la fiche : toutes en conflit. */
+export function remainingUpcomingDifferences(db: AppDb, entryId: string): UpcomingLine[] {
+  if (!db.select({ id: clubDirectory.id }).from(clubDirectory).where(eq(clubDirectory.id, entryId)).get()) throw new NotFoundError('Club introuvable dans l’annuaire');
+  return upcomingDifferences(db, entryId, null);
 }
 
 export interface ApplyResult {

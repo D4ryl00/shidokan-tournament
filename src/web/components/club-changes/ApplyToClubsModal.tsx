@@ -22,12 +22,15 @@ function summary(l: UpcomingLine): string {
   return `${shownValue(l.clubValue)} → ${shownValue(l.directoryValue)}`;
 }
 
+/** Phrase d'introduction par défaut : après « Modifier » dans l'annuaire. */
+const SAVED_INTRO = 'La fiche est enregistrée. Ces clubs de compétitions à venir diffèrent de la nouvelle fiche.';
+
 /**
- * Après l'enregistrement d'une fiche d'annuaire : les clubs des compétitions à venir qui diffèrent de la nouvelle fiche. Une ligne sans conflit est
- * cochée ; une ligne en conflit garde la valeur du club sauf choix contraire. Une compétition gérée ailleurs est montrée sans choix.
- * La fiche est déjà enregistrée : fermer n'annule rien.
+ * Après l'enregistrement d'une fiche d'annuaire (« Modifier », synchronisation Google), ou à la demande depuis la fiche : les clubs des compétitions
+ * à venir qui diffèrent de la fiche. Une ligne sans conflit est cochée ; une ligne en conflit garde la valeur du club sauf choix contraire. Une
+ * compétition gérée ailleurs est montrée sans choix. La fiche est déjà enregistrée : fermer n'annule rien.
  */
-export function ApplyToClubsModal({ entryId, lines, onClose }: { entryId: string; lines: UpcomingLine[]; onClose: () => void }) {
+export function ApplyToClubsModal({ entryId, lines, onClose, intro = SAVED_INTRO }: { entryId: string; lines: UpcomingLine[]; onClose: () => void; intro?: string }) {
   const apply = useApplyDirectoryToClubs();
   const [unticked, setUnticked] = useState<Set<string>>(new Set());
   const [taken, setTaken] = useState<Set<string>>(new Set());
@@ -58,7 +61,7 @@ export function ApplyToClubsModal({ entryId, lines, onClose }: { entryId: string
         </Stack>
       ) : (
         <Stack>
-          <Text size="sm" c="dimmed">La fiche est enregistrée. Ces clubs de compétitions à venir diffèrent de la nouvelle fiche.</Text>
+          <Text size="sm" c="dimmed" style={WRAP}>{intro}</Text>
           {competitions.map((c) => (
             <Stack key={c.competitionId} gap={6} data-testid={`apply-competition-${c.competitionId}`}>
               <Text fw={600} style={WRAP}>{c.competitionName}, le {frDate(c.competitionDate)}</Text>

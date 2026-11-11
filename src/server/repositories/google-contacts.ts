@@ -2,10 +2,12 @@ import { eq } from 'drizzle-orm';
 import { GOOGLE_CONNECT_FIRST, GOOGLE_RECONNECT, hasContactsScope } from '../../domain/app-settings.js';
 import { missingEmails, sameEmail } from '../../domain/emails.js';
 import { DIRECTORY_CHANGED, syncPreview, type CoachSet, type ContactLabel, type GoogleContact, type GoogleContactsView, type SyncApply } from '../../domain/google-contacts.js';
+import type { ClubValues } from '../../domain/club-changes.js';
 import type { AppDb } from '../db/client.js';
 import { clubDirectory } from '../db/schema.js';
 import { ContactsScopeMissingError, GoogleAccessRevokedError, type GoogleClient } from '../google/client.js';
 import { getAppSettings, markGoogleRevoked, setGoogleContactsState } from './app-settings.js';
+import { directoryValues, upcomingDifferences, type UpcomingLine } from './club-changes.js';
 import { checkNumber, createDirectoryEntry, DirectoryConflictError } from './directory.js';
 
 /**
@@ -53,13 +55,25 @@ export async function googleContactsPreview(db: AppDb, google: GoogleClient, lab
   return { state: 'ok', account: sender.email, labels, label: chosen, total: kept.length, preview: syncPreview(kept, rows, getAppSettings(db).googleContacts.pending) };
 }
 
-/** Applique les choix en une seule transaction : une fiche modifiée ou archivée depuis l'aperçu annule tout. */
-export function applyGoogleContacts(db: AppDb, input: SyncApply): { updated: number; linked: number; created: number } {
-  return db.transaction((tx) => {
+/** Fiche modifiée par la synchronisation dont des clubs de compétitions à venir diffèrent désormais : à proposer comme après « Modifier ». */
+export interface GoogleUpcoming {
+  entryId: string;
+  name: string;
+  lines: UpcomingLine[];
+}
+
+/**
+ * Applique les choix en une seule transaction : une fiche modifiée ou archivée depuis l'aperçu annule tout. Ensuite, pour chaque fiche mise à
+ * jour ou liée, les clubs des compétitions à venir qui diffèrent de la fiche (comme après « Modifier » dans l'annuaire) : rien n'y est écrit.
+ */
+export function applyGoogleContacts(db: AppDb, input: SyncApply): { updated: number; linked: number; created: number; upcoming: GoogleUpcoming[] } {
+  const before = new Map<string, ClubValues>();
+  const result = db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     for (const item of [...input.updates, ...input.links]) {
       const row = t.select().from(clubDirectory).where(eq(clubDirectory.id, item.clubId)).get();
       if (!row || row.archived || row.version !== item.version) throw new DirectoryConflictError(DIRECTORY_CHANGED);
+      if (!before.has(row.id)) before.set(row.id, directoryValues(row));
     }
     // Les adresses retirées puis ajoutées le sont sur la fiche telle qu'elle est à ce moment (une mise à jour puis un lien peuvent viser la même).
     // Un numéro d'affiliation déjà porté par une autre fiche annule tout (l'aperçu ne le propose pas : l'annuaire a changé entre-temps).
@@ -84,4 +98,10 @@ export function applyGoogleContacts(db: AppDb, input: SyncApply): { updated: num
     setGoogleContactsState(t, { pending });
     return { updated: input.updates.length, linked: input.links.length, created: input.creates.length };
   });
+  const upcoming = [...before].flatMap(([entryId, values]): GoogleUpcoming[] => {
+    const lines = upcomingDifferences(db, entryId, values);
+    const name = db.select({ name: clubDirectory.name }).from(clubDirectory).where(eq(clubDirectory.id, entryId)).get()?.name;
+    return lines.length && name !== undefined ? [{ entryId, name, lines }] : [];
+  });
+  return { ...result, upcoming: upcoming.sort((a, b) => a.name.localeCompare(b.name)) };
 }

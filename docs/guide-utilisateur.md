@@ -98,7 +98,8 @@ Un club de compétition est une **copie de sa fiche d'annuaire, faite à l'invit
 - **Un champ effacé est proposé** comme une modification : l'annuaire n'est vidé que si vous choisissez la valeur vide. Par défaut, la valeur de l'annuaire reste choisie, et si le coach a effacé toutes ses adresses, celles de la fiche restent cochées : il faut un clic (ou décocher les adresses) pour vider la fiche. Seules les valeurs modifiées par les enregistrements (page du club ou onglet Clubs) depuis la dernière décision sont proposées par défaut ; les autres différences, plus anciennes, gardent la valeur de l'annuaire, et une adresse seulement dans la compétition reste décochée (« seulement dans la compétition »). Le nom du club ne peut pas être vide.
 - **Compétition gérée par un PC** : le club ne peut pas y être modifié depuis le serveur ; la case est désactivée avec « Gérée par … : à appliquer après le retour de la main », et l'annuaire reste modifiable. **Compétition passée** : seul l'annuaire est modifié.
 - **Dans l'autre sens** : quand vous modifiez une fiche d'annuaire et que des clubs de compétitions **à venir** (date du jour ou après) y sont reliés et diffèrent, « **Appliquer aux compétitions à venir ?** » s'ouvre. Sans conflit, la ligne est cochée. En cas de conflit (le club avait une autre valeur que l'ancienne fiche), « **Garder le club** » est choisi par défaut, ou « **Prendre l'annuaire** ». « **Ne rien appliquer** » ferme la fenêtre ; la fiche, elle, est déjà enregistrée. Les compétitions passées ne sont pas proposées, et une compétition sous la main d'un PC est affichée sans pouvoir être modifiée.
-- **Ce qui ne crée rien** : la synchronisation Google, l'import d'une fiche et l'import FFK. Google écrit dans l'annuaire sans fenêtre.
+- **Plus tard, depuis la fiche** : « **Appliquer aux compétitions à venir…** » (menu « … » d'une fiche) propose de nouveau les clubs de compétitions à venir qui diffèrent de la fiche, par exemple après une fenêtre fermée sans rien appliquer. Les valeurs d'avant n'étant plus connues, chaque ligne est un conflit : choisissez « Prendre l'annuaire » pour y reporter la fiche.
+- **Ce qui ne crée aucun changement à examiner** : la synchronisation Google, l'import d'une fiche et l'import FFK. Après la synchronisation Google, « Appliquer aux compétitions à venir ? » s'ouvre pour chaque fiche modifiée dont des clubs de compétitions à venir diffèrent.
 - **Sur un PC** : les bandeaux et la fenêtre fonctionnent pour les compétitions gérées sur ce PC, sans page en ligne.
 
 ### Coordonnées des coachs depuis Google Contacts
@@ -115,6 +116,7 @@ Dans l'**Annuaire**, « **Synchroniser avec Google** » ouvre une page unique. *
    - **Plus tard** : le contact est rangé dans « En attente d'un rattachement », où les mêmes choix restent possibles.
    - « + Lier aussi à un autre club » : pour un coach qui tient deux clubs.
 4. **Appliquer** : tout est enregistré d'un coup. Si l'annuaire a été modifié entre-temps, rien n'est enregistré et la page se recharge : vérifiez, puis appliquez de nouveau.
+5. **Compétitions à venir** : pour chaque fiche modifiée dont des clubs de compétitions à venir diffèrent, « **Appliquer aux compétitions à venir ?** » s'ouvre ensuite, fiche après fiche, comme après « Modifier » dans l'annuaire. Rien ne change dans les compétitions sans votre choix.
 
 Un club lié porte la marque « Google » dans l'annuaire ; « **Ne plus synchroniser avec Google** » (menu « … » du club) retire le lien sans rien effacer. Archiver un club retire aussi son lien.
 

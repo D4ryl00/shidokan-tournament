@@ -4,9 +4,10 @@ import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { CONTACTS_NOT_GRANTED, DIRECTORY_CHANGED, numberConflict, rejectedValues, type ContactChoice, type GoogleContact, type SyncApply, type SyncPreview } from '../../domain/google-contacts.js';
 import { plural } from '../../domain/plural.js';
-import { ApiError, useApplyGoogleContacts, useGoogleContactsPreview } from '../api.js';
+import { ApiError, useApplyGoogleContacts, useGoogleContactsPreview, type GoogleUpcoming } from '../api.js';
 import { useDocumentTitle } from '../documentTitle.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { ApplyToClubsModal } from '../components/club-changes/ApplyToClubsModal.js';
 import { conflictText, contactName, diffText, FIELD_LABEL, GoogleContactCard, rejectedText } from '../components/GoogleContactCard.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
@@ -28,9 +29,16 @@ export function DirectorySyncPage() {
   // sinon les choix faits entre-temps seraient effacés à l'arrivée du nouveau.
   const reading = preview.isFetching && !preview.isFetchedAfterMount;
 
+  // Fiches modifiées dont des clubs de compétitions à venir diffèrent : proposées l'une après l'autre, comme après « Modifier » dans l'annuaire.
+  const [toApply, setToApply] = useState<GoogleUpcoming[]>([]);
+  const next = toApply[0];
+
   const send = (input: SyncApply) =>
     apply.mutate(input, {
-      onSuccess: () => notifications.show({ color: 'green', message: 'Annuaire mis à jour.' }),
+      onSuccess: (res) => {
+        notifications.show({ color: 'green', message: 'Annuaire mis à jour.' });
+        setToApply(res.upcoming);
+      },
       // L'annuaire a changé entre-temps : l'aperçu est relu, le message reste affiché.
       onError: (e) => { if (e instanceof ApiError && e.status === 409 && e.message === DIRECTORY_CHANGED) void preview.refetch(); },
     });
@@ -70,6 +78,10 @@ export function DirectorySyncPage() {
               error={<ApiErrorAlert error={apply.error} />} />
           )}
         </>
+      )}
+      {next && (
+        <ApplyToClubsModal key={next.entryId} entryId={next.entryId} lines={next.lines} onClose={() => setToApply((q) => q.slice(1))}
+          intro={`La synchronisation a modifié la fiche « ${next.name} ». Ces clubs de compétitions à venir en diffèrent.`} />
       )}
     </Stack>
   );

@@ -93,6 +93,30 @@ test('annuaire : seulement des contacts laissés « Plus tard », ils sont rang�
   expect(applied).toEqual([{ updates: [], links: [], creates: [], later: ['people/sophie'] }]);
 });
 
+test('annuaire : après la synchronisation, « Appliquer aux compétitions à venir ? » s’ouvre pour chaque fiche concernée, l’une après l’autre', async ({ page }) => {
+  const line = (entry: string, competitionId: string, name: string) => ({
+    clubId: `club-${entry}`, competitionId, competitionName: name, competitionDate: '2099-01-10', managedHere: true, ownerName: null,
+    field: 'coachPhone', kind: 'apply', clubValue: '06 11 22 33 44', directoryValue: '06 22 22 22 22',
+  });
+  await mockGoogleContacts(page, GOOGLE_PREVIEW, {
+    applyUpcoming: [
+      { entryId: 'c-est', name: 'Shidokan Est', lines: [line('est', 'cmp-1', 'Coupe Est')] },
+      { entryId: 'c-lilas', name: 'Dojo des Lilas', lines: [line('lilas', 'cmp-2', 'Coupe Lilas')] },
+    ],
+  });
+  await page.goto('/annuaire/google');
+  await page.getByTestId('google-apply').click();
+  await expect(page.getByText('Annuaire mis à jour.')).toBeVisible();
+  const dialog = page.getByRole('dialog', { name: 'Appliquer aux compétitions à venir ?' });
+  await expect(dialog).toContainText('La synchronisation a modifié la fiche « Shidokan Est ».');
+  await expect(dialog.getByTestId('apply-line-cmp-1-coachPhone').getByRole('checkbox')).toBeChecked();
+  await dialog.getByRole('button', { name: 'Ne rien appliquer' }).click();
+  await expect(dialog).toContainText('La synchronisation a modifié la fiche « Dojo des Lilas ».');
+  await expect(dialog).toContainText('Coupe Lilas');
+  await dialog.getByRole('button', { name: 'Ne rien appliquer' }).click();
+  await expect(dialog).toBeHidden();
+});
+
 test('annuaire : l’annuaire a changé entre-temps, l’aperçu est relu et le message reste', async ({ page }) => {
   const { previews } = await mockGoogleContacts(page);
   await page.route('**/api/club-directory/google/apply', (route) => route.fulfill({ status: 409, json: { error: DIRECTORY_CHANGED } }));

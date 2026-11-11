@@ -99,7 +99,7 @@ test('appliquer : différences, lien, création, plus tard', async () => {
   // Lien Lilas ↔ c1 : par un premier envoi.
   let p = (await preview()).json().preview;
   const lilasV = p.clubs.find((c: any) => c.name === 'Dojo des Lilas').version;
-  expect((await apply({ ...none, links: [{ clubId: lilas.id, version: lilasV, contact: 'people/c1', set: {} }] })).json()).toEqual({ updated: 0, linked: 1, created: 0 });
+  expect((await apply({ ...none, links: [{ clubId: lilas.id, version: lilasV, contact: 'people/c1', set: {} }] })).json()).toEqual({ updated: 0, linked: 1, created: 0, upcoming: [] });
   p = (await preview()).json().preview;
   expect(p.diffs).toHaveLength(1);
   const est = p.clubs.find((c: any) => c.name === 'Shidokan Est');
@@ -111,7 +111,7 @@ test('appliquer : différences, lien, création, plus tard', async () => {
     creates: [{ contact: 'people/c3', name: 'Kyokushin Sud', coachName: 'Sophie Leroy', coachPhone: null, coachEmails: ['s@ex.fr'], affiliationNumber: null }],
     later: ['people/c4'],
   });
-  expect(res.json()).toEqual({ updated: 1, linked: 1, created: 1 });
+  expect(res.json()).toEqual({ updated: 1, linked: 1, created: 1, upcoming: [] });
   const dir = await directory();
   expect(dir.find((c) => c.name === 'Dojo des Lilas')).toMatchObject({ coachPhone: '06 22 22 22 22', googleContactId: 'people/c1' });
   expect(dir.find((c) => c.name === 'Shidokan Est')).toMatchObject({ googleContactId: 'people/c2' });
@@ -267,4 +267,39 @@ test('numéro d’affiliation : lu dans le champ personnalisé Google, rapproche
   expect((await directory()).some((c) => c.name === 'Doublon')).toBe(false);
   // Pas 7 chiffres : refusé.
   expect((await apply({ ...none, updates: [{ clubId: lilas.id, version: lilasNow.version, set: { affiliationNumber: '60893' } }] })).statusCode).toBe(400);
+});
+
+/** Date locale `AAAA-MM-JJ` à n jours d'aujourd'hui. */
+function inDays(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  const p = (v: number) => String(v).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+test('appliquer : fiche reliée à un club d’une compétition à venir → report proposé (apply si le club avait l’ancienne valeur), passée absente', async () => {
+  await connectGoogle(app);
+  const club = await addClub('Dojo des Lilas', { coachPhone: '06 11 11 11 11', coachEmails: ['vieux@lilas.fr'] });
+  const competition = async (name: string, date: string) => {
+    const id = (await app.inject({ method: 'POST', url: '/api/competitions', payload: { name, date, location: 'Nice' } })).json().id as string;
+    const c = (await app.inject({ method: 'POST', url: `/api/competitions/${id}/clubs/from-directory`, payload: { directoryId: club.id } })).json();
+    return { id, clubId: c.id as string };
+  };
+  const coupe = await competition('Coupe', inDays(10));
+  await competition('Ancienne', inDays(-300));
+  fake.contacts = [contact('c1', { organization: 'Dojo des Lilas', phone: '06 22 22 22 22', emails: ['neuf@lilas.fr'] })];
+  const v = (await preview()).json().preview.clubs.find((c: any) => c.id === club.id).version;
+  const res = (await apply({ ...none, links: [{ clubId: club.id, version: v, contact: 'people/c1', set: { coachPhone: '06 22 22 22 22', addEmails: ['neuf@lilas.fr'], removeEmails: ['vieux@lilas.fr'] } }] })).json();
+  expect(res).toMatchObject({ linked: 1 });
+  expect(res.upcoming).toHaveLength(1);
+  expect(res.upcoming[0]).toMatchObject({ entryId: club.id, name: 'Dojo des Lilas' });
+  const lines = res.upcoming[0].lines;
+  expect(lines.map((l: any) => [l.clubId, l.field, l.kind])).toEqual([[coupe.clubId, 'coachPhone', 'apply'], [coupe.clubId, 'coachEmails', 'apply']]);
+  expect(lines[0]).toMatchObject({ clubValue: '06 11 11 11 11', directoryValue: '06 22 22 22 22', competitionName: 'Coupe', managedHere: true });
+
+  // Le report se fait ensuite par la route habituelle.
+  const applied = (await app.inject({ method: 'POST', url: `/api/club-directory/${club.id}/apply-to-clubs`, payload: { items: [{ clubId: coupe.clubId, fields: lines.map((l: any) => ({ field: l.field, clubValue: l.clubValue, directoryValue: l.directoryValue })) }] } })).json();
+  expect(applied[0]).toMatchObject({ status: 'applied' });
+  const clubs = (await app.inject({ method: 'GET', url: `/api/competitions/${coupe.id}/clubs` })).json() as any[];
+  expect(clubs.find((c) => c.id === coupe.clubId)).toMatchObject({ coachPhone: '06 22 22 22 22', coachEmails: ['neuf@lilas.fr'] });
 });

@@ -4,7 +4,7 @@ import { DIRECTORY_LIMITS as MAX } from '../../domain/registration.js';
 import { emailList } from './fields.js';
 import type { AppDb } from '../db/client.js';
 import { CLUB_FIELDS } from '../../domain/club-changes.js';
-import { applyDirectoryToClubs, updateDirectoryEntryWithUpcoming } from '../repositories/club-changes.js';
+import { applyDirectoryToClubs, remainingUpcomingDifferences, updateDirectoryEntryWithUpcoming } from '../repositories/club-changes.js';
 import { createDirectoryEntry, listDirectory, mergeDirectoryEntries } from '../repositories/directory.js';
 
 const text = (max: number) => z.string().trim().max(max).transform((v) => v || null).nullable();
@@ -33,6 +33,8 @@ export async function directoryRoutes(app: FastifyInstance, { db }: { db: AppDb 
   app.patch<{ Params: { entryId: string } }>('/api/club-directory/:entryId', async (req) =>
     updateDirectoryEntryWithUpcoming(db, req.params.entryId, directorySchema.partial().extend({ archived: z.boolean().optional(), googleContactId: z.null().optional() }).parse(req.body)),
   );
+  // Différences restées entre la fiche et les clubs des compétitions à venir, sans modification de la fiche (toutes en conflit).
+  app.get<{ Params: { entryId: string } }>('/api/club-directory/:entryId/upcoming', async (req) => remainingUpcomingDifferences(db, req.params.entryId));
   app.post<{ Params: { entryId: string } }>('/api/club-directory/:entryId/apply-to-clubs', async (req) => {
     const { items } = z.object({ items: z.array(z.object({ clubId: z.string(), fields: z.array(shownField) })) }).strict().parse(req.body);
     return applyDirectoryToClubs(db, req.params.entryId, items);

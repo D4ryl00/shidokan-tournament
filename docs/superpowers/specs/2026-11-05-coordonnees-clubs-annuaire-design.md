@@ -81,7 +81,7 @@ Aujourd'hui, c'est asymétrique et invisible :
 ## Non-objectifs
 
 - Pas de mise à jour automatique dans un sens ou dans l'autre.
-- Pas de proposition depuis la synchronisation Google : elle écrit dans l'annuaire comme aujourd'hui, sans ouvrir la fenêtre D (choix du concepteur).
+- ~~Pas de proposition depuis la synchronisation Google~~ : retiré le 2026-11-11 (bug signalé par l'organisateur : la fiche mise à jour par Google ne pouvait plus être reportée sur la compétition). La synchronisation écrit toujours dans l'annuaire sans créer de changement à examiner, puis ouvre la fenêtre D pour chaque fiche mise à jour ou liée dont des clubs de compétitions à venir diffèrent (valeurs d'avant = fiche avant la synchronisation). Une fiche offre aussi « Appliquer aux compétitions à venir… » à tout moment : différences restées, toutes en conflit (valeurs d'avant inconnues).
 - Pas de proposition depuis l'import d'une fiche ou l'import FFK : seules la page en ligne d'un club et l'onglet Clubs créent un changement à examiner.
 - Pas d'historique des décisions.
 - Pas de notification par mail à l'organisateur.
