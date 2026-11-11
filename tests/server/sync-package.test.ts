@@ -299,3 +299,49 @@ test('a package without wave_schedules imports with no times', async () => {
   await importPackage(b.db, b.dbPath, pkg, null);
   expect(b.db.$client.prepare('select count(*) as n from wave_schedules where competition_id = ?').get(a.id)).toEqual({ n: 0 });
 });
+
+test('aller-retour du paquet : finales gardées', async () => {
+  const a = await seeded();
+  const b = await seeded();
+  const cat = a.db.$client.prepare('select id from categories where competition_id = ? limit 1').get(a.id) as { id: string };
+  const zone = (a.db.$client.prepare('select id from zones where competition_id = ? limit 1').get(a.id) as { id: string }).id;
+  a.db.$client.prepare("update categories set finals_where = 'own', finals_when = 'ready' where id = ?").run(cat.id);
+  a.db.$client.prepare("update frozen_passages set finals_choice = 'own|ready' where competition_id = ?").run(a.id);
+  a.db.$client.prepare("insert into wave_finals (competition_id, wave_key, finals_zone_id, where_default, when_default) values (?, ?, ?, 'finals', 'after')").run(a.id, `wave-${a.id}`, zone);
+  const pkg = buildPackage(a.db, a.id, { handOver: false, role: 'local' });
+  expect(pkg.tables.wave_finals).toHaveLength(1);
+  await importPackage(b.db, b.dbPath, pkg, null);
+  expect(b.db.$client.prepare('select wave_key, finals_zone_id, where_default, when_default from wave_finals where competition_id = ?').all(a.id)).toEqual([
+    { wave_key: `wave-${a.id}`, finals_zone_id: zone, where_default: 'finals', when_default: 'after' },
+  ]);
+  expect(b.db.$client.prepare('select finals_where, finals_when from categories where id = ?').get(cat.id)).toEqual({ finals_where: 'own', finals_when: 'ready' });
+  expect(b.db.$client.prepare('select finals_choice from frozen_passages where competition_id = ?').get(a.id)).toEqual({ finals_choice: 'own|ready' });
+  expect(snapshot(b.db, a.id)).toEqual(snapshot(a.db, a.id));
+});
+
+test('paquet d’avant : finales reprises des réglages (et rien d’obsolète ne reste)', async () => {
+  const a = await seeded();
+  const b = await seeded();
+  const zone = (a.db.$client.prepare('select id from zones where competition_id = ? limit 1').get(a.id) as { id: string }).id;
+  a.db.$client.prepare('update competitions set settings_json = ? where id = ?').run(JSON.stringify({ finalsZoneId: zone, kataFinalsOnFinalsZone: true }), a.id);
+  const pkg = buildPackage(a.db, a.id, { handOver: false, role: 'local' });
+  await importPackage(b.db, b.dbPath, pkg, null);
+  delete pkg.tables.wave_finals;
+  // Valeurs locales de B qui doivent disparaître : l'import d'un paquet d'avant repart des réglages.
+  b.db.$client.prepare("insert into wave_finals (competition_id, wave_key, where_default) values (?, 'obsolete', 'own')").run(a.id);
+  b.db.$client.prepare("update categories set finals_where = 'own', finals_when = 'ready' where competition_id = ?").run(a.id);
+  await importPackage(b.db, b.dbPath, pkg, null);
+  expect(b.db.$client.prepare('select wave_key, finals_zone_id from wave_finals where competition_id = ?').all(a.id)).toEqual([{ wave_key: `wave-${a.id}`, finals_zone_id: zone }]);
+  expect(b.db.$client.prepare('select count(*) as n from categories where competition_id = ? and finals_where is not null').get(a.id)).toEqual({ n: 0 });
+});
+
+test('référence vers une zone d’une autre compétition refusée', async () => {
+  const a = await seeded();
+  const b = await seeded();
+  const foreignZone = (b.db.$client.prepare('select id from zones where competition_id = ? limit 1').get(b.id) as { id: string }).id;
+  const pkg = buildPackage(a.db, a.id, { handOver: false, role: 'local' });
+  const row = { competition_id: a.id, wave_key: `wave-${a.id}`, finals_zone_id: foreignZone, where_default: null, when_default: null };
+  await expect(importPackage(b.db, b.dbPath, { ...pkg, tables: { ...pkg.tables, wave_finals: [row] } }, null)).rejects.toThrow('autre compétition');
+  const foreignWave = { ...row, finals_zone_id: null, wave_key: `wave-${b.id}` };
+  await expect(importPackage(b.db, b.dbPath, { ...pkg, tables: { ...pkg.tables, wave_finals: [foreignWave] } }, null)).rejects.toThrow('autre compétition');
+});

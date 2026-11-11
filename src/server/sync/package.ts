@@ -6,6 +6,7 @@ import { backupNow } from '../repositories/backups.js';
 import { competitionChanged } from '../events.js';
 import { reopenIgnoredChanges } from '../repositories/club-changes.js';
 import { getInstance } from '../repositories/instance.js';
+import { WAVE_FINALS_FROM_SETTINGS } from '../repositories/wave-finals.js';
 import { APP_VERSION } from '../version.js';
 
 /** Une compétition entière, telle qu'elle passe d'une installation à l'autre (réseau ou fichier). */
@@ -74,6 +75,7 @@ const REFERENCES: [table: string, column: string, target: string][] = [
   ['frozen_passages', 'category_id', 'categories'], ['match_results', 'category_id', 'categories'], ['match_results', 'entrant_a', 'registrations'],
   ['match_results', 'entrant_b', 'registrations'], ['kata_scores', 'category_id', 'categories'], ['kata_scores', 'registration_id', 'registrations'],
   ['tie_breaks', 'category_id', 'categories'], ['recasements', 'registration_id', 'registrations'], ['history_entries', 'wave_id', 'waves'], ['wave_launches', 'wave_key', 'waves'], ['wave_schedules', 'wave_key', 'waves'],
+  ['wave_finals', 'wave_key', 'waves'], ['wave_finals', 'finals_zone_id', 'zones'],
 ];
 
 /** Valeur acceptée dans une ligne : texte, nombre fini dans l'intervalle des entiers sûrs, ou vide. */
@@ -261,6 +263,15 @@ export async function importPackage(
 
       // Paquet d'une version d'avant les catégories fermées : ses tranches « non proposées sur la fiche club » deviennent fermées (comme la migration 0021).
       if (!('closed_categories' in pkg.tables)) client.prepare(CLOSED_FROM_CLUB_FORM).run(id);
+
+      // Paquet d'une version d'avant les finales par catégorie : les choix des finales viennent des anciens réglages de la compétition
+      // (comme la migration 0036). Après la suppression ci-dessus, qui a vidé `wave_finals` ; les choix locaux laissés par les lignes
+      // du paquet (sans ces colonnes) sont remis à zéro pour que seule la reprise des réglages s'applique.
+      if (!('wave_finals' in pkg.tables)) {
+        client.prepare('update categories set finals_where = null, finals_when = null where competition_id = ?').run(id);
+        client.prepare('update frozen_passages set finals_choice = null where competition_id = ?').run(id);
+        for (const q of WAVE_FINALS_FROM_SETTINGS) client.prepare(q).run(id);
+      }
 
       // Un changement ignoré dont le club a changé pendant que le PC avait la main repasse à examiner.
       reopenIgnoredChanges(db, id);

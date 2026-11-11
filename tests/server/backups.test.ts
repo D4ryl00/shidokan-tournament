@@ -403,3 +403,32 @@ test('restauration : une sauvegarde de plus de 20 Mio (images comprises) n’est
   expect(res.statusCode).toBe(400);
   expect(res.json().error).toBe("Ce fichier n'est pas une sauvegarde de l'application");
 });
+
+test('sauvegarde complète puis restauration : zone des finales et choix des finales présents', async () => {
+  const otherPath = tmpDbPath();
+  const other = await buildApp({ dbPath: otherPath, instanceName: 'SERVEUR' });
+  await other.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Avec finales', date: '2026-11-22' } });
+  const snapshot = (await other.inject({ method: 'GET', url: '/api/backup.sqlite' })).rawPayload;
+  await other.close();
+  const file = path.join(path.dirname(otherPath), 'avec-finales.sqlite');
+  fs.writeFileSync(file, snapshot);
+  const r = new Database(file);
+  const c = (r.prepare('select id from competitions').get() as { id: string }).id;
+  r.exec(`
+    INSERT INTO zones (id, competition_id, name, sort_order) VALUES ('z1', '${c}', 'Tatami 1', 0);
+    INSERT INTO waves (id, competition_id, name, sort_order, rules_json) VALUES ('w1', '${c}', 'Matin', 0, '{}');
+    INSERT INTO wave_finals (competition_id, wave_key, finals_zone_id, where_default, when_default) VALUES ('${c}', 'w1', 'z1', 'finals', 'after');
+    INSERT INTO categories (id, competition_id, key_string, key_json, label, seed, finals_where, finals_when) VALUES ('k1', '${c}', 'k', '{"discipline":"kata"}', 'Kata', 1, 'own', 'ready');
+    INSERT INTO frozen_passages (competition_id, wave_key, zone_id, number, category_id, match_id, finals_choice) VALUES ('${c}', 'w1', 'z1', 1, 'k1', 'w1-0', 'own|ready');
+  `);
+  r.close();
+  const res = await app.inject({ method: 'POST', url: '/api/restore', payload: fs.readFileSync(file), headers: { 'content-type': 'application/octet-stream' } });
+  expect(res.statusCode).toBe(204);
+  const check = new Database(dbPath, { readonly: true });
+  expect(check.prepare('select wave_key, finals_zone_id, where_default, when_default from wave_finals').all()).toEqual([
+    { wave_key: 'w1', finals_zone_id: 'z1', where_default: 'finals', when_default: 'after' },
+  ]);
+  expect(check.prepare('select finals_where, finals_when from categories where id = ?').get('k1')).toEqual({ finals_where: 'own', finals_when: 'ready' });
+  expect(check.prepare('select finals_choice from frozen_passages').get()).toEqual({ finals_choice: 'own|ready' });
+  check.close();
+});

@@ -2,8 +2,9 @@ import Database from 'better-sqlite3';
 import { expect, test } from 'vitest';
 import { closeDb, openDb } from '../../src/server/db/client.js';
 import { launchStatus } from '../../src/server/repositories/launches.js';
-import { PACKAGE_TABLES } from '../../src/server/sync/package.js';
+import { buildPackage, importPackage, PACKAGE_TABLES } from '../../src/server/sync/package.js';
 import { olderDb } from '../helpers/older-db.js';
+import { tmpDbPath } from '../helpers/tmp-db.js';
 import { mainCompetition } from '../helpers/zones-fixture.js';
 
 const settings = (s: object) => JSON.stringify(s).replaceAll("'", "''");
@@ -96,5 +97,56 @@ test('migration 0036 : une session figée avant la migration garde ses numéros,
     expect(status.pending).toEqual([]);
   } finally {
     closeDb(migrated);
+  }
+});
+
+/** Compétitions de la même forme que celle de la migration : mêmes ids, mêmes réglages. */
+const PARITY_SQL = `
+  INSERT INTO competitions (id, name, date, settings_json) VALUES
+    ('c1', 'Deux sessions', '2026-11-22', '${settings({ finalsZoneId: 'z2', kataFinalsOnFinalsZone: false })}'),
+    ('c2', 'Sans session', '2026-11-22', '${settings({ finalsZoneId: 'y1' })}'),
+    ('c3', 'Zone inconnue', '2026-11-22', '${settings({ finalsZoneId: 'disparue' })}'),
+    ('c5', 'Katas sur la zone des finales', '2026-11-22', '${settings({ finalsZoneId: 'x1', kataFinalsOnFinalsZone: true })}');
+  INSERT INTO zones (id, competition_id, name, sort_order) VALUES ('z1', 'c1', 'Tatami 1', 0), ('z2', 'c1', 'Tatami 2', 1), ('y1', 'c2', 'Tatami 1', 0), ('x1', 'c5', 'Tatami 1', 0);
+  INSERT INTO waves (id, competition_id, name, sort_order, rules_json) VALUES ('matin', 'c1', 'Matin', 0, '{}'), ('aprem', 'c1', 'Après-midi', 1, '{}'), ('c3-matin', 'c3', 'Matin', 0, '{}');
+  INSERT INTO categories (id, competition_id, key_string, key_json, label, seed) VALUES
+    ('c1-kata', 'c1', 'k1', '{"discipline":"kata"}', 'Kata', 1), ('c1-combat', 'c1', 'k2', '{"discipline":"karate"}', 'Combat', 1),
+    ('c2-kata', 'c2', 'k1', '{"discipline":"kata"}', 'Kata', 1), ('c5-kata', 'c5', 'k1', '{"discipline":"kata"}', 'Kata', 1);`;
+
+const finalsState = (d: Database.Database) => ({
+  waveFinals: d.prepare('select competition_id, wave_key, finals_zone_id, where_default, when_default from wave_finals order by competition_id, wave_key').all(),
+  categories: d.prepare('select id, finals_where, finals_when from categories order by id').all(),
+});
+
+test('migration 0036 et paquet d’avant : même reprise des anciens réglages', async () => {
+  // Par la migration.
+  const old = olderDb(35);
+  const raw = new Database(old);
+  raw.exec(PARITY_SQL);
+  raw.close();
+  closeDb(openDb(old));
+  const viaMigration = new Database(old, { readonly: true });
+  const expected = finalsState(viaMigration);
+  viaMigration.close();
+  expect(expected.waveFinals).toHaveLength(4);
+
+  // Par l'import d'un paquet sans `wave_finals`, compétition par compétition, dans une base à jour.
+  const current = tmpDbPath();
+  const db = openDb(current);
+  try {
+    for (const id of ['c1', 'c2', 'c3', 'c5']) {
+      const source = openDb(tmpDbPath());
+      try {
+        source.$client.exec(PARITY_SQL);
+        const pkg = buildPackage(source, id, { handOver: false, role: 'local' });
+        delete pkg.tables.wave_finals;
+        await importPackage(db, current, pkg, null, new Date(), { backup: false });
+      } finally {
+        closeDb(source);
+      }
+    }
+    expect(finalsState(db.$client)).toEqual(expected);
+  } finally {
+    closeDb(db);
   }
 });
