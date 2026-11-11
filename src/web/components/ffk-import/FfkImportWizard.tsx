@@ -1,10 +1,10 @@
 import { Box, Button, Checkbox, FileButton, Group, Input, Loader, Modal, Paper, Select, Stack, Text, Title, UnstyledButton } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { useReducer, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
 import { hasDiscipline, planFfkImport, withoutDiscipline, type FfkPdfRead } from '../../../domain/ffk-pdf-plan.js';
 import type { DisciplineId } from '../../../domain/types.js';
-import type { ClubEntryView, ClubLine, LineOps } from '../../api.js';
+import { ApiError, RELOAD_STATUSES, type ClubEntryView, type ClubLine, type LineOps } from '../../api.js';
 import { DISCIPLINE_OPTIONS, disciplineLabel, SEX_LABELS } from '../../labels.js';
 import { ApiErrorAlert } from '../ApiErrorAlert.js';
 import { ClubLineForm } from '../ClubLineForm.js';
@@ -135,7 +135,8 @@ function Wizard({ onClose, mode, read, lines, ops, multipleCombats, ageBands, we
   if (state.stage === 'end') return <EndScreen state={state} discipline={discipline} lines={lines} ops={ops} ageBands={ageBands} weightClasses={weightClasses} mobile={!!mobile} onClose={onClose} toggle={(fighterId) => dispatch({ type: 'toggleAbsent', fighterId })} />;
 
   const view = stepView(state, { lines, discipline, multipleCombats, mode, weightClasses });
-  const progress = { index: state.index, total: state.plan.steps.length };
+  const index = state.index;
+  const progress = { index, total: state.plan.steps.length };
   const previous = state.index > 0 ? () => dispatch({ type: 'previous' }) : null;
 
   if (view.kind === 'homonym') {
@@ -176,11 +177,12 @@ function Wizard({ onClose, mode, read, lines, ops, multipleCombats, ageBands, we
       }}
       ffk={{
         ...view.ffk, progress, onPrevious: previous,
-        onSkip: () => dispatch({ type: 'skipped' }),
-        // Sans ligne : fiche verrouillée passée avec « Suivant → », rien n'a été écrit.
+        onSkip: () => dispatch({ type: 'skipped', index }),
+        // Sans ligne : fiche verrouillée passée avec « Suivant → », rien n'a été écrit. `index` : l'étape de ce rendu, même si
+        // la réponse arrive plus tard.
         onSaved: (message, saved) => {
           if (message) notifications.show({ color: 'orange', message });
-          dispatch(saved ? { type: 'saved', fighterId: saved.fighterId, created: view.line === null } : { type: 'skipped' });
+          dispatch(saved ? { type: 'saved', index, line: saved, created: view.line === null } : { type: 'skipped', index });
         },
       }} />
   );
@@ -199,6 +201,12 @@ function EndScreen({ state, discipline, lines, ops, ageBands, weightClasses, mob
   toggle: (fighterId: string) => void;
 }) {
   const [finishing, setFinishing] = useState(false);
+  // Fenêtre fermée pendant « Terminer » : les retraits suivants ne sont pas faits.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true; // remonté (mode strict)
+    return () => { mounted.current = false; };
+  }, []);
   const sum = wizardSummary(state);
   const rows = absentRows(state.plan, lines, discipline);
   const name = disciplineLabel(discipline).toLowerCase();
@@ -214,7 +222,10 @@ function EndScreen({ state, discipline, lines, ops, ageBands, weightClasses, mob
     setFinishing(true);
     let removed = 0;
     const failed: string[] = [];
+    // Page close, lien remplacé… : inutile d'essayer les suivants, la page est rechargée.
+    let stopped: string | null = null;
     for (const { line: l } of rows.filter((r) => r.checkable && state.remove.includes(r.line.fighterId))) {
+      if (!mounted.current) return;
       if (!hasDiscipline(l.line, discipline)) continue;
       const next = withoutDiscipline(l.line, discipline);
       try {
@@ -222,10 +233,19 @@ function EndScreen({ state, discipline, lines, ops, ageBands, weightClasses, mob
         else await ops.remove({ fighterId: l.fighterId, version: l.version });
         removed++;
       } catch (e) {
+        if (e instanceof ApiError && RELOAD_STATUSES.has(e.status) && e.status !== 409) {
+          stopped = e.message;
+          break;
+        }
         failed.push(`${fighterName(l)} (${e instanceof Error ? e.message : 'erreur'})`);
       }
     }
+    if (!mounted.current) return;
     setFinishing(false);
+    if (stopped) {
+      notifications.show({ color: 'orange', message: stopped });
+      return onClose();
+    }
     if (failed.length) notifications.show({ color: 'orange', message: `${disciplineLabel(discipline)} non retiré : ${failed.join(', ')}.` });
     onClose(summaryText(sum, removed, discipline));
   };

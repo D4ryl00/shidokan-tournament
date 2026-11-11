@@ -5,6 +5,7 @@ import type { ClubLine } from '../../src/web/api.js';
 import {
   absentRows,
   fitWeightClass,
+  NO_DISCIPLINE_BANNER,
   stepView,
   summaryText,
   wizardReducer,
@@ -57,12 +58,13 @@ describe('wizardReducer', () => {
   });
 
   test('saved à la dernière étape : la fin, toutes les étapes faites ; skipped : laissée', () => {
-    const s = run({ stage: 'start' }, { type: 'start', plan: plan([newStep(1), newStep(2)]) }, { type: 'skipped' }, { type: 'saved', fighterId: 'f2' });
-    expect(s).toMatchObject({ stage: 'end', done: { 0: 'skipped', 1: 'saved' }, fighters: { 1: 'f2' } });
+    const f2 = clubLine('f2');
+    const s = run({ stage: 'start' }, { type: 'start', plan: plan([newStep(1), newStep(2)]) }, { type: 'skipped', index: 0 }, { type: 'saved', index: 1, line: f2 });
+    expect(s).toMatchObject({ stage: 'end', done: { 0: 'skipped', 1: 'saved' }, saved: { 1: f2 } });
   });
 
   test('previous : une étape en arrière, rien à l’index 0', () => {
-    const at2 = run({ stage: 'start' }, { type: 'start', plan: plan([newStep(1), newStep(2), newStep(3)]) }, { type: 'saved' }, { type: 'saved' }) as Step;
+    const at2 = run({ stage: 'start' }, { type: 'start', plan: plan([newStep(1), newStep(2), newStep(3)]) }, { type: 'saved', index: 0 }, { type: 'saved', index: 1 }) as Step;
     expect(at2.index).toBe(2);
     expect(wizardReducer(at2, { type: 'previous' })).toMatchObject({ stage: 'step', index: 1 });
     const at0 = wizardReducer({ stage: 'start' }, { type: 'start', plan: plan([newStep(1)]) });
@@ -70,34 +72,55 @@ describe('wizardReducer', () => {
   });
 
   test('stale : même étape, remontée (le composant relit la fiche)', () => {
-    const at1 = run({ stage: 'start' }, { type: 'start', plan: plan([newStep(1), existingStep(2, 'f2')]) }, { type: 'saved' }) as Step;
+    const at1 = run({ stage: 'start' }, { type: 'start', plan: plan([newStep(1), existingStep(2, 'f2')]) }, { type: 'saved', index: 0 }) as Step;
     const stale = wizardReducer(at1, { type: 'stale' }) as Step;
     expect(stale).toMatchObject({ stage: 'step', index: 1, done: { 0: 'saved' } });
     expect(stale.round).not.toBe(at1.round);
   });
 
+  test('saved de l’étape i arrivé après « Précédent » : noté sur l’étape i, sans faire avancer', () => {
+    const at1 = run({ stage: 'start' }, { type: 'start', plan: plan([newStep(1), newStep(2), newStep(3)]) }, { type: 'skipped', index: 0 }) as Step;
+    const back = wizardReducer(at1, { type: 'previous' }) as Step;
+    const s = wizardReducer(back, { type: 'saved', index: 1, line: clubLine('f2'), created: true }) as Step;
+    expect(s).toMatchObject({ stage: 'step', index: 0, done: { 0: 'skipped', 1: 'saved' }, saved: { 1: { fighterId: 'f2' } } });
+    // Une réponse tardive de l'étape i ne fait pas non plus avancer la fin.
+    const end = run({ stage: 'start' }, { type: 'start', plan: plan([newStep(1)]) }, { type: 'skipped', index: 0 }) as End;
+    expect(wizardReducer(end, { type: 'saved', index: 0, line: clubLine('f1'), created: true })).toMatchObject({ stage: 'end', done: { 0: 'saved' } });
+  });
+
   test('skipped après un enregistrement de la même étape (retour par « Précédent ») : reste enregistrée', () => {
-    const s = run({ stage: 'start' }, { type: 'start', plan: plan([newStep(1), newStep(2)]) }, { type: 'saved', fighterId: 'f1' }, { type: 'previous' }, { type: 'skipped' }) as Step;
+    const s = run({ stage: 'start' }, { type: 'start', plan: plan([newStep(1), newStep(2)]) }, { type: 'saved', index: 0, line: clubLine('f1') }, { type: 'previous' }, { type: 'skipped', index: 0 }) as Step;
     expect(s).toMatchObject({ index: 1, done: { 0: 'saved' } });
   });
 
   test('saved d’une fiche existante devenue création (fiche supprimée entre-temps) : comptée comme ajoutée', () => {
-    const s = run({ stage: 'start' }, { type: 'start', plan: plan([existingStep(1, 'f1')]) }, { type: 'saved', fighterId: 'f9', created: true }) as End;
+    const s = run({ stage: 'start' }, { type: 'start', plan: plan([existingStep(1, 'f1')]) }, { type: 'saved', index: 0, line: clubLine('f9'), created: true }) as End;
     expect(wizardSummary(s)).toEqual({ added: 1, updated: 0, left: 0 });
+  });
+
+  test('saved d’un nouveau rapproché d’une fiche apparue entre-temps : compté mis à jour ; un nouveau créé puis rouvert reste ajouté', () => {
+    const matched = run({ stage: 'start' }, { type: 'start', plan: plan([newStep(1)]) }, { type: 'saved', index: 0, line: clubLine('f1'), created: false }) as End;
+    expect(wizardSummary(matched)).toEqual({ added: 0, updated: 1, left: 0 });
+    const reopened = run(
+      { stage: 'start' }, { type: 'start', plan: plan([newStep(1), newStep(2)]) },
+      { type: 'saved', index: 0, line: clubLine('f1'), created: true }, { type: 'previous' }, { type: 'saved', index: 0, line: clubLine('f1'), created: false },
+      { type: 'skipped', index: 1 },
+    ) as End;
+    expect(wizardSummary(reopened)).toEqual({ added: 1, updated: 0, left: 1 });
   });
 
   test('resolve : un homonyme devient une fiche existante ou un nouveau', () => {
     const homonym: FfkStep = { kind: 'homonym', ffk: fighter(), candidates: ['a', 'b'] };
     const at0 = wizardReducer({ stage: 'start' }, { type: 'start', plan: plan([homonym]) });
     expect((wizardReducer(at0, { type: 'resolve', fighterId: 'b' }) as Step).plan.steps[0]).toMatchObject({ kind: 'existing', fighterId: 'b' });
-    expect((wizardReducer(at0, { type: 'resolve', fighterId: null }) as Step).plan.steps[0]).toMatchObject({ kind: 'new' });
+    expect(wizardReducer(at0, { type: 'resolve', fighterId: null })).toMatchObject({ plan: { steps: [{ kind: 'new' }] }, others: [0] });
   });
 
   test('toggleAbsent deux fois : rien à retirer ; résumé', () => {
     const end = run(
       { stage: 'start' },
       { type: 'start', plan: plan([newStep(1), newStep(2), existingStep(3, 'f3'), existingStep(4, 'f4')], ['x']) },
-      { type: 'saved' }, { type: 'saved' }, { type: 'saved' }, { type: 'skipped' },
+      { type: 'saved', index: 0 }, { type: 'saved', index: 1 }, { type: 'saved', index: 2 }, { type: 'skipped', index: 3 },
     ) as End;
     expect(run(end, { type: 'toggleAbsent', fighterId: 'x' })).toMatchObject({ remove: ['x'] });
     expect(run(end, { type: 'toggleAbsent', fighterId: 'x' }, { type: 'toggleAbsent', fighterId: 'x' })).toMatchObject({ remove: [] });
@@ -115,7 +138,7 @@ describe('fitWeightClass', () => {
 });
 
 describe('stepView', () => {
-  const at = (steps: FfkStep[], index = 0, extra: Partial<Step> = {}): Step => ({ stage: 'step', plan: plan(steps), index, done: {}, fighters: {}, round: 0, ...extra });
+  const at = (steps: FfkStep[], index = 0, extra: Partial<Step> = {}): Step => ({ stage: 'step', plan: plan(steps), index, done: {}, saved: {}, others: [], round: 0, ...extra });
 
   test('nouveau : pré-rempli, marques FFK, phrase du nom en plus de deux mots, champs non traduits', () => {
     const ffk = fighter({ fullName: 'DA SILVA SANTOS INES', lastName: 'DA SILVA SANTOS', firstName: 'Ines', ageBandCode: null, weightClassId: null, raw: { age: 'Seniors Débutants Shindo', weight: '-99' } });
@@ -186,11 +209,36 @@ describe('stepView', () => {
   });
 
   test('déjà enregistrée (retour par « Précédent ») : la fiche telle qu’elle est, sans comparaison', () => {
-    const saved = clubLine('f9', { lastName: 'MARTIN-DUPONT' });
-    const v = stepView(at([newStep(1)], 0, { done: { 0: 'saved' }, fighters: { 0: 'f9' } }), ctx([saved]));
+    const returned = clubLine('f9', { lastName: 'MARTIN' });
+    const now = clubLine('f9', { lastName: 'MARTIN-DUPONT' }, { version: 'v2' });
+    const v = stepView(at([newStep(1)], 0, { done: { 0: 'saved' }, saved: { 0: returned } }), ctx([now]));
     if (v.kind !== 'form') throw new Error('formulaire attendu');
-    expect(v.line).toBe(saved);
-    expect(v.ffk).toMatchObject({ initial: saved.line, marks: [], diffs: [], banner: null, hints: {}, skipLabel: 'Laisser la fiche telle quelle' });
+    expect(v.line).toBe(now);
+    expect(v.ffk).toMatchObject({ initial: now.line, marks: [], diffs: [], banner: null, hints: {}, skipLabel: 'Laisser la fiche telle quelle' });
+  });
+
+  test('déjà enregistrée, liste pas rechargée : la fiche renvoyée par l’enregistrement (pas une seconde création)', () => {
+    const returned = clubLine('f9');
+    const v = stepView(at([newStep(1)], 0, { done: { 0: 'saved' }, saved: { 0: returned } }), ctx([]));
+    expect(v).toMatchObject({ kind: 'form', line: returned });
+  });
+
+  test('nouveau dont la fiche a été créée ailleurs entre-temps (même nom, même sexe) : comparé comme une fiche existante', () => {
+    const elsewhere = clubLine('f5', { lastName: 'Martin', firstName: 'Léa', combats: [], kata: true, ruleset: null });
+    const v = stepView(at([newStep(1)]), ctx([elsewhere, clubLine('m', { sex: 'M' })]));
+    if (v.kind !== 'form') throw new Error('formulaire attendu');
+    expect(v.line).toBe(elsewhere);
+    expect(v.ffk).toMatchObject({ marks: ['discipline'], skipLabel: 'Laisser la fiche telle quelle' });
+    expect(v.ffk.initial).toMatchObject({ combats: ['karate'], kata: true });
+    // « C’est un autre combattant » : jamais rapproché.
+    expect(stepView(at([newStep(1)], 0, { others: [0] }), ctx([elsewhere]))).toMatchObject({ kind: 'form', line: null });
+  });
+
+  test('fiche existante sans discipline : encadré sans liste', () => {
+    const v = stepView(at([existingStep(1, 'f1')]), ctx([clubLine('f1', { combats: [], kata: false, ruleset: null })]));
+    if (v.kind !== 'form') throw new Error('formulaire attendu');
+    expect(v.ffk.banner).toBe(NO_DISCIPLINE_BANNER);
+    expect(v.ffk.banner).toBe('Fiche déjà créée. Une seule fiche par combattant : ce que vous choisissez ici vaut pour toutes ses disciplines.');
   });
 
   test('homonymes : les candidats encore présents', () => {

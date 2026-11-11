@@ -3,6 +3,7 @@ import { DISCIPLINES } from '../../../domain/disciplines.js';
 import { hasDiscipline, planFfkImport, prefillExisting, prefillNew, type FfkFighter, type FfkImportPlan, type FfkPdfRead, type FfkStep } from '../../../domain/ffk-pdf-plan.js';
 import type { DisciplineId } from '../../../domain/types.js';
 import type { ClubEntryView, ClubLine } from '../../api.js';
+import { normalizeName } from '../../../domain/names.js';
 import { disciplineLabel } from '../../labels.js';
 import { ffkBanner, listFr, type FfkFormStep } from '../club-line/ffkStep.js';
 
@@ -10,19 +11,25 @@ import { ffkBanner, listFr, type FfkFormStep } from '../club-line/ffkStep.js';
 export type Done = Record<number, 'saved' | 'skipped'>;
 
 /**
- * Parcours d'import : départ, une étape par combattant à revoir, fin. `fighters` garde la fiche enregistrée à chaque étape
- * (« ← Précédent » la rouvre telle quelle, même renommée) ; `round` change à chaque passage pour remonter la fenêtre.
+ * Parcours d'import : départ, une étape par combattant à revoir, fin. `saved` garde la fiche enregistrée à chaque étape
+ * (« ← Précédent » la rouvre par son id, même renommée, ou telle que le serveur l'a renvoyée si la liste n'est pas rechargée) ;
+ * `others` : étapes dites « C’est un autre combattant » (jamais rapprochées d'une fiche) ; `round` change à chaque passage
+ * pour remonter la fenêtre.
  */
 export type WizardState =
   | { stage: 'start' }
-  | { stage: 'step'; plan: FfkImportPlan; index: number; done: Done; fighters: Record<number, string>; round: number }
-  | { stage: 'end'; plan: FfkImportPlan; done: Done; fighters: Record<number, string>; remove: string[] };
+  | { stage: 'step'; plan: FfkImportPlan; index: number; done: Done; saved: Record<number, ClubLine>; others: number[]; round: number }
+  | { stage: 'end'; plan: FfkImportPlan; done: Done; saved: Record<number, ClubLine>; others: number[]; remove: string[] };
 
 export type WizardAction =
   | { type: 'start'; plan: FfkImportPlan }
-  /** `created` : la fiche a été créée (une fiche existante supprimée entre-temps compte alors comme ajoutée). */
-  | { type: 'saved'; fighterId?: string; created?: boolean }
-  | { type: 'skipped' }
+  /**
+   * Étape `index` enregistrée (la réponse peut arriver après un changement d'étape : elle est notée sans faire avancer).
+   * `created` : la fiche a été créée (fiche existante supprimée entre-temps : comptée ajoutée) ou non (nouveau rapproché d'une
+   * fiche apparue entre-temps : compté mis à jour).
+   */
+  | { type: 'saved'; index: number; line?: ClubLine; created?: boolean }
+  | { type: 'skipped'; index: number }
   | { type: 'previous' }
   /** La fiche a changé ailleurs (409…) : même étape, relue. */
   | { type: 'stale' }
@@ -33,36 +40,50 @@ export type WizardAction =
 type StepState = Extract<WizardState, { stage: 'step' }>;
 type EndState = Extract<WizardState, { stage: 'end' }>;
 
-function advance(s: StepState, done: Done, fighters: Record<number, string>, plan = s.plan): WizardState {
-  if (s.index + 1 < plan.steps.length) return { ...s, plan, done, fighters, index: s.index + 1, round: s.round + 1 };
-  return { stage: 'end', plan, done, fighters, remove: [] };
-}
-
 function replaceStep(plan: FfkImportPlan, index: number, step: FfkStep): FfkImportPlan {
   return { ...plan, steps: plan.steps.map((st, i) => (i === index ? step : st)) };
+}
+
+/** Étape suivante, ou la fin. */
+function advance(s: StepState): WizardState {
+  if (s.index + 1 < s.plan.steps.length) return { ...s, index: s.index + 1, round: s.round + 1 };
+  return { stage: 'end', plan: s.plan, done: s.done, saved: s.saved, others: s.others, remove: [] };
+}
+
+/** Note ce qui a été fait à l'étape `a.index`. */
+function record<S extends StepState | EndState>(s: S, a: Extract<WizardAction, { type: 'saved' | 'skipped' }>): S {
+  const step = s.plan.steps[a.index];
+  if (!step) return s;
+  // Revenue par « Précédent » puis laissée : ce qui a été enregistré l'est toujours.
+  if (a.type === 'skipped') return { ...s, done: { ...s.done, [a.index]: s.done[a.index] === 'saved' ? 'saved' : 'skipped' } };
+  let plan = s.plan;
+  if (a.created === true && step.kind !== 'new') plan = replaceStep(plan, a.index, { kind: 'new', ffk: step.ffk });
+  // Un nouveau enregistré sur une fiche existante (apparue entre-temps) : une mise à jour. Pas un nouveau déjà créé puis rouvert.
+  if (a.created === false && step.kind === 'new' && s.done[a.index] !== 'saved' && a.line) {
+    plan = replaceStep(plan, a.index, { kind: 'existing', ffk: step.ffk, fighterId: a.line.fighterId, diffs: [], addsDiscipline: false, oneCombatBlocked: false, locked: false });
+  }
+  return { ...s, plan, done: { ...s.done, [a.index]: 'saved' }, saved: a.line ? { ...s.saved, [a.index]: a.line } : s.saved };
 }
 
 export function wizardReducer(s: WizardState, a: WizardAction): WizardState {
   if (a.type === 'start') {
     return a.plan.steps.length
-      ? { stage: 'step', plan: a.plan, index: 0, done: {}, fighters: {}, round: 0 }
-      : { stage: 'end', plan: a.plan, done: {}, fighters: {}, remove: [] };
+      ? { stage: 'step', plan: a.plan, index: 0, done: {}, saved: {}, others: [], round: 0 }
+      : { stage: 'end', plan: a.plan, done: {}, saved: {}, others: [], remove: [] };
   }
   if (s.stage === 'end') {
+    if (a.type === 'saved' || a.type === 'skipped') return record(s, a);
     if (a.type !== 'toggleAbsent') return s;
     return { ...s, remove: s.remove.includes(a.fighterId) ? s.remove.filter((id) => id !== a.fighterId) : [...s.remove, a.fighterId] };
   }
   if (s.stage !== 'step') return s;
   const step = s.plan.steps[s.index]!;
   switch (a.type) {
-    case 'saved': {
-      const fighters = a.fighterId ? { ...s.fighters, [s.index]: a.fighterId } : s.fighters;
-      const plan = a.created && step.kind !== 'new' ? replaceStep(s.plan, s.index, { kind: 'new', ffk: step.ffk }) : s.plan;
-      return advance(s, { ...s.done, [s.index]: 'saved' }, fighters, plan);
+    case 'saved':
+    case 'skipped': {
+      const next = record(s, a);
+      return a.index === s.index ? advance(next) : next;
     }
-    case 'skipped':
-      // Revenue par « Précédent » puis laissée : ce qui a été enregistré l'est toujours.
-      return advance(s, { ...s.done, [s.index]: s.done[s.index] === 'saved' ? 'saved' : 'skipped' }, s.fighters);
     case 'previous':
       return s.index > 0 ? { ...s, index: s.index - 1, round: s.round + 1 } : s;
     case 'stale':
@@ -70,9 +91,8 @@ export function wizardReducer(s: WizardState, a: WizardAction): WizardState {
     case 'resolve': {
       if (step.kind !== 'homonym') return s;
       // Les écarts sont recalculés à l'affichage, sur la fiche du moment (`stepView`).
-      const next: FfkStep = a.fighterId
-        ? { kind: 'existing', ffk: step.ffk, fighterId: a.fighterId, diffs: [], addsDiscipline: false, oneCombatBlocked: false, locked: false }
-        : { kind: 'new', ffk: step.ffk };
+      if (a.fighterId === null) return { ...s, plan: replaceStep(s.plan, s.index, { kind: 'new', ffk: step.ffk }), others: [...s.others, s.index], round: s.round + 1 };
+      const next: FfkStep = { kind: 'existing', ffk: step.ffk, fighterId: a.fighterId, diffs: [], addsDiscipline: false, oneCombatBlocked: false, locked: false };
       return { ...s, plan: replaceStep(s.plan, s.index, next), round: s.round + 1 };
     }
     default:
@@ -144,6 +164,9 @@ function newView(ffk: FfkFighter, c: StepContext): StepView {
   };
 }
 
+/** Encadré d'une fiche sans discipline (pas de liste vide « inscrite en . »). */
+export const NO_DISCIPLINE_BANNER = 'Fiche déjà créée. Une seule fiche par combattant : ce que vous choisissez ici vaut pour toutes ses disciplines.';
+
 /** La fiche existante comparée de nouveau au PDF, telle qu'elle est maintenant. */
 function existingView(ffk: FfkFighter, fresh: ClubLine, c: StepContext): StepView {
   // Comparée sur ce seul combattant, sous le nom et le sexe du PDF (la fiche a pu être renommée) : seuls les autres champs comptent.
@@ -164,18 +187,26 @@ function existingView(ffk: FfkFighter, fresh: ClubLine, c: StepContext): StepVie
       initial,
       marks: step?.addsDiscipline && !step.oneCombatBlocked ? ['discipline'] : [],
       diffs: step?.diffs ?? [],
-      banner: ffkBanner(fresh.line.firstName, current.map(disciplineLabel)),
+      banner: current.length ? ffkBanner(fresh.line.firstName, current.map(disciplineLabel)) : NO_DISCIPLINE_BANNER,
       hints: sentences.length ? { discipline: sentences.join(' ') } : {},
       skipLabel: 'Laisser la fiche telle quelle',
     },
   };
 }
 
+/** Fiches qui portent le nom et le sexe du combattant FFK (coupure nom / prénom indifférente). */
+const sameFighter = (ffk: FfkFighter, lines: ClubLine[]) => {
+  const key = normalizeName(`${ffk.lastName} ${ffk.firstName}`);
+  return lines.filter((l) => l.line.sex === ffk.sex && normalizeName(`${l.line.lastName} ${l.line.firstName}`) === key);
+};
+
 /** Ce que montre l'étape en cours, d'après la liste des fiches du moment (rechargée après chaque écriture ou refus). */
 export function stepView(s: StepState, c: StepContext): StepView {
   const step = s.plan.steps[s.index]!;
   const byId = (id: string | undefined) => (id ? c.lines.find((l) => l.fighterId === id) : undefined);
-  const saved = s.done[s.index] === 'saved' ? byId(s.fighters[s.index]) : undefined;
+  const kept = s.done[s.index] === 'saved' ? s.saved[s.index] : undefined;
+  // Liste pas encore (ou pas) rechargée : la fiche telle que le serveur l'a renvoyée.
+  const saved = kept ? byId(kept.fighterId) ?? kept : undefined;
   if (saved) {
     // Déjà enregistrée : une modification ordinaire, sans comparaison.
     return { kind: 'form', line: saved, ffk: { initial: saved.line, marks: [], diffs: [], banner: null, hints: {}, skipLabel: 'Laisser la fiche telle quelle' } };
@@ -184,7 +215,12 @@ export function stepView(s: StepState, c: StepContext): StepView {
     const candidates = c.lines.filter((l) => step.candidates.includes(l.fighterId));
     return candidates.length ? { kind: 'homonym', ffk: step.ffk, candidates } : newView(step.ffk, c);
   }
-  const fresh = step.kind === 'existing' ? byId(step.fighterId) : undefined;
+  if (step.kind === 'new') {
+    // Fiche créée ailleurs entre-temps (même nom, même sexe) : comparée comme une fiche existante, pour ne pas en créer une seconde.
+    const found = s.others.includes(s.index) ? [] : sameFighter(step.ffk, c.lines);
+    return found.length === 1 ? existingView(step.ffk, found[0]!, c) : newView(step.ffk, c);
+  }
+  const fresh = byId(step.fighterId);
   // Fiche supprimée entre-temps : le combattant redevient un nouveau.
   return fresh ? existingView(step.ffk, fresh, c) : newView(step.ffk, c);
 }

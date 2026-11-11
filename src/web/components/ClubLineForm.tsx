@@ -245,9 +245,9 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
         <ApiErrorAlert error={ops.error} />
         {ffk ? (
           <Group justify="space-between">
-            <Button variant="subtle" color="gray" data-testid="ffk-skip" onClick={ffk.onSkip}>{ffk.skipLabel}</Button>
+            <Button variant="subtle" color="gray" data-testid="ffk-skip" disabled={ops.pending} onClick={ffk.onSkip}>{ffk.skipLabel}</Button>
             <Group gap="xs">
-              {ffk.onPrevious && <Button variant="default" data-testid="ffk-previous" onClick={ffk.onPrevious}>← Précédent</Button>}
+              {ffk.onPrevious && <Button variant="default" data-testid="ffk-previous" disabled={ops.pending} onClick={ffk.onPrevious}>← Précédent</Button>}
               {frozen
                 ? <Button data-testid="line-save" onClick={() => ffk.onSaved()}>Suivant →</Button>
                 : <Button data-testid="line-save" loading={ops.pending} onClick={() => submit(ffk.onSaved)}>Enregistrer · suivant →</Button>}

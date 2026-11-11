@@ -1130,7 +1130,7 @@ export const useUpdateClubEntrySettings = (id: string) =>
 
 // Page d'inscription d'un club (lien personnel, sans compte).
 /** Refus après lesquels la page du club est rechargée et le formulaire fermé. */
-export const RELOAD_STATUSES = new Set([403, 404, 409]);
+export const RELOAD_STATUSES = new Set([403, 404, 409, 410]);
 export interface ClubLine { fighterId: string; clubId: string; publicNameHidden: boolean; version: string; line: ClubFormLine; editable: boolean; partlyEditable: boolean; startedDisciplines: DisciplineId[]; reason: string | null; notices: string[] }
 export interface ClubEntryHeader { coachName: string | null; coachPhone: string | null; coachEmails: string[]; preApproval: boolean; affiliationNumber: string | null }
 export interface ClubEntryView {
