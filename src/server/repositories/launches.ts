@@ -59,7 +59,7 @@ export async function launchStatus(db: AppDb, competitionId: string, waveId: str
   return {
     state,
     blocking,
-    pending: plan.pending.filter((p) => p.waveId === waveId).map((p) => ({ categoryId: p.categoryId, label: label.get(p.categoryId) ?? '' })),
+    pending: plan.pending.filter((p) => p.waveId === waveId).map((p) => ({ categoryId: p.categoryId, label: label.get(p.categoryId) ?? '', reason: p.reason })),
     zones: plan.zones.map((z) => {
       const numbers = z.passages.filter((p) => p.waveId === waveId).map((p) => p.number);
       return { zoneId: z.zoneId, first: numbers.length ? Math.min(...numbers) : null, last: numbers.length ? Math.max(...numbers) : null };
@@ -113,7 +113,8 @@ export async function reopenWave(db: AppDb, competitionId: string, waveId: strin
  * « Numéroter à la suite » : les catégories à numéroter de la vague (toutes, ou `categoryIds`) reçoivent des numéros après
  * le dernier numéro figé de leur zone ; la vague (re)passe lancée. `dryRun` : aperçu, rien n'est écrit.
  */
-export async function numberPending(db: AppDb, competitionId: string, waveId: string | null, categoryIds?: string[], dryRun = false, mode: RenumberMode = 'append') {
+export async function numberPending(db: AppDb, competitionId: string, waveId: string | null, categoryIds?: string[], dryRun = false, requested: RenumberMode = 'append') {
+  let mode = requested;
   await checkWave(db, competitionId, waveId);
   const key = waveKey(waveId);
   const row = launchRows(db, competitionId).get(key);
@@ -122,6 +123,8 @@ export async function numberPending(db: AppDb, competitionId: string, waveId: st
   const input = await planInput(db, competitionId, cats);
   const plan = planPassages(input);
   const ids = plan.pending.filter((p) => p.waveId === waveId && (!categoryIds || categoryIds.includes(p.categoryId))).map((p) => p.categoryId);
+    // Une finale qui a changé de place ne se range pas « à la suite » : elle imposerait le bout de la file (aperçu compris).
+  if (plan.pending.some((p) => ids.includes(p.categoryId) && p.reason === 'finals')) mode = 'shuffle';
   const appended = appendPassages(input, waveId, ids);
   // Mélangés : chaque zone qui reçoit une catégorie à numéroter est refaite (ses autres catégories comprises).
   const zonesRedone = mode === 'append' ? [] : [...new Set(appended.map((r) => r.zoneId))];

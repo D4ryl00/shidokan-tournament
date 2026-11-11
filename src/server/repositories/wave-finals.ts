@@ -1,10 +1,10 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import type { FinalsWhen, FinalsWhere, WaveFinals } from '../../domain/passages/finals-choice.js';
-import { waveKey } from '../../domain/passages/index.js';
+import { defaultFinalsChoice, finalMatchIds, planPassages, resolveFinals, waveKey, type FinalsWhen, type FinalsWhere, type WaveFinals } from '../../domain/passages/index.js';
 import type { AppDb } from '../db/client.js';
 import { categories, waveFinals } from '../db/schema.js';
-import { readCategories } from './categories.js';
+import { listCategories, readCategories } from './categories.js';
 import { launchRows } from './launch-state.js';
+import { planInput } from './passages.js';
 import { RegistrationValidationError } from './registrations.js';
 import { listWaves } from './waves.js';
 import { listZones } from './zones.js';
@@ -112,4 +112,85 @@ export async function setCategoryFinals(
     if (!patch.categoryIds) upsertWave(t, competitionId, waveId, { ...(patch.where ? { whereDefault: patch.where } : {}), ...(patch.when ? { whenDefault: patch.when } : {}) });
     if (ids.length) t.update(categories).set(values).where(and(eq(categories.competitionId, competitionId), inArray(categories.id, ids))).run();
   });
+}
+
+/** Une catégorie de l'onglet « Finales ». */
+export interface FinalsRow {
+  categoryId: string;
+  label: string;
+  /** Zone actuelle de la catégorie (épinglée ou répartie). */
+  zoneId: string | null;
+  kata: boolean;
+  /** Kata : tour 1 et finale sont deux passages distincts. */
+  kataSplit: boolean;
+  /** Tableau déjà tiré sans finale (poule unique). */
+  noFinal: boolean;
+  fixed: 'finals-zone' | 'not-accepted' | null;
+  /** « Où » et « Quand » effectifs. */
+  where: FinalsWhere;
+  when: FinalsWhen;
+}
+
+export interface FinalsView {
+  waveId: string | null;
+  finalsZoneId: string | null;
+  locked: boolean;
+  rows: FinalsRow[];
+  /** Ce que chaque zone joue pour la session : ses passages, puis finales dès que prêtes, puis finales en fin de session. */
+  summary: { zoneId: string; ownPassages: number; ready: number; end: number }[];
+}
+
+/** Onglet « Finales » d'une session : une ligne par catégorie (dans l'ordre du plan de passage), et le résumé par zone. */
+export async function finalsView(db: AppDb, competitionId: string, waveId: string | null): Promise<FinalsView> {
+  const cats = await listCategories(db, competitionId);
+  const input = await planInput(db, competitionId, cats);
+  const plan = planPassages(input);
+  const key = waveKey(waveId);
+  const wave = input.waveFinals?.find((w) => w.waveKey === key);
+  const finalsZoneId = wave?.finalsZoneId ?? null;
+  const byId = new Map(cats.map((c) => [c.id, c]));
+  const accepts = (zoneId: string, discipline: string) => {
+    const z = input.zones.find((x) => x.id === zoneId);
+    return !!z && (z.disciplines === null || z.disciplines.some((d) => d === discipline));
+  };
+
+  const rows = input.categories
+    .filter((p) => p.waveId === waveId)
+    .map((p): FinalsRow => {
+      const cat = byId.get(p.id)!;
+      const kata = p.bracket?.kind === 'kata';
+      const zoneId = plan.categories[p.id]?.zoneId ?? null;
+      const resolved =
+        plan.finals[p.id] ??
+        resolveFinals({ kata, entrants: p.bracket?.entrants.length ?? 0, zoneId, stored: p.finals ?? { where: null, when: null }, wave, mode: input.mode, accepts: (z) => accepts(z, p.discipline) });
+      // Sans zone, rien ne place la finale : « Où » reste le choix enregistré (ou la valeur de la session).
+      const where = zoneId === null ? (p.finals?.where ?? wave?.whereDefault ?? defaultFinalsChoice({ kata, mode: input.mode, hasFinalsZone: finalsZoneId !== null }).where) : resolved.onFinalsZone ? 'finals' : 'own';
+      return {
+        categoryId: p.id,
+        label: cat.label,
+        zoneId,
+        kata,
+        kataSplit: resolved.kataSplit,
+        noFinal: p.bracket?.kind === 'combat' && finalMatchIds(p.bracket).length === 0,
+        fixed: resolved.fixed,
+        where,
+        when: resolved.when,
+      };
+    });
+
+  const summary = plan.zones
+    .map((z) => {
+      const tally = { zoneId: z.zoneId, ownPassages: 0, ready: 0, end: 0 };
+      for (const passage of z.passages.filter((x) => x.waveId === waveId)) {
+        const bracket = byId.get(passage.categoryId)?.bracket;
+        const isFinal = passage.matchId === 'kata:finale' || (bracket?.kind === 'combat' && finalMatchIds(bracket).includes(passage.matchId ?? ''));
+        if (!isFinal) tally.ownPassages++;
+        else if (plan.finals[passage.categoryId]?.when === 'ready') tally.ready++;
+        else tally.end++;
+      }
+      return tally;
+    })
+    .filter((t) => t.ownPassages + t.ready + t.end > 0);
+
+  return { waveId, finalsZoneId, locked: launchRows(db, competitionId).get(key)?.launched === true, rows, summary };
 }

@@ -30,7 +30,7 @@ const many = async (count: number, over: object = {}) => {
 };
 type Cat = { id: string; label: string; zoneId: string | null; waveId: string | null; waveOverride: string | null; status: string; numbersUpdatedAt: string | null; stale: boolean; launchLocked: boolean };
 type Plan = { zones: { zoneId: string; passages: { number: number; categoryId: string; matchId: string | null; waveId: string | null }[] }[]; pending: { categoryId: string }[] };
-type Status = { state: string; blocking: string[]; pending: { categoryId: string; label: string }[]; zones: { zoneId: string; first: number | null; last: number | null }[] };
+type Status = { state: string; blocking: string[]; pending: { categoryId: string; label: string; reason: string }[]; zones: { zoneId: string; first: number | null; last: number | null }[] };
 const cats = async () => (await call('GET', '/categories')).json() as Cat[];
 const catOf = async (label: string) => (await cats()).find((c) => c.label.includes(label))!;
 const plan = async () => (await call('GET', '/passages')).json() as Plan;
@@ -118,7 +118,7 @@ describe('lancer une session', () => {
     await many(2, { weightClassId: 'cadet:F:-47' });
     const fresh = await catOf('-47');
     await call('PATCH', `/categories/${fresh.id}`, { status: 'ready' });
-    expect((await status(null)).pending).toEqual([{ categoryId: fresh.id, label: fresh.label }]);
+    expect((await status(null)).pending).toEqual([{ categoryId: fresh.id, label: fresh.label, reason: 'shape' }]);
     const preview = (await call('POST', '/launch/number/preview', { waveId: null })).json();
     expect(preview).toEqual({ changes: [{ categoryId: fresh.id, label: fresh.label, numbers: [4] }], blocking: [] });
     expect((await plan()).pending).toHaveLength(1);
@@ -303,5 +303,50 @@ describe('session lancée (relecture)', () => {
     await call('PATCH', `/categories/${c.id}`, { waveOverride: aprem!.id });
     await call('POST', '/launch/number', { waveId: matin!.id });
     expect((await catOf('Minimes')).launchLocked).toBe(false);
+  });
+});
+
+describe('refigeage après un changement de finale', () => {
+  test('une finale changée rend la catégorie « à numéroter » (finals) ; « à la suite » devient « mélangés », aperçu compris ; les passages joués gardent leur numéro', async () => {
+    await many(4);
+    await many(4, { weightClassId: 'cadet:F:-61' });
+    await readyAll();
+    const [t1, t2] = ((await call('GET', '/zones')).json() as { id: string }[]).map((z) => z.id) as [string, string];
+    for (const c of await cats()) await call('PATCH', `/categories/${c.id}`, { zoneId: t1 });
+    // Finales de la session sur Tatami 2, en fin de session (par défaut avec une zone des finales).
+    expect((await call('PUT', '/finals/zone', { waveId: null, finalsZoneId: t2 })).statusCode).toBe(200);
+    const a = await catOf('-54');
+    const b = await catOf('-61');
+    await launch(null);
+    const numberOf = (p: Plan, categoryId: string, matchId: string) => p.zones.flatMap((z) => z.passages).find((x) => x.categoryId === categoryId && x.matchId === matchId)!.number;
+    const lastOf = (p: Plan, categoryId: string, zoneId: string) =>
+      Math.max(...p.zones.find((z) => z.zoneId === zoneId)!.passages.filter((x) => x.categoryId === categoryId && x.matchId !== 'w2-0').map((x) => x.number));
+    const before = await plan();
+    expect((await call('PUT', `/categories/${a.id}/results/w1-0`, { winner: 'a', method: 'points' })).statusCode).toBe(200);
+
+    expect((await call('POST', '/launch/reopen', { waveId: null })).statusCode).toBe(204);
+    expect((await call('PUT', '/finals/categories', { waveId: null, categoryIds: [a.id], where: 'own', when: 'ready' })).statusCode).toBe(200);
+    expect((await status(null)).pending).toEqual([{ categoryId: a.id, label: a.label, reason: 'finals' }]);
+
+    const preview = (await call('POST', '/launch/number/preview', { waveId: null, mode: 'append' })).json() as { changes: { categoryId: string }[] };
+    expect(preview.changes.map((c) => c.categoryId)).toContain(a.id);
+    expect((await status(null)).pending).toHaveLength(1);
+    const res = (await call('POST', '/launch/number', { waveId: null, mode: 'append' })).json() as { changes: { categoryId: string }[]; blocking: string[] };
+    expect(res.blocking).toEqual([]);
+    expect(res.changes.map((c) => c.categoryId)).toEqual(preview.changes.map((c) => c.categoryId));
+
+    const after = await plan();
+    expect(after.pending).toEqual([]);
+    expect((await status(null)).state).toBe('launched');
+    // La finale de A est juste après son dernier combat, sur sa zone ; le combat joué garde son numéro.
+    expect(numberOf(after, a.id, 'w2-0')).toBe(lastOf(after, a.id, t1) + 1);
+    expect(after.zones.find((z) => z.zoneId === t1)!.passages.some((x) => x.categoryId === a.id && x.matchId === 'w2-0')).toBe(true);
+    expect(numberOf(after, a.id, 'w1-0')).toBe(numberOf(before, a.id, 'w1-0'));
+    // « Mélangés » : la zone est refaite (les combats de B passent après la finale de A, ce que « à la suite » n’aurait pas fait).
+    expect(numberOf(after, b.id, 'w1-0')).toBeGreaterThan(numberOf(after, a.id, 'w2-0'));
+    // La finale de B reste sur Tatami 2.
+    expect(after.zones.find((z) => z.zoneId === t2)!.passages.some((x) => x.categoryId === b.id && x.matchId === 'w2-0')).toBe(true);
+    // Aucun numéro en double sur une zone.
+    for (const z of after.zones) expect(new Set(z.passages.map((x) => x.number)).size).toBe(z.passages.length);
   });
 });

@@ -274,3 +274,18 @@ test('lignes de combattants de l’organisateur : permises à la Table centrale,
   const now = ((await table('GET', `${base}/fighters/${fighterId}/line`)).json() as { version: string }).version;
   expect((await table('DELETE', `${base}/clubs/${clubId}/lines/${fighterId}?version=${encodeURIComponent(now)}`)).statusCode).toBe(204);
 });
+
+test('finales : lecture permise à la Table centrale, écriture réservée à l’organisateur', async () => {
+  const { table, zone1, orga, base } = await setup();
+  const put = { waveId: null, finalsZoneId: null };
+  expect((await table('GET', `${base}/finals?vague=`)).statusCode).toBe(200);
+  for (const who of [table, zone1]) {
+    for (const [url, body] of [['finals/zone', put], ['finals/categories', { waveId: null, when: 'end' }]] as const) {
+      const res = await who('PUT', `${base}/${url}`, body);
+      expect(res.statusCode, url).toBe(403);
+      expect(res.json().error).toBe(FORBIDDEN);
+    }
+  }
+  expect((await orga('POST', `${base}/launch/reopen`, { waveId: null })).statusCode).toBe(204);
+  expect((await orga('PUT', `${base}/finals/zone`, put)).statusCode).toBe(200);
+});
