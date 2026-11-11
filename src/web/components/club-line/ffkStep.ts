@@ -1,5 +1,6 @@
 import type { ClubFormLine } from '../../../domain/club-form.js';
 import type { FfkDiff, FfkField } from '../../../domain/ffk-pdf-plan.js';
+import type { DisciplineId } from '../../../domain/types.js';
 import type { SavedThen } from '../ClubLineForm.js';
 
 /** Une étape du parcours d'import du PDF de la FFK : ce que la fenêtre du combattant affiche et fait. */
@@ -14,7 +15,10 @@ export interface FfkFormStep {
   /** Encadré « Fiche déjà créée. … ». */
   banner: string | null;
   hints: Partial<Record<'name' | 'ageBandCode' | 'weightClassId' | 'discipline', string>>;
-  skipLabel: 'Ne pas l’ajouter' | 'Laisser la fiche telle quelle';
+  /** Sous les disciplines, tant que `discipline` n'est pas cochée (« … Cochez Karaté pour changer. »). */
+  switchHint?: { text: string; discipline: DisciplineId } | null;
+  /** `null` : pas de bouton pour passer (fiche verrouillée : « Suivant → » suffit). */
+  skipLabel: 'Ne pas l’ajouter' | 'Laisser la fiche telle quelle' | null;
   onSkip: () => void;
   onPrevious: (() => void) | null;
   /** Après « Enregistrer · suivant → » (ou Entrée). */

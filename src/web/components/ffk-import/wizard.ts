@@ -100,15 +100,15 @@ export function wizardReducer(s: WizardState, a: WizardAction): WizardState {
   }
 }
 
-export function wizardSummary(s: EndState): { added: number; updated: number; left: number } {
-  let added = 0;
-  let updated = 0;
+/** Nouveaux ajoutés ou passés (« non ajoutés ») ; fiches existantes mises à jour ou laissées telles quelles. */
+export function wizardSummary(s: EndState): { added: number; notAdded: number; updated: number; left: number } {
+  const sum = { added: 0, notAdded: 0, updated: 0, left: 0 };
   s.plan.steps.forEach((step, i) => {
-    if (s.done[i] !== 'saved') return;
-    if (step.kind === 'new') added++;
-    else updated++;
+    const saved = s.done[i] === 'saved';
+    if (step.kind === 'new') sum[saved ? 'added' : 'notAdded']++;
+    else sum[saved ? 'updated' : 'left']++;
   });
-  return { added, updated, left: s.plan.steps.length - added - updated };
+  return sum;
 }
 
 /** « 1 ajouté », « 2 ajoutés », « 0 ajouté ». */
@@ -116,7 +116,12 @@ export const count = (n: number, one: string, many: string) => `${n} ${n <= 1 ? 
 
 /** `withdrawn` : fiches gardées sans la discipline ; `deleted` : fiches supprimées (inscrites dans cette seule discipline). */
 export function summaryText(sum: ReturnType<typeof wizardSummary>, removed: { withdrawn: number; deleted: number }, discipline: DisciplineId): string {
-  const parts = [count(sum.added, 'ajouté', 'ajoutés'), `${sum.updated} mis à jour`, count(sum.left, 'laissé tel quel', 'laissés tels quels')];
+  const parts = [
+    count(sum.added, 'ajouté', 'ajoutés'),
+    ...(sum.notAdded ? [count(sum.notAdded, 'non ajouté', 'non ajoutés')] : []),
+    `${sum.updated} mis à jour`,
+    count(sum.left, 'laissé tel quel', 'laissés tels quels'),
+  ];
   if (removed.withdrawn) parts.push(`${disciplineLabel(discipline)} retiré de ${count(removed.withdrawn, 'fiche', 'fiches')}`);
   if (removed.deleted) parts.push(count(removed.deleted, 'fiche supprimée', 'fiches supprimées'));
   return `Import FFK : ${parts.join(' · ')}.`;
@@ -142,7 +147,7 @@ export interface StepContext {
 }
 
 /** Contenu de la fenêtre du combattant pour une étape (le composant y ajoute progression et boutons). */
-export type FfkFormContent = Pick<FfkFormStep, 'initial' | 'marks' | 'diffs' | 'banner' | 'hints' | 'skipLabel'>;
+export type FfkFormContent = Pick<FfkFormStep, 'initial' | 'marks' | 'diffs' | 'banner' | 'hints' | 'skipLabel'> & Partial<Pick<FfkFormStep, 'switchHint'>>;
 export type StepView =
   | { kind: 'homonym'; ffk: FfkFighter; candidates: ClubLine[] }
   | { kind: 'form'; line: ClubLine | null; ffk: FfkFormContent };
@@ -180,15 +185,17 @@ function existingView(ffk: FfkFighter, fresh: ClubLine, c: StepContext): StepVie
   const initial = fitWeightClass(step ? lockedKept(fresh, prefillExisting(fresh.line, step, c.discipline)) : fresh.line, c.weightClasses);
   const current = disciplinesOf(fresh.line);
   const sentences: string[] = [];
-  if (step?.oneCombatBlocked) {
-    sentences.push(`Sa fiche est déjà inscrite en ${listFr(fresh.line.combats.map(disciplineLabel))} : une seule discipline de combat à cette compétition. Cochez ${disciplineLabel(c.discipline)} pour changer.`);
-  }
+  // Affichée tant que la discipline du PDF n'est pas cochée (une fois cochée, elle a remplacé l'autre combat).
+  const switchHint = step?.oneCombatBlocked
+    ? { text: `Sa fiche est déjà inscrite en ${listFr(fresh.line.combats.map(disciplineLabel))} : une seule discipline de combat à cette compétition. Cochez ${disciplineLabel(c.discipline)} pour changer.`, discipline: c.discipline }
+    : null;
   // Le bloc « une seule discipline de combat » cite déjà les disciplines gardées : pas de seconde phrase pour les mêmes.
   const blocked = step?.oneCombatBlocked ? fresh.line.combats : [];
   const kept = current.filter((d) => d !== c.discipline && !blocked.includes(d as never));
   if (kept.length) sentences.push(`Gardé, pas dans ce PDF : ${listFr(kept.map(disciplineLabel))}.`);
   const hints: FfkFormContent['hints'] = {};
   if (sentences.length) hints.discipline = sentences.join('\n');
+  const locked = !fresh.editable && !fresh.partlyEditable;
   if (!ffk.ageBandCode && ffk.raw.age) hints.ageBandCode = missingFromGrid(ffk.raw.age);
   if (DISCIPLINES[c.discipline].hasWeight && !ffk.weightClassId && ffk.raw.weight) hints.weightClassId = missingFromGrid(`${ffk.raw.weight} kg`);
   return {
@@ -197,9 +204,11 @@ function existingView(ffk: FfkFighter, fresh: ClubLine, c: StepContext): StepVie
       initial,
       marks: step?.addsDiscipline && !step.oneCombatBlocked ? ['discipline'] : [],
       diffs: step?.diffs ?? [],
-      banner: current.length ? ffkBanner(fresh.line.firstName, current.map(disciplineLabel), { locked: !fresh.editable && !fresh.partlyEditable }) : NO_DISCIPLINE_BANNER,
+      banner: current.length ? ffkBanner(fresh.line.firstName, current.map(disciplineLabel), { locked }) : NO_DISCIPLINE_BANNER,
       hints,
-      skipLabel: 'Laisser la fiche telle quelle',
+      switchHint,
+      // Verrouillée : « Suivant → » seul (rien à enregistrer, un second bouton ferait la même chose).
+      skipLabel: locked ? null : 'Laisser la fiche telle quelle',
     },
   };
 }

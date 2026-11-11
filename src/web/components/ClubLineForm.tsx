@@ -3,6 +3,7 @@ import { useMediaQuery } from '@mantine/hooks';
 import { Children, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { choosePref, kgText, orderedPrefs, weightWarning, type ClubFormLine, type PrefDiscipline, type PrefRank } from '../../domain/club-form.js';
 import { DISCIPLINES } from '../../domain/disciplines.js';
+import type { DisciplineId } from '../../domain/types.js';
 import { ApiError, RELOAD_STATUSES, type ClubEntryView, type ClubLine, type LineOps } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { ageBandChoices, applyChange, combatChoices, kataChoice, reclassChoices, rulesetChoices, toggleCombat, type LineFormContext } from './club-line/lineForm.js';
@@ -194,6 +195,9 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
                 )}
               </Stack>
             </Input.Wrapper>
+            {ffk?.switchHint && !(form.combats as DisciplineId[]).includes(ffk.switchHint.discipline) && (
+              <Text size="xs" c="dimmed" data-testid="ffk-hint-switch">{ffk.switchHint.text}</Text>
+            )}
             {hint('discipline')}
             {nothingOpen && <Text size="sm" c="var(--sk-warn-text)" data-testid="line-nothing-open">Aucune catégorie ouverte pour cette tranche d’âge à cette compétition.</Text>}
             {mode === 'organiser' && !multipleCombats && form.combats.length > 1 && (
@@ -248,7 +252,7 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
         <ApiErrorAlert error={tried ? ops.error : null} />
         {ffk ? (
           <Group justify="space-between">
-            <Button variant="subtle" color="gray" data-testid="ffk-skip" disabled={ops.pending} onClick={ffk.onSkip}>{ffk.skipLabel}</Button>
+            {ffk.skipLabel ? <Button variant="subtle" color="gray" data-testid="ffk-skip" disabled={ops.pending} onClick={ffk.onSkip}>{ffk.skipLabel}</Button> : <span />}
             <Group gap="xs">
               {ffk.onPrevious && <Button variant="default" data-testid="ffk-previous" disabled={ops.pending} onClick={ffk.onPrevious}>← Précédent</Button>}
               {frozen

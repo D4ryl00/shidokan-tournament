@@ -96,18 +96,19 @@ describe('wizardReducer', () => {
 
   test('saved d’une fiche existante devenue création (fiche supprimée entre-temps) : comptée comme ajoutée', () => {
     const s = run({ stage: 'start' }, { type: 'start', plan: plan([existingStep(1, 'f1')]) }, { type: 'saved', index: 0, line: clubLine('f9'), created: true }) as End;
-    expect(wizardSummary(s)).toEqual({ added: 1, updated: 0, left: 0 });
+    expect(wizardSummary(s)).toEqual({ added: 1, notAdded: 0, updated: 0, left: 0 });
   });
 
   test('saved d’un nouveau rapproché d’une fiche apparue entre-temps : compté mis à jour ; un nouveau créé puis rouvert reste ajouté', () => {
     const matched = run({ stage: 'start' }, { type: 'start', plan: plan([newStep(1)]) }, { type: 'saved', index: 0, line: clubLine('f1'), created: false }) as End;
-    expect(wizardSummary(matched)).toEqual({ added: 0, updated: 1, left: 0 });
+    expect(wizardSummary(matched)).toEqual({ added: 0, notAdded: 0, updated: 1, left: 0 });
     const reopened = run(
       { stage: 'start' }, { type: 'start', plan: plan([newStep(1), newStep(2)]) },
       { type: 'saved', index: 0, line: clubLine('f1'), created: true }, { type: 'previous' }, { type: 'saved', index: 0, line: clubLine('f1'), created: false },
       { type: 'skipped', index: 1 },
     ) as End;
-    expect(wizardSummary(reopened)).toEqual({ added: 1, updated: 0, left: 1 });
+    // Le second, un nouveau passé : « non ajouté », pas « laissé tel quel ».
+    expect(wizardSummary(reopened)).toEqual({ added: 1, notAdded: 1, updated: 0, left: 0 });
   });
 
   test('resolve : un homonyme devient une fiche existante ou un nouveau', () => {
@@ -125,7 +126,7 @@ describe('wizardReducer', () => {
     ) as End;
     expect(run(end, { type: 'toggleAbsent', fighterId: 'x' })).toMatchObject({ remove: ['x'] });
     expect(run(end, { type: 'toggleAbsent', fighterId: 'x' }, { type: 'toggleAbsent', fighterId: 'x' })).toMatchObject({ remove: [] });
-    expect(wizardSummary(end)).toEqual({ added: 2, updated: 1, left: 1 });
+    expect(wizardSummary(end)).toEqual({ added: 2, notAdded: 0, updated: 1, left: 1 });
   });
 });
 
@@ -183,18 +184,20 @@ describe('stepView', () => {
     if (v.kind !== 'form') throw new Error('formulaire attendu');
     expect(v.ffk.initial.combats).toEqual(['shido-mix']);
     expect(v.ffk.marks).toEqual([]);
-    expect(v.ffk.hints.discipline).toBe(
-      'Sa fiche est déjà inscrite en Shido-mix-martial : une seule discipline de combat à cette compétition. Cochez Karaté pour changer.',
-    );
+    // À part : la fenêtre ne l'affiche que tant que Karaté n'est pas coché.
+    expect(v.ffk.switchHint).toEqual({
+      text: 'Sa fiche est déjà inscrite en Shido-mix-martial : une seule discipline de combat à cette compétition. Cochez Karaté pour changer.',
+      discipline: 'karate',
+    });
+    expect(v.ffk.hints.discipline).toBeUndefined();
   });
 
   test('existante, un combat bloquant et kata gardé : deux lignes, sans doublon pour la discipline de combat', () => {
     const fresh = clubLine('f1', { combats: ['shido-mix'], kata: true });
     const v = stepView(at([existingStep(1, 'f1')]), ctx([fresh]));
     if (v.kind !== 'form') throw new Error('formulaire attendu');
-    expect(v.ffk.hints.discipline).toBe(
-      'Sa fiche est déjà inscrite en Shido-mix-martial : une seule discipline de combat à cette compétition. Cochez Karaté pour changer.\nGardé, pas dans ce PDF : Kata.',
-    );
+    expect(v.ffk.switchHint?.text).toBe('Sa fiche est déjà inscrite en Shido-mix-martial : une seule discipline de combat à cette compétition. Cochez Karaté pour changer.');
+    expect(v.ffk.hints.discipline).toBe('Gardé, pas dans ce PDF : Kata.');
   });
 
   test('existante, catégorie de poids et tranche d’âge de la FFK absentes de la grille : indication sous le champ', () => {
@@ -270,7 +273,8 @@ describe('stepView', () => {
     if (v2.kind !== 'form') throw new Error('formulaire attendu');
     expect(v2.ffk.initial).toEqual(fresh.line);
     expect(v2.ffk.diffs).toEqual([{ field: 'weightClassId', ffk: 'benjamin:F:-40', fiche: 'benjamin:F:-45' }]);
-    // Rien à choisir : l'encadré ne dit pas « ce que vous choisissez ici… ».
+    // Rien à choisir : l'encadré ne dit pas « ce que vous choisissez ici… », et seul « Suivant » fait passer (pas de second bouton).
+    expect(v2.ffk.skipLabel).toBeNull();
     expect(v2.ffk.banner).toBe('Fiche déjà créée. Une seule fiche par combattant : celle de Lea est inscrite en Karaté.');
   });
 
@@ -282,6 +286,8 @@ describe('stepView', () => {
     if (v.kind !== 'form') throw new Error('formulaire attendu');
     expect(v.ffk.initial).toEqual(fresh.line);
     expect(v.ffk.diffs.map((d) => d.field)).toEqual(['ageBandCode', 'weightClassId', 'ruleset']);
+    // En partie modifiable : il y a quelque chose à enregistrer, « Laisser la fiche telle quelle » reste.
+    expect(v.ffk.skipLabel).toBe('Laisser la fiche telle quelle');
   });
 
   test('existante en partie modifiable, kata seul commencé : tranche d’âge gardée, le combat ajouté prend poids et règlement FFK', () => {
@@ -321,10 +327,12 @@ describe('absentRows', () => {
 
 test('summaryText : singulier et pluriel, retraits et fiches supprimées à part', () => {
   const none = { withdrawn: 0, deleted: 0 };
-  expect(summaryText({ added: 2, updated: 1, left: 0 }, none, 'karate')).toBe('Import FFK : 2 ajoutés · 1 mis à jour · 0 laissé tel quel.');
-  expect(summaryText({ added: 1, updated: 0, left: 3 }, { withdrawn: 2, deleted: 0 }, 'kata')).toBe('Import FFK : 1 ajouté · 0 mis à jour · 3 laissés tels quels · Kata retiré de 2 fiches.');
-  expect(summaryText({ added: 0, updated: 0, left: 0 }, { withdrawn: 0, deleted: 1 }, 'karate')).toBe('Import FFK : 0 ajouté · 0 mis à jour · 0 laissé tel quel · 1 fiche supprimée.');
-  expect(summaryText({ added: 0, updated: 0, left: 0 }, { withdrawn: 1, deleted: 2 }, 'karate')).toBe('Import FFK : 0 ajouté · 0 mis à jour · 0 laissé tel quel · Karaté retiré de 1 fiche · 2 fiches supprimées.');
+  expect(summaryText({ notAdded: 0, added: 2, updated: 1, left: 0 }, none, 'karate')).toBe('Import FFK : 2 ajoutés · 1 mis à jour · 0 laissé tel quel.');
+  expect(summaryText({ notAdded: 0, added: 1, updated: 0, left: 3 }, { withdrawn: 2, deleted: 0 }, 'kata')).toBe('Import FFK : 1 ajouté · 0 mis à jour · 3 laissés tels quels · Kata retiré de 2 fiches.');
+  expect(summaryText({ notAdded: 0, added: 0, updated: 0, left: 0 }, { withdrawn: 0, deleted: 1 }, 'karate')).toBe('Import FFK : 0 ajouté · 0 mis à jour · 0 laissé tel quel · 1 fiche supprimée.');
+  expect(summaryText({ added: 1, notAdded: 2, updated: 0, left: 1 }, none, 'karate')).toBe('Import FFK : 1 ajouté · 2 non ajoutés · 0 mis à jour · 1 laissé tel quel.');
+  expect(summaryText({ added: 0, notAdded: 1, updated: 0, left: 0 }, none, 'karate')).toBe('Import FFK : 0 ajouté · 1 non ajouté · 0 mis à jour · 0 laissé tel quel.');
+  expect(summaryText({ notAdded: 0, added: 0, updated: 0, left: 0 }, { withdrawn: 1, deleted: 2 }, 'karate')).toBe('Import FFK : 0 ajouté · 0 mis à jour · 0 laissé tel quel · Karaté retiré de 1 fiche · 2 fiches supprimées.');
 });
 
 test('sameSaved : un réenregistrement sans changement (clés dans un autre ordre) n’est pas une mise à jour', () => {

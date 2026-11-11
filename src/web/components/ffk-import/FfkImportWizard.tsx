@@ -262,7 +262,7 @@ function EndScreen({ state, discipline, lines, ops, ageBands, weightClasses, mob
       <Stack data-testid="ffk-end">
         <Title order={3} fz="md">Terminé</Title>
         <Text data-testid="ffk-summary">
-          <b>{sum.added}</b> {sum.added <= 1 ? 'ajouté' : 'ajoutés'} · <b>{sum.updated}</b> mis à jour · <b>{sum.left}</b> {sum.left <= 1 ? 'laissé tel quel' : 'laissés tels quels'}
+          <b>{sum.added}</b> {sum.added <= 1 ? 'ajouté' : 'ajoutés'}{sum.notAdded > 0 && <> · <b>{sum.notAdded}</b> {sum.notAdded <= 1 ? 'non ajouté' : 'non ajoutés'}</>} · <b>{sum.updated}</b> mis à jour · <b>{sum.left}</b> {sum.left <= 1 ? 'laissé tel quel' : 'laissés tels quels'}
         </Text>
         {rows.length > 0 && (
           <Paper withBorder p="sm" radius="md" data-testid="ffk-absents">
