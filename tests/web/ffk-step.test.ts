@@ -15,6 +15,7 @@ test('ffkBanner : une, deux ou trois disciplines', () => {
   expect(ffkBanner('Jade', ['Karaté', 'Kata'])).toBe(`Fiche déjà créée. Une seule fiche par combattant : celle de Jade est inscrite en Karaté et Kata.${end}`);
   expect(ffkBanner('Jade', ['Karaté'])).toBe(`Fiche déjà créée. Une seule fiche par combattant : celle de Jade est inscrite en Karaté.${end}`);
   expect(ffkBanner('Jade', ['Karaté', 'Boxing', 'Kata'])).toBe(`Fiche déjà créée. Une seule fiche par combattant : celle de Jade est inscrite en Karaté, Boxing et Kata.${end}`);
+  expect(ffkBanner('Jade', ['Karaté'], { locked: true })).toBe('Fiche déjà créée. Une seule fiche par combattant : celle de Jade est inscrite en Karaté.');
 });
 
 test('ffkValueAvailable : la valeur doit figurer dans la liste actuelle du champ (null toujours permis)', () => {

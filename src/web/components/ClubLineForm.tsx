@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Checkbox, Chip, FocusTrap, Group, Input, Modal, NativeSelect, Paper, Progress, Radio, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, Badge, Button, Checkbox, Chip, FocusTrap, Group, Input, Modal, NativeSelect, Paper, Radio, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { Children, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { choosePref, kgText, orderedPrefs, weightWarning, type ClubFormLine, type PrefDiscipline, type PrefRank } from '../../domain/club-form.js';
@@ -7,6 +7,7 @@ import { ApiError, RELOAD_STATUSES, type ClubEntryView, type ClubLine, type Line
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { ageBandChoices, applyChange, combatChoices, kataChoice, reclassChoices, rulesetChoices, toggleCombat, type LineFormContext } from './club-line/lineForm.js';
 import { FfkChoice } from './club-line/FfkChoice.js';
+import { FfkProgress } from './club-line/FfkProgress.js';
 import { ffkChoiceState, ffkValueAvailable, type FfkFormStep } from './club-line/ffkStep.js';
 import { OneOf } from './PaperEntryTable.js';
 
@@ -134,12 +135,7 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
       <Stack data-testid="club-line-form" onKeyDown={onKeyDown}>
         {/* Import FFK : le piège à focus de la fenêtre prend cet élément caché (ni champ ni clavier) au lieu du premier champ. */}
         {ffk && <FocusTrap.InitialFocus />}
-        {ffk && (
-          <Stack gap={4} data-testid="ffk-progress">
-            <Text size="sm" c="dimmed">Fiche {ffk.progress.index + 1} sur {ffk.progress.total}</Text>
-            <Progress value={((ffk.progress.index + 1) / Math.max(ffk.progress.total, 1)) * 100} size="sm" aria-label={`Fiche ${ffk.progress.index + 1} sur ${ffk.progress.total}`} />
-          </Stack>
-        )}
+        {ffk && <FfkProgress {...ffk.progress} />}
         {ffk?.banner && <Alert color="blue" data-testid="ffk-banner"><BannerText text={ffk.banner} /></Alert>}
         {locked && line && <Alert color="orange" data-testid="line-locked">{line.reason ?? 'Cette ligne n’est pas modifiable.'}</Alert>}
         {/* Avant d'enregistrer : inscriptions qui ne tiennent pas sur la ligne, catégorie non ouverte… */}

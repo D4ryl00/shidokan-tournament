@@ -114,9 +114,11 @@ export function wizardSummary(s: EndState): { added: number; updated: number; le
 /** « 1 ajouté », « 2 ajoutés », « 0 ajouté ». */
 export const count = (n: number, one: string, many: string) => `${n} ${n <= 1 ? one : many}`;
 
-export function summaryText(sum: ReturnType<typeof wizardSummary>, removed: number, discipline: DisciplineId): string {
+/** `withdrawn` : fiches gardées sans la discipline ; `deleted` : fiches supprimées (inscrites dans cette seule discipline). */
+export function summaryText(sum: ReturnType<typeof wizardSummary>, removed: { withdrawn: number; deleted: number }, discipline: DisciplineId): string {
   const parts = [count(sum.added, 'ajouté', 'ajoutés'), `${sum.updated} mis à jour`, count(sum.left, 'laissé tel quel', 'laissés tels quels')];
-  if (removed) parts.push(`${disciplineLabel(discipline)} retiré de ${count(removed, 'fiche', 'fiches')}`);
+  if (removed.withdrawn) parts.push(`${disciplineLabel(discipline)} retiré de ${count(removed.withdrawn, 'fiche', 'fiches')}`);
+  if (removed.deleted) parts.push(count(removed.deleted, 'fiche supprimée', 'fiches supprimées'));
   return `Import FFK : ${parts.join(' · ')}.`;
 }
 
@@ -195,7 +197,7 @@ function existingView(ffk: FfkFighter, fresh: ClubLine, c: StepContext): StepVie
       initial,
       marks: step?.addsDiscipline && !step.oneCombatBlocked ? ['discipline'] : [],
       diffs: step?.diffs ?? [],
-      banner: current.length ? ffkBanner(fresh.line.firstName, current.map(disciplineLabel)) : NO_DISCIPLINE_BANNER,
+      banner: current.length ? ffkBanner(fresh.line.firstName, current.map(disciplineLabel), { locked: !fresh.editable && !fresh.partlyEditable }) : NO_DISCIPLINE_BANNER,
       hints,
       skipLabel: 'Laisser la fiche telle quelle',
     },

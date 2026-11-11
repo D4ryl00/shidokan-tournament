@@ -135,7 +135,7 @@ test.describe('coach', () => {
     await expect(end.getByRole('checkbox', { name: /FAURE Paul/ })).not.toBeChecked();
     await end.getByTestId('ffk-finish').click();
     await expect(end).toBeHidden();
-    await expect(page.getByText('Import FFK : 0 ajouté · 0 mis à jour · 0 laissé tel quel · Karaté retiré de 2 fiches.')).toBeVisible();
+    await expect(page.getByText('Import FFK : 0 ajouté · 0 mis à jour · 0 laissé tel quel · Karaté retiré de 1 fiche · 1 fiche supprimée.')).toBeVisible();
 
     const lines = await linesOf(request, token);
     const byName = (n: string) => lines.find((l) => l.line.lastName === n)?.line;

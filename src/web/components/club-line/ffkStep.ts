@@ -33,8 +33,10 @@ export function listFr(items: string[]): string {
   return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} et ${items[items.length - 1]}`;
 }
 
-export function ffkBanner(firstName: string, disciplines: string[]): string {
-  return `Fiche déjà créée. Une seule fiche par combattant : celle de ${firstName} est inscrite en ${listFr(disciplines)}. Ce que vous choisissez ici vaut pour toutes ses disciplines.`;
+/** `locked` : fiche non modifiable, rien à choisir (la raison est dite à côté). */
+export function ffkBanner(firstName: string, disciplines: string[], opts: { locked?: boolean } = {}): string {
+  const base = `Fiche déjà créée. Une seule fiche par combattant : celle de ${firstName} est inscrite en ${listFr(disciplines)}.`;
+  return opts.locked ? base : `${base} Ce que vous choisissez ici vaut pour toutes ses disciplines.`;
 }
 
 /** Une valeur ne peut être reprise que si la liste actuelle du champ la propose (sinon le formulaire afficherait un champ vide que le serveur refuse). `null` (champ vidé) est toujours permis. */

@@ -270,6 +270,8 @@ describe('stepView', () => {
     if (v2.kind !== 'form') throw new Error('formulaire attendu');
     expect(v2.ffk.initial).toEqual(fresh.line);
     expect(v2.ffk.diffs).toEqual([{ field: 'weightClassId', ffk: 'benjamin:F:-40', fiche: 'benjamin:F:-45' }]);
+    // Rien à choisir : l'encadré ne dit pas « ce que vous choisissez ici… ».
+    expect(v2.ffk.banner).toBe('Fiche déjà créée. Une seule fiche par combattant : celle de Lea est inscrite en Karaté.');
   });
 
   test('existante en partie modifiable, combat commencé : tranche d’âge, poids et règlement de la fiche gardés', () => {
@@ -317,9 +319,12 @@ describe('absentRows', () => {
   });
 });
 
-test('summaryText : singulier et pluriel, retraits', () => {
-  expect(summaryText({ added: 2, updated: 1, left: 0 }, 0, 'karate')).toBe('Import FFK : 2 ajoutés · 1 mis à jour · 0 laissé tel quel.');
-  expect(summaryText({ added: 1, updated: 0, left: 3 }, 2, 'kata')).toBe('Import FFK : 1 ajouté · 0 mis à jour · 3 laissés tels quels · Kata retiré de 2 fiches.');
+test('summaryText : singulier et pluriel, retraits et fiches supprimées à part', () => {
+  const none = { withdrawn: 0, deleted: 0 };
+  expect(summaryText({ added: 2, updated: 1, left: 0 }, none, 'karate')).toBe('Import FFK : 2 ajoutés · 1 mis à jour · 0 laissé tel quel.');
+  expect(summaryText({ added: 1, updated: 0, left: 3 }, { withdrawn: 2, deleted: 0 }, 'kata')).toBe('Import FFK : 1 ajouté · 0 mis à jour · 3 laissés tels quels · Kata retiré de 2 fiches.');
+  expect(summaryText({ added: 0, updated: 0, left: 0 }, { withdrawn: 0, deleted: 1 }, 'karate')).toBe('Import FFK : 0 ajouté · 0 mis à jour · 0 laissé tel quel · 1 fiche supprimée.');
+  expect(summaryText({ added: 0, updated: 0, left: 0 }, { withdrawn: 1, deleted: 2 }, 'karate')).toBe('Import FFK : 0 ajouté · 0 mis à jour · 0 laissé tel quel · Karaté retiré de 1 fiche · 2 fiches supprimées.');
 });
 
 test('sameSaved : un réenregistrement sans changement (clés dans un autre ordre) n’est pas une mise à jour', () => {

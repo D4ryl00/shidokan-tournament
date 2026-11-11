@@ -8,6 +8,7 @@ import { ApiError, RELOAD_STATUSES, type ClubEntryView, type ClubLine, type Line
 import { DISCIPLINE_OPTIONS, disciplineLabel, SEX_LABELS } from '../../labels.js';
 import { ApiErrorAlert } from '../ApiErrorAlert.js';
 import { ClubLineForm } from '../ClubLineForm.js';
+import { FfkProgress } from '../club-line/FfkProgress.js';
 import { listFr } from '../club-line/ffkStep.js';
 import { absentRows, count, disciplinesOf, sameSaved, startCounts, stepView, summaryText, wizardReducer, wizardSummary, type WizardState } from './wizard.js';
 
@@ -144,7 +145,7 @@ function Wizard({ onClose, mode, read, lines, ops, multipleCombats, ageBands, we
     return (
       <Modal opened onClose={() => onClose()} fullScreen={mobile} title="Plusieurs fiches portent ce nom : laquelle ?">
         <Stack data-testid="ffk-homonym">
-          <Text size="sm" c="dimmed">Fiche {progress.index + 1} sur {progress.total}</Text>
+          <FfkProgress {...progress} />
           <Text size="sm">La FFK inscrit « {view.ffk.fullName} » ({SEX_LABELS[view.ffk.sex].toLowerCase()}, {view.ffk.raw.age}).</Text>
           {view.candidates.map((l) => (
             <UnstyledButton key={l.fighterId} data-testid="ffk-homonym-choice" onClick={() => dispatch({ type: 'resolve', fighterId: l.fighterId })}>
@@ -222,7 +223,7 @@ function EndScreen({ state, discipline, lines, ops, ageBands, weightClasses, mob
 
   const finish = async () => {
     setFinishing(true);
-    let removed = 0;
+    const removed = { withdrawn: 0, deleted: 0 };
     const failed: string[] = [];
     // Page close, lien remplacé… : inutile d'essayer les suivants, la page est rechargée.
     let stopped: string | null = null;
@@ -231,9 +232,13 @@ function EndScreen({ state, discipline, lines, ops, ageBands, weightClasses, mob
       if (!hasDiscipline(l.line, discipline)) continue;
       const next = withoutDiscipline(l.line, discipline);
       try {
-        if (next) await ops.save({ fighterId: l.fighterId, line: next, version: l.version, publicNameHidden: l.publicNameHidden });
-        else await ops.remove({ fighterId: l.fighterId, version: l.version });
-        removed++;
+        if (next) {
+          await ops.save({ fighterId: l.fighterId, line: next, version: l.version, publicNameHidden: l.publicNameHidden });
+          removed.withdrawn++;
+        } else {
+          await ops.remove({ fighterId: l.fighterId, version: l.version });
+          removed.deleted++;
+        }
       } catch (e) {
         if (e instanceof ApiError && RELOAD_STATUSES.has(e.status) && e.status !== 409) {
           stopped = e.message;
