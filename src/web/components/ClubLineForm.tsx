@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Checkbox, Chip, Group, Input, Modal, NativeSelect, Paper, Progress, Radio, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, Badge, Button, Checkbox, Chip, FocusTrap, Group, Input, Modal, NativeSelect, Paper, Progress, Radio, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { Children, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { choosePref, kgText, orderedPrefs, weightWarning, type ClubFormLine, type PrefDiscipline, type PrefRank } from '../../domain/club-form.js';
@@ -62,7 +62,8 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
   const lastNameRef = useRef<HTMLInputElement>(null);
   // Fenêtre remontée à vide (« Enregistrer et ajouter un autre ») : le curseur revient sur le nom.
   useEffect(() => {
-    if (opened && !line) lastNameRef.current?.focus();
+    // Import FFK : fiches préremplies, pas de curseur (le clavier du téléphone masquerait le formulaire).
+    if (opened && !line && !ffk) lastNameRef.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- au montage seulement
   }, []);
   const saved = line?.line ?? null;
@@ -131,6 +132,8 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
   return (
     <Modal opened={opened} onClose={() => onClose()} fullScreen={mobile} title={title ?? (ffk ? (line ? `${line.line.lastName.toUpperCase()} ${line.line.firstName}` : 'Nouveau combattant') : line ? `${line.line.lastName} ${line.line.firstName}` : 'Ajouter un combattant')}>
       <Stack data-testid="club-line-form" onKeyDown={onKeyDown}>
+        {/* Import FFK : le piège à focus de la fenêtre prend cet élément caché (ni champ ni clavier) au lieu du premier champ. */}
+        {ffk && <FocusTrap.InitialFocus />}
         {ffk && (
           <Stack gap={4} data-testid="ffk-progress">
             <Text size="sm" c="dimmed">Fiche {ffk.progress.index + 1} sur {ffk.progress.total}</Text>
@@ -146,7 +149,7 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
         <Stack>
             <Part disabled={frozen}>
             <SimpleGrid cols={{ base: 1, xs: 2 }}>
-              <TextInput ref={lastNameRef} data-autofocus={!line || undefined} data-testid="line-last-name" label={labelled('Nom', 'name')} required value={form.lastName} onChange={(e) => set({ lastName: e.currentTarget.value })} />
+              <TextInput ref={lastNameRef} data-autofocus={(!line && !ffk) || undefined} data-testid="line-last-name" label={labelled('Nom', 'name')} required value={form.lastName} onChange={(e) => set({ lastName: e.currentTarget.value })} />
               <TextInput data-testid="line-first-name" label={labelled('Prénom', 'name')} required value={form.firstName} onChange={(e) => set({ firstName: e.currentTarget.value })} />
             </SimpleGrid>
             {hint('name')}
