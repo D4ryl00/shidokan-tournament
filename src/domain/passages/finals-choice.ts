@@ -56,7 +56,6 @@ export function resolveFinals(o: {
   const finalsZoneId = wave?.finalsZoneId ?? null;
   const defaults = defaultFinalsChoice({ kata: o.kata, mode: o.mode, hasFinalsZone: finalsZoneId != null });
   const where = o.stored.where ?? wave?.whereDefault ?? defaults.where;
-  const when = o.stored.when ?? wave?.whenDefault ?? defaults.when;
 
   let fixed: ResolvedFinals['fixed'] = null;
   if (zoneId != null && finalsZoneId != null) {
@@ -64,13 +63,16 @@ export function resolveFinals(o: {
     else if (!o.accepts(finalsZoneId)) fixed = 'not-accepted';
   }
 
-  const onFinalsZone = fixed === 'finals-zone' || (fixed === null && finalsZoneId != null && where === 'finals');
+  const onFinalsZone = zoneId != null && (fixed === 'finals-zone' || (fixed === null && finalsZoneId != null && where === 'finals'));
   const finalZoneId = zoneId == null ? null : onFinalsZone ? finalsZoneId : zoneId;
+  // « Quand » par défaut selon l’endroit effectif de la finale.
+  const placeDefault = defaultFinalsChoice({ kata: o.kata, mode: o.mode, hasFinalsZone: onFinalsZone });
+  const when = o.stored.when ?? wave?.whenDefault ?? placeDefault.when;
   const kataSplit = o.kata && (onFinalsZone || when === 'end');
   return {
     finalZoneId,
     when,
-    onFinalsZone: zoneId != null && onFinalsZone,
+    onFinalsZone,
     kataSplit,
     fixed,
     signature: `${finalZoneId ?? ''}|${when}`,

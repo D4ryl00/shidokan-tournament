@@ -61,6 +61,18 @@ describe('résolution', () => {
     expect(resolveFinals({ ...k, stored: { where: 'finals', when: 'ready' } }).kataSplit).toBe(true);
     expect(resolveFinals({ ...base, stored: { where: 'own', when: 'end' } }).kataSplit).toBe(false);
   });
+  it('« Quand » par défaut suit le « Où » résolu', () => {
+    const own = { where: 'own' as const, when: null };
+    expect(resolveFinals({ ...base, kata: true, entrants: 5, stored: own })).toMatchObject({ when: 'ready', kataSplit: false });
+    expect(resolveFinals({ ...base, mode: 'categories', stored: own }).when).toBe('ready');
+    expect(resolveFinals({ ...base, mode: 'rounds', stored: own }).when).toBe('end');
+    expect(resolveFinals({ ...base, kata: true, entrants: 5, accepts: () => false })).toMatchObject({
+      fixed: 'not-accepted',
+      when: 'ready',
+      kataSplit: false,
+    });
+    expect(resolveFinals({ ...base, mode: 'categories', zoneId: 'F' }).when).toBe('end');
+  });
   it('signature', () => {
     const a = resolveFinals({ ...base });
     expect(a.signature).toBe('F|end');
