@@ -147,6 +147,8 @@ export type StepView =
 
 const notTranslated = (raw: string) => `La FFK indique « ${raw} » : choisissez la catégorie.`;
 
+const missingFromGrid = (raw: string) => `La FFK indique « ${raw} », absente de la grille de cette compétition : vérifiez la catégorie.`;
+
 function newView(ffk: FfkFighter, c: StepContext): StepView {
   const combat = DISCIPLINES[c.discipline].hasWeight;
   const marks: FfkFormContent['marks'] = ['name', 'sex'];
@@ -179,8 +181,14 @@ function existingView(ffk: FfkFighter, fresh: ClubLine, c: StepContext): StepVie
   if (step?.oneCombatBlocked) {
     sentences.push(`Sa fiche est déjà inscrite en ${listFr(fresh.line.combats.map(disciplineLabel))} : une seule discipline de combat à cette compétition. Cochez ${disciplineLabel(c.discipline)} pour changer.`);
   }
-  const kept = current.filter((d) => d !== c.discipline);
+  // Le bloc « une seule discipline de combat » cite déjà les disciplines gardées : pas de seconde phrase pour les mêmes.
+  const blocked = step?.oneCombatBlocked ? fresh.line.combats : [];
+  const kept = current.filter((d) => d !== c.discipline && !blocked.includes(d as never));
   if (kept.length) sentences.push(`Gardé, pas dans ce PDF : ${listFr(kept.map(disciplineLabel))}.`);
+  const hints: FfkFormContent['hints'] = {};
+  if (sentences.length) hints.discipline = sentences.join('\n');
+  if (!ffk.ageBandCode && ffk.raw.age) hints.ageBandCode = missingFromGrid(ffk.raw.age);
+  if (DISCIPLINES[c.discipline].hasWeight && !ffk.weightClassId && ffk.raw.weight) hints.weightClassId = missingFromGrid(`${ffk.raw.weight} kg`);
   return {
     kind: 'form', line: fresh,
     ffk: {
@@ -188,7 +196,7 @@ function existingView(ffk: FfkFighter, fresh: ClubLine, c: StepContext): StepVie
       marks: step?.addsDiscipline && !step.oneCombatBlocked ? ['discipline'] : [],
       diffs: step?.diffs ?? [],
       banner: current.length ? ffkBanner(fresh.line.firstName, current.map(disciplineLabel)) : NO_DISCIPLINE_BANNER,
-      hints: sentences.length ? { discipline: sentences.join(' ') } : {},
+      hints,
       skipLabel: 'Laisser la fiche telle quelle',
     },
   };

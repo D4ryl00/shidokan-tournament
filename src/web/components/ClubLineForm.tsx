@@ -106,7 +106,7 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
   // Mode import : marque « FFK » à côté d'une étiquette, comparaison sous un champ.
   const mark = (key: FfkFormStep['marks'][number]) => ffk?.marks.includes(key) && <Badge variant="outline" size="xs" ml={6} data-testid={`ffk-mark-${key}`}>FFK</Badge>;
   const labelled = (text: string, key: FfkFormStep['marks'][number]) => <>{text}{mark(key)}</>;
-  const hint = (key: keyof FfkFormStep['hints']) => (ffk?.hints[key] ? <Text size="xs" c="dimmed" data-testid={`ffk-hint-${key}`}>{ffk.hints[key]}</Text> : null);
+  const hint = (key: keyof FfkFormStep['hints']) => (ffk?.hints[key] ? <Text size="xs" c="dimmed" style={{ whiteSpace: 'pre-line' }} data-testid={`ffk-hint-${key}`}>{ffk.hints[key]}</Text> : null);
   const readable = (field: FfkFormStep['diffs'][number]['field'], v: string | null): string => {
     if (v == null) return '—';
     if (field === 'ageBandCode') return ageBands.find((b) => b.code === v)?.label ?? v;

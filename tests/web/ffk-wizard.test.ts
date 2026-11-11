@@ -184,8 +184,26 @@ describe('stepView', () => {
     expect(v.ffk.initial.combats).toEqual(['shido-mix']);
     expect(v.ffk.marks).toEqual([]);
     expect(v.ffk.hints.discipline).toBe(
-      'Sa fiche est déjà inscrite en Shido-mix-martial : une seule discipline de combat à cette compétition. Cochez Karaté pour changer. Gardé, pas dans ce PDF : Shido-mix-martial.',
+      'Sa fiche est déjà inscrite en Shido-mix-martial : une seule discipline de combat à cette compétition. Cochez Karaté pour changer.',
     );
+  });
+
+  test('existante, un combat bloquant et kata gardé : deux lignes, sans doublon pour la discipline de combat', () => {
+    const fresh = clubLine('f1', { combats: ['shido-mix'], kata: true });
+    const v = stepView(at([existingStep(1, 'f1')]), ctx([fresh]));
+    if (v.kind !== 'form') throw new Error('formulaire attendu');
+    expect(v.ffk.hints.discipline).toBe(
+      'Sa fiche est déjà inscrite en Shido-mix-martial : une seule discipline de combat à cette compétition. Cochez Karaté pour changer.\nGardé, pas dans ce PDF : Kata.',
+    );
+  });
+
+  test('existante, catégorie de poids et tranche d’âge de la FFK absentes de la grille : indication sous le champ', () => {
+    const ffk = fighter({ ageBandCode: null, weightClassId: null, raw: { age: 'Cadet Feminine', weight: '-60' } });
+    const step = { ...existingStep(1, 'f1'), ffk } as FfkStep;
+    const v = stepView(at([step]), ctx([clubLine('f1')]));
+    if (v.kind !== 'form') throw new Error('formulaire attendu');
+    expect(v.ffk.hints.weightClassId).toBe('La FFK indique « -60 kg », absente de la grille de cette compétition : vérifiez la catégorie.');
+    expect(v.ffk.hints.ageBandCode).toBe('La FFK indique « Cadet Feminine », absente de la grille de cette compétition : vérifiez la catégorie.');
   });
 
   test('existante, tranche d’âge seule différente (kata) : la catégorie de poids de l’ancienne tranche est vidée', () => {

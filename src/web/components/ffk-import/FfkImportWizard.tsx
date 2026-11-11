@@ -124,7 +124,7 @@ function Wizard({ onClose, mode, read, lines, ops, multipleCombats, ageBands, we
           <Group justify="flex-end" gap="xs">
             <Button variant="default" onClick={() => onClose()}>Annuler</Button>
             <Button data-testid="ffk-begin" disabled={!preview || !ready} loading={busy.pending} onClick={begin}>
-              {preview && steps === 0 ? 'Continuer' : `Commencer (${count(steps, 'fiche', 'fiches')})`}
+              {!preview ? 'Commencer' : steps === 0 ? 'Continuer' : `Commencer (${count(steps, 'fiche', 'fiches')})`}
             </Button>
           </Group>
         </Stack>
