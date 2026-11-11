@@ -269,9 +269,8 @@ export function planPassages(input: PlanInput): PassagePlan {
       for (const c of playable) {
         const mine = rows.filter((r) => r.categoryId === c.id);
         const signature = plan.finals[c.id]?.signature;
-        const frozenChoice = mine.find((r) => r.finalsChoice != null)?.finalsChoice;
         if (!stillValid(c, mine, zoneOf.get(c.id) ?? null, ctx, input.played ?? new Set())) plan.pending.push({ waveId, categoryId: c.id, reason: 'shape' });
-        else if (frozenChoice != null && signature !== undefined && frozenChoice !== signature) plan.pending.push({ waveId, categoryId: c.id, reason: 'finals' });
+        else if (signature !== undefined && mine.some((r) => r.finalsChoice != null && r.finalsChoice !== signature)) plan.pending.push({ waveId, categoryId: c.id, reason: 'finals' });
         else for (const r of mine) byZone.get(r.zoneId)!.push({ number: r.number, categoryId: r.categoryId, matchId: r.matchId, noRest: r.noRest, waveId });
       }
       // Les numéros figés (trous compris) sont pris : la suite vient après (après eux seuls si la vague a repris à 1).

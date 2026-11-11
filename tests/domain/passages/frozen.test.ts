@@ -18,8 +18,10 @@ const finalsOn = (finalsZoneId: string | null): WaveFinals[] => [{ waveKey: '', 
 /** Kata en bloc unique sur sa zone (« Sa zone » + « Dès que finie »). */
 const whole = { finals: { where: 'own' as const, when: 'ready' as const } };
 const seqOf = (input: PlanInput, zone = 't1') => planPassages(input).zones.find((z) => z.zoneId === zone)!.passages.map((p) => `${p.number}:${p.categoryId}:${p.matchId ?? 'kata'}`);
-const freeze = (input: PlanInput, wave: string | null = null): FrozenPassage[] =>
-  planPassages(input).zones.flatMap((z) => z.passages.filter((p) => p.waveId === wave).map((p) => ({ waveKey: wave ?? '', zoneId: z.zoneId, number: p.number, categoryId: p.categoryId, matchId: p.matchId, noRest: p.noRest, finalsChoice: planPassages(input).finals[p.categoryId]?.signature ?? null })));
+const freeze = (input: PlanInput, wave: string | null = null): FrozenPassage[] => {
+  const plan = planPassages(input);
+  return plan.zones.flatMap((z) => z.passages.filter((p) => p.waveId === wave).map((p) => ({ waveKey: wave ?? '', zoneId: z.zoneId, number: p.number, categoryId: p.categoryId, matchId: p.matchId, noRest: p.noRest, finalsChoice: plan.finals[p.categoryId]?.signature ?? null })));
+};
 
 describe('numéros figés', () => {
   test('session figée : numéros repris tels quels, trous compris', () => {
@@ -131,7 +133,16 @@ describe('numéros figés (relecture)', () => {
     const frozen = freeze(base);
     expect(planPassages({ ...base, frozen }).pending).toEqual([]);
     const pending = planPassages({ ...base, frozen, waveFinals: finalsOn(null) }).pending;
-    expect(pending).toContainEqual({ waveId: null, categoryId: 'A', reason: 'finals' });
+    expect(pending).toEqual([{ waveId: null, categoryId: 'A', reason: 'finals' }]);
+  });
+
+  test('signatures mélangées : une ligne ancienne suffit (à numéroter) ; courante + null : rien', () => {
+    const base: PlanInput = { categories: [pc('A', br(8), { finals: { where: 'own', when: 'end' } })], zones: [t1], waves: [], mode: 'rounds' };
+    const frozen = freeze(base);
+    const old = (f: FrozenPassage[]) => f.map((r, i) => (i === f.length - 1 ? { ...r, finalsChoice: 'ancienne|ready' } : r));
+    expect(planPassages({ ...base, frozen: old(frozen) }).pending).toEqual([{ waveId: null, categoryId: 'A', reason: 'finals' }]);
+    expect(planPassages({ ...base, frozen: old(frozen).reverse() }).pending).toEqual([{ waveId: null, categoryId: 'A', reason: 'finals' }]);
+    expect(planPassages({ ...base, frozen: frozen.map((r, i) => (i === 0 ? { ...r, finalsChoice: null } : r)) }).pending).toEqual([]);
   });
 
   test('signature null (figé avant l’étape 43) : rien à numéroter', () => {
