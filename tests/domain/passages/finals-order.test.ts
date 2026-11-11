@@ -94,6 +94,24 @@ describe('zone des finales', () => {
     expect([...calls].sort()).toEqual(['A:w1-0', 'A:w1-1', 'K:kata']);
   });
 
+  test('fin de session : ordre des catégories, celles de la zone des finales comprises (le repos ne réordonne pas)', () => {
+    const input: PlanInput = {
+      categories: [pc('R', br(4), { pinnedZoneId: 'ring' }), pc('A', br(4), { rank: 1 })],
+      zones: [t1, ring], waves: [], mode: 'rounds', waveFinals: [on('ring')],
+    };
+    expect(seqOf(input, 'ring')).toEqual(['1:R:w1-0', '2:R:w1-1', '3:R:w2-0', '4:A:w2-0']);
+    // Le signal « pas de repos » suit le dernier passage de la zone.
+    expect(planPassages(input).zones.find((z) => z.zoneId === 'ring')!.passages.filter((p) => p.noRest).map((p) => p.number)).toEqual([3]);
+  });
+
+  test('dès que finie : une catégorie sans passage avant sa finale (kata à deux) est prête d’emblée, en tête', () => {
+    const input: PlanInput = {
+      categories: [pc('A', br(4), { finals: f('finals', 'ready') }), pc('L', br(2, 'kata_two_rounds'), { rank: 1, pinnedZoneId: 't2', finals: f('finals', 'ready') })],
+      zones: [t1, t2, ring], waves: [], mode: 'rounds', waveFinals: [on('ring')], durationSec: () => 60,
+    };
+    expect(seqOf(input, 'ring')).toEqual(['1:L:kata:finale', '2:A:w2-0']);
+  });
+
   test('zone des finales sans combat à elle : finales dès que finie dans l’ordre des fins estimées', () => {
     const input: PlanInput = {
       categories: [pc('A', br(8), { finals: f(null, 'ready') }), pc('B', br(4), { rank: 1, pinnedZoneId: 't2', finals: f(null, 'ready') }), pc('C', br(4), { rank: 2, pinnedZoneId: 't2' })],

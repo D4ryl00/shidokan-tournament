@@ -30,17 +30,16 @@ export interface PlacedMatch {
   categoryId: string;
   node: MatchNode;
 }
-type Item = PlacedMatch;
-const shares = (x: Item, y: Item) => x.categoryId === y.categoryId && (x.node.feeds.includes(y.node.matchId) || y.node.feeds.includes(x.node.matchId));
+const shares = (x: PlacedMatch, y: PlacedMatch) => x.categoryId === y.categoryId && (x.node.feeds.includes(y.node.matchId) || y.node.feeds.includes(x.node.matchId));
 
 /**
  * File d'une zone pour une vague, numérotée à partir de `first` : blocs de kata, puis combats groupés par distance à la fin
  * (« tour par tour » : catégories alternées ; « catégorie par catégorie » : chacune en entier). Dans un groupe, on prend le premier
  * combat qui laisse au moins deux combats de repos, sinon un, sinon le premier (signalé « pas de repos »). Les `finalsAfter`
- * d'une catégorie passent juste après son dernier combat. `before` : derniers combats de la zone avant cette file (repos ;
- * sans effet si la file commence par un bloc de kata).
+ * d'une catégorie passent juste après son dernier combat. `previous` : dernier combat de la zone avant cette file, pour le
+ * seul signal « pas de repos » du premier combat (sans effet sur l'ordre, ni si la file commence par un bloc de kata).
  */
-export function zoneOrder(cats: OrderCategory[], mode: PassageOrderMode, first: number, before: PlacedMatch[] = []): Passage[] {
+export function zoneOrder(cats: OrderCategory[], mode: PassageOrderMode, first: number, previous?: PlacedMatch): Passage[] {
   const sorted = [...cats].sort((a, b) => a.rank - b.rank);
   const out: Passage[] = [];
   let number = first;
@@ -52,15 +51,17 @@ export function zoneOrder(cats: OrderCategory[], mode: PassageOrderMode, first: 
   const distancesOf = (nodes: MatchNode[]) => [...new Set(nodes.map((n) => n.distance))].sort((a, b) => b - a);
   const at = (nodes: MatchNode[], d: number) => nodes.filter((n) => n.distance === d).sort(byPhase);
 
-  const placed: Item[] = out.length > 0 ? [] : [...before];
-  const place = (group: Item[]) => {
+  const before = out.length > 0 ? undefined : previous;
+  const placed: PlacedMatch[] = [];
+  const place = (group: PlacedMatch[]) => {
     const rest = [...group];
     while (rest.length) {
       const last = placed[placed.length - 1];
       const lastTwo = placed.slice(-2);
       const pick = rest.find((c) => !lastTwo.some((p) => shares(p, c))) ?? rest.find((c) => !last || !shares(last, c)) ?? rest[0]!;
       rest.splice(rest.indexOf(pick), 1);
-      out.push({ number: number++, categoryId: pick.categoryId, matchId: pick.node.matchId, noRest: last !== undefined && shares(last, pick) });
+      const prior = last ?? before;
+      out.push({ number: number++, categoryId: pick.categoryId, matchId: pick.node.matchId, noRest: prior !== undefined && shares(prior, pick) });
       placed.push(pick);
       const w = waiting.get(pick.categoryId);
       if (w && --w.left === 0) {
@@ -76,7 +77,7 @@ export function zoneOrder(cats: OrderCategory[], mode: PassageOrderMode, first: 
   } else {
     for (const d of distancesOf(combats.flatMap(nodesOf))) {
       const lists = combats.map((c) => at(nodesOf(c), d).map((node) => ({ categoryId: c.id, node })));
-      const group: Item[] = [];
+      const group: PlacedMatch[] = [];
       for (let i = 0; i < Math.max(0, ...lists.map((l) => l.length)); i++) for (const l of lists) if (l[i]) group.push(l[i]!);
       place(group);
     }

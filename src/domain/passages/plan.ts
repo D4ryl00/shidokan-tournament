@@ -198,21 +198,17 @@ function orderWave(
   }
 
   const queues = new Map(ctx.zones.map((z) => [z.id, zoneOrder(own.get(z.id)!, ctx.mode, 1)]));
-  // Derniers combats de la file (le repos se compte jusqu'au bloc de kata précédent).
-  const tail = (queue: Passage[]): PlacedMatch[] => {
-    const out: PlacedMatch[] = [];
-    for (let i = queue.length - 1; i >= 0 && out.length < 2; i--) {
-      const p = queue[i]!;
-      const node = ctx.nodes.get(p.categoryId)?.find((n) => n.matchId === p.matchId);
-      if (!node) break;
-      out.unshift({ categoryId: p.categoryId, node });
-    }
-    return out;
+  // Dernier passage de la file, s'il est un combat : « pas de repos » du premier combat ajouté après lui.
+  const previous = (queue: Passage[]): PlacedMatch | undefined => {
+    const p = queue[queue.length - 1];
+    const node = p && ctx.nodes.get(p.categoryId)?.find((n) => n.matchId === p.matchId);
+    return node ? { categoryId: p.categoryId, node } : undefined;
   };
-  const append = (queue: Passage[], here: OrderCategory[], mode: PassageOrderMode) => queue.push(...zoneOrder(here, mode, queue.length + 1, tail(queue)));
+  const append = (queue: Passage[], here: OrderCategory[], mode: PassageOrderMode) => queue.push(...zoneOrder(here, mode, queue.length + 1, previous(queue)));
 
   if (finalsZone !== null && ready.length > 0) {
     const ends = ctx.durationSec ? estimatedEnds([...queues.values()], ctx.durationSec) : new Map<string, number>();
+    // Sans passage dans les files (kata à deux, sans tour 1 ; tout le reste joué) : prête d'emblée, donc en tête.
     const end = (c: OrderCategory) => ends.get(c.id) ?? 0;
     // Une à une : un bloc de kata ne passe pas devant une finale de combat finie avant lui.
     for (const c of [...ready].sort((a, b) => end(a) - end(b) || a.rank - b.rank)) append(queues.get(finalsZone)!, [c], ctx.mode);
