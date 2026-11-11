@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, notInArray } from 'drizzle-orm';
 import { validateWaves, type Wave, type WaveInput, type WaveRules } from '../../domain/waves.js';
 import type { AppDb } from '../db/client.js';
-import { categories, waveSchedules, waves } from '../db/schema.js';
+import { categories, waveFinals, waveSchedules, waves } from '../db/schema.js';
 import { CategoryLockedError } from './categories.js';
 import { GridValidationError, getGrid } from './competitions.js';
 import { launchRows } from './launch-state.js';
@@ -54,6 +54,7 @@ export async function replaceWaves(db: AppDb, competitionId: string, input: Wave
     if (removed.length) {
       t.update(categories).set({ waveOverride: null }).where(and(eq(categories.competitionId, competitionId), inArray(categories.waveOverride, removed))).run();
       t.delete(waveSchedules).where(and(eq(waveSchedules.competitionId, competitionId), inArray(waveSchedules.waveKey, removed))).run();
+      t.delete(waveFinals).where(and(eq(waveFinals.competitionId, competitionId), inArray(waveFinals.waveKey, removed))).run();
       t.delete(waves).where(and(eq(waves.competitionId, competitionId), keptIds.length ? notInArray(waves.id, keptIds) : undefined)).run();
     }
     input.forEach((w, order) => {

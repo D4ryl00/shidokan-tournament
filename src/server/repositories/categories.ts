@@ -208,6 +208,8 @@ export async function syncCategories(db: AppDb, competitionId: string, opts: { r
           sortOrder: 0,
           numbersUpdatedAt: null,
           durationsJson: null,
+          finalsWhere: null,
+          finalsWhen: null,
           version: null,
           updatedAt: null,
         };

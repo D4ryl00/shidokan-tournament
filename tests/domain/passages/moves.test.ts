@@ -28,6 +28,14 @@ describe('déplacements', () => {
     expect(show(rows)).toEqual(['ring:7:C:w1-1', 'ring:8:C:w2-0']);
   });
 
+  test('choix des finales enregistré avec les numéros : celui de la zone imposée, pas de l’ancienne', () => {
+    const input = base();
+    input.frozen = freeze(input);
+    expect(appendPassages(input, null, ['C'], { zoneOf: { C: 'ring' } }).map((r) => r.finalsChoice)).toEqual(['ring|end', 'ring|end', 'ring|end']);
+    const shuffled = reshuffleZone(input, 'ring', null, ['C'], { zoneOf: { C: 'ring' } });
+    expect(new Set(shuffled.map((r) => `${r.categoryId}=${r.finalsChoice}`))).toEqual(new Set(['C=ring|end', 'X=ring|end', 'Y=ring|end']));
+  });
+
   test('mélangés : numéros joués gardés, le reste de la zone renuméroté à partir du plus grand joué + 1', () => {
     const input = base();
     input.frozen = freeze(input);

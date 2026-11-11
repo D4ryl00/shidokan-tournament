@@ -1,16 +1,30 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
+import { closeDb, openDb } from '../../src/server/db/client.js';
+import { setFinalsZone } from '../../src/server/repositories/wave-finals.js';
 import { readWorkbook } from '../../src/server/spreadsheet/read.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
 let base: string;
+let dbPath: string;
 beforeEach(async () => {
-  app = await buildApp({ dbPath: tmpDbPath() });
+  dbPath = tmpDbPath();
+  app = await buildApp({ dbPath });
   base = `/api/competitions/${(await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22' } })).json().id}`;
 });
 afterEach(async () => app.close());
+
+/** Zone des finales de la session unique (compétition sans session). */
+const finalsZone = async (zoneId: string) => {
+  const db = openDb(dbPath);
+  try {
+    await setFinalsZone(db, base.split('/').at(-1)!, null, zoneId);
+  } finally {
+    closeDb(db);
+  }
+};
 
 const call = (method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', url: string, payload?: object) => app.inject({ method, url: `${base}${url}`, payload });
 let n = 0;
@@ -141,7 +155,7 @@ test('programme des zones', async () => {
 test('programme : la zone des finales, sans catégorie à elle, apparaît avec la finale dans sa file', async () => {
   const c = await fourInElimination();
   const [t1, t2] = (await call('GET', '/zones')).json() as { id: string }[];
-  await call('PATCH', '', { settings: { finalsZoneId: t2!.id } });
+  await finalsZone(t2!.id);
   await call('PATCH', `/categories/${c.id}`, { zoneId: t1!.id });
   await put(c.id, 'w1-0', 'a');
   await put(c.id, 'w1-1', 'a');

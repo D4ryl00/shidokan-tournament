@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { generateBracket, type Bracket, type BracketFormat } from '../../../src/domain/brackets/index.js';
 import { appendPassages, finalMatchIds, planPassages, reshuffleZone, type FrozenPassage, type PlanCategory, type PlanInput, type WaveFinals } from '../../../src/domain/passages/index.js';
-import { defaultSettings } from '../../../src/domain/settings.js';
 import type { CombatBracket } from '../../../src/domain/brackets/index.js';
 
 let seq = 0;
@@ -93,10 +92,6 @@ describe('finales sur une zone', () => {
     expect(seqOf(on)).toEqual(['1:K:kata:tour1']);
     expect(seqOf(on, 'ring')).toEqual(['1:K:kata:finale', '2:L:kata:finale']);
   });
-});
-
-test('réglages : pas de zone des finales par défaut', () => {
-  expect(defaultSettings()).toMatchObject({ finalsZoneId: null, kataFinalsOnFinalsZone: false });
 });
 
 describe('numéros figés (relecture)', () => {

@@ -1,15 +1,29 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
+import { closeDb, openDb } from '../../src/server/db/client.js';
+import { setFinalsZone } from '../../src/server/repositories/wave-finals.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
 let base: string;
+let dbPath: string;
 beforeEach(async () => {
-  app = await buildApp({ dbPath: tmpDbPath() });
+  dbPath = tmpDbPath();
+  app = await buildApp({ dbPath });
   base = `/api/competitions/${(await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22' } })).json().id}`;
 });
 afterEach(async () => app.close());
+
+/** Zone des finales de la session unique (compétition sans session). */
+const finalsZone = async (zoneId: string) => {
+  const db = openDb(dbPath);
+  try {
+    await setFinalsZone(db, base.split('/').at(-1)!, null, zoneId);
+  } finally {
+    closeDb(db);
+  }
+};
 
 const call = (method: 'GET' | 'POST' | 'PUT' | 'PATCH', url: string, payload?: object) => app.inject({ method, url: `${base}${url}`, payload });
 let n = 0;
@@ -34,7 +48,7 @@ async function setup(finals?: 0 | 1) {
   await many(4, 'cadet:F:-61');
   await many(4, 'cadet:F:-47');
   const [t1, t2] = (await call('GET', '/zones')).json() as { id: string }[];
-  if (finals !== undefined) await call('PATCH', '', { settings: { finalsZoneId: [t1, t2][finals]!.id } });
+  if (finals !== undefined) await finalsZone([t1, t2][finals]!.id);
   for (const c of await cats()) await call('PATCH', `/categories/${c.id}`, { status: 'ready', zoneId: c.label.includes('-61') ? t2!.id : t1!.id });
   expect((await call('POST', '/launch', { waveId: null })).statusCode).toBe(204);
   const [a, b, d] = [await catOf('-54'), await catOf('-61'), await catOf('-47')];

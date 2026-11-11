@@ -1,14 +1,17 @@
 import { eq, inArray } from 'drizzle-orm';
 import { activeEntrantCount, type Category } from '../../domain/categories.js';
+import type { StoredFinals } from '../../domain/passages/finals-choice.js';
 import { planPassages, type FrozenPassage, type PassagePlan, type PlanInput } from '../../domain/passages/index.js';
+import { ageGroupOf, combatTiming, fightSeconds, kataPassages } from '../../domain/schedule/durations.js';
 import type { AppDb } from '../db/client.js';
 import { categories as categoryTable, frozenPassages, kataScores, matchResults } from '../db/schema.js';
 import { listCategories } from './categories.js';
-import { getCompetition } from './competitions.js';
+import { getCompetition, getGrid } from './competitions.js';
 import { NotFoundError } from './registrations.js';
 import { listWaves } from './waves.js';
 import { listZones } from './zones.js';
 import { launchRows } from './launch-state.js';
+import { listWaveFinals } from './wave-finals.js';
 
 /** Numéros figés des vagues lancées au moins une fois (`match_id` 'kata' : bloc de kata entier). */
 export function loadFrozen(db: AppDb, competitionId: string): FrozenPassage[] {
@@ -17,7 +20,15 @@ export function loadFrozen(db: AppDb, competitionId: string): FrozenPassage[] {
     .from(frozenPassages)
     .where(eq(frozenPassages.competitionId, competitionId))
     .all()
-    .map((r) => ({ waveKey: r.waveKey, zoneId: r.zoneId, number: r.number, categoryId: r.categoryId, matchId: r.matchId === 'kata' ? null : r.matchId, noRest: r.noRest }));
+    .map((r) => ({
+      waveKey: r.waveKey,
+      zoneId: r.zoneId,
+      number: r.number,
+      categoryId: r.categoryId,
+      matchId: r.matchId === 'kata' ? null : r.matchId,
+      noRest: r.noRest,
+      finalsChoice: r.finalsChoice,
+    }));
 }
 
 /**
@@ -38,9 +49,22 @@ export function playedKeys(db: AppDb, competitionId: string): Set<string> {
   return out;
 }
 
+/** « Où » et « Quand » enregistrés de chaque catégorie de la compétition. */
+function storedFinals(db: AppDb, competitionId: string): Map<string, StoredFinals> {
+  return new Map(
+    db
+      .select({ id: categoryTable.id, where: categoryTable.finalsWhere, when: categoryTable.finalsWhen })
+      .from(categoryTable)
+      .where(eq(categoryTable.competitionId, competitionId))
+      .all()
+      .map((r) => [r.id, { where: r.where, when: r.when }]),
+  );
+}
+
 /**
- * Entrée du plan de passage : catégories (rang : « Ordre » saisi, puis ordre de la grille), zones, vagues, numéros figés,
- * réglages. `cats` : catégories déjà lues (évite une seconde synchronisation) ; `restart` : vagues numérotées à partir de 1.
+ * Entrée du plan de passage : catégories (rang : « Ordre » saisi, puis ordre de la grille ; choix des finales), zones,
+ * vagues et leurs finales, numéros figés, réglages, durées estimées des passages (celles du mode spectateur).
+ * `cats` : catégories déjà lues (évite une seconde synchronisation) ; `restart` : vagues numérotées à partir de 1.
  */
 export async function planInput(db: AppDb, competitionId: string, cats?: Category[], restart: string[] = []): Promise<PlanInput> {
   const competition = await getCompetition(db, competitionId);
@@ -48,10 +72,19 @@ export async function planInput(db: AppDb, competitionId: string, cats?: Categor
   cats ??= await listCategories(db, competitionId);
   const ranked = cats.map((c, i) => ({ c, i })).sort((x, y) => x.c.order - y.c.order || x.i - y.i);
   const { settings } = competition;
-  const waves = await listWaves(db, competitionId);
-  // Réglages d'avant les choix par catégorie : même zone des finales pour toutes les sessions ; sans la case « finales de
-  // kata aussi sur cette zone », un kata reste un bloc unique sur sa zone.
-  const kataFinals = settings.kataFinalsOnFinalsZone ? {} : { finals: { where: 'own' as const, when: 'ready' as const } };
+  const grid = await getGrid(db, competitionId);
+  const finals = storedFinals(db, competitionId);
+  const byId = new Map(cats.map((c) => [c.id, c]));
+  // Durée d'un passage, changement compris : combat (rounds et repos), ou bloc de kata (nombre de passages).
+  const durationSec = (categoryId: string, matchId: string | null): number => {
+    const c = byId.get(categoryId);
+    if (!c) return settings.schedule.changeoverSec;
+    if (c.bracket?.kind === 'kata') {
+      const block = matchId === 'kata:tour1' ? 'tour1' : matchId === 'kata:finale' ? 'finale' : 'whole';
+      return kataPassages(activeEntrantCount(c), block) * settings.schedule.kataPassageSec + settings.schedule.changeoverSec;
+    }
+    return fightSeconds(combatTiming(settings, ageGroupOf(c.key, grid), c.durations, matchId)) + settings.schedule.changeoverSec;
+  };
   return {
     categories: ranked.map(({ c }, rank) => ({
       id: c.id,
@@ -61,15 +94,16 @@ export async function planInput(db: AppDb, competitionId: string, cats?: Categor
       rank,
       bracket: c.bracket,
       playable: !!c.bracket && activeEntrantCount(c) >= 2,
-      ...(c.bracket?.kind === 'kata' ? kataFinals : {}),
+      finals: finals.get(c.id) ?? { where: null, when: null },
     })),
     zones: (await listZones(db, competitionId)).map((z) => ({ id: z.id, order: z.order, disciplines: z.disciplines })),
-    waves,
+    waves: await listWaves(db, competitionId),
     mode: competition.settings.passageOrder,
     frozen: loadFrozen(db, competitionId),
     // « Reprendre les numéros à 1 » choisi au lancement des vagues figées, et celui de l'aperçu.
     restart: [...restart, ...[...launchRows(db, competitionId).values()].filter((r) => r.restartNumbering).map((r) => r.waveKey)],
-    waveFinals: (waves.length > 0 ? waves.map((w) => w.id) : ['']).map((key) => ({ waveKey: key, finalsZoneId: settings.finalsZoneId, whereDefault: null, whenDefault: null })),
+    waveFinals: listWaveFinals(db, competitionId),
+    durationSec,
     played: playedKeys(db, competitionId),
   };
 }

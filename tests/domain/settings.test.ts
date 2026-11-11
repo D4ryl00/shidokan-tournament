@@ -19,8 +19,6 @@ test('réglages par défaut (spec §9.2, §8, §11.1, §12, §4.1)', () => {
     triathlonRounds: 3,
     passageOrder: 'rounds',
     schedule: defaultSchedule(),
-    finalsZoneId: null,
-    kataFinalsOnFinalsZone: false,
     invitationMail: null,
     clubFormAttachments: { pdf: true, ods: true },
     replacementRules: { order: [...RULE_IDS], off: [], cutAfter: 'discipline' },
@@ -64,4 +62,12 @@ test('mergeSettings : le message aux clubs est remplacé en entier, jamais fusio
   // Un autre réglage ne touche pas au message, et null le retire.
   expect(mergeSettings({ repechage: true }, base).invitationMail).toEqual(base.invitationMail);
   expect(mergeSettings({ invitationMail: null }, base).invitationMail).toBeNull();
+});
+
+test('zone des finales : plus dans les réglages (par session, onglet Finales)', () => {
+  const stored = readStoredSettings({ finalsZoneId: 'z2', kataFinalsOnFinalsZone: true, repechage: true });
+  expect(stored).not.toHaveProperty('finalsZoneId');
+  expect(stored).not.toHaveProperty('kataFinalsOnFinalsZone');
+  expect(stored.repechage).toBe(true);
+  expect(() => mergeSettings({ finalsZoneId: 'z2' })).toThrow(ZodError);
 });

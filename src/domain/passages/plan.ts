@@ -314,9 +314,19 @@ export interface RenumberOptions {
   zoneOf?: Record<string, string>;
 }
 
-const toFrozen = (plan: PassagePlan) => (p: PlannedPassage & { zoneId: string }): FrozenPassage => ({
+/** Signature du choix des finales de chaque catégorie : sur sa zone imposée (`zoneOf`, déplacement), sinon celle du plan. */
+function signatureOf(input: PlanInput, plan: PassagePlan, ctx: Context, opts: RenumberOptions) {
+  return (categoryId: string): string | null => {
+    const zoneId = opts.zoneOf?.[categoryId];
+    if (zoneId === undefined) return plan.finals[categoryId]?.signature ?? null;
+    const c = input.categories.find((x) => x.id === categoryId);
+    return c ? finalsChoice(c, zoneId, ctx).signature : null;
+  };
+}
+
+const toFrozen = (signature: (categoryId: string) => string | null) => (p: PlannedPassage & { zoneId: string }): FrozenPassage => ({
   waveKey: waveKey(p.waveId), zoneId: p.zoneId, number: p.number, categoryId: p.categoryId, matchId: p.matchId, noRest: p.noRest,
-  finalsChoice: plan.finals[p.categoryId]?.signature ?? null,
+  finalsChoice: signature(p.categoryId),
 });
 
 /**
@@ -333,7 +343,7 @@ export function appendPassages(input: PlanInput, waveId: string | null, category
   const cats = input.categories.filter((c) => c.waveId === waveId && c.playable && categoryIds.includes(c.id));
   const zoneOf = (id: string) => opts.zoneOf?.[id] ?? plan.categories[id]?.zoneId ?? null;
   const keep = new Set([...(opts.played ?? input.played ?? []), ...(opts.pinned ?? [])]);
-  return orderWave(cats, zoneOf, waveId, ctx, next, { keep }).map(toFrozen(plan));
+  return orderWave(cats, zoneOf, waveId, ctx, next, { keep }).map(toFrozen(signatureOf(input, plan, ctx, opts)));
 }
 
 /**
@@ -353,11 +363,12 @@ export function reshuffleZone(input: PlanInput, zoneId: string, waveId: string |
   next.set(zoneId, 1 + Math.max(0, ...kept.map((f) => f.number)));
   const pending = new Set(plan.pending.map((p) => p.categoryId).filter((id) => !extra.includes(id)));
   const zoneOf = (id: string) => opts.zoneOf?.[id] ?? plan.categories[id]?.zoneId ?? null;
+  const signature = signatureOf(input, plan, ctx, opts);
   const out: FrozenPassage[] = [];
   for (const key of segment.filter((k) => plan.frozenWaves.includes(k))) {
     const wave = key === '' ? null : key;
     const cats = input.categories.filter((c) => c.waveId === wave && c.playable && !pending.has(c.id));
-    out.push(...orderWave(cats, zoneOf, wave, ctx, next, { keep, zones: new Set([zoneId]) }).map(toFrozen(plan)));
+    out.push(...orderWave(cats, zoneOf, wave, ctx, next, { keep, zones: new Set([zoneId]) }).map(toFrozen(signature)));
   }
   return out;
 }

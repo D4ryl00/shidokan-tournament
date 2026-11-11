@@ -8,6 +8,7 @@ import { clubs, competitions, fighters, registrations } from '../db/schema.js';
 import { readCategories } from '../repositories/categories.js';
 import { getCompetition, getGrid, listCompetitions } from '../repositories/competitions.js';
 import { launchedCategoryIds, launchedWaveKeys } from '../repositories/launch-state.js';
+import { listWaveFinals } from '../repositories/wave-finals.js';
 import { listWaveSchedules } from '../repositories/wave-schedules.js';
 import { passagePlan } from '../repositories/passages.js';
 import { getResults } from '../repositories/results.js';
@@ -90,7 +91,8 @@ export async function loadPublicSource(db: AppDb, id: string, now: Date): Promis
     lastResultAt: lastResultAt(db, id),
     plan: await passagePlan(db, id, categories),
     launchedCategoryIds: launched,
-    finalsZoneId: settings?.finalsZoneId ?? null,
+    // Provisoire : une seule zone des finales pour la vue publique (la première choisie parmi les sessions).
+    finalsZoneId: listWaveFinals(db, id).find((w) => w.finalsZoneId !== null)?.finalsZoneId ?? null,
     schedule: settings?.schedule ?? defaultSchedule(),
     triathlonRounds: settings?.triathlonRounds ?? 3,
     grid: await getGrid(db, id),

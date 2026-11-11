@@ -57,9 +57,6 @@ export const competitionSettingsSchema = z
     passageOrder: z.enum(PASSAGE_ORDER_MODES),
     /** Durées des combats par groupe d'âge, temps de changement et passage de kata (horaires du mode spectateur). */
     schedule: scheduleSettingsSchema,
-    /** Zone où passent les combats pour la 1re place (null : aucune). */
-    finalsZoneId: z.string().nullable(),
-    kataFinalsOnFinalsZone: z.boolean(),
     /** Message envoyé aux clubs pour cette compétition (null : celui des réglages de l'application). */
     invitationMail: mailTemplateSchema.nullable(),
     /** Fiches club jointes au mail aux clubs (décochées : non jointes, mais toujours téléchargeables). */
@@ -93,8 +90,6 @@ export function defaultSettings(): CompetitionSettings {
     triathlonRounds: 3,
     passageOrder: 'rounds',
     schedule: defaultSchedule(),
-    finalsZoneId: null,
-    kataFinalsOnFinalsZone: false,
     invitationMail: null,
     clubFormAttachments: { pdf: true, ods: true },
     replacementRules: { order: [...RULE_IDS], off: [], cutAfter: 'discipline' },

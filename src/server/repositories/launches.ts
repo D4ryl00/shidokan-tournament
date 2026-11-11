@@ -67,7 +67,9 @@ export async function launchStatus(db: AppDb, competitionId: string, waveId: str
   };
 }
 
-const rowOf = (competitionId: string, f: FrozenPassage) => ({ competitionId, waveKey: f.waveKey, zoneId: f.zoneId, number: f.number, categoryId: f.categoryId, matchId: f.matchId ?? 'kata', noRest: f.noRest });
+const rowOf = (competitionId: string, f: FrozenPassage) => ({
+  competitionId, waveKey: f.waveKey, zoneId: f.zoneId, number: f.number, categoryId: f.categoryId, matchId: f.matchId ?? 'kata', noRest: f.noRest, finalsChoice: f.finalsChoice ?? null,
+});
 
 /** Fixe l'appartenance (choix de vague) et la zone (épinglage) des catégories d'une vague lancée. */
 function fixCategories(t: AppDb, cats: Category[], waveId: string | null, zoneOf: (id: string) => string | null) {
@@ -87,7 +89,10 @@ export async function launchWave(db: AppDb, competitionId: string, waveId: strin
   const key = waveKey(waveId);
   const cats = await listCategories(db, competitionId);
   const plan = planPassages(await planInput(db, competitionId, cats, opts.restart ? [key] : []));
-  const rows = plan.zones.flatMap((z) => z.passages.filter((p) => p.waveId === waveId).map((p) => rowOf(competitionId, { ...p, waveKey: key, zoneId: z.zoneId })));
+  // Avec le choix des finales de chaque catégorie : le changer ensuite la rend « à numéroter ».
+  const rows = plan.zones.flatMap((z) =>
+    z.passages.filter((p) => p.waveId === waveId).map((p) => rowOf(competitionId, { ...p, waveKey: key, zoneId: z.zoneId, finalsChoice: plan.finals[p.categoryId]?.signature ?? null })),
+  );
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
     if (rows.length) t.insert(frozenPassages).values(rows).run();
@@ -204,6 +209,11 @@ function replaceRows(
       .run();
   }
   if (rows.length) t.insert(frozenPassages).values(rows.map((r) => rowOf(competitionId, r))).run();
+  // Une catégorie renumérotée l'est selon son choix des finales actuel : ses passages gardés (joués, finale restée sur la zone
+  // des finales) le prennent aussi, sinon elle resterait « à numéroter ».
+  for (const [categoryId, finalsChoice] of new Map(rows.map((r) => [r.categoryId, r.finalsChoice ?? null]))) {
+    t.update(frozenPassages).set({ finalsChoice }).where(and(eq(frozenPassages.competitionId, competitionId), eq(frozenPassages.categoryId, categoryId))).run();
+  }
 }
 
 export interface MoveResult {

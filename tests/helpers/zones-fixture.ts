@@ -3,6 +3,7 @@ import { expect, vi } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
 import { closeDb, openDb, type AppDb } from '../../src/server/db/client.js';
 import { matchEntrants } from '../../src/server/repositories/results.js';
+import { setCategoryFinals, setFinalsZone } from '../../src/server/repositories/wave-finals.js';
 import { kataRev, resultRev, tieBreakRev } from '../../src/server/revisions.js';
 import type { ZoneEntry } from '../../src/server/zone/entry.js';
 import { copyFromMain } from '../../src/server/zone/link.js';
@@ -23,7 +24,6 @@ export async function mainCompetition(opts: { finalsOnT2?: boolean } = {}) {
   const base = `/api/competitions/${id}`;
   const zones = (await onMain('GET', `${base}/zones`)).json() as { id: string; name: string }[];
   const [t1, t2] = zones.map((z) => z.id) as [string, string];
-  if (opts.finalsOnT2) expect((await onMain('PATCH', base, { settings: { finalsZoneId: t2 } })).statusCode).toBe(200);
   let n = 0;
   const register = (discipline: 'karate' | 'kata', ageBandCode: string, weightClassId: string | null) =>
     onMain('POST', `${base}/registrations`, { clubId: null, lastName: `NOM${++n}`, firstName: 'x', sex: 'F', ageBandCode, discipline, ruleset: discipline === 'kata' ? null : 'jiyu', weightClassId, source: 'manual' });
@@ -31,11 +31,19 @@ export async function mainCompetition(opts: { finalsOnT2?: boolean } = {}) {
   for (let i = 0; i < 4; i++) await register('karate', 'cadet', 'cadet:F:-61');
   for (let i = 0; i < 3; i++) await register('kata', 'cadet', null);
   for (let i = 0; i < 2; i++) await register('karate', 'minime', 'minime:F:-45');
-  const [matin] = (await onMain('PUT', `${base}/waves`, [
+  const [matin, aprem] = (await onMain('PUT', `${base}/waves`, [
     { name: 'Matin', rules: { ageBandCodes: ['cadet'], disciplines: [] } },
     { name: 'Après-midi', rules: { ageBandCodes: ['minime'], disciplines: [] } },
   ])).json() as { id: string }[];
   const cats = async () => (await onMain('GET', `${base}/categories`)).json() as Cat[];
+  if (opts.finalsOnT2) {
+    // Comme l'ancien réglage « Finales sur la zone » : finales de combat sur Tatami 2, kata en bloc unique sur sa zone.
+    const db = openDb(mainPath);
+    for (const w of [matin!, aprem!]) await setFinalsZone(db, id, w.id, t2);
+    const kata = (await cats()).filter((c) => c.label.includes('Kata')).map((c) => c.id);
+    await setCategoryFinals(db, id, matin!.id, { categoryIds: kata, where: 'own', when: 'ready' });
+    closeDb(db);
+  }
   for (const c of await cats()) expect((await onMain('PATCH', `${base}/categories/${c.id}`, { status: 'ready', zoneId: c.label.includes('-61') ? t2 : t1 })).statusCode).toBe(200);
   expect((await onMain('POST', `${base}/launch`, { waveId: matin!.id })).statusCode).toBe(204);
   const byLabel = async (s: string) => (await cats()).find((c) => c.label.includes(s))!;

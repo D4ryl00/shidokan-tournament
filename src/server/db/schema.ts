@@ -426,6 +426,10 @@ export const categories = sqliteTable('categories', {
   numbersUpdatedAt: text('numbers_updated_at'),
   /** Durées de ce tableau (`CategoryDurations` en JSON) ; null : celles de la compétition. */
   durationsJson: text('durations_json'),
+  /** Où se joue sa finale (`FinalsWhere`) ; null : valeur de la session, sinon défaut. */
+  finalsWhere: text('finals_where', { enum: ['own', 'finals'] }),
+  /** Quand se joue sa finale (`FinalsWhen`) ; null : valeur de la session, sinon défaut. */
+  finalsWhen: text('finals_when', { enum: ['ready', 'end'] }),
   ...rowMeta(),
 });
 
@@ -461,6 +465,25 @@ export const waveSchedules = sqliteTable(
   (t) => [primaryKey({ columns: [t.competitionId, t.waveKey] })],
 );
 
+/**
+ * Finales d'une session (`wave_key` '' : session unique d'une compétition sans session) : zone des finales et dernières
+ * valeurs « Tout… » de chaque colonne (prises par une catégorie qui arrive dans la session).
+ */
+export const waveFinals = sqliteTable(
+  'wave_finals',
+  {
+    competitionId: text('competition_id')
+      .notNull()
+      .references(() => competitions.id, { onDelete: 'cascade' }),
+    waveKey: text('wave_key').notNull(),
+    finalsZoneId: text('finals_zone_id').references(() => zones.id, { onDelete: 'set null' }),
+    whereDefault: text('where_default', { enum: ['own', 'finals'] }),
+    whenDefault: text('when_default', { enum: ['ready', 'end'] }),
+    ...rowMeta(),
+  },
+  (t) => [primaryKey({ columns: [t.competitionId, t.waveKey] })],
+);
+
 /** Numéros de passage figés au lancement d'une vague (`match_id` 'kata' : bloc de kata entier). */
 export const frozenPassages = sqliteTable(
   'frozen_passages',
@@ -474,6 +497,8 @@ export const frozenPassages = sqliteTable(
     categoryId: text('category_id').notNull(),
     matchId: text('match_id').notNull(),
     noRest: integer('no_rest', { mode: 'boolean' }).notNull().default(false),
+    /** Signature du choix des finales de la catégorie au figeage ; null : figé avant les choix par catégorie. */
+    finalsChoice: text('finals_choice'),
     ...rowMeta(),
   },
   (t) => [primaryKey({ columns: [t.competitionId, t.waveKey, t.categoryId, t.matchId] })],
