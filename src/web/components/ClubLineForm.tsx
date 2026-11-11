@@ -48,6 +48,8 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
   const [weight, setWeight] = useState(startLine?.weightKg != null ? kgText(startLine.weightKg) : '');
   const [nameHidden, setNameHidden] = useState(line?.publicNameHidden ?? false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // L'erreur de `ops` est partagée par toutes les fenêtres (et les étapes de l'import) : seule celle d'un essai fait ici s'affiche.
+  const [tried, setTried] = useState(false);
 
   // Ligne verrouillée (combats commencés…) : elle s'ouvre en lecture seule, avec la raison. L'organisateur y corrige encore
   // le nom, le prénom, le grade, le nom masqué et les disciplines qui n'ont pas commencé (`partly`) ; sans combat commencé
@@ -84,10 +86,12 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
   const onError = (e: unknown) => {
     if (e instanceof ApiError && RELOAD_STATUSES.has(e.status)) onClose(e.message);
   };
-  const submit = (then: SavedThen = onClose) =>
-    ops.save({ fighterId: line?.fighterId ?? null, line: form, version: line?.version ?? null, publicNameHidden: nameHidden })
+  const submit = (then: SavedThen = onClose) => {
+    setTried(true);
+    return ops.save({ fighterId: line?.fighterId ?? null, line: form, version: line?.version ?? null, publicNameHidden: nameHidden })
       // L'organisateur peut choisir une catégorie fermée : le serveur l'enregistre avec un avis, qu'on lui montre.
       .then((done) => then(mode === 'organiser' && done.notices.length ? done.notices.join(' ') : undefined, done), onError);
+  };
   // Entrée dans un champ : pas dans une liste déroulante (elle choisit), ni sur un bouton (il se clique), ni pendant une saisie IME.
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== 'Enter' || (!onEnter && !ffk) || ops.pending || e.nativeEvent.isComposing || (frozen && !ffk)) return;
@@ -116,13 +120,13 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
     const options = field === 'ageBandCode' ? ageBandChoices(form, ctx).map((o) => o.value)
       : field === 'weightClassId' ? classes.map((w) => w.id) : rulesets.map(([r]) => r);
     return (
-      <FfkChoice label={FIELD_LABELS[field]} state={ffkChoiceState(form[field], diff)} ffk={readable(field, diff.ffk)} fiche={readable(field, diff.fiche)} disabled={locked}
+      <FfkChoice label={FIELD_LABELS[field]} state={ffkChoiceState(form[field], diff)} ffk={readable(field, diff.ffk)} fiche={readable(field, diff.fiche)} disabled={field === 'ageBandCode' ? locked : combatFrozen}
         unavailable={{ ffk: !ffkValueAvailable(diff.ffk, options), fiche: !ffkValueAvailable(diff.fiche, options) }}
         onPick={(which) => set({ [field]: which === 'ffk' ? diff.ffk : diff.fiche } as Partial<ClubFormLine>)} />
     );
   };
 
-  const doDelete = () => line && ops.remove({ fighterId: line.fighterId, version: line.version }).then(() => onClose(), onError);
+  const doDelete = () => line && (setTried(true), ops.remove({ fighterId: line.fighterId, version: line.version }).then(() => onClose(), onError));
 
   return (
     <Modal opened={opened} onClose={() => onClose()} fullScreen={mobile} title={title ?? (ffk ? (line ? `${line.line.lastName.toUpperCase()} ${line.line.firstName}` : 'Nouveau combattant') : line ? `${line.line.lastName} ${line.line.firstName}` : 'Ajouter un combattant')}>
@@ -133,7 +137,7 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
             <Progress value={((ffk.progress.index + 1) / Math.max(ffk.progress.total, 1)) * 100} size="sm" aria-label={`Fiche ${ffk.progress.index + 1} sur ${ffk.progress.total}`} />
           </Stack>
         )}
-        {ffk?.banner && <Alert color="blue" data-testid="ffk-banner">{ffk.banner}</Alert>}
+        {ffk?.banner && <Alert color="blue" data-testid="ffk-banner"><BannerText text={ffk.banner} /></Alert>}
         {locked && line && <Alert color="orange" data-testid="line-locked">{line.reason ?? 'Cette ligne n’est pas modifiable.'}</Alert>}
         {/* Avant d'enregistrer : inscriptions qui ne tiennent pas sur la ligne, catégorie non ouverte… */}
         {!frozen && line && line.notices.length > 0 && (
@@ -242,7 +246,7 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
             )}
             </Part>
         </Stack>
-        <ApiErrorAlert error={ops.error} />
+        <ApiErrorAlert error={tried ? ops.error : null} />
         {ffk ? (
           <Group justify="space-between">
             <Button variant="subtle" color="gray" data-testid="ffk-skip" disabled={ops.pending} onClick={ffk.onSkip}>{ffk.skipLabel}</Button>
@@ -273,6 +277,13 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
       </Stack>
     </Modal>
   );
+}
+
+/** Encadré de l'import : sa première phrase (« Fiche déjà créée. ») en gras. */
+function BannerText({ text }: { text: string }) {
+  const end = text.indexOf('. ');
+  if (end < 0) return <>{text}</>;
+  return <><b>{text.slice(0, end + 1)}</b>{text.slice(end + 1)}</>;
 }
 
 /** Morceau de la fenêtre qu'une ligne verrouillée désactive (un `fieldset` désactivé ne se réactive pas plus bas : d'où plusieurs morceaux). */

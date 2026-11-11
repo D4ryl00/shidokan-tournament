@@ -1182,7 +1182,9 @@ function useLineOps(write: { save: (a: SaveArgs) => Promise<ClubLine>; remove: (
   };
   const save = useMutation({ mutationFn: write.save, ...options });
   const remove = useMutation({ mutationFn: write.remove, ...options });
-  return { save: save.mutateAsync, remove: remove.mutateAsync, pending: save.isPending || remove.isPending, error: save.error ?? remove.error };
+  // L'erreur de la dernière écriture lancée (une ancienne erreur d'enregistrement ne masque pas celle d'une suppression).
+  const last = save.submittedAt >= remove.submittedAt ? save : remove;
+  return { save: save.mutateAsync, remove: remove.mutateAsync, pending: save.isPending || remove.isPending, error: last.error };
 }
 
 export const useCoachLineOps = (token: string): LineOps => {

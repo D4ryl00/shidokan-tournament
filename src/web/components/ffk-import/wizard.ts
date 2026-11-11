@@ -173,7 +173,7 @@ function existingView(ffk: FfkFighter, fresh: ClubLine, c: StepContext): StepVie
   const probe = { ...fresh, line: { ...fresh.line, lastName: ffk.lastName, firstName: ffk.firstName, sex: ffk.sex } };
   const found = planFfkImport([ffk], [probe], c.discipline, { multipleCombats: c.multipleCombats, mode: c.mode }).steps[0];
   const step = found?.kind === 'existing' ? found : null;
-  const initial = fitWeightClass(step ? prefillExisting(fresh.line, step, c.discipline) : fresh.line, c.weightClasses);
+  const initial = fitWeightClass(step ? lockedKept(fresh, prefillExisting(fresh.line, step, c.discipline)) : fresh.line, c.weightClasses);
   const current = disciplinesOf(fresh.line);
   const sentences: string[] = [];
   if (step?.oneCombatBlocked) {
@@ -192,6 +192,33 @@ function existingView(ffk: FfkFighter, fresh: ClubLine, c: StepContext): StepVie
       skipLabel: 'Laisser la fiche telle quelle',
     },
   };
+}
+
+/**
+ * Fiche verrouillée : ce que le serveur garde tel quel reste celui de la fiche (les valeurs FFK ne se voient que dans les cases
+ * « FFK » / « Votre fiche », désactivées). Entièrement verrouillée : la fiche elle-même. En partie (organisateur, combats
+ * commencés) : la tranche d'âge toujours, la catégorie de poids et le règlement dès qu'un combat a commencé.
+ */
+export function lockedKept(fresh: ClubLine, prefilled: ClubFormLine): ClubFormLine {
+  if (fresh.editable) return prefilled;
+  if (!fresh.partlyEditable) return fresh.line;
+  const kept: ClubFormLine = { ...prefilled, ageBandCode: fresh.line.ageBandCode };
+  if (fresh.startedDisciplines.some((d) => d !== 'kata')) {
+    return { ...kept, weightClassId: fresh.line.weightClassId, ruleset: fresh.line.ruleset };
+  }
+  return kept;
+}
+
+/** Enregistrement qui n'a rien changé à la fiche (ni la ligne, ni le nom masqué) : l'étape compte « laissée telle quelle ». */
+export function sameSaved(before: ClubLine, after: ClubLine): boolean {
+  return before.publicNameHidden === after.publicNameHidden && before.clubId === after.clubId && canonical(before.line) === canonical(after.line);
+}
+
+/** JSON aux clés triées : deux lignes égales s'écrivent pareil, dans quelque ordre que leurs champs soient arrivés. */
+function canonical(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canonical).join(',')}]`;
+  if (v && typeof v === 'object') return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`).join(',')}}`;
+  return JSON.stringify(v) ?? 'null';
 }
 
 /** Fiches qui portent le nom et le sexe du combattant FFK (coupure nom / prénom indifférente). */

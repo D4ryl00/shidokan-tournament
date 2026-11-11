@@ -1,6 +1,6 @@
 import { Accordion, Alert, Box, Button, Card, Checkbox, Container, Group, Loader, SegmentedControl, SimpleGrid, Stack, Text, TextInput, Title, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { PRE_APPROVAL_TEXT, kgText, orderedPrefs, weightWarning, type ClubFormLine } from '../../domain/club-form.js';
 import { useClubEntry, useCoachLineOps, useReadFfkPdfCoach, useSaveClubHeader, type ClubEntryHeader, type ClubEntryView, type ClubLine } from '../api.js';
@@ -185,6 +185,12 @@ export function ClubEntryPage() {
   const coachOps = useCoachLineOps(token);
   const [importing, setImporting] = useState(false);
   const readPdf = useReadFfkPdfCoach(token);
+  // Page close ou lien remplacé pendant l'import (403, 410 : la relecture échoue et garde l'ancienne vue) : l'import s'arrête
+  // et ne se rouvre pas de lui-même quand la page redevient modifiable.
+  const stopImport = !!error || (!!view && !view.editable);
+  useEffect(() => {
+    if (stopImport) setImporting(false);
+  }, [stopImport]);
 
   const close = (message?: string) => {
     setEditing(null);
@@ -253,7 +259,7 @@ export function ClubEntryPage() {
             <Text size="xs" c="dimmed" mt="lg" data-testid="privacy-notice">{view.privacyNotice}</Text>
             <ClubLineForm key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.fighterId} ops={coachOps} mode="coach" multipleCombats={view.multipleCombats} line={editing === 'new' ? null : editing}
               ageBands={view.ageBands} weightClasses={view.weightClasses} closed={view.closed} opened={editing !== null} onClose={close} />
-            <FfkImportWizard opened={importing && view.editable} mode="coach" read={(file, discipline) => readPdf.mutateAsync({ file, discipline })}
+            <FfkImportWizard opened={importing && !stopImport} mode="coach" read={(file, discipline) => readPdf.mutateAsync({ file, discipline })}
               lines={view.lines} ops={coachOps} multipleCombats={view.multipleCombats} ageBands={view.ageBands} weightClasses={view.weightClasses} closed={view.closed}
               onClose={(message) => {
                 setImporting(false);

@@ -9,7 +9,7 @@ import { DISCIPLINE_OPTIONS, disciplineLabel, SEX_LABELS } from '../../labels.js
 import { ApiErrorAlert } from '../ApiErrorAlert.js';
 import { ClubLineForm } from '../ClubLineForm.js';
 import { listFr } from '../club-line/ffkStep.js';
-import { absentRows, count, disciplinesOf, startCounts, stepView, summaryText, wizardReducer, wizardSummary, type WizardState } from './wizard.js';
+import { absentRows, count, disciplinesOf, sameSaved, startCounts, stepView, summaryText, wizardReducer, wizardSummary, type WizardState } from './wizard.js';
 
 export interface FfkImportWizardProps {
   opened: boolean;
@@ -178,11 +178,13 @@ function Wizard({ onClose, mode, read, lines, ops, multipleCombats, ageBands, we
       ffk={{
         ...view.ffk, progress, onPrevious: previous,
         onSkip: () => dispatch({ type: 'skipped', index }),
-        // Sans ligne : fiche verrouillée passée avec « Suivant → », rien n'a été écrit. `index` : l'étape de ce rendu, même si
+        // Sans ligne : fiche verrouillée passée avec « Suivant → », rien n'a été écrit ; fiche réenregistrée sans changement
+        // (« Votre fiche » partout, champs gardés par le verrou) : laissée telle quelle. `index` : l'étape de ce rendu, même si
         // la réponse arrive plus tard.
         onSaved: (message, saved) => {
           if (message) notifications.show({ color: 'orange', message });
-          dispatch(saved ? { type: 'saved', index, line: saved, created: view.line === null } : { type: 'skipped', index });
+          const changed = saved && !(view.line && sameSaved(view.line, saved));
+          dispatch(changed ? { type: 'saved', index, line: saved, created: view.line === null } : { type: 'skipped', index });
         },
       }} />
   );

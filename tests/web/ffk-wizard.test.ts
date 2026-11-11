@@ -6,6 +6,7 @@ import {
   absentRows,
   fitWeightClass,
   NO_DISCIPLINE_BANNER,
+  sameSaved,
   stepView,
   summaryText,
   wizardReducer,
@@ -241,6 +242,40 @@ describe('stepView', () => {
     expect(v.ffk.banner).toBe('Fiche déjà créée. Une seule fiche par combattant : ce que vous choisissez ici vaut pour toutes ses disciplines.');
   });
 
+  test('existante verrouillée : la fiche telle qu’elle est, les valeurs FFK seulement dans les cases', () => {
+    const fresh = clubLine('f1', { weightClassId: 'benjamin:F:-45' }, { editable: false, partlyEditable: false, reason: 'Combats commencés.' });
+    const step: FfkStep = { ...existingStep(1, 'f1'), addsDiscipline: false, locked: true } as FfkStep;
+    const v = stepView(at([step]), ctx([fresh], { discipline: 'kata' }));
+    if (v.kind !== 'form') throw new Error('formulaire attendu');
+    expect(v.ffk.initial).toEqual(fresh.line);
+    const v2 = stepView(at([step]), ctx([fresh]));
+    if (v2.kind !== 'form') throw new Error('formulaire attendu');
+    expect(v2.ffk.initial).toEqual(fresh.line);
+    expect(v2.ffk.diffs).toEqual([{ field: 'weightClassId', ffk: 'benjamin:F:-40', fiche: 'benjamin:F:-45' }]);
+  });
+
+  test('existante en partie modifiable, combat commencé : tranche d’âge, poids et règlement de la fiche gardés', () => {
+    const fresh = clubLine('f1', { weightClassId: 'benjamin:F:-45', kata: false }, { editable: false, partlyEditable: true, startedDisciplines: ['karate'] });
+    const ffk = fighter({ ageBandCode: 'minime', weightClassId: 'minime:F:-45', ruleset: 'shobu', rulesetGiven: true });
+    const step: FfkStep = { kind: 'existing', ffk, fighterId: 'f1', diffs: [], addsDiscipline: false, oneCombatBlocked: false, locked: false };
+    const v = stepView(at([step]), ctx([fresh], { mode: 'organiser' }));
+    if (v.kind !== 'form') throw new Error('formulaire attendu');
+    expect(v.ffk.initial).toEqual(fresh.line);
+    expect(v.ffk.diffs.map((d) => d.field)).toEqual(['ageBandCode', 'weightClassId', 'ruleset']);
+  });
+
+  test('existante en partie modifiable, kata seul commencé : tranche d’âge gardée, le combat ajouté prend poids et règlement FFK', () => {
+    const fresh = clubLine('f1', { combats: [], kata: true, weightClassId: null, ruleset: null }, { editable: false, partlyEditable: true, startedDisciplines: ['kata'] });
+    const v = stepView(at([existingStep(1, 'f1')]), ctx([fresh], { mode: 'organiser' }));
+    if (v.kind !== 'form') throw new Error('formulaire attendu');
+    expect(v.ffk.initial).toMatchObject({ ageBandCode: 'benjamin', combats: ['karate'], kata: true, weightClassId: 'benjamin:F:-40', ruleset: 'jiyu' });
+    // Tranche d'âge FFK différente : celle de la fiche reste (le serveur la garde), la catégorie de poids FFK d'une autre tranche est vidée.
+    const minime: FfkStep = { ...existingStep(1, 'f1'), ffk: fighter({ ageBandCode: 'minime', weightClassId: 'minime:F:-45' }) } as FfkStep;
+    const v2 = stepView(at([minime]), ctx([fresh], { mode: 'organiser' }));
+    if (v2.kind !== 'form') throw new Error('formulaire attendu');
+    expect(v2.ffk.initial).toMatchObject({ ageBandCode: 'benjamin', weightClassId: null, combats: ['karate'] });
+  });
+
   test('homonymes : les candidats encore présents', () => {
     const a = clubLine('a');
     const v = stepView(at([{ kind: 'homonym', ffk: fighter(), candidates: ['a', 'gone'] }]), ctx([a, clubLine('z')]));
@@ -267,4 +302,13 @@ describe('absentRows', () => {
 test('summaryText : singulier et pluriel, retraits', () => {
   expect(summaryText({ added: 2, updated: 1, left: 0 }, 0, 'karate')).toBe('Import FFK : 2 ajoutés · 1 mis à jour · 0 laissé tel quel.');
   expect(summaryText({ added: 1, updated: 0, left: 3 }, 2, 'kata')).toBe('Import FFK : 1 ajouté · 0 mis à jour · 3 laissés tels quels · Kata retiré de 2 fiches.');
+});
+
+test('sameSaved : un réenregistrement sans changement (clés dans un autre ordre) n’est pas une mise à jour', () => {
+  const before = clubLine('f1', { prefs: { 'shido-boxing': 1, 'shido-mix': 2 } });
+  const line = Object.fromEntries(Object.entries(before.line).reverse()) as ClubFormLine;
+  const reordered = { ...before, version: 'v2', line: { ...line, prefs: { 'shido-mix': 2, 'shido-boxing': 1 } as ClubFormLine['prefs'] } };
+  expect(sameSaved(before, reordered)).toBe(true);
+  expect(sameSaved(before, { ...before, line: { ...before.line, weightClassId: 'benjamin:F:-45' } })).toBe(false);
+  expect(sameSaved(before, { ...before, publicNameHidden: true })).toBe(false);
 });

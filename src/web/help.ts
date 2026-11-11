@@ -342,7 +342,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     ],
   },
   'fiche-club.pdf-ffk': {
-    title: 'Importer un PDF de la FFK',
+    title: '3. Importer un PDF de la FFK',
     short: 'Choisissez le club et la discipline, puis lisez le PDF « État des inscriptions » de la FFK : les fiches se vérifient une à une.',
     details: [
       [
@@ -355,7 +355,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     ],
   },
   'fiche-club.saisir': {
-    title: '3. Saisir une fiche papier',
+    title: '4. Saisir une fiche papier',
     short: 'Recopiez une fiche papier ligne par ligne (page par page), cliquez « Vérifier », puis « Enregistrer la fiche ».',
     details: [
       [
