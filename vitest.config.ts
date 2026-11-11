@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     include: ['tests/domain/**/*.test.ts', 'tests/server/**/*.test.ts', 'tests/web/**/*.test.ts'],
     environment: 'node',
+    setupFiles: ['tests/helpers/setup-tmp-cleanup.ts'],
     // Les tests qui montent deux installations complètes dépassent parfois 5 s sur une machine chargée (CI).
     testTimeout: 30_000,
   },
