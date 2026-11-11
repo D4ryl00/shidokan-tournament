@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { generateBracket, type Bracket, type BracketFormat } from '../../../src/domain/brackets/index.js';
-import { appendPassages, finalMatchIds, planPassages, type FrozenPassage, type PlanCategory, type PlanInput } from '../../../src/domain/passages/index.js';
+import { appendPassages, finalMatchIds, planPassages, type FrozenPassage, type PlanCategory, type PlanInput, type WaveFinals } from '../../../src/domain/passages/index.js';
 import { defaultSettings } from '../../../src/domain/settings.js';
 import type { CombatBracket } from '../../../src/domain/brackets/index.js';
 
@@ -13,6 +13,10 @@ const pc = (id: string, b: Bracket, over: Partial<PlanCategory> = {}): PlanCateg
 });
 const t1 = { id: 't1', order: 0, disciplines: null };
 const ring = { id: 'ring', order: 1, disciplines: null };
+/** Zone des finales de la session implicite (null : aucune). */
+const finalsOn = (finalsZoneId: string | null): WaveFinals[] => [{ waveKey: '', finalsZoneId, whereDefault: null, whenDefault: null }];
+/** Kata en bloc unique sur sa zone (« Sa zone » + « Dès que finie »). */
+const whole = { finals: { where: 'own' as const, when: 'ready' as const } };
 const seqOf = (input: PlanInput, zone = 't1') => planPassages(input).zones.find((z) => z.zoneId === zone)!.passages.map((p) => `${p.number}:${p.categoryId}:${p.matchId ?? 'kata'}`);
 const freeze = (input: PlanInput, wave: string | null = null): FrozenPassage[] =>
   planPassages(input).zones.flatMap((z) => z.passages.filter((p) => p.waveId === wave).map((p) => ({ waveKey: wave ?? '', zoneId: z.zoneId, number: p.number, categoryId: p.categoryId, matchId: p.matchId, noRest: p.noRest })));
@@ -66,23 +70,24 @@ describe('finales sur une zone', () => {
   test('finales sur le Ring, à la fin de la session, dans l’ordre des rangs', () => {
     const input: PlanInput = {
       categories: [pc('A', br(8)), pc('B', br(4), { rank: 1 }), pc('R', br(4), { pinnedZoneId: 'ring', rank: 2 })],
-      zones: [t1, ring], waves: [], mode: 'rounds', finals: { zoneId: 'ring', kata: false },
+      zones: [t1, ring], waves: [], mode: 'rounds', waveFinals: finalsOn('ring'),
     };
     expect(seqOf(input, 'ring')).toEqual(['1:R:w1-0', '2:R:w1-1', '3:A:w3-0', '4:B:w2-0', '5:R:w2-0']);
     expect(seqOf(input).some((s) => s.endsWith('A:w3-0') || s.endsWith('B:w2-0'))).toBe(false);
-    for (const zoneId of [null, 'inconnue']) expect(seqOf({ ...input, finals: { zoneId, kata: false } }, 'ring')).toEqual(['1:R:w1-0', '2:R:w1-1', '3:R:w2-0']);
+    for (const zoneId of [null, 'inconnue']) expect(seqOf({ ...input, waveFinals: finalsOn(zoneId) }, 'ring')).toEqual(['1:R:w1-0', '2:R:w1-1', '3:R:w2-0']);
   });
 
   test('poule unique : rien ne bouge ; meilleur des trois : s1-s3 sur la zone des finales', () => {
-    const input: PlanInput = { categories: [pc('P', br(3, 'round_robin')), pc('S', br(2, 'best_of_three'), { rank: 1 })], zones: [t1, ring], waves: [], mode: 'rounds', finals: { zoneId: 'ring', kata: false } };
+    const input: PlanInput = { categories: [pc('P', br(3, 'round_robin')), pc('S', br(2, 'best_of_three'), { rank: 1 })], zones: [t1, ring], waves: [], mode: 'rounds', waveFinals: finalsOn('ring') };
     expect(seqOf(input).every((s) => s.includes(':P:'))).toBe(true);
     expect(seqOf(input, 'ring').map((s) => s.split(':').slice(1).join(':'))).toEqual(['S:s1', 'S:s2', 'S:s3']);
   });
 
-  test('kata : sans l’option, bloc entier ; avec, tour 1 sur sa zone et finale sur le Ring ; kata à 2 : seulement la finale', () => {
-    const input: PlanInput = { categories: [pc('K', br(5, 'kata_two_rounds')), pc('L', br(2, 'kata_two_rounds'), { rank: 1 })], zones: [t1, ring], waves: [], mode: 'rounds', finals: { zoneId: 'ring', kata: false } };
+  test('kata : sa zone dès que finie, bloc entier ; par défaut, tour 1 sur sa zone et finale sur le Ring ; kata à 2 : seulement la finale', () => {
+    const cats = [pc('K', br(5, 'kata_two_rounds')), pc('L', br(2, 'kata_two_rounds'), { rank: 1 })];
+    const input: PlanInput = { categories: cats.map((c) => ({ ...c, ...whole })), zones: [t1, ring], waves: [], mode: 'rounds', waveFinals: finalsOn('ring') };
     expect(seqOf(input)).toEqual(['1:K:kata', '2:L:kata']);
-    const on = { ...input, finals: { zoneId: 'ring', kata: true } };
+    const on = { ...input, categories: cats };
     expect(seqOf(on)).toEqual(['1:K:kata:tour1']);
     expect(seqOf(on, 'ring')).toEqual(['1:K:kata:finale', '2:L:kata:finale']);
   });
@@ -114,16 +119,18 @@ describe('numéros figés (relecture)', () => {
   });
 
   test('réglage des finales changé après le lancement : rien n’est à renuméroter', () => {
-    const base: PlanInput = { categories: [pc('K', br(5, 'kata_two_rounds')), pc('A', br(8), { rank: 1 })], zones: [t1, ring], waves: [], mode: 'rounds', finals: { zoneId: 'ring', kata: false } };
+    const cats = [pc('K', br(5, 'kata_two_rounds')), pc('A', br(8), { rank: 1 })];
+    const wholeKata = [{ ...cats[0]!, ...whole }, cats[1]!];
+    const base: PlanInput = { categories: wholeKata, zones: [t1, ring], waves: [], mode: 'rounds', waveFinals: finalsOn('ring') };
     const frozen = freeze(base);
-    for (const finals of [{ zoneId: 'ring', kata: true }, { zoneId: null, kata: false }]) expect(planPassages({ ...base, frozen, finals }).pending).toEqual([]);
-    const split = freeze({ ...base, finals: { zoneId: 'ring', kata: true } });
-    expect(planPassages({ ...base, frozen: split, finals: { zoneId: null, kata: false } }).pending).toEqual([]);
+    for (const change of [{ categories: cats }, { waveFinals: finalsOn(null) }]) expect(planPassages({ ...base, frozen, ...change }).pending).toEqual([]);
+    const split = freeze({ ...base, categories: cats });
+    expect(planPassages({ ...base, frozen: split, waveFinals: finalsOn(null) }).pending).toEqual([]);
   });
 
   test('zone des finales qui n’accepte pas la discipline : la finale reste sur sa zone', () => {
     const tatami2 = { id: 't2', order: 1, disciplines: ['karate' as const, 'kata' as const] };
-    const input: PlanInput = { categories: [pc('B', br(4), { discipline: 'shido-boxing', pinnedZoneId: 'ring' }), pc('K', br(5, 'kata_two_rounds'))], zones: [t1, { ...ring, disciplines: ['shido-boxing' as const] }, tatami2], waves: [], mode: 'rounds', finals: { zoneId: 't2', kata: true } };
+    const input: PlanInput = { categories: [pc('B', br(4), { discipline: 'shido-boxing', pinnedZoneId: 'ring' }), pc('K', br(5, 'kata_two_rounds'))], zones: [t1, { ...ring, disciplines: ['shido-boxing' as const] }, tatami2], waves: [], mode: 'rounds', waveFinals: finalsOn('t2') };
     expect(seqOf(input, 'ring')).toEqual(['1:B:w1-0', '2:B:w1-1', '3:B:w2-0']);
     const noKata: PlanInput = { ...input, zones: [t1, ring, { ...tatami2, disciplines: ['karate' as const] }] };
     expect(seqOf(noKata)).toEqual(['1:K:kata']);

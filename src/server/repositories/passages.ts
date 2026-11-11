@@ -47,6 +47,11 @@ export async function planInput(db: AppDb, competitionId: string, cats?: Categor
   if (!competition) throw new NotFoundError('Compétition introuvable');
   cats ??= await listCategories(db, competitionId);
   const ranked = cats.map((c, i) => ({ c, i })).sort((x, y) => x.c.order - y.c.order || x.i - y.i);
+  const { settings } = competition;
+  const waves = await listWaves(db, competitionId);
+  // Réglages d'avant les choix par catégorie : même zone des finales pour toutes les sessions ; sans la case « finales de
+  // kata aussi sur cette zone », un kata reste un bloc unique sur sa zone.
+  const kataFinals = settings.kataFinalsOnFinalsZone ? {} : { finals: { where: 'own' as const, when: 'ready' as const } };
   return {
     categories: ranked.map(({ c }, rank) => ({
       id: c.id,
@@ -56,14 +61,15 @@ export async function planInput(db: AppDb, competitionId: string, cats?: Categor
       rank,
       bracket: c.bracket,
       playable: !!c.bracket && activeEntrantCount(c) >= 2,
+      ...(c.bracket?.kind === 'kata' ? kataFinals : {}),
     })),
     zones: (await listZones(db, competitionId)).map((z) => ({ id: z.id, order: z.order, disciplines: z.disciplines })),
-    waves: await listWaves(db, competitionId),
+    waves,
     mode: competition.settings.passageOrder,
     frozen: loadFrozen(db, competitionId),
     // « Reprendre les numéros à 1 » choisi au lancement des vagues figées, et celui de l'aperçu.
     restart: [...restart, ...[...launchRows(db, competitionId).values()].filter((r) => r.restartNumbering).map((r) => r.waveKey)],
-    finals: { zoneId: competition.settings.finalsZoneId, kata: competition.settings.kataFinalsOnFinalsZone },
+    waveFinals: (waves.length > 0 ? waves.map((w) => w.id) : ['']).map((key) => ({ waveKey: key, finalsZoneId: settings.finalsZoneId, whereDefault: null, whenDefault: null })),
     played: playedKeys(db, competitionId),
   };
 }

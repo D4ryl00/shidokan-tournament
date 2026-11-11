@@ -3,8 +3,9 @@ import type { PassageOrderMode } from '../settings.js';
 import type { DisciplineId } from '../types.js';
 import { distributeZones, type ZoneSpec } from './distribute.js';
 import { finalMatchIds } from './finals.js';
+import { resolveFinals, type ResolvedFinals, type StoredFinals, type WaveFinals } from './finals-choice.js';
 import { matchNodes, type MatchNode } from './graph.js';
-import { zoneOrder, type OrderCategory, type Passage } from './order.js';
+import { zoneOrder, type OrderCategory, type Passage, type PlacedMatch } from './order.js';
 
 export interface PlanCategory {
   id: string;
@@ -16,6 +17,8 @@ export interface PlanCategory {
   bracket: Bracket | null;
   /** Au moins deux inscrits actifs. */
   playable: boolean;
+  /** Où et quand se joue sa finale ; absent : valeurs de la session, sinon défaut. */
+  finals?: StoredFinals;
 }
 
 /** Clé d'une vague ; '' : la vague implicite d'une compétition sans vague. */
@@ -40,8 +43,13 @@ export interface PlanInput {
   frozen?: FrozenPassage[];
   /** Vagues numérotées à partir de 1 (« reprendre les numéros à 1 ») : les vagues suivantes continuent après elles. */
   restart?: string[];
-  /** Zone des finales (combats pour la 1re place, et finales de kata si `kata`). */
-  finals?: { zoneId: string | null; kata: boolean };
+  /** Zone des finales et derniers « Tout… » de chaque session (clé `waveKey`) ; absente : aucune. */
+  waveFinals?: WaveFinals[];
+  /**
+   * Durée estimée d'un passage, changement compris (`matchId` null / 'kata:tour1' / 'kata:finale' : bloc de kata) : range les
+   * finales « dès que finie » de la zone des finales par fin estimée de leur catégorie. Absente : dans l'ordre des catégories.
+   */
+  durationSec?: (categoryId: string, matchId: string | null) => number;
   /** Passages joués (clé `${categoryId}:${matchId ?? 'kata'}`) : ils gardent numéro et zone, même après un déplacement. */
   played?: Set<string>;
 }
@@ -58,13 +66,16 @@ export interface PassagePlan {
   pending: { waveId: string | null; categoryId: string }[];
   /** Clés des vagues figées. */
   frozenWaves: string[];
+  /** Où et quand se joue la finale de chaque catégorie jouable placée sur une zone. */
+  finals: Record<string, ResolvedFinals>;
 }
 
 interface Context {
   zones: ZoneSpec[];
   mode: PassageOrderMode;
-  finalsZone: string | null;
-  kataFinals: boolean;
+  /** Réglages des finales de chaque session ; une zone des finales inconnue vaut « Aucune ». */
+  waveFinals: Map<string, WaveFinals>;
+  durationSec: PlanInput['durationSec'];
   nodes: Map<string, MatchNode[]>;
   /** La zone accueille la discipline. */
   accepts: (zoneId: string, discipline: DisciplineId) => boolean;
@@ -72,20 +83,43 @@ interface Context {
 
 function context(input: PlanInput): Context {
   const zones = [...input.zones].sort((a, b) => a.order - b.order);
-  const finalsZone = input.finals?.zoneId && zones.some((z) => z.id === input.finals!.zoneId) ? input.finals.zoneId : null;
+  const known = (id: string | null) => id !== null && zones.some((z) => z.id === id);
+  const waveFinals = new Map((input.waveFinals ?? []).map((w) => [w.waveKey, known(w.finalsZoneId) ? w : { ...w, finalsZoneId: null }]));
   const nodes = new Map<string, MatchNode[]>(input.categories.map((c) => [c.id, c.playable && c.bracket?.kind === 'combat' ? matchNodes(c.bracket) : []]));
   const accepts = (zoneId: string, discipline: DisciplineId) => {
     const z = zones.find((x) => x.id === zoneId);
     return !!z && (z.disciplines === null || z.disciplines.includes(discipline));
   };
-  return { zones, mode: input.mode, finalsZone, kataFinals: !!input.finals?.kata && finalsZone !== null, nodes, accepts };
+  return { zones, mode: input.mode, waveFinals, durationSec: input.durationSec, nodes, accepts };
 }
 
 const isKata = (c: PlanCategory) => c.bracket?.kind === 'kata';
-/** Finales qui passent sur la zone des finales : seulement si elle accueille la discipline de la catégorie. */
-const finalsOf = (c: PlanCategory, ctx: Context) =>
-  ctx.finalsZone && c.bracket?.kind === 'combat' && ctx.accepts(ctx.finalsZone, c.discipline) ? finalMatchIds(c.bracket) : [];
-const kataSplit = (c: PlanCategory, ctx: Context) => ctx.kataFinals && ctx.accepts(ctx.finalsZone!, c.discipline);
+const NO_CHOICE: StoredFinals = { where: null, when: null };
+
+/** Où et quand se joue la finale de `c` quand la catégorie est sur `zoneId`. */
+const finalsChoice = (c: PlanCategory, zoneId: string | null, ctx: Context): ResolvedFinals =>
+  resolveFinals({
+    kata: isKata(c),
+    entrants: c.bracket?.entrants.length ?? 0,
+    zoneId,
+    stored: c.finals ?? NO_CHOICE,
+    wave: ctx.waveFinals.get(waveKey(c.waveId)),
+    mode: ctx.mode,
+    accepts: (z) => ctx.accepts(z, c.discipline),
+  });
+
+/** Fin estimée (secondes depuis le début de la session) du dernier passage de chaque catégorie dans ces files. */
+function estimatedEnds(queues: Passage[][], durationSec: (categoryId: string, matchId: string | null) => number): Map<string, number> {
+  const ends = new Map<string, number>();
+  for (const queue of queues) {
+    let t = 0;
+    for (const p of queue) {
+      t += durationSec(p.categoryId, p.matchId);
+      ends.set(p.categoryId, Math.max(ends.get(p.categoryId) ?? 0, t));
+    }
+  }
+  return ends;
+}
 
 const sameKeys = (a: (string | null)[], b: (string | null)[]) => a.length === b.length && a.every((k) => b.includes(k));
 
@@ -110,8 +144,12 @@ function stillValid(c: PlanCategory, rows: FrozenPassage[], zoneId: string | nul
 }
 
 /**
- * Numérote les catégories jouables `cats` d'une vague à partir des compteurs `next` (mis à jour) : chaque zone (kata d'abord,
- * puis les combats), puis, sur la zone des finales, les combats pour la 1re place et les finales de kata, à la fin de la vague.
+ * Numérote les catégories jouables `cats` d'une vague à partir des compteurs `next` (mis à jour), zone par zone :
+ * - sur chaque zone, ses passages (kata d'abord, puis les combats), chaque finale « Sa zone » + « Dès que finie » juste après
+ *   le dernier combat de sa catégorie ;
+ * - sur la zone des finales de la session, puis les finales « Dès que finie » qui y passent, dans l'ordre où leurs catégories
+ *   se terminent (durées estimées ; à défaut, ou à égalité, ordre des catégories) ;
+ * - enfin, sur chaque zone, les finales « Fin de session » qui y passent, dans l'ordre des catégories.
  */
 function orderWave(
   cats: PlanCategory[],
@@ -121,42 +159,73 @@ function orderWave(
   next: Map<string, number>,
   opts: { keep?: Set<string>; zones?: Set<string> } = {},
 ): (PlannedPassage & { zoneId: string })[] {
-  const out: (PlannedPassage & { zoneId: string })[] = [];
   // Passages gardés (joués) : ni émis ni renumérotés ; `zones` : seulement ces zones.
   const kept = (c: PlanCategory, matchId: string | null) => opts.keep?.has(`${c.id}:${matchId ?? 'kata'}`) ?? false;
   const kataEntry = (c: PlanCategory, block: string | null): OrderCategory[] =>
     kept(c, block) ? [] : [{ id: c.id, rank: c.rank, kataEntrants: c.bracket!.entrants.length, kataBlock: block, nodes: [] }];
-  const emit = (zoneId: string, here: OrderCategory[]) => {
-    if (opts.zones && !opts.zones.has(zoneId)) return;
-    const passages = zoneOrder(here, ctx.mode, next.get(zoneId)!);
-    out.push(...passages.map((p) => ({ ...p, waveId, zoneId })));
-    next.set(zoneId, next.get(zoneId)! + passages.length);
-  };
-  for (const z of ctx.zones) {
-    const here: OrderCategory[] = [];
-    for (const c of cats.filter((x) => zoneOf(x.id) === z.id)) {
-      if (isKata(c)) {
-        if (!kataSplit(c, ctx)) here.push(...kataEntry(c, null));
-        else if (c.bracket!.entrants.length > 2) here.push(...kataEntry(c, 'kata:tour1'));
-      } else {
-        const finals = finalsOf(c, ctx);
-        here.push({ id: c.id, rank: c.rank, kataEntrants: null, nodes: ctx.nodes.get(c.id)!.filter((x) => !finals.includes(x.matchId) && !kept(c, x.matchId)) });
+  const finalsZone = ctx.waveFinals.get(waveKey(waveId))?.finalsZoneId ?? null;
+
+  const own = new Map(ctx.zones.map((z) => [z.id, [] as OrderCategory[]]));
+  const atEnd = new Map(ctx.zones.map((z) => [z.id, [] as OrderCategory[]]));
+  const ready: OrderCategory[] = [];
+  for (const c of cats) {
+    const zoneId = zoneOf(c.id);
+    if (zoneId === null || !own.has(zoneId)) continue;
+    const r = finalsChoice(c, zoneId, ctx);
+    let finals: OrderCategory[];
+    if (isKata(c)) {
+      if (!r.kataSplit) {
+        own.get(zoneId)!.push(...kataEntry(c, null));
+        continue;
       }
+      if (c.bracket!.entrants.length > 2) own.get(zoneId)!.push(...kataEntry(c, 'kata:tour1'));
+      finals = kataEntry(c, 'kata:finale');
+    } else {
+      const ids = c.bracket?.kind === 'combat' ? finalMatchIds(c.bracket) : [];
+      const nodes = ctx.nodes.get(c.id)!.filter((x) => !kept(c, x.matchId));
+      const entry = (list: MatchNode[]): OrderCategory => ({ id: c.id, rank: c.rank, kataEntrants: null, nodes: list });
+      const rounds = nodes.filter((x) => !ids.includes(x.matchId));
+      const last = nodes.filter((x) => ids.includes(x.matchId));
+      if (!r.onFinalsZone && r.when === 'ready') {
+        own.get(zoneId)!.push({ ...entry(rounds), finalsAfter: last });
+        continue;
+      }
+      own.get(zoneId)!.push(entry(rounds));
+      finals = last.length > 0 ? [entry(last)] : [];
     }
-    emit(z.id, here);
+    if (r.onFinalsZone && r.when === 'ready') ready.push(...finals);
+    else atEnd.get(r.finalZoneId!)!.push(...finals);
   }
-  if (ctx.finalsZone) {
-    const finals: OrderCategory[] = [];
-    for (const c of cats.filter((x) => zoneOf(x.id) !== null)) {
-      if (isKata(c)) {
-        if (kataSplit(c, ctx)) finals.push(...kataEntry(c, 'kata:finale'));
-      } else {
-        const ids = finalsOf(c, ctx);
-        const nodes = ctx.nodes.get(c.id)!.filter((x) => ids.includes(x.matchId) && !kept(c, x.matchId));
-        if (nodes.length) finals.push({ id: c.id, rank: c.rank, kataEntrants: null, nodes });
-      }
+
+  const queues = new Map(ctx.zones.map((z) => [z.id, zoneOrder(own.get(z.id)!, ctx.mode, 1)]));
+  // Derniers combats de la file (le repos se compte jusqu'au bloc de kata précédent).
+  const tail = (queue: Passage[]): PlacedMatch[] => {
+    const out: PlacedMatch[] = [];
+    for (let i = queue.length - 1; i >= 0 && out.length < 2; i--) {
+      const p = queue[i]!;
+      const node = ctx.nodes.get(p.categoryId)?.find((n) => n.matchId === p.matchId);
+      if (!node) break;
+      out.unshift({ categoryId: p.categoryId, node });
     }
-    emit(ctx.finalsZone, finals);
+    return out;
+  };
+  const append = (queue: Passage[], here: OrderCategory[], mode: PassageOrderMode) => queue.push(...zoneOrder(here, mode, queue.length + 1, tail(queue)));
+
+  if (finalsZone !== null && ready.length > 0) {
+    const ends = ctx.durationSec ? estimatedEnds([...queues.values()], ctx.durationSec) : new Map<string, number>();
+    const end = (c: OrderCategory) => ends.get(c.id) ?? 0;
+    // Une à une : un bloc de kata ne passe pas devant une finale de combat finie avant lui.
+    for (const c of [...ready].sort((a, b) => end(a) - end(b) || a.rank - b.rank)) append(queues.get(finalsZone)!, [c], ctx.mode);
+  }
+  for (const z of ctx.zones) append(queues.get(z.id)!, atEnd.get(z.id)!, ctx.mode);
+
+  const out: (PlannedPassage & { zoneId: string })[] = [];
+  for (const z of ctx.zones) {
+    if (opts.zones && !opts.zones.has(z.id)) continue;
+    const first = next.get(z.id)!;
+    const queue = queues.get(z.id)!;
+    out.push(...queue.map((p) => ({ ...p, number: first + p.number - 1, waveId, zoneId: z.id })));
+    next.set(z.id, first + queue.length);
   }
   return out;
 }
@@ -169,7 +238,7 @@ function orderWave(
 export function planPassages(input: PlanInput): PassagePlan {
   const ctx = context(input);
   const zoneIds = new Set(ctx.zones.map((z) => z.id));
-  const plan: PassagePlan = { categories: {}, zones: ctx.zones.map((z) => ({ zoneId: z.id, passages: [] })), impossible: [], pending: [], frozenWaves: [] };
+  const plan: PassagePlan = { categories: {}, zones: ctx.zones.map((z) => ({ zoneId: z.id, passages: [] })), impossible: [], pending: [], frozenWaves: [], finals: {} };
   const byZone = new Map(plan.zones.map((z) => [z.zoneId, z.passages]));
   const frozen = input.frozen ?? [];
   const weight = (c: PlanCategory) => (isKata(c) ? (c.playable ? c.bracket!.entrants.length : 0) : ctx.nodes.get(c.id)!.length);
@@ -186,6 +255,10 @@ export function planPassages(input: PlanInput): PassagePlan {
     for (const c of cats) plan.categories[c.id] = { zoneId: zoneOf.get(c.id) ?? null, auto: !(c.pinnedZoneId && zoneIds.has(c.pinnedZoneId)) };
     for (const id of impossible) plan.impossible.push({ categoryId: id, discipline: cats.find((c) => c.id === id)!.discipline });
     const playable = cats.filter((c) => c.playable);
+    for (const c of playable) {
+      const zoneId = zoneOf.get(c.id) ?? null;
+      if (zoneId !== null) plan.finals[c.id] = finalsChoice(c, zoneId, ctx);
+    }
     const rows = frozen.filter((f) => f.waveKey === key && zoneIds.has(f.zoneId));
     if (rows.length > 0) {
       plan.frozenWaves.push(key);

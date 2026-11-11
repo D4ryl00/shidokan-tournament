@@ -233,7 +233,7 @@ export async function moveCategory(db: AppDb, competitionId: string, categoryId:
     throw new RegistrationValidationError([`La zone « ${zone.name} » n’accueille pas le ${DISCIPLINES[cat.key.discipline].label.toLowerCase()}.`]);
   }
   // La finale restée sur la zone des finales y reste (sauf si la catégorie y arrive : elle y est renumérotée après ses demies).
-  const finalsZone = input.finals?.zoneId ?? null;
+  const finalsZone = input.waveFinals?.find((w) => w.waveKey === waveKey(cat.waveId))?.finalsZoneId ?? null;
   const finals = cat.bracket?.kind === 'combat' ? finalMatchIds(cat.bracket) : [];
   const pinned = new Set(
     (input.frozen ?? [])

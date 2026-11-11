@@ -71,9 +71,10 @@ describe('déplacements', () => {
 });
 
 describe('déplacements et zone des finales (relecture)', () => {
-  const finalsOn = (zoneId: string, kata = false): PlanInput => ({
+  const waveFinals = (finalsZoneId: string) => [{ waveKey: '', finalsZoneId, whereDefault: null, whenDefault: null }];
+  const finalsOn = (zoneId: string): PlanInput => ({
     categories: [pc('C', br(4)), pc('X', br(4), { pinnedZoneId: 'ring', rank: 1 })],
-    zones, waves: [], mode: 'rounds', finals: { zoneId, kata },
+    zones, waves: [], mode: 'rounds', waveFinals: waveFinals(zoneId),
   });
   const after = (rows: FrozenPassage[], cat: string, match: string) => rows.find((r) => r.categoryId === cat && r.matchId === match)!.number;
 
@@ -107,7 +108,7 @@ describe('déplacements et zone des finales (relecture)', () => {
   });
 
   test('kata séparé, déplacé vers la zone des finales : la finale après le tour 1', () => {
-    const input: PlanInput = { categories: [pc('K', br(5, 'kata_two_rounds'))], zones, waves: [], mode: 'rounds', finals: { zoneId: 'ring', kata: true } };
+    const input: PlanInput = { categories: [pc('K', br(5, 'kata_two_rounds'))], zones, waves: [], mode: 'rounds', waveFinals: waveFinals('ring') };
     input.frozen = freeze(input);
     const rows = appendPassages(input, null, ['K'], { zoneOf: { K: 'ring' } });
     expect(rows.map((r) => `${r.zoneId}:${r.matchId}`)).toEqual(['ring:kata:tour1', 'ring:kata:finale']);

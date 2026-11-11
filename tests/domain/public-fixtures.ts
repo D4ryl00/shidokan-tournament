@@ -165,6 +165,7 @@ export const PLAN: PassagePlan = {
   impossible: [],
   pending: [],
   frozenWaves: ['w1'],
+  finals: {},
 };
 
 export function source(over: Partial<PublicSource> = {}): PublicSource {
