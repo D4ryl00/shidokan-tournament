@@ -2,18 +2,57 @@ import { Button, FileButton, Group, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useRef, useState } from 'react';
 import { useParams } from 'react-router';
-import { useAuthMe, useClubChanges, useDirectoryClubs, useGrid, useImportClubForm, usePreviewClubForm, useResolveClub, type ClubFormPreview } from '../api.js';
+import { useAuthMe, useClubChanges, useClubLines, useDirectoryClubs, useGrid, useImportClubForm, useOrganiserLineOps, usePreviewClubForm, useReadFfkPdfOrganiser, useResolveClub, type ClubFormPreview } from '../api.js';
 import { ClubPicker } from '../components/club-picker/ClubPicker.js';
 import type { ClubChoice } from '../components/club-picker/choice.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { CompetitionChangesBanner } from '../components/club-changes/ClubChangeBanners.js';
 import { useClubChangeDialog } from '../components/club-changes/ClubChangeModal.js';
 import { ClubFormPreviewTable } from '../components/ClubFormPreviewTable.js';
+import { FfkImportWizard } from '../components/ffk-import/FfkImportWizard.js';
+import { useOrganiserLineInputs } from '../components/club-line/organiserInputs.js';
 import { HELP } from '../help.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
 import { OnlineEntryPanel } from '../components/OnlineEntryPanel.js';
 import { PaperEntryTable } from '../components/PaperEntryTable.js';
 import { plural } from '../../domain/plural.js';
+
+/** Import du PDF de la FFK par l'organisateur : le club se choisit en tête de la fenêtre, une fiche de l'annuaire n'entre dans la compétition qu'à « Commencer ». */
+function FfkPdfImport({ competitionId }: { competitionId: string }) {
+  const [opened, setOpened] = useState(false);
+  const [choice, setChoice] = useState<ClubChoice | null>(null);
+  // Club de la compétition visé par les étapes : le club choisi, ou celui que la fiche d'annuaire est devenue à « Commencer ».
+  const [resolved, setResolved] = useState<string | null>(null);
+  const clubId = resolved ?? (choice?.kind === 'club' ? choice.id : '');
+  const resolveClub = useResolveClub(competitionId);
+  const readPdf = useReadFfkPdfOrganiser(competitionId);
+  const clubLines = useClubLines(competitionId, clubId);
+  const ops = useOrganiserLineOps(competitionId, clubId);
+  const inputs = useOrganiserLineInputs(competitionId);
+  // Un club déjà dans la compétition : « Commencer » attend ses fiches, le plan en dépend. Une fiche d'annuaire n'a pas de fiches.
+  const linesLoaded = clubLines.isSuccess && !clubLines.isFetching;
+  const ready = choice !== null && (choice.kind === 'directory' && resolved === null ? true : linesLoaded);
+  const close = (message?: string) => {
+    setOpened(false);
+    setChoice(null);
+    setResolved(null);
+    if (message) notifications.show({ color: 'green', message });
+  };
+  return (
+    <>
+      <Group>
+        <Button variant="default" data-testid="ffk-import" onClick={() => setOpened(true)}>Importer le PDF de la FFK</Button>
+      </Group>
+      <FfkImportWizard opened={opened} mode="organiser" onClose={close} read={(file, discipline) => readPdf.mutateAsync({ file, discipline })}
+        lines={clubId ? (clubLines.data ?? []) : []} ops={ops} {...inputs}
+        before={<ClubPicker competitionId={competitionId} value={choice} onChange={(next) => { setChoice(next); setResolved(null); }} />}
+        ready={ready}
+        onBeforeStart={async () => {
+          if (choice?.kind === 'directory' && resolved === null) setResolved((await resolveClub(choice)).id);
+        }} />
+    </>
+  );
+}
 
 export function ClubFormPage() {
   const { id = '' } = useParams();
@@ -132,6 +171,10 @@ export function ClubFormPage() {
             </Group>
           </Stack>
         )}
+      </SectionCard>
+
+      <SectionCard title={HELP['fiche-club.pdf-ffk'].title} help="fiche-club.pdf-ffk">
+        <FfkPdfImport competitionId={id} />
       </SectionCard>
 
       <SectionCard title={HELP['fiche-club.saisir'].title} help="fiche-club.saisir">

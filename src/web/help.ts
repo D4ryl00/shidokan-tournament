@@ -28,6 +28,7 @@ export type HelpTopicId =
   | 'fiche-club.en-ligne'
   | 'fiche-club.envoyer'
   | 'fiche-club.importer'
+  | 'fiche-club.pdf-ffk'
   | 'fiche-club.saisir'
   | 'import-ffk.clubs'
   | 'import-ffk.rapprochements'
@@ -338,6 +339,19 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       ],
       'Si le fichier est refusé, le message dit pourquoi (fiche modifiée, nom du club manquant…).',
       'Les fiches remplies avec l’ancien format (une ligne par inscription, catégorie de poids) sont toujours acceptées.',
+    ],
+  },
+  'fiche-club.pdf-ffk': {
+    title: 'Importer un PDF de la FFK',
+    short: 'Choisissez le club et la discipline, puis lisez le PDF « État des inscriptions » de la FFK : les fiches se vérifient une à une.',
+    details: [
+      [
+        'Ce PDF vient de la FFK : il donne les combattants d’une discipline pour un club. Ni le club ni la discipline ne sont lus dans le fichier : vous les choisissez avant de commencer.',
+        'Choisissez le club (ses clubs, puis l’annuaire) et la discipline du PDF, puis le fichier. Le club d’une fiche de l’annuaire n’entre dans la compétition qu’à « Commencer ».',
+      ],
+      'Le parcours montre une fiche à la fois : le combattant du PDF face à sa fiche déjà enregistrée, avec les différences. Pour chaque fiche, vous l’enregistrez, la laissez telle quelle ou ne l’ajoutez pas.',
+      'Chaque fiche est enregistrée au fur et à mesure : si vous vous arrêtez au milieu, ce qui est fait reste fait. Réimporter le même PDF reprend là où vous en étiez, les fiches déjà à jour comptent comme faites.',
+      'À la fin, les combattants du club qui ne sont pas dans le PDF sont listés, cases décochées : cochez ceux qu’il faut retirer de cette discipline. Les autres disciplines de ces combattants ne changent pas.',
     ],
   },
   'fiche-club.saisir': {

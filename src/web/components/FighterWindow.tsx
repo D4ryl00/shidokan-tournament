@@ -1,15 +1,14 @@
 import { Button, Group, Loader, Modal, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
-import { entryKey } from '../../domain/closed-categories.js';
-import { ageRangeText } from '../../domain/grid.js';
 import type { Club } from '../../domain/registration.js';
-import { useClosedCategories, useClubs, useCompetition, useFighterLine, useGrid, useOrganiserLineOps, useResolveClub } from '../api.js';
+import { useClubs, useFighterLine, useOrganiserLineOps, useResolveClub } from '../api.js';
 import type { ClubLine } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { ClubLineForm, type SavedThen } from './ClubLineForm.js';
 import { ClubPicker } from './club-picker/ClubPicker.js';
 import type { ClubChoice } from './club-picker/choice.js';
+import { useOrganiserLineInputs } from './club-line/organiserInputs.js';
 
 export type FighterWindowMode = { kind: 'add' } | { kind: 'edit'; fighterId: string };
 
@@ -47,9 +46,7 @@ function Steps({ competitionId, mode, line, onClose }: {
   line: ClubLine | null;
   onClose: () => void;
 }) {
-  const { data: grid } = useGrid(competitionId);
-  const { data: closedView } = useClosedCategories(competitionId);
-  const { data: competition } = useCompetition(competitionId);
+  const inputs = useOrganiserLineInputs(competitionId);
   const resolve = useResolveClub(competitionId);
   // Club de la ligne : celui du combattant tant qu'on n'en choisit pas un autre ; sans club, l'étape club vient d'abord.
   const [club, setClub] = useState<{ id: string; name: string } | null>(null);
@@ -100,19 +97,14 @@ function Steps({ competitionId, mode, line, onClose }: {
       </Modal>
   );
 
-  const ageBands = (grid?.ageBands ?? []).map((b) => ({ code: b.code, label: b.label, ages: ageRangeText(b), isMinor: b.isMinor }));
-  const weightClasses = [...(grid?.weightClasses ?? [])]
-    .sort((a, b) => (a.maxKg ?? Infinity) - (b.maxKg ?? Infinity))
-    .map(({ id, ageBandCode, sex, label, maxKg }) => ({ id, ageBandCode, sex, label, maxKg }));
-  const closed = (closedView?.closed ?? []).map(entryKey);
   // Le formulaire reste monté pendant l'étape « Club » (fenêtre fermée) : le brouillon est gardé quand on y va et revient.
   return (
     <>
     {step === 'club' && clubStep}
     <ClubLineForm
       key={mode.kind === 'add' ? `add-${round}` : mode.fighterId}
-      ops={ops} mode="organiser" multipleCombats={competition?.settings.multipleCombatDisciplinesPerDay ?? false}
-      line={formLine} ageBands={ageBands} weightClasses={weightClasses} closed={closed} opened={step === 'line'} onClose={done}
+      ops={ops} mode="organiser" {...inputs}
+      line={formLine} opened={step === 'line'} onClose={done}
       title={mode.kind === 'add' ? `Ajouter un combattant · ${clubName ?? ''}` : clubName ? `${line?.line.lastName} ${line?.line.firstName} · ${clubName}` : undefined}
       // Entrée : en ajout, « Enregistrer et ajouter un autre » ; en modification, « Enregistrer ».
       onEnter={(saveThen) => (mode.kind === 'add' ? saveThen(savedThenNext) : saveThen())}
