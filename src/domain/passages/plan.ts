@@ -32,6 +32,11 @@ export interface FrozenPassage {
   categoryId: string;
   matchId: string | null;
   noRest: boolean;
+  /**
+   * Signature du choix des finales de la catégorie au figeage (`ResolvedFinals.signature`) ; null ou absente : figé avant
+   * l'étape 43, jamais « à numéroter » pour cette raison.
+   */
+  finalsChoice?: string | null;
 }
 
 export interface PlanInput {
@@ -62,8 +67,11 @@ export interface PassagePlan {
   zones: { zoneId: string; passages: PlannedPassage[] }[];
   /** Catégories qu'aucune zone n'accepte (discipline). */
   impossible: { categoryId: string; discipline: DisciplineId }[];
-  /** Catégories d'une vague figée sans numéros à jour (nouvelles ou régénérées) : à numéroter. */
-  pending: { waveId: string | null; categoryId: string }[];
+  /**
+   * Catégories d'une vague figée sans numéros à jour : à numéroter. `shape` : nouvelle, régénérée ou changée de zone ;
+   * `finals` : où ou quand se joue sa finale a changé depuis le figeage (`shape` l'emporte si les deux).
+   */
+  pending: { waveId: string | null; categoryId: string; reason: 'shape' | 'finals' }[];
   /** Clés des vagues figées. */
   frozenWaves: string[];
   /** Où et quand se joue la finale de chaque catégorie jouable placée sur une zone. */
@@ -260,7 +268,10 @@ export function planPassages(input: PlanInput): PassagePlan {
       plan.frozenWaves.push(key);
       for (const c of playable) {
         const mine = rows.filter((r) => r.categoryId === c.id);
-        if (!stillValid(c, mine, zoneOf.get(c.id) ?? null, ctx, input.played ?? new Set())) plan.pending.push({ waveId, categoryId: c.id });
+        const signature = plan.finals[c.id]?.signature;
+        const frozenChoice = mine.find((r) => r.finalsChoice != null)?.finalsChoice;
+        if (!stillValid(c, mine, zoneOf.get(c.id) ?? null, ctx, input.played ?? new Set())) plan.pending.push({ waveId, categoryId: c.id, reason: 'shape' });
+        else if (frozenChoice != null && signature !== undefined && frozenChoice !== signature) plan.pending.push({ waveId, categoryId: c.id, reason: 'finals' });
         else for (const r of mine) byZone.get(r.zoneId)!.push({ number: r.number, categoryId: r.categoryId, matchId: r.matchId, noRest: r.noRest, waveId });
       }
       // Les numéros figés (trous compris) sont pris : la suite vient après (après eux seuls si la vague a repris à 1).
@@ -304,8 +315,9 @@ export interface RenumberOptions {
   zoneOf?: Record<string, string>;
 }
 
-const toFrozen = (p: PlannedPassage & { zoneId: string }): FrozenPassage => ({
+const toFrozen = (plan: PassagePlan) => (p: PlannedPassage & { zoneId: string }): FrozenPassage => ({
   waveKey: waveKey(p.waveId), zoneId: p.zoneId, number: p.number, categoryId: p.categoryId, matchId: p.matchId, noRest: p.noRest,
+  finalsChoice: plan.finals[p.categoryId]?.signature ?? null,
 });
 
 /**
@@ -322,7 +334,7 @@ export function appendPassages(input: PlanInput, waveId: string | null, category
   const cats = input.categories.filter((c) => c.waveId === waveId && c.playable && categoryIds.includes(c.id));
   const zoneOf = (id: string) => opts.zoneOf?.[id] ?? plan.categories[id]?.zoneId ?? null;
   const keep = new Set([...(opts.played ?? input.played ?? []), ...(opts.pinned ?? [])]);
-  return orderWave(cats, zoneOf, waveId, ctx, next, { keep }).map(toFrozen);
+  return orderWave(cats, zoneOf, waveId, ctx, next, { keep }).map(toFrozen(plan));
 }
 
 /**
@@ -346,7 +358,7 @@ export function reshuffleZone(input: PlanInput, zoneId: string, waveId: string |
   for (const key of segment.filter((k) => plan.frozenWaves.includes(k))) {
     const wave = key === '' ? null : key;
     const cats = input.categories.filter((c) => c.waveId === wave && c.playable && !pending.has(c.id));
-    out.push(...orderWave(cats, zoneOf, wave, ctx, next, { keep, zones: new Set([zoneId]) }).map(toFrozen));
+    out.push(...orderWave(cats, zoneOf, wave, ctx, next, { keep, zones: new Set([zoneId]) }).map(toFrozen(plan)));
   }
   return out;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { generateBracket, type Bracket, type BracketFormat } from '../../../src/domain/brackets/index.js';
-import { appendPassages, finalMatchIds, planPassages, type FrozenPassage, type PlanCategory, type PlanInput, type WaveFinals } from '../../../src/domain/passages/index.js';
+import { appendPassages, finalMatchIds, planPassages, reshuffleZone, type FrozenPassage, type PlanCategory, type PlanInput, type WaveFinals } from '../../../src/domain/passages/index.js';
 import { defaultSettings } from '../../../src/domain/settings.js';
 import type { CombatBracket } from '../../../src/domain/brackets/index.js';
 
@@ -19,7 +19,7 @@ const finalsOn = (finalsZoneId: string | null): WaveFinals[] => [{ waveKey: '', 
 const whole = { finals: { where: 'own' as const, when: 'ready' as const } };
 const seqOf = (input: PlanInput, zone = 't1') => planPassages(input).zones.find((z) => z.zoneId === zone)!.passages.map((p) => `${p.number}:${p.categoryId}:${p.matchId ?? 'kata'}`);
 const freeze = (input: PlanInput, wave: string | null = null): FrozenPassage[] =>
-  planPassages(input).zones.flatMap((z) => z.passages.filter((p) => p.waveId === wave).map((p) => ({ waveKey: wave ?? '', zoneId: z.zoneId, number: p.number, categoryId: p.categoryId, matchId: p.matchId, noRest: p.noRest })));
+  planPassages(input).zones.flatMap((z) => z.passages.filter((p) => p.waveId === wave).map((p) => ({ waveKey: wave ?? '', zoneId: z.zoneId, number: p.number, categoryId: p.categoryId, matchId: p.matchId, noRest: p.noRest, finalsChoice: planPassages(input).finals[p.categoryId]?.signature ?? null })));
 
 describe('numéros figés', () => {
   test('session figée : numéros repris tels quels, trous compris', () => {
@@ -42,7 +42,7 @@ describe('numéros figés', () => {
     const frozen = freeze(base);
     const changed: PlanInput = { ...base, frozen, categories: [pc('A', br(4)), pc('B', br(5), { rank: 1 }), pc('C', br(2, 'single_match'), { rank: 2 })] };
     const plan = planPassages(changed);
-    expect(plan.pending).toEqual([{ waveId: null, categoryId: 'B' }, { waveId: null, categoryId: 'C' }]);
+    expect(plan.pending).toEqual([{ waveId: null, categoryId: 'B', reason: 'shape' }, { waveId: null, categoryId: 'C', reason: 'shape' }]);
     expect(plan.zones[0]!.passages.map((p) => p.categoryId)).toEqual(['A', 'A', 'A']);
     expect(plan.zones[0]!.passages.map((p) => p.number)).toEqual(frozen.filter((f) => f.categoryId === 'A').map((f) => f.number));
   });
@@ -115,17 +115,59 @@ describe('numéros figés (relecture)', () => {
     const input: PlanInput = { categories: [pc('A', br(4))], zones: [t1, ring], waves: [], mode: 'rounds' };
     const frozen = freeze(input);
     expect(planPassages({ ...input, frozen }).pending).toEqual([]);
-    expect(planPassages({ ...input, frozen, categories: [pc('A', br(4), { pinnedZoneId: 'ring' })] }).pending).toEqual([{ waveId: null, categoryId: 'A' }]);
+    expect(planPassages({ ...input, frozen, categories: [pc('A', br(4), { pinnedZoneId: 'ring' })] }).pending).toEqual([{ waveId: null, categoryId: 'A', reason: 'shape' }]);
   });
 
-  test('réglage des finales changé après le lancement : rien n’est à renuméroter', () => {
+  test('choix changé après réouverture : à numéroter (finals)', () => {
+    const own = (when: 'end' | 'ready') => pc('A', br(8), { finals: { where: 'own', when } });
+    const base: PlanInput = { categories: [own('end')], zones: [t1], waves: [], mode: 'rounds' };
+    const frozen = freeze(base);
+    expect(planPassages({ ...base, frozen }).pending).toEqual([]);
+    expect(planPassages({ ...base, frozen, categories: [own('ready')] }).pending).toEqual([{ waveId: null, categoryId: 'A', reason: 'finals' }]);
+  });
+
+  test('zone des finales de la session changée : à numéroter pour les catégories concernées', () => {
+    const base: PlanInput = { categories: [pc('A', br(8)), pc('R', br(4), { pinnedZoneId: 'ring', rank: 1 })], zones: [t1, ring], waves: [], mode: 'rounds', waveFinals: finalsOn('ring') };
+    const frozen = freeze(base);
+    expect(planPassages({ ...base, frozen }).pending).toEqual([]);
+    const pending = planPassages({ ...base, frozen, waveFinals: finalsOn(null) }).pending;
+    expect(pending).toContainEqual({ waveId: null, categoryId: 'A', reason: 'finals' });
+  });
+
+  test('signature null (figé avant l’étape 43) : rien à numéroter', () => {
     const cats = [pc('K', br(5, 'kata_two_rounds')), pc('A', br(8), { rank: 1 })];
     const wholeKata = [{ ...cats[0]!, ...whole }, cats[1]!];
     const base: PlanInput = { categories: wholeKata, zones: [t1, ring], waves: [], mode: 'rounds', waveFinals: finalsOn('ring') };
+    const legacy = freeze(base).map(({ finalsChoice: _drop, ...f }) => ({ ...f, finalsChoice: null }));
+    const absent = freeze(base).map(({ finalsChoice: _drop, ...f }) => f);
+    for (const frozen of [legacy, absent]) {
+      for (const change of [{ categories: cats }, { waveFinals: finalsOn(null) }]) expect(planPassages({ ...base, frozen, ...change }).pending).toEqual([]);
+    }
+  });
+
+  test('forme changée en même temps que le choix : reason shape', () => {
+    const base: PlanInput = { categories: [pc('A', br(8), { finals: { where: 'own', when: 'end' } })], zones: [t1], waves: [], mode: 'rounds' };
     const frozen = freeze(base);
-    for (const change of [{ categories: cats }, { waveFinals: finalsOn(null) }]) expect(planPassages({ ...base, frozen, ...change }).pending).toEqual([]);
-    const split = freeze({ ...base, categories: cats });
-    expect(planPassages({ ...base, frozen: split, waveFinals: finalsOn(null) }).pending).toEqual([]);
+    const changed = pc('A', br(5), { finals: { where: 'own', when: 'ready' } });
+    expect(planPassages({ ...base, frozen, categories: [changed] }).pending).toEqual([{ waveId: null, categoryId: 'A', reason: 'shape' }]);
+  });
+
+  test('appendPassages : chaque ligne porte la signature actuelle de sa catégorie', () => {
+    const base: PlanInput = { categories: [pc('A', br(4)), pc('B', br(4), { rank: 1 })], zones: [t1], waves: [], mode: 'rounds' };
+    const input: PlanInput = { ...base, frozen: freeze(base), categories: [pc('A', br(4)), pc('B', br(5), { rank: 1, finals: { where: 'own', when: 'ready' } })] };
+    const sig = planPassages(input).finals['B']!.signature;
+    const rows = appendPassages(input, null, ['B']);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.finalsChoice === sig)).toBe(true);
+  });
+
+  test('reshuffleZone : chaque ligne porte la signature actuelle de sa catégorie', () => {
+    const input: PlanInput = { categories: [pc('A', br(4)), pc('B', br(4), { rank: 1, finals: { where: 'own', when: 'ready' } })], zones: [t1], waves: [], mode: 'rounds' };
+    const full = { ...input, frozen: freeze(input) };
+    const rows = reshuffleZone(full, 't1', null, []);
+    const plan = planPassages(full);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.finalsChoice === plan.finals[r.categoryId]!.signature)).toBe(true);
   });
 
   test('zone des finales qui n’accepte pas la discipline : la finale reste sur sa zone', () => {
