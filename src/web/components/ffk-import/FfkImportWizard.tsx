@@ -9,6 +9,7 @@ import { DISCIPLINE_OPTIONS, disciplineLabel, SEX_LABELS } from '../../labels.js
 import { ApiErrorAlert } from '../ApiErrorAlert.js';
 import { ClubLineForm } from '../ClubLineForm.js';
 import { FfkProgress } from '../club-line/FfkProgress.js';
+import { FfkPdfSource } from './FfkPdfSource.js';
 import { listFr } from '../club-line/ffkStep.js';
 import { absentRows, count, disciplinesOf, sameSaved, startCounts, stepView, summaryText, wizardReducer, wizardSummary, type WizardState } from './wizard.js';
 
@@ -87,6 +88,7 @@ function Wizard({ onClose, mode, read, lines, ops, multipleCombats, ageBands, we
     return (
       <Modal opened onClose={() => onClose()} fullScreen={mobile} title="Importer le PDF de la FFK">
         <Stack data-testid="ffk-start-form">
+          <FfkPdfSource />
           {before}
           <Select data-testid="ffk-discipline" label="Discipline de ce PDF" required placeholder="Choisir la discipline" data={DISCIPLINE_OPTIONS}
             value={discipline} allowDeselect={false} onChange={(v) => chooseDiscipline(v as DisciplineId | null)} comboboxProps={{ withinPortal: true }} />

@@ -346,7 +346,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Choisissez le club et la discipline, puis lisez le PDF « État des inscriptions » de la FFK : les fiches se vérifient une à une.',
     details: [
       [
-        'Ce PDF vient de la FFK : il donne les combattants d’une discipline pour un club. Ni le club ni la discipline ne sont lus dans le fichier : vous les choisissez avant de commencer.',
+        'Ce PDF vient de la FFK : il donne les combattants d’une discipline pour un club. Le club le récupère sur ffkcompetition.fr : la compétition, onglet « Récap », puis « Etat des inscriptions ». Ni le club ni la discipline ne sont lus dans le fichier : vous les choisissez avant de commencer.',
         'Choisissez le club (ses clubs, puis l’annuaire) et la discipline du PDF, puis le fichier. Le club d’une fiche de l’annuaire n’entre dans la compétition qu’à « Commencer ».',
       ],
       'Le parcours montre une fiche à la fois : le combattant du PDF face à sa fiche déjà enregistrée, avec les différences. Pour chaque fiche, vous l’enregistrez, la laissez telle quelle ou ne l’ajoutez pas.',

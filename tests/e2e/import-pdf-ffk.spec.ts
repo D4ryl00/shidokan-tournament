@@ -45,8 +45,12 @@ test.describe('coach', () => {
     const { token } = await coachSetup(page, request, 'Coupe PDF coach');
     const file = await pdf('Senior Masculin -75 KG', ['DURAND LEO', 'MARTIN HUGO', 'PETIT NOAH']);
     await page.goto(`/inscription/${token}`);
+    // Où trouver le PDF : une ligne sur la page, le chemin complet dans la fenêtre.
+    await expect(page.getByTestId('ffk-import-hint')).toContainText('ffkcompetition.fr');
 
     const win = await choose(page, file, 'Karaté');
+    await expect(win.getByTestId('ffk-pdf-source')).toContainText('onglet « Récap », puis téléchargez « Etat des inscriptions »');
+    await expect(win.getByRole('link', { name: 'ffkcompetition.fr' })).toHaveAttribute('href', 'https://www.ffkcompetition.fr');
     await expect(win.getByTestId('ffk-counts')).toContainText('3 nouveaux');
     await expect(page.getByTestId('ffk-begin')).toHaveText('Commencer (3 fiches)');
     await page.getByTestId('ffk-begin').click();

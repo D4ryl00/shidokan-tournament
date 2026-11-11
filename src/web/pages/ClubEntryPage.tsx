@@ -17,6 +17,7 @@ import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { JumpLinks } from '../components/ui/JumpLinks.js';
 import { GROUP_MODES, groupClubLines, type GroupMode, type Hidden } from '../components/club-entry/groups.js';
 import { disciplineLabel, SEX_LABELS } from '../labels.js';
+import { quoted } from '../components/ffk-import/FfkPdfSource.js';
 
 const RULESET_LABEL = { jiyu: 'jiyu', shobu: 'shobu' } as const;
 
@@ -240,6 +241,12 @@ export function ClubEntryPage() {
                 </Group>
               )}
             </Group>
+            {view.editable && (
+              <Text size="sm" c="dimmed" data-testid="ffk-import-hint">
+                Vos combattants sont déjà inscrits sur ffkcompetition.fr{'\u00a0'}? {quoted('Importer le PDF de la FFK')} reprend le PDF{' '}
+                {quoted('Etat des inscriptions')} (onglet {quoted('Récap')} de la compétition) au lieu de tout retaper.
+              </Text>
+            )}
             {view.closedSummary.length > 0 && (
               <Accordion variant="contained" radius="md" data-testid="club-entry-closed">
                 <Accordion.Item value="closed">
