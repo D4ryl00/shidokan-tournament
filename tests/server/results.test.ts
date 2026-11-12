@@ -189,6 +189,74 @@ test('finale prête avant son tour : signalée même au-delà des 6 premiers ; s
   expect(after.every((q) => !q.early)).toBe(true);
 });
 
+type QItem = { number: number; categoryId: string; matchId: string | null; kataPart: string | null; early: boolean };
+const queueOf = async (zoneId: string) =>
+  ((await call('GET', '/schedule')).json() as { zones: { zone: { id: string }; queue: QItem[] }[] }).zones.find((t) => t.zone.id === zoneId)?.queue ?? [];
+const twoSessions = async () =>
+  (await call('PUT', '/waves', [
+    { name: 'Matin', rules: { ageBandCodes: ['minime'], disciplines: [] } },
+    { name: 'Après-midi', rules: { ageBandCodes: ['cadet'], disciplines: [] } },
+  ])).json() as { id: string }[];
+
+test('finale de kata prête avant son tour : early', async () => {
+  const [t1, t2] = (await call('GET', '/zones')).json() as { id: string }[];
+  const k = [await reg({ discipline: 'kata', ruleset: null, weightClassId: null }), await reg({ discipline: 'kata', ruleset: null, weightClassId: null }), await reg({ discipline: 'kata', ruleset: null, weightClassId: null })];
+  for (let i = 0; i < 4; i++) await reg({ weightClassId: 'cadet:F:-47' });
+  const all = await cats();
+  const kata = all.find((c) => c.registrationIds.length === 3 && c.registrationIds.includes(k[0]!.id))!;
+  const elim = all.find((c) => c.id !== kata.id)!;
+  for (const c of [kata, elim]) await call('PATCH', `/categories/${c.id}`, { zoneId: t1!.id });
+  await finalsZone(t2!.id);
+  await call('PUT', '/finals/categories', { waveId: null, categoryIds: [kata.id], where: 'own', when: 'end' });
+  for (const [i, r] of k.entries()) await call('PUT', `/categories/${kata.id}/kata/${r.id}/round1`, { notes: [9 - i, 9 - i, 9 - i] });
+  const q = await queueOf(t1!.id);
+  const fin = (await queueOf(t2!.id)).concat(q).find((x) => x.categoryId === kata.id && x.kataPart === 'finale');
+  expect(fin, JSON.stringify([q, await queueOf(t2!.id)])).toBeDefined();
+  expect(fin!.early).toBe(true);
+});
+
+test('finale prête : pas « early » si le seul passage non joué plus petit est d’une autre session', async () => {
+  const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
+  for (let i = 0; i < 4; i++) await reg({ ageBandCode: 'minime', weightClassId: 'minime:F:-45' });
+  for (let i = 0; i < 4; i++) await reg();
+  const [, aprem] = await twoSessions();
+  for (const c of await cats()) await call('PATCH', `/categories/${c.id}`, { zoneId: t1!.id });
+  await call('PUT', '/finals/categories', { waveId: aprem!.id, when: 'end' });
+  const cad = (await call('GET', '/categories')).json() as (Cat & { label: string })[];
+  const cadet = cad.find((c) => !c.label.includes('-45'))!;
+  await put(cadet.id, 'w1-0', 'a');
+  await put(cadet.id, 'w1-1', 'a');
+  const q = await queueOf(t1!.id);
+  const fin = q.find((x) => x.categoryId === cadet.id && x.matchId === 'w2-0')!;
+  expect(q[0]!.categoryId).not.toBe(cadet.id); // les passages du matin passent en premier
+  expect(fin.early).toBe(false);
+});
+
+test('« reprendre à 1 » : early calculé dans la bonne session quand deux passages de sessions différentes ont le même numéro', async () => {
+  const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
+  for (let i = 0; i < 8; i++) await reg({ ageBandCode: 'minime', weightClassId: 'minime:F:-45' });
+  for (let i = 0; i < 4; i++) await reg();
+  for (let i = 0; i < 4; i++) await reg({ weightClassId: 'cadet:F:-47' });
+  const [matin, aprem] = await twoSessions();
+  const list = (await call('GET', '/categories')).json() as (Cat & { label: string })[];
+  const minime = list.find((c) => c.label.includes('-45'))!;
+  const a = list.find((c) => c.label.includes('-54'))!;
+  for (const c of list) await call('PATCH', `/categories/${c.id}`, { zoneId: t1!.id, status: 'ready' });
+  await call('PUT', '/finals/categories', { waveId: aprem!.id, when: 'end' });
+  expect((await call('POST', '/launch', { waveId: matin!.id })).statusCode).toBe(204);
+  expect((await call('POST', '/launch', { waveId: aprem!.id, restart: true })).statusCode).toBe(204);
+  // Le matin est entièrement joué.
+  for (const m of minime.bracket.matches!) await put(minime.id, m.id, 'a');
+  await put(a.id, 'w1-0', 'a');
+  await put(a.id, 'w1-1', 'a');
+  const plan = ((await call('GET', '/passages')).json() as { zones: { passages: { number: number; categoryId: string; matchId: string | null; waveId: string | null }[] }[] }).zones.flatMap((z) => z.passages);
+  const fp = plan.find((p) => p.categoryId === a.id && p.matchId === 'w2-0')!;
+  // Le numéro de la finale est partagé avec un passage du matin (numérotation reprise à 1).
+  expect(plan.some((p) => p.waveId === matin!.id && p.number === fp.number)).toBe(true);
+  const fin = (await queueOf(t1!.id)).find((x) => x.categoryId === a.id && x.matchId === 'w2-0')!;
+  expect(fin.early).toBe(true);
+});
+
 test('exports .xlsx et .ods relus', async () => {
   const c = await fourInElimination();
   await put(c.id, 'w1-0', 'a');

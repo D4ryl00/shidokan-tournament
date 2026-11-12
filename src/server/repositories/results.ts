@@ -287,38 +287,38 @@ export async function schedule(db: AppDb, competitionId: string, waveId?: string
     (db.$client.prepare("select distinct category_id as c from zone_entries where competition_id = ? and status in ('conflict', 'waiting')").all(competitionId) as { c: string }[]).map((r) => r.c),
   );
   const finalIds = new Map(cats.map((c) => [c.id, new Set(c.bracket?.kind === 'combat' ? finalMatchIds(c.bracket) : [])]));
+  // Bloc de kata terminé : catégorie finie, ou tour 1 terminé pour le bloc `kata:tour1`.
+  const kataDone = (st: { finished: boolean; round1Done: boolean }, matchId: string | null) => st.finished || (matchId === 'kata:tour1' && st.round1Done);
+  const isKataBlock = (matchId: string | null): matchId is string | null => matchId === null || matchId.startsWith('kata:');
   // Passage pas encore joué (même s'il n'est pas encore jouable) : combat sans résultat, bloc de kata non terminé.
   const unplayed = (p: { categoryId: string; matchId: string | null }) => {
     const st = state.get(p.categoryId);
     if (!st) return false;
-    if (p.matchId === null || p.matchId.startsWith('kata:')) return !(st.finished || (p.matchId === 'kata:tour1' && st.round1Done));
+    if (isKataBlock(p.matchId)) return !kataDone(st, p.matchId);
     const m = st.matches.find((x) => x.id === p.matchId);
     return !!m && !m.bye && !m.result;
   };
   const queue = (zoneId: string) => {
     const passages = plan.zones.find((z) => z.zoneId === zoneId)?.passages ?? [];
+    // Chaque élément garde son passage du plan : les numéros ne sont pas uniques sur une zone (« reprendre à 1 » par session).
     const items = passages
       .filter((p) => !waveId || p.waveId === waveId)
-      .flatMap((p): QueueItem[] => {
+      .flatMap((p): { p: (typeof passages)[number]; q: QueueItem }[] => {
         const st = state.get(p.categoryId);
         if (!st) return [];
         const base = { number: p.number, categoryId: p.categoryId, categoryLabel: labelOf.get(p.categoryId) ?? '', noRest: p.noRest, held: held.has(p.categoryId), early: false };
-        if (p.matchId === null || p.matchId.startsWith('kata:')) {
+        if (isKataBlock(p.matchId)) {
           const c = cats.find((x) => x.id === p.categoryId)!;
           const kataPart = p.matchId === 'kata:tour1' ? ('tour1' as const) : p.matchId === 'kata:finale' ? ('finale' as const) : null;
-          const done = st.finished || (kataPart === 'tour1' && st.round1Done);
-          return done ? [] : [{ ...base, matchId: null, a: null, b: null, katakas: c.bracket?.entrants.length ?? 0, kataPart }];
+          return kataDone(st, p.matchId) ? [] : [{ p, q: { ...base, matchId: null, a: null, b: null, katakas: c.bracket?.entrants.length ?? 0, kataPart } }];
         }
         const m = st.matches.find((x) => x.id === p.matchId);
-        return m && m.playable && !m.result ? [{ ...base, matchId: m.id, a: name(m.entrantA), b: name(m.entrantB), katakas: null, kataPart: null }] : [];
+        return m && m.playable && !m.result ? [{ p, q: { ...base, matchId: m.id, a: name(m.entrantA), b: name(m.entrantB), katakas: null, kataPart: null } }] : [];
       });
     // Une finale prête derrière un passage non joué de sa session est signalée, même au-delà des 6 premiers (jamais le premier de la file).
     const isFinal = (q: QueueItem) => q.matchId === null ? q.kataPart === 'finale' : !!finalIds.get(q.categoryId)?.has(q.matchId);
-    const marked = items.map((q, i) => {
-      if (i === 0 || !isFinal(q)) return q;
-      const wave = passages.find((p) => p.number === q.number)?.waveId;
-      return { ...q, early: passages.some((p) => p.number < q.number && p.waveId === wave && unplayed(p)) };
-    });
+    const marked = items.map(({ p, q }, i) =>
+      i === 0 || !isFinal(q) ? q : { ...q, early: passages.some((o) => o.number < p.number && o.waveId === p.waveId && unplayed(o)) });
     return [...marked.slice(0, 6), ...marked.slice(6).filter((q) => q.early)];
   };
   // Combats de la zone qui attendent les résultats d'une autre zone (finales sur la zone des finales, par exemple).
