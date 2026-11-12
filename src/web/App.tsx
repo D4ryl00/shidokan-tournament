@@ -46,10 +46,12 @@ export function App() {
 
 /** En ligne (rôle serveur) : l'écran de connexion tant qu'aucun organisateur n'est connecté. Sur le PC : rien à faire. */
 function AuthGate({ children }: { children: ReactNode }) {
-  const { data, isLoading } = useAuthMe();
+  const { data, isLoading, errorUpdateCount } = useAuthMe();
   const expired = useAuthExpired();
   const { pathname } = useLocation();
-  if (isLoading) return <Center mih="100vh"><Loader /></Center>;
+  // Le sablier au tout premier chargement seulement : sans session, la session est relue au retour sur l'onglet
+  // (gestionnaire de mots de passe, autre fenêtre…), et l'écran de connexion doit rester là avec sa saisie.
+  if (isLoading && errorUpdateCount === 0) return <Center mih="100vh"><Loader /></Center>;
   // Sans session : la page publique sur `/`, la connexion sur `/connexion` (et partout ailleurs).
   if (!data) return pathname === '/' ? <PublicHomePage /> : <LoginPage />;
   return (

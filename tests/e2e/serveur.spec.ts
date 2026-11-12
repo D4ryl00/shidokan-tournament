@@ -23,6 +23,18 @@ test('serveur : connexion obligatoire, puis les écrans habituels ; déconnexion
   await expect(page.getByTestId('club-entry-error')).toHaveText('Lien inconnu ou expiré.');
 });
 
+test('serveur : revenir sur l’onglet pendant la connexion garde l’e-mail et le mot de passe saisis', async ({ page }) => {
+  await page.goto('/connexion');
+  await page.getByTestId('login-email').fill('orga@e2e.example');
+  await page.getByTestId('login-password').fill('saisie-en-cours');
+  // Retour sur l'onglet (gestionnaire de mots de passe, autre fenêtre…) : la session est relue.
+  const reread = page.waitForResponse((r) => r.url().endsWith('/api/auth/me'));
+  await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
+  await reread;
+  await expect(page.getByTestId('login-email')).toHaveValue('orga@e2e.example');
+  await expect(page.getByTestId('login-password')).toHaveValue('saisie-en-cours');
+});
+
 test('serveur : session perdue pendant une saisie → reconnexion par-dessus l’écran, la saisie est gardée', async ({ page }) => {
   await page.goto('/connexion');
   await page.getByTestId('login-email').fill('orga@e2e.example');
