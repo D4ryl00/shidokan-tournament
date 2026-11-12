@@ -77,7 +77,7 @@ test('poste Zone : seulement Combats et Tableaux, sa zone seulement, même aprè
 test('poste sur la zone des finales : la finale est dans sa file et se saisit', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe zone des finales');
   const { cat, zones } = await seed(request, id);
-  await request.patch(`/api/competitions/${id}`, { data: { settings: { finalsZoneId: zones[1]!.id } } });
+  expect((await request.put(`/api/competitions/${id}/finals/zone`, { data: { waveId: null, finalsZoneId: zones[1]!.id } })).ok()).toBe(true);
   for (const m of ['w1-0', 'w1-1']) await request.put(`/api/competitions/${id}/categories/${cat.id}/results/${m}`, { data: { winner: 'a', method: 'points' } });
   await page.goto(`/competitions/${id}/combats`);
   await choosePoste(page, `Zone : ${zones[1]!.name}`);

@@ -9,6 +9,14 @@ test('onglets de chaque poste, dans l’ordre des onglets', () => {
   expect(posteTabs({ kind: 'zone', zoneId: 'z1' })).toEqual(['tableaux', 'combats']);
 });
 
+test('onglet « Finales » : poste Organisation seulement', () => {
+  expect(posteTabs({ kind: 'organisation' })).toContain('finales');
+  expect(posteTabs({ kind: 'table' })).not.toContain('finales');
+  expect(posteTabs({ kind: 'zone', zoneId: 'z1' })).not.toContain('finales');
+  expect(tabFor({ kind: 'table' }, 'finales')).toBe('inscriptions');
+  expect(tabFor({ kind: 'zone', zoneId: 'z1' }, 'finales')).toBe('combats');
+});
+
 test('onglet par défaut et redirection d’un onglet masqué', () => {
   expect(defaultTab({ kind: 'zone', zoneId: 'z1' })).toBe('combats');
   expect(defaultTab({ kind: 'table' })).toBe('inscriptions');

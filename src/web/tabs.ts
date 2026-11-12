@@ -5,6 +5,7 @@ export const COMPETITION_TABS = [
   { path: 'fiche-club', label: 'Fiche club' },
   { path: 'import-ffk', label: 'Import FFK' },
   { path: 'sessions', label: 'Sessions' },
+  { path: 'finales', label: 'Finales' },
   { path: 'pesee', label: 'Pesée' },
   { path: 'reaffectation', label: 'Réaffectation' },
   { path: 'tableaux', label: 'Tableaux' },

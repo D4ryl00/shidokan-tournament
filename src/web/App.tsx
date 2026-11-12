@@ -15,6 +15,7 @@ import { CompetitionsPage } from './pages/CompetitionsPage.js';
 import { DirectoryPage } from './pages/DirectoryPage.js';
 import { DirectorySyncPage } from './pages/DirectorySyncPage.js';
 import { FfkImportPage } from './pages/FfkImportPage.js';
+import { FinalsPage } from './pages/FinalsPage.js';
 import { GridEditorPage } from './pages/GridEditorPage.js';
 import { LoginPage, ReloginModal } from './pages/LoginPage.js';
 import { MatchesPage } from './pages/MatchesPage.js';
@@ -89,6 +90,7 @@ function MainShell() {
               <Route path="import-ffk" element={<FfkImportPage />} />
               <Route path="sessions" element={<WavesPage />} />
               <Route path="vagues" element={<RenamedTab to="sessions" />} />
+              <Route path="finales" element={<FinalsPage />} />
               <Route path="pesee" element={<WeighInPage />} />
               <Route path="reaffectation" element={<ReplacementPage />} />
               <Route path="recasement" element={<RenamedTab to="reaffectation" />} />

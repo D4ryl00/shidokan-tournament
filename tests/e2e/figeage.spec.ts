@@ -16,12 +16,12 @@ test('figer et imprimer la session, finales sur le Ring, régénérer à la suit
   const cats = (await (await request.get(`/api/competitions/${id}/categories`)).json()) as { id: string; label: string }[];
   const big = cats.find((c) => c.label.includes('-54'))!;
 
-  // Réglages : finales sur le Ring.
-  await page.goto(`/competitions/${id}/reglages`);
+  // Onglet Finales (compétition sans session : pas de sélecteur) : finales sur le Ring.
+  await openTab(page, 'Finales');
+  await expect(page.getByTestId('finals-wave')).toHaveCount(0);
   await page.getByTestId('finals-zone').click();
   await page.getByRole('option', { name: 'Ring', exact: true }).click();
-  await page.getByTestId('settings-save').click();
-  await expect(page.getByText('Réglages enregistrés')).toBeVisible();
+  await expect(page.getByTestId('finals-zone')).toHaveValue('Ring');
 
   // Combats : figer est bloqué tant que les catégories ne sont pas prêtes.
   await openTab(page, 'Combats');

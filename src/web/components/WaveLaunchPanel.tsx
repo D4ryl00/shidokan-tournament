@@ -70,8 +70,10 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
     numberPreview.reset();
     numberPreview.mutate({ waveId, mode: m });
   };
+  // Une finale qui a changé de place ne se range pas « à la suite » (elle irait au bout de la file) : « Mélangés » imposé.
+  const finalsChanged = status.pending.some((p) => p.reason === 'finals');
   const openNumber = () => {
-    previewNumbers('append');
+    previewNumbers(finalsChanged ? 'shuffle' : 'append');
     setDialog('number');
   };
   const close = () => {
@@ -165,7 +167,8 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
       <Modal opened={dialog === 'number'} onClose={close} title={status.state === 'reopened' ? 'Refiger la session' : 'Numéroter les catégories modifiées'} size="lg">
         <Stack>
           <SegmentedControl data-testid="number-mode" value={mode} onChange={(v) => previewNumbers(v as RenumberMode)}
-            data={[{ value: 'append', label: 'À la suite' }, { value: 'shuffle', label: 'Mélangés' }]} />
+            data={[{ value: 'append', label: 'À la suite', disabled: finalsChanged }, { value: 'shuffle', label: 'Mélangés' }]} />
+          {finalsChanged && <Alert color="orange" data-testid="number-finals">Les finales ont changé : les zones concernées sont renumérotées (mélangés).</Alert>}
           <Text size="sm">
             {mode === 'append'
               ? 'À la suite : seules les catégories modifiées reçoivent de nouveaux numéros, après le dernier numéro de leur zone ; leurs tableaux sont à réimprimer (« mis à jour à … »).'

@@ -762,7 +762,8 @@ export type WaveState = 'preparation' | 'launched' | 'reopened' | 'finished';
 export interface LaunchStatus {
   state: WaveState;
   blocking: string[];
-  pending: { categoryId: string; label: string }[];
+  /** `reason` : 'finals' quand seuls les choix des finales ont changé depuis le figeage (renumérotée « mélangés »). */
+  pending: { categoryId: string; label: string; reason: 'shape' | 'finals' }[];
   zones: { zoneId: string; first: number | null; last: number | null }[];
 }
 export interface NumberChanges {
@@ -811,6 +812,60 @@ export const useRegenerate = (id: string) => useLaunchAction<string, NumberChang
 export function useNumberPreview(id: string) {
   return useMutation({ mutationFn: (body: { waveId: string | null; mode?: RenumberMode }) => api<NumberChanges>('POST', `/api/competitions/${id}/launch/number/preview`, body) });
 }
+
+// --- Onglet « Finales » (étape 43) ---
+
+export type FinalsWhere = 'own' | 'finals';
+export type FinalsWhen = 'ready' | 'end';
+/** Une catégorie de la session : sa zone, et « Où » / « Quand » effectifs de sa finale. */
+export interface FinalsRow {
+  categoryId: string;
+  label: string;
+  zoneId: string | null;
+  kata: boolean;
+  /** Kata : tour 1 et finale sont deux passages distincts. */
+  kataSplit: boolean;
+  /** Tableau déjà tiré sans finale (poule unique). */
+  noFinal: boolean;
+  /** « Où » imposé : catégorie de la zone des finales, ou discipline que la zone des finales n'accueille pas. */
+  fixed: 'finals-zone' | 'not-accepted' | null;
+  where: FinalsWhere;
+  when: FinalsWhen;
+}
+export interface FinalsView {
+  waveId: string | null;
+  finalsZoneId: string | null;
+  /** Session figée : rien ne change avant sa réouverture. */
+  locked: boolean;
+  rows: FinalsRow[];
+  /** Ce que chaque zone joue : ses passages, puis les finales dès que prêtes, puis celles de fin de session. */
+  summary: { zoneId: string; ownPassages: number; ready: number; end: number }[];
+}
+
+/** Finales d'une session (null : session unique d'une compétition sans session). */
+export function useFinals(id: string, waveId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ['finals', id, waveId],
+    queryFn: () => api<FinalsView>('GET', `/api/competitions/${id}/finals?vague=${encodeURIComponent(waveId ?? '')}`),
+    enabled,
+  });
+}
+/** Après un changement des finales : la session, les files des zones, l'état de lancement et le plan des passages. */
+function useFinalsMutation<T extends { waveId: string | null }>(id: string, path: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: T) => api<FinalsView>('PUT', `/api/competitions/${id}/finals/${path}`, body),
+    onSuccess: (view, body) => {
+      qc.setQueryData(['finals', id, body.waveId], view);
+      return Promise.all([['finals', id, body.waveId], ['schedule', id], ['categories', id, 'launch'], ['categories', id, 'passages']].map((queryKey) => qc.invalidateQueries({ queryKey })));
+    },
+  });
+}
+/** Zone des finales d'une session (null : « Aucune »). */
+export const useSetFinalsZone = (id: string) => useFinalsMutation<{ waveId: string | null; finalsZoneId: string | null }>(id, 'zone');
+/** « Où » / « Quand » des catégories données, ou de toute la session (« Tout… », sans `categoryIds`). */
+export const useSetCategoryFinals = (id: string) =>
+  useFinalsMutation<{ waveId: string | null; categoryIds?: string[]; where?: FinalsWhere; when?: FinalsWhen }>(id, 'categories');
 
 /** Zones et numéros de passage (clé sous « categories » : rechargés avec les catégories). */
 export function usePassages(id: string) {

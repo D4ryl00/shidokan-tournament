@@ -1,5 +1,5 @@
 import {
-  ActionIcon, Alert, Button, Checkbox, List, Modal, Group, MultiSelect, NumberInput, Select, SegmentedControl, SimpleGrid, Stack, Switch, Text, TextInput,
+  ActionIcon, Alert, Anchor, Button, Checkbox, List, Modal, Group, MultiSelect, NumberInput, Select, SegmentedControl, SimpleGrid, Stack, Switch, Text, TextInput,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
@@ -226,6 +226,9 @@ export function CompetitionSettingsPage() {
         <Stack>
           <Select data-testid="passage-order" w={320} label="Ordre de passage des combats" data={PASSAGE_ORDER_OPTIONS} value={s.passageOrder} allowDeselect={false}
             onChange={(v) => v && set({ passageOrder: v as PassageOrderMode })} />
+          <Text size="sm" data-testid="finals-tab-link">
+            Les finales se règlent session par session dans l’<Anchor component={Link} to={`/competitions/${id}/finales`}>onglet Finales</Anchor>.
+          </Text>
           <ZonesImpossibleAlert impossible={passages?.impossible} />
         </Stack>
       </SectionCard>

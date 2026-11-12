@@ -17,6 +17,7 @@ export type HelpTopicId =
   | 'fiche-club'
   | 'import-ffk'
   | 'sessions'
+  | 'finales'
   | 'vagues.en-attente'
   | 'pesee'
   | 'reaffectation'
@@ -424,6 +425,24 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Sans session, toutes les catégories forment une seule session.',
     ],
   },
+  finales: {
+    title: 'Finales',
+    short: 'Pour chaque session : la zone des finales, puis où et quand se joue la finale de chaque catégorie.',
+    details: [
+      'Chaque changement s’enregistre tout de suite. Les numéros de passage qui en découlent sont donnés au figeage de la session (onglet Combats).',
+      [
+        '« Zone des finales » : une zone de la compétition, ou « Aucune ». Choisir une zone y met toutes les finales de la session ; « Aucune » : chaque finale reste sur la zone de sa catégorie.',
+        'Où : « Sa zone » ou la zone des finales. Une catégorie qui se joue déjà sur la zone des finales est marquée « sur … » ; une discipline que la zone des finales n’accueille pas reste sur sa zone.',
+        'Quand : « Dès que finie » (juste après le dernier combat de la catégorie) ou « Fin de session » (à la fin de la file de la zone, dans l’ordre des catégories).',
+        '« Tout sur … », « Tout sur sa zone », « Tout dès que finie » et « Tout en fin de session » changent d’un coup toutes les catégories de la session ; une catégorie qui y arrive ensuite prend ce choix.',
+        'Sur la zone des finales : d’abord tous ses propres combats, puis les finales « Dès que finie » dans l’ordre où leurs catégories se terminent, puis les finales « Fin de session ».',
+        'Kata : la finale est le tour 2. « Sa zone » et « Dès que finie » gardent un seul numéro (tour 1 et finale d’affilée) ; tout autre choix sépare le tour 1 et la finale.',
+        '« pas de finale (poule) » : une poule unique n’a pas de finale, ses choix sont sans effet.',
+      ],
+      'Le résumé sous le tableau dit ce que chaque zone jouera pour la session.',
+      'Session figée : les choix sont en lecture seule. Rouvrez la session dans Combats pour changer ; au moment de la refiger, les zones dont une finale a changé sont renumérotées « Mélangés ».',
+    ],
+  },
   'vagues.en-attente': {
     title: 'En attente',
     short: 'Les catégories qui ne sont dans aucune session : pas de pesée ni de lancement tant qu’elles n’en rejoignent pas une.',
@@ -576,7 +595,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Début prévu, heure de démarrage réelle et heure des finales : de quoi estimer les heures de passage.',
     details: [
       'Le début prévu est affiché aux spectateurs avant le lancement. Une fois la session lancée, « Démarrée à » (bouton « Maintenant ») sert de point de départ aux estimations.',
-      '« Finales à » : vide, les finales suivent la fin des combats éliminatoires.',
+      '« Finales à » : vide, les finales « Fin de session » de la zone des finales attendent la fin des combats éliminatoires de la session, et celles des autres zones se jouent à la fin de leur file. Saisie, la première finale « Fin de session » de chaque zone attend cette heure.',
       'Les heures affichées aux spectateurs sont des estimations (« vers 14:30 ») calculées avec les durées des combats ; chaque champ s’enregistre en le quittant.',
     ],
   },
@@ -665,12 +684,12 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Chaque zone numérote ses combats : kata d’abord, puis les combats tour par tour (par défaut) ou catégorie par catégorie.',
     details: [
       [
-        'Tour par tour : les tours sont alignés à partir de la fin (toutes les finales ensemble, toutes les demies ensemble…) ; on passe un tour de toutes les catégories de la zone avant le suivant, et les finales à la fin de la session. Les combattants ont ainsi le plus de repos possible.',
-        'Catégorie par catégorie : une catégorie va jusqu’à sa finale, puis la suivante (dans l’ordre saisi dans l’onglet Combats, sinon celui de la grille).',
-        'Chaque catégorie de kata forme un seul numéro, avant les combats de sa session.',
+        'Tour par tour : les tours sont alignés à partir de la fin (toutes les demies ensemble…) ; on passe un tour de toutes les catégories de la zone avant le suivant. Les combattants ont ainsi le plus de repos possible.',
+        'Catégorie par catégorie : une catégorie va jusqu’à son dernier combat, puis la suivante (dans l’ordre saisi dans l’onglet Combats, sinon celui de la grille).',
+        'Chaque catégorie de kata forme un seul numéro (tour 1 et finale d’affilée), avant les combats de sa session, sauf si sa finale est placée ailleurs ou en fin de session.',
         'Les numéros se suivent d’une session à l’autre sur une même zone. Une exemption n’a pas de numéro.',
         'Quand un combattant enchaîne deux combats sans repos, le combat porte « pas de repos : prévoir une pause ».',
-        '« Finales sur la zone » : le combat pour la 1re place de chaque catégorie passe sur cette zone, à la fin de la session, l’un après l’autre (le tableau imprimé l’indique). Les combats pour la 3e place et les repêchages restent sur leur zone. Option : les finales de kata aussi (le tour 1 reste sur sa zone).',
+        'Les finales se règlent session par session dans l’onglet Finales : sur leur zone ou sur une zone des finales, dès que leur catégorie est finie ou en fin de session (le tableau imprimé indique la zone des finales). Les combats pour la 3e place et les repêchages restent sur leur zone.',
         'Une catégorie sans numéro de passage (sans zone possible ou sans session) numérote ses combats « c1 », « c2 »… pour ne pas les confondre avec ceux d’une zone.',
       ],
       'Si aucune zone n’accueille une discipline, ses catégories restent sans zone ni numéro et un message le signale.',

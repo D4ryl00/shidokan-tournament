@@ -22,7 +22,7 @@ export async function createCompetition(page: Page, name: string): Promise<strin
 
 /** Étape de chaque onglet d'une compétition (barre du haut : Préparer, Jour J, Après). */
 const STAGE_OF: Record<string, string> = {
-  Inscriptions: 'preparer', Clubs: 'preparer', 'Fiche club': 'preparer', 'Import FFK': 'preparer', Sessions: 'preparer', Catégories: 'preparer', Réglages: 'preparer',
+  Inscriptions: 'preparer', Clubs: 'preparer', 'Fiche club': 'preparer', 'Import FFK': 'preparer', Sessions: 'preparer', Finales: 'preparer', Catégories: 'preparer', Réglages: 'preparer',
   Pesée: 'jour-j', Réaffectation: 'jour-j', Tableaux: 'jour-j', Combats: 'jour-j', Podiums: 'apres',
 };
 

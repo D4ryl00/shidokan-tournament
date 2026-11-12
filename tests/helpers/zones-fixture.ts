@@ -3,7 +3,6 @@ import { expect, vi } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
 import { closeDb, openDb, type AppDb } from '../../src/server/db/client.js';
 import { matchEntrants } from '../../src/server/repositories/results.js';
-import { setCategoryFinals, setFinalsZone } from '../../src/server/repositories/wave-finals.js';
 import { kataRev, resultRev, tieBreakRev } from '../../src/server/revisions.js';
 import type { ZoneEntry } from '../../src/server/zone/entry.js';
 import { copyFromMain } from '../../src/server/zone/link.js';
@@ -38,11 +37,9 @@ export async function mainCompetition(opts: { finalsOnT2?: boolean } = {}) {
   const cats = async () => (await onMain('GET', `${base}/categories`)).json() as Cat[];
   if (opts.finalsOnT2) {
     // Comme l'ancien réglage « Finales sur la zone » : finales de combat sur Tatami 2, kata en bloc unique sur sa zone.
-    const db = openDb(mainPath);
-    for (const w of [matin!, aprem!]) await setFinalsZone(db, id, w.id, t2);
+    for (const w of [matin!, aprem!]) expect((await onMain('PUT', `${base}/finals/zone`, { waveId: w.id, finalsZoneId: t2 })).statusCode).toBe(200);
     const kata = (await cats()).filter((c) => c.label.includes('Kata')).map((c) => c.id);
-    await setCategoryFinals(db, id, matin!.id, { categoryIds: kata, where: 'own', when: 'ready' });
-    closeDb(db);
+    expect((await onMain('PUT', `${base}/finals/categories`, { waveId: matin!.id, categoryIds: kata, where: 'own', when: 'ready' })).statusCode).toBe(200);
   }
   for (const c of await cats()) expect((await onMain('PATCH', `${base}/categories/${c.id}`, { status: 'ready', zoneId: c.label.includes('-61') ? t2 : t1 })).statusCode).toBe(200);
   expect((await onMain('POST', `${base}/launch`, { waveId: matin!.id })).statusCode).toBe(204);

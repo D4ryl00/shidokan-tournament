@@ -133,3 +133,11 @@ test('réglages : la voie Google d’abord, avec l’avertissement de Google ann
 test('tableaux libres : leur nom est public, pas de nom de personne', () => {
   expect(HELP['grille.libres'].details.flat().join(' ')).toContain('n’y mettez pas le nom d’une personne');
 });
+
+test('finales : une aide à part ; Ordre de passage et Horaires renvoient à l’onglet Finales', () => {
+  expect(HELP.finales.title).toBe('Finales');
+  for (const label of ['Zone des finales', 'Aucune', 'Sa zone', 'Dès que finie', 'Fin de session', 'Rouvrez la session dans Combats', 'Mélangés']) expect(all('finales')).toContain(label);
+  expect(all('reglages.ordre')).toContain('onglet Finales');
+  expect(all('reglages.ordre')).not.toContain('« Finales sur la zone »');
+  expect(all('combats.horaires')).toContain('« Fin de session »');
+});
