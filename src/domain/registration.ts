@@ -83,6 +83,8 @@ export interface RegistrationRow extends Registration {
   club: Club | null;
   /** Nom masqué sur la page publique (propre au combattant, donc le même sur toutes ses inscriptions). */
   publicNameHidden: boolean;
+  /** Poids relevé à la pesée (kg), propre au combattant ; null tant qu'il n'est pas pesé. */
+  weighInKg: number | null;
   /** Révision (inscription et combattant) : protection contre les écrasements entre postes. */
   rev: string;
 }

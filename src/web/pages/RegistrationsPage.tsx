@@ -11,7 +11,7 @@ import { EmptyState } from '../components/ui/EmptyState.js';
 import { IconEdit, IconSearch, IconTrash } from '../components/ui/icons.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
-import { DISCIPLINE_OPTIONS, ageBandLabel, disciplineLabel, prefsLabel, rulesetShort, weightLabel } from '../labels.js';
+import { DISCIPLINE_OPTIONS, ageBandLabel, disciplineLabel, kgLabel, prefsLabel, rulesetShort, weightLabel } from '../labels.js';
 import { TableCard } from '../components/ui/TableCard.js';
 
 export function RegistrationsPage() {
@@ -86,7 +86,12 @@ export function RegistrationsPage() {
                 <Table.Td style={{ whiteSpace: 'nowrap' }}>{ageBandLabel(grid, r.fighter.ageBandCode)}</Table.Td>
                 <Table.Td>{disciplineLabel(r.discipline)}</Table.Td>
                 <Table.Td>{rulesetShort(r.ruleset)}{r.acceptsJiyuFirst ? ' (jiyu ok)' : ''}</Table.Td>
-                <Table.Td className="num" style={{ whiteSpace: 'nowrap' }}>{weightLabel(grid, r.weightClassId)}</Table.Td>
+                <Table.Td className="num" style={{ whiteSpace: 'nowrap' }} data-testid="registration-weight">
+                  {weightLabel(grid, r.weightClassId)}
+                  {/* Poids réel pour organiser : celui de la pesée dès qu'il existe, sinon celui saisi par le club. */}
+                  {r.weighInKg !== null ? <Text span size="sm" ml={8} title="Poids relevé à la pesée">{kgLabel(r.weighInKg)} pesé</Text>
+                    : r.approxWeightKg !== null ? <Text span size="sm" ml={8} c="dimmed" title="Poids saisi par le club">{kgLabel(r.approxWeightKg)}</Text> : null}
+                </Table.Td>
                 <Table.Td c="dimmed">{prefsLabel(r.otherDisciplines)}</Table.Td>
                 <Table.Td>
                   <Group gap={4} wrap="nowrap">

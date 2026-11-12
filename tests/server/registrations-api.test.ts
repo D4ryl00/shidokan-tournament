@@ -345,3 +345,16 @@ test('club trouvé par son nom (accents, casse) : l’aperçu donne le club, pas
   const preview = (await upload(`${base}/club-forms/preview`, file)).json();
   expect(preview.club).toMatchObject({ id: club.id });
 });
+
+test('liste : le poids saisi par le club et, après la pesée, le poids pesé', async () => {
+  const created = await app.inject({ method: 'POST', url: `${base}/registrations`, payload: {
+    clubId: null, lastName: 'MARTIN', firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu',
+    weightClassId: 'cadet:F:-54', approxWeightKg: 52.5, source: 'manual',
+  } });
+  expect(created.statusCode).toBe(201);
+  const list = async () => (await app.inject({ method: 'GET', url: `${base}/registrations` })).json() as { approxWeightKg: number | null; weighInKg: number | null }[];
+  expect((await list())[0]).toMatchObject({ approxWeightKg: 52.5, weighInKg: null });
+  const weighed = await app.inject({ method: 'PUT', url: `${base}/weigh-in/${created.json().row.fighterId}`, payload: { weighInKg: 53.2 } });
+  expect(weighed.statusCode).toBe(204);
+  expect((await list())[0]).toMatchObject({ approxWeightKg: 52.5, weighInKg: 53.2 });
+});

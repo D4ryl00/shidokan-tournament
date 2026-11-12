@@ -493,3 +493,22 @@ test('relecture (mineurs) : saisie papier — confirmation avant de quitter, nom
   await page.getByTestId('leave-go').click();
   await expect(page).toHaveURL(/\/inscriptions$/);
 });
+
+test('liste des inscriptions : la catégorie, puis le poids saisi par le club, remplacé par le poids pesé', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe poids réels');
+  const reg = async (lastName: string, approxWeightKg: number | null) => (await (await request.post(`/api/competitions/${id}/registrations`, { data: {
+    clubId: null, lastName, firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54', approxWeightKg, source: 'manual',
+  } })).json()) as { row: { fighterId: string } };
+  await reg('SAISI', 52.5);
+  await reg('SANSPOIDS', null);
+  const pese = await reg('PESEE', 51);
+  expect((await request.put(`/api/competitions/${id}/weigh-in/${pese.row.fighterId}`, { data: { weighInKg: 53.2 } })).status()).toBe(204);
+
+  await page.goto(`/competitions/${id}/inscriptions`);
+  const weight = (name: string) => page.getByTestId('registration-row').filter({ hasText: name }).getByTestId('registration-weight');
+  await expect(weight('SAISI')).toHaveText('-5452,5 kg');
+  await expect(weight('SAISI').getByTitle('Poids saisi par le club')).toBeVisible();
+  await expect(weight('PESEE')).toHaveText('-5453,2 kg pesé');
+  await expect(weight('PESEE').getByTitle('Poids relevé à la pesée')).toBeVisible();
+  await expect(weight('SANSPOIDS')).toHaveText('-54');
+});
