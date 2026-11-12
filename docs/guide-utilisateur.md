@@ -75,11 +75,11 @@ Chaque session a son propre réglage des finales, pour les combats comme pour le
 - **Un tableau, une ligne par catégorie**, avec la zone actuelle de la catégorie et deux interrupteurs :
   - **Où** : « Sa zone » ou « [nom de la zone des finales] ». Une catégorie déjà sur la zone des finales affiche « sur [zone] ». Si la zone des finales n'accueille pas la discipline (zones limitées à certaines disciplines), « Où » reste sur « Sa zone » et la raison est écrite (« Tatami 3 n’accueille pas le kata »).
   - **Quand** : « Dès que finie » (la finale passe dès que sa catégorie est terminée) ou « Fin de session » (après tous les combats de la zone). Pour un kata, « finie » veut dire « tour 1 fini » ; sa finale est le tour 2.
-- **Boutons « Tout… »** au-dessus de chaque colonne (« Tout sur [zone] », « Tout sur sa zone », « Tout dès que finie », « Tout en fin de session ») : un clic règle toutes les catégories de la session. Une catégorie qui apparaît plus tard (changement de session, tableau libre) reprend le dernier « Tout… » utilisé.
-- **Une poule unique n'a pas de finale** : sa ligne le dit (« pas de finale »), ses choix sont sans effet.
+- **Boutons « Tout… »** au-dessus de chaque colonne (« Tout sur [zone] », « Tout sur sa zone », « Tout dès que finie », « Tout en fin de session ») : un clic règle toutes les catégories de la session. Une catégorie qui apparaît plus tard (tableau libre, réaffectation) prend le dernier « Tout… » utilisé dans la session. Une catégorie qui change de session garde ses propres choix ; seul ce qui n'a jamais été choisi pour elle prend le dernier « Tout… » de sa nouvelle session.
+- **Une poule unique n'a pas de finale** : une fois son tableau tiré, sa ligne le dit (« pas de finale (poule) ») et ses choix sont sans effet. Avant (avant la pesée, par exemple), chaque catégorie a ses deux interrupteurs.
 - **Un résumé par zone** sous le tableau : ce que chaque zone jouera (combats, puis finales dès que prêtes, puis finales en fin de session).
 
-Chaque changement s'enregistre tout seul. Sans toucher à rien, les valeurs reproduisent l'ancien comportement : « Dès que finie » en « catégorie par catégorie » sans zone des finales, « Fin de session » sinon.
+Chaque changement s'enregistre tout seul. Sans toucher à rien, les valeurs reproduisent l'ancien comportement : « Dès que finie » en « catégorie par catégorie » sans zone des finales, « Fin de session » sinon. À « Figer et imprimer la session », les choix de chaque catégorie figée sont enregistrés tels qu'ils sont : changer ensuite l'ordre de passage des combats (Réglages) ne déplace plus ses finales.
 
 **L'ordre qui en découle** (les numéros se calculent à « Figer et imprimer la session »)
 - Sur la zone des finales : d'abord **tous ses combats propres**, sans exception, pour laisser ses combattants se reposer ; puis les finales « Dès que finie », dans l'ordre où leurs catégories se terminent ; puis les finales « Fin de session », dans l'ordre des catégories. Les finales de ses propres catégories passent avec les autres finales.
@@ -88,7 +88,7 @@ Chaque changement s'enregistre tout seul. Sans toucher à rien, les valeurs repr
 
 **Session figée, puis rouverte**
 - Une session figée est en **lecture seule** dans l'onglet Finales : « Rouvrez la session dans Combats pour changer », car changer une finale changerait des numéros déjà imprimés.
-- Une fois la session rouverte, le tableau redevient modifiable. Une catégorie dont un choix a changé (Où, Quand, ou zone des finales de la session) redevient « à numéroter ». À « Refiger la session », les zones touchées sont **renumérotées « mélangés »** : les passages non joués de la zone prennent leur nouvelle place, les passages déjà joués gardent leur numéro. La fenêtre de refigeage dit quelles zones sont renumérotées.
+- Une fois la session rouverte, le tableau redevient modifiable. Une catégorie dont un choix a changé (Où, Quand, ou zone des finales de la session) redevient « à numéroter ». À « Refiger la session », les zones touchées sont **renumérotées « mélangés »** : les passages non joués de la zone prennent leur nouvelle place, les passages déjà joués gardent leur numéro. La fenêtre de refigeage le dit (« Les finales ont changé : les zones concernées sont renumérotées (mélangés). ») et nomme ces zones (« Zones renumérotées : Tatami 1, Tatami 3. ») ; « À la suite » n'y est pas proposé.
 
 ### Le message aux clubs
 

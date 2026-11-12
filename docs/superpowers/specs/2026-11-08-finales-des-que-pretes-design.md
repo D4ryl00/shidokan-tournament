@@ -140,8 +140,13 @@ reste.
   quand l'ordre de passage est « catégorie par catégorie » et que la session n'a pas de zone des finales ; « Fin de
   session » dans tous les autres cas. Vaut pour les compétitions existantes, les nouvelles compétitions et les nouvelles
   sessions ; « Où » vaut par défaut la zone des finales s'il y en a une.
-- Une catégorie qui apparaît après coup (créée par la réaffectation, tableau libre, catégorie qui change de session) prend
-  la valeur du dernier « Tout… » utilisé dans chaque colonne pour sa session ; sinon la valeur par défaut ci-dessus 💡.
+- Une catégorie qui apparaît après coup (créée par la réaffectation, tableau libre) prend la valeur du dernier « Tout… »
+  utilisé dans chaque colonne pour sa session ; sinon la valeur par défaut ci-dessus 💡. Une catégorie qui change de
+  session garde ses propres choix ✅ (revue finale) : seule une colonne jamais choisie pour elle prend le dernier « Tout… »
+  de sa nouvelle session, sinon la valeur par défaut.
+- Au figeage (et à chaque renumérotation), le choix effectif de chaque catégorie figée est enregistré sur elle là où elle
+  prenait la valeur de la session ou la valeur par défaut ✅ (revue finale) : changer ensuite l'ordre de passage des combats
+  ne déplace plus ses finales, et ne la rend pas « à numéroter ».
 - Migration 💡 : chaque session (ou la session implicite d'une compétition sans session) reprend `finalsZoneId` comme zone
   des finales ; ses catégories de combat vont sur cette zone ; ses katas aussi si `kataFinalsOnFinalsZone` était coché,
   sinon « Sa zone » + « Dès que finie » (bloc unique d'aujourd'hui). Les sessions déjà figées gardent leurs numéros
