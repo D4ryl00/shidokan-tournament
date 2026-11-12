@@ -9,6 +9,7 @@ import { categories, clubs, fighters, kataScores, matchResults, registrations, t
 import { listCategories } from './categories.js';
 import { listZones } from './zones.js';
 import { listWaves } from './waves.js';
+import { finalMatchIds } from '../../domain/passages/finals.js';
 import { fixWaveZones, passageNumbers, passagePlan } from './passages.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
 import { activeEntrantCount } from '../../domain/categories.js';
@@ -236,6 +237,8 @@ export interface QueueItem {
   noRest: boolean;
   /** Une saisie d'une zone autonome est à trancher dans cette catégorie : en attente d'une décision à la table centrale. */
   held: boolean;
+  /** Finale prête (finalistes connus) alors qu'un passage de numéro plus petit de la même zone et session n'est pas joué : peut passer plus tôt. */
+  early: boolean;
 }
 
 /**
@@ -283,13 +286,23 @@ export async function schedule(db: AppDb, competitionId: string, waveId?: string
   const held = new Set(
     (db.$client.prepare("select distinct category_id as c from zone_entries where competition_id = ? and status in ('conflict', 'waiting')").all(competitionId) as { c: string }[]).map((r) => r.c),
   );
-  const queue = (zoneId: string) =>
-    (plan.zones.find((z) => z.zoneId === zoneId)?.passages ?? [])
+  const finalIds = new Map(cats.map((c) => [c.id, new Set(c.bracket?.kind === 'combat' ? finalMatchIds(c.bracket) : [])]));
+  // Passage pas encore joué (même s'il n'est pas encore jouable) : combat sans résultat, bloc de kata non terminé.
+  const unplayed = (p: { categoryId: string; matchId: string | null }) => {
+    const st = state.get(p.categoryId);
+    if (!st) return false;
+    if (p.matchId === null || p.matchId.startsWith('kata:')) return !(st.finished || (p.matchId === 'kata:tour1' && st.round1Done));
+    const m = st.matches.find((x) => x.id === p.matchId);
+    return !!m && !m.bye && !m.result;
+  };
+  const queue = (zoneId: string) => {
+    const passages = plan.zones.find((z) => z.zoneId === zoneId)?.passages ?? [];
+    const items = passages
       .filter((p) => !waveId || p.waveId === waveId)
       .flatMap((p): QueueItem[] => {
         const st = state.get(p.categoryId);
         if (!st) return [];
-        const base = { number: p.number, categoryId: p.categoryId, categoryLabel: labelOf.get(p.categoryId) ?? '', noRest: p.noRest, held: held.has(p.categoryId) };
+        const base = { number: p.number, categoryId: p.categoryId, categoryLabel: labelOf.get(p.categoryId) ?? '', noRest: p.noRest, held: held.has(p.categoryId), early: false };
         if (p.matchId === null || p.matchId.startsWith('kata:')) {
           const c = cats.find((x) => x.id === p.categoryId)!;
           const kataPart = p.matchId === 'kata:tour1' ? ('tour1' as const) : p.matchId === 'kata:finale' ? ('finale' as const) : null;
@@ -298,8 +311,16 @@ export async function schedule(db: AppDb, competitionId: string, waveId?: string
         }
         const m = st.matches.find((x) => x.id === p.matchId);
         return m && m.playable && !m.result ? [{ ...base, matchId: m.id, a: name(m.entrantA), b: name(m.entrantB), katakas: null, kataPart: null }] : [];
-      })
-      .slice(0, 6);
+      });
+    // Une finale prête derrière un passage non joué de sa session est signalée, même au-delà des 6 premiers (jamais le premier de la file).
+    const isFinal = (q: QueueItem) => q.matchId === null ? q.kataPart === 'finale' : !!finalIds.get(q.categoryId)?.has(q.matchId);
+    const marked = items.map((q, i) => {
+      if (i === 0 || !isFinal(q)) return q;
+      const wave = passages.find((p) => p.number === q.number)?.waveId;
+      return { ...q, early: passages.some((p) => p.number < q.number && p.waveId === wave && unplayed(p)) };
+    });
+    return [...marked.slice(0, 6), ...marked.slice(6).filter((q) => q.early)];
+  };
   // Combats de la zone qui attendent les résultats d'une autre zone (finales sur la zone des finales, par exemple).
   const waitingOtherZones = (zoneId: string) =>
     (plan.zones.find((z) => z.zoneId === zoneId)?.passages ?? []).filter((p) => {

@@ -12,6 +12,10 @@ const HeldBadge = () => (
   </StatusBadge>
 );
 
+const EarlyBadge = () => (
+  <StatusBadge tone="ok" size="sm" mt={2} data-testid="queue-early">Prête · peut passer plus tôt</StatusBadge>
+);
+
 /** Libellé de catégorie sans « kg » isolé en début de ligne (espace insécable). */
 const label = (q: QueueItem) => q.categoryLabel.replace(/ kg\b/g, '\u00a0kg');
 const kataTitle = (q: QueueItem) => `${label(q)}${q.kataPart === 'tour1' ? ' (tour 1)' : q.kataPart === 'finale' ? ' (finale)' : ''}`;
@@ -70,6 +74,7 @@ function Next({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem) =
           )}
           {!kata && <Text size="xs" c="dimmed">{label(q)}</Text>}
           {q.noRest && <StatusBadge tone="warn" size="sm" mt={2} data-testid="no-rest">Pas de repos : prévoir une pause</StatusBadge>}
+          {q.early && <EarlyBadge />}
         </Stack>
       </Group>
       <Box style={{ flexShrink: 0, maxWidth: '50%' }}>

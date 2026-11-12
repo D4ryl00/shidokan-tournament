@@ -165,6 +165,30 @@ test('programme : la zone des finales, sans catégorie à elle, apparaît avec l
   expect(finals?.queue.map((q) => q.matchId)).toEqual(['w2-0']);
 });
 
+test('finale prête avant son tour : signalée même au-delà des 6 premiers ; son résultat se saisit hors ordre', async () => {
+  const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
+  for (let i = 0; i < 4; i++) await reg();
+  for (let i = 0; i < 16; i++) await reg({ weightClassId: 'cadet:F:-47' });
+  const [a, b] = [(await cats()).find((c) => c.registrationIds.length === 4)!, (await cats()).find((c) => c.registrationIds.length === 16)!];
+  for (const c of [a, b]) await call('PATCH', `/categories/${c.id}`, { zoneId: t1!.id });
+  expect((await call('PUT', '/finals/categories', { waveId: null, when: 'end' })).statusCode).toBe(200);
+  const queue = async () => ((await call('GET', '/schedule')).json() as { zones: { zone: { id: string }; queue: { number: number; categoryId: string; matchId: string | null; early: boolean }[] }[] }).zones.find((t) => t.zone.id === t1!.id)!.queue;
+  expect((await queue()).some((q) => q.early)).toBe(false);
+  await put(a.id, 'w1-0', 'a');
+  await put(a.id, 'w1-1', 'a');
+  const before = await queue();
+  const finale = before.find((q) => q.categoryId === a.id && q.matchId === 'w2-0')!;
+  expect(finale).toBeDefined();
+  expect(finale.early).toBe(true);
+  expect(before.indexOf(finale)).toBeGreaterThanOrEqual(6); // ajoutée après les 6 premiers
+  expect(before.filter((q) => q.early)).toEqual([finale]);
+  expect((await put(a.id, 'w2-0', 'b')).statusCode).toBe(200);
+  const after = await queue();
+  expect(after.some((q) => q.categoryId === a.id)).toBe(false);
+  expect(after.slice(0, 6).map((q) => q.number)).toEqual(before.slice(0, 6).map((q) => q.number));
+  expect(after.every((q) => !q.early)).toBe(true);
+});
+
 test('exports .xlsx et .ods relus', async () => {
   const c = await fourInElimination();
   await put(c.id, 'w1-0', 'a');

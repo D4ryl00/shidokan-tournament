@@ -712,6 +712,8 @@ export interface QueueItem {
   noRest: boolean;
   /** Une saisie d'une zone autonome est à trancher dans cette catégorie. */
   held: boolean;
+  /** Finale prête qui peut passer avant des passages non joués de sa zone. */
+  early: boolean;
 }
 export interface ScheduleData {
   /** `waitingOtherZones` : combats de la zone qui attendent les résultats d'une autre zone. */
