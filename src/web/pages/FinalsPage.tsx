@@ -24,6 +24,9 @@ function summaryLine(name: string, s: FinalsView['summary'][number]): string {
  * Onglet « Finales » (Préparer) : pour une session, la zone des finales, puis « Où » et « Quand » de la finale de chaque
  * catégorie. Chaque changement s'enregistre tout de suite ; une session figée est en lecture seule.
  */
+/** Sélecteurs par ligne : pastille pleine à la couleur de l'application (en sombre, la pastille par défaut se distingue à peine du fond). */
+export const FINALS_CONTROL = { size: 'xs', color: 'shidokan' } as const;
+
 export function FinalsPage() {
   const { id = '' } = useParams();
   // Par défaut, la première session (null : une compétition sans session travaille sur sa session unique).
@@ -46,7 +49,7 @@ export function FinalsPage() {
     if (r.fixed === 'finals-zone') return <Text size="sm">sur {finalsZone}</Text>;
     if (r.fixed === 'not-accepted') return <Text size="sm" c="dimmed">{notAcceptedBy(finalsZone ?? '…', r.discipline)}</Text>;
     return (
-      <SegmentedControl size="xs" data-testid="finals-where" value={r.where} disabled={locked}
+      <SegmentedControl {...FINALS_CONTROL} data-testid="finals-where" value={r.where} disabled={locked}
         data={[{ value: 'own', label: 'Sa zone' }, { value: 'finals', label: finalsZone ?? '…' }]}
         onChange={(v) => choose({ categoryIds: [r.categoryId], where: v as FinalsWhere })} />
     );
@@ -134,7 +137,7 @@ export function FinalsPage() {
                             <>
                               {finalsZone && <Table.Td>{whereCell(r)}</Table.Td>}
                               <Table.Td>
-                                <SegmentedControl size="xs" data-testid="finals-when" value={r.when} disabled={locked} data={WHEN_OPTIONS}
+                                <SegmentedControl {...FINALS_CONTROL} data-testid="finals-when" value={r.when} disabled={locked} data={WHEN_OPTIONS}
                                   onChange={(v) => choose({ categoryIds: [r.categoryId], when: v as FinalsWhen })} />
                               </Table.Td>
                             </>
