@@ -16,6 +16,16 @@ const STATES: Record<WaveState, { label: string; tone: Tone }> = {
   finished: { label: 'Terminée', tone: 'accent' },
 };
 
+/** Fenêtre de refigeage quand une finale a changé : la phrase, puis les zones renumérotées (connues avec l'aperçu). */
+export function finalsChangedText(zoneNames: string[]): string {
+  const sentence = 'Les finales ont changé : les zones concernées sont renumérotées (mélangés).';
+  if (zoneNames.length === 0) return sentence;
+  return `${sentence} ${zoneNames.length > 1 ? 'Zones renumérotées' : 'Zone renumérotée'} : ${zoneNames.join(', ')}.`;
+}
+
+/** Bouton des catégories à numéroter : « mélangés » imposé dès qu'une finale a changé de place. */
+export const pendingButtonLabel = (finalsChanged: boolean) => (finalsChanged ? 'Numéroter (mélangés)…' : 'Numéroter à la suite…');
+
 /** Heure de Paris, « HH:MM ». */
 const nowInParis = () =>
   new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date());
@@ -110,7 +120,7 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
       {status.pending.length > 0 && status.state !== 'reopened' && (
         <Alert color="orange" data-testid="pending-alert" title={`${plural(status.pending.length, 'catégorie')} à numéroter`}>
           <Text size="sm" mb={6}>{status.pending.map((p) => p.label).join(', ')} : sans numéro de passage (catégorie nouvelle ou régénérée).</Text>
-          <Button size="xs" data-testid="number-open" onClick={openNumber}>Numéroter à la suite…</Button>
+          <Button size="xs" data-testid="number-open" onClick={openNumber}>{pendingButtonLabel(finalsChanged)}</Button>
         </Alert>
       )}
 
@@ -168,7 +178,7 @@ export function WaveLaunchPanel({ competitionId, waveId }: { competitionId: stri
         <Stack>
           <SegmentedControl data-testid="number-mode" value={mode} onChange={(v) => previewNumbers(v as RenumberMode)}
             data={[{ value: 'append', label: 'À la suite', disabled: finalsChanged }, { value: 'shuffle', label: 'Mélangés' }]} />
-          {finalsChanged && <Alert color="orange" data-testid="number-finals">Les finales ont changé : les zones concernées sont renumérotées (mélangés).</Alert>}
+          {finalsChanged && <Alert color="orange" data-testid="number-finals">{finalsChangedText(shown?.zonesRedone.map(zoneName) ?? [])}</Alert>}
           <Text size="sm">
             {mode === 'append'
               ? 'À la suite : seules les catégories modifiées reçoivent de nouveaux numéros, après le dernier numéro de leur zone ; leurs tableaux sont à réimprimer (« mis à jour à … »).'

@@ -772,6 +772,8 @@ export interface NumberChanges {
   changes: { categoryId: string; label: string; numbers: number[] }[];
   /** Ce qui empêche de numéroter (catégorie pas prête, sans zone possible). */
   blocking: string[];
+  /** Zones entièrement renumérotées (« mélangés »). */
+  zonesRedone: string[];
 }
 
 /** État de lancement d'une vague (null : vague implicite) ; sous « categories » : rechargé avec elles. */
@@ -824,6 +826,7 @@ export interface FinalsRow {
   categoryId: string;
   label: string;
   zoneId: string | null;
+  discipline: DisciplineId;
   kata: boolean;
   /** Kata : tour 1 et finale sont deux passages distincts. */
   kataSplit: boolean;

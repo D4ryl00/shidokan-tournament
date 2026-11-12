@@ -110,6 +110,8 @@ test('onglet Finales : zone des finales, choix par catégorie gardés, session f
   await expect(dialog.getByRole('radio', { name: 'Mélangés' })).toBeChecked();
   await expect(dialog.getByRole('radio', { name: 'À la suite' })).toBeDisabled();
   await expect(dialog).toContainText('Les finales ont changé : les zones concernées sont renumérotées (mélangés).');
+  // Seules les zones refaites sont nommées : celle de la catégorie et la zone des finales (pas Tatami 2, celle du kata).
+  await expect(dialog.getByTestId('number-finals')).toContainText('Zones renumérotées : Tatami 1, Tatami 3.');
   await expect(dialog.getByTestId('number-preview')).toContainText(c54.label);
   await dialog.getByTestId('number-confirm').click();
   await expect(page.getByTestId('wave-state')).toHaveText('Lancée');

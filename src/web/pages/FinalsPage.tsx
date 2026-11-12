@@ -1,8 +1,8 @@
 import { Alert, Box, Button, Card, Group, SegmentedControl, Select, Stack, Table, Text } from '@mantine/core';
 import { Link, useParams } from 'react-router';
-import { DISCIPLINES } from '../../domain/disciplines.js';
+import { notAcceptedBy } from '../../domain/disciplines.js';
 import { plural } from '../../domain/plural.js';
-import { useCategories, useFinals, useSetCategoryFinals, useSetFinalsZone, useZones, type FinalsRow, type FinalsView, type FinalsWhen, type FinalsWhere } from '../api.js';
+import { useFinals, useSetCategoryFinals, useSetFinalsZone, useZones, type FinalsRow, type FinalsView, type FinalsWhen, type FinalsWhere } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
@@ -30,7 +30,6 @@ export function FinalsPage() {
   const { waves, waveId, select, ready } = useSelectedWave(id, () => null);
   const { data: view, error: loadError } = useFinals(id, waveId, ready);
   const { data: zones = [] } = useZones(id);
-  const { data: categories = [] } = useCategories(id);
   const setZone = useSetFinalsZone(id);
   const setChoice = useSetCategoryFinals(id);
   const zoneName = (zid: string | null) => zones.find((z) => z.id === zid)?.name ?? null;
@@ -42,14 +41,10 @@ export function FinalsPage() {
     setZone.reset();
     setChoice.mutate({ waveId, ...patch });
   };
-  const disciplineOf = (cid: string) => {
-    const d = categories.find((c) => c.id === cid)?.key.discipline;
-    return d ? DISCIPLINES[d].label.toLowerCase() : '';
-  };
 
   const whereCell = (r: FinalsRow) => {
     if (r.fixed === 'finals-zone') return <Text size="sm">sur {finalsZone}</Text>;
-    if (r.fixed === 'not-accepted') return <Text size="sm" c="dimmed">{finalsZone} n’accueille pas {disciplineOf(r.categoryId)}</Text>;
+    if (r.fixed === 'not-accepted') return <Text size="sm" c="dimmed">{notAcceptedBy(finalsZone ?? '…', r.discipline)}</Text>;
     return (
       <SegmentedControl size="xs" data-testid="finals-where" value={r.where} disabled={locked}
         data={[{ value: 'own', label: 'Sa zone' }, { value: 'finals', label: finalsZone ?? '…' }]}
