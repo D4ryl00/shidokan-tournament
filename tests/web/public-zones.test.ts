@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { toPublicCompetition } from '../../src/domain/public/view.js';
 import type { PublicTimes } from '../../src/domain/public/times.js';
-import { currentWave, driftText, finalsLabel, finalsMarkers, involvesFollowed, sideText, versText, waitingWaves, waveHeaderText, zoneViews } from '../../src/web/components/public/zoneRows.js';
+import { currentWave, driftText, finalBadge, finalsLabel, finalsMarkers, involvesFollowed, sideText, versText, waitingWaves, waveHeaderText, zoneViews } from '../../src/web/components/public/zoneRows.js';
 import { source } from '../domain/public-fixtures.js';
 
 const pub = toPublicCompetition(source());
@@ -112,6 +112,29 @@ describe('finalsLabel', () => {
     expect(finalsLabel('Session 1')).toBe('Finales de la session 1');
     expect(finalsLabel('Session 1', '11:10')).toBe('Finales de la session 1 à partir de 11:10');
     expect(finalsLabel('Session 1', null)).toBe('Finales de la session 1');
+  });
+});
+
+describe('finales dans la file', () => {
+  // Ring (z2) : zone des finales de la session Matin ; file : passage non final, finale « Dès que finie », deux « Fin de session ».
+  const d = structuredClone(pub);
+  d.finalsZones = { w1: 'z2', w2: null };
+  const base = item('z2', 5);
+  const items = [
+    { ...base, number: 1, finals: null },
+    { ...base, number: 2, finals: 'ready' as const },
+    { ...base, number: 3, finals: 'end' as const },
+    { ...base, number: 4, finals: 'end' as const },
+  ];
+  it('la ligne « Finales de la session … » avant la première « Fin de session » de la zone des finales seulement', () => {
+    expect([...finalsMarkers(d, items, 'z2', () => '11:10')]).toEqual([[2, 'Finales de la session Matin à partir de 11:10']]);
+    expect(finalsMarkers(d, items, 'z1').size).toBe(0);
+  });
+  it('badge « Finale » sur les autres passages de finale', () => {
+    expect(items.map((i) => finalBadge(d, i, 'z2'))).toEqual([false, true, false, false]);
+    // Hors de la zone des finales (ou session sans zone des finales) : toute finale porte le badge.
+    expect(items.map((i) => finalBadge(d, i, 'z1'))).toEqual([false, true, true, true]);
+    expect(items.map((i) => finalBadge({ ...d, finalsZones: { w1: null } }, i, 'z2'))).toEqual([false, true, true, true]);
   });
 });
 

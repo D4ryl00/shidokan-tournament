@@ -91,8 +91,7 @@ export async function loadPublicSource(db: AppDb, id: string, now: Date): Promis
     lastResultAt: lastResultAt(db, id),
     plan: await passagePlan(db, id, categories),
     launchedCategoryIds: launched,
-    // Provisoire : une seule zone des finales pour la vue publique (la première choisie parmi les sessions).
-    finalsZoneId: listWaveFinals(db, id).find((w) => w.finalsZoneId !== null)?.finalsZoneId ?? null,
+    finalsZones: Object.fromEntries(listWaveFinals(db, id).map((w) => [w.waveKey, w.finalsZoneId])),
     schedule: settings?.schedule ?? defaultSchedule(),
     triathlonRounds: settings?.triathlonRounds ?? 3,
     grid: await getGrid(db, id),

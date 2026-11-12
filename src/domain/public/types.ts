@@ -1,4 +1,5 @@
 import type { Bracket, KataScores, MatchResult, Podium } from '../brackets/index.js';
+import type { FinalsWhen } from '../passages/finals-choice.js';
 import type { MedalRow } from '../results.js';
 import type { CombatTiming } from '../schedule/durations.js';
 import type { DisciplineId } from '../types.js';
@@ -54,8 +55,12 @@ export interface PublicQueueItem {
   bFrom: SideSource | null;
   state: 'played' | 'ready' | 'waiting';
   waveId: string | null;
-  /** Finale passée sur la zone des finales (à la fin de la file de sa vague) : la ligne « Finales de la session … » se place avant la première. */
-  finals: boolean;
+  /**
+   * Passage de finale (combat pour la 1re place, bloc de finale d'un kata) : quand se joue la finale de sa catégorie, « Dès que
+   * finie » ou « Fin de session » ; null : pas une finale. La ligne « Finales de la session … » se place avant la première
+   * « Fin de session » de la zone des finales de sa session.
+   */
+  finals: FinalsWhen | null;
   /** Durée du passage, sans le temps de changement. */
   durationSec: number;
   /** Durée retenue du combat ; null : bloc de kata. */
@@ -115,7 +120,8 @@ export interface PublicCompetition {
   }[];
   /** Temps de changement entre deux passages, en secondes. */
   changeoverSec: number;
-  finalsZoneId: string | null;
+  /** Zone des finales de chaque session (clé `waveKey`) ; null : aucune. */
+  finalsZones: Record<string, string | null>;
   zones: { id: string; name: string }[];
   entrants: Record<string, PublicEntrant>;
   /** Seulement celles d'une vague lancée. */

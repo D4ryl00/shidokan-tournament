@@ -3,7 +3,7 @@ import { Fragment, useState } from 'react';
 import { Link } from 'react-router';
 import type { PublicCompetition, PublicQueueItem } from '../../../domain/public/types.js';
 import { categoryText } from '../../components/public/bracketsModel.js';
-import { currentWave, driftText, finalsMarkers, involvesFollowed, sideText, versText, waitingWaves, waveHeaderText, zoneViews, type ZoneView } from '../../components/public/zoneRows.js';
+import { currentWave, driftText, finalBadge, finalsMarkers, involvesFollowed, sideText, versText, waitingWaves, waveHeaderText, zoneViews, type ZoneView } from '../../components/public/zoneRows.js';
 import type { PublicTimes } from '../../../domain/public/times.js';
 import { passageKey } from '../../../domain/public/types.js';
 import { StatusBadge } from '../../components/ui/StatusBadge.js';
@@ -19,6 +19,7 @@ function PassageRow({ pub, times, item, zoneId, followed, big }: { pub: PublicCo
   const cat = pub.categories.find((c) => c.id === item.categoryId);
   const kata = item.matchId === null;
   const star = involvesFollowed(pub, item, followed);
+  const final = finalBadge(pub, item, zoneId);
   const katas = cat?.bracket.entrants.length ?? 0;
   const text = kata
     ? `${cat ? categoryText(cat.label, cat.discipline) : 'Kata'}${item.kataPart === 'finale' ? ' · finale' : ` · ${plural(katas, 'passage', 'passages')}`}`
@@ -29,7 +30,12 @@ function PassageRow({ pub, times, item, zoneId, followed, big }: { pub: PublicCo
       <Group gap="xs" wrap="nowrap" align="baseline" py={big ? 6 : 4}>
         <Text span className="num" fw={700} fz={big ? 26 : 'sm'} style={{ flexShrink: 0, minWidth: big ? 44 : 32 }}>n° {item.number}</Text>
         <Box style={{ minWidth: 0, flex: 1 }}>
-          {big && <StatusBadge tone="accent">À suivre</StatusBadge>}
+          {(big || final) && (
+            <Group gap={4}>
+              {big && <StatusBadge tone="accent">À suivre</StatusBadge>}
+              {final && <StatusBadge tone="neutral" data-testid="public-zone-final">Finale</StatusBadge>}
+            </Group>
+          )}
           {at && <Text size="xs" fw={700} data-testid="public-zone-at">{versText(at)}</Text>}
           <Text size={big ? 'md' : 'sm'} fw={big ? 700 : 400} style={{ overflowWrap: 'anywhere' }}>{text}</Text>
           {!kata && cat && <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{categoryText(cat.label, cat.discipline)}</Text>}
@@ -40,7 +46,7 @@ function PassageRow({ pub, times, item, zoneId, followed, big }: { pub: PublicCo
   );
 }
 
-/** « Finales de la session 1 » : à l'endroit où les finales commencent dans la file de la zone des finales. */
+/** « Finales de la session 1 » : à l'endroit où les finales « Fin de session » commencent dans la file de la zone des finales. */
 function FinalsMarker({ text }: { text: string }) {
   return (
     <Text size="xs" fw={700} tt="uppercase" c="dimmed" pt={6} mt={2} data-testid="public-zone-finals"
@@ -53,7 +59,7 @@ function ZoneCard({ pub, times, view, followed }: { pub: PublicCompetition; time
   const { zoneId, next } = view;
   const shown = open ? [...view.shown, ...view.rest] : view.shown;
   // Index dans [prochain, ...suivants] : le prochain est 0.
-  const markers = finalsMarkers(pub, next ? [next, ...view.shown, ...view.rest] : [], times.finalsAt);
+  const markers = finalsMarkers(pub, next ? [next, ...view.shown, ...view.rest] : [], zoneId, times.finalsAt);
   const drift = times.drift(zoneId);
   return (
     <Stack gap={2} p="sm" data-testid="public-zone" style={cardStyle}>

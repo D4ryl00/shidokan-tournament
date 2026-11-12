@@ -14,7 +14,7 @@ export interface PublicTimes {
   at(key: string): string | null;
   /** Démarrage d'une session : saisi, ou estimé d'après le premier résultat ; null sinon. */
   waveStart(waveId: string | null): { clock: string; estimated: boolean } | null;
-  /** Départ estimé des finales d'une session, « H:MM ». */
+  /** Départ estimé des finales « Fin de session » de la zone des finales d'une session, « H:MM » : seulement s'il est après maintenant. */
   finalsAt(waveId: string | null): string | null;
   /**
    * Heure estimée de la finale d'une catégorie (bloc de finale d'un kata, ou bloc entier) : le premier passage de finale pas
@@ -35,11 +35,20 @@ export function publicTimes(pub: PublicCompetition, now: number | null): PublicT
   if (pub.phase === 'past') return NONE;
   const launched = pub.waves.filter((w) => w.launched);
   const order = new Map(launched.map((w, i) => [waveKey(w.id), i]));
+  // Une finale « Dès que finie » jouée hors de la zone de sa catégorie attend la fin des passages non finaux de celle-ci.
+  const zoneOf = new Map(pub.categories.map((c) => [c.id, c.zoneId]));
+  const nonFinals = new Map<string, string[]>();
+  for (const i of pub.queues.flatMap((q) => q.items)) if (i.finals === null) nonFinals.set(i.categoryId, [...(nonFinals.get(i.categoryId) ?? []), passageKey(i)]);
   const input: TimelineInput = {
     now,
     changeoverSec: pub.changeoverSec,
-    finalsZoneId: pub.finalsZoneId,
-    waves: launched.map((w) => ({ key: waveKey(w.id), plannedStart: orNull(w.plannedStart), actualStart: orNull(w.actualStart), finalsStart: orNull(w.finalsStart) })),
+    waves: launched.map((w) => ({
+      key: waveKey(w.id),
+      plannedStart: orNull(w.plannedStart),
+      actualStart: orNull(w.actualStart),
+      finalsStart: orNull(w.finalsStart),
+      finalsZoneId: pub.finalsZones[waveKey(w.id)] ?? null,
+    })),
     // Ordre des sessions puis ordre de la file : les numéros peuvent reprendre à 1 dans une session.
     zones: pub.queues.map((q) => ({
       zoneId: q.zoneId,
@@ -53,6 +62,7 @@ export function publicTimes(pub: PublicCompetition, now: number | null): PublicT
           durationSec: i.durationSec,
           endedAt: i.endedAt === null ? null : isoToDaySeconds(i.endedAt, pub.date),
           finals: i.finals,
+          ...(i.finals === 'ready' && zoneOf.get(i.categoryId) !== q.zoneId ? { waitsFor: nonFinals.get(i.categoryId) ?? [] } : {}),
         })),
     })),
   };
@@ -65,10 +75,7 @@ export function publicTimes(pub: PublicCompetition, now: number | null): PublicT
       const w = timeline.waveStarts.get(waveKey(waveId));
       return w ? { clock: secondsToClock(w.at), estimated: w.estimated } : null;
     },
-    finalsAt: (waveId) => {
-      const s = timeline.finalsStarts.get(waveKey(waveId));
-      return s === undefined ? null : secondsToClock(s);
-    },
+    finalsAt: (waveId) => shown(timeline.finalsStarts.get(waveKey(waveId))),
     categoryFinalAt: (categoryId) => {
       const c = pub.categories.find((x) => x.id === categoryId);
       if (!c) return null;

@@ -1,3 +1,4 @@
+import { waveKey } from '../../../domain/passages/index.js';
 import { zoneQueue } from '../../../domain/public/follow.js';
 import type { PublicCompetition, PublicQueueItem } from '../../../domain/public/types.js';
 import type { PublicTimes } from '../../../domain/public/times.js';
@@ -100,18 +101,27 @@ export function finalsLabel(waveName: string, at?: string | null): string {
   return `Finales de la session ${waveName.trim().replace(/^session\s+/i, '')}${at ? ` à partir de ${at}` : ''}`;
 }
 
+/** Finale « Fin de session » sur la zone des finales de sa session : elle passe sous la ligne « Finales de la session … ». */
+const underFinalsLine = (pub: PublicCompetition, item: PublicQueueItem, zoneId: string): boolean =>
+  item.finals === 'end' && (pub.finalsZones[waveKey(item.waveId)] ?? null) === zoneId;
+
 /**
- * Lignes « Finales de la session … » d'une file (passages restants dans l'ordre) : avant la première finale de chaque
- * session sur la zone des finales. Clé : l'index du passage dans `items`.
+ * Lignes « Finales de la session … » de la file d'une zone (passages restants dans l'ordre) : avant la première finale « Fin de
+ * session » de chaque session dont c'est la zone des finales. Clé : l'index du passage dans `items`.
  */
-export function finalsMarkers(pub: PublicCompetition, items: PublicQueueItem[], finalsAt?: (waveId: string | null) => string | null): Map<number, string> {
+export function finalsMarkers(pub: PublicCompetition, items: PublicQueueItem[], zoneId: string, finalsAt?: (waveId: string | null) => string | null): Map<number, string> {
   const out = new Map<number, string>();
   const seen = new Set<string | null>();
   items.forEach((item, i) => {
-    if (!item.finals || seen.has(item.waveId)) return;
+    if (!underFinalsLine(pub, item, zoneId) || seen.has(item.waveId)) return;
     seen.add(item.waveId);
     const wave = pub.waves.find((w) => w.id === (item.waveId ?? null));
     if (wave) out.set(i, finalsLabel(wave.name, finalsAt?.(item.waveId ?? null)));
   });
   return out;
+}
+
+/** Badge « Finale » : un passage de finale qui ne passe pas sous la ligne « Finales de la session … ». */
+export function finalBadge(pub: PublicCompetition, item: PublicQueueItem, zoneId: string): boolean {
+  return item.finals !== null && !underFinalsLine(pub, item, zoneId);
 }

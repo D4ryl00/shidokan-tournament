@@ -7,7 +7,7 @@ import { source } from './public-fixtures.js';
 const timing = { rounds: 2, roundSec: 90, restSec: 30, overtimeSec: 60 };
 const item = (over: Partial<PublicQueueItem>): PublicQueueItem => ({
   number: 1, categoryId: 'A', matchId: 'w1-0', kataPart: null, a: null, b: null, aFrom: null, bFrom: null, state: 'ready', waveId: 'w1',
-  finals: false, durationSec: 210, timing, kataPassages: null, endedAt: null, ...over,
+  finals: null, durationSec: 210, timing, kataPassages: null, endedAt: null, ...over,
 });
 
 /** Vue fabriquée : une zone, deux combats de la session Matin (prévue 9:30). */
@@ -38,9 +38,9 @@ describe('publicTimes', () => {
     const pub = made({
       queues: [
         { zoneId: 'z1', items: [item({ number: 1, matchId: 'w1-0' })] },
-        { zoneId: 'z2', items: [item({ number: 5, matchId: 'w2-0', finals: true })] },
+        { zoneId: 'z2', items: [item({ number: 5, matchId: 'w2-0', finals: 'end' })] },
       ],
-      finalsZoneId: 'z2',
+      finalsZones: { w1: 'z2' },
       categories: base.categories,
     });
     const t = publicTimes(pub, null);
@@ -108,9 +108,9 @@ describe('publicTimes', () => {
       waves: [{ id: 'w1', name: 'Matin', launched: true, plannedStart: '09:30', actualStart: '09:30', finalsStart: null }],
       queues: [
         { zoneId: 'z1', items: [item({ number: 1, matchId: 'w1-0' })] },
-        { zoneId: 'z2', items: [item({ number: 5, matchId: 'w2-0', finals: true })] },
+        { zoneId: 'z2', items: [item({ number: 5, matchId: 'w2-0', finals: 'end' })] },
       ],
-      finalsZoneId: 'z2',
+      finalsZones: { w1: 'z2' },
     });
     const start = publicTimes(pub, null).categoryFinalAt('A');
     expect(start).not.toBeNull();
@@ -127,5 +127,57 @@ describe('publicTimes', () => {
     expect(t.drift('z1')).toBeNull();
     expect(t.waveStart('w1')).toBeNull();
     expect(t.finalsAt('w1')).toBeNull();
+  });
+  describe('finals', () => {
+    const h = (hh: number, mm: number) => hh * 3600 + mm * 60;
+    /** z1 : deux combats de A (9:30 → 9:38) ; z2 : un passage de B (9:30 → 9:31), puis la finale de A. */
+    const withFinal = (finals: 'ready' | 'end', over: Partial<PublicCompetition> = {}) => {
+      const base = made();
+      return made({
+        categories: base.categories,
+        queues: [
+          { zoneId: 'z1', items: [item({ number: 1, matchId: 'w1-0' }), item({ number: 2, matchId: 'w1-1' })] },
+          { zoneId: 'z2', items: [item({ number: 1, categoryId: 'B', matchId: null, timing: null, kataPassages: 1, durationSec: 60 }), item({ number: 5, matchId: 'w2-0', finals })] },
+        ],
+        ...over,
+      });
+    };
+    const finalAt = (pub: PublicCompetition, now: number | null = null) => publicTimes(pub, now).at(passageKey(pub.queues[1]!.items[1]!));
+
+    test('« dès que finie » hors de la zone de sa catégorie : après la fin estimée de ses combats', () => {
+      expect(finalAt(withFinal('ready'))).toBe('9:38');
+      // Sur la zone de sa catégorie : rien à attendre.
+      const own = withFinal('ready');
+      own.categories = own.categories.map((c) => (c.id === 'A' ? { ...c, zoneId: 'z2' } : c));
+      expect(finalAt(own)).toBe('9:32');
+    });
+
+    test('« fin de session » : attend les autres zones sur la zone des finales de la session seulement', () => {
+      expect(finalAt(withFinal('end', { finalsZones: { w1: 'z2' } }))).toBe('9:38');
+      expect(finalAt(withFinal('end', { finalsZones: { w1: 'z3' } }))).toBe('9:32');
+      expect(finalAt(withFinal('end', { finalsZones: {} }))).toBe('9:32');
+    });
+
+    test('début des finales : jamais une heure déjà passée', () => {
+      const pub = withFinal('end', { finalsZones: { w1: 'z2' } });
+      expect(publicTimes(pub, h(9, 37)).finalsAt('w1')).toBe('9:38');
+      expect(publicTimes(pub, h(9, 39)).finalsAt('w1')).toBeNull();
+    });
+
+    test('finale jouée en avance : les passages qui la précèdent restent à venir, après elle', () => {
+      const base = made();
+      const pub = made({
+        waves: [{ id: 'w1', name: 'Matin', launched: true, plannedStart: '09:30', actualStart: '09:30', finalsStart: null }],
+        categories: base.categories,
+        queues: [{ zoneId: 'z1', items: [
+          item({ number: 1, matchId: 'w1-0' }), item({ number: 2, matchId: 'w1-1' }),
+          item({ number: 3, matchId: 'w2-0', finals: 'ready', endedAt: `${base.date}T09:20:00Z` }),
+        ] }],
+      });
+      // Fin de la finale : 10:20 à Paris ; maintenant 10:20:30.
+      const t = publicTimes(pub, h(10, 20) + 30);
+      expect(t.at(passageKey(pub.queues[0]!.items[0]!))).toBe('10:21');
+      expect(t.at(passageKey(pub.queues[0]!.items[1]!))).toBe('10:26');
+    });
   });
 });

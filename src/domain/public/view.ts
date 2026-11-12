@@ -37,8 +37,8 @@ export interface PublicSource {
   plan: PassagePlan;
   /** Catégories numérotées dans une vague actuellement lancée (`launchedCategoryIds`). */
   launchedCategoryIds: Iterable<string>;
-  /** Zone des finales des réglages (`settings.finalsZoneId`) ; absente ou null : aucune. */
-  finalsZoneId?: string | null;
+  /** Zone des finales de chaque session (clé `waveKey`) ; absente ou null : aucune. */
+  finalsZones?: Record<string, string | null>;
   /** Réglages des durées de la compétition. */
   schedule: ScheduleSettings;
   triathlonRounds: 3 | 6;
@@ -168,6 +168,12 @@ export function toPublicCompetition(src: PublicSource): PublicCompetition {
     ? [wave(null, IMPLICIT_WAVE, launchedWaves.has(waveKey(null)))]
     : [...src.waves].sort((a, b) => a.order - b.order).map((w) => wave(w.id, w.name, launchedWaves.has(w.id)));
   const launchedWaveIds = new Set(waves.filter((w) => w.launched).map((w) => waveKey(w.id)));
+  // Zone des finales de chaque session ; une zone inconnue vaut « Aucune » (comme `planPassages`).
+  const knownZones = new Set(src.zones.map((z) => z.id));
+  const finalsZones = Object.fromEntries(waves.map((w) => {
+    const z = src.finalsZones?.[waveKey(w.id)] ?? null;
+    return [waveKey(w.id), z !== null && knownZones.has(z) ? z : null];
+  }));
 
   // À disputer comme pour l'organisation (`playableCategory` : un tableau et au moins 2 combattants), numérotée et dans une
   // vague actuellement lancée.
@@ -290,8 +296,9 @@ export function toPublicCompetition(src: PublicSource): PublicCompetition {
       items: z.passages.flatMap((p): PublicQueueItem[] => {
         const st = states.get(p.categoryId)!;
         const bracket = bracketOf.get(p.categoryId)!;
-        // Sur la zone des finales, les finales de la vague passent à la fin de sa file (voir `planPassages`).
-        const finals = z.zoneId === (src.finalsZoneId ?? null) && (p.matchId === 'kata:finale' || (bracket.kind === 'combat' && p.matchId !== null && finalMatchIds(bracket).includes(p.matchId)));
+        // Passage de finale (un bloc de kata entier n'en est pas une à part) : quand se joue la finale de sa catégorie.
+        const isFinal = p.matchId === 'kata:finale' || (bracket.kind === 'combat' && p.matchId !== null && finalMatchIds(bracket).includes(p.matchId));
+        const finals = isFinal ? (src.plan.finals[p.categoryId]?.when ?? null) : null;
         const base = { number: p.number, categoryId: p.categoryId, waveId: p.waveId, finals };
         // Bloc de kata, comme dans la file de l'organisation : terminé avec la catégorie (ou le tour 1 noté).
         if (p.matchId === null || p.matchId.startsWith('kata:')) {
@@ -346,7 +353,7 @@ export function toPublicCompetition(src: PublicSource): PublicCompetition {
     phase: publicPhase(src.competition.date, src.today, waves.some((w) => w.launched)),
     waves,
     changeoverSec: src.schedule.changeoverSec,
-    finalsZoneId: src.finalsZoneId ?? null,
+    finalsZones,
     zones,
     entrants,
     categories,
