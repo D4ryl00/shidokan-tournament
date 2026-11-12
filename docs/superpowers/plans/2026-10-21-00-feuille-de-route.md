@@ -81,3 +81,6 @@ Faite le 2026-11-08 sur la branche `etape-38-planche-historique` : voir le bilan
 
 ## Étape 39 : mode spectateur, lot 1
 Faite le 2026-11-08 sur la branche `etape-39-mode-spectateur` (pas encore fusionnée) : voir le bilan. Pages publiques en lecture seule pour les compétitions rendues publiques ; les heures, durées et l'avance / le retard sont le lot 2.
+
+## Étape 43 : finales catégorie par catégorie
+Faite le 2026-11-12 sur la branche `etape-43-finales` (pas encore fusionnée) : voir le bilan. Spec : `docs/superpowers/specs/2026-11-08-finales-des-que-pretes-design.md`. Migration 0036. Chaque session a une zone des finales (une zone quelconque, ou aucune) et, par catégorie, deux choix : « Où » (sa zone ou la zone des finales) et « Quand » (dès que finie, ou en fin de session), pour les combats comme pour les katas ; nouvel onglet « Finales » dans Préparer (lecture seule une fois la session figée ; rouverte puis refigée, les zones touchées sont renumérotées « mélangés »). Les réglages « Finales sur la zone » et « Finales de kata aussi sur cette zone » disparaissent (leurs valeurs sont reprises à la migration). Dans Combats, une finale dont les finalistes sont connus avant son tour est signalée « Prête · peut passer plus tôt » ; les heures estimées du mode spectateur décalent les passages restants quand une finale est jouée en avance.
