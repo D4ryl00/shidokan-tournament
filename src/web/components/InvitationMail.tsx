@@ -25,7 +25,7 @@ export function CompetitionMessage({ competitionId, previewClubId, onUnsavedChan
   const own = competition?.settings.invitationMail ?? null;
   const current = own ?? app?.invitationMail;
   const [form, setForm] = useState<{ subject: string; body: string; format?: 'html' } | null>(null);
-  // Remonte l'éditeur (il ne lit son contenu qu'à l'ouverture) après un enregistrement ou un retour au message de l'application.
+  // Remonte l'éditeur (il ne lit son contenu qu'à l'ouverture) quand le message à afficher n'est plus le sien (voir `save`).
   const [editorKey, setEditorKey] = useState(0);
   const shown = form ?? current;
   // Mode code ou image en cours d'envoi : le message n'est pas prêt, on enregistre ensuite. Ce qui s'y écrit n'est pas encore remonté : c'est déjà un brouillon.
@@ -43,8 +43,17 @@ export function CompetitionMessage({ competitionId, previewClubId, onUnsavedChan
   const readOnly = entry?.managedHere === false;
   const { checking, noticeThenSave } = useRemovedNotice();
   if (!shown) return null;
+  // L'éditeur n'est remonté que si le message enregistré n'est plus celui qu'il affiche (filtré par le serveur, ou retour au message de
+  // l'application). Le remonter sans raison détruit les paragraphes à l'écran : sur Firefox, avec un long message, la page sautait en bas.
   const save = (invitationMail: { subject: string; body: string; format?: 'html' } | null) =>
-    update.mutate({ settings: { invitationMail } }, { onSuccess: () => { setForm(null); setEditorKey((k) => k + 1); notifications.show({ color: 'green', message: 'Message enregistré.' }); } });
+    update.mutate({ settings: { invitationMail } }, {
+      onSuccess: (saved) => {
+        const stored = saved.settings.invitationMail;
+        if (!invitationMail || !stored || stored.format !== invitationMail.format || !sameHtml(stored.body, invitationMail.body)) setEditorKey((k) => k + 1);
+        setForm(null);
+        notifications.show({ color: 'green', message: 'Message enregistré.' });
+      },
+    });
   return (
     <Accordion variant="contained">
       <Accordion.Item value="message">
@@ -81,6 +90,13 @@ export function CompetitionMessage({ competitionId, previewClubId, onUnsavedChan
       </Accordion.Item>
     </Accordion>
   );
+}
+
+/** Même HTML une fois lu par le navigateur : le serveur écrit `<br />` là où l'éditeur écrit `<br>`. */
+function sameHtml(a: string, b: string): boolean {
+  if (a === b) return true;
+  const read = (html: string) => new DOMParser().parseFromString(html, 'text/html').body.innerHTML;
+  return read(a) === read(b);
 }
 
 /** Envoi groupé : avancement tant qu'il tourne (sur le serveur, il continue si la fenêtre est fermée), puis résultat club par club. */

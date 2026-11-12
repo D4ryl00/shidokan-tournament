@@ -457,3 +457,29 @@ test('message modifié en mode code : compté comme non enregistré ; un refus d
   await expect(page.getByTestId('api-error')).toContainText('Mail trop lourd');
   await expect(page.getByTestId('api-error')).toBeInViewport();
 });
+
+test('long message enregistré : l’éditeur garde ses paragraphes et l’aperçu reste affiché (la page ne saute plus, Firefox)', async ({ page, request }) => {
+  const { editor } = await openedMessage(page, request, 'Long message Osaka', 'Dojo Osaka');
+  await page.getByRole('checkbox', { name: /^Choisir Dojo Osaka/ }).check();
+  await expect(page.getByTestId('invitation-preview')).toBeVisible();
+  // Long message : le haut de l'écran tombe dans l'éditeur, sur un paragraphe que le navigateur prend comme repère de défilement.
+  await editor.locator('p').last().click();
+  await page.keyboard.press('ControlOrMeta+End');
+  for (let i = 1; i <= 40; i++) await page.keyboard.type(`\nParagraphe ajouté ${i}`);
+  const save = page.getByRole('button', { name: 'Enregistrer pour cette compétition' });
+  await save.scrollIntoViewIfNeeded();
+  await page.evaluate(() => {
+    const w = window as unknown as { marked: Element; previewRemoved: boolean };
+    w.marked = [...document.querySelectorAll('[data-testid=mail-editor] .ProseMirror p')].find((p) => p.getBoundingClientRect().top >= 0)!;
+    w.previewRemoved = false;
+    new MutationObserver(() => { if (!document.querySelector('[data-testid=invitation-preview]')) w.previewRemoved = true; }).observe(document.body, { childList: true, subtree: true });
+  });
+  const before = await page.evaluate(() => window.scrollY);
+  await save.click();
+  await expect(page.getByText('Message enregistré.')).toBeVisible();
+  await expect(page.getByTestId('invitation-preview')).toContainText('Paragraphe ajouté 40');
+  expect(await page.evaluate(() => {
+    const w = window as unknown as { marked: Element; previewRemoved: boolean };
+    return { sameParagraph: w.marked.isConnected, previewRemoved: w.previewRemoved, scroll: Math.round(window.scrollY) };
+  })).toEqual({ sameParagraph: true, previewRemoved: false, scroll: Math.round(before) });
+});

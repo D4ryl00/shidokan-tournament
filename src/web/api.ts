@@ -1400,6 +1400,8 @@ export const useInvitationPreview = (id: string, clubId: string | null, version:
     queryKey: ['invitation-preview', id, clubId, version],
     queryFn: () => api<{ subject: string; body: string; html: string }>('GET', `/api/competitions/${id}/invitations/preview?clubId=${clubId}`),
     enabled: !!clubId,
+    // Message enregistré : l'aperçu du même club reste affiché pendant sa relecture (sinon il disparaît un instant et la page saute).
+    placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[2] === clubId ? previous : undefined),
   });
 
 // Pièces jointes ajoutées au mail aux clubs (les fiches club se cochent dans les réglages de la compétition).
