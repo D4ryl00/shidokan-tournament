@@ -125,7 +125,7 @@ export interface FinalsRow {
   kata: boolean;
   /** Kata : tour 1 et finale sont deux passages distincts. */
   kataSplit: boolean;
-  /** Tableau déjà tiré sans finale (poule unique). */
+  /** Tableau jouable déjà tiré sans finale (poule unique). */
   noFinal: boolean;
   fixed: 'finals-zone' | 'not-accepted' | null;
   /** « Où » et « Quand » effectifs. */
@@ -174,7 +174,8 @@ export async function finalsView(db: AppDb, competitionId: string, waveId: strin
         discipline: p.discipline,
         kata,
         kataSplit: resolved.kataSplit,
-        noFinal: p.bracket?.kind === 'combat' && finalMatchIds(p.bracket).length === 0,
+        // « Poule » : seulement un tableau jouable (2 inscrits actifs au moins) qui n'a pas de finale.
+        noFinal: p.playable && p.bracket?.kind === 'combat' && finalMatchIds(p.bracket).length === 0,
         fixed: resolved.fixed,
         where,
         when: resolved.when,

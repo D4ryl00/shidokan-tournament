@@ -42,6 +42,15 @@ async function setup() {
 const view = async (wave: string | null) => (await call('GET', `/finals?vague=${wave ?? ''}`)).json() as View;
 
 describe('GET /finals', () => {
+  test('une catégorie à un seul inscrit n’est pas « sans finale (poule) » : elle garde ses choix', async () => {
+    await register(1, { ageBandCode: 'cadet', weightClassId: 'cadet:F:-54' });
+    await register(3, { ageBandCode: 'cadet', weightClassId: 'cadet:F:-61' });
+    const matin = ((await call('PUT', '/waves', [{ name: 'Matin', rules: { ageBandCodes: ['cadet'], disciplines: [] } }])).json() as { id: string }[])[0]!.id;
+    const v = await view(matin);
+    const byLabel = (s: string) => v.rows.find((r) => r.label.includes(s))!;
+    expect(byLabel('-54').noFinal).toBe(false);
+    expect(byLabel('-61').noFinal).toBe(true);
+  });
   test('lignes de la session dans l’ordre des catégories, choix effectifs, poule unique, résumé par zone', async () => {
     const s = await setup();
     const v = await view(s.matin);
