@@ -88,7 +88,7 @@ Chaque changement s'enregistre tout seul. Sans toucher à rien, les valeurs repr
 
 **Session figée, puis rouverte**
 - Une session figée est en **lecture seule** dans l'onglet Finales : « Rouvrez la session dans Combats pour changer », car changer une finale changerait des numéros déjà imprimés.
-- Une fois la session rouverte, le tableau redevient modifiable. Une catégorie dont un choix a changé (Où, Quand, ou zone des finales de la session) redevient « à numéroter ». À « Refiger la session », les zones touchées sont **renumérotées « mélangés »** : les passages non joués de la zone prennent leur nouvelle place, les passages déjà joués gardent leur numéro. La fenêtre de refigeage le dit (« Les finales ont changé : les zones concernées sont renumérotées (mélangés). ») et nomme ces zones (« Zones renumérotées : Tatami 1, Tatami 3. ») ; « À la suite » n'y est pas proposé.
+- Une fois la session rouverte, le tableau redevient modifiable. Une catégorie dont un choix a changé (Où, Quand, ou zone des finales de la session) redevient « à numéroter ». À « Refiger la session », les zones touchées sont **renumérotées « mélangés »** : les passages non joués de la zone prennent leur nouvelle place, les passages déjà joués gardent leur numéro. La fenêtre de refigeage le dit (« Les finales ont changé : les zones concernées sont renumérotées (mélangés). ») et nomme ces zones (« Zones renumérotées : Tatami 1, Tatami 3. ») ; « À la suite » y est grisé (non sélectionnable).
 
 ### Le message aux clubs
 
