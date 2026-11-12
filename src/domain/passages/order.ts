@@ -10,8 +10,10 @@ export interface OrderCategory {
   /** Bloc de kata émis (`matchId` du passage) : null = catégorie entière, sinon 'kata:tour1' ou 'kata:finale'. */
   kataBlock?: string | null;
   nodes: MatchNode[];
-  /** Finales à placer juste après le dernier combat de `nodes` (sans combat dans `nodes` : ordre normal). */
+  /** Finales à placer juste après le dernier combat de `nodes` (sans combat dans `nodes` : ordre normal, sauf `finalsFirst`). */
   finalsAfter?: MatchNode[];
+  /** Ses combats non finaux sont déjà joués : ses `finalsAfter` sont prêtes et passent en tête des combats. */
+  finalsFirst?: boolean;
 }
 /** Numéro de passage : un combat, ou un bloc de kata (`matchId` null : entier ; 'kata:tour1' / 'kata:finale'). */
 export interface Passage {
@@ -36,8 +38,9 @@ const shares = (x: PlacedMatch, y: PlacedMatch) => x.categoryId === y.categoryId
  * File d'une zone pour une vague, numérotée à partir de `first` : blocs de kata, puis combats groupés par distance à la fin
  * (« tour par tour » : catégories alternées ; « catégorie par catégorie » : chacune en entier). Dans un groupe, on prend le premier
  * combat qui laisse au moins deux combats de repos, sinon un, sinon le premier (signalé « pas de repos »). Les `finalsAfter`
- * d'une catégorie passent juste après son dernier combat. `previous` : dernier combat de la zone avant cette file, pour le
- * seul signal « pas de repos » du premier combat (sans effet sur l'ordre, ni si la file commence par un bloc de kata).
+ * d'une catégorie passent juste après son dernier combat ; celles d'une catégorie `finalsFirst`, en tête des combats.
+ * `previous` : dernier combat de la zone avant cette file, pour le seul signal « pas de repos » du premier combat (sans effet
+ * sur l'ordre, ni si la file commence par un bloc de kata).
  */
 export function zoneOrder(cats: OrderCategory[], mode: PassageOrderMode, first: number, previous?: PlacedMatch): Passage[] {
   const sorted = [...cats].sort((a, b) => a.rank - b.rank);
@@ -70,7 +73,11 @@ export function zoneOrder(cats: OrderCategory[], mode: PassageOrderMode, first: 
       }
     }
   };
-  const combats = sorted.filter((c) => c.kataEntrants === null && nodesOf(c).length > 0);
+  // Finales prêtes d'emblée (« Dès que finie », combats non finaux joués) : en tête, avant les autres combats.
+  for (const c of sorted.filter((x) => x.finalsFirst && x.nodes.length === 0)) {
+    for (const d of distancesOf(c.finalsAfter ?? [])) place(at(c.finalsAfter!, d).map((node) => ({ categoryId: c.id, node })));
+  }
+  const combats = sorted.filter((c) => c.kataEntrants === null && !(c.finalsFirst && c.nodes.length === 0) && nodesOf(c).length > 0);
 
   if (mode === 'categories') {
     for (const c of combats) for (const d of distancesOf(nodesOf(c))) place(at(nodesOf(c), d).map((node) => ({ categoryId: c.id, node })));

@@ -104,9 +104,12 @@ function context(input: PlanInput): Context {
 const isKata = (c: PlanCategory) => c.bracket?.kind === 'kata';
 const NO_CHOICE: StoredFinals = { where: null, when: null };
 
-/** Où et quand se joue la finale de `c` quand la catégorie est sur `zoneId`. */
-const finalsChoice = (c: PlanCategory, zoneId: string | null, ctx: Context): ResolvedFinals =>
-  resolveFinals({
+/**
+ * Où et quand se joue la finale de `c` quand la catégorie est sur `zoneId`. Un tableau de combat sans finale (poule unique)
+ * a une signature constante : ses choix sont sans effet, ils ne la rendent jamais « à numéroter ».
+ */
+function finalsChoice(c: PlanCategory, zoneId: string | null, ctx: Context): ResolvedFinals {
+  const resolved = resolveFinals({
     kata: isKata(c),
     entrants: c.bracket?.entrants.length ?? 0,
     zoneId,
@@ -115,6 +118,9 @@ const finalsChoice = (c: PlanCategory, zoneId: string | null, ctx: Context): Res
     mode: ctx.mode,
     accepts: (z) => ctx.accepts(z, c.discipline),
   });
+  const noFinal = c.bracket?.kind === 'combat' && finalMatchIds(c.bracket).length === 0;
+  return noFinal ? { ...resolved, signature: 'none' } : resolved;
+}
 
 /** Fin estimée (secondes depuis le début de la session) du dernier passage de chaque catégorie dans ces files. */
 function estimatedEnds(queues: Passage[][], durationSec: (categoryId: string, matchId: string | null) => number): Map<string, number> {
@@ -195,7 +201,9 @@ function orderWave(
       const rounds = nodes.filter((x) => !ids.includes(x.matchId));
       const last = nodes.filter((x) => ids.includes(x.matchId));
       if (!r.onFinalsZone && r.when === 'ready') {
-        own.get(zoneId)!.push({ ...entry(rounds), finalsAfter: last });
+        // Tous ses combats non finaux joués (renumérotation) : sa finale est prête, elle passe en tête.
+        const ready = rounds.length === 0 && ctx.nodes.get(c.id)!.some((x) => !ids.includes(x.matchId));
+        own.get(zoneId)!.push({ ...entry(rounds), finalsAfter: last, ...(ready ? { finalsFirst: true } : {}) });
         continue;
       }
       own.get(zoneId)!.push(entry(rounds));
@@ -314,14 +322,25 @@ export interface RenumberOptions {
   zoneOf?: Record<string, string>;
 }
 
-/** Signature du choix des finales de chaque catégorie : sur sa zone imposée (`zoneOf`, déplacement), sinon celle du plan. */
-function signatureOf(input: PlanInput, plan: PassagePlan, ctx: Context, opts: RenumberOptions) {
-  return (categoryId: string): string | null => {
+/** Choix des finales de chaque catégorie : sur sa zone imposée (`zoneOf`, déplacement), sinon celle du plan. */
+function choiceOf(input: PlanInput, plan: PassagePlan, ctx: Context, opts: RenumberOptions) {
+  return (categoryId: string): ResolvedFinals | null => {
     const zoneId = opts.zoneOf?.[categoryId];
-    if (zoneId === undefined) return plan.finals[categoryId]?.signature ?? null;
+    if (zoneId === undefined) return plan.finals[categoryId] ?? null;
     const c = input.categories.find((x) => x.id === categoryId);
-    return c ? finalsChoice(c, zoneId, ctx).signature : null;
+    return c ? finalsChoice(c, zoneId, ctx) : null;
   };
+}
+
+/** Signature du choix des finales de chaque catégorie (voir `choiceOf`). */
+function signatureOf(input: PlanInput, plan: PassagePlan, ctx: Context, opts: RenumberOptions) {
+  const choice = choiceOf(input, plan, ctx, opts);
+  return (categoryId: string): string | null => choice(categoryId)?.signature ?? null;
+}
+
+/** Où et quand se joue la finale de chaque catégorie, sur sa zone imposée (`zoneOf`, déplacement) ou celle du plan. */
+export function finalsOf(input: PlanInput, opts: Pick<RenumberOptions, 'zoneOf'> = {}): (categoryId: string) => ResolvedFinals | null {
+  return choiceOf(input, planPassages(input), context(input), opts);
 }
 
 const toFrozen = (signature: (categoryId: string) => string | null) => (p: PlannedPassage & { zoneId: string }): FrozenPassage => ({

@@ -1,7 +1,7 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { activeEntrantCount, type Category } from '../../domain/categories.js';
-import { DISCIPLINES } from '../../domain/disciplines.js';
-import { appendPassages, finalMatchIds, planPassages, reshuffleZone, segmentOf, waveKey, type FrozenPassage, type PlanInput } from '../../domain/passages/index.js';
+import { DISCIPLINES, notAcceptedBy } from '../../domain/disciplines.js';
+import { appendPassages, finalMatchIds, finalsOf, planPassages, reshuffleZone, segmentOf, waveKey, type FrozenPassage, type PlanInput, type ResolvedFinals } from '../../domain/passages/index.js';
 import type { AppDb } from '../db/client.js';
 import { categories, frozenPassages, waveLaunches } from '../db/schema.js';
 import { CategoryLockedError, listCategories, syncCategories } from './categories.js';
@@ -82,7 +82,22 @@ function fixCategories(t: AppDb, cats: Category[], waveId: string | null, zoneOf
   }
 }
 
-/** « Figer et imprimer la vague » : numéros enregistrés, catégories fixées (vague, zone), vague lancée. */
+/**
+ * Les numéros figés de ces catégories suivent leur choix des finales effectif : il est enregistré sur la catégorie là où elle
+ * prenait la valeur de la session ou la valeur par défaut (« Quand », et « Où » s'il est au choix). Changer ensuite l'ordre
+ * de passage des combats ou un « Tout… » ne déplace plus leurs finales (sinon elles deviendraient « à numéroter »).
+ */
+function keepFinalsChoices(t: AppDb, competitionId: string, categoryIds: Iterable<string>, finals: (categoryId: string) => ResolvedFinals | null) {
+  for (const id of new Set(categoryIds)) {
+    const r = finals(id);
+    if (!r) continue;
+    const mine = and(eq(categories.competitionId, competitionId), eq(categories.id, id));
+    t.update(categories).set({ finalsWhen: r.when }).where(and(mine, isNull(categories.finalsWhen))).run();
+    if (r.fixed === null) t.update(categories).set({ finalsWhere: r.onFinalsZone ? 'finals' : 'own' }).where(and(mine, isNull(categories.finalsWhere))).run();
+  }
+}
+
+/** « Figer et imprimer la vague » : numéros enregistrés, catégories fixées (vague, zone, choix des finales), vague lancée. */
 export async function launchWave(db: AppDb, competitionId: string, waveId: string | null, opts: { restart: boolean }): Promise<void> {
   const status = await launchStatus(db, competitionId, waveId, opts.restart);
   if (status.blocking.length) throw new RegistrationValidationError(status.blocking);
@@ -97,6 +112,7 @@ export async function launchWave(db: AppDb, competitionId: string, waveId: strin
     const t = tx as unknown as AppDb;
     if (rows.length) t.insert(frozenPassages).values(rows).run();
     fixCategories(t, cats.filter((c) => c.waveId === waveId), waveId, (id) => plan.categories[id]?.zoneId ?? null);
+    keepFinalsChoices(t, competitionId, rows.map((r) => r.categoryId), (id) => plan.finals[id] ?? null);
     t.insert(waveLaunches).values({ competitionId, waveKey: key, launched: true, restartNumbering: opts.restart, launchedAt: now() }).run();
   });
 }
@@ -111,7 +127,8 @@ export async function reopenWave(db: AppDb, competitionId: string, waveId: strin
 
 /**
  * « Numéroter à la suite » : les catégories à numéroter de la vague (toutes, ou `categoryIds`) reçoivent des numéros après
- * le dernier numéro figé de leur zone ; la vague (re)passe lancée. `dryRun` : aperçu, rien n'est écrit.
+ * le dernier numéro figé de leur zone ; la vague (re)passe lancée. `dryRun` : aperçu, rien n'est écrit. `zonesRedone` :
+ * zones entièrement renumérotées (« mélangés »).
  */
 export async function numberPending(db: AppDb, competitionId: string, waveId: string | null, categoryIds?: string[], dryRun = false, requested: RenumberMode = 'append') {
   let mode = requested;
@@ -123,7 +140,7 @@ export async function numberPending(db: AppDb, competitionId: string, waveId: st
   const input = await planInput(db, competitionId, cats);
   const plan = planPassages(input);
   const ids = plan.pending.filter((p) => p.waveId === waveId && (!categoryIds || categoryIds.includes(p.categoryId))).map((p) => p.categoryId);
-    // Une finale qui a changé de place ne se range pas « à la suite » : elle imposerait le bout de la file (aperçu compris).
+  // Une finale qui a changé de place ne se range pas « à la suite » : elle imposerait le bout de la file (aperçu compris).
   if (plan.pending.some((p) => ids.includes(p.categoryId) && p.reason === 'finals')) mode = 'shuffle';
   const appended = appendPassages(input, waveId, ids);
   // Mélangés : chaque zone qui reçoit une catégorie à numéroter est refaite (ses autres catégories comprises).
@@ -140,7 +157,7 @@ export async function numberPending(db: AppDb, competitionId: string, waveId: st
   }
   const zoneless = ids.filter((id) => !plan.categories[id]?.zoneId);
   if (zoneless.length) blocking.push(`Sans zone possible : ${zoneless.map((id) => label.get(id)).join(', ')}.`);
-  if (dryRun) return { changes, blocking };
+  if (dryRun) return { changes, blocking, zonesRedone };
   if (blocking.length) throw new RegistrationValidationError(blocking);
   // Catégories qui ne sont plus dans la vague (changées de vague, supprimées) : leurs anciens numéros deviennent des trous.
   const members = new Set(cats.filter((c) => c.waveId === waveId).map((c) => c.id));
@@ -149,11 +166,12 @@ export async function numberPending(db: AppDb, competitionId: string, waveId: st
     const t = tx as unknown as AppDb;
     if (gone.length) t.delete(frozenPassages).where(and(eq(frozenPassages.competitionId, competitionId), eq(frozenPassages.waveKey, key), inArray(frozenPassages.categoryId, gone))).run();
     replaceRows(t, competitionId, input, rows, ids, undefined, zonesRedone.map((zoneId) => ({ zoneId, waves: segmentOf(input, waveId) })));
+    keepFinalsChoices(t, competitionId, rows.map((r) => r.categoryId), (id) => plan.finals[id] ?? null);
     if (changed.length) t.update(categories).set({ numbersUpdatedAt: now() }).where(inArray(categories.id, changed)).run();
     fixCategories(t, cats.filter((c) => c.waveId === waveId), waveId, (id) => plan.categories[id]?.zoneId ?? null);
     t.update(waveLaunches).set({ launched: true }).where(and(eq(waveLaunches.competitionId, competitionId), eq(waveLaunches.waveKey, key))).run();
   });
-  return { changes, blocking };
+  return { changes, blocking, zonesRedone };
 }
 
 /**
@@ -243,7 +261,7 @@ export async function moveCategory(db: AppDb, competitionId: string, categoryId:
   const current = plan.categories[categoryId]?.zoneId ?? null;
   if (current === zoneId) throw new RegistrationValidationError(['La catégorie est déjà sur cette zone.']);
   if (zone.disciplines && !zone.disciplines.includes(cat.key.discipline)) {
-    throw new RegistrationValidationError([`La zone « ${zone.name} » n’accueille pas le ${DISCIPLINES[cat.key.discipline].label.toLowerCase()}.`]);
+    throw new RegistrationValidationError([`${notAcceptedBy(`La zone « ${zone.name} »`, cat.key.discipline)}.`]);
   }
   // La finale restée sur la zone des finales y reste (sauf si la catégorie y arrive : elle y est renumérotée après ses demies).
   const finalsZone = input.waveFinals?.find((w) => w.waveKey === waveKey(cat.waveId))?.finalsZoneId ?? null;
@@ -273,6 +291,7 @@ export async function moveCategory(db: AppDb, competitionId: string, categoryId:
     const t = tx as unknown as AppDb;
     // Seules les lignes non gardées de la catégorie déplacée disparaissent (pas sa finale sur la zone des finales).
     replaceRows(t, competitionId, input, rows, [categoryId], keep, mode === 'shuffle' ? [{ zoneId, waves: segmentOf(input, cat.waveId) }] : []);
+    keepFinalsChoices(t, competitionId, rows.map((r) => r.categoryId), finalsOf(input, opts));
     t.update(categories).set({ zoneId }).where(eq(categories.id, categoryId)).run();
     t.update(categories).set({ numbersUpdatedAt: now() }).where(inArray(categories.id, changed)).run();
   });

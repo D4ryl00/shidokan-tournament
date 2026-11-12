@@ -176,6 +176,33 @@ describe('numéros figés (relecture)', () => {
     expect(rows.every((r) => r.finalsChoice === plan.finals[r.categoryId]!.signature)).toBe(true);
   });
 
+  test('poule unique : signature constante, ses choix et la zone des finales ne la rendent jamais à numéroter', () => {
+    const pool = (finals?: PlanCategory['finals']) => pc('P', br(3, 'round_robin'), finals ? { finals } : {});
+    const base: PlanInput = { categories: [pool()], zones: [t1, ring], waves: [], mode: 'rounds' };
+    const frozen = freeze(base);
+    expect(planPassages(base).finals['P']!.signature).toBe('none');
+    for (const change of [
+      { categories: [pool({ where: null, when: 'ready' })] },
+      { categories: [pool({ where: 'finals', when: 'end' })], waveFinals: finalsOn('ring') },
+      { mode: 'categories' as const },
+    ]) expect(planPassages({ ...base, frozen, ...change }).pending).toEqual([]);
+  });
+
+  test('reshuffleZone, tour par tour : une finale « dès que finie » dont tous les combats non finaux sont joués passe en tête', () => {
+    const input: PlanInput = {
+      categories: [pc('A', br(4), { finals: { where: 'own', when: 'ready' } }), pc('B', br(8), { rank: 1, finals: { where: 'own', when: 'end' } })],
+      zones: [t1], waves: [], mode: 'rounds',
+    };
+    const frozen = freeze(input);
+    const played = new Set(['A:w1-0', 'A:w1-1']);
+    const top = Math.max(...frozen.filter((f) => played.has(`${f.categoryId}:${f.matchId}`)).map((f) => f.number));
+    const rows = reshuffleZone({ ...input, frozen, played }, 't1', null, []).sort((a, b) => a.number - b.number);
+    expect(rows[0]).toMatchObject({ number: top + 1, categoryId: 'A', matchId: 'w2-0' });
+    // Les autres gardent l'ordre habituel ; rien de joué n'est renuméroté.
+    expect(rows.slice(1).every((r) => r.categoryId === 'B')).toBe(true);
+    expect(rows.some((r) => played.has(`${r.categoryId}:${r.matchId}`))).toBe(false);
+  });
+
   test('zone des finales qui n’accepte pas la discipline : la finale reste sur sa zone', () => {
     const tatami2 = { id: 't2', order: 1, disciplines: ['karate' as const, 'kata' as const] };
     const input: PlanInput = { categories: [pc('B', br(4), { discipline: 'shido-boxing', pinnedZoneId: 'ring' }), pc('K', br(5, 'kata_two_rounds'))], zones: [t1, { ...ring, disciplines: ['shido-boxing' as const] }, tatami2], waves: [], mode: 'rounds', waveFinals: finalsOn('t2') };

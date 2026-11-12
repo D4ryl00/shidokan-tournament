@@ -208,6 +208,9 @@ test('finale de kata prête avant son tour : early', async () => {
   for (const c of [kata, elim]) await call('PATCH', `/categories/${c.id}`, { zoneId: t1!.id });
   await finalsZone(t2!.id);
   await call('PUT', '/finals/categories', { waveId: null, categoryIds: [kata.id], where: 'own', when: 'end' });
+  // Tour 1 pas encore noté : finalistes inconnus, la finale n'est pas prête.
+  const waiting = (await queueOf(t1!.id)).find((x) => x.categoryId === kata.id && x.kataPart === 'finale');
+  expect(waiting).toMatchObject({ early: false });
   for (const [i, r] of k.entries()) await call('PUT', `/categories/${kata.id}/kata/${r.id}/round1`, { notes: [9 - i, 9 - i, 9 - i] });
   const q = await queueOf(t1!.id);
   const fin = (await queueOf(t2!.id)).concat(q).find((x) => x.categoryId === kata.id && x.kataPart === 'finale');

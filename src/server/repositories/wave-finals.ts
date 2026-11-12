@@ -1,5 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { defaultFinalsChoice, finalMatchIds, planPassages, resolveFinals, waveKey, type FinalsWhen, type FinalsWhere, type WaveFinals } from '../../domain/passages/index.js';
+import type { DisciplineId } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
 import { categories, waveFinals } from '../db/schema.js';
 import { listCategories, readCategories } from './categories.js';
@@ -120,6 +121,7 @@ export interface FinalsRow {
   label: string;
   /** Zone actuelle de la catégorie (épinglée ou répartie). */
   zoneId: string | null;
+  discipline: DisciplineId;
   kata: boolean;
   /** Kata : tour 1 et finale sont deux passages distincts. */
   kataSplit: boolean;
@@ -169,6 +171,7 @@ export async function finalsView(db: AppDb, competitionId: string, waveId: strin
         categoryId: p.id,
         label: cat.label,
         zoneId,
+        discipline: p.discipline,
         kata,
         kataSplit: resolved.kataSplit,
         noFinal: p.bracket?.kind === 'combat' && finalMatchIds(p.bracket).length === 0,

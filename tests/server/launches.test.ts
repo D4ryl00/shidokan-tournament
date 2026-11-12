@@ -104,7 +104,7 @@ describe('lancer une session', () => {
     const before = await plan();
     expect((await call('POST', '/launch/reopen', { waveId: null })).statusCode).toBe(204);
     expect((await status(null)).state).toBe('reopened');
-    expect((await call('POST', '/launch/number', { waveId: null })).json()).toEqual({ changes: [], blocking: [] });
+    expect((await call('POST', '/launch/number', { waveId: null })).json()).toEqual({ changes: [], blocking: [], zonesRedone: [] });
     expect((await status(null)).state).toBe('launched');
     expect((await plan()).zones).toEqual(before.zones);
   });
@@ -120,7 +120,7 @@ describe('lancer une session', () => {
     await call('PATCH', `/categories/${fresh.id}`, { status: 'ready' });
     expect((await status(null)).pending).toEqual([{ categoryId: fresh.id, label: fresh.label, reason: 'shape' }]);
     const preview = (await call('POST', '/launch/number/preview', { waveId: null })).json();
-    expect(preview).toEqual({ changes: [{ categoryId: fresh.id, label: fresh.label, numbers: [4] }], blocking: [] });
+    expect(preview).toEqual({ changes: [{ categoryId: fresh.id, label: fresh.label, numbers: [4] }], blocking: [], zonesRedone: [] });
     expect((await plan()).pending).toHaveLength(1);
     await call('POST', '/launch/number', { waveId: null });
     const p = await plan();
@@ -328,8 +328,10 @@ describe('refigeage après un changement de finale', () => {
     expect((await call('PUT', '/finals/categories', { waveId: null, categoryIds: [a.id], where: 'own', when: 'ready' })).statusCode).toBe(200);
     expect((await status(null)).pending).toEqual([{ categoryId: a.id, label: a.label, reason: 'finals' }]);
 
-    const preview = (await call('POST', '/launch/number/preview', { waveId: null, mode: 'append' })).json() as { changes: { categoryId: string }[] };
+    const preview = (await call('POST', '/launch/number/preview', { waveId: null, mode: 'append' })).json() as { changes: { categoryId: string }[]; zonesRedone: string[] };
     expect(preview.changes.map((c) => c.categoryId)).toContain(a.id);
+    // Seule la zone qui reçoit la catégorie est refaite (sa finale quitte Tatami 2, qui n'est pas renumérotée).
+    expect(preview.zonesRedone).toEqual([t1]);
     expect((await status(null)).pending).toHaveLength(1);
     const res = (await call('POST', '/launch/number', { waveId: null, mode: 'append' })).json() as { changes: { categoryId: string }[]; blocking: string[] };
     expect(res.blocking).toEqual([]);
@@ -348,5 +350,35 @@ describe('refigeage après un changement de finale', () => {
     expect(after.zones.find((z) => z.zoneId === t2)!.passages.some((x) => x.categoryId === b.id && x.matchId === 'w2-0')).toBe(true);
     // Aucun numéro en double sur une zone.
     for (const z of after.zones) expect(new Set(z.passages.map((x) => x.number)).size).toBe(z.passages.length);
+  });
+
+  test('refigeage mêlant une catégorie changée (forme) et une finale changée : les deux renumérotées, aucun numéro en double', async () => {
+    await many(4);
+    await many(4, { weightClassId: 'cadet:F:-61' });
+    await readyAll();
+    const [t1] = ((await call('GET', '/zones')).json() as { id: string }[]).map((z) => z.id) as [string];
+    for (const c of await cats()) await call('PATCH', `/categories/${c.id}`, { zoneId: t1 });
+    await launch(null);
+    const a = await catOf('-54');
+    const b = await catOf('-61');
+    expect((await call('POST', '/launch/reopen', { waveId: null })).statusCode).toBe(204);
+    expect((await call('PUT', '/finals/categories', { waveId: null, categoryIds: [a.id], when: 'ready' })).statusCode).toBe(200);
+    await many(1, { weightClassId: 'cadet:F:-61' });
+    await call('PATCH', `/categories/${b.id}`, { status: 'ready' });
+    expect(new Set((await status(null)).pending.map((p) => `${p.categoryId}:${p.reason}`))).toEqual(new Set([`${a.id}:finals`, `${b.id}:shape`]));
+    const res = (await call('POST', '/launch/number', { waveId: null, mode: 'append' })).json() as { changes: { categoryId: string }[]; blocking: string[]; zonesRedone: string[] };
+    expect(res.blocking).toEqual([]);
+    expect(res.zonesRedone).toEqual([t1]);
+    expect(new Set(res.changes.map((c) => c.categoryId))).toEqual(new Set([a.id, b.id]));
+    const after = await plan();
+    expect(after.pending).toEqual([]);
+    expect((await status(null)).state).toBe('launched');
+    const zone = after.zones.find((z) => z.zoneId === t1)!.passages;
+    expect(new Set(zone.map((x) => x.number)).size).toBe(zone.length);
+    // B a son nouveau tableau (5 inscrites : 4 combats) ; la finale de A suit son dernier combat.
+    expect(zone.filter((x) => x.categoryId === b.id)).toHaveLength(4);
+    const ofA = zone.filter((x) => x.categoryId === a.id);
+    expect(ofA.at(-1)!.matchId).toBe('w2-0');
+    expect(ofA.at(-1)!.number).toBe(ofA.at(-2)!.number + 1);
   });
 });

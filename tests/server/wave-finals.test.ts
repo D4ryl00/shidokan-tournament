@@ -135,6 +135,21 @@ describe('plan de passage', () => {
 });
 
 describe('figeage', () => {
+  test('changer l’ordre de passage après le figeage ne déplace aucune finale figée (choix effectifs gardés sur la catégorie)', async () => {
+    const s = await setup();
+    for (const c of [s.a54, s.kata]) await call('PATCH', `/categories/${c}`, { status: 'ready', zoneId: s.t1 });
+    expect((await call('POST', '/launch', { waveId: s.matin })).statusCode).toBe(204);
+    // Rien n'était choisi : les choix par défaut (tour par tour) sont enregistrés sur les catégories figées, pas sur les autres.
+    expect(stored(s.a54)).toEqual({ where: 'own', when: 'end' });
+    expect(stored(s.kata)).toEqual({ where: 'own', when: 'ready' });
+    expect(stored(s.m45)).toEqual({ where: null, when: null });
+    const passages = async () => (await call('GET', '/passages')).json();
+    const before = await passages();
+    expect((await app.inject({ method: 'PATCH', url: base, payload: { settings: { passageOrder: 'categories' } } })).statusCode).toBe(200);
+    expect((await launchStatus(db, id, s.matin)).pending).toEqual([]);
+    expect((await passages()).zones).toEqual(before.zones);
+  });
+
   test('les numéros figés gardent le choix des finales ; le changer rend la catégorie à numéroter', async () => {
     const s = await setup();
     await setFinalsZone(db, id, s.matin, s.t2);

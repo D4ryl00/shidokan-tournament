@@ -123,7 +123,10 @@ describe('toPublicCompetition', () => {
     expect(toPublicCompetition(source()).finalsZones).toEqual({ w1: null, w2: null });
     // Zone inconnue : aucune ; session unique : clé ''.
     expect(toPublicCompetition(source({ finalsZones: { w1: 'disparue' } })).finalsZones).toEqual({ w1: null, w2: null });
-    expect(toPublicCompetition(source({ waves: [], finalsZones: { '': 'z3' } })).finalsZones).toEqual({ '': 'z3' });
+    expect(toPublicCompetition(source({ waves: [], launchedWaveKeys: [''], finalsZones: { '': 'z3' } })).finalsZones).toEqual({ '': 'z3' });
+    // Session pas lancée : sa zone des finales ne sort pas.
+    expect(toPublicCompetition(source({ finalsZones: { w1: 'z2', w2: 'z3' } })).finalsZones).toEqual({ w1: 'z2', w2: null });
+    expect(toPublicCompetition(source({ launchedWaveKeys: [], finalsZones: { w1: 'z2' } })).finalsZones).toEqual({ w1: null, w2: null });
   });
 
   test('category contents: numbers, zones of moved finals, results, status, podium, medals', () => {

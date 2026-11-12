@@ -168,11 +168,12 @@ export function toPublicCompetition(src: PublicSource): PublicCompetition {
     ? [wave(null, IMPLICIT_WAVE, launchedWaves.has(waveKey(null)))]
     : [...src.waves].sort((a, b) => a.order - b.order).map((w) => wave(w.id, w.name, launchedWaves.has(w.id)));
   const launchedWaveIds = new Set(waves.filter((w) => w.launched).map((w) => waveKey(w.id)));
-  // Zone des finales de chaque session ; une zone inconnue vaut « Aucune » (comme `planPassages`).
+  // Zone des finales de chaque session lancée (comme ses horaires, rien ne sort d'une session non lancée) ; une zone inconnue
+  // vaut « Aucune » (comme `planPassages`).
   const knownZones = new Set(src.zones.map((z) => z.id));
   const finalsZones = Object.fromEntries(waves.map((w) => {
     const z = src.finalsZones?.[waveKey(w.id)] ?? null;
-    return [waveKey(w.id), z !== null && knownZones.has(z) ? z : null];
+    return [waveKey(w.id), w.launched && z !== null && knownZones.has(z) ? z : null];
   }));
 
   // À disputer comme pour l'organisation (`playableCategory` : un tableau et au moins 2 combattants), numérotée et dans une

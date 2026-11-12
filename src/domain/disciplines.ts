@@ -14,6 +14,9 @@ export const DISCIPLINES: Record<
   kata: { label: 'Kata', clubFormCode: null, hasWeight: false, inPreferences: false },
 };
 
+/** « Tatami 3 n’accueille pas le kata » : une zone limitée à d'autres disciplines (tous les noms de discipline prennent « le »). */
+export const notAcceptedBy = (zoneName: string, discipline: DisciplineId): string => `${zoneName} n’accueille pas le ${DISCIPLINES[discipline].label.toLowerCase()}`;
+
 export const RULESETS: Record<Ruleset, { label: string; ko: boolean; adultsOnly: boolean }> = {
   jiyu: { label: 'Jiyu ippon kumite', ko: false, adultsOnly: false },
   shobu: { label: 'Shobu ippon kumite', ko: true, adultsOnly: true },
