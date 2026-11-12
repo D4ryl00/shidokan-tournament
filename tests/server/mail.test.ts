@@ -10,6 +10,7 @@ import { formatBytes } from '../../src/domain/mail-attachments.js';
 import { MAIL_IMAGE_LIMITS } from '../../src/domain/mail-images.js';
 import { textToHtml } from '../../src/domain/mail-template.js';
 import { attachmentDir } from '../../src/server/repositories/mail-attachments.js';
+import { sendAndWait } from '../helpers/send-job.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 type Sent = { from: { name: string; address: string }; to: { name: string; address: string }[]; subject: string; text: string; html?: string; attachments?: { filename: string; content: Buffer; contentType: string; cid?: string; contentDisposition?: string }[] };
@@ -18,12 +19,15 @@ let failFor: Set<string>;
 let verifyError: string | null;
 /** Échec à la façon de nodemailer (code et réponse du serveur) pour une adresse. */
 let failCode: { address: string; code: string; response?: string } | null;
+/** Envoi retenu tant que cette promesse n'est pas tenue (pour voir l'avancement). */
+let gate: Promise<void> | null;
 const transport: MailTransport = () => ({
   verify: async () => {
     if (verifyError) throw new Error(verifyError);
     return true;
   },
   sendMail: async (m: Sent) => {
+    if (gate) await gate;
     if (m.to.some((a) => failFor.has(a.address))) throw new Error('550 Adresse refusée');
     if (failCode && m.to.some((a) => a.address === failCode!.address)) throw Object.assign(new Error(`SMTP ${failCode.code}`), { code: failCode.code, response: failCode.response });
     sent.push({ ...m, to: m.to.map((a) => a.address).join(', ') });
@@ -42,6 +46,7 @@ beforeEach(async () => {
   failFor = new Set();
   verifyError = null;
   failCode = null;
+  gate = null;
   dbPathOf = tmpDbPath();
   app = await buildApp({ clubServices: true, dbPath: dbPathOf, mailTransport: transport, publicUrl: 'https://competitions.example.org' });
   base = `/api/competitions/${(await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe 2026', date: '2026-11-22', location: 'Nice' } })).json().id}`;
@@ -57,15 +62,16 @@ async function invited(...clubs: { name: string; coachEmails: string[]; coachNam
   return Promise.all(ids.map(async (id) => (await app.inject({ method: 'POST', url: `${base}/invitations/${rows.find((r) => r.directoryClubId === id)!.clubId}/links` })).json() as { clubId: string; clubName: string; token: string }));
 }
 const smtp = () => app.inject({ method: 'PATCH', url: '/api/app-settings', payload: { smtp: SMTP } });
-const send = (clubIds: string[]) => app.inject({ method: 'POST', url: `${base}/invitations/send`, payload: { clubs: clubIds.map((clubId) => ({ clubId })) } });
-const sendTo = (clubs: { clubId: string; emails?: string[] }[]) => app.inject({ method: 'POST', url: `${base}/invitations/send`, payload: { clubs } });
+const inject = (method: 'GET' | 'POST', url: string, payload?: unknown) => app.inject({ method, url, payload: payload as object });
+const send = (clubIds: string[]) => sendAndWait(inject, `${base}/invitations/send`, { clubs: clubIds.map((clubId) => ({ clubId })) });
+const sendTo = (clubs: { clubId: string; emails?: string[] }[]) => sendAndWait(inject, `${base}/invitations/send`, { clubs });
 const tokenOf = (text: string) => text.match(/\/inscription\/([A-Za-z0-9_-]+)/)![1]!;
 
 test('envoi à deux clubs : mails rendus, liens neufs qui fonctionnent, journal ; ancien lien → 410', async () => {
   await smtp();
   const links = await invited({ name: 'Tani Dojo', coachEmails: ['tani@example.org'], coachName: 'Jean' }, { name: 'Budo', coachEmails: ['budo@example.org'] });
   const res = await send(links.map((l) => l.clubId));
-  expect(res.statusCode).toBe(200);
+  expect(res.statusCode).toBe(202);
   expect(res.json().map((r: { status: string }) => r.status)).toEqual(['sent', 'sent']);
   expect(sent).toHaveLength(2);
   const tani = sent.find((m) => m.to === 'tani@example.org')!;
@@ -215,11 +221,50 @@ test('club en erreur : son ancien lien fonctionne toujours', async () => {
   expect(rows[0]!.invited).toBe(true);
 });
 
+test('envoi en tâche de fond : 202 tout de suite, avancement club par club, un seul envoi à la fois, dernier envoi relu', async () => {
+  await smtp();
+  expect((await inject('GET', `${base}/invitations/send`)).json()).toEqual({ job: null });
+  const links = await invited({ name: 'Tani Dojo', coachEmails: ['tani@example.org'] }, { name: 'Budo', coachEmails: ['budo@example.org'] });
+  let release!: () => void;
+  gate = new Promise((r) => (release = r));
+  const res = await inject('POST', `${base}/invitations/send`, { clubs: links.map((l) => ({ clubId: l.clubId })) });
+  expect(res.statusCode).toBe(202);
+  expect(res.json()).toMatchObject({ total: 2, results: [], finished: false, error: null });
+  const progress = async () => (await inject('GET', `${base}/invitations/send`)).json().job;
+  expect(await progress()).toMatchObject({ id: res.json().id, total: 2, results: [], finished: false });
+  // Pendant l'envoi : un second envoi est refusé, sans rien changer.
+  const busy = await inject('POST', `${base}/invitations/send`, { clubs: [{ clubId: links[0]!.clubId }] });
+  expect([busy.statusCode, busy.json().error]).toEqual([409, 'Un envoi de mails est déjà en cours pour cette compétition : attendez qu’il se termine.']);
+  release();
+  let job = await progress();
+  for (let i = 0; !job.finished && i < 500; i++) {
+    await new Promise((r) => setTimeout(r, 5));
+    job = await progress();
+  }
+  expect(job.results.map((r: { clubName: string; status: string }) => [r.clubName, r.status])).toEqual([['Tani Dojo', 'sent'], ['Budo', 'sent']]);
+  expect(sent).toHaveLength(2);
+  // Fini : un nouvel envoi est permis et remplace le précédent.
+  gate = null;
+  const again = await send([links[1]!.clubId]);
+  expect(again.json().map((r: { clubName: string }) => r.clubName)).toEqual(['Budo']);
+  expect((await progress()).total).toBe(1);
+});
+
+test('envoi refusé dès la vérification (serveur injoignable) : pas d’envoi en cours, un autre peut partir', async () => {
+  await smtp();
+  const [link] = await invited({ name: 'Tani Dojo', coachEmails: ['tani@example.org'] });
+  verifyError = 'connect ECONNREFUSED';
+  expect((await send([link!.clubId])).statusCode).toBe(400);
+  expect((await inject('GET', `${base}/invitations/send`)).json()).toEqual({ job: null });
+  verifyError = null;
+  expect((await send([link!.clubId])).json()[0].status).toBe('sent');
+});
+
 test('un club inconnu au milieu : erreur pour lui seul, les autres partent', async () => {
   await smtp();
   const links = await invited({ name: 'Tani Dojo', coachEmails: ['tani@example.org'] }, { name: 'Budo', coachEmails: ['budo@example.org'] });
   const res = await send([links[0]!.clubId, 'inconnu', links[1]!.clubId]);
-  expect(res.statusCode).toBe(200);
+  expect(res.statusCode).toBe(202);
   expect(res.json().map((r: { status: string }) => r.status)).toEqual(['sent', 'error', 'sent']);
 });
 
@@ -420,7 +465,7 @@ test('message html avec une image : cid dans le html, pièce en ligne, texte san
   const id = await upload();
   await htmlMessage(`<p>Bonjour <strong>{coach}</strong></p><img src="/api/mail-images/${id}" width="400"><p>{lien}</p>`);
   const links = await invited({ name: 'Tani Dojo', coachEmails: ['tani@example.org'] }, { name: 'Budo', coachEmails: ['budo@example.org'] });
-  expect((await send(links.map((l) => l.clubId))).statusCode).toBe(200);
+  expect((await send(links.map((l) => l.clubId))).statusCode).toBe(202);
   expect(sent).toHaveLength(2);
   for (const m of sent) {
     expect(m.html).toContain(`cid:image-${id}@shidokan`);
@@ -507,7 +552,7 @@ test('images d’un message stocké : c’est le corps filtré qui compte, comme
   const ghost = '99999999-9999-4999-8999-999999999999';
   storeRawMessage(`<p>{lien}</p><!-- <img src="/api/mail-images/${ghost}"> --><script>'<img src="/api/mail-images/${ghost}">'</script>`);
   const res = await send([link!.clubId]);
-  expect(res.statusCode).toBe(200);
+  expect(res.statusCode).toBe(202);
   expect(res.json()).toEqual([expect.objectContaining({ status: 'sent' })]);
   expect(sent[1]!.attachments!.filter((a) => a.cid)).toEqual([]);
 });

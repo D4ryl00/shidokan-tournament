@@ -257,9 +257,12 @@ test('envoi du lien : une case par adresse pour un club qui en a plusieurs ; seu
   });
   // Pas de serveur d'envoi ici : l'envoi est intercepté, on regarde ce qui part.
   const bodies: unknown[] = [];
+  // Envoi fait en tâche de fond : la demande rend l'envoi (ici déjà fini, sans club), l'avancement se relit par GET.
+  const job = { id: 'envoi-1', startedAt: new Date().toISOString(), total: 0, results: [], finished: true, error: null };
   await page.route(`**/api/competitions/${id}/invitations/send`, async (route) => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: { job: bodies.length ? job : null } });
     bodies.push(route.request().postDataJSON());
-    await route.fulfill({ json: [] });
+    await route.fulfill({ status: 202, json: job });
   });
   await page.route(`**/api/competitions/${id}/invitations/*/mailto`, async (route) => {
     bodies.push(route.request().postDataJSON());
@@ -279,8 +282,12 @@ test('envoi du lien : une case par adresse pour un club qui en a plusieurs ; seu
   await expect(dialog.getByTestId('send-recipients').filter({ hasText: solo })).toContainText('coach@solo.fr');
   await recipients.getByRole('checkbox', { name: 'secr@multi.fr' }).check();
   await dialog.getByTestId('send-confirm').click();
-  // L'envoi fini ferme la fenêtre et vide la sélection : attendre avant de recocher.
+  // L'envoi lancé ferme la fenêtre, vide la sélection et ouvre le bilan : attendre avant de recocher.
   await expect(dialog).toBeHidden();
+  const report = page.getByRole('dialog', { name: 'Envoi des liens' });
+  await expect(report).toBeVisible();
+  await report.locator('.mantine-Modal-close').click();
+  await expect(report).toBeHidden();
   await expect(page.getByTestId('send-invitations')).toBeDisabled();
   expect(bodies).toHaveLength(1);
   const ids = (await (await request.get(`/api/competitions/${id}/invitations`)).json()) as { clubId: string; clubName: string }[];
@@ -500,4 +507,58 @@ test('le coach masque le nom d’un combattant : « Combattant masqué » sur la
   await expect(v.getByText('Combattant masqué').first()).toBeVisible();
   expect(await v.locator('body').innerText()).not.toMatch(/discret|\bnoé\b/i);
   await visitor.close();
+});
+
+test('envoi groupé en cours : avancement retrouvé en ouvrant la page, fenêtre refermable, bilan à la fin', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe envoi long');
+  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
+  const entry = ((await (await request.post('/api/club-directory', { data: { ...EMPTY, name: `Dojo long ${Date.now()}`, coachEmails: ['a@long.fr'] } })).json()) as { id: string }).id;
+  await request.post(`/api/competitions/${id}/invitations`, { data: { directoryIds: [entry] } });
+  // Envoi simulé côté serveur : 1 club sur 3, puis 3 sur 3 quand le test le décide.
+  const result = (n: number) => ({ clubId: `c${n}`, clubName: `Club ${n}`, email: `c${n}@x.fr`, status: n === 2 ? 'error' : 'sent', error: n === 2 ? '550 Adresse refusée' : null });
+  let job = { id: 'envoi-long', startedAt: new Date().toISOString(), total: 3, results: [result(1)], finished: false, error: null as string | null };
+  await page.route(`**/api/competitions/${id}/invitations/send`, (route) => route.fulfill({ json: { job } }));
+
+  await page.goto(`/competitions/${id}/fiche-club`);
+  const report = page.getByRole('dialog', { name: 'Envoi des liens' });
+  await expect(report.getByTestId('send-progress')).toContainText('Envoi en cours : 1 / 3 clubs');
+  await expect(report).toContainText('l’envoi continue sur le serveur');
+  await expect(page.getByTestId('send-invitations')).toBeDisabled();
+  // Fermée : l'envoi continue, une ligne le rappelle et rouvre la fenêtre.
+  await report.locator('.mantine-Modal-close').click();
+  await expect(report).toBeHidden();
+  // Fenêtre fermée : la barre et le compte restent à côté du bouton d'envoi ; « Détails » rouvre la fenêtre.
+  const running = page.getByTestId('send-running');
+  await expect(running).toContainText('1/3');
+  await expect(running.getByRole('progressbar', { name: 'Avancement de l’envoi' })).toBeVisible();
+  const button = await page.getByTestId('send-invitations').boundingBox();
+  const bar = await running.boundingBox();
+  expect(Math.abs(bar!.y + bar!.height / 2 - (button!.y + button!.height / 2))).toBeLessThan(8);
+  await running.getByRole('button', { name: 'Détails' }).click();
+  await expect(report).toBeVisible();
+
+  job = { ...job, results: [result(1), result(2), result(3)], finished: true };
+  await expect(report.getByTestId('send-progress')).toBeHidden();
+  await expect(report).toContainText('2 mails envoyés');
+  await expect(report).toContainText('1 club en erreur');
+  await expect(report).toContainText('Erreur : 550 Adresse refusée');
+  await expect(page.getByTestId('send-running')).toBeHidden();
+
+  // 39 clubs : la fenêtre tient dans l'écran, la liste défile seule sous le bilan.
+  job = { ...job, id: 'envoi-39', total: 39, finished: false, results: Array.from({ length: 20 }, (_, i) => result(i + 1)) };
+  await page.reload();
+  await expect(report.getByTestId('send-progress')).toContainText('20 / 39 clubs');
+  job = { ...job, finished: true, results: Array.from({ length: 39 }, (_, i) => result(i + 1)) };
+  await expect(report).toContainText('38 mails envoyés');
+  // Envoi fini : le club en erreur en tête de liste.
+  await expect(report.getByTestId('send-results-list').getByText(/^Club \d+ — /).first()).toHaveText('Club 2 — c2@x.fr');
+  const viewport = page.viewportSize()!;
+  const box = (await report.boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+  await expect(report.getByText('38 mails envoyés')).toBeInViewport();
+  const list = report.getByTestId('send-results-list').locator('.mantine-ScrollArea-viewport');
+  expect(await list.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+  await report.getByText('Club 39 — c39@x.fr').scrollIntoViewIfNeeded();
+  await expect(report.getByText('Club 39 — c39@x.fr')).toBeInViewport();
 });

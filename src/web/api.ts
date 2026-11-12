@@ -1371,8 +1371,28 @@ export function useGoogleDisconnect() {
 /** Club à qui envoyer le lien ; `emails` : les adresses choisies (absent : toutes celles du club). */
 export interface SendTarget { clubId: string; emails?: string[] }
 export interface SendResult { clubId: string; clubName: string; email: string | null; status: 'sent' | 'error'; error: string | null }
-export const useSendInvitations = (id: string) =>
-  useOnlineEntryMutation(id, (clubs: SendTarget[]) => api<SendResult[]>('POST', `/api/competitions/${id}/invitations/send`, { clubs }));
+/** Envoi groupé fait en tâche de fond par le serveur : `results` grandit club par club jusqu'à `finished`. */
+export interface SendJob { id: string; startedAt: string; total: number; results: SendResult[]; finished: boolean; error: string | null }
+/** Lance l'envoi (un refus arrive tout de suite, rien ne part) ; l'avancement se lit ensuite par `useSendJob`. */
+export function useSendInvitations(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (clubs: SendTarget[]) => api<SendJob>('POST', `/api/competitions/${id}/invitations/send`, { clubs }),
+    onSuccess: (job) => qc.setQueryData(['invitation-send', id], { job }),
+  });
+}
+/** Dernier envoi groupé de la compétition, relu chaque seconde tant qu'il n'est pas fini (aussi après un rechargement de la page). */
+export const useSendJob = (id: string) =>
+  useQuery({
+    queryKey: ['invitation-send', id],
+    queryFn: () => api<{ job: SendJob | null }>('GET', `/api/competitions/${id}/invitations/send`),
+    refetchInterval: (q) => (q.state.data?.job && !q.state.data.job.finished ? 1000 : false),
+  });
+/** Après chaque club traité : la liste des clubs (dernier mail, liens) est relue. */
+export function useRefreshInvitations(id: string) {
+  const qc = useQueryClient();
+  return () => Promise.all([['invitations', id], ['club-accesses', id], ['club-entry', id], ['clubs', id], ['club-directory']].map((queryKey) => qc.invalidateQueries({ queryKey })));
+}
 export const useMailtoInvitation = (id: string) =>
   useOnlineEntryMutation(id, ({ clubId, emails }: SendTarget) => api<{ to: string | null; subject: string; body: string }>('POST', `/api/competitions/${id}/invitations/${clubId}/mailto`, emails ? { emails } : {}));
 export const useInvitationPreview = (id: string, clubId: string | null, version: string) =>

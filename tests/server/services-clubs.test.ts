@@ -6,6 +6,7 @@ import { createUser } from '../../src/server/auth/sessions.js';
 import { buildApp } from '../../src/server/app.js';
 import { closeDb, openDb } from '../../src/server/db/client.js';
 import type { MailTransport } from '../../src/server/mail.js';
+import { sendAndWait } from '../helpers/send-job.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
@@ -23,7 +24,7 @@ type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 test('PC : chaque route de mail et d’inscription en ligne répond 403 SERVER_ONLY, quelle que soit la méthode', async () => {
   const routes: [Method, string][] = [
-    ['GET', comp('/invitations')], ['POST', comp('/invitations')], ['POST', comp('/invitations/send')], ['POST', comp('/invitations/c1/mailto')],
+    ['GET', comp('/invitations')], ['POST', comp('/invitations')], ['POST', comp('/invitations/send')], ['GET', comp('/invitations/send')], ['POST', comp('/invitations/c1/mailto')],
     ['GET', comp('/invitations/preview')], ['GET', comp('/invitations/c1/links')], ['POST', comp('/invitations/c1/links')],
     ['DELETE', comp('/invitations/c1/links/l1')], ['DELETE', comp('/invitations/c1')],
     ['GET', comp('/mail-attachments')], ['POST', comp('/mail-attachments')], ['GET', comp('/mail-attachments/a1')], ['PATCH', comp('/mail-attachments/a1')], ['DELETE', comp('/mail-attachments/a1')],
@@ -167,7 +168,7 @@ test('main ailleurs : l’envoi aux clubs est refusé, le message et son image r
     expect(pkg.tables.clubs[0].invited_at).toEqual(expect.any(String));
 
     // Pendant ce temps : envoi refusé, aucun mail, aucun lien de plus ; le message et son image sont intacts.
-    const refused = await orga('POST', `${base}/invitations/send`, { clubs: [{ clubId: link!.clubId }] });
+    const refused = await sendAndWait(orga, `${base}/invitations/send`, { clubs: [{ clubId: link!.clubId }] });
     expect(refused.statusCode).toBe(409);
     expect(sent).toEqual([]);
     expect(await linksOf()).toBe(1);
@@ -185,8 +186,8 @@ test('main ailleurs : l’envoi aux clubs est refusé, le message et son image r
     expect(back.statusCode).toBe(200);
     const dirty = /<script|alert|javascript:|onclick|e\.fr/;
     expect((await orga('GET', `${base}/invitations/preview?clubId=${link!.clubId}`)).json().html).not.toMatch(dirty);
-    const res = await orga('POST', `${base}/invitations/send`, { clubs: [{ clubId: link!.clubId }] });
-    expect(res.statusCode).toBe(200);
+    const res = await sendAndWait(orga, `${base}/invitations/send`, { clubs: [{ clubId: link!.clubId }] });
+    expect(res.statusCode).toBe(202);
     expect(res.json()).toEqual([expect.objectContaining({ status: 'sent' })]);
     expect(sent).toHaveLength(1);
     expect(sent[0]!.html).not.toMatch(dirty);

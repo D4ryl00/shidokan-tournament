@@ -449,7 +449,7 @@ test('message modifié en mode code : compté comme non enregistré ; un refus d
   await expect(page).toHaveURL(/\/fiche-club$/);
 
   // Refus d'envoi (réponse simulée, rien ne part) : l'alerte est sous le bouton, dans l'écran, accordéon ouvert.
-  await page.route('**/invitations/send', (route) => route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Mail trop lourd : retirez une pièce.' }) }));
+  await page.route('**/invitations/send', (route) => route.request().method() === 'POST' ? route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Mail trop lourd : retirez une pièce.' }) }) : route.continue());
   await page.getByRole('checkbox', { name: /^Choisir Dojo Kobe/ }).check();
   await page.getByRole('button', { name: /Message aux clubs de cette compétition/ }).click();
   await page.getByTestId('send-invitations').click();

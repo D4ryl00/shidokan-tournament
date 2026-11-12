@@ -237,6 +237,17 @@ function recipientsOf(club: { coachEmails: string[] }, chosen: string[] | undefi
  * s'arrête : le club en cours et les suivants sont notés « non envoyé », sans nouveau lien.
  */
 export async function sendInvitations(db: AppDb, dbPath: string, transport: MailTransport, competitionId: string, targets: SendTarget[], baseUrl: string, pauseMs = 300): Promise<SendResult[]> {
+  return (await prepareInvitations(db, dbPath, transport, competitionId, baseUrl, pauseMs))(targets);
+}
+
+/** Envoi préparé et vérifié : il ne reste qu'à l'appliquer aux clubs ; `onResult` est appelé après chaque club. */
+export type InvitationSending = (targets: SendTarget[], onResult?: (result: SendResult) => void) => Promise<SendResult[]>;
+
+/**
+ * Tout ce qui peut refuser l'envoi entier (réglages, pièces jointes, images, serveur d'envoi injoignable) est vérifié ici, avant le moindre
+ * lien ; la fonction rendue fait l'envoi club par club (voir `sendInvitations`).
+ */
+export async function prepareInvitations(db: AppDb, dbPath: string, transport: MailTransport, competitionId: string, baseUrl: string, pauseMs = 300): Promise<InvitationSending> {
   const sender = senderOf(db);
   // Les mêmes pièces jointes pour chaque club : préparées une fois, avant tout (une pièce manquante arrête l'envoi sans rien changer).
   const files = await invitationAttachments(db, dbPath, competitionId);
@@ -250,48 +261,54 @@ export async function sendInvitations(db: AppDb, dbPath: string, transport: Mail
     if (e instanceof GoogleAccessRevokedError && sender.kind === 'google') markGoogleRevoked(db, sender.google.refreshToken);
     throw new MailError(`Envoi impossible, aucun lien n’a changé : ${e instanceof GoogleAccessRevokedError ? GOOGLE_RECONNECT : errorText(e)}`);
   }
-  const results: SendResult[] = [];
-  let sentBefore = false;
-  let accessRevoked = false;
-  for (const { clubId, emails: chosen } of targets) {
-    let club: ReturnType<typeof clubOf>;
-    try {
-      club = clubOf(db, competitionId, clubId);
-    } catch (e) {
-      results.push({ clubId, clubName: 'Club inconnu', email: null, status: 'error', error: errorText(e) });
-      continue;
+  return async (targets, onResult) => {
+    const results: SendResult[] = [];
+    const push = (r: SendResult) => {
+      results.push(r);
+      onResult?.(r);
+    };
+    let sentBefore = false;
+    let accessRevoked = false;
+    for (const { clubId, emails: chosen } of targets) {
+      let club: ReturnType<typeof clubOf>;
+      try {
+        club = clubOf(db, competitionId, clubId);
+      } catch (e) {
+        push({ clubId, clubName: 'Club inconnu', email: null, status: 'error', error: errorText(e) });
+        continue;
+      }
+      const recipients = recipientsOf(club, chosen);
+      const email = 'emails' in recipients ? joinEmails(recipients.emails) : joinEmails(club.coachEmails);
+      if (accessRevoked) {
+        db.insert(mailLog).values({ id: crypto.randomUUID(), competitionId, clubId, email, status: 'error', error: GOOGLE_NOT_SENT }).run();
+        push({ clubId, clubName: club.name, email: email || null, status: 'error', error: GOOGLE_NOT_SENT });
+        continue;
+      }
+      if ('error' in recipients) {
+        push({ clubId, clubName: club.name, email: email || null, status: 'error', error: recipients.error });
+        continue;
+      }
+      if (sentBefore && pauseMs) await new Promise((r) => setTimeout(r, pauseMs));
+      sentBefore = true;
+      const link = addInvitationLink(db, competitionId, clubId);
+      let error: string | null = null;
+      try {
+        const message = await invitationMessage(db, competitionId, clubId, linkUrl(baseUrl, link.token), (id) => `cid:${imageCid(id)}`, template);
+        await mailer.sendMail({ from: fromOf(sender), to: recipients.emails.map((address) => ({ name: club.name, address })), subject: message.subject, text: message.text, html: message.html, attachments });
+        markLinkSent(db, link.token, 'mail');
+      } catch (e) {
+        revokeLink(db, link.token);
+        if (e instanceof GoogleAccessRevokedError) {
+          accessRevoked = true;
+          if (sender.kind === 'google') markGoogleRevoked(db, sender.google.refreshToken);
+          error = GOOGLE_NOT_SENT;
+        } else error = errorText(e);
+      }
+      db.insert(mailLog).values({ id: crypto.randomUUID(), competitionId, clubId, email, status: error ? 'error' : 'sent', error }).run();
+      push({ clubId, clubName: club.name, email, status: error ? 'error' : 'sent', error });
     }
-    const recipients = recipientsOf(club, chosen);
-    const email = 'emails' in recipients ? joinEmails(recipients.emails) : joinEmails(club.coachEmails);
-    if (accessRevoked) {
-      db.insert(mailLog).values({ id: crypto.randomUUID(), competitionId, clubId, email, status: 'error', error: GOOGLE_NOT_SENT }).run();
-      results.push({ clubId, clubName: club.name, email: email || null, status: 'error', error: GOOGLE_NOT_SENT });
-      continue;
-    }
-    if ('error' in recipients) {
-      results.push({ clubId, clubName: club.name, email: email || null, status: 'error', error: recipients.error });
-      continue;
-    }
-    if (sentBefore && pauseMs) await new Promise((r) => setTimeout(r, pauseMs));
-    sentBefore = true;
-    const link = addInvitationLink(db, competitionId, clubId);
-    let error: string | null = null;
-    try {
-      const message = await invitationMessage(db, competitionId, clubId, linkUrl(baseUrl, link.token), (id) => `cid:${imageCid(id)}`, template);
-      await mailer.sendMail({ from: fromOf(sender), to: recipients.emails.map((address) => ({ name: club.name, address })), subject: message.subject, text: message.text, html: message.html, attachments });
-      markLinkSent(db, link.token, 'mail');
-    } catch (e) {
-      revokeLink(db, link.token);
-      if (e instanceof GoogleAccessRevokedError) {
-        accessRevoked = true;
-        if (sender.kind === 'google') markGoogleRevoked(db, sender.google.refreshToken);
-        error = GOOGLE_NOT_SENT;
-      } else error = errorText(e);
-    }
-    db.insert(mailLog).values({ id: crypto.randomUUID(), competitionId, clubId, email, status: error ? 'error' : 'sent', error }).run();
-    results.push({ clubId, clubName: club.name, email, status: error ? 'error' : 'sent', error });
-  }
-  return results;
+    return results;
+  };
 }
 
 /**

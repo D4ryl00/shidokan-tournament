@@ -1,12 +1,13 @@
-import { Accordion, Alert, Anchor, Button, Group, Input, Modal, Stack, Text, TextInput } from '@mantine/core';
+import { Accordion, Alert, Anchor, Button, Group, Input, Modal, Progress, ScrollArea, Stack, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
-import { useAppSettings, useClubEntrySettings, useCompetition, useInvitationPreview, useUpdateCompetition, type SendResult } from '../api.js';
+import { useAppSettings, useClubEntrySettings, useCompetition, useInvitationPreview, useUpdateCompetition, type SendJob } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { MailMessageEditor } from './mail-editor/index.js';
 import { useRemovedNotice } from './mail-editor/removed-notice.js';
 import { MailAttachments, sentLines, useAttachmentLines } from './MailAttachments.js';
 import { sendSummary } from '../send-summary.js';
+import { plural } from '../../domain/plural.js';
 import { GOOGLE_NOT_SENT } from '../../domain/app-settings.js';
 import { useUnsaved } from '../unsaved.js';
 
@@ -82,27 +83,50 @@ export function CompetitionMessage({ competitionId, previewClubId, onUnsavedChan
   );
 }
 
-/** Résultat d'un envoi groupé, club par club. */
-export function SendResultsModal({ results, onClose }: { results: SendResult[]; onClose: () => void }) {
+/** Envoi groupé : avancement tant qu'il tourne (sur le serveur, il continue si la fenêtre est fermée), puis résultat club par club. */
+export function SendResultsModal({ job, opened, onClose }: { job: SendJob | null; opened: boolean; onClose: () => void }) {
+  if (!job) return null;
+  const results = job.results;
   const errors = results.filter((r) => r.status === 'error');
   const googleRevoked = results.some((r) => r.error === GOOGLE_NOT_SENT);
   return (
-    <Modal opened={results.length > 0} onClose={onClose} title="Envoi des liens" size="lg">
+    <Modal opened={opened} onClose={onClose} title="Envoi des liens" size="lg">
       <Stack data-testid="send-results">
-        {googleRevoked && (
-          <Alert color="red">
-            L’accès au compte Google a été retiré pendant l’envoi : reconnectez-vous dans les <Anchor href="/parametres#mails">Réglages de l’application</Anchor>, puis renvoyez aux clubs restants.
-          </Alert>
+        {!job.finished ? (
+          <Stack gap="xs" data-testid="send-progress">
+            <Text>Envoi en cours : {results.length} / {plural(job.total, 'club')}</Text>
+            <Progress value={job.total ? (100 * results.length) / job.total : 0} animated aria-label="Avancement de l’envoi" />
+            <Text size="sm" c="dimmed">Vous pouvez fermer cette fenêtre ou quitter la page : l’envoi continue sur le serveur.</Text>
+          </Stack>
+        ) : (
+          <>
+            {job.error && (
+              <Alert color="red">
+                {job.error}<br />
+                {plural(job.total - results.length, 'club n’a', 'clubs n’ont')} rien reçu : ceux qui manquent dans la liste ci-dessous.
+              </Alert>
+            )}
+            {googleRevoked && (
+              <Alert color="red">
+                L’accès au compte Google a été retiré pendant l’envoi : reconnectez-vous dans les <Anchor href="/parametres#mails">Réglages de l’application</Anchor>, puis renvoyez aux clubs restants.
+              </Alert>
+            )}
+            <Alert color={errors.length || job.error ? 'orange' : 'green'}>
+              {sendSummary(results.length - errors.length, errors.length)}
+            </Alert>
+          </>
         )}
-        <Alert color={errors.length ? 'orange' : 'green'}>
-          {sendSummary(results.length - errors.length, errors.length)}
-        </Alert>
-        {results.map((r) => (
-          <Group key={r.clubId} justify="space-between" wrap="nowrap">
-            <Text size="sm">{r.clubName}{r.email ? ` — ${r.email}` : ''}</Text>
-            <Text size="sm" c={r.status === 'sent' ? 'green' : 'red'}>{r.status === 'sent' ? 'Envoyé' : `Erreur : ${r.error}`}</Text>
-          </Group>
-        ))}
+        {/* Liste longue (39 clubs…) : elle défile seule, le bilan au-dessus reste visible ; envoi fini, les clubs en erreur d'abord. */}
+        <ScrollArea.Autosize mah="50vh" type="auto" offsetScrollbars data-testid="send-results-list">
+          <Stack gap="xs">
+            {(job.finished ? [...errors, ...results.filter((r) => r.status === 'sent')] : results).map((r) => (
+              <Group key={r.clubId} justify="space-between" wrap="nowrap" align="flex-start">
+                <Text size="sm">{r.clubName}{r.email ? ` — ${r.email}` : ''}</Text>
+                <Text size="sm" c={r.status === 'sent' ? 'green' : 'red'} ta="right">{r.status === 'sent' ? 'Envoyé' : `Erreur : ${r.error}`}</Text>
+              </Group>
+            ))}
+          </Stack>
+        </ScrollArea.Autosize>
       </Stack>
     </Modal>
   );

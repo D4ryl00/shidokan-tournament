@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { GOOGLE_NOT_CONFIGURED, GOOGLE_NOT_SENT, GOOGLE_RECONNECT } from '../../src/domain/app-settings.js';
 import { buildApp } from '../../src/server/app.js';
+import { sendAndWait } from '../helpers/send-job.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 import { connectGoogle, fakeGoogle, type FakeGoogle } from '../helpers/fake-google.js';
 
@@ -31,7 +32,8 @@ async function invited(...emails: string[]) {
   const rows = (await app.inject({ method: 'GET', url: `${base}/invitations` })).json() as { clubId: string; directoryClubId: string }[];
   return Promise.all(ids.map(async (id) => (await app.inject({ method: 'POST', url: `${base}/invitations/${rows.find((r) => r.directoryClubId === id)!.clubId}/links` })).json() as { clubId: string; clubName: string; token: string }));
 }
-const send = (clubIds: string[]) => app.inject({ method: 'POST', url: `${base}/invitations/send`, payload: { clubs: clubIds.map((clubId) => ({ clubId })) } });
+const inject = (method: 'GET' | 'POST', url: string, payload?: unknown) => app.inject({ method, url, payload: payload as object });
+const send = (clubIds: string[]) => sendAndWait(inject, `${base}/invitations/send`, { clubs: clubIds.map((clubId) => ({ clubId })) });
 const testMail = () => app.inject({ method: 'POST', url: '/api/app-settings/test-mail', payload: { to: 'moi@example.org' } });
 const linkStatus = async (token: string) => (await app.inject({ method: 'GET', url: `/api/inscription/${token}` })).statusCode;
 const settings = async () => (await app.inject({ method: 'GET', url: '/api/app-settings' })).json();
@@ -137,7 +139,7 @@ test('envoi par Gmail d’un message avec image : multipart/related et image inc
   const id = (await app.inject({ method: 'POST', url: '/api/mail-images', payload: png, headers: { 'content-type': 'application/octet-stream' } })).json().id as string;
   await app.inject({ method: 'PATCH', url: base, payload: { settings: { invitationMail: { subject: 'S', body: `<p>Bonjour</p><img src="/api/mail-images/${id}"><p>{lien}</p>`, format: 'html' } } } });
   const links = await invited('a@example.org');
-  expect((await send(links.map((l) => l.clubId))).statusCode).toBe(200);
+  expect((await send(links.map((l) => l.clubId))).statusCode).toBe(202);
   const mime = fake.sent[0]!.toString();
   expect(mime).toContain('multipart/related');
   expect(mime).toContain(`Content-ID: <image-${id}@shidokan>`);

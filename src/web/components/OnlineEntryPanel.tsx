@@ -1,6 +1,6 @@
-import { Alert, Anchor, Button, Checkbox, Chip, Group, Modal, MultiSelect, ScrollArea, Stack, Table, Text } from '@mantine/core';
+import { Alert, Anchor, Button, Checkbox, Chip, Group, Modal, MultiSelect, Progress, ScrollArea, Stack, Table, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   useClubChanges,
   useClubEntrySettings,
@@ -9,10 +9,11 @@ import {
   useInviteClubs,
   useAppSettings,
   useMailtoInvitation,
+  useRefreshInvitations,
   useSendInvitations,
+  useSendJob,
   useUpdateClubEntrySettings,
   type ClubInvitationRow,
-  type SendResult,
   type SendTarget,
 } from '../api.js';
 import { ClubChangePill } from './club-changes/ClubChangeBanners.js';
@@ -69,7 +70,20 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState<string[]>([]);
   const [confirmSend, setConfirmSend] = useState(false);
-  const [results, setResults] = useState<SendResult[]>([]);
+  // Envoi groupé suivi : celui lancé ici, ou celui trouvé en cours en ouvrant la page ; fermer la fenêtre ne l'arrête pas.
+  const sendJob = useSendJob(competitionId).data?.job ?? null;
+  const refreshInvitations = useRefreshInvitations(competitionId);
+  const [watchedJobId, setWatchedJobId] = useState<string | null>(null);
+  const [dismissedJobId, setDismissedJobId] = useState<string | null>(null);
+  const sending = sendJob !== null && !sendJob.finished;
+  useEffect(() => {
+    if (sending && sendJob.id !== dismissedJobId) setWatchedJobId(sendJob.id);
+  }, [sending, sendJob?.id, dismissedJobId]);
+  // Chaque club traité : la colonne « Dernier mail » et les liens se mettent à jour.
+  const sendDone = sendJob ? `${sendJob.id}:${sendJob.results.length}:${sendJob.finished}` : null;
+  useEffect(() => {
+    if (sendDone) void refreshInvitations();
+  }, [sendDone]);
   const [mailtoClub, setMailtoClub] = useState<ClubInvitationRow | null>(null);
   const [accessClubId, setAccessClubId] = useState<string | null>(null);
   const [addresses, setAddresses] = useState<CheckedAddresses>({});
@@ -188,9 +202,17 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
             </Table>
           </ScrollArea>
           <Group>
-            <Button data-testid="send-invitations" disabled={selected.length === 0 || !settings.managedHere} loading={send.isPending} onClick={() => { setAddresses({}); setConfirmSend(true); }}>
+            <Button data-testid="send-invitations" disabled={selected.length === 0 || !settings.managedHere || sending} loading={send.isPending} onClick={() => { setAddresses({}); setConfirmSend(true); }}>
               Envoyer le lien par mail ({selected.length})
             </Button>
+            {/* Fenêtre d'avancement fermée : l'envoi continue, sa barre reste à côté du bouton. */}
+            {sending && watchedJobId !== sendJob.id && (
+              <Group gap="xs" wrap="nowrap" data-testid="send-running">
+                <Progress w={140} value={sendJob.total ? (100 * sendJob.results.length) / sendJob.total : 0} animated aria-label="Avancement de l’envoi" />
+                <Text size="sm" className="num">{sendJob.results.length}/{sendJob.total}</Text>
+                <Button size="compact-sm" variant="subtle" onClick={() => setWatchedJobId(sendJob.id)}>Détails</Button>
+              </Group>
+            )}
             <Text size="sm" c="dimmed">{settings.managedHere ? NEW_LINK_WARNING : 'Rendez la main au serveur pour envoyer des mails.'}</Text>
           </Group>
           {/* Sous le bouton : l'accordéon du message peut être très haut, un refus placé après serait hors de l'écran. */}
@@ -209,13 +231,13 @@ export function OnlineEntryPanel({ competitionId }: { competitionId: string }) {
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setConfirmSend(false)}>Annuler</Button>
             <Button data-testid="send-confirm" loading={send.isPending} disabled={selected.some((i) => noneChecked(i, addresses))}
-              onClick={() => send.mutate(selected.map((i) => sendTarget(i, addresses)), { onSuccess: (r) => { setConfirmSend(false); setChecked(new Set()); setResults(r); }, onError: () => setConfirmSend(false) })}>
+              onClick={() => send.mutate(selected.map((i) => sendTarget(i, addresses)), { onSuccess: (job) => { setConfirmSend(false); setChecked(new Set()); setWatchedJobId(job.id); }, onError: () => setConfirmSend(false) })}>
               Envoyer
             </Button>
           </Group>
         </Stack>
       </Modal>
-      <SendResultsModal results={results} onClose={() => setResults([])} />
+      <SendResultsModal job={sendJob} opened={sendJob !== null && watchedJobId === sendJob.id} onClose={() => { setDismissedJobId(watchedJobId); setWatchedJobId(null); }} />
       <Modal opened={mailtoClub !== null} onClose={() => setMailtoClub(null)} title="Ouvrir dans ma messagerie">
         <Stack>
           <Text>Un nouveau lien est créé pour {mailtoClub?.clubName} ; ses liens d’avant restent valables. Envoyez bien ce mail depuis votre messagerie.</Text>

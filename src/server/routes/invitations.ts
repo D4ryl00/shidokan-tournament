@@ -4,7 +4,8 @@ import { EMAIL_LIMITS } from '../../domain/emails.js';
 import type { AppDb } from '../db/client.js';
 import type { InstanceRole } from '../auth/guard.js';
 import { MAIL_ATTACHMENT_LIMITS } from '../../domain/mail-attachments.js';
-import { invitationMessage, mailtoInvitation, sendInvitations, type MailTransport } from '../mail.js';
+import { invitationMessage, mailtoInvitation, prepareInvitations, type MailTransport } from '../mail.js';
+import { SendJobs } from '../send-jobs.js';
 import { addMailAttachment, AttachmentError, deleteMailAttachment, listMailAttachments, readMailAttachment, setMailAttachmentIncluded } from '../repositories/mail-attachments.js';
 import { getCompetition } from '../repositories/competitions.js';
 import {
@@ -73,10 +74,18 @@ export async function invitationRoutes(
     return reply.status(204).send();
   });
 
-  app.post<P>('/api/competitions/:id/invitations/send', async (req) => {
+  // Envoi groupé : vérifié tout de suite (un refus répond 400/409, rien ne part), puis fait en tâche de fond ; la page suit l'avancement par GET.
+  const sendJobs = new SendJobs();
+  app.post<P>('/api/competitions/:id/invitations/send', async (req, reply) => {
     const { clubs } = z.object({ clubs: z.array(z.object({ clubId: z.string(), emails: chosenEmails.optional() }).strict()).min(1).max(500) }).strict().parse(req.body);
-    return sendInvitations(db, dbPath, mailTransport, req.params.id, clubs, baseUrl(req), mailPauseMs);
+    const base = baseUrl(req);
+    const job = await sendJobs.start(req.params.id, clubs.length, async () => {
+      const sending = await prepareInvitations(db, dbPath, mailTransport, req.params.id, base, mailPauseMs);
+      return (onResult) => sending(clubs, onResult);
+    });
+    return reply.status(202).send(job);
   });
+  app.get<P>('/api/competitions/:id/invitations/send', async (req) => ({ job: sendJobs.get(req.params.id) }));
   app.post<PC>('/api/competitions/:id/invitations/:clubId/mailto', async (req) => {
     const { emails } = z.object({ emails: chosenEmails.optional() }).strict().parse(req.body ?? {});
     return mailtoInvitation(db, req.params.id, req.params.clubId, baseUrl(req), emails);
