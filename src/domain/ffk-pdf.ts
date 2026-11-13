@@ -25,6 +25,8 @@ export interface FfkPdfEntry {
 const TITLE_RE = /^(.+?)\s+(masculin|f[ée]minine?)\s*(?:([+-])\s*(\d+(?:[.,]\d+)?)\s*kg)?\s*$/i;
 const LICENCE_RE = /^\d{6,}[A-Z]$/;
 const FOOTER_RE = /^\d{2}\/\d{2}\/\d{4}/;
+/** Effectif ajouté au titre par les listes de participants ou de préinscrits : « (2 participants) », « (1 préinscrits) ». */
+const HEADCOUNT_RE = /\s*\(\s*\d+\s+(?:participants?|pr[ée]inscrits?)\s*\)\s*$/i;
 /** Au-delà de cet x, on est dans la colonne « Rattachement ». */
 const ATTACHMENT_X = 500;
 
@@ -62,7 +64,8 @@ function fighterName(items: { x: number; text: string }[]): string {
     parts.push(it.text);
   }
   const joined = squeeze(parts.join(' '));
-  const cut = joined.search(/\bLIGUE\b/i);
+  // La ligue peut commencer par son numéro : « 10 LIGUE REGIONALE … ».
+  const cut = joined.search(/(?:\b\d+\s+)?\bLIGUE\b/i);
   return squeeze(cut >= 0 ? joined.slice(0, cut) : joined);
 }
 
@@ -88,7 +91,7 @@ export function parseFfkPdfLines(lines: FfkTextLine[]): { entries: FfkPdfEntry[]
       entries.push({ order: entries.length, fullName, category: current.category, title: current.title });
       continue;
     }
-    const text = squeeze(l.items.map((i) => i.text).join(' '));
+    const text = squeeze(l.items.map((i) => i.text).join(' ')).replace(HEADCOUNT_RE, '');
     if (FOOTER_RE.test(text)) continue;
     const title = parseFfkCategory(text);
     if (title) current = { category: text, title };

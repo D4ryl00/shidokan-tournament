@@ -79,6 +79,35 @@ describe('parseFfkPdfLines', () => {
     ]);
     expect(r.entries).toEqual([]);
   });
+  it('lit la « Liste des participants » (titre avec effectif, ligue numérotée)', () => {
+    const r = parseFfkPdfLines([
+      line(1, 44, [409, 'Coupe Shidokan Boxe - Combats']),
+      line(1, 50, [220, 'LISTE DES PARTICIPANTS']),
+      line(1, 86, [28, 'Nombre participants : 10']),
+      line(1, 108, [28, 'N° Licencié'], [82, 'Nom'], [243, 'Ligue Régionale'], [405, 'Rattachement']),
+      line(1, 128, [28, 'Benjamin Masculin -30 KG (2 participants)']),
+      line(1, 140, [28, '11445085K'], [82, 'ABELLO JULIEN'], [243, '10 LIGUE REGIONALE PROVENCE ALPES COTE'], [405, '0060789 SHINSENGUMI DOJO VESUBIE']),
+      line(1, 148, [243, 'D AZUR DE KARATE ET DA']),
+      line(1, 804, [503, '13/11/2026 - Page 1']),
+      line(2, 44, [28, 'Séniors shobu ippon kumité Masculin +84 KG (1 participants)']),
+      line(2, 56, [28, '11058989Q'], [82, 'LEJEANNIC TITOUAN'], [243, '10 LIGUE REGIONALE PROVENCE ALPES COTE'], [405, '0060789 SHINSENGUMI DOJO VESUBIE']),
+    ]);
+    expect(r.entries).toEqual([
+      { order: 0, fullName: 'ABELLO JULIEN', category: 'Benjamin Masculin -30 KG', title: { sex: 'M', ageLabel: 'Benjamin', weightLabel: '-30', rulesetLabel: null } },
+      { order: 1, fullName: 'LEJEANNIC TITOUAN', category: 'Séniors shobu ippon kumité Masculin +84 KG', title: { sex: 'M', ageLabel: 'Séniors', weightLabel: '+84', rulesetLabel: 'shobu' } },
+    ]);
+  });
+  it('lit la « Liste des préinscrits »', () => {
+    const r = parseFfkPdfLines([
+      line(1, 50, [224, 'LISTE DES PRÉINSCRITS'], [524, 'Combats']),
+      line(1, 86, [28, 'Nombre préinscrits : 1']),
+      line(1, 128, [28, 'Minime Masculin -40 KG (1 préinscrits)']),
+      line(1, 140, [28, '11544781A'], [82, 'FARGE HUGO'], [243, '10 LIGUE REGIONALE PROVENCE ALPES COTE'], [405, '0060789 SHINSENGUMI DOJO VESUBIE']),
+    ]);
+    expect(r.entries).toEqual([
+      { order: 0, fullName: 'FARGE HUGO', category: 'Minime Masculin -40 KG', title: { sex: 'M', ageLabel: 'Minime', weightLabel: '-40', rulesetLabel: null } },
+    ]);
+  });
   it('signale les doublons', () => {
     const r = parseFfkPdfLines([
       line(2, 50, [40, 'Poussin Masculin -25 KG']),
