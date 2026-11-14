@@ -66,6 +66,8 @@ export interface PlanLine {
   line: ClubFormLine;
   editable: boolean;
   partlyEditable: boolean;
+  /** Disciplines déjà commencées : l'import de la fiche renvoyée ne les retire pas. */
+  startedDisciplines?: DisciplineId[];
 }
 export type FfkStep =
   | { kind: 'new'; ffk: FfkFighter }
