@@ -1,6 +1,7 @@
 import { Alert, Badge, Button, Checkbox, Chip, FocusTrap, Group, Input, Modal, NativeSelect, Paper, Radio, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { Children, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { fieldPatch, fieldValue, type ImportField } from '../../domain/club-form-plan.js';
 import { choosePref, kgText, orderedPrefs, weightWarning, type ClubFormLine, type PrefDiscipline, type PrefRank } from '../../domain/club-form.js';
 import { DISCIPLINES } from '../../domain/disciplines.js';
 import type { DisciplineId } from '../../domain/types.js';
@@ -9,7 +10,7 @@ import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { ageBandChoices, applyChange, combatChoices, kataChoice, reclassChoices, rulesetChoices, toggleCombat, type LineFormContext } from './club-line/lineForm.js';
 import { FfkChoice } from './club-line/FfkChoice.js';
 import { FfkProgress } from './club-line/FfkProgress.js';
-import { ffkChoiceState, ffkValueAvailable, type FfkFormStep } from './club-line/ffkStep.js';
+import { ffkChoiceState, ffkValueAvailable, importValueText, type FfkFormStep } from './club-line/ffkStep.js';
 import { OneOf } from './PaperEntryTable.js';
 
 /** Suite d'un enregistrement : l'avis éventuel du serveur et la ligne enregistrée. */
@@ -110,22 +111,28 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
   const mark = (key: FfkFormStep['marks'][number]) => ffk?.marks.includes(key) && <Badge variant="outline" size="xs" ml={6} data-testid={`ffk-mark-${key}`}>FFK</Badge>;
   const labelled = (text: string, key: FfkFormStep['marks'][number]) => <>{text}{mark(key)}</>;
   const hint = (key: keyof FfkFormStep['hints']) => (ffk?.hints[key] ? <Text size="xs" c="dimmed" style={{ whiteSpace: 'pre-line' }} data-testid={`ffk-hint-${key}`}>{ffk.hints[key]}</Text> : null);
-  const readable = (field: FfkFormStep['diffs'][number]['field'], v: string | null): string => {
-    if (v == null) return '—';
-    if (field === 'ageBandCode') return ageBands.find((b) => b.code === v)?.label ?? v;
-    if (field === 'weightClassId') { const w = weightClasses.find((x) => x.id === v); return w ? `${w.label} kg` : v; }
-    return v === 'shobu' ? 'Shobu' : 'Jiyu';
+  const FIELD_LABELS: Record<ImportField, string> = {
+    ageBandCode: 'Catégorie d’âge', weightClassId: 'Catégorie de poids', weightKg: 'Poids actuel', disciplines: 'Disciplines',
+    ruleset: 'Règlement', grade: 'Grade', prefs: 'Reclassement', shobuKeep: 'Priorité en shobu',
   };
-  const FIELD_LABELS = { ageBandCode: 'Catégorie d’âge', weightClassId: 'Catégorie de poids', ruleset: 'Règlement' } as const;
-  const choice = (field: FfkFormStep['diffs'][number]['field']) => {
+  const DISABLED: Record<ImportField, boolean> = {
+    ageBandCode: locked, disciplines: frozen, grade: frozen, weightClassId: combatFrozen, weightKg: combatFrozen, ruleset: combatFrozen, prefs: combatFrozen, shobuKeep: combatFrozen,
+  };
+  const choice = (field: ImportField) => {
     const diff = ffk?.diffs.find((d) => d.field === field);
-    if (!diff) return null;
+    if (!diff || !ffk) return null;
     const options = field === 'ageBandCode' ? ageBandChoices(form, ctx).map((o) => o.value)
-      : field === 'weightClassId' ? classes.map((w) => w.id) : rulesets.map(([r]) => r);
+      : field === 'weightClassId' ? classes.map((w) => w.id) : field === 'ruleset' ? rulesets.map(([r]) => r) : null;
+    const labels = ffk.labels ?? { imported: 'FFK', saved: 'Votre fiche' };
+    const pick = (value: string | null) => {
+      set(fieldPatch(field, value));
+      if (field === 'weightKg') setWeight(value ? kgText(Number(value)) : '');
+    };
     return (
-      <FfkChoice label={FIELD_LABELS[field]} state={ffkChoiceState(form[field], diff)} ffk={readable(field, diff.ffk)} fiche={readable(field, diff.fiche)} disabled={field === 'ageBandCode' ? locked : combatFrozen}
-        unavailable={{ ffk: !ffkValueAvailable(diff.ffk, options), fiche: !ffkValueAvailable(diff.fiche, options) }}
-        onPick={(which) => set({ [field]: which === 'ffk' ? diff.ffk : diff.fiche } as Partial<ClubFormLine>)} />
+      <FfkChoice label={FIELD_LABELS[field]} state={ffkChoiceState(fieldValue(form, field), diff)} ffk={importValueText(field, diff.ffk, ctx)} fiche={importValueText(field, diff.fiche, ctx)} disabled={DISABLED[field]}
+        titles={{ ffk: labels.imported, fiche: diff.savedLabel ?? labels.saved }}
+        unavailable={options ? { ffk: !ffkValueAvailable(diff.ffk, options), fiche: !ffkValueAvailable(diff.fiche, options) } : undefined}
+        onPick={(which) => pick(which === 'ffk' ? diff.ffk : diff.fiche)} />
     );
   };
 
@@ -137,6 +144,11 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
         {/* Import FFK : le piège à focus de la fenêtre prend cet élément caché (ni champ ni clavier) au lieu du premier champ. */}
         {ffk && <FocusTrap.InitialFocus />}
         {ffk && <FfkProgress {...ffk.progress} />}
+        {ffk?.notes && (
+          <Alert color="yellow" data-testid="import-notes">
+            <Stack gap={4}><Text fw={700} size="sm">{ffk.notes.title}</Text>{ffk.notes.lines.map((l) => <Text key={l} size="sm">{l}</Text>)}</Stack>
+          </Alert>
+        )}
         {ffk?.banner && <Alert color="blue" data-testid="ffk-banner"><BannerText text={ffk.banner} /></Alert>}
         {locked && line && <Alert color="orange" data-testid="line-locked">{line.reason ?? 'Cette ligne n’est pas modifiable.'}</Alert>}
         {/* Avant d'enregistrer : inscriptions qui ne tiennent pas sur la ligne, catégorie non ouverte… */}
@@ -171,6 +183,7 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
               {hint('weightClassId')}
               {choice('weightClassId')}
               </Stack>
+              <Stack gap={4}>
               <TextInput data-testid="line-weight" label="Poids actuel (facultatif)" rightSection={<Text size="xs">kg</Text>} inputMode="decimal" value={weight} disabled={combatFrozen}
                 onChange={(e) => {
                   const raw = e.currentTarget.value;
@@ -178,6 +191,8 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
                   const kg = Number(raw.replace(',', '.'));
                   set({ weightKg: raw.trim() && kg > 0 ? kg : null });
                 }} />
+              {choice('weightKg')}
+              </Stack>
             </SimpleGrid>
             {warning && <Text size="sm" c="var(--sk-warn-text)" data-testid="line-weight-warning">{warning}</Text>}
             {/* Au moins une discipline : un combat, le kata, ou les deux (le poids et le règlement ne sont demandés que pour un combat). */}
@@ -195,6 +210,7 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
                 )}
               </Stack>
             </Input.Wrapper>
+            {choice('disciplines')}
             {ffk?.switchHint && !(form.combats as DisciplineId[]).includes(ffk.switchHint.discipline) && (
               <Text size="xs" c="dimmed" data-testid="ffk-hint-switch">{ffk.switchHint.text}</Text>
             )}
@@ -214,6 +230,7 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
             </Part>
             <Part disabled={frozen}>
             {form.kata && <TextInput data-testid="line-grade" label="Grade (pour le kata)" value={form.grade ?? ''} onChange={(e) => set({ grade: e.currentTarget.value || null })} />}
+            {form.kata && choice('grade')}
             <Checkbox data-testid="line-name-hidden" label="Masquer le nom sur la page publique" description="Le public voit « Combattant masqué » ; le club reste affiché."
               checked={nameHidden} onChange={(e) => setNameHidden(e.currentTarget.checked)} />
             </Part>
@@ -236,6 +253,7 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
                         onChange={(e) => set({ prefs: choosePref(form.prefs, rank, (e.currentTarget.value || null) as PrefDiscipline | null) })} />
                     ))}
                   </SimpleGrid>
+                  {choice('prefs')}
                   {form.ruleset === 'shobu' && (chosen.length > 0 ? (
                     <Radio.Group label="Que lui proposer d’abord ?" value={form.shobuKeep} onChange={(v) => set({ shobuKeep: v as 'ruleset' | 'discipline' })}>
                       <Stack gap={6} mt={6}>
@@ -244,6 +262,7 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
                       </Stack>
                     </Radio.Group>
                   ) : <Text size="xs" c="dimmed">Sans autre discipline, on pourra seulement lui proposer de passer en jiyu.</Text>)}
+                  {choice('shobuKeep')}
                 </Stack>
               </Paper>
             )}

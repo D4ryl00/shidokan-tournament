@@ -1,4 +1,5 @@
 import { tidyReclass, ageBandFromLabel, rulesetFromLabel, type ClubFormLine, type CombatDiscipline } from './club-form.js';
+import type { ImportDiff } from './club-form-plan.js';
 import { DISCIPLINES } from './disciplines.js';
 import type { FfkPdfEntry } from './ffk-pdf.js';
 import { weightClassesFor } from './grid.js';
@@ -56,11 +57,7 @@ export function translateFfkEntries(entries: FfkPdfEntry[], grid: CategoryGrid, 
 }
 
 export type FfkField = 'ageBandCode' | 'weightClassId' | 'ruleset';
-export interface FfkDiff {
-  field: FfkField;
-  ffk: string;
-  fiche: string | null;
-}
+export type FfkDiff = ImportDiff & { field: FfkField };
 export interface PlanLine {
   fighterId: string;
   line: ClubFormLine;

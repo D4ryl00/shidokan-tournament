@@ -1,5 +1,7 @@
 import { expect, test } from 'vitest';
-import { ffkBanner, ffkChoiceState, ffkValueAvailable } from '../../src/web/components/club-line/ffkStep.js';
+import { fieldValue } from '../../src/domain/club-form-plan.js';
+import { EMPTY_LINE as EMPTY } from '../../src/web/components/ClubLineForm.js';
+import { ffkBanner, ffkChoiceState, ffkValueAvailable, importValueText } from '../../src/web/components/club-line/ffkStep.js';
 
 const diff = { field: 'weightClassId' as const, ffk: 'benjamin:F:-40', fiche: 'benjamin:F:-45' };
 
@@ -23,4 +25,32 @@ test('ffkValueAvailable : la valeur doit figurer dans la liste actuelle du champ
   expect(ffkValueAvailable('c', ['a', 'b'])).toBe(false);
   expect(ffkValueAvailable('c', [])).toBe(false);
   expect(ffkValueAvailable(null, [])).toBe(true);
+});
+
+const ctx = {
+  ageBands: [{ code: 'senior', label: 'Senior', ages: '18-39', isMinor: false }],
+  weightClasses: [{ id: 'senior:F:-54', ageBandCode: 'senior', sex: 'F' as const, label: '-54', maxKg: 54 }],
+};
+
+test('importValueText : le texte lisible de chaque champ', () => {
+  expect(importValueText('weightClassId', 'senior:F:-54', ctx)).toBe('-54 kg');
+  expect(importValueText('weightKg', '52.5', ctx)).toBe('52,5 kg');
+  expect(importValueText('ageBandCode', 'senior', ctx)).toBe('Senior');
+  expect(importValueText('ruleset', 'jiyu', ctx)).toBe('Jiyu');
+  expect(importValueText('ruleset', 'shobu', ctx)).toBe('Shobu');
+  expect(importValueText('disciplines', 'karate,kata', ctx)).toBe('Karaté et Kata');
+  expect(importValueText('disciplines', 'karate,shido-boxing,kata', ctx)).toBe('Karaté, Shido-boxing et Kata');
+  expect(importValueText('prefs', 'shido-boxing,shido-mix', ctx)).toBe('1 Boxing · 2 Mix');
+  expect(importValueText('shobuKeep', 'ruleset', ctx)).toBe('Changer de discipline');
+  expect(importValueText('shobuKeep', 'discipline', ctx)).toBe('Passer en jiyu');
+  expect(importValueText('grade', '3e dan', ctx)).toBe('3e dan');
+  expect(importValueText('grade', null, ctx)).toBe('—');
+});
+
+test('ffkChoiceState sur la valeur texte d’un champ de la ligne', () => {
+  const d = { field: 'disciplines' as const, ffk: 'karate,kata', fiche: 'karate' };
+  const line = { ...EMPTY, combats: ['karate' as const], kata: true };
+  expect(ffkChoiceState(fieldValue(line, 'disciplines'), d)).toBe('ffk');
+  expect(ffkChoiceState(fieldValue({ ...line, kata: false }, 'disciplines'), d)).toBe('fiche');
+  expect(ffkChoiceState(fieldValue({ ...line, combats: [] }, 'disciplines'), d)).toBeNull();
 });

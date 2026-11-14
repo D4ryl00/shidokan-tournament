@@ -2,7 +2,7 @@ import { Group, UnstyledButton } from '@mantine/core';
 import type { ffkChoiceState } from './ffkStep.js';
 
 /** Deux cases côte à côte sous un champ en désaccord : la valeur de la FFK et celle de la fiche. */
-export function FfkChoice({ label, state, ffk, fiche, disabled, unavailable, onPick }: {
+export function FfkChoice({ label, state, ffk, fiche, disabled, unavailable, titles = { ffk: 'FFK', fiche: 'Votre fiche' }, onPick }: {
   /** Nom du champ, pour l'étiquette du groupe. */
   label: string;
   state: ReturnType<typeof ffkChoiceState>;
@@ -12,6 +12,8 @@ export function FfkChoice({ label, state, ffk, fiche, disabled, unavailable, onP
   disabled?: boolean;
   /** Case dont la valeur n'est pas proposée par le champ en ce moment. */
   unavailable?: { ffk?: boolean; fiche?: boolean };
+  /** Titres des deux cases. */
+  titles?: { ffk: string; fiche: string };
   onPick: (which: 'ffk' | 'fiche') => void;
 }) {
   const box = (which: 'ffk' | 'fiche', title: string, value: string) => {
@@ -30,8 +32,8 @@ export function FfkChoice({ label, state, ffk, fiche, disabled, unavailable, onP
   };
   return (
     <Group gap="xs" grow mt={4} role="group" aria-label={`${label} : valeur à garder`}>
-      {box('ffk', 'FFK', ffk)}
-      {box('fiche', 'Votre fiche', fiche)}
+      {box('ffk', titles.ffk, ffk)}
+      {box('fiche', titles.fiche, fiche)}
     </Group>
   );
 }

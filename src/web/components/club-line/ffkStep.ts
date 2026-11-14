@@ -1,7 +1,11 @@
 import type { ClubFormLine } from '../../../domain/club-form.js';
-import type { FfkDiff, FfkField } from '../../../domain/ffk-pdf-plan.js';
+import { kgText } from '../../../domain/club-form.js';
+import type { ImportDiff, ImportField } from '../../../domain/club-form-plan.js';
+import { DISCIPLINES } from '../../../domain/disciplines.js';
+import type { FfkField } from '../../../domain/ffk-pdf-plan.js';
 import type { DisciplineId } from '../../../domain/types.js';
 import type { SavedThen } from '../ClubLineForm.js';
+import { COMBAT_LABELS, type AgeBandInfo, type WeightClassInfo } from './lineForm.js';
 
 /** Une étape du parcours d'import du PDF de la FFK : ce que la fenêtre du combattant affiche et fait. */
 export interface FfkFormStep {
@@ -11,7 +15,12 @@ export interface FfkFormStep {
   initial: ClubFormLine;
   /** Champs marqués « FFK ». */
   marks: ('name' | 'sex' | FfkField | 'discipline')[];
-  diffs: FfkDiff[];
+  /** `savedLabel` remplace le titre « Enregistré » de la case de la fiche, pour ce champ seulement. */
+  diffs: (ImportDiff & { savedLabel?: string })[];
+  /** Titres des deux cases (défaut : « FFK » / « Votre fiche »). */
+  labels?: { imported: string; saved: string };
+  /** Encadré jaune en tête (fiche renvoyée) : un titre en gras, une ligne de texte par élément. */
+  notes?: { title: string; lines: string[] };
   /** Encadré « Fiche déjà créée. … ». */
   banner: string | null;
   hints: Partial<Record<'name' | 'ageBandCode' | 'weightClassId' | 'discipline', string>>;
@@ -26,7 +35,7 @@ export interface FfkFormStep {
 }
 
 /** Quelle case est sélectionnée : la valeur FFK, celle de la fiche, ou aucune (autre valeur tapée). */
-export function ffkChoiceState(value: string | null, diff: FfkDiff): 'ffk' | 'fiche' | null {
+export function ffkChoiceState(value: string | null, diff: ImportDiff): 'ffk' | 'fiche' | null {
   if (value === diff.ffk) return 'ffk';
   if (value === diff.fiche) return 'fiche';
   return null;
@@ -46,4 +55,19 @@ export function ffkBanner(firstName: string, disciplines: string[], opts: { lock
 /** Une valeur ne peut être reprise que si la liste actuelle du champ la propose (sinon le formulaire afficherait un champ vide que le serveur refuse). `null` (champ vidé) est toujours permis. */
 export function ffkValueAvailable(value: string | null, options: string[]): boolean {
   return value === null || options.includes(value);
+}
+
+/** Le texte d'une valeur de champ d'import (celle de `fieldValue`) tel qu'on la montre dans une case de choix ; `null` : « — ». */
+export function importValueText(field: ImportField, value: string | null, ctx: { ageBands: AgeBandInfo[]; weightClasses: WeightClassInfo[] }): string {
+  if (value == null) return '—';
+  switch (field) {
+    case 'ageBandCode': return ctx.ageBands.find((b) => b.code === value)?.label ?? value;
+    case 'weightClassId': { const w = ctx.weightClasses.find((x) => x.id === value); return w ? `${w.label} kg` : value; }
+    case 'weightKg': return `${kgText(Number(value))} kg`;
+    case 'disciplines': return listFr(value.split(',').map((d) => DISCIPLINES[d as DisciplineId]?.label ?? d));
+    case 'ruleset': return value === 'shobu' ? 'Shobu' : 'Jiyu';
+    case 'prefs': return value.split(',').map((d, i) => `${i + 1} ${COMBAT_LABELS.find(([c]) => c === d)?.[1] ?? d}`).join(' · ');
+    case 'shobuKeep': return value === 'ruleset' ? 'Changer de discipline' : 'Passer en jiyu';
+    case 'grade': return value;
+  }
 }
