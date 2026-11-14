@@ -255,7 +255,7 @@ export function lineToRows(line: ClubFormLine, lineNumber: number, grid: Categor
 }
 
 const COMBAT_LABELS = new Set<DisciplineId>(['karate', 'shido-boxing', 'shido-mix', 'triathlon']);
-function cellsToLine(row: unknown[], grid: CategoryGrid, triathlonColumn: boolean, secondCombatColumn = -1): { line: ClubFormLine; warnings: string[]; errors: string[] } {
+export function cellsToLine(row: unknown[], grid: CategoryGrid, triathlonColumn: boolean, secondCombatColumn = -1): { line: ClubFormLine; warnings: string[]; errors: string[] } {
   const [lastName, firstName, sexCell, ageCell, weightCell, combatCell, kataCell, gradeCell, rulesetCell, prefK, prefB, prefM] = row;
   // Les fiches envoyées avant l'ajout du triathlon ont une colonne de moins.
   const prefT = triathlonColumn ? row[12] : null;
@@ -332,7 +332,7 @@ export function ageBandFromLabel(v: unknown, grid: CategoryGrid): string | null 
 }
 
 /** Repère la fiche dans le tableur : titre, champs d'en-tête et ligne des colonnes, même si des lignes ont été ajoutées. */
-function locate(cells: unknown[][]): { headerRows: Map<string, number>; columnsRow: number } {
+export function locate(cells: unknown[][]): { headerRows: Map<string, number>; columnsRow: number } {
   const title = normalizeName(CLUB_FORM_TITLE);
   // Titre en colonne A (ancien modèle) ou B (à côté du logo).
   const titleRow = cells.slice(0, 10).findIndex((r) => [0, 1, 2].some((i) => normalizeName(text(r?.[i])) === title));
@@ -354,7 +354,7 @@ function locate(cells: unknown[][]): { headerRows: Map<string, number>; columnsR
   return { headerRows, columnsRow };
 }
 
-function parseHeader(cells: unknown[][], headerRows: Map<string, number>): ClubFormHeader {
+export function parseHeader(cells: unknown[][], headerRows: Map<string, number>): ClubFormHeader {
   const value = (i: number) => {
     const row = headerRows.get(CLUB_FORM_HEADER_FIELDS[i]!);
     return row === undefined ? null : cells[row]?.[1];
