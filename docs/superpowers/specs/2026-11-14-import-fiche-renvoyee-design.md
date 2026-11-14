@@ -1,6 +1,6 @@
 # Importer une fiche renvoyée : une fiche par combattant — design
 
-Date : 2026-11-14. Statut : décisions de l'organisateur intégrées, en attente de son accord sur ce document. Maquettes retenues
+Date : 2026-11-14. Statut : réalisé (étape 44). Maquettes retenues
 (non versionnées) : `.superpowers/brainstorm/29753-1794672617/content/import-fiche-v2.html` (parcours) et
 `conflit-disciplines-v2.html` (conflit sur les disciplines et sur un poids confirmé FFK), `coordonnees-club.html` (étape
 « Coordonnées du club »).
