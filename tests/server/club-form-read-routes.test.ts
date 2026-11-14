@@ -91,6 +91,39 @@ test('coordonnées : club et annuaire', async () => {
   expect(await get('/api/club-changes')).toEqual([]);
 });
 
+test('coordonnées : l’annuaire ne reçoit que ce que l’étape change (une case vide n’efface rien, aucune adresse retirée)', async () => {
+  const { entryId, clubId } = await directoryClub();
+  await app.inject({ method: 'PATCH', url: `/api/club-directory/${entryId}`, payload: { coachEmails: ['jean@tani.example', 'club@tani.example'] } });
+  // Le club n'a ni le téléphone ni la 2e adresse de la fiche d'annuaire.
+  const club = { ...JEAN, coachPhone: null, coachEmails: ['jean@tani.example'] };
+  expect((await app.inject({ method: 'PATCH', url: `${base}/clubs/${clubId}`, payload: { coachPhone: null } })).statusCode).toBe(200);
+
+  // (a) seul le pré-accord change : le téléphone de l'annuaire reste.
+  expect((await writeHeader(clubId, { ...club, preApproval: true }, club)).statusCode).toBe(200);
+  expect(await directoryEntry(entryId)).toMatchObject({ coachName: 'Jean', coachPhone: '0600000000', coachEmails: ['jean@tani.example', 'club@tani.example'] });
+
+  // (b) une adresse ajoutée : l'annuaire garde les siennes et la reçoit à la suite.
+  const shown = { ...club, preApproval: true };
+  const res = await writeHeader(clubId, { ...shown, coachEmails: ['jean@tani.example', 'paul@tani.example'] }, shown);
+  expect(res.statusCode, res.body).toBe(200);
+  expect(res.json()).toMatchObject({ coachPhone: null, coachEmails: ['jean@tani.example', 'paul@tani.example'], preApproval: true });
+  expect((await directoryEntry(entryId)).coachEmails).toEqual(['jean@tani.example', 'club@tani.example', 'paul@tani.example']);
+
+  // (c) le coach change : l'annuaire le reçoit, son téléphone reste.
+  const now = { ...shown, coachEmails: ['jean@tani.example', 'paul@tani.example'] };
+  expect((await writeHeader(clubId, { ...now, coachName: 'Paul' }, now)).statusCode).toBe(200);
+  expect(await directoryEntry(entryId)).toMatchObject({ coachName: 'Paul', coachPhone: '0600000000' });
+});
+
+test('coordonnées : fiche d’annuaire archivée → le club seul', async () => {
+  const { entryId, clubId } = await directoryClub();
+  expect((await app.inject({ method: 'PATCH', url: `/api/club-directory/${entryId}`, payload: { archived: true } })).statusCode).toBe(200);
+  const res = await writeHeader(clubId, PAUL, JEAN);
+  expect(res.statusCode, res.body).toBe(200);
+  expect(res.json()).toMatchObject(PAUL);
+  expect(await directoryEntry(entryId)).toMatchObject({ coachName: 'Jean', coachPhone: '0600000000', coachEmails: ['jean@tani.example'] });
+});
+
 test('coordonnées : club sans fiche d’annuaire, valeurs nettoyées', async () => {
   const { id: clubId } = (await app.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Tani Dojo', coachName: 'Jean', coachEmails: ['jean@tani.example'] } })).json() as { id: string };
   // Le club n'a pas de téléphone : `expected` le donne vide ; les adresses comparées sans casse ni ordre.

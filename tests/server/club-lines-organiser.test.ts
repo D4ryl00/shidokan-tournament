@@ -85,6 +85,20 @@ test('ffkConfirmed : vrai si une inscription du combattant est confirmée par l�
   expect(lines.map((l) => l.ffkConfirmed)).toEqual([true]);
 });
 
+test('ffkConfirmed : réservé à l’organisateur, faux sur la page du coach', async () => {
+  const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
+  const entryId = (await app.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, name: 'Coach Dojo' } })).json().id;
+  await app.inject({ method: 'POST', url: `${base}/invitations`, payload: { directoryIds: [entryId] } });
+  const [row] = (await app.inject({ method: 'GET', url: `${base}/invitations` })).json();
+  const t = (await app.inject({ method: 'POST', url: `${base}/invitations/${row.clubId}/links` })).json().token;
+  await app.inject({ method: 'PATCH', url: `${base}/club-entry`, payload: { status: 'open', deadline: '2026-11-15' } });
+  const a = (await app.inject({ method: 'POST', url: `/api/inscription/${t}/lines`, payload: { line: LINE } })).json() as Line;
+  raw('update registrations set ffk_confirmed = 1');
+  expect((await current(a.fighterId)) as unknown).toMatchObject({ ffkConfirmed: true });
+  const view = (await app.inject({ method: 'GET', url: `/api/inscription/${t}` })).json() as { lines: { ffkConfirmed: boolean }[] };
+  expect(view.lines.map((l) => l.ffkConfirmed)).toEqual([false]);
+});
+
 test('organiser may choose a closed category, with a notice', async () => {
   const cell = { ageBandCode: 'senior', sex: 'F', discipline: 'karate', ruleset: 'jiyu' };
   await closeCells([cell]);

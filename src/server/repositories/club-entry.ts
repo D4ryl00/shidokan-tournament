@@ -44,7 +44,7 @@ export interface ClubLine {
   reason: string | null;
   /** Mentions pour le coach (catégorie qui n'est plus ouverte…). */
   notices: string[];
-  /** L'une de ses inscriptions est confirmée par l'export FFK (âge, catégorie de poids). */
+  /** L'une de ses inscriptions est confirmée par l'export FFK (âge, catégorie de poids) ; vu par l'organisateur seulement (faux pour le coach). */
   ffkConfirmed: boolean;
 }
 export interface ClubEntryHeader {
@@ -142,7 +142,7 @@ function lineOf(db: AppDb, fighter: typeof fighters.$inferSelect, viewer: LineWr
   if (viewer === 'organiser' && line.combats.length > 1 && !getCompetitionSync(db, fighter.competitionId)?.settings.multipleCombatDisciplinesPerDay) notices.push(MULTIPLE_COMBATS_OFF);
   const base = {
     fighterId: fighter.id, clubId: fighter.clubId ?? '', publicNameHidden: fighter.publicNameHidden, version, line, notices, partlyEditable: false, startedDisciplines,
-    ffkConfirmed: regs.some((r) => r.ffkConfirmed),
+    ffkConfirmed: viewer === 'organiser' && regs.some((r) => r.ffkConfirmed),
   };
   if (!locked) return { ...base, editable, reason };
   return viewer === 'organiser'

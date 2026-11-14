@@ -1,5 +1,5 @@
 import { and, eq, gte } from 'drizzle-orm';
-import { cleanEmails, sameEmail } from '../../domain/emails.js';
+import { cleanEmails, missingEmails, sameEmail } from '../../domain/emails.js';
 import { CLUB_FIELDS, differingFields, isUpcoming, propagationKind, type ClubField, type ClubValues } from '../../domain/club-changes.js';
 import { normalizeName } from '../../domain/names.js';
 import type { Club } from '../../domain/registration.js';
@@ -437,10 +437,12 @@ const sameHeader = (a: HeaderValues, b: HeaderValues) =>
   sameText(a.coachName, b.coachName) && sameText(a.coachPhone, b.coachPhone) && sameEmailSet(a.coachEmails, b.coachEmails) && a.preApproval === b.preApproval;
 
 /**
- * Coordonnées validées à l'étape « coordonnées » d'une fiche renvoyée : écrites dans le club de la compétition (pré-accord compris) et,
- * si le club a une fiche d'annuaire, dans cette fiche (coach, téléphone, e-mails ; le pré-accord ne vaut que pour la compétition), d'un coup.
- * Le changement à examiner du club et ceux des autres clubs de la fiche sont recalculés (jamais créés). Refusé sans rien écrire si les
- * valeurs du club ne sont plus `expected` (celles que l'étape affichait), ou si la compétition est gérée ailleurs ou passée.
+ * Coordonnées validées à l'étape « coordonnées » d'une fiche renvoyée, d'un coup : `values` dans le club de la compétition (pré-accord compris)
+ * et, si le club a une fiche d'annuaire active, ce que l'étape a changé dans cette fiche (le pré-accord ne vaut que pour la compétition) :
+ * le coach ou le téléphone modifiés, les adresses ajoutées à la suite des siennes. Une valeur de la fiche que le club n'a pas n'est donc ni
+ * effacée ni retirée. Le changement à examiner du club et ceux des autres clubs de la fiche sont recalculés (jamais créés ; celui du club
+ * peut rester si club et fiche différaient déjà). Refusé sans rien écrire si les valeurs du club ne sont plus `expected` (celles que l'étape
+ * affichait), ou si la compétition est gérée ailleurs ou passée.
  */
 export function writeClubFormHeader(db: AppDb, competitionId: string, clubId: string, input: { values: HeaderValues; expected: HeaderValues }): Club {
   const touched = new Set<string>([competitionId]);
@@ -456,14 +458,22 @@ export function writeClubFormHeader(db: AppDb, competitionId: string, clubId: st
     if (!club) throw new NotFoundError('Club introuvable');
     const current: HeaderValues = { coachName: club.coachName, coachPhone: club.coachPhone, coachEmails: club.coachEmails, preApproval: club.preApproval };
     if (!sameHeader(current, input.expected)) throw new StaleClubHeaderError();
-    t.update(clubs).set({ preApproval: input.values.preApproval }).where(eq(clubs.id, clubId)).run();
+    const { preApproval } = input.values;
     const entry = club.directoryClubId ? t.select().from(clubDirectory).where(eq(clubDirectory.id, club.directoryClubId)).get() : undefined;
-    if (!entry) {
-      t.update(clubs).set(values).where(eq(clubs.id, clubId)).run();
+    if (!entry || entry.archived) {
+      t.update(clubs).set({ ...values, preApproval }).where(eq(clubs.id, clubId)).run();
       return;
     }
-    updateDirectoryEntry(t, entry.id, values);
+    const { expected } = input;
+    const patch: Partial<Omit<HeaderValues, 'preApproval'>> = {};
+    if (!sameText(values.coachName, expected.coachName)) patch.coachName = values.coachName;
+    if (!sameText(values.coachPhone, expected.coachPhone)) patch.coachPhone = values.coachPhone;
+    // Sans dépasser la limite d'adresses d'une fiche.
+    const added = missingEmails(entry.coachEmails, emailsNotIn(values.coachEmails, expected.coachEmails));
+    if (added.length) patch.coachEmails = [...entry.coachEmails, ...added];
+    updateDirectoryEntry(t, entry.id, patch);
     const updated = t.select().from(clubDirectory).where(eq(clubDirectory.id, entry.id)).get()!;
+    t.update(clubs).set({ preApproval }).where(eq(clubs.id, clubId)).run();
     writeClubValues(t, club, updated, values);
     for (const other of t.select().from(clubChanges).where(eq(clubChanges.directoryId, entry.id)).all()) {
       reconcileChange(t, other.clubId);
