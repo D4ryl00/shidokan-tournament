@@ -10,7 +10,7 @@ import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { ageBandChoices, applyChange, combatChoices, kataChoice, reclassChoices, rulesetChoices, toggleCombat, type LineFormContext } from './club-line/lineForm.js';
 import { FfkChoice } from './club-line/FfkChoice.js';
 import { FfkProgress } from './club-line/FfkProgress.js';
-import { ffkChoiceState, ffkValueAvailable, importValueText, type FfkFormStep } from './club-line/ffkStep.js';
+import { ffkChoiceState, ffkValueAvailable, importValueText, withStartedDisciplines, type FfkFormStep } from './club-line/ffkStep.js';
 import { OneOf } from './PaperEntryTable.js';
 
 /** Suite d'un enregistrement : l'avis éventuel du serveur et la ligne enregistrée. */
@@ -124,15 +124,19 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
     const options = field === 'ageBandCode' ? ageBandChoices(form, ctx).map((o) => o.value)
       : field === 'weightClassId' ? classes.map((w) => w.id) : field === 'ruleset' ? rulesets.map(([r]) => r) : null;
     const labels = ffk.labels ?? { imported: 'FFK', saved: 'Votre fiche' };
+    // Disciplines commencées : le formulaire les garde cochées, les cases aussi.
+    const val = (v: string | null) => (field === 'disciplines' ? withStartedDisciplines(v, [...started]) : v);
+    const imported = val(diff.ffk)!;
+    const saved = val(diff.fiche);
     const pick = (value: string | null) => {
       set(fieldPatch(field, value));
       if (field === 'weightKg') setWeight(value ? kgText(Number(value)) : '');
     };
     return (
-      <FfkChoice label={FIELD_LABELS[field]} state={ffkChoiceState(fieldValue(form, field), diff)} ffk={importValueText(field, diff.ffk, ctx)} fiche={importValueText(field, diff.fiche, ctx)} disabled={DISABLED[field]}
+      <FfkChoice label={FIELD_LABELS[field]} state={ffkChoiceState(fieldValue(form, field), { ...diff, ffk: imported, fiche: saved })} ffk={importValueText(field, imported, ctx)} fiche={importValueText(field, saved, ctx)} disabled={DISABLED[field]}
         titles={{ ffk: labels.imported, fiche: diff.savedLabel ?? labels.saved }}
         unavailable={options ? { ffk: !ffkValueAvailable(diff.ffk, options), fiche: !ffkValueAvailable(diff.fiche, options) } : undefined}
-        onPick={(which) => pick(which === 'ffk' ? diff.ffk : diff.fiche)} />
+        onPick={(which) => pick(which === 'ffk' ? imported : saved)} />
     );
   };
 
@@ -146,7 +150,7 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
         {ffk && <FfkProgress {...ffk.progress} />}
         {ffk?.notes && (
           <Alert color="yellow" data-testid="import-notes">
-            <Stack gap={4}><Text fw={700} size="sm">{ffk.notes.title}</Text>{ffk.notes.lines.map((l) => <Text key={l} size="sm">{l}</Text>)}</Stack>
+            <Stack gap={4}><Text fw={700} size="sm">{ffk.notes.title}</Text>{ffk.notes.lines.map((l, i) => <Text key={i} size="sm">{l}</Text>)}</Stack>
           </Alert>
         )}
         {ffk?.banner && <Alert color="blue" data-testid="ffk-banner"><BannerText text={ffk.banner} /></Alert>}
@@ -262,7 +266,7 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
                       </Stack>
                     </Radio.Group>
                   ) : <Text size="xs" c="dimmed">Sans autre discipline, on pourra seulement lui proposer de passer en jiyu.</Text>)}
-                  {choice('shobuKeep')}
+                  {form.ruleset === 'shobu' && choice('shobuKeep')}
                 </Stack>
               </Paper>
             )}

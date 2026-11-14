@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { fieldValue } from '../../src/domain/club-form-plan.js';
 import { EMPTY_LINE as EMPTY } from '../../src/web/components/ClubLineForm.js';
-import { ffkBanner, ffkChoiceState, ffkValueAvailable, importValueText } from '../../src/web/components/club-line/ffkStep.js';
+import { ffkBanner, ffkChoiceState, ffkValueAvailable, importValueText, withStartedDisciplines } from '../../src/web/components/club-line/ffkStep.js';
 
 const diff = { field: 'weightClassId' as const, ffk: 'benjamin:F:-40', fiche: 'benjamin:F:-45' };
 
@@ -53,4 +53,12 @@ test('ffkChoiceState sur la valeur texte d’un champ de la ligne', () => {
   expect(ffkChoiceState(fieldValue(line, 'disciplines'), d)).toBe('ffk');
   expect(ffkChoiceState(fieldValue({ ...line, kata: false }, 'disciplines'), d)).toBe('fiche');
   expect(ffkChoiceState(fieldValue({ ...line, combats: [] }, 'disciplines'), d)).toBeNull();
+});
+
+test('withStartedDisciplines : remet les disciplines commencées dans la valeur', () => {
+  expect(withStartedDisciplines('karate', ['kata'])).toBe('karate,kata');
+  expect(withStartedDisciplines('shido-mix,kata', ['karate'])).toBe('karate,shido-mix,kata');
+  expect(withStartedDisciplines('karate', [])).toBe('karate');
+  expect(withStartedDisciplines(null, ['kata', 'karate'])).toBe('karate,kata');
+  expect(withStartedDisciplines(null, [])).toBeNull();
 });

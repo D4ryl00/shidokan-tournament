@@ -1,5 +1,5 @@
 import type { ClubFormLine } from '../../../domain/club-form.js';
-import { kgText } from '../../../domain/club-form.js';
+import { PREF_DISCIPLINES, kgText } from '../../../domain/club-form.js';
 import type { ImportDiff, ImportField } from '../../../domain/club-form-plan.js';
 import { DISCIPLINES } from '../../../domain/disciplines.js';
 import type { FfkField } from '../../../domain/ffk-pdf-plan.js';
@@ -70,4 +70,12 @@ export function importValueText(field: ImportField, value: string | null, ctx: {
     case 'shobuKeep': return value === 'ruleset' ? 'Changer de discipline' : 'Passer en jiyu';
     case 'grade': return value;
   }
+}
+
+/** Une valeur « disciplines » (encodage de `fieldValue`) à laquelle on remet les disciplines commencées, qu'on ne peut pas décocher. */
+export function withStartedDisciplines(value: string | null, started: DisciplineId[]): string | null {
+  const parts = new Set(value ? value.split(',') : []);
+  for (const d of started) parts.add(d);
+  const list = [...PREF_DISCIPLINES.filter((d) => parts.has(d)), ...(parts.has('kata') ? ['kata'] : [])];
+  return list.length ? list.join(',') : null;
 }
