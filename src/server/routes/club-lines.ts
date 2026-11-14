@@ -11,6 +11,8 @@ import { clubFormLineSchema } from './registrations.js';
 type P = { Params: { id: string; clubId: string } };
 type PF = { Params: { id: string; clubId: string; fighterId: string } };
 const writer = { kind: 'organiser' } as const;
+/** Origine des inscriptions créées par une écriture : « sur place » par défaut, `club_form` depuis une fiche renvoyée. */
+const source = z.enum(['club_form']).optional();
 
 /** Lignes de combattants écrites par l'organisateur (écran Inscriptions) : les mêmes que celles du coach, sans le contrôle des inscriptions en ligne. */
 export async function clubLineRoutes(app: FastifyInstance, { db }: { db: AppDb }) {
@@ -35,16 +37,16 @@ export async function clubLineRoutes(app: FastifyInstance, { db }: { db: AppDb }
 
   app.post<P>('/api/competitions/:id/clubs/:clubId/lines', async (req, reply) => {
     const a = { competitionId: req.params.id, clubId: req.params.clubId }; // saveClubLine vérifie la compétition
-    const { line, publicNameHidden } = z.object({ line: clubFormLineSchema, publicNameHidden: z.boolean() }).parse(req.body);
-    const saved = await saveClubLine(db, a, null, line, null, { writer, publicNameHidden });
+    const body = z.object({ line: clubFormLineSchema, publicNameHidden: z.boolean(), source }).parse(req.body);
+    const saved = await saveClubLine(db, a, null, body.line, null, { writer, publicNameHidden: body.publicNameHidden, source: body.source });
     await resync(a.competitionId);
     return reply.status(201).send(reloadLine(db, saved, 'organiser'));
   });
 
   app.put<PF>('/api/competitions/:id/clubs/:clubId/lines/:fighterId', async (req) => {
     const a = { competitionId: req.params.id, clubId: req.params.clubId }; // saveClubLine vérifie la compétition
-    const { line, version, publicNameHidden } = z.object({ line: clubFormLineSchema, version: z.string().min(1), publicNameHidden: z.boolean() }).parse(req.body);
-    const saved = await saveClubLine(db, a, req.params.fighterId, line, version, { writer, publicNameHidden });
+    const body = z.object({ line: clubFormLineSchema, version: z.string().min(1), publicNameHidden: z.boolean(), source }).parse(req.body);
+    const saved = await saveClubLine(db, a, req.params.fighterId, body.line, body.version, { writer, publicNameHidden: body.publicNameHidden, source: body.source });
     await resync(a.competitionId);
     return reloadLine(db, saved, 'organiser');
   });

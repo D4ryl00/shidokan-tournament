@@ -73,6 +73,7 @@ import { startRetention } from './repositories/retention.js';
 import { ffkImportRoutes } from './routes/ffk-import.js';
 import { registrationRoutes } from './routes/registrations.js';
 import { clubLineRoutes } from './routes/club-lines.js';
+import { clubFormReadRoutes } from './routes/club-form-read.js';
 import { ffkPdfOrganiserRoutes } from './routes/ffk-pdf.js';
 import { fighterRoutes } from './routes/fighters.js';
 import { UnreadableFileError } from './spreadsheet/read.js';
@@ -258,6 +259,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
 
   await app.register(registrationRoutes, { db });
   await app.register(clubLineRoutes, { db });
+  await app.register(clubFormReadRoutes, { db });
   await app.register(ffkPdfOrganiserRoutes, { db });
   await app.register(fighterRoutes, { db });
   await app.register(ffkImportRoutes, { db });

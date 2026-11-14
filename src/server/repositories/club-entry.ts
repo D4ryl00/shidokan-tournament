@@ -44,6 +44,8 @@ export interface ClubLine {
   reason: string | null;
   /** Mentions pour le coach (catégorie qui n'est plus ouverte…). */
   notices: string[];
+  /** L'une de ses inscriptions est confirmée par l'export FFK (âge, catégorie de poids). */
+  ffkConfirmed: boolean;
 }
 export interface ClubEntryHeader {
   coachName: string | null;
@@ -138,7 +140,10 @@ function lineOf(db: AppDb, fighter: typeof fighters.$inferSelect, viewer: LineWr
   })];
   // L'organisateur peut inscrire plusieurs combats malgré le réglage : il le voit rappelé.
   if (viewer === 'organiser' && line.combats.length > 1 && !getCompetitionSync(db, fighter.competitionId)?.settings.multipleCombatDisciplinesPerDay) notices.push(MULTIPLE_COMBATS_OFF);
-  const base = { fighterId: fighter.id, clubId: fighter.clubId ?? '', publicNameHidden: fighter.publicNameHidden, version, line, notices, partlyEditable: false, startedDisciplines };
+  const base = {
+    fighterId: fighter.id, clubId: fighter.clubId ?? '', publicNameHidden: fighter.publicNameHidden, version, line, notices, partlyEditable: false, startedDisciplines,
+    ffkConfirmed: regs.some((r) => r.ffkConfirmed),
+  };
   if (!locked) return { ...base, editable, reason };
   return viewer === 'organiser'
     ? { ...base, editable: false, partlyEditable: true, reason: organiserLockedReason(startedDisciplines) }
@@ -270,14 +275,17 @@ function checkedLine(db: AppDb, competitionId: string, clubId: string | null, fi
   return fighter;
 }
 
-/** Crée (fighterId null) ou modifie la ligne d'un combattant : ses inscriptions suivent la ligne (combats et/ou kata). L'organisateur peut aussi le changer de club. */
+/**
+ * Crée (fighterId null) ou modifie la ligne d'un combattant : ses inscriptions suivent la ligne (combats et/ou kata). L'organisateur peut aussi le changer de club.
+ * `source` (organisateur) : origine des inscriptions créées (« sur place » par défaut ; `club_form` depuis une fiche renvoyée).
+ */
 export async function saveClubLine(
   db: AppDb,
   access: ClubAccess,
   fighterId: string | null,
   submitted: ClubFormLine,
   expectedVersion: string | null,
-  opts: { writer: LineWriter; publicNameHidden?: boolean },
+  opts: { writer: LineWriter; publicNameHidden?: boolean; source?: 'club_form' },
 ): Promise<ClubLine> {
   let line = submitted;
   const coach = opts.writer.kind === 'coach';
@@ -311,7 +319,7 @@ export async function saveClubLine(
   if (line.combats.length && !line.weightClassId) errors.unshift(WEIGHT_CLASS_MISSING);
   if (errors.length || rows.some((r) => !r.input)) throw new RegistrationValidationError(errors);
   // La source d'une inscription existante est gardée par `upsertFighterRegistration` ; celle d'une nouvelle dépend de l'auteur.
-  const source = coach ? ('online' as const) : ('onsite' as const);
+  const source = coach ? ('online' as const) : (opts.source ?? ('onsite' as const));
   const inputs = rows.map((r) => ({ ...r.input!, clubId: club.id, source }));
   // Une catégorie fermée ne s'ouvre pas en ligne, sauf pour une inscription déjà enregistrée qui y était ; l'organisateur peut la choisir.
   if (coach) {

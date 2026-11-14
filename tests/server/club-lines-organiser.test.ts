@@ -60,6 +60,31 @@ test('editing keeps the existing source, a new discipline is onsite', async () =
   expect((await registrations()).map((r) => [r.discipline, r.source]).sort()).toEqual([['karate', 'ffk'], ['kata', 'onsite']]);
 });
 
+test('origine fiche club : les inscriptions créées sont « club_form », une existante garde la sienne', async () => {
+  const created = await app.inject({ method: 'POST', url: `${base}/clubs/${clubId}/lines`, payload: { line: LINE, publicNameHidden: false, source: 'club_form' } });
+  expect(created.statusCode, created.body).toBe(201);
+  expect((await registrations()).map((r) => [r.discipline, r.source]).sort()).toEqual([['karate', 'club_form'], ['kata', 'club_form']]);
+
+  const other = (await post({ ...LINE, lastName: 'DURAND', kata: false, grade: null })).json() as Line;
+  const l = await current(other.fighterId);
+  const res = await app.inject({ method: 'PUT', url: `${base}/clubs/${clubId}/lines/${l.fighterId}`, payload: { line: { ...LINE, lastName: 'DURAND' }, version: l.version, publicNameHidden: false, source: 'club_form' } });
+  expect(res.statusCode, res.body).toBe(200);
+  const durand = (await registrations()).filter((r) => r.fighter.id === other.fighterId);
+  expect(durand.map((r) => [r.discipline, r.source]).sort()).toEqual([['karate', 'onsite'], ['kata', 'club_form']]);
+  // Une autre origine n'est pas acceptée.
+  const refused = await app.inject({ method: 'POST', url: `${base}/clubs/${clubId}/lines`, payload: { line: { ...LINE, lastName: 'PETIT' }, publicNameHidden: false, source: 'ffk' } });
+  expect(refused.statusCode).toBe(400);
+});
+
+test('ffkConfirmed : vrai si une inscription du combattant est confirmée par l’import FFK', async () => {
+  const first = (await post()).json() as Line & { ffkConfirmed: boolean };
+  expect(first.ffkConfirmed).toBe(false);
+  raw("update registrations set ffk_confirmed = 1 where discipline = 'karate'");
+  expect((await current(first.fighterId)) as unknown).toMatchObject({ ffkConfirmed: true });
+  const lines = (await app.inject({ method: 'GET', url: `${base}/clubs/${clubId}/lines` })).json() as { ffkConfirmed: boolean }[];
+  expect(lines.map((l) => l.ffkConfirmed)).toEqual([true]);
+});
+
 test('organiser may choose a closed category, with a notice', async () => {
   const cell = { ageBandCode: 'senior', sex: 'F', discipline: 'karate', ruleset: 'jiyu' };
   await closeCells([cell]);

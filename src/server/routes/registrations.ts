@@ -5,6 +5,8 @@ import { clubFormFileNames } from '../../domain/mail-attachments.js';
 import { NotAClubFormError, parseClubForm, parseClubFormLines } from '../../domain/club-form.js';
 import { buildClubFormTemplate } from '../club-form-template.js';
 import { buildClubFormPdf } from '../club-form-pdf.js';
+import type { CompetitionSettings } from '../../domain/settings.js';
+import type { CategoryGrid } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
 import { checkRev, registrationRev } from '../revisions.js';
 import { getCompetition, getGrid } from '../repositories/competitions.js';
@@ -96,33 +98,44 @@ const clubSchema = z
 
 type P = { Params: { id: string } };
 
+/**
+ * Lit une fiche club reçue en corps brut : `read` sur le premier onglet qui est une fiche club (un coach peut ajouter des onglets).
+ * Un onglet reconnu (titre trouvé) mais cassé est signalé : on ne lit pas à sa place un onglet suivant (copie ancienne, par exemple).
+ */
+export async function readUploadedClubForm<T>(
+  db: AppDb,
+  competitionId: string,
+  body: unknown,
+  read: (cells: unknown[][], grid: CategoryGrid, settings: CompetitionSettings) => T,
+): Promise<T> {
+  if (!Buffer.isBuffer(body)) throw new UnreadableFileError('Aucun fichier reçu.');
+  let sheets: { cells: unknown[][] }[];
+  try {
+    sheets = readWorkbook(body).sheets;
+  } catch (e) {
+    if (e instanceof UnreadableFileError) throw new NotAClubFormError(e.message);
+    throw e;
+  }
+  const grid = await getGrid(db, competitionId);
+  const settings = (await getCompetition(db, competitionId))!.settings;
+  const GENERIC = "Ce fichier n'est pas une fiche club.";
+  for (const sheet of sheets) {
+    try {
+      return read(sheet.cells, grid, settings);
+    } catch (e) {
+      if (!(e instanceof NotAClubFormError) || e.message !== GENERIC) throw e;
+    }
+  }
+  throw new NotAClubFormError(GENERIC);
+}
+
 export async function registrationRoutes(app: FastifyInstance, { db }: { db: AppDb }) {
   const NOT_FOUND = { error: 'Compétition introuvable' };
 
-  async function parseUpload(competitionId: string, body: unknown) {
-    if (!Buffer.isBuffer(body)) throw new UnreadableFileError('Aucun fichier reçu.');
-    let sheets: { cells: unknown[][] }[];
-    try {
-      sheets = readWorkbook(body).sheets;
-    } catch (e) {
-      if (e instanceof UnreadableFileError) throw new NotAClubFormError(e.message);
-      throw e;
-    }
-    // Premier onglet qui est une fiche club (un coach peut ajouter des onglets). Un onglet reconnu (titre trouvé)
-    // mais cassé est signalé : on ne lit pas à sa place un onglet suivant (copie ancienne, par exemple).
-    const grid = await getGrid(db, competitionId);
-    const settings = (await getCompetition(db, competitionId))!.settings;
-    const tolerance = settings.weighInToleranceKg;
-    const GENERIC = "Ce fichier n'est pas une fiche club.";
-    for (const sheet of sheets) {
-      try {
-        return parseClubForm(sheet.cells, grid, tolerance, closedSet(db, competitionId), { multipleCombats: settings.multipleCombatDisciplinesPerDay });
-      } catch (e) {
-        if (!(e instanceof NotAClubFormError) || e.message !== GENERIC) throw e;
-      }
-    }
-    throw new NotAClubFormError(GENERIC);
-  }
+  const parseUpload = (competitionId: string, body: unknown) =>
+    readUploadedClubForm(db, competitionId, body, (cells, grid, settings) =>
+      parseClubForm(cells, grid, settings.weighInToleranceKg, closedSet(db, competitionId), { multipleCombats: settings.multipleCombatDisciplinesPerDay }),
+    );
 
   app.addHook('preHandler', async (req, reply) => {
     const id = (req.params as { id?: string }).id;
