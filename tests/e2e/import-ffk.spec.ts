@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { fillClubForm } from '../helpers/club-form-fill.js';
 import { BLANK, buildFfkWorkbook } from '../helpers/ffk-fixture.js';
@@ -17,17 +16,17 @@ const ffk = buildFfkWorkbook({
 });
 
 async function importClubForm(page: Page, id: string) {
-  await page.request.post(`/api/competitions/${id}/clubs`, { data: { name: 'Tani Dojo' } }); // le club de la fiche existe déjà
-  await page.goto(`/competitions/${id}/fiche-club`);
-  const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('club-form-download').click()]);
-  const template = fs.readFileSync((await download.path())!);
+  const club = await page.request.post(`/api/competitions/${id}/clubs`, { data: { name: 'Tani Dojo' } }); // le club de la fiche existe déjà
+  expect(club.ok()).toBe(true);
+  // Route de l'ancien modèle de fiche (l'écran de l'organisateur lit désormais le nouveau, fiche par fiche).
+  const template = Buffer.from(await (await page.request.get(`/api/competitions/${id}/club-form.ods`)).body());
   const filled = fillClubForm(template, ['Tani Dojo', 'Coach', null, null, 'Non'], [
     ['MARTIN', 'Léa', 'Féminin', 'Cadets', '-54', 'Karaté', 'Jiyu', '2', null, null],
     ['SHINSEN', 'Paul', 'Masculin', 'Seniors', '-75', 'Karaté', 'Jiyu', null, null, null],
   ]);
-  await page.getByTestId('club-form-file').setInputFiles({ name: 'fiche.ods', mimeType: 'application/octet-stream', buffer: filled });
-  await page.getByTestId('club-form-import').click();
-  await expect(page.getByText('2 inscriptions importées')).toBeVisible();
+  const res = await page.request.post(`/api/competitions/${id}/club-forms/import`, { data: filled, headers: { 'content-type': 'application/octet-stream' } });
+  expect(res.ok()).toBe(true);
+  expect(await (await page.request.get(`/api/competitions/${id}/registrations`)).json()).toHaveLength(2);
 }
 
 async function uploadFfk(page: Page, id: string) {

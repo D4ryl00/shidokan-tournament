@@ -202,7 +202,7 @@ export function useWriteClubFormHeader(competitionId: string, clubId: string) {
   return useMutation<Club, ApiError, { values: ClubFormHeaderValues; expected: ClubFormHeaderValues }>({
     mutationFn: (body) => api<Club>('POST', `/api/competitions/${competitionId}/clubs/${clubId}/club-form-header`, body),
     // Refus compris (club changé entre-temps) : le club relu sert à refaire la comparaison.
-    onSettled: () => Promise.all(['clubs', 'club-changes', 'club-directory', 'directory-clubs'].map((k) => qc.invalidateQueries({ queryKey: [k] }))),
+    onSettled: () => Promise.all(['clubs', 'club-changes', 'club-directory', 'directory-clubs', 'registrations'].map((k) => qc.invalidateQueries({ queryKey: [k] }))),
   });
 }
 export type ClubFormHeaderValues = Pick<Club, 'coachName' | 'coachPhone' | 'coachEmails' | 'preApproval'>;

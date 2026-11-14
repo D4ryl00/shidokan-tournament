@@ -323,7 +323,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Le modèle .ods s’ouvre avec LibreOffice ou Excel ; il contient des listes déroulantes (sexe, catégorie d’âge, discipline de combat, kata, règlement, reclassement, priorité shobu).',
       '« Télécharger la fiche papier (PDF) » donne une fiche A4 paysage à cocher, 10 combattants par feuille, à envoyer aux clubs ou à imprimer telle quelle (une page, sans réglage).',
       'Une ligne par combattant : kata et combat sur la même ligne. Le coach donne le poids actuel ; la catégorie de poids en est déduite.',
-      'Seules les tranches d’âge qui ont au moins une catégorie ouverte sont proposées. Les fichiers n’indiquent pas les fermetures partielles (par exemple pas de kata chez les seniors F) : à l’import, l’aperçu signale ces lignes et elles vont en Réaffectation. La page en ligne, elle, ne propose que ce qui est ouvert et en donne le détail dans un champ repliable.',
+      'Seules les tranches d’âge qui ont au moins une catégorie ouverte sont proposées. Les fichiers n’indiquent pas les fermetures partielles (par exemple pas de kata chez les seniors F) : à l’import, ces lignes sont signalées dans la fenêtre du combattant (catégorie « non ouverte ») et vont en Réaffectation. La page en ligne, elle, ne propose que ce qui est ouvert et en donne le détail dans un champ repliable.',
     ],
   },
   'fiche-club.importer': {

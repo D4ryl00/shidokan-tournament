@@ -10,7 +10,9 @@ async function downloadTemplate(page: Page, id: string): Promise<Buffer> {
   return fs.readFileSync((await download.path())!);
 }
 
-async function uploadForm(page: Page, buffer: Buffer) {
+/** Ouvre la fenêtre « Importer une fiche renvoyée » et y choisit le fichier. */
+async function openForm(page: Page, buffer: Buffer) {
+  await page.getByTestId('club-form-import-open').click();
   await page.getByTestId('club-form-file').setInputFiles({
     name: 'fiche.ods', mimeType: 'application/vnd.oasis.opendocument.spreadsheet', buffer,
   });
@@ -18,38 +20,34 @@ async function uploadForm(page: Page, buffer: Buffer) {
 
 const HEADER = ['Tani Dojo', 'Jean Coach', '0600000000', null, 'Oui'];
 
-test('fiche club : modèle, aperçu avec erreur, import, réimport corrigé', async ({ page }) => {
-  const id = await createCompetition(page, 'Coupe fiche club');
-  await page.request.post(`/api/competitions/${id}/clubs`, { data: { name: 'Tani Dojo' } }); // le club de la fiche existe déjà
+test('fiche club : modèle, fiche renvoyée importée fiche par fiche, réimport à jour', async ({ page }) => {
+  const id = await createCompetition(page, 'Coupe fiche renvoyée');
+  await page.request.post(`/api/competitions/${id}/clubs`, { data: { name: 'Tani Dojo', coachName: 'Jean Coach', coachPhone: '0600000000', coachEmails: [], preApproval: true } });
   const template = await downloadTemplate(page, id);
+  const lines = [
+    ['MARTIN', 'Léa', 'Féminin', 'Cadets', 52, 'Karaté', 'Non', null, 'Jiyu'],
+    ['PETIT', 'Noé', 'Masculin', 'Minimes', 40, 'Karaté', 'Non', null, null],
+  ];
 
-  await uploadForm(page, fillClubForm(template, HEADER, [
-    ['MARTIN', 'Léa', 'Féminin', 'Cadets', '-54', 'Karaté', 'Jiyu', '32', null, null],
-    ['PETIT', 'Noé', 'Masculin', 'Minimes', '-45', 'Karaté', 'Shobu', null, null, null],
-    ['DURAND', 'Hugo', 'Masculin', 'Seniors', '-75', 'Shido-boxing', 'Shobu', null, 'Oui', 74],
-  ]));
-  await expect(page.getByTestId('club-form-preview-row')).toHaveCount(3);
-  // Nom du fichier = club : le titre n'ajoute rien.
-  await expect(page.getByTestId('club-form-preview-header')).toContainText('Club : Tani Dojo');
-  await expect(page.getByTestId('club-form-preview-header')).not.toContainText('nom dans le fichier');
-  // Le champ est vidé aussitôt lu : choisir de nouveau le même fichier (corrigé entre-temps) le relit.
-  await expect(page.getByTestId('club-form-file')).toHaveValue('');
-  await expect(page.getByTestId('club-form-row-error')).toContainText('réservé aux adultes');
-  await page.getByTestId('club-form-import').click();
-  await expect(page.getByText('2 inscriptions importées')).toBeVisible();
+  await openForm(page, fillClubForm(template, HEADER, lines, 'new'));
+  await expect(page.getByTestId('club-form-counts')).toHaveCount(0); // le club n'est pas encore choisi
+  await page.getByTestId('club-form-start').getByTestId('club-picker').getByLabel('Club').click();
+  await page.getByRole('option', { name: 'Tani Dojo', exact: true }).click();
+  await expect(page.getByTestId('club-form-counts')).toHaveText('2 nouveaux · 0 fiche existante à revoir · 0 déjà à jour');
+  await page.getByTestId('club-form-begin').click();
+  await page.getByTestId('line-save').click();
+  await page.getByTestId('line-save').click();
+  await page.getByTestId('club-form-finish').click();
+  await expect(page.getByText('Fiche renvoyée : 2 ajoutés')).toBeVisible();
   await page.goto(`/competitions/${id}/inscriptions`);
   await expect(page.getByTestId('registration-row')).toHaveCount(2);
 
+  // Même fiche renvoyée de nouveau : tout est à jour, rien à revoir.
   await page.goto(`/competitions/${id}/fiche-club`);
-  await uploadForm(page, fillClubForm(template, HEADER, [
-    ['MARTIN', 'Léa', 'Féminin', 'Cadets', '-54', 'Karaté', 'Jiyu', '32', null, null],
-    ['PETIT', 'Noé', 'Masculin', 'Minimes', '-45', 'Karaté', 'Jiyu', null, null, null],
-    ['DURAND', 'Hugo', 'Masculin', 'Seniors', '-75', 'Shido-boxing', 'Shobu', null, 'Oui', 74],
-  ]));
-  await page.getByTestId('club-form-import').click();
-  await expect(page.getByText('3 inscriptions importées, 2 remplacées')).toBeVisible();
-  await page.goto(`/competitions/${id}/inscriptions`);
-  await expect(page.getByTestId('registration-row')).toHaveCount(3);
+  await openForm(page, fillClubForm(template, HEADER, lines, 'new'));
+  await page.getByTestId('club-form-start').getByTestId('club-picker').getByLabel('Club').click();
+  await page.getByRole('option', { name: 'Tani Dojo', exact: true }).click();
+  await expect(page.getByTestId('club-form-counts')).toHaveText('0 nouveau · 0 fiche existante à revoir · 2 déjà à jour');
 });
 
 async function pick(page: Page, testId: string, option: string) {

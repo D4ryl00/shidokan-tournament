@@ -117,11 +117,12 @@ function Wizard({ onClose, competitionId, read, lines, ops, club: liveClub, mult
     return (
       <Modal opened onClose={() => onClose()} fullScreen={mobile} title="Importer une fiche renvoyée">
         <Stack data-testid="club-form-start">
-          {picker(form.read?.header ?? null)}
+          {/* Pendant « Commencer » : ni autre club ni autre fichier. */}
+          <fieldset disabled={busy.pending} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>{picker(form.read?.header ?? null)}</fieldset>
           <Input.Wrapper label="Fichier" required labelElement="div">
             <Group gap="sm" mt={4} wrap="nowrap">
               <FileButton resetRef={resetFile} accept=".ods,.xlsx,.xls,.csv" onChange={chooseFile} inputProps={{ 'data-testid': 'club-form-file' } as object}>
-                {(p) => <Button variant="default" {...p}>{file ? 'Changer de fichier' : 'Choisir le fichier du club'}</Button>}
+                {(p) => <Button variant="default" disabled={busy.pending} {...p}>{file ? 'Changer de fichier' : 'Choisir le fichier du club'}</Button>}
               </FileButton>
               {file && <Text size="sm" truncate data-testid="club-form-file-name">{file.name}</Text>}
             </Group>
@@ -131,7 +132,7 @@ function Wizard({ onClose, competitionId, read, lines, ops, club: liveClub, mult
           )}
           <ApiErrorAlert error={form.error} />
           {form.read && <Text size="sm" data-testid="club-form-club">La fiche indique le club « {form.read.header.club} ».</Text>}
-          {preview && form.read && (
+          {preview && form.read && ready && (
             <Paper withBorder p="sm" radius="md" style={{ background: 'var(--sk-bg)' }}>
               <Stack gap={6}>
                 <Text data-testid="club-form-counts">
