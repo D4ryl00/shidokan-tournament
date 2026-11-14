@@ -390,6 +390,11 @@ describe('relecture (mineurs) : messages du nouveau format', () => {
     expect(r.warnings).toEqual([]);
     expect(r.input!.approxWeightKg).toBe(53.5);
   });
+  test('règlement illisible sur un combat : un seul message, « incompréhensible »', () => {
+    const r = parseClubForm(sheetNew([with_(8, 'Kumite')]), grid).rows[0]!;
+    expect(r.errors).toEqual(['Règlement incompréhensible : « Kumite » (Jiyu ou Shobu).']);
+    expect(r.warnings).toEqual([]);
+  });
   test('poids illisible : un seul message', () => {
     expect(parseClubForm(sheetNew([with_(4, 'lourd')]), grid).rows[0]!.errors).toEqual(['Poids actuel incompréhensible : « lourd ».']);
   });

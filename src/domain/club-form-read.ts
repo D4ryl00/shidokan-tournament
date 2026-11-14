@@ -64,7 +64,7 @@ export function readClubFormLines(cells: unknown[][], grid: CategoryGrid, tolera
   const baseWidth = triathlonColumn ? CLUB_FORM_COLUMNS.length : CLUB_FORM_COLUMNS.length - 1;
   const width = Math.max(baseWidth, secondCombatColumn + 1);
 
-  const groups = new Map<string, { rows: number[]; lines: ClubFormLine[]; notes: string[] }>();
+  const groups = new Map<string, Group>();
   for (let r = columnsRow + 1; r < cells.length; r++) {
     const row = cells[r] ?? [];
     if (row.slice(0, width).every((c) => text(c) === '')) continue;
@@ -80,6 +80,7 @@ export function readClubFormLines(cells: unknown[][], grid: CategoryGrid, tolera
     group.notes.push(...notes);
     groups.set(key, group);
   }
+  joinUnknownSex(groups);
 
   const items: ClubFormItem[] = [];
   const merged: ClubFormRead['merged'] = [];
@@ -95,6 +96,34 @@ export function readClubFormLines(cells: unknown[][], grid: CategoryGrid, tolera
     if (group.rows.length > 1) merged.push({ label: `${group.lines[0]!.lastName} ${group.lines[0]!.firstName}`.trim(), rows: group.rows });
   }
   return { header, items, merged };
+}
+
+type Group = { rows: number[]; lines: ClubFormLine[]; notes: string[] };
+
+/**
+ * Lignes au sexe illisible (clé « nom| ») : rattachées à la seule autre ligne du même nom, quand il n'y en a qu'une (sinon gardées
+ * à part, on ne sait pas laquelle). Lignes et remarques restent dans l'ordre du fichier ; l'ordre des combattants suit leur première ligne.
+ */
+function joinUnknownSex(groups: Map<string, Group>): void {
+  for (const [key, unknown] of [...groups]) {
+    if (!key.endsWith('|') || key.startsWith('#')) continue;
+    const name = key.slice(0, -1);
+    const known = [...groups.keys()].filter((k) => k !== key && k.startsWith(`${name}|`) && k.length > key.length);
+    if (known.length !== 1) continue;
+    const target = groups.get(known[0]!)!;
+    const rows = [...target.rows.map((row, i) => ({ row, line: target.lines[i]! })), ...unknown.rows.map((row, i) => ({ row, line: unknown.lines[i]! }))].sort((a, b) => a.row - b.row);
+    const first = rows[0]!.row;
+    groups.delete(key);
+    groups.set(known[0]!, {
+      rows: rows.map((x) => x.row),
+      lines: rows.map((x) => x.line),
+      notes: first === unknown.rows[0] ? [...unknown.notes, ...target.notes] : [...target.notes, ...unknown.notes],
+    });
+  }
+  // Ordre des combattants : celui de leur première ligne.
+  const sorted = [...groups].sort((a, b) => a[1].rows[0]! - b[1].rows[0]!);
+  groups.clear();
+  for (const [k, g] of sorted) groups.set(k, g);
 }
 
 /** Même combattant sur plusieurs lignes : première valeur renseignée, combats réunis dans l'ordre, kata si une ligne le coche. */

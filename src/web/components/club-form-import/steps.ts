@@ -19,6 +19,8 @@ const LABELS = { imported: 'Fiche renvoyée', saved: 'Enregistré' };
 
 /** Encadré d'une fiche sans discipline (pas de liste vide « inscrite en . »). */
 const NO_DISCIPLINE_BANNER = 'Fiche déjà créée. Une seule fiche par combattant : sous chaque différence, choisissez la valeur à garder.';
+/** La même, verrouillée : rien à choisir. */
+const LOCKED_NO_DISCIPLINE_BANNER = 'Fiche déjà créée. Une seule fiche par combattant.';
 
 /** Les remarques de lecture de la ligne, s'il y en a. */
 const notesOf = (item: ClubFormItem): Pick<FfkFormContent, 'notes'> =>
@@ -41,7 +43,7 @@ function existingView(item: ClubFormItem, fresh: ClubLine, c: ClubFormStepContex
   const current = disciplinesOf(fresh.line);
   // Verrouillée : rien à choisir, l'encadré s'arrête aux disciplines.
   const base = current.length ? ffkBanner(fresh.line.firstName, current.map(disciplineLabel), { locked: true }) : null;
-  const banner = base === null ? NO_DISCIPLINE_BANNER : locked ? base : `${base} Sous chaque différence, choisissez la valeur à garder.`;
+  const banner = base === null ? (locked ? LOCKED_NO_DISCIPLINE_BANNER : NO_DISCIPLINE_BANNER) : locked ? base : `${base} Sous chaque différence, choisissez la valeur à garder.`;
   // Combattant confirmé par l'export FFK : la case de droite dit ce qu'on remplace.
   const confirmed = (field: string) => fresh.ffkConfirmed === true && (field === 'ageBandCode' || field === 'weightClassId');
   return {
@@ -59,7 +61,8 @@ function existingView(item: ClubFormItem, fresh: ClubLine, c: ClubFormStepContex
 /** Ce que montre l'étape en cours : mêmes règles que le PDF FFK, cases « Fiche renvoyée » / « Enregistré ». */
 export function clubFormStepView(s: WizardState<ClubFormItem> & { stage: 'step' }, c: ClubFormStepContext): StepView<ClubFormItem> {
   const v = routeStep(s, c.lines, { who: (item) => item.line, fresh: (item) => newView(item, c), existing: (item, fresh) => existingView(item, fresh, c) });
-  return v.kind === 'form' ? { ...v, ffk: { ...v.ffk, labels: LABELS } } : v;
+  // Les remarques de la fiche restent affichées sur une fiche déjà enregistrée (« ← Précédent »).
+  return v.kind === 'form' ? { ...v, ffk: { ...notesOf(s.plan.steps[s.index]!.ffk), ...v.ffk, labels: LABELS } } : v;
 }
 
 /** Fiches du club absentes de la fiche renvoyée (toutes disciplines) ; seule une fiche modifiable se coche (suppression entière). */

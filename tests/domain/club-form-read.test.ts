@@ -98,6 +98,36 @@ describe('readClubFormLines', () => {
     expect(r.merged).toEqual([{ label: 'MARTIN Léa', rows: [14, 16] }]);
   });
 
+  test('fusion : une ligne au sexe illisible rejoint la seule ligne du même nom', () => {
+    const r = readClubFormLines(
+      sheet([
+        ['MARTIN', 'Léa', 'Fille ?', 'Cadets', '52', 'Karaté', 'Non', '', 'Jiyu', '', '', '', '', ''],
+        ['DURAND', 'Hugo', 'M', 'Seniors', '70', 'Karaté', 'Non', '', 'Jiyu', '', '', '', '', ''],
+        ['MARTIN', 'Léa', 'F', 'Cadets', '', '', 'Oui', '2e kyu', '', '', '', '', '', ''],
+      ]),
+      grid,
+      TOL,
+    );
+    expect(r.items).toHaveLength(2);
+    expect(r.items[0]).toMatchObject({ order: 0, rows: [14, 16], line: { sex: 'F', combats: ['karate'], kata: true, grade: '2e kyu', weightKg: 52 } });
+    expect(r.items[0]!.notes).toContain('Sexe incompréhensible : « Fille ? ».');
+    expect(r.items[1]).toMatchObject({ order: 1, rows: [15] });
+    expect(r.merged).toEqual([{ label: 'MARTIN Léa', rows: [14, 16] }]);
+  });
+
+  test('fusion : sexe illisible et deux lignes du même nom de sexes différents : gardée à part', () => {
+    const r = readClubFormLines(
+      sheet([
+        ['MARTIN', 'Camille', 'F', 'Cadets', '52', 'Karaté', 'Non', '', 'Jiyu', '', '', '', '', ''],
+        ['MARTIN', 'Camille', 'M', 'Cadets', '60', 'Karaté', 'Non', '', 'Jiyu', '', '', '', '', ''],
+        ['MARTIN', 'Camille', '?', 'Cadets', '', '', 'Oui', '', '', '', '', '', '', ''],
+      ]),
+      grid,
+      TOL,
+    );
+    expect(r.items.map((i) => i.rows)).toEqual([[14], [15], [16]]);
+  });
+
   test('pré-accord vide ou Oui', () => {
     expect(readClubFormLines(sheet([], null), grid, TOL).header.preApproval).toBeNull();
     expect(readClubFormLines(sheet([], 'Oui'), grid, TOL).header.preApproval).toBe(true);

@@ -10,7 +10,7 @@ import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { ageBandChoices, applyChange, combatChoices, deriveAfterAgeChange, kataChoice, reclassChoices, rulesetChoices, toggleCombat, type LineFormContext } from './club-line/lineForm.js';
 import { FfkChoice } from './club-line/FfkChoice.js';
 import { FfkProgress } from './club-line/FfkProgress.js';
-import { ffkChoiceState, ffkValueAvailable, importValueText, withStartedDisciplines, type FfkFormStep } from './club-line/ffkStep.js';
+import { choiceValues, ffkChoiceState, ffkValueAvailable, hiddenConflicts, importValueText, type FfkFormStep } from './club-line/ffkStep.js';
 import { OneOf } from './PaperEntryTable.js';
 
 /** Suite d'un enregistrement : l'avis éventuel du serveur et la ligne enregistrée. */
@@ -125,10 +125,10 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
     const options = field === 'ageBandCode' ? ageBandChoices(form, ctx).map((o) => o.value)
       : field === 'weightClassId' ? classes.map((w) => w.id) : field === 'ruleset' ? rulesets.map(([r]) => r) : null;
     const labels = ffk.labels ?? { imported: 'FFK', saved: 'Votre fiche' };
-    // Disciplines commencées : le formulaire les garde cochées, les cases aussi.
-    const val = (v: string | null) => (field === 'disciplines' ? withStartedDisciplines(v, [...started]) : v);
-    const imported = val(diff.ffk)!;
-    const saved = val(diff.fiche);
+    // Disciplines commencées : le formulaire les garde cochées, les cases aussi ; plus rien à choisir si elles étaient la seule différence.
+    const values = choiceValues(diff, [...started]);
+    if (!values) return null;
+    const { imported, saved } = values;
     const pick = (value: string | null) => {
       set(fieldPatch(field, value));
       if (field === 'weightKg') setWeight(value ? kgText(Number(value)) : '');
@@ -140,6 +140,8 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
         onPick={(which) => pick(which === 'ffk' ? imported : saved)} />
     );
   };
+
+  const elsewhere = ffk ? hiddenConflicts(ffk.diffs, { reclassShown: hasCombat && otherChoices.length > 0, shobu: form.ruleset === 'shobu', kata: form.kata }) : [];
 
   const doDelete = () => line && (setTried(true), ops.remove({ fighterId: line.fighterId, version: line.version }).then(() => onClose(), onError));
 
@@ -272,6 +274,20 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
               </Paper>
             )}
             </Part>
+            {/* Différences dont le champ n'est pas affiché en ce moment : chaque conflit reste visible. */}
+            {elsewhere.length > 0 && (
+              <Paper withBorder p="md" radius="md" data-testid="import-hidden-conflicts" style={{ background: 'var(--sk-bg)' }}>
+                <Stack gap="sm">
+                  <Text fw={600} size="sm">Autres différences avec la fiche</Text>
+                  {elsewhere.map((field) => (
+                    <Stack key={field} gap={2}>
+                      <Text size="sm">{FIELD_LABELS[field]}</Text>
+                      {choice(field)}
+                    </Stack>
+                  ))}
+                </Stack>
+              </Paper>
+            )}
         </Stack>
         <ApiErrorAlert error={tried ? ops.error : null} />
         {ffk ? (

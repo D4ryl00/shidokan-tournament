@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { fieldValue } from '../../src/domain/club-form-plan.js';
 import { EMPTY_LINE as EMPTY } from '../../src/web/components/ClubLineForm.js';
-import { ffkBanner, ffkChoiceState, ffkValueAvailable, importValueText, withStartedDisciplines } from '../../src/web/components/club-line/ffkStep.js';
+import { choiceValues, ffkBanner, ffkChoiceState, ffkValueAvailable, hiddenConflicts, importValueText, withStartedDisciplines } from '../../src/web/components/club-line/ffkStep.js';
 
 const diff = { field: 'weightClassId' as const, ffk: 'benjamin:F:-40', fiche: 'benjamin:F:-45' };
 
@@ -61,4 +61,22 @@ test('withStartedDisciplines : remet les disciplines commencées dans la valeur'
   expect(withStartedDisciplines('karate', [])).toBe('karate');
   expect(withStartedDisciplines(null, ['kata', 'karate'])).toBe('karate,kata');
   expect(withStartedDisciplines(null, [])).toBeNull();
+});
+
+test('choiceValues : disciplines commencées remises des deux côtés ; plus de cases si les deux valeurs deviennent égales', () => {
+  const d = { field: 'disciplines' as const, ffk: 'karate', fiche: 'karate,kata' };
+  expect(choiceValues(d, [])).toEqual({ imported: 'karate', saved: 'karate,kata' });
+  // Seule différence : le kata, commencé, que la fiche renvoyée ne donne plus : il reste coché des deux côtés.
+  expect(choiceValues(d, ['kata'])).toBeNull();
+  expect(choiceValues({ field: 'weightKg', ffk: '38', fiche: '40' }, ['kata'])).toEqual({ imported: '38', saved: '40' });
+});
+
+test('hiddenConflicts : les différences dont le champ n’est pas affiché', () => {
+  const diffs = [{ field: 'prefs' as const }, { field: 'shobuKeep' as const }, { field: 'grade' as const }, { field: 'weightKg' as const }];
+  // Tout est affiché : reclassement visible, shobu, kata coché.
+  expect(hiddenConflicts(diffs, { reclassShown: true, shobu: true, kata: true })).toEqual([]);
+  // Encadré Reclassement masqué (pas d'autre discipline à proposer) : reclassement et priorité shobu ailleurs.
+  expect(hiddenConflicts(diffs, { reclassShown: false, shobu: true, kata: true })).toEqual(['prefs', 'shobuKeep']);
+  // Pas en shobu, kata décoché : priorité shobu et grade ailleurs.
+  expect(hiddenConflicts(diffs, { reclassShown: true, shobu: false, kata: false })).toEqual(['shobuKeep', 'grade']);
 });

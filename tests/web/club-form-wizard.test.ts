@@ -121,6 +121,13 @@ describe('clubFormStepView, fiche existante', () => {
     expect(v.ffk.banner).toBe('Fiche déjà créée. Une seule fiche par combattant : sous chaque différence, choisissez la valeur à garder.');
   });
 
+  test('verrouillée et sans discipline : encadré sans phrase de choix', () => {
+    const fresh = clubLine('f1', { combats: [], kata: false, ruleset: null }, { editable: false, partlyEditable: false, reason: 'Verrouillée.' });
+    const v = clubFormStepView(at([existing('f1', item())]), ctx([fresh]));
+    if (v.kind !== 'form') throw new Error('formulaire attendu');
+    expect(v.ffk.banner).toBe('Fiche déjà créée. Une seule fiche par combattant.');
+  });
+
   test('supprimée entre-temps : redevient un nouveau', () => {
     expect(clubFormStepView(at([existing('f1', item())]), ctx([]))).toMatchObject({ kind: 'form', line: null, ffk: { skipLabel: 'Ne pas l’ajouter', labels } });
   });
@@ -129,6 +136,14 @@ describe('clubFormStepView, fiche existante', () => {
     const now = clubLine('f1', { weightKg: 60 }, { version: 'v3' });
     const v = clubFormStepView(at([existing('f1', item())], { done: { 0: 'saved' }, saved: { 0: clubLine('f1') } }), ctx([now]));
     expect(v).toEqual({ kind: 'form', line: now, ffk: { initial: now.line, marks: [], diffs: [], banner: null, hints: {}, skipLabel: 'Laisser la fiche telle quelle', labels } });
+  });
+
+  test('déjà enregistrée : les remarques de la fiche restent affichées', () => {
+    const now = clubLine('f1', {}, { version: 'v3' });
+    const file = item({}, { rows: [27], notes: ['Catégorie d’âge incompréhensible : « 12 ans ».'] });
+    const v = clubFormStepView(at([existing('f1', file)], { done: { 0: 'saved' }, saved: { 0: clubLine('f1') } }), ctx([now]));
+    if (v.kind !== 'form') throw new Error('formulaire attendu');
+    expect(v.ffk.notes).toEqual({ title: 'Dans la fiche (ligne 27)', lines: ['Catégorie d’âge incompréhensible : « 12 ans ».'] });
   });
 });
 

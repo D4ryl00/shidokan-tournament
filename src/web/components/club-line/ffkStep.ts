@@ -79,3 +79,24 @@ export function withStartedDisciplines(value: string | null, started: Discipline
   const list = [...PREF_DISCIPLINES.filter((d) => parts.has(d)), ...(parts.has('kata') ? ['kata'] : [])];
   return list.length ? list.join(',') : null;
 }
+
+/**
+ * Valeurs des deux cases d'une différence. Disciplines : les disciplines commencées y sont remises des deux côtés (le formulaire
+ * les garde cochées) ; si les deux valeurs deviennent alors égales, il n'y a plus rien à choisir (`null`).
+ */
+export function choiceValues(diff: Pick<ImportDiff, 'field' | 'ffk' | 'fiche'>, started: DisciplineId[]): { imported: string; saved: string | null } | null {
+  if (diff.field !== 'disciplines') return { imported: diff.ffk, saved: diff.fiche };
+  const imported = withStartedDisciplines(diff.ffk, started)!;
+  const saved = withStartedDisciplines(diff.fiche, started);
+  return imported === saved ? null : { imported, saved };
+}
+
+/** Différences dont le champ n'est pas affiché en ce moment (encadré Reclassement masqué, pas en shobu, kata décoché) : montrées à part. */
+export function hiddenConflicts(diffs: Pick<ImportDiff, 'field'>[], shown: { reclassShown: boolean; shobu: boolean; kata: boolean }): ImportField[] {
+  const visible: Partial<Record<ImportField, boolean>> = {
+    prefs: shown.reclassShown,
+    shobuKeep: shown.reclassShown && shown.shobu,
+    grade: shown.kata,
+  };
+  return diffs.map((d) => d.field).filter((f) => visible[f] === false);
+}

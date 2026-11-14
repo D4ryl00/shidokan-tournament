@@ -205,6 +205,7 @@ export function weightWarning(
 }
 
 export const WEIGHT_MISSING = 'Poids actuel manquant (nécessaire pour la catégorie de poids).';
+const RULESET_MISSING = 'Règlement manquant (Jiyu ou Shobu).';
 
 /** Une ligne → une inscription par combat (dans l'ordre) puis le kata, avec le même numéro de ligne. */
 export function lineToRows(line: ClubFormLine, lineNumber: number, grid: CategoryGrid, tolerance: WeighInTolerance, closed: ReadonlySet<string> = new Set(), opts: LineOptions = {}): ClubFormRow[] {
@@ -223,7 +224,7 @@ export function lineToRows(line: ClubFormLine, lineNumber: number, grid: Categor
   for (const combat of line.combats) {
     const errors: string[] = [];
     const warnings: string[] = [];
-    if (!line.ruleset) errors.push('Règlement manquant (Jiyu ou Shobu).');
+    if (!line.ruleset) errors.push(RULESET_MISSING);
     // La catégorie choisie fait foi (validateRegistration vérifie l'âge et le sexe) ; à défaut, celle du poids actuel.
     let weightClassId: string | null = line.weightClassId;
     if (weightClassId === null && line.weightKg === null) errors.push(WEIGHT_MISSING);
@@ -453,7 +454,13 @@ export function parseClubForm(cells: unknown[][], grid: CategoryGrid, tolerance:
           // Une valeur illisible prime sur « manquant » (même ligne, un seul message par case).
           if (errors.length) return [{ line: r + 1, label: `${line.lastName} ${line.firstName}`.trim(), input: null, errors, warnings }];
           const out = lineToRows(line, r + 1, grid, tolerance, closed, opts);
-          out[0]!.warnings.unshift(...warnings);
+          // Règlement écrit mais illisible : « incompréhensible » remplace « manquant » sur les lignes de combat.
+          const unreadable = warnings.find((w) => w.startsWith('Règlement incompréhensible'));
+          for (const row of out) {
+            if (unreadable && row.errors.includes(RULESET_MISSING)) row.errors = row.errors.map((e) => (e === RULESET_MISSING ? unreadable : e));
+          }
+          const shown = unreadable && out.some((row) => row.errors.includes(unreadable)) ? warnings.filter((w) => w !== unreadable) : warnings;
+          out[0]!.warnings.unshift(...shown);
           return out;
         })()
       : warnClosed([parseRow(row, r + 1, grid)], closed);
