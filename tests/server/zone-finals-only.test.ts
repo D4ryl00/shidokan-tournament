@@ -48,7 +48,7 @@ describe('zone réservée aux finales', () => {
   });
 
   test('aucune catégorie sur la zone réservée ; ses finales y passent dès que la catégorie est finie', async () => {
-    await call('PUT', '/zones', [{ name: 'Tatami 1' }, { name: 'Tatami 2' }, { name: 'Ring', finalsOnly: true }]);
+    await call('PUT', '/zones', [{ name: 'Ring', finalsOnly: true }, { name: 'Tatami 1' }, { name: 'Tatami 2' }]);
     const ringId = ((await call('GET', '/zones')).json() as Zone[]).find((z) => z.name === 'Ring')!.id;
     await register(4, { ageBandCode: 'cadet', weightClassId: 'cadet:F:-54' });
     await register(4, { ageBandCode: 'minime', weightClassId: 'minime:F:-45' });

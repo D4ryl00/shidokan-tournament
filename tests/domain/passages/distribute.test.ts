@@ -39,11 +39,17 @@ describe('répartition sur les zones', () => {
     expect(r.impossible).toEqual(['box']);
   });
 
-  test('zone réservée aux finales : aucune catégorie automatique, l’épinglage l’emporte', () => {
+  test('zone réservée aux finales : aucune catégorie automatique (même première et à vide)', () => {
     const ring: ZoneSpec = { id: 'ring', order: 0, disciplines: null, finalsOnly: true };
-    const r = distributeZones([cat('a', 9), cat('b', 1), cat('pin', 2, { pinnedZoneId: 'ring' })], [ring, t1, t2]);
-    expect(zonesOf(r)).toEqual({ a: 't1', b: 't2', pin: 'ring' });
+    const r = distributeZones([cat('a', 9), cat('b', 1)], [ring, t1, t2]);
+    expect(zonesOf(r)).toEqual({ a: 't1', b: 't2' });
     expect(r.impossible).toEqual([]);
+  });
+
+  test('zone réservée aux finales : l’épinglage l’emporte', () => {
+    const ring: ZoneSpec = { id: 'ring', order: 0, disciplines: null, finalsOnly: true };
+    const r = distributeZones([cat('a', 9), cat('pin', 2, { pinnedZoneId: 'ring' })], [ring, t1, t2]);
+    expect(zonesOf(r)).toEqual({ a: 't1', pin: 'ring' });
   });
 
   test('discipline accueillie seulement par une zone réservée : impossible', () => {
