@@ -14,6 +14,7 @@ import type { CategoryGrid, DisciplineId, Ruleset, Sex } from '../domain/types.j
 import type { LadderProgress, LadderRow, PlanChoice, PlanMove } from '../domain/replacement/plan.js';
 import type { ClubChoice } from './components/club-picker/choice.js';
 import type { FfkPdfRead } from '../domain/ffk-pdf-plan.js';
+import type { ClubFormRead } from '../domain/club-form-read.js';
 import { fetchPlanStream } from './planStream.js';
 import { queriesAfterCompetitionPatch } from './settingsPatch.js';
 import { applyRulesView, type RulesView } from '../domain/replacement/rules.js';
@@ -182,8 +183,7 @@ export function useDeleteRegistration(id: string) {
   });
 }
 
-async function upload<T>(url: string, file: File, clubId?: string): Promise<T> {
-  if (clubId) url += `?clubId=${encodeURIComponent(clubId)}`;
+async function upload<T>(url: string, file: File): Promise<T> {
   const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: await file.arrayBuffer() });
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string; issues?: string[] };
@@ -192,12 +192,23 @@ async function upload<T>(url: string, file: File, clubId?: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-export function usePreviewClubForm(id: string) {
-  return useMutation({
-    // `clubId` : le club de la compétition choisi quand le nom de la fiche n'en désigne aucun (les retraits sont alors calculés pour lui).
-    mutationFn: ({ file, clubId }: { file: File; clubId?: string }) => upload<ClubFormPreview>(`/api/competitions/${id}/club-forms/preview`, file, clubId),
+/** Fiche renvoyée par un club : en-tête, un combattant par ligne, lignes réunies (rien n'est écrit). */
+export const useReadClubForm = (competitionId: string) =>
+  useMutation<ClubFormRead, ApiError, File>({ mutationFn: (file) => upload<ClubFormRead>(`/api/competitions/${competitionId}/club-forms/read`, file) });
+
+/** Coordonnées gardées à l'étape « coordonnées » : écrites dans le club et dans sa fiche d'annuaire ; `expected` : le club tel qu'affiché. */
+export function useWriteClubFormHeader(competitionId: string, clubId: string) {
+  const qc = useQueryClient();
+  return useMutation<Club, ApiError, { values: ClubFormHeaderValues; expected: ClubFormHeaderValues }>({
+    mutationFn: (body) => api<Club>('POST', `/api/competitions/${competitionId}/clubs/${clubId}/club-form-header`, body),
+    // Refus compris (club changé entre-temps) : le club relu sert à refaire la comparaison.
+    onSettled: () => Promise.all(['clubs', 'club-changes', 'club-directory', 'directory-clubs'].map((k) => qc.invalidateQueries({ queryKey: [k] }))),
   });
 }
+export type ClubFormHeaderValues = Pick<Club, 'coachName' | 'coachPhone' | 'coachEmails' | 'preApproval'>;
+/** Un club de la compétition relu sur le serveur, sans le cache (une lecture en cours a pu commencer avant le changement). */
+export const fetchClub = async (competitionId: string, clubId: string): Promise<Club | undefined> =>
+  (await api<Club[]>('GET', `/api/competitions/${competitionId}/clubs`)).find((c) => c.id === clubId);
 
 /** `club` : le club de la compétition que désigne la fiche (nom, alias), ou null : l'organisateur le choisit. */
 export type ClubFormPreview = ClubFormParse & { club: Club | null; removals: { registrationId: string; label: string }[] };
@@ -215,15 +226,6 @@ export function useImportPaperEntry(id: string) {
   return useMutation({
     mutationFn: (entry: PaperEntry) =>
       api<{ club: Club; imported: number; replaced: number; skipped: number }>('POST', `/api/competitions/${id}/club-forms/entry/import`, entry),
-    onSuccess: invalidate,
-  });
-}
-
-export function useImportClubForm(id: string) {
-  const invalidate = useInvalidateRegistrations(id);
-  return useMutation({
-    mutationFn: ({ file, clubId }: { file: File; clubId?: string }) =>
-      upload<{ club: Club; imported: number; replaced: number; skipped: number }>(`/api/competitions/${id}/club-forms/import`, file, clubId),
     onSuccess: invalidate,
   });
 }
@@ -1231,7 +1233,8 @@ export const useSaveClubHeader = (token: string) =>
   useClubEntryMutation(token, (header: ClubEntryHeader) => api<ClubEntryView['club']>('PATCH', `/api/inscription/${token}/club`, header));
 /** Écriture d'une ligne de combattant : la même fenêtre sert au coach (lien) et à l'organisateur (écran Inscriptions). */
 export interface LineOps {
-  save(args: { fighterId: string | null; line: ClubFormLine; version: string | null; publicNameHidden: boolean }): Promise<ClubLine>;
+  /** `source` : origine des inscriptions créées (organisateur seulement ; `club_form` depuis une fiche renvoyée). */
+  save(args: { fighterId: string | null; line: ClubFormLine; version: string | null; publicNameHidden: boolean; source?: 'club_form' }): Promise<ClubLine>;
   remove(args: { fighterId: string; version: string }): Promise<void>;
   pending: boolean;
   error: Error | null;
@@ -1296,10 +1299,10 @@ export const useOrganiserLineOps = (competitionId: string, clubId: string): Line
   const qc = useQueryClient();
   const base = `/api/competitions/${competitionId}/clubs/${clubId}/lines`;
   return useLineOps({
-    save: ({ fighterId, line, version, publicNameHidden }) =>
+    save: ({ fighterId, line, version, publicNameHidden, source }) =>
       fighterId
-        ? api<ClubLine>('PUT', `${base}/${fighterId}`, { line, version, publicNameHidden })
-        : api<ClubLine>('POST', base, { line, publicNameHidden }),
+        ? api<ClubLine>('PUT', `${base}/${fighterId}`, { line, version, publicNameHidden, source })
+        : api<ClubLine>('POST', base, { line, publicNameHidden, source }),
     remove: ({ fighterId, version }) => api<void>('DELETE', `${base}/${fighterId}?version=${encodeURIComponent(version)}`),
   }, () => Promise.all(['registrations', 'clubs', 'club-lines'].map((key) => qc.invalidateQueries({ queryKey: [key, competitionId] }))));
 };

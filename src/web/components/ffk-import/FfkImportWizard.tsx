@@ -1,4 +1,4 @@
-import { Box, Button, Checkbox, FileButton, Group, Input, Loader, Modal, Paper, Select, Stack, Text, Title, UnstyledButton } from '@mantine/core';
+import { Box, Button, Checkbox, FileButton, Group, Input, Loader, Modal, Paper, Select, Stack, Text, Title } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
@@ -8,10 +8,10 @@ import { ApiError, RELOAD_STATUSES, type ClubEntryView, type ClubLine, type Line
 import { DISCIPLINE_OPTIONS, disciplineLabel, SEX_LABELS } from '../../labels.js';
 import { ApiErrorAlert } from '../ApiErrorAlert.js';
 import { ClubLineForm } from '../ClubLineForm.js';
-import { FfkProgress } from '../club-line/FfkProgress.js';
 import { FfkPdfSource } from './FfkPdfSource.js';
+import { HomonymScreen } from './HomonymScreen.js';
 import { listFr } from '../club-line/ffkStep.js';
-import { absentRows, count, disciplinesOf, sameSaved, startCounts, stepView, summaryText, wizardReducer, wizardSummary, type WizardState } from './wizard.js';
+import { absentRows, count, fighterName, sameSaved, startCounts, stepView, summaryText, wizardReducer, wizardSummary, type WizardState } from './wizard.js';
 
 export interface FfkImportWizardProps {
   opened: boolean;
@@ -39,8 +39,6 @@ export function FfkImportWizard(props: FfkImportWizardProps) {
   // Démonté à la fermeture : chaque ouverture repart du départ.
   return props.opened ? <Wizard {...props} /> : null;
 }
-
-const fighterName = (l: ClubLine) => `${l.line.lastName.toUpperCase()} ${l.line.firstName}`;
 
 function Wizard({ onClose, mode, read, lines, ops, multipleCombats, ageBands, weightClasses, closed, before, ready = true, onBeforeStart }: FfkImportWizardProps) {
   const mobile = useMediaQuery('(max-width: 600px)');
@@ -143,26 +141,10 @@ function Wizard({ onClose, mode, read, lines, ops, multipleCombats, ageBands, we
   const previous = state.index > 0 ? () => dispatch({ type: 'previous' }) : null;
 
   if (view.kind === 'homonym') {
-    const ageOf = (code: string | null) => ageBands.find((b) => b.code === code)?.label ?? code ?? '—';
     return (
-      <Modal opened onClose={() => onClose()} fullScreen={mobile} title="Plusieurs fiches portent ce nom : laquelle ?">
-        <Stack data-testid="ffk-homonym">
-          <FfkProgress {...progress} />
-          <Text size="sm">La FFK inscrit « {view.ffk.fullName} » ({SEX_LABELS[view.ffk.sex].toLowerCase()}, {view.ffk.raw.age}).</Text>
-          {view.candidates.map((l) => (
-            <UnstyledButton key={l.fighterId} data-testid="ffk-homonym-choice" onClick={() => dispatch({ type: 'resolve', fighterId: l.fighterId })}>
-              <Paper withBorder p="sm" radius="md">
-                <Text fw={700}>{fighterName(l)}</Text>
-                <Text size="sm" c="dimmed">{ageOf(l.line.ageBandCode)} · {listFr(disciplinesOf(l.line).map(disciplineLabel))}</Text>
-              </Paper>
-            </UnstyledButton>
-          ))}
-          <Group justify="space-between">
-            <Button variant="subtle" data-testid="ffk-homonym-new" onClick={() => dispatch({ type: 'resolve', fighterId: null })}>C’est un autre combattant</Button>
-            {previous && <Button variant="default" onClick={previous}>← Précédent</Button>}
-          </Group>
-        </Stack>
-      </Modal>
+      <HomonymScreen intro={`La FFK inscrit « ${view.ffk.fullName} » (${SEX_LABELS[view.ffk.sex].toLowerCase()}, ${view.ffk.raw.age}).`}
+        candidates={view.candidates} ageBands={ageBands} progress={progress} mobile={!!mobile}
+        onResolve={(fighterId) => dispatch({ type: 'resolve', fighterId })} onPrevious={previous} onClose={() => onClose()} />
     );
   }
 

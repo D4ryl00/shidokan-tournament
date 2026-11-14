@@ -328,20 +328,24 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
   },
   'fiche-club.importer': {
     title: '2. Importer une fiche renvoyée',
-    short: 'Choisissez le fichier renvoyé par un club, vérifiez l’aperçu, puis importez.',
+    short: 'Choisissez le club, puis le fichier qu’il vous a renvoyé : ses coordonnées et ses fiches se vérifient une à une.',
     details: [
       [
-        'L’aperçu montre chaque ligne : les lignes en erreur (rouge) ne seront pas importées, les remarques (orange) le seront.',
-        'Réimporter la fiche d’un club remplace les inscriptions de sa fiche précédente : l’aperçu liste celles qui seront retirées.',
-        'Une inscription d’une catégorie qui a déjà commencé n’est jamais retirée.',
+        'Le club n’est jamais reconnu d’après le nom écrit dans le fichier : choisissez-le (ses clubs, puis l’annuaire) ou « Ajouter un club », pré-rempli d’après la fiche si elle est déjà choisie. Le club d’une fiche de l’annuaire n’entre dans la compétition qu’à « Commencer ».',
+        'Choisissez ensuite le fichier (.ods, .xlsx, .xls ou .csv) : sa lecture n’écrit rien. Si le fichier est refusé, le message dit pourquoi (fiche modifiée, nom du club manquant…). Deux lignes pour le même combattant sont réunies en une seule fiche, et signalées.',
       ],
       [
-        'Étape « Club de la fiche » : si le nom du club écrit dans le fichier ne correspond à aucun club de la compétition, choisissez le club (ou ajoutez-le) avant de voir l’aperçu. Aucun club n’est créé d’après le nom du fichier.',
-        'Le club choisi n’entre dans la compétition qu’à « Importer ».',
-        'Les coordonnées renseignées dans le fichier (coach, téléphone, e-mails) sont ajoutées au club ; une case vide n’efface rien. Ce qui diffère de l’annuaire devient un changement à examiner : ouvrez « Comparer » pour le décider.',
+        'Si la fiche donne d’autres coordonnées que le club (coach, téléphone, e-mails, pré-accord du coach), une première étape les montre, la valeur de la fiche renvoyée choisie d’office. « Enregistrer · suivant » écrit ce que vous gardez dans le club et dans l’annuaire ; « Laisser tel quel » n’écrit rien.',
+        'Une case vide de la fiche ne change rien. Aucune adresse n’est retirée : les nouvelles s’ajoutent si leur case reste cochée. Le pré-accord ne vaut que pour cette compétition.',
       ],
-      'Si le fichier est refusé, le message dit pourquoi (fiche modifiée, nom du club manquant…).',
-      'Les fiches remplies avec l’ancien format (une ligne par inscription, catégorie de poids) sont toujours acceptées.',
+      [
+        'Le parcours montre ensuite une fiche à la fois : un combattant de la fiche renvoyée, nouveau ou face à sa fiche déjà enregistrée. Pour chaque fiche, vous l’enregistrez, la laissez telle quelle ou ne l’ajoutez pas.',
+        'Sous chaque différence, la valeur de la fiche renvoyée est choisie d’office et l’enregistrée reste à un clic. Tous les conflits sont montrés, y compris une discipline enregistrée qui manque dans la fiche (décochée d’office) et les valeurs confirmées par l’export FFK (case « Enregistré · confirmé FFK »).',
+        'Ce que la fiche n’a pas pu lire reste vide, avec la remarque de la ligne en tête de la fenêtre.',
+      ],
+      'Chaque fiche est enregistrée au fur et à mesure : si vous vous arrêtez au milieu, ce qui est fait reste fait. Réimporter la même fiche reprend là où vous en étiez, les fiches déjà à jour comptent comme faites.',
+      'À la fin, les combattants du club qui ne sont pas dans la fiche sont listés, cases décochées : cochez seulement ceux qui ne viendront pas, leur fiche est supprimée (toutes disciplines).',
+      'Les fiches remplies avec l’ancien format (une ligne par inscription, catégorie de poids) sont refusées : demandez au club de remplir le nouveau modèle.',
     ],
   },
   'fiche-club.pdf-ffk': {

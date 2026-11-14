@@ -145,6 +145,9 @@ export function summaryText(sum: ReturnType<typeof wizardSummary>, removed: { wi
   return `Import FFK : ${parts.join(' · ')}.`;
 }
 
+/** « DUPONT Léo ». */
+export const fighterName = (l: ClubLine) => `${l.line.lastName.toUpperCase()} ${l.line.firstName}`;
+
 /** Disciplines d'une fiche, dans l'ordre habituel. */
 export const disciplinesOf = (line: ClubFormLine): DisciplineId[] => (Object.keys(DISCIPLINES) as DisciplineId[]).filter((d) => hasDiscipline(line, d));
 
