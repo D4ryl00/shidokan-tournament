@@ -50,7 +50,7 @@ const ctx = (lines: ClubLine[], over: Partial<StepContext> = {}): StepContext =>
 
 type Step = Extract<WizardState, { stage: 'step' }>;
 type End = Extract<WizardState, { stage: 'end' }>;
-const run = (s: WizardState, ...actions: Parameters<typeof wizardReducer>[1][]) => actions.reduce(wizardReducer, s);
+const run = (s: WizardState, ...actions: Parameters<typeof wizardReducer<FfkFighter>>[1][]) => actions.reduce(wizardReducer, s);
 
 describe('wizardReducer', () => {
   test('start : première étape, ou la fin directement sans rien à revoir', () => {
