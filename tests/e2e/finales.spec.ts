@@ -116,3 +116,31 @@ test('onglet Finales : zone des finales, choix par catégorie gardés, session f
   await dialog.getByTestId('number-confirm').click();
   await expect(page.getByTestId('wave-state')).toHaveText('Lancée');
 });
+
+test('zone réservée aux finales : cochée dans Réglages, aucune catégorie dessus, choisie comme zone des finales', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe réservée finales');
+  await page.getByTestId('zone-add').click();
+  await page.getByTestId('zone-name').nth(2).fill('Ring');
+  await page.getByTestId('zone-finals-only').nth(2).check();
+  await page.getByTestId('settings-save').click();
+  await expect(page.getByText('Réglages enregistrés')).toBeVisible();
+  await page.reload();
+  await expect(page.getByTestId('zone-finals-only').nth(2)).toBeChecked();
+  await expect(page.getByTestId('zone-finals-only').nth(0)).not.toBeChecked();
+
+  for (let k = 0; k < 4; k++) {
+    await request.post(`/api/competitions/${id}/registrations`, {
+      data: { clubId: null, lastName: `RES${k}`, firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54', source: 'manual' },
+    });
+  }
+  await openTab(page, 'Combats');
+  const badge = page.getByTestId('schedule-category').first().getByTestId('schedule-zone');
+  await expect(badge).toBeVisible();
+  await expect(badge).not.toHaveValue(/Ring/);
+  await badge.click();
+  await expect(page.getByRole('option', { name: 'Ring (réservée aux finales)', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await openTab(page, 'Finales');
+  await chooseFinalsZone(page, 'Ring');
+});

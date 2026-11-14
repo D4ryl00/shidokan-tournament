@@ -61,7 +61,7 @@ export function CompetitionSettingsPage() {
   const { data: categories = [] } = useCategories(id);
   // `key` : identifiant d'affichage stable, y compris pour une zone pas encore enregistrée.
   // Disciplines accueillies : null = toutes.
-  const [zones, setZones] = useState<{ key: string; id?: string; name: string; disciplines: DisciplineId[] | null }[]>([]);
+  const [zones, setZones] = useState<{ key: string; id?: string; name: string; disciplines: DisciplineId[] | null; finalsOnly: boolean }[]>([]);
   const { data: passages } = usePassages(id);
   const [zoneErrors, setZoneErrors] = useState<string[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -104,7 +104,7 @@ export function CompetitionSettingsPage() {
     setS(next.settings);
   };
   const loadZones = (zs: NonNullable<typeof savedZones>) => {
-    const view = zs.map(({ id: zid, name, disciplines }) => ({ key: zid, id: zid, name, disciplines }));
+    const view = zs.map(({ id: zid, name, disciplines, finalsOnly }) => ({ key: zid, id: zid, name, disciplines, finalsOnly }));
     setZonesBase({ view: JSON.stringify(view), ids: zs.map((z) => z.id), from: zs });
     setZones(view);
   };
@@ -121,7 +121,7 @@ export function CompetitionSettingsPage() {
   // Zones vérifiées avant tout envoi, puis enregistrées en premier : une erreur n'enregistre rien d'autre.
   const save = () => {
     if (durationFields.invalid) return;
-    const input = zones.map(({ id: zid, name, disciplines }) => (zid ? { id: zid, name, disciplines } : { name, disciplines }));
+    const input = zones.map(({ id: zid, name, disciplines, finalsOnly }) => (zid ? { id: zid, name, disciplines, finalsOnly } : { name, disciplines, finalsOnly }));
     const errors = validateZones(input);
     setZoneErrors(errors);
     if (errors.length) return;
@@ -196,12 +196,14 @@ export function CompetitionSettingsPage() {
                 <Checkbox key={d} size="xs" label={DISCIPLINES[d].label} checked={z.disciplines === null || z.disciplines.includes(d)}
                   onChange={() => toggleDiscipline(z.key, d)} />
               ))}
+              <Checkbox size="xs" data-testid="zone-finals-only" label="Réservée aux finales" checked={z.finalsOnly}
+                onChange={(e) => { const finalsOnly = e.currentTarget.checked; setZones((zs) => zs.map((x) => (x.key === z.key ? { ...x, finalsOnly } : x))); }} />
             </Group>
             </Stack>
           ))}
           <Group>
             <Button variant="default" size="xs" data-testid="zone-add" disabled={zones.length >= ZONE_MAX}
-              onClick={() => setZones((zs) => [...zs, { key: crypto.randomUUID(), name: nextZoneName(zs.map((x) => x.name)), disciplines: null }])}>Ajouter une zone</Button>
+              onClick={() => setZones((zs) => [...zs, { key: crypto.randomUUID(), name: nextZoneName(zs.map((x) => x.name)), disciplines: null, finalsOnly: false }])}>Ajouter une zone</Button>
           </Group>
           {zoneErrors.length > 0 && (
             <Alert color="red" title="Zones de combat" data-testid="zone-errors">

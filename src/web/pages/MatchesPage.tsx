@@ -71,7 +71,7 @@ export function MatchesPage() {
   // Zone : automatique (répartie par l'app) ou épinglée à la main.
   const zoneOptions = (cid: string, launched: boolean) => {
     const auto = plan?.categories[cid]?.auto !== false ? zoneName(plan?.categories[cid]?.zoneId ?? null) : null;
-    return [{ value: '', label: auto ? `Automatique (${auto})` : 'Automatique', disabled: launched }, ...zones.map((z) => ({ value: z.id, label: z.name }))];
+    return [{ value: '', label: auto ? `Automatique (${auto})` : 'Automatique', disabled: launched }, ...zones.map((z) => ({ value: z.id, label: z.finalsOnly ? `${z.name} (réservée aux finales)` : z.name }))];
   };
   const passages = useMemo(() => (selected ? categoryPassages(plan, selected.id) : null), [plan, selected]);
 
