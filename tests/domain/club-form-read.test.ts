@@ -62,6 +62,26 @@ describe('readClubFormLines', () => {
     expect(r.items[0]!.notes).toContain('« Vétéran » sans numéro : placé en V1 (à corriger si besoin).');
   });
 
+  test('règlement illisible : remarque, ligne gardée', () => {
+    const r = readClubFormLines(sheet([['MARTIN', 'Léa', 'F', 'Cadets', '52', 'Karaté', 'Non', '', 'Kumite', '', '', '', '', '']]), grid, TOL);
+    expect(r.items[0]!.line.ruleset).toBeNull();
+    expect(r.items[0]!.notes).toContain('Règlement incompréhensible : « Kumite » (Jiyu ou Shobu).');
+  });
+
+  test('lignes sans nom : jamais fusionnées', () => {
+    const r = readClubFormLines(
+      sheet([
+        [null, null, 'F', 'Cadets', '52', 'Karaté', 'Non', '', 'Jiyu', '', '', '', '', ''],
+        [null, null, 'F', 'Cadets', '48', 'Karaté', 'Non', '', 'Jiyu', '', '', '', '', ''],
+      ]),
+      grid,
+      TOL,
+    );
+    expect(r.items).toHaveLength(2);
+    expect(r.items.map((i) => i.rows)).toEqual([[14], [15]]);
+    expect(r.merged).toEqual([]);
+  });
+
   test('fusion', () => {
     const r = readClubFormLines(
       sheet([

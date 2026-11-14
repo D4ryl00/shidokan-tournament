@@ -424,8 +424,12 @@ export interface HeaderValues {
   preApproval: boolean;
 }
 
+export const STALE_CLUB_HEADER = 'STALE_CLUB_HEADER';
+
 export class StaleClubHeaderError extends Error {
   readonly statusCode = 409;
+  /** Renvoyé dans `code` : l'étape ne se refait que pour ce refus-là. */
+  readonly reason = STALE_CLUB_HEADER;
   constructor() {
     super('Ce club vient de changer : rouvrez l’étape.');
   }

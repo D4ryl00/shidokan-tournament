@@ -137,6 +137,7 @@ test('coordonnées périmées : 409, club et annuaire inchangés', async () => {
   const res = await writeHeader(clubId, PAUL, { ...JEAN, coachPhone: '0699999999' });
   expect(res.statusCode).toBe(409);
   expect(res.json().error).toBe('Ce club vient de changer : rouvrez l’étape.');
+  expect(res.json().code).toBe('STALE_CLUB_HEADER');
   expect((await get<{ id: string }[]>(`${base}/clubs`)).find((c) => c.id === clubId)).toMatchObject(JEAN);
   expect(await directoryEntry(entryId)).toMatchObject({ coachName: 'Jean', coachPhone: '0600000000', coachEmails: ['jean@tani.example'] });
   expect((await writeHeader(clubId, PAUL, { ...JEAN, preApproval: true })).statusCode).toBe(409);
@@ -155,5 +156,6 @@ test('coordonnées : compétition passée → refusé, rien n’est écrit', asy
   const { id: clubId } = (await app.inject({ method: 'POST', url: `${past}/clubs`, payload: { name: 'Tani Dojo', ...JEAN } })).json() as { id: string };
   const res = await app.inject({ method: 'POST', url: `${past}/clubs/${clubId}/club-form-header`, payload: { values: PAUL, expected: JEAN } });
   expect(res.statusCode).toBe(409);
+  expect(res.json().code).toBeUndefined();
   expect((await get<{ id: string }[]>(`${past}/clubs`)).find((c) => c.id === clubId)).toMatchObject(JEAN);
 });

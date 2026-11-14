@@ -148,20 +148,28 @@ export interface HeaderDiff {
   newEmails: string[];
 }
 
-function textDiff(file: string | null, saved: string | null): { fiche: string; saved: string | null } | null {
+function textDiff(file: string | null, saved: string | null, same: (a: string, b: string) => boolean): { fiche: string; saved: string | null } | null {
   const f = file?.trim() ?? '';
   if (!f) return null;
   const s = saved?.trim() ?? '';
-  return f === s ? null : { fiche: f, saved };
+  return same(f, s) ? null : { fiche: f, saved };
 }
+
+const sameName = (a: string, b: string) => normalizeName(a) === normalizeName(b);
+/** Téléphones : mêmes chiffres, quelle que soit la mise en forme ; sans chiffre, le texte. */
+const samePhone = (a: string, b: string) => {
+  const da = a.replace(/\D/g, '');
+  const db = b.replace(/\D/g, '');
+  return da || db ? da === db : a === b;
+};
 
 export function clubHeaderDiff(
   file: ClubFormReadHeader,
   club: { coachName: string | null; coachPhone: string | null; coachEmails: string[]; preApproval: boolean },
 ): HeaderDiff {
   return {
-    coachName: textDiff(file.coachName, club.coachName),
-    coachPhone: textDiff(file.coachPhone, club.coachPhone),
+    coachName: textDiff(file.coachName, club.coachName, sameName),
+    coachPhone: textDiff(file.coachPhone, club.coachPhone, samePhone),
     preApproval: file.preApproval === null || file.preApproval === club.preApproval ? null : { fiche: file.preApproval, saved: club.preApproval },
     newEmails: cleanEmails(file.coachEmails).filter((e) => !club.coachEmails.some((x) => sameEmail(x, e))),
   };

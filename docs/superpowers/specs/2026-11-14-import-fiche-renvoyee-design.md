@@ -87,7 +87,10 @@ coordonnées.** Ce que vous gardez ici est écrit dans le club et dans l'annuair
   coup ; aucun changement « à comparer » n'est laissé (s'il y en avait un sur ce club, il est recalculé comme après « Comparer »).
   « Laisser tel quel » : rien n'est écrit. « Précédent » depuis la 1re fiche de combattant y revient.
 - Comparaison faite avec les valeurs du club dans la compétition (celles de la Fiche club). Club ajouté à l'instant par « Ajouter
-  un club » (déjà pré-rempli d'après la fiche) ou sans différence : étape sautée.
+  un club » (déjà pré-rempli d'après la fiche) ou sans différence : étape sautée. Un club ajouté à l'instant peut tout de même
+  voir l'étape quand le pré-accord de la fiche diffère du sien (il n'est pas dans l'annuaire) : seul ce champ est alors montré.
+- Comparaison : téléphone sur les chiffres seuls, coach sans casse ni accents ; égaux ainsi, pas de différence (les valeurs
+  écrites restent telles qu'affichées).
 
 ### 6.3 Une fiche à la fois
 
@@ -187,7 +190,10 @@ Comparaison pure (club du moment, en-tête de la fiche) → différences coach /
 - Coordonnées : `POST /api/competitions/:id/clubs/:clubId/club-form-header` (JSON coach, téléphone, e-mails, pré-accord, version
   de la fiche d'annuaire) : écrit le club **et** la fiche d'annuaire par les fonctions existantes de l'annuaire et des
   changements (`updateDirectoryEntry`, `writeClubValues`, recalcul des changements des autres compétitions de cette fiche), avec
-  leurs contrôles (version de la fiche d'annuaire, compétition gérée ailleurs…). Club sans fiche d'annuaire : le club seul.
+  leurs contrôles (compétition gérée ailleurs…). La route vérifie que le club a encore les valeurs que l'étape affichait
+  (`expected`), et non la version de la fiche d'annuaire ; ce refus renvoie le code `STALE_CLUB_HEADER` (l'étape se refait sur
+  le club relu), tout autre refus s'affiche dans l'étape. Seuls les champs qui ont changé arrivent dans l'annuaire. Club sans
+  fiche d'annuaire : le club seul.
 - Écritures des fiches : routes existantes des lignes de l'organisateur (`/clubs/:clubId/lines`). Elles acceptent une origine
   facultative « fiche club » : une inscription **créée** par ce parcours a l'origine « Fiche club » (pas « sur place », qui
   s'affiche en orange dans Inscriptions) ; une inscription existante garde la sienne (`upsertFighterRegistration`).

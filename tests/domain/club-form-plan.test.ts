@@ -152,6 +152,13 @@ describe('clubHeaderDiff', () => {
     expect(d).toEqual({ coachName: null, coachPhone: null, preApproval: null, newEmails: [] });
     expect(hasHeaderDiff(d)).toBe(false);
   });
+  test('téléphone sur les chiffres, coach sur le nom normalisé', () => {
+    const c = { coachName: 'Paul Évrard', coachPhone: '06 12 34 56 78', coachEmails: [], preApproval: false };
+    const d = clubHeaderDiff({ club: 'X', coachName: 'paul  evrard', coachPhone: '06.12.34.56.78', coachEmails: [], preApproval: null }, c);
+    expect(d).toEqual({ coachName: null, coachPhone: null, preApproval: null, newEmails: [] });
+    const d2 = clubHeaderDiff({ club: 'X', coachName: 'Paul Évrard', coachPhone: '06.12.34.56.79', coachEmails: [], preApproval: null }, c);
+    expect(d2.coachPhone).toEqual({ fiche: '06.12.34.56.79', saved: '06 12 34 56 78' });
+  });
   test('différences', () => {
     const d = clubHeaderDiff({ club: 'X', coachName: 'Pierre', coachPhone: '0611', coachEmails: [], preApproval: true }, club);
     expect(d).toEqual({ coachName: { fiche: 'Pierre', saved: 'Paul' }, coachPhone: { fiche: '0611', saved: '0600' }, preApproval: { fiche: true, saved: false }, newEmails: [] });

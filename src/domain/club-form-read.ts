@@ -71,7 +71,9 @@ export function readClubFormLines(cells: unknown[][], grid: CategoryGrid, tolera
     const { line, warnings, errors } = cellsToLine(row, grid, triathlonColumn, secondCombatColumn);
     const notes = [...errors, ...warnings];
     if (/^VETERANS?$/.test(normalizeName(text(row[3])))) notes.push('« Vétéran » sans numéro : placé en V1 (à corriger si besoin).');
-    const key = `${normalizeName(`${line.lastName} ${line.firstName}`)}|${line.sex ?? ''}`;
+    // Une ligne sans nom n'est jamais fusionnée : chacune reste son propre combattant.
+    const name = normalizeName(`${line.lastName} ${line.firstName}`);
+    const key = name ? `${name}|${line.sex ?? ''}` : `#${r}`;
     const group = groups.get(key) ?? { rows: [], lines: [], notes: [] };
     group.rows.push(r + 1);
     group.lines.push(line);

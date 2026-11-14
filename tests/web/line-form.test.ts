@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import type { ClubFormLine } from '../../src/domain/club-form.js';
 import { entryKey } from '../../src/domain/closed-categories.js';
-import { ageBandChoices, applyChange, combatChoices, kataChoice, reclassChoices, rulesetChoices, toggleCombat, type LineFormContext } from '../../src/web/components/club-line/lineForm.js';
+import { ageBandChoices, applyChange, combatChoices, deriveAfterAgeChange, kataChoice, reclassChoices, rulesetChoices, toggleCombat, type LineFormContext } from '../../src/web/components/club-line/lineForm.js';
 
 const bands = [
   { code: 'cadet', label: 'Cadets', ages: '14 à 15 ans', isMinor: true },
@@ -95,4 +95,22 @@ test('ticking a combat clears a ruleset that is no longer offered, and its shobu
   // Aucun règlement commun : rien n'est proposé.
   const none = ctx({ closed: new Set([shut('senior', 'karate', 'jiyu'), shut('senior', 'shido-boxing', 'shobu')]) });
   expect(rulesetChoices({ ...blank, combats: ['karate', 'shido-boxing'] }, none)).toEqual([]);
+});
+
+test('fiche renvoyée : tranche choisie → catégorie de poids déduite du poids, Jiyu pour un mineur', () => {
+  const cls = [{ id: 'c-open', ageBandCode: 'cadet', sex: 'F' as const, label: '+54', maxKg: null }, ...classes, { id: 'c-48', ageBandCode: 'cadet', sex: 'F' as const, label: '-48', maxKg: 48 }];
+  const c = ctx({ weightClasses: cls });
+  const line: ClubFormLine = { ...blank, ageBandCode: null, weightClassId: null, weightKg: 52, combats: ['karate'] };
+  const patch = { ageBandCode: 'cadet' };
+  const out = deriveAfterAgeChange(applyChange(line, patch, c), patch, c);
+  expect(out).toMatchObject({ weightClassId: 'c-54', ruleset: 'jiyu' });
+  // Senior : catégorie déduite, mais pas de Jiyu imposé.
+  const senior = { ageBandCode: 'senior' };
+  expect(deriveAfterAgeChange(applyChange(line, senior, c), senior, c)).toMatchObject({ weightClassId: 's-60', ruleset: null });
+  // Sans combat, sans poids, catégorie ou règlement déjà choisis, ou autre champ modifié : rien.
+  expect(deriveAfterAgeChange(applyChange({ ...line, combats: [] }, patch, c), patch, c)).toMatchObject({ weightClassId: null, ruleset: null });
+  expect(deriveAfterAgeChange(applyChange({ ...line, weightKg: null }, patch, c), patch, c).weightClassId).toBeNull();
+  expect(deriveAfterAgeChange({ ...line, ageBandCode: 'cadet', ruleset: 'shobu' }, patch, c).ruleset).toBe('shobu');
+  const other = { grade: 'x' };
+  expect(deriveAfterAgeChange({ ...line, ageBandCode: 'cadet' }, other, c).weightClassId).toBeNull();
 });

@@ -292,6 +292,7 @@ export function cellsToLine(row: unknown[], grid: CategoryGrid, triathlonColumn:
     if (n === '1' || n === '2' || n === '3') prefs[d] = Number(n) as PrefRank;
     else if (n) warnings.push(`Ordre de reclassement « ${n} » ignoré (1, 2 ou 3).`);
   }
+  if (text(rulesetCell) && !rulesetFromLabel(rulesetCell)) warnings.push(`Règlement incompréhensible : « ${text(rulesetCell)} » (Jiyu ou Shobu).`);
   const keep = normalizeName(text(keepCell));
   // « Autre discipline » (ou « changer de discipline ») contient « discipline » mais veut dire l'inverse de l'ancien « La discipline » : à tester d'abord.
   const shobuKeep = !keep ? null : keep.includes('JIYU') ? 'discipline' : /AUTRE|CHANGER|REGLE/.test(keep) || keep === '1' ? 'ruleset' : keep.includes('DISCIPLINE') || keep === '2' ? 'discipline' : null;

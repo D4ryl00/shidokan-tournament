@@ -1,5 +1,6 @@
 import { PREF_DISCIPLINES, orderedPrefs, tidyReclass, type ClubFormLine, type CombatDiscipline, type PrefDiscipline } from '../../../domain/club-form.js';
 import { entryKey } from '../../../domain/closed-categories.js';
+import { pickWeightClass } from '../../../domain/weights.js';
 import { DISCIPLINES } from '../../../domain/disciplines.js';
 import type { DisciplineId, Ruleset } from '../../../domain/types.js';
 import type { ClubEntryView } from '../../api.js';
@@ -113,4 +114,22 @@ export function applyChange(form: ClubFormLine, patch: Partial<ClubFormLine>, ct
   if (next.kata && !allowed('kata', null)) next.kata = false;
   next.prefs = Object.fromEntries(orderedPrefs(next.prefs).filter((d) => allowed(d, 'jiyu') || allowed(d, 'shobu')).map((d, i) => [d, i + 1]));
   return tidyReclass(next);
+}
+
+/**
+ * Fiche renvoyée, ligne à compléter : une fois la tranche d'âge (ou le sexe) choisie, la catégorie de poids se déduit du poids
+ * (sans tolérance) et un mineur qui combat sans règlement passe en Jiyu. Ne joue que si la tranche ou le sexe vient de changer.
+ */
+export function deriveAfterAgeChange(next: ClubFormLine, patch: Partial<ClubFormLine>, ctx: LineFormContext): ClubFormLine {
+  if (patch.ageBandCode === undefined && patch.sex === undefined) return next;
+  if (!next.combats.length) return next;
+  const out = { ...next };
+  if (out.weightClassId === null && out.weightKg !== null) {
+    const classes = ctx.weightClasses
+      .filter((w) => w.ageBandCode === out.ageBandCode && w.sex === out.sex)
+      .sort((a, b) => (a.maxKg ?? Infinity) - (b.maxKg ?? Infinity));
+    out.weightClassId = pickWeightClass(classes, out.weightKg, 0)?.id ?? null;
+  }
+  if (out.ruleset === null && ctx.ageBands.find((b) => b.code === out.ageBandCode)?.isMinor) out.ruleset = 'jiyu';
+  return tidyReclass(out);
 }

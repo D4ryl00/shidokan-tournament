@@ -7,7 +7,7 @@ import { DISCIPLINES } from '../../domain/disciplines.js';
 import type { DisciplineId } from '../../domain/types.js';
 import { ApiError, RELOAD_STATUSES, type ClubEntryView, type ClubLine, type LineOps } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
-import { ageBandChoices, applyChange, combatChoices, kataChoice, reclassChoices, rulesetChoices, toggleCombat, type LineFormContext } from './club-line/lineForm.js';
+import { ageBandChoices, applyChange, combatChoices, deriveAfterAgeChange, kataChoice, reclassChoices, rulesetChoices, toggleCombat, type LineFormContext } from './club-line/lineForm.js';
 import { FfkChoice } from './club-line/FfkChoice.js';
 import { FfkProgress } from './club-line/FfkProgress.js';
 import { ffkChoiceState, ffkValueAvailable, importValueText, withStartedDisciplines, type FfkFormStep } from './club-line/ffkStep.js';
@@ -72,7 +72,8 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
   const saved = line?.line ?? null;
   // L'organisateur coche plusieurs combats même si le réglage ne le prévoit pas (un avis le rappelle).
   const ctx: LineFormContext = { mode, multipleCombats: multipleCombats || mode === 'organiser', closed: new Set(closed), ageBands, weightClasses, saved };
-  const set = (patch: Partial<ClubFormLine>) => setForm((f) => applyChange(f, patch, ctx));
+  // Import d'une fiche renvoyée : la tranche d'âge choisie déduit la catégorie de poids et le Jiyu d'un mineur.
+  const set = (patch: Partial<ClubFormLine>) => setForm((f) => { const next = applyChange(f, patch, ctx); return ffk ? deriveAfterAgeChange(next, patch, ctx) : next; });
   const band = ageBands.find((b) => b.code === form.ageBandCode);
   const classes = weightClasses.filter((w) => w.ageBandCode === form.ageBandCode && w.sex === form.sex);
   const warning = weightWarning(form, weightClasses);

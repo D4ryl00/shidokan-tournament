@@ -86,7 +86,7 @@ function ClubFormImport({ competitionId }: { competitionId: string }) {
         lines={clubId ? (clubLines.data ?? []) : []} ops={ops} club={clubs?.find((c) => c.id === clubId)} {...inputs}
         // « Ajouter un club » : pré-rempli d'après l'en-tête de la fiche, si elle est déjà lue.
         picker={(header) => (
-          <ClubPicker competitionId={competitionId} value={choice} onChange={(next) => { setChoice(next); setResolved(null); }}
+          <ClubPicker required competitionId={competitionId} value={choice} onChange={(next) => { setChoice(next); setResolved(null); }}
             prefill={header ? { name: header.club, coachName: header.coachName, coachPhone: header.coachPhone, coachEmails: header.coachEmails } : undefined} />
         )}
         ready={ready}

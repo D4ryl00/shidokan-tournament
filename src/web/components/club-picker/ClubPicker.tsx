@@ -10,13 +10,14 @@ import { choiceKey, parseChoice, type ClubChoice } from './choice.js';
  * Choisir n'écrit rien (le club d'une fiche se crée à l'enregistrement, voir `useResolveClub`) ; seule la fenêtre
  * « Ajouter un club » crée tout de suite la fiche et le club, puis le choisit.
  */
-export function ClubPicker({ competitionId, value, onChange, prefill, label = 'Club' }: {
+export function ClubPicker({ competitionId, value, onChange, prefill, label = 'Club', required }: {
   competitionId: string;
   value: ClubChoice | null;
   /** `club` : le club de la compétition quand le choix en est un (pour lire `preApproval`), `null` pour une fiche de l'annuaire. */
   onChange: (choice: ClubChoice | null, club: Club | null) => void;
   prefill?: Partial<DirectoryInput>;
   label?: string;
+  required?: boolean;
 }) {
   const { data: clubs = [] } = useClubs(competitionId);
   const { data: directory = [] } = useDirectoryClubs(competitionId);
@@ -34,7 +35,7 @@ export function ClubPicker({ competitionId, value, onChange, prefill, label = 'C
   return (
     <>
       <Group align="flex-end" gap="xs" wrap="nowrap" data-testid="club-picker">
-        <Select style={{ flex: 1 }} label={label} searchable clearable placeholder="Choisir un club" nothingFoundMessage="Aucun club" data={data}
+        <Select style={{ flex: 1 }} label={label} required={required} searchable clearable placeholder="Choisir un club" nothingFoundMessage="Aucun club" data={data}
           value={value ? choiceKey(value) : null} onChange={change} />
         <Button data-testid="club-picker-new" variant="default" onClick={() => { setOpens((n) => n + 1); setAdding(true); }}>Ajouter un club</Button>
       </Group>

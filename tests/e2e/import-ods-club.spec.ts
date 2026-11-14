@@ -69,6 +69,24 @@ test('fiche renvoyée sur un club existant : réimport, conflit, coordonnées, a
   expect(regs.find((r) => r.fighter.lastName === 'MARTIN' && r.discipline === 'karate')?.approxWeightKg).toBe(56);
 });
 
+test('fiche renvoyée : « Laisser tel quel » aux coordonnées n’écrit rien', async ({ page }) => {
+  const id = await createCompetition(page, 'Fiche renvoyée laisser tel quel');
+  await page.request.post(`/api/competitions/${id}/clubs`, { data: TANI });
+  const directoryOf = async () => ((await (await page.request.get('/api/club-directory')).json()) as { name: string; coachPhone: string | null; coachEmails: string[] }[]).find((c) => c.name === 'Tani Dojo');
+  const before = await directoryOf();
+  const header = [...HEADER];
+  header[2] = '0700000000';
+  header[3] = 'coach@tani.example; nouveau@tani.example';
+  await openStart(page, id, 'Tani Dojo', await filledForm(page, id, header, [LEA]));
+  await page.getByTestId('club-form-begin').click();
+  await expect(page.getByTestId('club-header-step')).toBeVisible();
+  await page.getByTestId('club-header-skip').click();
+  await expect(page.getByTestId('club-header-step')).toHaveCount(0);
+  const [club] = await clubsOf(page, id);
+  expect(club).toMatchObject({ coachName: TANI.coachName, coachPhone: TANI.coachPhone, coachEmails: TANI.coachEmails });
+  expect(await directoryOf()).toEqual(before);
+});
+
 test('fiche renvoyée sur un club vide : nouveaux enregistrés, un mineur sans règlement en Jiyu', async ({ page }) => {
   const id = await createCompetition(page, 'Fiche renvoyée club vide');
   await page.request.post(`/api/competitions/${id}/clubs`, { data: TANI });

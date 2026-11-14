@@ -49,7 +49,7 @@ export function ClubHeaderStep({ competitionId, club, header, progress, mobile, 
       preApproval,
     };
     write.mutateAsync({ values, expected: shown }).then(onDone, async (error: unknown) => {
-      if (!(error instanceof ApiError && error.status === 409)) return;
+      if (!(error instanceof ApiError && error.code === 'STALE_CLUB_HEADER')) return;
       notifications.show({ color: 'orange', message: error.message });
       // Relu sur le serveur : la comparaison se refait sur le club tel qu'il est devenu.
       const fresh = await fetchClub(competitionId, club.id).catch(() => undefined);
@@ -103,7 +103,7 @@ export function ClubHeaderStep({ competitionId, club, header, progress, mobile, 
               <Text size="xs" c="dimmed">Le pré-accord ne vaut que pour cette compétition (il n’est pas dans l’annuaire).</Text>
             </Stack>
           </Input.Wrapper>
-          <ApiErrorAlert error={write.error?.status === 409 ? null : write.error} />
+          <ApiErrorAlert error={write.error?.code === 'STALE_CLUB_HEADER' ? null : write.error} />
           <Group justify="space-between">
             <Button variant="subtle" color="gray" data-testid="club-header-skip" disabled={write.isPending} onClick={onDone}>Laisser tel quel</Button>
             <Button type="submit" data-testid="club-header-save" loading={write.isPending}>Enregistrer · suivant →</Button>
