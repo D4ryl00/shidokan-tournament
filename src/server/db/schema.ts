@@ -276,6 +276,8 @@ export const zones = sqliteTable('zones', {
   sortOrder: integer('sort_order').notNull(),
   /** Disciplines accueillies (JSON) ; null = toutes. */
   disciplinesJson: text('disciplines_json'),
+  /** Réservée aux finales : la répartition automatique ne lui donne aucune catégorie. */
+  finalsOnly: integer('finals_only', { mode: 'boolean' }).notNull().default(false),
   ...rowMeta(),
 });
 

@@ -5,6 +5,8 @@ export interface ZoneSpec {
   id: string;
   order: number;
   disciplines: DisciplineId[] | null;
+  /** Réservée aux finales : la répartition ne lui donne aucune catégorie (absent = faux). */
+  finalsOnly?: boolean;
 }
 export interface DistributionCategory {
   id: string;
@@ -38,7 +40,7 @@ export function distributeZones(cats: DistributionCategory[], zones: ZoneSpec[])
   }
   const rest = cats.filter((c) => !pinned.includes(c)).sort((a, b) => b.weight - a.weight || a.rank - b.rank);
   for (const c of rest) {
-    const allowed = zonesFor(c.discipline, zones);
+    const allowed = zonesFor(c.discipline, zones).filter((z) => !z.finalsOnly);
     if (allowed.length === 0) {
       zoneOf.set(c.id, null);
       impossible.push(c.id);

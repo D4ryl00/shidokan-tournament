@@ -1,0 +1,1 @@
+ALTER TABLE `zones` ADD `finals_only` integer DEFAULT false NOT NULL;

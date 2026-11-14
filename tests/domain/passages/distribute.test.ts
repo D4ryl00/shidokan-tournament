@@ -38,4 +38,18 @@ describe('répartition sur les zones', () => {
     expect(zonesOf(r)).toEqual({ box: null, lost: 't1' });
     expect(r.impossible).toEqual(['box']);
   });
+
+  test('zone réservée aux finales : aucune catégorie automatique, l’épinglage l’emporte', () => {
+    const ring: ZoneSpec = { id: 'ring', order: 0, disciplines: null, finalsOnly: true };
+    const r = distributeZones([cat('a', 9), cat('b', 1), cat('pin', 2, { pinnedZoneId: 'ring' })], [ring, t1, t2]);
+    expect(zonesOf(r)).toEqual({ a: 't1', b: 't2', pin: 'ring' });
+    expect(r.impossible).toEqual([]);
+  });
+
+  test('discipline accueillie seulement par une zone réservée : impossible', () => {
+    const ring: ZoneSpec = { id: 'ring', order: 1, disciplines: ['shido-boxing'], finalsOnly: true };
+    const r = distributeZones([cat('box', 3, { discipline: 'shido-boxing' })], [{ ...t1, disciplines: ['karate'] }, ring]);
+    expect(zonesOf(r)).toEqual({ box: null });
+    expect(r.impossible).toEqual(['box']);
+  });
 });

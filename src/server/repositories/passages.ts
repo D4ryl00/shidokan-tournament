@@ -96,7 +96,7 @@ export async function planInput(db: AppDb, competitionId: string, cats?: Categor
       playable: !!c.bracket && activeEntrantCount(c) >= 2,
       finals: finals.get(c.id) ?? { where: null, when: null },
     })),
-    zones: (await listZones(db, competitionId)).map((z) => ({ id: z.id, order: z.order, disciplines: z.disciplines })),
+    zones: (await listZones(db, competitionId)).map((z) => ({ id: z.id, order: z.order, disciplines: z.disciplines, finalsOnly: z.finalsOnly })),
     waves: await listWaves(db, competitionId),
     mode: competition.settings.passageOrder,
     frozen: loadFrozen(db, competitionId),

@@ -14,7 +14,7 @@ export async function listZones(db: AppDb, competitionId: string): Promise<Zone[
     .where(eq(zones.competitionId, competitionId))
     .orderBy(asc(zones.sortOrder))
     .all()
-    .map((z) => ({ id: z.id, name: z.name, order: z.sortOrder, disciplines: z.disciplinesJson ? (JSON.parse(z.disciplinesJson) as DisciplineId[]) : null }));
+    .map((z) => ({ id: z.id, name: z.name, order: z.sortOrder, disciplines: z.disciplinesJson ? (JSON.parse(z.disciplinesJson) as DisciplineId[]) : null, finalsOnly: z.finalsOnly }));
 }
 
 /**
@@ -54,8 +54,10 @@ export async function replaceZones(db: AppDb, competitionId: string, input: Zone
       const name = z.name.trim();
       // Disciplines omises : inchangées (toutes pour une nouvelle zone).
       const disciplines = z.disciplines === undefined ? {} : { disciplinesJson: z.disciplines ? JSON.stringify(z.disciplines) : null };
-      if (z.id && known.has(z.id)) t.update(zones).set({ name, sortOrder: order, ...disciplines }).where(eq(zones.id, z.id)).run();
-      else t.insert(zones).values({ id: crypto.randomUUID(), competitionId, name, sortOrder: order, ...disciplines }).run();
+      // Case « réservée aux finales » omise : inchangée (faux pour une nouvelle zone).
+      const finalsOnly = z.finalsOnly === undefined ? {} : { finalsOnly: z.finalsOnly };
+      if (z.id && known.has(z.id)) t.update(zones).set({ name, sortOrder: order, ...disciplines, ...finalsOnly }).where(eq(zones.id, z.id)).run();
+      else t.insert(zones).values({ id: crypto.randomUUID(), competitionId, name, sortOrder: order, ...disciplines, ...finalsOnly }).run();
     });
   });
   return listZones(db, competitionId);

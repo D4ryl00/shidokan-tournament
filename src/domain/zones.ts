@@ -8,6 +8,8 @@ export interface Zone {
   order: number;
   /** Disciplines accueillies ; null = toutes. */
   disciplines: DisciplineId[] | null;
+  /** Réservée aux finales : aucune catégorie de la répartition automatique. */
+  finalsOnly: boolean;
 }
 /** Zone telle qu'enregistrée par l'organisateur : sans identifiant, c'est une nouvelle zone ; l'ordre est le rang dans la liste. */
 export interface ZoneInput {
@@ -15,6 +17,8 @@ export interface ZoneInput {
   name: string;
   /** Omis : inchangé (toutes pour une nouvelle zone) ; null : toutes. */
   disciplines?: DisciplineId[] | null;
+  /** Omis : inchangé (faux pour une nouvelle zone). */
+  finalsOnly?: boolean;
 }
 
 export const ZONE_NAME_MAX = 40;
