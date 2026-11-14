@@ -205,7 +205,7 @@ export function CompetitionSettingsPage() {
                 onChange={(e) => { const finalsOnly = e.currentTarget.checked; setZones((zs) => zs.map((x) => (x.key === z.key ? { ...x, finalsOnly } : x))); }} />
               {z.finalsOnly && !savedFinalsOnly(z.id) && zoneMovable(z.id) > 0 && (
                 <Text size="xs" c="dimmed" data-testid="zone-finals-only-move">
-                  {zoneMovable(z.id)} catégorie{zoneMovable(z.id) > 1 ? 's' : ''} repartiront sur les autres zones à l’enregistrement.
+                  {zoneMovable(z.id)} catégorie{zoneMovable(z.id) > 1 ? 's' : ''} {zoneMovable(z.id) > 1 ? 'repartiront' : 'repartira'} sur les autres zones à l’enregistrement.
                 </Text>
               )}
             </Group>
