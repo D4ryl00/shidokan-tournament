@@ -436,7 +436,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Chaque changement s’enregistre tout de suite. Les numéros de passage qui en découlent sont donnés au figeage de la session (onglet Combats).',
       [
         '« Zone des finales » : une zone de la compétition, ou « Aucune ». Choisir une zone y met toutes les finales de la session ; « Aucune » : chaque finale reste sur la zone de sa catégorie.',
-        'Une zone cochée « Réservée aux finales » dans Réglages ne reçoit aucune catégorie : c’est la zone à choisir ici pour y jouer les finales.',
+        'Une zone cochée « Réservée aux finales » dans Réglages ne reçoit aucune catégorie de la répartition automatique : c’est la zone à choisir ici pour y jouer les finales.',
         'Où : « Sa zone » ou la zone des finales. Une catégorie qui se joue déjà sur la zone des finales est marquée « sur … » ; une discipline que la zone des finales n’accueille pas reste sur sa zone.',
         'Quand : « Dès que finie » (juste après le dernier combat de la catégorie) ou « Fin de session » (à la fin de la file de la zone, dans l’ordre des catégories).',
         '« Tout sur … », « Tout sur sa zone », « Tout dès que finie » et « Tout en fin de session » changent d’un coup toutes les catégories de la session ; une catégorie qui y arrive ensuite prend ce choix.',
@@ -680,7 +680,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Une zone où se déroule une catégorie déjà lancée ne peut pas être supprimée.',
         'Deux zones ne peuvent pas porter le même nom.',
         'Disciplines accueillies : par exemple, le shido-boxing cochée seulement sur le Ring. Une zone accueille au moins une discipline.',
-        'Réservée aux finales : l’app n’y répartit aucune catégorie (vous pouvez encore en épingler une à la main) ; choisissez-la ensuite comme zone des finales dans l’onglet Finales, ses finales « Dès que finie » y passent dès que leur catégorie est terminée. Les disciplines cochées disent quelles finales elle accepte.',
+        'Réservée aux finales : l’app n’y répartit aucune catégorie (vous pouvez encore en épingler une à la main) ; choisissez-la ensuite comme zone des finales dans l’onglet Finales, puis « Tout dès que finie » ; tant qu’aucune catégorie n’y est épinglée, chaque finale y passe dès que sa catégorie est terminée. Les disciplines cochées disent quelles finales elle accepte.',
       ],
       'L’app répartit les catégories de chaque session sur les zones qui accueillent leur discipline, en équilibrant le nombre de combats. Dans l’onglet Combats, vous pouvez épingler une catégorie sur une zone : ce choix l’emporte. Le nom de la zone est imprimé sur les tableaux.',
     ],

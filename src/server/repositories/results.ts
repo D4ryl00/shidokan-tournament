@@ -332,11 +332,11 @@ export async function schedule(db: AppDb, competitionId: string, waveId?: string
       const m = state.get(p.categoryId)?.matches.find((x) => x.id === p.matchId);
       return !!m && !m.bye && !m.playable && !m.result;
     }).length;
-  // Dans l'ordre des zones de la compétition ; une zone sans catégorie ni passage à elle (finales) n'apparaît pas.
+  // Dans l'ordre des zones de la compétition ; une zone sans catégorie, sans passage jouable ni combat en attente (finales) n'apparaît pas.
   return {
     zones: (await listZones(db, competitionId))
       .map((zone) => ({ zone, categories: (byZone.get(zone.id) ?? []).sort((a, b) => a.order - b.order), queue: queue(zone.id), waitingOtherZones: waitingOtherZones(zone.id) }))
-      .filter((t) => t.categories.length > 0 || t.queue.length > 0),
+      .filter((t) => t.categories.length > 0 || t.queue.length > 0 || t.waitingOtherZones > 0),
     unassigned,
     impossible: plan.impossible,
   };

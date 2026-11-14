@@ -68,6 +68,9 @@ export function CompetitionSettingsPage() {
   // Catégories de la zone, épinglées ou réparties automatiquement.
   const zoneCategories = (zid?: string) => (zid ? categories.filter((c) => (passages?.categories[c.id]?.zoneId ?? c.zoneId) === zid) : []);
   const zoneLocked = (zid?: string) => zoneCategories(zid).some((c) => c.status === 'started' || c.status === 'finished');
+  // Case « Réservée aux finales » telle qu'enregistrée ; les catégories à déplacer à l'enregistrement : celles qui ne sont ni épinglées ni lancées.
+  const savedFinalsOnly = (zid?: string) => !!savedZones?.find((x) => x.id === zid)?.finalsOnly;
+  const zoneMovable = (zid?: string) => zoneCategories(zid).filter((c) => !c.zoneId && c.status !== 'started' && c.status !== 'finished').length;
   const removeZone = (key: string) => {
     setZones((zs) => zs.filter((z) => z.key !== key));
     setDeleting(null);
@@ -196,8 +199,15 @@ export function CompetitionSettingsPage() {
                 <Checkbox key={d} size="xs" label={DISCIPLINES[d].label} checked={z.disciplines === null || z.disciplines.includes(d)}
                   onChange={() => toggleDiscipline(z.key, d)} />
               ))}
+            </Group>
+            <Group gap="sm">
               <Checkbox size="xs" data-testid="zone-finals-only" label="Réservée aux finales" checked={z.finalsOnly}
                 onChange={(e) => { const finalsOnly = e.currentTarget.checked; setZones((zs) => zs.map((x) => (x.key === z.key ? { ...x, finalsOnly } : x))); }} />
+              {z.finalsOnly && !savedFinalsOnly(z.id) && zoneMovable(z.id) > 0 && (
+                <Text size="xs" c="dimmed" data-testid="zone-finals-only-move">
+                  {zoneMovable(z.id)} catégorie{zoneMovable(z.id) > 1 ? 's' : ''} repartiront sur les autres zones à l’enregistrement.
+                </Text>
+              )}
             </Group>
             </Stack>
           ))}
@@ -231,7 +241,7 @@ export function CompetitionSettingsPage() {
           <Text size="sm" data-testid="finals-tab-link">
             Les finales se règlent session par session dans l’<Anchor component={Link} to={`/competitions/${id}/finales`}>onglet Finales</Anchor>.
           </Text>
-          <ZonesImpossibleAlert impossible={passages?.impossible} />
+          <ZonesImpossibleAlert impossible={passages?.impossible} reservedZones={!!savedZones?.some((z) => z.finalsOnly)} />
         </Stack>
       </SectionCard>
 

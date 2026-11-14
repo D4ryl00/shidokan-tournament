@@ -70,6 +70,22 @@ describe('zone réservée aux finales', () => {
     expect(after.impossible).toEqual([]);
   });
 
+  test('Combats : la zone réservée apparaît avant sa première finale jouable, file vide et combats en attente', async () => {
+    await call('PUT', '/zones', [{ name: 'Ring', finalsOnly: true }, { name: 'Tatami 1' }, { name: 'Tatami 2' }]);
+    const zones = (await call('GET', '/zones')).json() as Zone[];
+    const ringId = zones.find((z) => z.name === 'Ring')!.id;
+    await register(4, { ageBandCode: 'cadet', weightClassId: 'cadet:F:-54' });
+    await register(4, { ageBandCode: 'minime', weightClassId: 'minime:F:-45' });
+    await setFinalsZone(db, id, null, ringId);
+    await setCategoryFinals(db, id, null, { where: 'finals', when: 'ready' });
+    const board = (await call('GET', '/schedule')).json() as { zones: { zone: { id: string }; queue: unknown[]; categories: unknown[]; waitingOtherZones: number }[] };
+    const ring = board.zones.find((z) => z.zone.id === ringId);
+    expect(ring).toBeDefined();
+    expect(ring!.categories).toEqual([]);
+    expect(ring!.queue).toEqual([]);
+    expect(ring!.waitingOtherZones).toBeGreaterThan(0);
+  });
+
   test('paquet d’avant sans finals_only : zones à faux', async () => {
     await call('PUT', '/zones', [{ name: 'Tatami 1' }, { name: 'Ring', finalsOnly: true }]);
     const pkg = buildPackage(db, id, { handOver: false, role: 'local' });

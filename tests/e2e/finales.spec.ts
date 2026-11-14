@@ -136,6 +136,7 @@ test('zone réservée aux finales : cochée dans Réglages, aucune catégorie de
   await openTab(page, 'Combats');
   const badge = page.getByTestId('schedule-category').first().getByTestId('schedule-zone');
   await expect(badge).toBeVisible();
+  await expect(badge).toHaveValue(/Automatique \(Tatami [12]\)/);
   await expect(badge).not.toHaveValue(/Ring/);
   await badge.click();
   await expect(page.getByRole('option', { name: 'Ring (réservée aux finales)', exact: true })).toBeVisible();

@@ -147,7 +147,7 @@ export function MatchesPage() {
       {zoneOnly && !imposed && zones.length > 0 && !zones.some((z) => z.id === zoneOnly) && (
         <Alert color="orange">La zone de ce poste n’existe plus : choisissez un autre poste en haut de l’écran.</Alert>
       )}
-      <ZonesImpossibleAlert impossible={schedule?.impossible} />
+      <ZonesImpossibleAlert impossible={schedule?.impossible} reservedZones={zones.some((z) => z.finalsOnly)} />
       {!zoneOnly && <ZoneCards competitionId={id} />}
       <Grid gutter="md">
         {listOpen && (
