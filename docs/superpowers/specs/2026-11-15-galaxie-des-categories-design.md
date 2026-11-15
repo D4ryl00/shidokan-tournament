@@ -171,7 +171,7 @@ d'un combattant :
 | `weight` | même discipline, règlement, sexe et tranche ; classes de poids voisines dans la grille (`neighborWeightClasses`) |
 | `ageUp` / `ageDown` | même discipline, règlement et sexe ; tranches reliées par un lien `C` de la grille (`ageLinks`), dans un sens ou dans l'autre ; poids le plus proche (en kg) de l'autre tranche |
 | `seniorsVeterans` | comme ci-dessus avec un lien `D` (seniors ↔ vétérans) |
-| `minorsAdults` | s'ajoute aux règles d'âge quand le lien traverse mineurs / adultes (`crossesMinorAdult`) |
+| `minorsAdults` | **remplace** les règles d'âge quand le lien traverse mineurs / adultes (`crossesMinorAdult`), comme `ruleProfile` du moteur |
 | `discipline` | même sexe, tranche et poids le plus proche ; deux disciplines « dans les préférences » (`DISCIPLINES[x].inPreferences` : pas le kata) |
 | `shobuToJiyu` | même discipline, sexe, tranche et poids ; shobu ↔ jiyu |
 | `mixSexes` | même discipline, règlement et tranche, sexes différents, tranche cochée dans `mixSexes.ageBandCodes` ; poids le plus proche |
@@ -191,8 +191,11 @@ d'un combattant :
   coûte d'aller d'ici à là ») ; si ce sens est interdit (jiyu → shobu), on prend l'autre sens (quelqu'un de là-bas peut
   venir ici). Avec « Tous les liens » et sans sélection, le meilleur des deux sens. Désactiver `ageDown` laisse le lien
   entre deux tranches (via `ageUp` vu de la plus jeune).
-- Catégorie regroupée (plusieurs tranches ou plusieurs poids) : reliée si l'une de ses cases l'est. Tableau libre : aucun
-  lien. 💡
+- Catégorie regroupée (plusieurs tranches ou plusieurs poids) : au départ, reliée si l'une de ses cases l'est ; à
+  l'arrivée, l'âge doit convenir à **toutes** ses tranches (`ageCompatibility`). Arriver dans une catégorie mixte (sexe
+  `X`) demande toujours « mélange filles / garçons ». « Poids voisin » ne s'ajoute pas à une autre règle (comme
+  `ruleProfile`) ; entre deux tranches, c'est « tranche au-dessus » dès que monter est permis. Tableau libre : aucun
+  lien. 💡 (précisé à la relecture de la tâche 1 : le moteur fait foi)
 - Ce sont des voisinages **de principe** : « autre discipline » ne dit pas si ce combattant-là l'a dans ses
   préférences, et l'écart de poids réel n'est pas vérifié. La confirmation du déplacement (§4.3) montre, comme dans la
   planche, les règles enfreintes. 💡 À dire dans l'aide de la vue.
