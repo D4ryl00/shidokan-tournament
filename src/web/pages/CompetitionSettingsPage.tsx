@@ -316,6 +316,8 @@ export function CompetitionSettingsPage() {
           {AGE_GROUPS.map((g) => {
             const t = s.schedule.groups[g];
             const setT = (patch: Partial<CombatTiming>) => set({ schedule: { ...s.schedule, groups: { ...s.schedule.groups, [g]: { ...t, ...patch } } } });
+            const f = s.schedule.finals[g];
+            const setF = (next: CombatTiming | null) => set({ schedule: { ...s.schedule, finals: { ...s.schedule.finals, [g]: next } } });
             return (
               <Stack key={g} gap={4} data-testid={`durations-${g}`}>
                 <Text fw={600} size="sm">{GROUP_LABELS[g]}</Text>
@@ -328,6 +330,19 @@ export function CompetitionSettingsPage() {
                   <MinSecInput label="Repos" min={0} max={600} value={t.restSec} onChange={(restSec) => setT({ restSec })} onValidityChange={durationFields.field(`${g}.rest`)} />
                   <MinSecInput label="Prolongation" min={0} max={900} value={t.overtimeSec} onChange={(overtimeSec) => setT({ overtimeSec })} onValidityChange={durationFields.field(`${g}.overtime`)} />
                 </SimpleGrid>
+                <Select label="Finale" size="sm" data-testid={`durations-finals-${g}`} allowDeselect={false}
+                  data={[{ value: 'same', label: 'Comme les autres combats' }, { value: 'other', label: 'Autre' }]}
+                  value={f ? 'other' : 'same'}
+                  onChange={(v) => v && setF(v === 'other' ? { ...t, rounds: g === 'triathlon' ? s.triathlonRounds : t.rounds } : null)} />
+                {f && (
+                  <SimpleGrid cols={{ base: 2, sm: 4 }} data-testid={`durations-finals-fields-${g}`}>
+                    <NumberInput label="Rounds" size="sm" min={1} max={12} allowDecimal={false} clampBehavior="none" value={f.rounds}
+                      onChange={(v) => setF({ ...f, rounds: typeof v === 'number' ? v : 0 })} />
+                    <MinSecInput label="Round" min={10} max={900} value={f.roundSec} onChange={(roundSec) => setF({ ...f, roundSec })} onValidityChange={durationFields.field(`${g}.finals.round`)} />
+                    <MinSecInput label="Repos" min={0} max={600} value={f.restSec} onChange={(restSec) => setF({ ...f, restSec })} onValidityChange={durationFields.field(`${g}.finals.rest`)} />
+                    <MinSecInput label="Prolongation" min={0} max={900} value={f.overtimeSec} onChange={(overtimeSec) => setF({ ...f, overtimeSec })} onValidityChange={durationFields.field(`${g}.finals.overtime`)} />
+                  </SimpleGrid>
+                )}
               </Stack>
             );
           })}

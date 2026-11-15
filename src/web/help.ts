@@ -741,7 +741,8 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Rounds, durée d’un round, repos et prolongation par groupe d’âge, pour estimer les heures de passage.',
     details: [
       'Durée d’un combat = rounds × durée d’un round + (rounds − 1) × repos. Le temps de changement s’ajoute après chaque passage ; la prolongation n’est pas comptée.',
-      'Un tableau peut avoir sa propre durée, et un combat la sienne (onglet Tableaux) : le combat l’emporte sur le tableau, qui l’emporte sur la compétition.',
+      'Finale : par groupe d’âge, une autre durée pour les combats pour la 1re place (finale, grande finale, combat unique, manches d’un meilleur des trois ; pas la petite finale). Un tableau avec sa propre durée a aussi sa ligne Finale.',
+      'Un tableau peut avoir sa propre durée, et un combat la sienne (onglet Tableaux) : le combat l’emporte sur le tableau (et sa finale), qui l’emporte sur la compétition (et sa finale).',
       'Les spectateurs voient des heures estimées (« vers 14:30 ») : elles se recalculent au fil des résultats.',
     ],
   },
