@@ -24,6 +24,8 @@ export type AgeGroup = (typeof AGE_GROUPS)[number];
 
 export interface ScheduleSettings {
   groups: Record<AgeGroup, CombatTiming>;
+  /** Durée propre aux finales, par groupe d'âge (null : les finales suivent le groupe). */
+  finals: Record<AgeGroup, CombatTiming | null>;
   /** Temps de changement, ajouté après chaque passage. */
   changeoverSec: number;
   kataPassageSec: number;
@@ -39,6 +41,14 @@ export const scheduleSettingsSchema = z
         triathlon: combatTimingSchema,
       })
       .strict(),
+    finals: z
+      .object({
+        under14: combatTimingSchema.nullable(),
+        youth: combatTimingSchema.nullable(),
+        adults: combatTimingSchema.nullable(),
+        triathlon: combatTimingSchema.nullable(),
+      })
+      .strict(),
     changeoverSec: z.number().int().min(0).max(900),
     kataPassageSec: z.number().int().min(10).max(900),
   })
@@ -47,12 +57,15 @@ export const scheduleSettingsSchema = z
 /** Durées propres à un tableau : pour tout le tableau, et/ou combat par combat. */
 export interface CategoryDurations {
   bracket: CombatTiming | null;
+  /** Durée des finales de ce tableau (null : elles suivent le tableau, sinon la compétition). */
+  finals: CombatTiming | null;
   matches: Record<string, CombatTiming>;
 }
 
 export const categoryDurationsSchema = z
   .object({
     bracket: combatTimingSchema.nullable(),
+    finals: combatTimingSchema.nullable().default(null),
     matches: z.record(z.string(), combatTimingSchema).refine((m) => Object.keys(m).length <= 200, 'trop de combats'),
   })
   .strict();
@@ -66,6 +79,7 @@ export function defaultSchedule(): ScheduleSettings {
       adults: { rounds: 2, roundSec: 120, restSec: 60, overtimeSec: 120 },
       triathlon: { rounds: 3, roundSec: 120, restSec: 60, overtimeSec: 120 },
     },
+    finals: { under14: null, youth: null, adults: null, triathlon: null },
     changeoverSec: 60,
     kataPassageSec: 90,
   };
@@ -85,16 +99,28 @@ export function ageGroupOf(key: CategoryKey, grid: CategoryGrid): AgeGroup {
   return 'adults';
 }
 
-/** Durée retenue pour un combat : combat, puis tableau, puis compétition. */
+/** Aucune durée propre au tableau (ni tableau, ni finales, ni combat). */
+export function isEmptyDurations(d: CategoryDurations): boolean {
+  return d.bracket === null && d.finals === null && Object.keys(d.matches).length === 0;
+}
+
+/**
+ * Durée retenue pour un combat : le combat, puis (finale) les finales du tableau, puis le tableau,
+ * puis (finale) les finales de la compétition, puis le groupe d'âge. La finale de compétition du
+ * triathlon garde ses propres rounds ; seul le groupe suit le réglage `triathlonRounds`.
+ */
 export function combatTiming(
   s: { schedule: ScheduleSettings; triathlonRounds: 3 | 6 },
   group: AgeGroup,
   durations: CategoryDurations | null,
   matchId: string | null,
+  isFinal: boolean,
 ): CombatTiming {
   const own = matchId !== null ? durations?.matches[matchId] : undefined;
   if (own) return own;
+  if (isFinal && durations?.finals) return durations.finals;
   if (durations?.bracket) return durations.bracket;
+  if (isFinal && s.schedule.finals[group]) return s.schedule.finals[group];
   const base = s.schedule.groups[group];
   return group === 'triathlon' ? { ...base, rounds: s.triathlonRounds } : base;
 }
