@@ -192,7 +192,7 @@ test('finale prête avant son tour : signalée même au-delà des 6 premiers ; s
 type QItem = {
   number: number; categoryId: string; matchId: string | null; kataPart: string | null; early: boolean;
   a: string | null; aClub: string | null; bClub: string | null;
-  lineup: { round: string; list: { name: string; club: string; done: boolean }[] } | null;
+  lineup: { round: string; list: { name: string; club: string; done: boolean; absent: boolean }[] } | null;
 };
 const queueOf = async (zoneId: string) =>
   ((await call('GET', '/schedule')).json() as { zones: { zone: { id: string }; queue: QItem[] }[] }).zones.find((t) => t.zone.id === zoneId)?.queue ?? [];
@@ -215,6 +215,9 @@ test('finale de kata prête avant son tour : early', async () => {
   // Tour 1 pas encore noté : finalistes inconnus, la finale n'est pas prête.
   const waiting = (await queueOf(t1!.id)).find((x) => x.categoryId === kata.id && x.kataPart === 'finale');
   expect(waiting).toMatchObject({ early: false, lineup: null });
+  const tour1 = (await queueOf(t1!.id)).find((x) => x.categoryId === kata.id && x.kataPart === 'tour1')!;
+  expect(tour1.lineup!.round).toBe('tour1');
+  expect(tour1.lineup!.list).toHaveLength(3);
   for (const [i, r] of k.entries()) await call('PUT', `/categories/${kata.id}/kata/${r.id}/round1`, { notes: [9 - i, 9 - i, 9 - i] });
   const q = await queueOf(t1!.id);
   const fin = (await queueOf(t2!.id)).concat(q).find((x) => x.categoryId === kata.id && x.kataPart === 'finale');
@@ -273,6 +276,39 @@ test('file des zones : égalité pour la 2e place de finale, pas de liste tant q
   const b = await block();
   expect(b.lineup!.round).toBe('finale');
   expect(b.lineup!.list.map((x) => x.name.split(' ')[0]).sort()).toEqual([nameOf(k[0]!.id), nameOf(k[2]!.id)].sort());
+});
+
+test('file des zones : kata à 2, la finale d’emblée dans l’ordre du tirage', async () => {
+  const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
+  const k = [await reg({ discipline: 'kata', ruleset: null, weightClassId: null }), await reg({ discipline: 'kata', ruleset: null, weightClassId: null })];
+  const kata = (await cats()).find((c) => c.registrationIds.includes(k[0]!.id))! as Cat & { bracket: { order: string[] } };
+  await call('PATCH', `/categories/${kata.id}`, { zoneId: t1!.id });
+  const names = (await call('GET', '/registrations')).json() as { id: string; fighter: { lastName: string } }[];
+  const b = (await queueOf(t1!.id)).find((x) => x.categoryId === kata.id)!;
+  expect(b.lineup!.round).toBe('finale');
+  expect(b.lineup!.list.map((x) => x.name.split(' ')[0])).toEqual(kata.bracket.order.map((id) => names.find((r) => r.id === id)!.fighter.lastName));
+});
+
+test('file des zones : absent tardif d’un kata commencé, signalé, et la finale attend ses notes comme la feuille de notation', async () => {
+  const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
+  const k: { id: string; fighterId: string }[] = [];
+  for (let i = 0; i < 3; i++) k.push(await reg({ discipline: 'kata', ruleset: null, weightClassId: null }) as { id: string; fighterId: string });
+  const kata = (await cats()).find((c) => c.registrationIds.includes(k[0]!.id))! as Cat & { bracket: { order: string[] } };
+  await call('PATCH', `/categories/${kata.id}`, { zoneId: t1!.id });
+  const [first, gone, last] = kata.bracket.order;
+  await call('PUT', `/categories/${kata.id}/kata/${first}/round1`, { notes: [9, 9, 9] });
+  expect((await call('PUT', `/weigh-in/${k.find((r) => r.id === gone)!.fighterId}`, { presence: 'absent' })).statusCode).toBe(204);
+  const block = async () => (await queueOf(t1!.id)).find((x) => x.categoryId === kata.id)!;
+  let b = await block();
+  expect(b.lineup!.round).toBe('tour1');
+  expect(b.lineup!.list.map((x) => x.absent)).toEqual([false, true, false]);
+  await call('PUT', `/categories/${kata.id}/kata/${last}/round1`, { notes: [8, 8, 8] });
+  b = await block();
+  expect(b.lineup!.round).toBe('tour1'); // la feuille n'ouvre pas la finale tant que l'absent n'a pas de notes
+  await call('PUT', `/categories/${kata.id}/kata/${gone}/round1`, { notes: [0, 0, 0] });
+  b = await block();
+  expect(b.lineup!.round).toBe('finale');
+  expect(b.lineup!.list).toHaveLength(2);
 });
 
 test('finale prête : pas « early » si le seul passage non joué plus petit est d’une autre session', async () => {

@@ -32,7 +32,7 @@ test('ordre de passage : zones par discipline, kata d’abord, numéros imprimé
   // Le numéro de passage est porté par data-number (affiché en grand pour le passage à l'appel).
   await expect(tatami.getByTestId('next-kata')).toHaveAttribute('data-number', '1');
   await expect(tatami.getByTestId('next-kata')).toContainText('Kata');
-  await expect(tatami.getByTestId('next-kata')).toContainText('3 katakas');
+  await expect(tatami.getByTestId('next-kata')).toContainText('kataka 1 sur 3');
   // Kata à l'appel : le kataka qui se présente et celui qui se prépare, avec leur club ; les combats suivants avec les clubs.
   await expect(tatami.getByTestId('kata-current')).toContainText('Se présente :');
   await expect(tatami.getByTestId('kata-current')).toContainText(' · ');

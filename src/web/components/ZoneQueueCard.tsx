@@ -1,8 +1,8 @@
 import { Box, Button, Card, Group, Stack, Text, Title } from '@mantine/core';
 import { plural } from '../../domain/plural.js';
 import type { Zone } from '../../domain/zones.js';
-import type { QueueItem } from '../api.js';
-import { kataCall, type KatakaSlot } from '../kataCall.js';
+import type { QueueItem, QueueKataka } from '../api.js';
+import { kataCall } from '../kataCall.js';
 import { HelpButton } from './Help.js';
 import { StatusBadge } from './ui/StatusBadge.js';
 
@@ -25,13 +25,16 @@ const kataTitle = (q: QueueItem) => {
   return `${label(q)}${round === 'tour1' ? ' (tour 1)' : round === 'finale' ? ' (finale)' : ''}`;
 };
 
+/** Nombre de katakas du bloc : ceux du tour joué sans les absents tardifs (la finale : 2), sinon tous les inscrits. */
+const katakaCount = (q: QueueItem) => plural(q.lineup ? q.lineup.list.filter((k) => !k.absent).length : (q.katakas ?? 0), 'kataka');
+
 /** « NOM Prénom · Club » : le club en plus discret. */
 const Who = ({ name, club, c }: { name: string | null; club: string | null; c: string }) => (
   <>{name}{club && <Text span fw={400} c={c} style={{ fontSize: '0.8em' }}> · {club}</Text>}</>
 );
 
 /** Kataka appelé (« Se présente ») ou prévenu (« Se prépare ») d'un bloc de kata à l'appel. */
-const Called = ({ k, what, big }: { k: KatakaSlot; what: string; big?: boolean }) => (
+const Called = ({ k, what, big }: { k: QueueKataka; what: string; big?: boolean }) => (
   <Box data-testid={big ? 'kata-current' : 'kata-next'}>
     <Text size="xs" c="var(--sk-hero-sub)">{what}</Text>
     <Text fz={big ? 'xl' : 'md'} fw={big ? 700 : 600} lh={1.2}><Who name={k.name} club={k.club} c="var(--sk-hero-sub)" /></Text>
@@ -56,7 +59,7 @@ function OnCall({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem)
             <>
               <Text fz="xl" fw={700} lh={1.2}>{kataTitle(q)}</Text>
               <Text size="sm" c="var(--sk-hero-sub)">
-                {plural(q.katakas ?? 0, 'kataka')}{call && call.current && ` · kataka ${call.position} sur ${call.total}`}
+                {call?.current ? `kataka ${call.position} sur ${call.total}` : katakaCount(q)}
               </Text>
               {call?.current && <Called k={call.current} what="Se présente :" big />}
               {call?.next && <Called k={call.next} what="Se prépare :" />}
@@ -94,11 +97,13 @@ function Next({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem) =
         <Stack gap={0} style={{ minWidth: 0 }}>
           {kata ? (
             <>
-              <Text size="sm" fw={600}>{kataTitle(q)} <Text span size="sm" c="dimmed" fw={400} style={{ whiteSpace: 'nowrap' }}>· {plural(q.katakas ?? 0, 'kataka')}</Text></Text>
+              <Text size="sm" fw={600}>{kataTitle(q)} <Text span size="sm" c="dimmed" fw={400} style={{ whiteSpace: 'nowrap' }}>· {katakaCount(q)}</Text></Text>
               {q.lineup && (
                 <Box component="ol" data-testid="kata-lineup" m={0} pl={20}>
                   {q.lineup.list.map((k, i) => (
-                    <Text component="li" key={i} size="sm" fw={600} td={k.done ? 'line-through' : undefined}><Who name={k.name} club={k.club} c="dimmed" /></Text>
+                    <Text component="li" key={i} size="sm" fw={600} c={k.absent ? 'dimmed' : undefined} td={k.done ? 'line-through' : undefined}>
+                      <Who name={k.name} club={k.club} c="dimmed" />{k.absent && <Text span size="xs" c="dimmed" fw={400}> · absent</Text>}
+                    </Text>
                   ))}
                 </Box>
               )}

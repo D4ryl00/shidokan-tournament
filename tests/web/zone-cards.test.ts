@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, test } from 'vitest';
 import type { Zone } from '../../src/domain/zones.js';
-import type { QueueItem } from '../../src/web/api.js';
+import type { QueueItem, QueueKataka } from '../../src/web/api.js';
 import { ZoneQueueCard } from '../../src/web/components/ZoneQueueCard.js';
 import { zoneCardsVisible } from '../../src/web/components/ZoneCards.js';
 
@@ -34,11 +34,11 @@ test('sans ligne early : pas de mention', () => {
   expect(render([item(1, false), item(2, false)])).not.toContain('queue-early');
 });
 
-const kata = (number: number, list: { name: string; club: string; done: boolean }[], round: 'tour1' | 'finale' = 'tour1'): QueueItem => ({
+const kata = (number: number, list: QueueKataka[], round: 'tour1' | 'finale' = 'tour1'): QueueItem => ({
   number, categoryId: 'k', categoryLabel: 'Kata Filles', matchId: null, a: null, b: null, aClub: null, bClub: null, katakas: list.length, kataPart: null,
   lineup: { round, list }, noRest: false, held: false, early: false,
 });
-const k = (name: string, club: string, done = false) => ({ name, club, done });
+const k = (name: string, club: string, done = false, absent = false) => ({ name, club, done, absent });
 
 test('combat : le club de chaque combattant, à l’appel et sur les lignes suivantes', () => {
   const html = render([item(1, false), item(2, false)]);
@@ -50,6 +50,7 @@ test('kata à l’appel : « kataka i sur n », se présente, se prépare', () =
   const html = render([kata(1, [k('DUPONT Léa', 'Shidokan Paris', true), k('MOREAU Inès', 'KC Nantes'), k('GIRARD Zoé', 'Shidokan Lyon')])]);
   expect(html).toContain('Kata Filles (tour 1)');
   expect(html).toContain('kataka 2 sur 3');
+  expect(html).not.toContain('3 katakas'); // un seul compte dans l'en-tête
   const current = html.slice(html.indexOf('kata-current'), html.indexOf('kata-next'));
   expect(current).toContain('Se présente :');
   expect(current).toContain('MOREAU Inès');
@@ -76,4 +77,21 @@ test('kata dans « Ensuite » : tous les katakas avec leur club, dans l’ordre'
   expect(lineup.indexOf('DUPONT Léa')).toBeLessThan(lineup.indexOf('MOREAU Inès'));
   expect(lineup).toContain('Shidokan Paris');
   expect(lineup).toContain('KC Nantes');
+});
+
+test('kata : les comptes portent sur les katakas du tour, sans les absents ; un absent tardif est signalé et jamais appelé', () => {
+  const list = [k('DUPONT Léa', 'Shidokan Paris', true), k('MOREAU Inès', 'KC Nantes', false, true), k('GIRARD Zoé', 'Shidokan Lyon')];
+  const onCall = render([{ ...kata(1, list), katakas: 8 }]);
+  expect(onCall).toContain('kataka 2 sur 2');
+  expect(onCall.slice(onCall.indexOf('kata-current'))).toContain('GIRARD Zoé');
+  expect(onCall).not.toContain('Se prépare');
+  const next = render([item(1, false), { ...kata(2, list, 'finale'), katakas: 8 }]);
+  expect(next).toContain('2 katakas');
+  expect(next).not.toContain('8 katakas');
+  const lineup = next.slice(next.indexOf('kata-lineup'));
+  expect(lineup.slice(lineup.indexOf('MOREAU Inès'), lineup.indexOf('GIRARD Zoé'))).toContain('absent');
+});
+
+test('kata à l’appel, tous notés : le nombre de katakas du tour reste affiché', () => {
+  expect(render([{ ...kata(1, [k('DUPONT Léa', 'Shidokan Paris', true), k('MOREAU Inès', 'KC Nantes', true)], 'finale'), katakas: 8 }])).toContain('2 katakas');
 });

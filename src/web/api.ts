@@ -28,7 +28,6 @@ import type { WaveSchedule } from '../domain/schedule/types.js';
 import type { CategoryDurations } from '../domain/schedule/durations.js';
 
 import { ApiError, TAB_ID } from './apiError.js';
-import type { KatakaSlot } from './kataCall.js';
 export { ApiError, TAB_ID };
 
 /** `rev` : révision de la donnée telle que l'écran l'a lue (null : elle n'existait pas) ; envoyée en If-Match. */
@@ -703,6 +702,13 @@ const registrationRevOf = (qc: QC, id: string, rid: string) => qc.getQueryData<R
 const resultsOf = (qc: QC, id: string, cid: string) => qc.getQueryData<CategoryResultsData>(['results', id, cid]);
 
 /** Passage de la file d'une zone : un combat, ou un bloc de kata (`matchId` null). */
+/** Kataka d'un bloc de kata de la file : `done` noté dans ce tour, `absent` absent tardif (affiché, jamais appelé). */
+export interface QueueKataka {
+  name: string;
+  club: string;
+  done: boolean;
+  absent: boolean;
+}
 export interface QueueItem {
   number: number;
   categoryId: string;
@@ -716,7 +722,7 @@ export interface QueueItem {
   katakas: number | null;
   kataPart: 'tour1' | 'finale' | null;
   /** Bloc de kata : katakas présents du tour joué, dans l'ordre de passage ; null pour un combat ou une finale aux finalistes inconnus. */
-  lineup: { round: 'tour1' | 'finale'; list: KatakaSlot[] } | null;
+  lineup: { round: 'tour1' | 'finale'; list: QueueKataka[] } | null;
   noRest: boolean;
   /** Une saisie d'une zone autonome est à trancher dans cette catégorie. */
   held: boolean;
