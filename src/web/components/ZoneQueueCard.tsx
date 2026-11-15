@@ -98,7 +98,7 @@ function Next({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem) =
               {q.lineup && (
                 <Box component="ol" data-testid="kata-lineup" m={0} pl={20}>
                   {q.lineup.list.map((k, i) => (
-                    <Text component="li" key={i} size="xs" fw={600} td={k.done ? 'line-through' : undefined}><Who name={k.name} club={k.club} c="dimmed" /></Text>
+                    <Text component="li" key={i} size="sm" fw={600} td={k.done ? 'line-through' : undefined}><Who name={k.name} club={k.club} c="dimmed" /></Text>
                   ))}
                 </Box>
               )}
