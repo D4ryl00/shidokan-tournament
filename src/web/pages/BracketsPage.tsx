@@ -16,6 +16,7 @@ import { usePoste } from '../poste.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { useUndoToast } from '../components/history/undoToast.js';
 import { HistoryPanel, HISTORY_DRAWER_WIDTH } from '../components/history/HistoryPanel.js';
+import { GalaxyView } from '../components/galaxy/GalaxyView.js';
 import { Planche, type SeeRequest } from '../components/planche/Planche.js';
 import type { Scope } from '../components/planche/PlancheToolbar.js';
 import { CategoryDurations } from '../components/CategoryDurations.js';
@@ -31,10 +32,12 @@ export const STATUS_LABELS: Record<CategoryStatus, string> = { provisional: 'Pro
 /** Sens de l'état d'une catégorie : provisoire (neutre), prête (action), lancée (en cours), terminée (succès). */
 export const STATUS_TONES: Record<CategoryStatus, Tone> = { provisional: 'neutral', ready: 'accent', started: 'warn', finished: 'ok' };
 
-type View = 'planche' | 'liste';
+type View = 'planche' | 'liste' | 'galaxie';
+const VIEWS: View[] = ['planche', 'liste', 'galaxie'];
+const isView = (v: string | null): v is View => VIEWS.includes(v as View);
 const VIEW_KEY = 'tableaux-vue';
 function storedView(): View {
-  try { return localStorage.getItem(VIEW_KEY) === 'liste' ? 'liste' : 'planche'; } catch { return 'planche'; }
+  try { const v = localStorage.getItem(VIEW_KEY); return isView(v) ? v : 'planche'; } catch { return 'planche'; }
 }
 
 export function useEntrantInfo(competitionId: string): Map<string, EntrantInfo> {
@@ -76,22 +79,26 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   const [confirmUnlock, setConfirmUnlock] = useState(false);
   // Avec des vagues : les catégories de la vague choisie (la même que dans les autres onglets), celles en attente, ou toutes.
   const { waves, waveId, select } = useSelectedWave(id);
-  // `?vue=planche|liste` et `?voir=id1,id2` (lien « Voir » de la Réaffectation) ne sont lus qu'au chargement.
+  // `?vue=planche|liste|galaxie`, `?voir=id1,id2` (lien « Voir » de la Réaffectation) et `?categorie=id` (« Voir dans la
+  // galaxie ») ne sont lus qu'au chargement.
   const [, setParams] = useSearchParams();
-  const first = useRef<{ vue: string | null; voir: string[] } | null>(null);
+  const first = useRef<{ vue: string | null; voir: string[]; categorie: string | null } | null>(null);
   if (first.current === null) {
     const q = new URLSearchParams(window.location.search);
-    first.current = { vue: q.get('vue'), voir: (q.get('voir') ?? '').split(',').filter(Boolean) };
+    first.current = { vue: q.get('vue'), voir: (q.get('voir') ?? '').split(',').filter(Boolean), categorie: q.get('categorie') };
   }
-  const [view, setView] = useState<View>(() => (first.current!.vue === 'planche' || first.current!.vue === 'liste' ? first.current!.vue : first.current!.voir.length ? 'planche' : storedView()));
+  const [view, setView] = useState<View>(() => (isView(first.current!.vue) ? first.current!.vue : first.current!.voir.length ? 'planche' : storedView()));
   const [scope, setScope] = useState<Scope>(first.current.voir.length ? 'all' : 'wave');
   const [seeRequest, setSeeRequest] = useState<SeeRequest | null>(first.current.voir.length ? { ids: first.current.voir, n: 1 } : null);
+  // Catégorie du lien « Voir dans la galaxie » : valable pour la première ouverture de la galaxie seulement.
+  const [galaxyStart, setGalaxyStart] = useState(first.current.categorie);
   useEffect(() => {
-    setParams((p) => { p.delete('vue'); p.delete('voir'); return p; }, { replace: true });
+    setParams((p) => { p.delete('vue'); p.delete('voir'); p.delete('categorie'); return p; }, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const chooseView = (v: string) => {
     setView(v as View);
+    setGalaxyStart(null);
     try { localStorage.setItem(VIEW_KEY, v); } catch { /* stockage indisponible : le choix vaut pour cette visite */ }
   };
   // Historique : tiroir à droite ; au-dessus de `lg`, la page se resserre pour lui laisser la place.
@@ -157,6 +164,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   const onSee = (ids: string[]) => {
     if (waves.length > 0 && scope !== 'all' && ids.some((x) => !inScope(categories.find((c) => c.id === x) ?? ({ waveId: undefined } as unknown as Category)))) setScope('all');
     setView('planche');
+    setGalaxyStart(null);
     setSeeRequest((r) => ({ ids, n: (r?.n ?? 0) + 1 }));
   };
   const onSelectScope = (v: string) => {
@@ -174,12 +182,17 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
     <>
     <Stack gap="sm" style={historyOpen && wide ? { marginRight: HISTORY_DRAWER_WIDTH } : undefined}>
     <Group justify="flex-end">
-      <SegmentedControl size="xs" data-testid="brackets-view" value={view} onChange={chooseView} data={[{ value: 'planche', label: 'Planche' }, { value: 'liste', label: 'Liste' }]} />
+      <SegmentedControl size="xs" data-testid="brackets-view" value={view} onChange={chooseView} data={[{ value: 'planche', label: 'Planche' }, { value: 'liste', label: 'Liste' }, { value: 'galaxie', label: 'Galaxie' }]} />
     </Group>
     {view === 'planche' && (
       <Planche competitionId={id} categories={categories} waves={waves} waveId={waveId} scope={scope} onScope={onSelectScope} readOnly={readOnlyPoste}
         entrants={entrants} badges={badges} badgeDetails={badgeDetails} cases={casesByCategory} aside={asideByCategory} historyCount={historyCount}
         onHistory={() => setHistoryOpen((o) => !o)} seeRequest={seeRequest} onConsumed={() => setSeeRequest(null)} onOpenList={openInList} />
+    )}
+    {view === 'galaxie' && (
+      <GalaxyView competitionId={id} categories={categories} waves={waves} waveId={waveId} scope={scope} onScope={onSelectScope} readOnly={readOnlyPoste}
+        entrants={entrants} badges={badges} badgeDetails={badgeDetails} cases={casesByCategory} aside={asideByCategory} historyCount={historyCount}
+        onHistory={() => setHistoryOpen((o) => !o)} initialCategoryId={galaxyStart} onSeeInPlanche={(cid) => onSee([cid])} />
     )}
     {view === 'liste' && (
     <Grid>

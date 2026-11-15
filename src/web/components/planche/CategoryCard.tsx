@@ -1,5 +1,5 @@
-import { Badge, Button, Card, Group, Stack, Text } from '@mantine/core';
-import type { HTMLAttributes } from 'react';
+import { Badge, Button, Card, Group, Stack, Text, UnstyledButton } from '@mantine/core';
+import type { HTMLAttributes, ReactNode } from 'react';
 import { Link } from 'react-router';
 import { newSameClubSentences, sameClubFirstRound } from '../../../domain/brackets/same-club.js';
 import { activeEntrantCount, isFreeKey, type Category } from '../../../domain/categories.js';
@@ -50,7 +50,19 @@ export interface CardProps {
   chipProps?: (registrationId: string, category: Category) => HTMLAttributes<HTMLDivElement>;
   /** Pastille choisie (clic-clic). */
   selectedChip?: string | null;
+  /**
+   * Carte compacte (galaxie) : 4 combattants au plus puis « + n autres », les badges utiles seulement (état si lancée),
+   * sans « Agrandir ».
+   */
+  compact?: boolean;
+  /** Le titre devient un bouton (galaxie : la carte devient la sélection). */
+  onTitleClick?: () => void;
+  /** Liens du bas, à la place de « Agrandir » et « Ouvrir dans la liste ». */
+  actions?: ReactNode;
 }
+
+/** Combattants listés au plus sur une carte compacte. */
+export const COMPACT_NAMES = 4;
 
 /** Bouton « Nouveau tirage » d'une carte agrandie. */
 function RedrawButton({ competitionId, category, entrants }: { competitionId: string; category: Category; entrants: Map<string, EntrantInfo> }) {
@@ -82,24 +94,32 @@ export function CategoryCard(p: CardProps) {
   const chip = (id: string) => (
     <FighterChip key={id} id={id} info={p.entrants.get(id)} badge={p.badges.get(id)} badgeDetail={p.badgeDetails.get(id)}
       sameClub={sameIds.has(id)} matched={matched(id)} locked={locked || p.readOnly} selected={p.selectedChip === id}
-      extra={p.chipProps?.(id, c)} />
+      extra={p.chipProps?.(id, c)} compact={p.compact} />
   );
+  // Carte compacte : les combattants à la suite, sans les intitulés des combats.
+  const compactIds = p.compact ? sections.flatMap((s) => s.ids) : [];
   return (
-    <Card withBorder padding="sm" data-testid="planche-card" data-category={c.id} data-locked={locked || undefined} data-ring={p.ring ?? undefined} {...p.cardProps}
+    <Card withBorder padding={p.compact ? 'xs' : 'sm'} data-testid="planche-card" data-category={c.id} data-locked={locked || undefined} data-ring={p.ring ?? undefined} {...p.cardProps}
       style={{
         gridColumn: p.expanded ? '1 / -1' : undefined, opacity: locked ? 0.7 : undefined,
         outline: ringColor ? `3px solid ${ringColor}` : undefined, outlineOffset: 1, scrollMarginTop: 80, ...p.cardProps?.style,
       }}>
-      <Stack gap="xs">
-        <Stack gap={2}>
-          <Text fw={700} lh={1.25}>{p.title}</Text>
+      <Stack gap={p.compact ? 6 : 'xs'}>
+        <Stack gap={p.compact ? 0 : 2}>
+          {p.onTitleClick
+            ? (
+              <UnstyledButton data-testid="card-title" onClick={p.onTitleClick} title="Sélectionner cette catégorie" style={{ textAlign: 'left' }}>
+                <Text fw={700} lh={1.25} td="underline" style={{ textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}>{p.title}</Text>
+              </UnstyledButton>
+            )
+            : <Text fw={700} lh={1.25}>{p.title}</Text>}
           {p.subtitle && <Text size="xs" c="dimmed">{p.subtitle}</Text>}
         </Stack>
         <Group gap={4}>
           {p.sessionName && <StatusBadge tone="neutral" size="sm" data-testid="card-session">{p.sessionName}</StatusBadge>}
           {p.zoneName && <StatusBadge tone="accent" size="sm" data-testid="card-zone">{p.zoneName}</StatusBadge>}
           <StatusBadge tone="neutral" size="sm" className="num" data-testid="card-count">{plural(active, 'inscrit')}{c.absentIds.length ? ` + ${plural(c.absentIds.length, 'absent')}` : ''}</StatusBadge>
-          <StatusBadge tone={STATUS_TONES[c.status]} size="sm" data-testid="card-status">{STATUS_LABELS[c.status]}{c.status === 'started' ? ' 🔒' : ''}</StatusBadge>
+          {(!p.compact || locked) && <StatusBadge tone={STATUS_TONES[c.status]} size="sm" data-testid="card-status">{STATUS_LABELS[c.status]}{c.status === 'started' ? ' 🔒' : ''}</StatusBadge>}
           {active === 1 && <StatusBadge tone="danger" size="sm" data-testid="card-alone">Sans adversaire</StatusBadge>}
           {p.cases > 0 && (
             <Badge size="sm" variant="outline" color="orange" data-testid="card-cases" component={Link} to={`/competitions/${p.competitionId}/reaffectation`}
@@ -107,11 +127,20 @@ export function CategoryCard(p: CardProps) {
               {p.cases} cas à traiter{p.aside ? ` (dont ${p.aside} de côté)` : ''}
             </Badge>
           )}
-          {c.format && <StatusBadge tone="neutral" size="sm" data-testid="card-format">{ALL_FORMAT_LABELS[c.format]}</StatusBadge>}
-          {pairs.length > 0 && <Badge size="sm" variant="outline" color="orange" data-testid="card-same-club" title={sameClubName}>Même club</Badge>}
-          {kata && <StatusBadge tone="neutral" size="sm">{kata}</StatusBadge>}
+          {c.format && !p.compact && <StatusBadge tone="neutral" size="sm" data-testid="card-format">{ALL_FORMAT_LABELS[c.format]}</StatusBadge>}
+          {pairs.length > 0 && !p.compact && <Badge size="sm" variant="outline" color="orange" data-testid="card-same-club" title={sameClubName}>Même club</Badge>}
+          {kata && !p.compact && <StatusBadge tone="neutral" size="sm">{kata}</StatusBadge>}
         </Group>
-        {!p.expanded && (
+        {p.compact && (
+          <Stack gap={4} data-testid="card-content">
+            {compactIds.length === 0 && <Text size="sm" c="dimmed">{isFreeKey(c.key) ? 'Aucun combattant pour l’instant.' : 'Aucun combattant présent.'}</Text>}
+            {compactIds.slice(0, COMPACT_NAMES).map(chip)}
+            {compactIds.length > COMPACT_NAMES && (
+              <Text size="xs" c="dimmed" data-testid="card-more">+ {plural(compactIds.length - COMPACT_NAMES, 'autre')}</Text>
+            )}
+          </Stack>
+        )}
+        {!p.expanded && !p.compact && (
           <Stack gap="xs" data-testid="card-content">
             {sections.length === 0 && <Text size="sm" c="dimmed">{isFreeKey(c.key) ? 'Aucun combattant pour l’instant.' : 'Aucun combattant présent.'}</Text>}
             {sections.map((s, i) => (
@@ -138,6 +167,7 @@ export function CategoryCard(p: CardProps) {
             {LOCKED_DROP}
           </Text>
         )}
+        {p.actions ?? (
         <Group gap="xs">
           {c.bracket && (
             <Button size="xs" variant="subtle" data-testid="card-grow" aria-expanded={p.expanded} onClick={p.onToggle}>{p.expanded ? 'Réduire' : 'Agrandir'}</Button>
@@ -145,6 +175,7 @@ export function CategoryCard(p: CardProps) {
           {p.expanded && !locked && !p.readOnly && <RedrawButton competitionId={p.competitionId} category={c} entrants={p.entrants} />}
           <Button size="xs" variant="subtle" data-testid="card-open-list" onClick={p.onOpenList}>Ouvrir dans la liste</Button>
         </Group>
+        )}
       </Stack>
     </Card>
   );

@@ -30,6 +30,13 @@ export function cardScale(k: number, pull: number): number {
   return ((CARD_W * k) / 220) * (1 - pull) + Math.min(1, k / K_FULL) * pull;
 }
 
+/** Écart entre deux cases autour de la sélection, en px à l'écran (le tout tient sur un écran). */
+export function slotGap(k: number, viewport: { w: number; h: number }, neighbors: number): { x: number; y: number } {
+  const full = Math.min(1, k / K_FULL);
+  const cols = neighbors > 8 ? 5 : 3;
+  return { x: Math.min(265, (viewport.w - 40) / cols) * full, y: Math.min(205, (viewport.h - 130) / 3) * full };
+}
+
 /** Places affichées : les voisines (déjà triées, ≤ 14) glissent vers les cases autour de la sélection selon `pull`. */
 export function displayedPositions(
   base: Map<string, Point>, selectedId: string | null, neighborIds: string[], cam: Camera, viewport: { w: number; h: number },
@@ -38,10 +45,9 @@ export function displayedPositions(
   const center = selectedId === null ? undefined : base.get(selectedId);
   if (pull <= 0 || center === undefined) return base;
   const out = new Map(base);
-  const full = Math.min(1, cam.k / K_FULL);
-  const cols = neighborIds.length > 8 ? 5 : 3;
-  const sx = (Math.min(265, (viewport.w - 40) / cols) * full) / cam.k;
-  const sy = (Math.min(205, (viewport.h - 130) / 3) * full) / cam.k;
+  const gap = slotGap(cam.k, viewport, neighborIds.length);
+  const sx = gap.x / cam.k;
+  const sy = gap.y / cam.k;
   neighborIds.slice(0, SLOTS.length).forEach((id, i) => {
     const from = base.get(id);
     if (from === undefined) return;
@@ -86,11 +92,15 @@ export function legendRules(settings: CompetitionSettings): { rule: RuleId; labe
   return rules.map((rule, i) => ({ rule, label: RULE_LABELS[rule], color: legendColor(i, rules.length) }));
 }
 
-/** Couleur et pointillés d'un lien vu depuis `fromId` : couleur de sa règle la plus loin dans la légende. */
-export function linkStyle(link: GalaxyLink, fromId: string, settings: CompetitionSettings): { color: string; dashed: boolean } {
+/**
+ * Couleur et pointillés d'un lien vu depuis `fromId` : couleur de sa règle la plus loin dans la légende.
+ * `legend` : `legendRules(settings)` déjà calculée (le dessin l'appelle pour chaque lien, à chaque image).
+ */
+export function linkStyle(
+  link: GalaxyLink, fromId: string, settings: CompetitionSettings, legend: { rule: RuleId; color: string }[] = legendRules(settings),
+): { color: string; dashed: boolean } {
   const { rank, beyondCut } = rulesRank(rulesFrom(link, fromId), settings);
   if (beyondCut) return { color: BEYOND, dashed: true };
-  const legend = legendRules(settings);
   const { order } = settings.replacementRules;
   // Dernière règle de la légende au rang du lien ou avant (une règle hors légende retombe sur la précédente).
   let idx = -1;
