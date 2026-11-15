@@ -10,6 +10,7 @@ import { listCategories } from './categories.js';
 import { listZones } from './zones.js';
 import { listWaves } from './waves.js';
 import { finalMatchIds } from '../../domain/passages/finals.js';
+import { kataLineup } from '../../domain/passages/kata-lineup.js';
 import { fixWaveZones, passageNumbers, passagePlan } from './passages.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
 import { activeEntrantCount } from '../../domain/categories.js';
@@ -231,7 +232,12 @@ export interface QueueItem {
   matchId: string | null;
   a: string | null;
   b: string | null;
+  /** Club de chaque combattant (« Sans club » s'il n'en a pas) ; null pour un kata. */
+  aClub: string | null;
+  bClub: string | null;
   katakas: number | null;
+  /** Bloc de kata : katakas présents du tour joué, dans l'ordre de passage ; null pour un combat ou une finale aux finalistes inconnus. */
+  lineup: { round: 'tour1' | 'finale'; list: { name: string; club: string; done: boolean }[] } | null;
   /** Bloc de kata séparé (finales de kata sur la zone des finales) : 'tour1' ou 'finale'. */
   kataPart: 'tour1' | 'finale' | null;
   noRest: boolean;
@@ -255,9 +261,9 @@ export async function schedule(db: AppDb, competitionId: string, waveId?: string
   const rows = new Map(db.select().from(categories).where(eq(categories.competitionId, competitionId)).all().map((r) => [r.id, r]));
   const who = labels(db, competitionId);
   const name = (rid: string | null) => (rid ? (who.get(rid)?.name ?? '?') : null);
-  const state = new Map<string, { matches: ReturnType<typeof resolveBracket>['matches']; finished: boolean; round1Done: boolean; finalistsKnown: boolean }>();
+  const state = new Map<string, { matches: ReturnType<typeof resolveBracket>['matches']; finished: boolean; round1Done: boolean; finalistsKnown: boolean; lineup: (round: 'tour1' | 'finale') => NonNullable<QueueItem['lineup']>['list'] }>();
   const describe = async (c: (typeof cats)[number]) => {
-    const { progress, kataScores: scores } = await getResults(db, competitionId, c.id);
+    const { progress, kataScores: scores, tieBreaks: tb } = await getResults(db, competitionId, c.id);
     let matches: ReturnType<typeof resolveBracket>['matches'] = [];
     if (c.bracket?.kind === 'combat') {
       const { results } = validResults(c.bracket, loadRecords(db, c.id), loadTieBreaks(db, c.id).pools);
@@ -268,7 +274,13 @@ export async function schedule(db: AppDb, competitionId: string, waveId?: string
     const round1Done = c.bracket?.kind === 'kata' && present.every((e) => (scores.round1[e.registrationId] ?? []).length > 0);
     // Kata : ses deux finalistes sont connus (kata à deux : d'emblée, sans tour 1).
     const finalistsKnown = c.bracket?.kind === 'kata' && (c.bracket.entrants.length <= 2 || round1Done);
-    state.set(c.id, { matches, finished: progress.status === 'finished', round1Done, finalistsKnown });
+    // Katakas d'un tour, dans l'ordre de passage : tirage pour le tour 1, tableau de notation pour la finale.
+    const lineup = (round: 'tour1' | 'finale') => {
+      if (c.bracket?.kind !== 'kata') return [];
+      const ids = round === 'tour1' ? c.bracket.order : resolveKata(c.bracket, scores, tb.kata, tb.kataFinal).finalists;
+      return kataLineup(ids, c.absentIds, round === 'tour1' ? scores.round1 : scores.final).map((s) => ({ name: name(s.registrationId)!, club: who.get(s.registrationId)?.club ?? 'Sans club', done: s.done }));
+    };
+    state.set(c.id, { matches, finished: progress.status === 'finished', round1Done, finalistsKnown, lineup });
     // Numéro de passage ; sans zone, numérotation propre à la catégorie.
     const local = new Map([...matches].filter((m) => !m.bye).sort((x, y) => x.order - y.order).map((m, i) => [m.id, i + 1]));
     const nextMatches = matches
@@ -310,13 +322,17 @@ export async function schedule(db: AppDb, competitionId: string, waveId?: string
         const st = state.get(p.categoryId);
         if (!st) return [];
         const base = { number: p.number, categoryId: p.categoryId, categoryLabel: labelOf.get(p.categoryId) ?? '', noRest: p.noRest, held: held.has(p.categoryId), early: false };
+        const club = (rid: string | null) => (rid ? (who.get(rid)?.club ?? 'Sans club') : null);
         if (isKataPassage(p.matchId)) {
           const c = cats.find((x) => x.id === p.categoryId)!;
           const kataPart = p.matchId === 'kata:tour1' ? ('tour1' as const) : p.matchId === 'kata:finale' ? ('finale' as const) : null;
-          return kataDone(st, p.matchId) ? [] : [{ p, q: { ...base, matchId: null, a: null, b: null, katakas: c.bracket?.entrants.length ?? 0, kataPart } }];
+          // Tour joué : le tour 1 tant qu'il n'est pas noté (kata à plus de 2), sinon la finale (finalistes connus).
+          const round = kataPart ?? (c.bracket?.kind === 'kata' && c.bracket.order.length > 2 && !st.round1Done ? 'tour1' : 'finale');
+          const lineup = round === 'finale' && !st.finalistsKnown ? null : { round, list: st.lineup(round) };
+          return kataDone(st, p.matchId) ? [] : [{ p, q: { ...base, matchId: null, a: null, b: null, aClub: null, bClub: null, katakas: c.bracket?.entrants.length ?? 0, kataPart, lineup } }];
         }
         const m = st.matches.find((x) => x.id === p.matchId);
-        return m && m.playable && !m.result ? [{ p, q: { ...base, matchId: m.id, a: name(m.entrantA), b: name(m.entrantB), katakas: null, kataPart: null } }] : [];
+        return m && m.playable && !m.result ? [{ p, q: { ...base, matchId: m.id, a: name(m.entrantA), b: name(m.entrantB), aClub: club(m.entrantA), bClub: club(m.entrantB), katakas: null, kataPart: null, lineup: null } }] : [];
       });
     // Une finale prête derrière un passage non joué de sa session est signalée, même au-delà des 6 premiers (jamais le premier de la file).
     // Combat : il est dans la file, donc jouable (finalistes connus) ; finale de kata : finalistes connus (tour 1 noté).
