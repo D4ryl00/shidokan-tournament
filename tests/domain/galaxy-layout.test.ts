@@ -65,7 +65,9 @@ describe('galaxyLayout', () => {
     for (let i = 0; i < points.length; i++) for (let j = i + 1; j < points.length; j++) all.push(dist(points[i]!, points[j]!));
     all.sort((a, b) => a - b);
     const median = all[Math.floor(all.length / 2)]!;
-    expect(meanFor('weight')).toBeLessThan(meanFor('discipline'));
+    // Plus on s'éloigne en poids, en âge ou en discipline, plus les catégories sont éloignées (avec de la marge).
+    expect(meanFor('weight')).toBeLessThanOrEqual(0.7 * meanFor('discipline'));
+    expect(meanFor('age')).toBeLessThan(meanFor('discipline'));
     expect(meanFor('discipline')).toBeLessThan(median);
   });
 });

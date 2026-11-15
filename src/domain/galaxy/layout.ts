@@ -14,6 +14,13 @@ export interface Point { x: number; y: number }
 const SEXES: Sex[] = ['F', 'M'];
 /** Longueurs relatives des liens (Global Constraints) : un ordre naturel fixe, pas l'ordre des règles de la compétition. */
 const LENGTH: Record<LinkKind, number> = { weight: 1, age: 1.6, ruleset: 2.2, discipline: 2.8, sex: 3.2 };
+/**
+ * Raideur relative par nature de lien. Chaque ressort est aussi divisé par le nombre moyen de liens de sa nature sur
+ * ses deux cases : sans cela, les quelque 12 liens « autre discipline » d'une case écrasent ses 2 liens « poids
+ * voisin », et les poids voisins finissent aussi loin que les autres disciplines. Le poids et l'âge tiennent plus fort,
+ * pour que la distance suive la nature du lien (poids, puis âge, puis discipline).
+ */
+const STRENGTH: Record<LinkKind, number> = { weight: 2, age: 3, ruleset: 1, discipline: 1, sex: 1 };
 const L = 70;
 const ITERATIONS = 500;
 const REPULSION = 1400;
@@ -162,12 +169,22 @@ export function galaxyLayout(grid: CategoryGrid): Map<string, Point> {
     ys[i] = (140 - weightRank * 40) * 1.2 + (floors.indexOf(floorOf(c)) - midFloor) * FLOOR + (rnd() - 0.5) * 40;
   });
 
-  // Ressorts : tous les voisinages possibles (toutes les règles), longueur selon leur nature.
-  const springs = galaxyLinks(cells.map((key, i) => ({ id: ids[i]!, key })), grid, null).map((l) => ({
+  // Ressorts : tous les voisinages possibles (toutes les règles), longueur et raideur selon leur nature.
+  const links = galaxyLinks(cells.map((key, i) => ({ id: ids[i]!, key })), grid, null).map((l) => ({
     i: index.get(l.a)!,
     j: index.get(l.b)!,
-    length: L * LENGTH[linkKind(rulesFrom(l, l.a))],
+    kind: linkKind(rulesFrom(l, l.a)),
   }));
+  const kinds = Object.keys(LENGTH) as LinkKind[];
+  const perCell = new Int32Array(n * kinds.length); // nombre de liens de chaque nature, par case
+  for (const { i, j, kind } of links) {
+    perCell[i * kinds.length + kinds.indexOf(kind)]!++;
+    perCell[j * kinds.length + kinds.indexOf(kind)]!++;
+  }
+  const springs = links.map(({ i, j, kind }) => {
+    const shared = (perCell[i * kinds.length + kinds.indexOf(kind)]! + perCell[j * kinds.length + kinds.indexOf(kind)]!) / 2;
+    return { i, j, length: L * LENGTH[kind], stiffness: (STIFFNESS * STRENGTH[kind]) / shared };
+  });
 
   const fx = new Float64Array(n);
   const fy = new Float64Array(n);
@@ -190,11 +207,11 @@ export function galaxyLayout(grid: CategoryGrid): Map<string, Point> {
       fx[j] = fx[j]! - dx * f;
       fy[j] = fy[j]! - dy * f;
     }
-    for (const { i, j, length } of springs) {
+    for (const { i, j, length, stiffness } of springs) {
       const dx = xs[j]! - xs[i]!;
       const dy = ys[j]! - ys[i]!;
       const d = Math.hypot(dx, dy) + 0.01;
-      const k = ((d - length) / d) * STIFFNESS;
+      const k = ((d - length) / d) * stiffness;
       fx[i] = fx[i]! + dx * k;
       fy[i] = fy[i]! + dy * k;
       fx[j] = fx[j]! - dx * k;
