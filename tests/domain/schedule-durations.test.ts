@@ -7,6 +7,10 @@ import {
   minSecText, parseMinSec, timingText,
 } from '../../src/domain/schedule/durations.js';
 
+const s = { schedule: defaultSchedule(), triathlonRounds: 3 as const };
+const three = { rounds: 3, roundSec: 120, restSec: 60, overtimeSec: 120 };
+const short = { rounds: 1, roundSec: 60, restSec: 0, overtimeSec: 0 };
+
 const key = (p: Partial<CategoryKey>): CategoryKey => ({
   discipline: 'karate', ruleset: 'jiyu', sex: 'M', ageBandCodes: [], weightClassIds: [], ...p,
 });
@@ -38,9 +42,6 @@ test('triathlon rounds follow the setting', () => {
   expect(fightSeconds(t)).toBe(6 * 120 + 5 * 60);
 });
 test('match beats bracket beats competition', () => {
-  const s = { schedule: defaultSchedule(), triathlonRounds: 3 as const };
-  const three = { rounds: 3, roundSec: 120, restSec: 60, overtimeSec: 120 };
-  const short = { rounds: 1, roundSec: 60, restSec: 0, overtimeSec: 0 };
   const d = { bracket: short, finals: null, matches: { final: three } };
   expect(combatTiming(s, 'adults', d, 'final', false)).toEqual(three);
   expect(combatTiming(s, 'adults', d, 'm1', false)).toEqual(short);
@@ -77,23 +78,20 @@ test('stored settings without schedule fall back to defaults', () => {
   expect(readStoredSettings({ schedule: { changeoverSec: -5 } }).schedule).toEqual(defaultSchedule());
 });
 
-const s46 = { schedule: defaultSchedule(), triathlonRounds: 3 as const };
-const three46 = { rounds: 3, roundSec: 120, restSec: 60, overtimeSec: 120 };
-const short46 = { rounds: 1, roundSec: 60, restSec: 0, overtimeSec: 0 };
 const fin = { rounds: 4, roundSec: 90, restSec: 30, overtimeSec: 60 };
 
 test('defaults have no finals duration', () => {
   expect(defaultSchedule().finals).toEqual({ under14: null, youth: null, adults: null, triathlon: null });
 });
 test('finals precedence: match, bracket finals, bracket, competition finals, group', () => {
-  const comp = { ...s46, schedule: { ...s46.schedule, finals: { ...s46.schedule.finals, adults: fin } } };
+  const comp = { ...s, schedule: { ...s.schedule, finals: { ...s.schedule.finals, adults: fin } } };
   expect(combatTiming(comp, 'adults', null, 'w2-0', true)).toEqual(fin);
   expect(combatTiming(comp, 'adults', null, 'w1-0', false)).toEqual(defaultSchedule().groups.adults);
   expect(combatTiming(comp, 'youth', null, 'w2-0', true)).toEqual(defaultSchedule().groups.youth); // autre groupe : pas de finale propre
-  expect(combatTiming(comp, 'adults', { bracket: short46, finals: null, matches: {} }, 'w2-0', true)).toEqual(short46); // tableau « Autre » sans finale propre
-  expect(combatTiming(comp, 'adults', { bracket: short46, finals: three46, matches: {} }, 'w2-0', true)).toEqual(three46);
-  expect(combatTiming(comp, 'adults', { bracket: short46, finals: three46, matches: {} }, 'w1-0', false)).toEqual(short46);
-  expect(combatTiming(comp, 'adults', { bracket: short46, finals: three46, matches: { 'w2-0': fin } }, 'w2-0', true)).toEqual(fin);
+  expect(combatTiming(comp, 'adults', { bracket: short, finals: null, matches: {} }, 'w2-0', true)).toEqual(short); // tableau « Autre » sans finale propre
+  expect(combatTiming(comp, 'adults', { bracket: short, finals: three, matches: {} }, 'w2-0', true)).toEqual(three);
+  expect(combatTiming(comp, 'adults', { bracket: short, finals: three, matches: {} }, 'w1-0', false)).toEqual(short);
+  expect(combatTiming(comp, 'adults', { bracket: short, finals: three, matches: { 'w2-0': fin } }, 'w2-0', true)).toEqual(fin);
 });
 test('triathlon finals keep their own rounds', () => {
   const two = { rounds: 2, roundSec: 120, restSec: 60, overtimeSec: 120 };
@@ -104,8 +102,8 @@ test('triathlon finals keep their own rounds', () => {
 test('stored data from before finals stays readable', () => {
   const old = { groups: defaultSchedule().groups, changeoverSec: 60, kataPassageSec: 90 };
   expect(readStoredSettings({ schedule: old }).schedule.finals).toEqual(defaultSchedule().finals);
-  expect(readStoredSettings({ schedule: { ...old, groups: { ...old.groups, adults: three46 } } }).schedule.groups.adults).toEqual(three46);
-  expect(categoryDurationsSchema.parse({ bracket: short46, matches: {} })).toEqual({ bracket: short46, finals: null, matches: {} });
+  expect(readStoredSettings({ schedule: { ...old, groups: { ...old.groups, adults: three } } }).schedule.groups.adults).toEqual(three);
+  expect(categoryDurationsSchema.parse({ bracket: short, matches: {} })).toEqual({ bracket: short, finals: null, matches: {} });
   expect(readStoredSettings({ schedule: { finals: { adults: fin } } }).schedule.finals.adults).toEqual(fin);
 });
 test('empty durations', () => {

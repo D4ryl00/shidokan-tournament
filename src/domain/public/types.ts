@@ -99,6 +99,8 @@ export interface PublicCategory {
   podium: Podium;
   /** Durée du tableau (null pour un kata). */
   timing: CombatTiming | null;
+  /** Durée des combats pour la 1re place quand elle diffère de `timing` ; absent sinon. */
+  finalsTiming?: CombatTiming;
   /** Kata : durée d'un passage. */
   kataPassageSec: number | null;
 }

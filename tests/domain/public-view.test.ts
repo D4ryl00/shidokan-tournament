@@ -242,6 +242,22 @@ describe('durées et heures (lot 2)', () => {
     expect(items(view).find((i) => i.categoryId === 'A' && i.matchId === 'w1-0')!.timing?.rounds).toBe(2);
   });
 
+  test('en-tête public : la durée de finale remplace celle du tableau quand tous les combats sont des finales, sinon elle s’y ajoute', () => {
+    const base = source();
+    const finals = { rounds: 3, roundSec: 120, restSec: 30, overtimeSec: 60 };
+    const withFinals = (id: string) => toPublicCompetition({ ...base, categories: base.categories.map((c) => (c.id === id ? { ...c, durations: { bracket: null, finals, matches: {} } } : c)) });
+    // D : combat unique, tous ses combats sont des finales.
+    const d = withFinals('D').categories.find((c) => c.id === 'D')!;
+    expect(d.timing).toEqual(finals);
+    expect(d.finalsTiming).toBeUndefined();
+    // A : élimination directe, les combats d’avant la finale gardent la durée du tableau ; la finale s’annonce à part.
+    const a = withFinals('A').categories.find((c) => c.id === 'A')!;
+    expect(a.timing).toEqual({ rounds: 2, roundSec: 90, restSec: 30, overtimeSec: 60 });
+    expect(a.finalsTiming).toEqual(finals);
+    // Sans durée de finale : rien de plus.
+    expect(toPublicCompetition(base).categories.find((c) => c.id === 'A')!.finalsTiming).toBeUndefined();
+  });
+
   test('unlaunched wave shows only its planned time', () => {
     const all = { plannedStart: '14:00', actualStart: '14:05', finalsStart: '16:00' };
     const view = toPublicCompetition(source({ waveSchedules: [{ waveId: 'w2', ...all }, { waveId: 'w1', plannedStart: '09:00', actualStart: '09:10', finalsStart: '11:00' }] }));

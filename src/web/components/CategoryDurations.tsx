@@ -32,7 +32,7 @@ const validTiming = (t: CombatTiming) => Number.isInteger(t.rounds) && t.rounds 
 
 /**
  * Durée des combats d'un tableau : celle de la compétition, ou la sienne, avec des exceptions combat par combat
- * (précédence : combat, tableau, compétition). Permis même tableau lancé ou commencé. Pas de bloc pour un kata.
+ * (précédence : combat, finale du tableau, tableau, finale de la compétition, compétition). Permis même tableau lancé ou commencé. Pas de bloc pour un kata.
  */
 export function CategoryDurations({ competitionId, category, readOnly }: { competitionId: string; category: Category; readOnly: boolean }) {
   const { data: competition } = useCompetition(competitionId);
@@ -56,7 +56,8 @@ export function CategoryDurations({ competitionId, category, readOnly }: { compe
   const stored = own || durations?.finals ? { bracket: own ?? inherited, finals: durations?.finals ?? null } : null;
   const editing = draft ?? stored;
   const mode = editing ? 'own' : 'inherit';
-  const competitionFinals = base.schedule.finals[group];
+  // La finale de la compétition ne s'annonce que pour un tableau qui en a une (ou pas encore tiré).
+  const competitionFinals = !bracket || finalMatchIds(bracket).length > 0 ? base.schedule.finals[group] : null;
   const save = (d: Durations, after?: () => void) =>
     update.mutate({ cid: category.id, durations: isEmptyDurations(d) ? null : d }, { onSuccess: after });
   const matches = durations?.matches ?? {};
@@ -76,7 +77,7 @@ export function CategoryDurations({ competitionId, category, readOnly }: { compe
   return (
     <SectionCard title="Durée des combats" help="tableaux.durees" data-testid="category-durations">
       <Stack gap="sm">
-        <Select size="sm" w={320} maw="100%" label="Durée des combats" disabled={readOnly || update.isPending} allowDeselect={false} data-testid="durations-mode"
+        <Select size="sm" w={420} maw="100%" label="Durée des combats" disabled={readOnly || update.isPending} allowDeselect={false} data-testid="durations-mode"
           data={[{ value: 'inherit', label: `Comme la compétition (${timingText(inherited)}${competitionFinals ? `, finale ${timingText(competitionFinals)}` : ''})` }, { value: 'own', label: 'Autre' }]}
           value={mode}
           onChange={(v) => {

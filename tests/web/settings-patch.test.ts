@@ -25,3 +25,17 @@ test('après modification de la compétition : cocher une fiche club ne recharge
   expect(queriesAfterCompetitionPatch('c1', { settings: { clubFormAttachments: { pdf: false }, shobuToJiyu: true } })).toEqual(all);
   expect(queriesAfterCompetitionPatch('c1', { date: '2026-12-01' })).toEqual(all);
 });
+
+test('réglages : une finale modifiée part en entier, même si un autre poste l’a remise à « comme les autres »', () => {
+  const loaded = defaultSettings();
+  const t = { rounds: 3, roundSec: 120, restSec: 30, overtimeSec: 60 };
+  const a = { ...loaded, schedule: { ...loaded.schedule, finals: { ...loaded.schedule.finals, adults: t } } };
+  const edited = { ...a, schedule: { ...a.schedule, finals: { ...a.schedule.finals, adults: { ...t, rounds: 4 } } } };
+  // Chargée comme une durée : le poste envoie la durée entière, pas la seule feuille « rounds ».
+  expect(settingsPatch(a, edited)).toEqual({ schedule: { finals: { adults: { ...t, rounds: 4 } } } });
+  // Passée à « comme les autres » : null.
+  expect(settingsPatch(a, { ...a, schedule: { ...a.schedule, finals: { ...a.schedule.finals, adults: null } } })).toEqual({ schedule: { finals: { adults: null } } });
+  // Autre poste : null entre-temps ; la feuille seule serait rejetée, la durée entière s’applique.
+  const saved = mergeSettings(settingsPatch(a, edited), loaded);
+  expect(saved.schedule.finals.adults).toEqual({ ...t, rounds: 4 });
+});

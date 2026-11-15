@@ -31,10 +31,14 @@ test('réglages : finale des 18 ans et plus en 3 rounds', async ({ page, request
   await round.fill('1:30');
   await expect(page.getByTestId('settings-invalid')).toHaveCount(0);
 
-  // Retour à « Comme les autres combats ».
+  // Valeur illisible laissée dans la ligne, puis retour à « Comme les autres combats » : l'enregistrement redevient possible.
+  await round.fill('1:5');
+  await expect(page.getByTestId('settings-save')).toBeDisabled();
   await page.getByTestId('durations-finals-adults').click();
   await page.getByRole('option', { name: 'Comme les autres combats' }).click();
   await expect(page.getByTestId('durations-finals-fields-adults')).toHaveCount(0);
+  await expect(page.getByTestId('settings-invalid')).toHaveCount(0);
+  await expect(page.getByTestId('settings-save')).toBeEnabled();
   const saved2 = page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().includes(`/api/competitions/${id}`) && r.ok());
   await page.getByTestId('settings-save').click();
   await saved2;
@@ -106,7 +110,7 @@ test('tableaux : une exception sur la finale reprend la finale de la compétitio
   await page.getByTestId('exception-match').click();
   await page.getByRole('option', { name: /Finale/ }).first().click();
   await expect(page.getByTestId('exception-timing').getByLabel('Rounds')).toHaveValue('3');
-  await expect(page.getByTestId('exception-timing').getByLabel('Prolongation')).toBeVisible();
+  await expect(page.getByTestId('exception-timing').getByLabel('Prolongation')).toHaveValue('1:00');
 });
 
 test('tableaux : le bloc de durée tient à 360 px', async ({ page, request }) => {
@@ -120,5 +124,10 @@ test('tableaux : le bloc de durée tient à 360 px', async ({ page, request }) =
   await page.getByTestId('durations-mode').click();
   await page.getByRole('option', { name: 'Autre', exact: true }).click();
   await expect(page.getByTestId('durations-own-finals-fields')).toBeVisible();
+  expect(await clipped(page)).toEqual([]);
+  // Et dans l'état « comme la compétition », avec la finale de la compétition dans le libellé.
+  await page.getByTestId('durations-mode').click();
+  await page.getByRole('option', { name: /^Comme la compétition/ }).click();
+  await expect(page.getByTestId('durations-mode')).toHaveValue(/finale 3 × 2 min/);
   expect(await clipped(page)).toEqual([]);
 });

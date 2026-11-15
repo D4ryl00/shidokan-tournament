@@ -28,8 +28,9 @@ function headline(pub: PublicCompetition, c: PublicCategory, times: PublicTimes)
   const format = c.bracket.kind === 'kata' ? ALL_FORMAT_LABELS.kata_two_rounds : ALL_FORMAT_LABELS[c.bracket.format];
   const past = pub.phase === 'past';
   const duration = past ? null : c.bracket.kind === 'kata' ? (c.kataPassageSec ? `${minSecText(c.kataPassageSec)} par passage` : null) : c.timing ? timingText(c.timing) : null;
+  const finals = past || !c.finalsTiming ? null : `finale ${timingText(c.finalsTiming)}`;
   const final = past ? null : times.categoryFinalAt(c.id);
-  return [zone, format, duration, final ? `finale\u00a0${versText(final)}` : null].filter(Boolean).join(' · ');
+  return [zone, format, duration, finals, final ? `finale\u00a0${versText(final)}` : null].filter(Boolean).join(' · ');
 }
 
 function Passages({ pub, c }: { pub: PublicCompetition; c: PublicCategory }) {

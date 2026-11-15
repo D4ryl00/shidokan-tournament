@@ -247,6 +247,13 @@ export function toPublicCompetition(src: PublicSource): PublicCompetition {
 
     const zoneId = src.plan.categories[c.id]?.zoneId ?? null;
     const finals = c.bracket.kind === 'combat' ? finalMatchIds(c.bracket) : [];
+    // En-tête : la durée du tableau, ou celle de la finale quand tous ses combats en sont (combat unique, meilleur des trois) ;
+    // sinon, la durée de finale s'annonce à part quand elle diffère.
+    const allFinals = c.bracket.kind === 'combat' && finals.length > 0 && c.bracket.matches.every((m) => finals.includes(m.id));
+    const headlineId = allFinals ? finals[0]! : null;
+    const finalTiming = c.bracket.kind === 'combat' && finals.length > 0 && !allFinals ? timingOf(c, finals[0]!) : null;
+    const normal = finalTiming ? timingOf(c, null) : null;
+    const finalsTiming = finalTiming && normal && JSON.stringify(finalTiming) !== JSON.stringify(normal) ? finalTiming : null;
     const numbers: Record<string, number> = {};
     const matchZones: Record<string, string> = {};
     for (const z of planZones) {
@@ -283,7 +290,8 @@ export function toPublicCompetition(src: PublicSource): PublicCompetition {
       numbers,
       matchZones,
       podium: copyPodium(progress.podium),
-      timing: c.bracket.kind === 'combat' ? { ...timingOf(c, null) } : null,
+      timing: c.bracket.kind === 'combat' ? { ...timingOf(c, headlineId) } : null,
+      ...(finalsTiming ? { finalsTiming } : {}),
       kataPassageSec: c.bracket.kind === 'kata' ? src.schedule.kataPassageSec : null,
     };
   });

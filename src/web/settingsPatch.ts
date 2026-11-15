@@ -19,7 +19,12 @@ function diff(loaded: unknown, edited: unknown): unknown {
  */
 export function settingsPatch(loaded: CompetitionSettings, edited: CompetitionSettings): Partial<CompetitionSettings> {
   const { replacementRules: _ignored, ...rest } = edited;
-  return (diff(loaded, rest) ?? {}) as Partial<CompetitionSettings>;
+  const patch = (diff(loaded, rest) ?? {}) as Record<string, unknown>;
+  // Durée de finale : toujours entière (ou null), jamais une feuille. Un autre poste a pu la passer de « comme les autres » (null)
+  // à une durée, ou l'inverse : une feuille seule serait fusionnée sur null et refusée par le serveur.
+  const finals = isObject(patch.schedule) && isObject(patch.schedule.finals) ? patch.schedule.finals : null;
+  if (finals) for (const g of Object.keys(finals)) finals[g] = (edited.schedule.finals as Record<string, unknown>)[g];
+  return patch as Partial<CompetitionSettings>;
 }
 
 /**
