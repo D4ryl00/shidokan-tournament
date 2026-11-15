@@ -581,6 +581,8 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     details: [
       'Cliquez « Saisir » pour entrer le résultat d’un combat, « Noter » pour un kata (« n° 14 — Kata… » : toute la catégorie de kata sous un seul numéro). La liste avance au fur et à mesure.',
       '« pas de repos : prévoir une pause » : un combattant de ce combat sort juste du précédent ; laissez-lui le temps de souffler.',
+      'Le club de chaque combattant est écrit à côté de son nom, pour l’appel.',
+      'Kata à l’appel : « Se présente » est le kataka à appeler sur le tatami, « Se prépare » le suivant à prévenir ; la carte passe au suivant dès que ses notes sont enregistrées (les absents sont sautés). Plus bas dans la liste, un kata montre tous ses katakas dans l’ordre de passage.',
     ],
   },
   'combats.resultat': {

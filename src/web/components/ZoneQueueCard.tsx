@@ -2,6 +2,7 @@ import { Box, Button, Card, Group, Stack, Text, Title } from '@mantine/core';
 import { plural } from '../../domain/plural.js';
 import type { Zone } from '../../domain/zones.js';
 import type { QueueItem } from '../api.js';
+import { kataCall, type KatakaSlot } from '../kataCall.js';
 import { HelpButton } from './Help.js';
 import { StatusBadge } from './ui/StatusBadge.js';
 
@@ -18,11 +19,29 @@ const EarlyBadge = () => (
 
 /** Libellé de catégorie sans « kg » isolé en début de ligne (espace insécable). */
 const label = (q: QueueItem) => q.categoryLabel.replace(/ kg\b/g, '\u00a0kg');
-const kataTitle = (q: QueueItem) => `${label(q)}${q.kataPart === 'tour1' ? ' (tour 1)' : q.kataPart === 'finale' ? ' (finale)' : ''}`;
+/** Tour du bloc : celui du passage séparé, sinon celui en cours (tour 1 puis finale d'un bloc entier). */
+const kataTitle = (q: QueueItem) => {
+  const round = q.kataPart ?? q.lineup?.round ?? null;
+  return `${label(q)}${round === 'tour1' ? ' (tour 1)' : round === 'finale' ? ' (finale)' : ''}`;
+};
+
+/** « NOM Prénom · Club » : le club en plus discret. */
+const Who = ({ name, club, c }: { name: string | null; club: string | null; c: string }) => (
+  <>{name}{club && <Text span fw={400} c={c} style={{ fontSize: '0.8em' }}> · {club}</Text>}</>
+);
+
+/** Kataka appelé (« Se présente ») ou prévenu (« Se prépare ») d'un bloc de kata à l'appel. */
+const Called = ({ k, what, big }: { k: KatakaSlot; what: string; big?: boolean }) => (
+  <Box data-testid={big ? 'kata-current' : 'kata-next'}>
+    <Text size="xs" c="var(--sk-hero-sub)">{what}</Text>
+    <Text fz={big ? 'xl' : 'md'} fw={big ? 700 : 600} lh={1.2}><Who name={k.name} club={k.club} c="var(--sk-hero-sub)" /></Text>
+  </Box>
+);
 
 /** Premier passage de la file : en grand, lisible de loin. */
 function OnCall({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem) => void; onScore: (q: QueueItem) => void }) {
   const kata = q.matchId === null;
+  const call = q.lineup ? kataCall(q.lineup.list) : null;
   return (
     <Box data-testid={kata ? 'next-kata' : 'next-match'} data-number={q.number} p="md"
       style={{ background: 'var(--sk-hero)', borderRadius: 'var(--mantine-radius-md)', border: '1px solid var(--sk-card-line)' }}>
@@ -36,13 +55,19 @@ function OnCall({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem)
           {kata ? (
             <>
               <Text fz="xl" fw={700} lh={1.2}>{kataTitle(q)}</Text>
-              <Text size="sm" c="var(--sk-hero-sub)">{plural(q.katakas ?? 0, 'kataka')}</Text>
+              <Text size="sm" c="var(--sk-hero-sub)">
+                {plural(q.katakas ?? 0, 'kataka')}{call && call.current && ` · kataka ${call.position} sur ${call.total}`}
+              </Text>
+              {call?.current && <Called k={call.current} what="Se présente :" big />}
+              {call?.next && <Called k={call.next} what="Se prépare :" />}
             </>
           ) : (
             <>
               <Text fz="xl" fw={700} lh={1.2}>{q.a}</Text>
+              {q.aClub && <Text size="sm" c="var(--sk-hero-sub)" data-testid="club">{q.aClub}</Text>}
               <Text size="xs" c="var(--sk-hero-sub)">contre</Text>
               <Text fz="xl" fw={700} lh={1.2}>{q.b}</Text>
+              {q.bClub && <Text size="sm" c="var(--sk-hero-sub)" data-testid="club">{q.bClub}</Text>}
               <Text size="sm" c="var(--sk-hero-sub)" mt={2}>{label(q)}</Text>
             </>
           )}
@@ -68,9 +93,21 @@ function Next({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem) =
         <Text fw={700} className="num" w={32} ta="right" style={{ flexShrink: 0 }}>{q.number}</Text>
         <Stack gap={0} style={{ minWidth: 0 }}>
           {kata ? (
-            <Text size="sm" fw={600}>{kataTitle(q)} <Text span size="sm" c="dimmed" fw={400} style={{ whiteSpace: 'nowrap' }}>· {plural(q.katakas ?? 0, 'kataka')}</Text></Text>
+            <>
+              <Text size="sm" fw={600}>{kataTitle(q)} <Text span size="sm" c="dimmed" fw={400} style={{ whiteSpace: 'nowrap' }}>· {plural(q.katakas ?? 0, 'kataka')}</Text></Text>
+              {q.lineup && (
+                <Box component="ol" data-testid="kata-lineup" m={0} pl={20}>
+                  {q.lineup.list.map((k, i) => (
+                    <Text component="li" key={i} size="xs" fw={600} td={k.done ? 'line-through' : undefined}><Who name={k.name} club={k.club} c="dimmed" /></Text>
+                  ))}
+                </Box>
+              )}
+            </>
           ) : (
-            <Text size="sm" fw={600}>{q.a} <Text span c="dimmed" fw={400}>contre</Text> {q.b}</Text>
+            <>
+              <Text size="sm" fw={600}><Who name={q.a} club={q.aClub} c="dimmed" /></Text>
+              <Text size="sm" fw={600}><Text span c="dimmed" fw={400}>contre</Text> <Who name={q.b} club={q.bClub} c="dimmed" /></Text>
+            </>
           )}
           {!kata && <Text size="xs" c="dimmed">{label(q)}</Text>}
           {q.noRest && <StatusBadge tone="warn" size="sm" mt={2} data-testid="no-rest">Pas de repos : prévoir une pause</StatusBadge>}

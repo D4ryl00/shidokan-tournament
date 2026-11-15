@@ -33,6 +33,11 @@ test('ordre de passage : zones par discipline, kata d’abord, numéros imprimé
   await expect(tatami.getByTestId('next-kata')).toHaveAttribute('data-number', '1');
   await expect(tatami.getByTestId('next-kata')).toContainText('Kata');
   await expect(tatami.getByTestId('next-kata')).toContainText('3 katakas');
+  // Kata à l'appel : le kataka qui se présente et celui qui se prépare, avec leur club ; les combats suivants avec les clubs.
+  await expect(tatami.getByTestId('kata-current')).toContainText('Se présente :');
+  await expect(tatami.getByTestId('kata-current')).toContainText(' · ');
+  await expect(tatami.getByTestId('kata-next')).toContainText('Se prépare :');
+  await expect(tatami.getByTestId('next-match').first()).toContainText(' · ');
   await expect(tatami.getByTestId('next-match').first()).toHaveAttribute('data-number', '2');
   await expect(page.getByTestId('zone-card').filter({ hasText: 'Ring' }).getByTestId('next-match')).toHaveAttribute('data-number', '1');
   await expect(page.getByTestId('schedule-category').filter({ hasText: cadettes.label }).getByTestId('schedule-zone')).toHaveValue('Automatique (Tatami 1)');

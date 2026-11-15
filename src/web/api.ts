@@ -28,6 +28,7 @@ import type { WaveSchedule } from '../domain/schedule/types.js';
 import type { CategoryDurations } from '../domain/schedule/durations.js';
 
 import { ApiError, TAB_ID } from './apiError.js';
+import type { KatakaSlot } from './kataCall.js';
 export { ApiError, TAB_ID };
 
 /** `rev` : révision de la donnée telle que l'écran l'a lue (null : elle n'existait pas) ; envoyée en If-Match. */
@@ -709,8 +710,13 @@ export interface QueueItem {
   matchId: string | null;
   a: string | null;
   b: string | null;
+  /** Club de chaque combattant (« Sans club » s'il n'en a pas) ; null pour un kata. */
+  aClub: string | null;
+  bClub: string | null;
   katakas: number | null;
   kataPart: 'tour1' | 'finale' | null;
+  /** Bloc de kata : katakas présents du tour joué, dans l'ordre de passage ; null pour un combat ou une finale aux finalistes inconnus. */
+  lineup: { round: 'tour1' | 'finale'; list: KatakaSlot[] } | null;
   noRest: boolean;
   /** Une saisie d'une zone autonome est à trancher dans cette catégorie. */
   held: boolean;
