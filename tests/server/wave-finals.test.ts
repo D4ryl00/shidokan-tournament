@@ -5,6 +5,8 @@ import { buildApp } from '../../src/server/app.js';
 import { closeDb, openDb, type AppDb } from '../../src/server/db/client.js';
 import { categories, frozenPassages } from '../../src/server/db/schema.js';
 import { launchStatus, numberPending } from '../../src/server/repositories/launches.js';
+import { finalMatchIds } from '../../src/domain/passages/index.js';
+import type { CombatBracket } from '../../src/domain/brackets/index.js';
 import { passagePlan, planInput } from '../../src/server/repositories/passages.js';
 import { RegistrationValidationError } from '../../src/server/repositories/registrations.js';
 import { assertFinalsEditable, listWaveFinals, setCategoryFinals, setFinalsZone } from '../../src/server/repositories/wave-finals.js';
@@ -131,6 +133,23 @@ describe('plan de passage', () => {
     expect(duration(s.kata, null)).toBe(5 * 90 + 60);
     expect(duration(s.kata, 'kata:tour1')).toBe(3 * 90 + 60);
     expect(duration(s.kata, 'kata:finale')).toBe(2 * 90 + 60);
+  });
+
+  test('la finale prend la durée de finale du tableau, sinon de la compétition', async () => {
+    const s = await setup();
+    const fin = { rounds: 3, roundSec: 120, restSec: 60, overtimeSec: 60 };
+    await app.inject({ method: 'PATCH', url: base, payload: { settings: { schedule: { finals: { youth: fin } } } } }); // cadettes = 14 à 17 ans
+    const input = await planInput(db, id);
+    const finalId = finalMatchIds(input.categories.find((c) => c.id === s.a54)!.bracket as CombatBracket)[0]!;
+    let duration = input.durationSec!;
+    expect(duration(s.a54, finalId)).toBe(3 * 120 + 2 * 60 + 60);
+    expect(duration(s.a54, 'w1-0')).toBe(2 * 120 + 60 + 60);
+    await call('PATCH', `/categories/${s.a54}`, { durations: { bracket: { rounds: 1, roundSec: 100, restSec: 0, overtimeSec: 0 }, matches: {} } }); // ancien client : pas de `finals`
+    duration = (await planInput(db, id)).durationSec!;
+    expect(duration(s.a54, finalId)).toBe(100 + 60); // tableau « Autre » sans finale propre
+    await call('PATCH', `/categories/${s.a54}`, { durations: { bracket: { rounds: 1, roundSec: 100, restSec: 0, overtimeSec: 0 }, finals: { rounds: 2, roundSec: 100, restSec: 20, overtimeSec: 0 }, matches: {} } });
+    duration = (await planInput(db, id)).durationSec!;
+    expect(duration(s.a54, finalId)).toBe(2 * 100 + 20 + 60);
   });
 });
 

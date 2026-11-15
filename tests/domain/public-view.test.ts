@@ -235,7 +235,7 @@ describe('durées et heures (lot 2)', () => {
     const base = source();
     const a = base.categories.find((c) => c.id === 'A')!;
     const timing = { rounds: 3, roundSec: 90, restSec: 30, overtimeSec: 60 };
-    const view = toPublicCompetition({ ...base, categories: base.categories.map((c) => (c.id === 'A' ? { ...a, durations: { bracket: null, matches: { 'w2-0': timing } } } : c)) });
+    const view = toPublicCompetition({ ...base, categories: base.categories.map((c) => (c.id === 'A' ? { ...a, durations: { bracket: null, finals: null, matches: { 'w2-0': timing } } } : c)) });
     const final = items(view).find((i) => i.categoryId === 'A' && i.matchId === 'w2-0')!;
     expect(final.timing?.rounds).toBe(3);
     expect(final.durationSec).toBe(3 * 90 + 2 * 30);
@@ -253,7 +253,7 @@ describe('durées et heures (lot 2)', () => {
   test('no schedule data leaks', () => {
     const base = source();
     const a = base.categories.find((c) => c.id === 'A')!;
-    const view = toPublicCompetition({ ...base, categories: base.categories.map((c) => (c.id === 'A' ? { ...a, durations: { bracket: null, matches: {} } } : c)) });
+    const view = toPublicCompetition({ ...base, categories: base.categories.map((c) => (c.id === 'A' ? { ...a, durations: { bracket: null, finals: null, matches: {} } } : c)) });
     const json = JSON.stringify(view);
     expect(json).not.toContain('durations');
     expect(json).not.toContain('under14');

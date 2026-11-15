@@ -5,6 +5,8 @@ import { afterEach, expect, test } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
 import { createUser } from '../../src/server/auth/sessions.js';
 import { closeDb, openDb } from '../../src/server/db/client.js';
+import { finalMatchIds } from '../../src/domain/passages/index.js';
+import type { CombatBracket } from '../../src/domain/brackets/index.js';
 import { todayInParis } from '../../src/domain/public/view.js';
 import { competitionChanged, everythingChanged } from '../../src/server/events.js';
 import { forgetPublicCache, publicCompetition, publicList } from '../../src/server/public/cache.js';
@@ -391,4 +393,20 @@ test('schedule change refreshes the cache', async () => {
   const after = await visit(pub, { 'if-none-match': before });
   expect(after.statusCode).toBe(200);
   expect(String(after.headers.etag)).not.toBe(before);
+});
+
+test('public view uses the finals duration for the final', async () => {
+  const { orga, visit, base, pub, launch, byLabel } = await setup();
+  await launch();
+  const cat = await byLabel('-54');
+  const full = (await orga('GET', `${base}/categories`)).json() as { id: string; bracket: CombatBracket }[];
+  const finalId = finalMatchIds(full.find((c) => c.id === cat.id)!.bracket)[0]!;
+  const itemsOf = async () => ((await visit(pub)).json() as PublicCompetition).queues.flatMap((q) => q.items).filter((i) => i.categoryId === cat.id);
+  const before = await itemsOf();
+  const other = before.find((i) => i.matchId !== null && i.matchId !== finalId)!;
+  const fin = { rounds: 3, roundSec: 120, restSec: 60, overtimeSec: 60 };
+  expect((await orga('PATCH', base, { settings: { schedule: { finals: { youth: fin } } } })).statusCode).toBe(200);
+  const after = await itemsOf();
+  expect(after.find((i) => i.matchId === finalId)!.durationSec).toBe(3 * 120 + 2 * 60);
+  expect(after.find((i) => i.matchId === other.matchId)!.durationSec).toBe(other.durationSec);
 });

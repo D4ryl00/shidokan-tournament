@@ -217,8 +217,11 @@ export function toPublicCompetition(src: PublicSource): PublicCompetition {
   const numberOf = new Map(planZones.flatMap((z) => z.passages.map((p) => [`${p.categoryId}:${p.matchId ?? 'kata'}`, { number: p.number, zoneId: z.zoneId }] as const)));
 
   const settings = { schedule: src.schedule, triathlonRounds: src.triathlonRounds };
+  const finalIdsOf = new Map<string, Set<string>>();
   const timingOf = (c: Category, matchId: string | null) => {
-    const t = combatTiming(settings, ageGroupOf(c.key, src.grid), c.durations, matchId);
+    let ids = finalIdsOf.get(c.id);
+    if (!ids) finalIdsOf.set(c.id, (ids = new Set(c.bracket?.kind === 'combat' ? finalMatchIds(c.bracket) : [])));
+    const t = combatTiming(settings, ageGroupOf(c.key, src.grid), c.durations, matchId, matchId !== null && ids.has(matchId));
     return { rounds: t.rounds, roundSec: t.roundSec, restSec: t.restSec, overtimeSec: t.overtimeSec };
   };
   const catById = new Map(cats.map((c) => [c.id, c]));

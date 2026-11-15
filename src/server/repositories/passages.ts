@@ -1,7 +1,7 @@
 import { eq, inArray } from 'drizzle-orm';
 import { activeEntrantCount, type Category } from '../../domain/categories.js';
 import type { StoredFinals } from '../../domain/passages/finals-choice.js';
-import { planPassages, type FrozenPassage, type PassagePlan, type PlanInput } from '../../domain/passages/index.js';
+import { finalMatchIds, planPassages, type FrozenPassage, type PassagePlan, type PlanInput } from '../../domain/passages/index.js';
 import { ageGroupOf, combatTiming, fightSeconds, kataPassages } from '../../domain/schedule/durations.js';
 import type { AppDb } from '../db/client.js';
 import { categories as categoryTable, frozenPassages, kataScores, matchResults } from '../db/schema.js';
@@ -76,6 +76,7 @@ export async function planInput(db: AppDb, competitionId: string, cats?: Categor
   const finals = storedFinals(db, competitionId);
   const byId = new Map(cats.map((c) => [c.id, c]));
   // Durée d'un passage, changement compris : combat (rounds et repos), ou bloc de kata (nombre de passages).
+  const finalIds = new Map<string, Set<string>>();
   const durationSec = (categoryId: string, matchId: string | null): number => {
     const c = byId.get(categoryId);
     if (!c) return settings.schedule.changeoverSec;
@@ -83,7 +84,10 @@ export async function planInput(db: AppDb, competitionId: string, cats?: Categor
       const block = matchId === 'kata:tour1' ? 'tour1' : matchId === 'kata:finale' ? 'finale' : 'whole';
       return kataPassages(activeEntrantCount(c), block) * settings.schedule.kataPassageSec + settings.schedule.changeoverSec;
     }
-    return fightSeconds(combatTiming(settings, ageGroupOf(c.key, grid), c.durations, matchId)) + settings.schedule.changeoverSec;
+    let ids = finalIds.get(c.id);
+    if (!ids) finalIds.set(c.id, (ids = new Set(c.bracket?.kind === 'combat' ? finalMatchIds(c.bracket) : [])));
+    const isFinal = matchId !== null && ids.has(matchId);
+    return fightSeconds(combatTiming(settings, ageGroupOf(c.key, grid), c.durations, matchId, isFinal)) + settings.schedule.changeoverSec;
   };
   return {
     categories: ranked.map(({ c }, rank) => ({

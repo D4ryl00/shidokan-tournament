@@ -98,7 +98,7 @@ test('category durations are saved even when the wave is launched', async () => 
   const res = await app.inject({ method: 'PATCH', url: `${base}/categories/${cat!.id}`, payload: { durations } });
   expect(res.statusCode).toBe(200);
   const db = openDb(dbPath);
-  expect((await listCategories(db, id)).find((c) => c.id === cat!.id)!.durations).toEqual(durations);
+  expect((await listCategories(db, id)).find((c) => c.id === cat!.id)!.durations).toEqual({ ...durations, finals: null });
   expect(db.$client.prepare('select count(*) as n from history_entries where competition_id = ?').get(id)).toEqual({ n: 0 });
   closeDb(db);
   const cleared = await app.inject({ method: 'PATCH', url: `${base}/categories/${cat!.id}`, payload: { durations: null } });

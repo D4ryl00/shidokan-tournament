@@ -1,7 +1,8 @@
 import { ActionIcon, Button, Group, NumberInput, Select, Stack, Text } from '@mantine/core';
 import { useState } from 'react';
 import type { Category } from '../../domain/categories.js';
-import { ageGroupOf, combatTiming, timingText, type CategoryDurations as Durations, type CombatTiming } from '../../domain/schedule/durations.js';
+import { finalMatchIds } from '../../domain/passages/index.js';
+import { ageGroupOf, combatTiming, isEmptyDurations, timingText, type CategoryDurations as Durations, type CombatTiming } from '../../domain/schedule/durations.js';
 import { useCompetition, useGrid, usePassages, useUpdateCategory } from '../api.js';
 import { categoryPassages } from '../passages.js';
 import { roundTitle } from './BracketView.js';
@@ -47,12 +48,12 @@ export function CategoryDurations({ competitionId, category, readOnly }: { compe
   const base = { schedule: competition.settings.schedule, triathlonRounds: competition.settings.triathlonRounds };
   const group = ageGroupOf(category.key, grid);
   const durations = category.durations;
-  const inherited = combatTiming(base, group, null, null);
+  const inherited = combatTiming(base, group, null, null, false);
   const own = durations?.bracket ?? null;
   const editing = draft ?? own;
   const mode = editing ? 'own' : 'inherit';
   const save = (d: Durations, after?: () => void) =>
-    update.mutate({ cid: category.id, durations: d.bracket === null && Object.keys(d.matches).length === 0 ? null : d }, { onSuccess: after });
+    update.mutate({ cid: category.id, durations: isEmptyDurations(d) ? null : d }, { onSuccess: after });
   const matches = durations?.matches ?? {};
 
   const numbers = categoryPassages(plan, category.id).numbers;
@@ -64,7 +65,7 @@ export function CategoryDurations({ competitionId, category, readOnly }: { compe
     return `${n !== undefined ? `n° ${n} · ` : ''}${roundTitle(m.phase, m.round, rounds)}${n === undefined ? ` (${id})` : ''}`;
   };
   const available = (bracket?.matches ?? []).filter((m) => !(m.id in matches));
-  const pick = exception.matchId ? combatTiming(base, group, durations, exception.matchId) : null;
+  const pick = exception.matchId ? combatTiming(base, group, durations, exception.matchId, !!bracket && finalMatchIds(bracket).includes(exception.matchId)) : null;
   const newTiming = exception.timing ?? pick;
 
   return (
@@ -74,7 +75,7 @@ export function CategoryDurations({ competitionId, category, readOnly }: { compe
           data={[{ value: 'inherit', label: `Comme la compétition (${timingText(inherited)})` }, { value: 'own', label: 'Autre' }]}
           value={mode}
           onChange={(v) => {
-            if (v === 'inherit') { setDraft(null); if (own) save({ bracket: null, matches }); }
+            if (v === 'inherit') { setDraft(null); if (own) save({ bracket: null, finals: durations?.finals ?? null, matches }); }
             else setDraft(own ?? inherited);
           }} />
         {mode === 'own' && editing && (
@@ -82,7 +83,7 @@ export function CategoryDurations({ competitionId, category, readOnly }: { compe
             <Group align="flex-end" gap="sm">
               <TimingFields testId="durations-own" value={editing} onChange={setDraft} onValidity={ownFields.field} />
               <Button size="sm" data-testid="durations-save" loading={update.isPending} disabled={!validTiming(editing) || ownFields.invalid}
-                onClick={() => save({ bracket: { ...inherited, ...editing }, matches }, () => setDraft(null))}>Enregistrer</Button>
+                onClick={() => save({ bracket: { ...inherited, ...editing }, finals: durations?.finals ?? null, matches }, () => setDraft(null))}>Enregistrer</Button>
             </Group>
           )
         )}
@@ -95,7 +96,7 @@ export function CategoryDurations({ competitionId, category, readOnly }: { compe
                 <Text size="sm" style={{ flex: 1 }}>{label(id)} : {timingText(t)}</Text>
                 {!readOnly && (
                   <ActionIcon variant="subtle" color="red" aria-label={`Retirer l’exception : ${label(id)}`}
-                    onClick={() => { const { [id]: _gone, ...rest } = matches; save({ bracket: durations?.bracket ?? null, matches: rest }); }}>
+                    onClick={() => { const { [id]: _gone, ...rest } = matches; save({ bracket: durations?.bracket ?? null, finals: durations?.finals ?? null, matches: rest }); }}>
                     <IconTrash size={16} />
                   </ActionIcon>
                 )}
@@ -111,7 +112,7 @@ export function CategoryDurations({ competitionId, category, readOnly }: { compe
                     <TimingFields key={exception.matchId} testId="exception-timing" value={newTiming} onValidity={exceptionFields.field}
                       onChange={(t) => setException({ matchId: exception.matchId, timing: t })} />
                     <Button size="sm" data-testid="exception-add" loading={update.isPending} disabled={!validTiming(newTiming) || exceptionFields.invalid}
-                      onClick={() => save({ bracket: durations?.bracket ?? null, matches: { ...matches, [exception.matchId!]: { ...pick!, ...newTiming } } },
+                      onClick={() => save({ bracket: durations?.bracket ?? null, finals: durations?.finals ?? null, matches: { ...matches, [exception.matchId!]: { ...pick!, ...newTiming } } },
                         () => setException({ matchId: null, timing: null }))}>
                       Ajouter
                     </Button>
