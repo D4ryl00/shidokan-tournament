@@ -19,7 +19,7 @@ import { PlancheToolbar, type Scope } from '../planche/PlancheToolbar.js';
 import { usePlancheDrop } from '../planche/usePlancheDrop.js';
 import { EmptyState } from '../ui/EmptyState.js';
 import { disciplineHue, drawGalaxy, fitCamera, SKY, starAt, toScreen, type Star } from './drawGalaxy.js';
-import { cardScale, displayedPositions, legendRules, linkStyle, pullFactor, slotGap, sortedNeighbors, type Camera } from './scene.js';
+import { cardScale, displayedPositions, legendRules, linkStyle, pullFactor, slotLayout, sortedNeighbors, type Camera } from './scene.js';
 import { K_MIN, useGalaxyCamera } from './useGalaxyCamera.js';
 
 // Vue « Galaxie » de Jour J → Tableaux (spec étape 48, §3 et §4) : chaque catégorie est une étoile près de ses voisines ;
@@ -29,7 +29,8 @@ const NO_OVERLAY: ReadonlySet<string> = new Set();
 /** Largeur des cartes posées sur le canevas (celle de la sélection, un peu plus large). */
 const CARD_PX = 220;
 const SELECTED_CARD_PX = 240;
-const MIN_FIT = 0.75;
+/** En dessous de cette largeur (téléphone) : barre au-dessus du canevas, cartes jusqu'à 0,6. */
+const NARROW_PX = 600;
 
 /** Règles d'un lien vues depuis `fromId`, dans l'ordre de la compétition. */
 function linkLabelOf(settings: CompetitionSettings | null) {
@@ -46,6 +47,8 @@ export function GalaxyView(p: {
   /** Catégorie à sélectionner à l'ouverture (lien de la Réaffectation). */
   initialCategoryId: string | null;
   onSeeInPlanche: (categoryId: string) => void;
+  /** Le sélecteur « Planche / Liste / Galaxie », posé dans la barre (qui flotte sur le canevas). */
+  viewSwitch?: ReactNode;
 }) {
   const { competitionId, categories, waves, waveId, scope, readOnly, entrants } = p;
   const { data: grid } = useGrid(competitionId);
@@ -209,19 +212,23 @@ export function GalaxyView(p: {
 
   const presentHues = [...new Map(drawnCats.map((c) => { const h = disciplineHue(c.key); return [h.key, h] as const; })).values()];
 
+  const toolbar = (
+    <PlancheToolbar waves={waves} waveId={waveId} scope={scope} waiting={waiting} onScope={p.onScope} query={query} onQuery={onQuery}
+      historyCount={p.historyCount} onHistory={readOnly ? undefined : p.onHistory}>
+      <Group gap={6} pb={4}>
+        <Button size="compact-sm" radius="xl" variant={onlyLone ? 'filled' : 'default'} aria-pressed={onlyLone} data-testid="galaxy-only-lone"
+          onClick={() => setOnlyLone((v) => !v)}>Seulement les seuls</Button>
+        <Button size="compact-sm" radius="xl" variant={allLinks ? 'filled' : 'default'} aria-pressed={allLinks} data-testid="galaxy-all-links"
+          onClick={() => setAllLinks((v) => !v)}>Tous les liens</Button>
+      </Group>
+      {p.viewSwitch && <Box pb={6}>{p.viewSwitch}</Box>}
+    </PlancheToolbar>
+  );
+  const staged = base !== null && scopeCats.length > 0;
+
   return (
     <Box data-testid="galaxy">
-      <Box mb="sm">
-        <PlancheToolbar waves={waves} waveId={waveId} scope={scope} waiting={waiting} onScope={p.onScope} query={query} onQuery={onQuery}
-          historyCount={p.historyCount} onHistory={readOnly ? undefined : p.onHistory}>
-          <Group gap={6} pb={4}>
-            <Button size="compact-sm" radius="xl" variant={onlyLone ? 'filled' : 'default'} aria-pressed={onlyLone} data-testid="galaxy-only-lone"
-              onClick={() => setOnlyLone((v) => !v)}>Seulement les seuls</Button>
-            <Button size="compact-sm" radius="xl" variant={allLinks ? 'filled' : 'default'} aria-pressed={allLinks} data-testid="galaxy-all-links"
-              onClick={() => setAllLinks((v) => !v)}>Tous les liens</Button>
-          </Group>
-        </PlancheToolbar>
-      </Box>
+      {!staged && <Box mb="sm">{toolbar}</Box>}
       {drag.selected && (
         <Paper data-testid="planche-banner" role="status" px="sm" py={6} radius="sm"
           style={{ position: 'fixed', top: 'calc(var(--sk-bar-h, 56px) + 8px)', left: '50%', transform: 'translateX(-50%)', width: 'min(900px, calc(100vw - 32px))', zIndex: 90, pointerEvents: 'none', boxShadow: 'var(--mantine-shadow-md)', backgroundColor: 'var(--sk-chip)', color: 'var(--sk-chip-text)', border: '1px solid var(--sk-accent)' }}>
@@ -230,8 +237,8 @@ export function GalaxyView(p: {
       )}
       {!base && <Center h={300}><Loader /></Center>}
       {base && scopeCats.length === 0 && <EmptyState title="Aucune catégorie." />}
-      {base && scopeCats.length > 0 && (
-        <GalaxyStage stars={stars} base={base} links={drawnLinks} sel={sel} neighborIds={neighborIds} matched={matched} allLinks={allLinks}
+      {staged && (
+        <GalaxyStage toolbar={toolbar} stars={stars} base={base} links={drawnLinks} sel={sel} neighborIds={neighborIds} matched={matched} allLinks={allLinks}
           linkStyle={styleOf} linkLabel={labelOf} fitIds={fitIds} fitKey={`${scope}|${waveId ?? ''}|${onlyLone}`}
           onSelect={setSelectedId} chipSelected={drag.selected !== null} onCancelChip={drag.cancel} renderCard={renderCard}
           legend={<GalaxyLegend hues={presentHues} rules={legend} />} />
@@ -241,24 +248,9 @@ export function GalaxyView(p: {
   );
 }
 
-/**
- * Échelle des cartes rapprochées pour que trois rangées tiennent dans un canevas bas (écran de portable : la barre de
- * l'appli prend de la hauteur) ; jamais en dessous de 0,75, pour rester lisible.
- */
-function fitScale(s: { sel: string | null; neighborIds: string[] }, k: number, w: number, h: number, els?: Map<string, HTMLDivElement>): number {
-  const gap = slotGap(k, { w, h }, s.neighborIds.length);
-  let hSel = 0;
-  let hMax = 0;
-  for (const [id, el] of els ?? []) {
-    if (id === s.sel) hSel = el.offsetHeight;
-    else hMax = Math.max(hMax, el.offsetHeight);
-  }
-  const need = Math.min(hSel + hMax > 0 ? (2 * gap.y - 12) / (hSel + hMax) : 1, (gap.x - 12) / CARD_PX);
-  return Math.max(MIN_FIT, Math.min(1, need));
-}
-
 /** Le canevas, les cartes posées dessus et la légende. Monté seulement quand la portée a des étoiles. */
 function GalaxyStage(p: {
+  toolbar: ReactNode;
   stars: Star[]; base: Map<string, Point>; links: GalaxyLink[]; sel: string | null; neighborIds: string[];
   matched: ReadonlySet<string> | null; allLinks: boolean;
   linkStyle: (l: GalaxyLink, fromId: string) => { color: string; dashed: boolean };
@@ -272,32 +264,49 @@ function GalaxyStage(p: {
   const legendRef = useRef<HTMLDivElement | null>(null);
   const cardEls = useRef(new Map<string, HTMLDivElement>());
   const [size, setSize] = useState({ w: 0, h: 0 });
+  // Bureau : la barre flotte sur le haut du canevas (comme la maquette) ; sa hauteur est retirée de la place des cartes.
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < NARROW_PX);
+  const [topInset, setTopInset] = useState(0);
   const scene = useRef(p);
   scene.current = p;
+  const inset = useRef(topInset);
+  inset.current = topInset;
   const hover = useRef<string | null>(null);
   // Dernières places affichées et cartes posées : pour savoir sur quelle étoile tombe un clic.
   const shownPos = useRef<Map<string, Point>>(p.base);
   const overlaid = useRef<ReadonlySet<string>>(NO_OVERLAY);
 
-  // Taille : toute la largeur, la hauteur jusqu'en bas de la fenêtre (Hauteur : 100vh moins ce qui est au-dessus).
+  // Taille : toute la largeur, et toute la hauteur sous la barre de l'appli, sans faire défiler la page (les marges du bas
+  // des conteneurs sont retirées).
   useLayoutEffect(() => {
     const el = frameRef.current;
     if (!el) return;
     const measure = () => {
       const r = el.getBoundingClientRect();
       const w = Math.round(r.width);
+      let below = 0;
+      for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+        const cs = getComputedStyle(a);
+        below += (parseFloat(cs.paddingBottom) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
+      }
+      const isNarrow = window.innerWidth < NARROW_PX;
       // Au téléphone, la barre de l'appli prend la moitié de l'écran : le canevas garde au moins 70 % de la hauteur (on
       // fait défiler la page jusqu'à lui).
-      const floor = window.innerWidth < 600 ? Math.min(560, Math.round(window.innerHeight * 0.7)) : 300;
-      const h = Math.max(floor, Math.round(window.innerHeight - (r.top + window.scrollY) - 16));
+      const floor = isNarrow ? Math.min(560, Math.round(window.innerHeight * 0.7)) : 300;
+      const h = Math.max(floor, Math.floor(window.innerHeight - (r.top + window.scrollY) - below));
       setSize((s) => (s.w === w && s.h === h ? s : { w, h }));
+      setNarrow(isNarrow);
+      const t = toolbarRef.current;
+      setTopInset(t && !isNarrow ? Math.ceil(t.getBoundingClientRect().height) + 16 : 0);
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
+    if (toolbarRef.current) ro.observe(toolbarRef.current);
     window.addEventListener('resize', measure);
     return () => { ro.disconnect(); window.removeEventListener('resize', measure); };
-  }, []);
+  }, [narrow]);
 
   const draw = (cam: Camera, now: number): boolean => {
     const canvas = canvasRef.current;
@@ -308,10 +317,16 @@ function GalaxyStage(p: {
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const pull = s.sel ? pullFactor(cam.k) : 0;
-    const pos = displayedPositions(s.base, s.sel, s.neighborIds, cam, { w, h });
+    // Cases des voisines : selon la place sous la barre et la taille mesurée des cartes (à l'échelle 1).
+    const heightOf = (id: string, fallback: number) => cardEls.current.get(id)?.offsetHeight || fallback;
+    const lay = s.sel
+      ? slotLayout({ sel: { w: SELECTED_CARD_PX, h: heightOf(s.sel, 200) }, neighbors: s.neighborIds.map((id) => ({ w: CARD_PX, h: heightOf(id, 180) })) },
+        { w, h: h - inset.current }, w < NARROW_PX ? 0.6 : 0.75)
+      : null;
+    const pos = displayedPositions(s.base, s.sel, s.neighborIds, cam, { w, h }, lay?.slots);
     // Cartes posées par-dessus : la sélection et ses voisines rapprochées, à leur place affichée, à l'échelle.
     const show = s.sel !== null && pull > 0.2 && cardScale(cam.k, pull) * CARD_PX >= 70;
-    const sc = cardScale(cam.k, pull) * (show ? 1 - pull * (1 - fitScale(s, cam.k, w, h, cardEls.current)) : 1);
+    const sc = cardScale(cam.k, pull) * (show && lay ? 1 - pull * (1 - lay.scale) : 1);
     const over: ReadonlySet<string> = show ? new Set([s.sel!, ...s.neighborIds]) : NO_OVERLAY;
     for (const [id, el] of cardEls.current) {
       const q = pos.get(id);
@@ -360,7 +375,9 @@ function GalaxyStage(p: {
     if (size.w === 0) return;
     if (fitted.current && scene.current.sel) return;
     const pts = scene.current.fitIds.map((id) => scene.current.base.get(id)).filter((q): q is Point => q !== undefined);
-    camera.setCamera(fitCamera(pts, size.w, size.h, K_MIN), !fitted.current);
+    // La place sous la barre : cadrée plus bas d'une demi-barre.
+    const cam = fitCamera(pts, size.w, size.h - inset.current, K_MIN);
+    camera.setCamera({ ...cam, py: cam.py + inset.current / 2 }, !fitted.current);
     fitted.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.fitKey, size.w > 0]);
@@ -369,7 +386,7 @@ function GalaxyStage(p: {
   useEffect(() => {
     hover.current = null;
     const q = p.sel ? scene.current.base.get(p.sel) : undefined;
-    if (q && size.w > 0) camera.flyTo(q);
+    if (q && size.w > 0) camera.flyTo(q, inset.current / 2);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.sel, size.w > 0]);
 
@@ -385,7 +402,11 @@ function GalaxyStage(p: {
 
   const dpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
   const cards = p.sel ? [p.sel, ...p.neighborIds] : [];
+  // Au-dessus des autres : la carte sous le pointeur, ou celle que survole un glisser.
+  const raise = (el: HTMLElement, on: boolean, id: string) => { el.style.zIndex = on ? '3' : id === p.sel ? '2' : '1'; };
   return (
+    <>
+    {narrow && <Box mb="sm">{p.toolbar}</Box>}
     <Box ref={frameRef} data-testid="galaxy-frame"
       style={{ position: 'relative', height: size.h || 300, overflow: 'hidden', borderRadius: 'var(--mantine-radius-md)', backgroundColor: SKY, touchAction: 'none' }}>
       <canvas ref={canvasRef} data-testid="galaxy-canvas" data-selected={p.sel ?? ''} data-stars={p.stars.length}
@@ -396,8 +417,11 @@ function GalaxyStage(p: {
         {cards.map((id) => (
           <div key={id} data-testid="galaxy-card" data-category={id}
             ref={(el) => { if (el) cardEls.current.set(id, el); else cardEls.current.delete(id); }}
-            onMouseEnter={(e) => { e.currentTarget.style.zIndex = '3'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.zIndex = id === p.sel ? '2' : '1'; }}
+            onMouseEnter={(e) => raise(e.currentTarget, true, id)}
+            onMouseLeave={(e) => raise(e.currentTarget, false, id)}
+            onDragEnter={(e) => raise(e.currentTarget, true, id)}
+            onDragLeave={(e) => { if (!(e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget))) raise(e.currentTarget, false, id); }}
+            onDrop={(e) => raise(e.currentTarget, false, id)}
             style={{
               position: 'absolute', left: 0, top: 0, width: id === p.sel ? SELECTED_CARD_PX : CARD_PX, visibility: 'hidden', pointerEvents: 'auto',
               zIndex: id === p.sel ? 2 : 1, willChange: 'transform', borderRadius: 'var(--mantine-radius-md)',
@@ -410,7 +434,13 @@ function GalaxyStage(p: {
       <div ref={legendRef} data-testid="galaxy-legend" style={{ position: 'absolute', right: 10, bottom: 10, maxWidth: 'calc(100% - 20px)', transition: 'opacity .3s' }}>
         {p.legend}
       </div>
+      {!narrow && (
+        <div ref={toolbarRef} data-testid="galaxy-toolbar" style={{ position: 'absolute', top: 10, left: 10, right: 10, zIndex: 5 }}>
+          {p.toolbar}
+        </div>
+      )}
     </Box>
+    </>
   );
 }
 

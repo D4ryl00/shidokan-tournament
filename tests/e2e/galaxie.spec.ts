@@ -4,7 +4,8 @@ import { clipped, createCompetition } from './helpers.js';
 interface Cat { id: string; label: string; registrationIds: string[] }
 
 /**
- * Karaté jiyu cadettes : ALBA et BRUN en -54, SOLO seule en -61 ; MIXA seule en Shido-mix -61.
+ * Karaté jiyu cadettes : ALBA, BRUN, CARO, DIDI et EVAN en -54, SOLO seule en -61 ; MIXA seule en Shido-mix -61 ;
+ * BOXA et BOXB en Shido-boxing -61, TRIA en triathlon -61 (des voisines du -61 de tailles différentes).
  * Sessions « Matin » (cadets), « Soir » (seniors) et « Vide » (vétérans 1) ; le Mix -61 est mis dans « Soir » à la main.
  */
 async function seed(request: APIRequestContext, id: string): Promise<{ c54: string; c61: string; mix: string; soir: string }> {
@@ -14,9 +15,11 @@ async function seed(request: APIRequestContext, id: string): Promise<{ c54: stri
     });
     expect(res.ok(), await res.text()).toBeTruthy();
   };
-  for (const n of ['ALBA', 'BRUN']) await reg(n, 'karate', 'cadet:F:-54');
+  for (const n of ['ALBA', 'BRUN', 'CARO', 'DIDI', 'EVAN']) await reg(n, 'karate', 'cadet:F:-54');
   await reg('SOLO', 'karate', 'cadet:F:-61');
   await reg('MIXA', 'shido-mix', 'cadet:F:-61');
+  for (const n of ['BOXA', 'BOXB']) await reg(n, 'shido-boxing', 'cadet:F:-61');
+  await reg('TRIA', 'triathlon', 'cadet:F:-61');
   const waves = (await (await request.put(`/api/competitions/${id}/waves`, { data: [
     { name: 'Matin', rules: { ageBandCodes: ['cadet'], disciplines: [] } },
     { name: 'Soir', rules: { ageBandCodes: ['senior'], disciplines: [] } },
@@ -43,6 +46,22 @@ function consoleErrors(page: Page): string[] {
   return out;
 }
 
+/** Plus grand chevauchement (px, sur le côté le plus court) entre deux cartes visibles de la galaxie. */
+async function maxCardOverlap(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const boxes = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="galaxy"] [data-testid="planche-card"]'))
+      .filter((el) => getComputedStyle(el).visibility === 'visible')
+      .map((el) => el.getBoundingClientRect());
+    let worst = 0;
+    boxes.forEach((a, i) => boxes.slice(i + 1).forEach((b) => {
+      const ix = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const iy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      if (ix > 0 && iy > 0) worst = Math.max(worst, Math.min(ix, iy));
+    }));
+    return boxes.length < 2 ? -1 : worst;
+  });
+}
+
 const card = (page: Page, categoryId: string) => page.locator(`[data-testid="planche-card"][data-category="${categoryId}"]`);
 const canvas = (page: Page) => page.getByTestId('galaxy-canvas');
 
@@ -56,7 +75,8 @@ test('galaxie : choisir la vue, chercher, voir les voisines en cartes, déplacer
   const errors = consoleErrors(page);
   const id = await createCompetition(page, 'Galaxie bleue');
   const ids = await seed(request, id);
-  await page.setViewportSize({ width: 1280, height: 800 });
+  // L'écran du PC de la table centrale.
+  await page.setViewportSize({ width: 1280, height: 720 });
   await openGalaxy(page, id);
   await expect.poll(async () => Number(await canvas(page).getAttribute('data-stars'))).toBeGreaterThanOrEqual(2);
   await expect(canvas(page)).toHaveAttribute('data-selected', '');
@@ -77,6 +97,16 @@ test('galaxie : choisir la vue, chercher, voir les voisines en cartes, déplacer
   await expect(mix.getByTestId('card-session')).toHaveText('Soir');
   await expect(c61.getByTestId('card-session')).toHaveCount(0);
   await expect(page.getByTestId('galaxy-legend')).toHaveCSS('opacity', '0');
+  // Les cartes rapprochées tiennent sur l'écran sans s'empiler, et la page ne défile pas.
+  await expect(page.locator('[data-testid="galaxy"] [data-testid="planche-card"]:visible')).toHaveCount(5);
+  await expect.poll(() => maxCardOverlap(page)).toBeGreaterThanOrEqual(0);
+  await expect.poll(() => maxCardOverlap(page)).toBeLessThanOrEqual(3);
+  for (const id of [ids.c61, ids.c54, ids.mix]) {
+    const b = (await card(page, id).boundingBox())!;
+    expect(b.y).toBeGreaterThanOrEqual(0);
+    expect(b.y + b.height).toBeLessThanOrEqual(720);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1)).toBe(true);
 
   // Clic sur le titre d'une voisine : elle devient la sélection ; puis retour au -61 par son titre.
   await mix.getByTestId('card-title').click();

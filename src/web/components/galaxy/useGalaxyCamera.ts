@@ -9,7 +9,7 @@ import { flyDuration, K_FULL, type Camera } from './scene.js';
 export const K_MIN = 0.15;
 const EASE = 0.18;
 const clampK = (k: number) => Math.max(K_MIN, Math.min(K_FULL, k));
-interface Fly { t0: number; ms: number; k0: number; X0: number; Y0: number; X1: number; Y1: number }
+interface Fly { t0: number; ms: number; k0: number; X0: number; Y0: number; X1: number; Y1: number; oy0: number; oy1: number }
 interface Gesture { moved: boolean; sx: number; sy: number; dist?: number; mid?: Point }
 
 export function useGalaxyCamera(o: {
@@ -45,7 +45,7 @@ export function useGalaxyCamera(o: {
       const k = Math.exp(Math.log(f.k0) + (Math.log(K_FULL) - Math.log(f.k0)) * e);
       c.k = k;
       c.px = -(f.X0 + (f.X1 - f.X0) * e) * k;
-      c.py = -(f.Y0 + (f.Y1 - f.Y0) * e) * k;
+      c.py = -(f.Y0 + (f.Y1 - f.Y0) * e) * k + f.oy0 + (f.oy1 - f.oy0) * e;
       Object.assign(t, c);
       if (u >= 1) fly.current = null;
       moving = true;
@@ -156,13 +156,13 @@ export function useGalaxyCamera(o: {
     onPointerLeave: (ev: ReactPointerEvent<HTMLCanvasElement>) => { if (ev.pointerType === 'mouse' && !gesture.current) latest.current.onHover(null, null); },
   };
 
-  /** Vol jusqu'à une place de la galaxie, au zoom maximal. */
-  const flyTo = useCallback((p: Point) => {
+  /** Vol jusqu'à une place de la galaxie, au zoom maximal ; elle arrive `offsetY` px sous le milieu (barre flottante). */
+  const flyTo = useCallback((p: Point, offsetY = 0) => {
     const c = cam.current;
     const X0 = -c.px / c.k;
     const Y0 = -c.py / c.k;
     const dist = Math.hypot(p.x - X0, p.y - Y0) * c.k;
-    fly.current = { t0: performance.now(), ms: flyDuration(dist, c.k), k0: c.k, X0, Y0, X1: p.x, Y1: p.y };
+    fly.current = { t0: performance.now(), ms: flyDuration(dist, c.k), k0: c.k, X0, Y0, X1: p.x, Y1: p.y, oy0: 0, oy1: offsetY };
     requestDraw();
   }, [requestDraw]);
 

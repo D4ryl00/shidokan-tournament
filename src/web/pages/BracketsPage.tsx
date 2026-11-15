@@ -178,12 +178,15 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
     setSelectedId(cid); setSwapFrom(null); setView('liste');
   };
 
+  const viewSwitch = (
+    <SegmentedControl size="xs" data-testid="brackets-view" value={view} onChange={chooseView}
+      data={[{ value: 'planche', label: 'Planche' }, { value: 'liste', label: 'Liste' }, { value: 'galaxie', label: 'Galaxie' }]} />
+  );
+
   return (
     <>
     <Stack gap="sm" style={historyOpen && wide ? { marginRight: HISTORY_DRAWER_WIDTH } : undefined}>
-    <Group justify="flex-end">
-      <SegmentedControl size="xs" data-testid="brackets-view" value={view} onChange={chooseView} data={[{ value: 'planche', label: 'Planche' }, { value: 'liste', label: 'Liste' }, { value: 'galaxie', label: 'Galaxie' }]} />
-    </Group>
+    {view !== 'galaxie' && <Group justify="flex-end">{viewSwitch}</Group>}
     {view === 'planche' && (
       <Planche competitionId={id} categories={categories} waves={waves} waveId={waveId} scope={scope} onScope={onSelectScope} readOnly={readOnlyPoste}
         entrants={entrants} badges={badges} badgeDetails={badgeDetails} cases={casesByCategory} aside={asideByCategory} historyCount={historyCount}
@@ -192,7 +195,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
     {view === 'galaxie' && (
       <GalaxyView competitionId={id} categories={categories} waves={waves} waveId={waveId} scope={scope} onScope={onSelectScope} readOnly={readOnlyPoste}
         entrants={entrants} badges={badges} badgeDetails={badgeDetails} cases={casesByCategory} aside={asideByCategory} historyCount={historyCount}
-        onHistory={() => setHistoryOpen((o) => !o)} initialCategoryId={galaxyStart} onSeeInPlanche={(cid) => onSee([cid])} />
+        onHistory={() => setHistoryOpen((o) => !o)} initialCategoryId={galaxyStart} onSeeInPlanche={(cid) => onSee([cid])} viewSwitch={viewSwitch} />
     )}
     {view === 'liste' && (
     <Grid>
