@@ -106,8 +106,9 @@ export function galaxyLinks(nodes: GalaxyNode[], grid: CategoryGrid, settings: C
   }
   const group = (discipline: DisciplineId, ruleset: Ruleset | null, sex: Sex, band: string) => groups.get(groupKey(discipline, ruleset, sex, band)) ?? [];
 
-  /** Cases du groupe dont la classe est la plus proche en kg de celle de `c` (toutes à égalité). */
-  const nearest = (targets: Cell[], c: Cell): Cell[] => {
+  /** Cases du groupe, hors du nœud de `c`, dont la classe est la plus proche en kg de celle de `c` (toutes à égalité). */
+  const nearest = (group: Cell[], c: Cell): Cell[] => {
+    const targets = group.filter((t) => t.node !== c.node);
     const dist = (t: Cell) => {
       if (c.weight === null || t.weight === null) return c.weight === t.weight ? 0 : Infinity;
       return Math.abs((kgOf.get(c.weight) ?? Infinity) - (kgOf.get(t.weight) ?? Infinity));

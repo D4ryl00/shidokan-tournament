@@ -125,6 +125,16 @@ describe('galaxyLinks', () => {
     expect(from(far, j66)).toEqual(['ageDown']);
   });
 
+  test('le poids le plus proche se cherche hors de la catégorie de départ', () => {
+    // La case cadette -54 du regroupement a sa voisine juniors -53 chez elle : elle se relie à juniors -59.
+    const merged = node(key('karate', 'jiyu', 'F', ['cadet', 'junior'], ['cadet:F:-54', 'junior:F:-53']));
+    const j59 = kj('F', 'junior', '-59');
+    const j66 = kj('F', 'junior', '-66');
+    const links = galaxyLinks([merged, j59, j66], grid, settings({ replacementRules: { ...defaultSettings().replacementRules, off: ['weight'] } }));
+    expect(from(between(links, merged, j59)!, merged)).toEqual(['ageUp']);
+    expect(from(between(links, merged, j66)!, merged)).toBeNull();
+  });
+
   test('tableau libre : aucun lien', () => {
     const free = node(freeKey('Open', 'karate', 'jiyu'));
     const cadet = kj('F', 'cadet', '-54');
