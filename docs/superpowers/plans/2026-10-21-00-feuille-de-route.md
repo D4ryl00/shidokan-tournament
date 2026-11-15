@@ -87,3 +87,6 @@ Faite le 2026-11-12 sur la branche `etape-43-finales` (pas encore fusionnée) : 
 
 ## Étape 45 : zone réservée aux finales
 Faite le 2026-11-14 sur la branche `etape-45-zone-reservee` : voir le bilan. Case « Réservée aux finales » sur une zone (Réglages) : la répartition automatique ne lui donne aucune catégorie ; choisie comme zone des finales avec « Dès que finie », chaque finale y passe dès que sa catégorie est terminée. Migration 0037. Spec : `docs/superpowers/specs/2026-11-14-zone-reservee-aux-finales-design.md`.
+
+## Étape 46 : durée des finales
+Faite le 2026-11-15 sur la branche `etape-46-duree-des-finales` : voir le bilan. Réglages → Durées des combats : une ligne « Finale » par groupe d'âge (rounds, round, repos, prolongation) ; Tableaux → Durée des combats : prolongation réglable et ligne « Finale » propre au tableau. Les heures estimées (plan, spectateurs) prennent la durée de finale. Pas de migration. Spec : `docs/superpowers/specs/2026-11-15-duree-des-finales-design.md`.
