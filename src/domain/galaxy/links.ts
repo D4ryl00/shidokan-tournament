@@ -117,68 +117,114 @@ export function galaxyLinks(nodes: GalaxyNode[], grid: CategoryGrid, settings: C
     return Number.isFinite(min) ? targets.filter((t) => dist(t) <= min + 1e-9) : [];
   };
 
+  /**
+   * Compatibilité d'âge de la tranche `band` avec toutes les tranches d'arrivée, comme `ageCompatibility` du moteur
+   * (dans les deux sens) : on monte dès que c'est permis, on ne descend que sinon. null = interdit.
+   */
+  const allowed = (x: ReturnType<typeof ageMove>) =>
+    (x.kind === 'C' || x.kind === 'D') && (x.kind !== 'D' || s.mixSeniorsVeterans) && (!x.crossesMinorAdult || s.mixMinorsAdults);
+  const ageCompatibility = (band: string, targetBands: string[]): { kind: 'same' | 'C' | 'D'; crossesMinorAdult: boolean; directions: Set<'up' | 'down'> } | null => {
+    let kind: 'same' | 'C' | 'D' = 'same';
+    let crossesMinorAdult = false;
+    const directions = new Set<'up' | 'down'>();
+    for (const b of targetBands) {
+      if (b === band) continue;
+      const up = ageMove(grid, band, b);
+      const down = ageMove(grid, b, band);
+      const goesUp = allowed(up);
+      const link = goesUp ? up : allowed(down) ? down : null;
+      if (!link || (link.kind !== 'C' && link.kind !== 'D')) return null;
+      if (link.crossesMinorAdult) crossesMinorAdult = true;
+      if (!targetBands.includes(band)) {
+        kind = kind === 'D' ? 'D' : link.kind;
+        directions.add(goesUp ? 'up' : 'down');
+      }
+    }
+    return { kind, crossesMinorAdult, directions };
+  };
+
+  /**
+   * Règles pour amener la case `c` dans la catégorie `tk`, comme `evaluate` puis `ruleProfile` du moteur (sans l'écart
+   * de poids, qui dépend des combattants) ; null = interdit. `near` : classe de `c` et ses voisines.
+   */
+  const moveRules = (c: Cell, near: (string | null)[], tk: CategoryKey): RuleId[] | null => {
+    const rules: RuleId[] = [];
+    if (tk.discipline !== c.discipline) {
+      if (!DISCIPLINES[c.discipline].inPreferences || !DISCIPLINES[tk.discipline].inPreferences) return null;
+      rules.push('discipline');
+    }
+    if (tk.ruleset !== c.ruleset) {
+      if (c.ruleset !== 'shobu' || tk.ruleset !== 'jiyu') return null;
+      rules.push('shobuToJiyu');
+    }
+    // Pas de shobu pour une tranche mineure.
+    if (tk.ruleset === 'shobu' && isMinor(c.band)) return null;
+    // Une catégorie mixte (X) n'est jamais du même sexe : y entrer demande toujours le mélange.
+    const sameSex = tk.sex === c.sex;
+    if (!sameSex) {
+      if (!s.mixSexes.ageBandCodes.includes(c.band)) return null;
+      rules.push('mixSexes');
+    }
+    const ages = ageCompatibility(c.band, tk.ageBandCodes);
+    if (!ages) return null;
+    // Même sexe et même tranche : la catégorie doit avoir la classe de `c` ou une voisine.
+    if (DISCIPLINES[tk.discipline].hasWeight && c.weight !== null && sameSex && tk.ageBandCodes.includes(c.band)) {
+      if (!tk.weightClassIds.some((id) => near.includes(id))) return null;
+    }
+    if (ages.crossesMinorAdult) rules.push('minorsAdults');
+    else if (ages.kind === 'D') rules.push('seniorsVeterans');
+    else for (const d of ages.directions) rules.push(d === 'up' ? 'ageUp' : 'ageDown');
+    // « Poids voisin » seulement quand aucune autre règle ne s'applique.
+    if (rules.length === 0) rules.push('weight');
+    return rules;
+  };
+
   // Pour chaque sens (nœud de départ → nœud d'arrivée), l'ensemble de règles le moins coûteux.
+  const keyOf = new Map(nodes.map((n) => [n.id, n.key]));
   const best = new Map<string, { from: string; to: string; rules: RuleId[]; rank: number }>();
-  const consider = (from: Cell, to: Cell, rules: RuleId[]) => {
+  const consider = (from: Cell, near: (string | null)[], to: Cell) => {
     if (to.node === from.node) return;
-    if (!rules.every((r) => isRuleOn(s, r))) return;
-    // Comme le moteur : pas de shobu pour une tranche mineure.
-    if (to.ruleset === 'shobu' && isMinor(from.band)) return;
+    const rules = moveRules(from, near, keyOf.get(to.node)!);
+    if (!rules || !rules.every((r) => isRuleOn(s, r))) return;
     const rank = rulesRank(rules, s).rank;
     const k = `${from.node}\n${to.node}`;
     const cur = best.get(k);
     if (!cur || rank < cur.rank || (rank === cur.rank && rules.length < cur.rules.length)) best.set(k, { from: from.node, to: to.node, rules, rank });
   };
-  const plusWeight = (c: Cell, t: Cell): RuleId[] => (t.weight !== c.weight ? ['weight'] : []);
 
+  // Cases voisines de chaque case (le principe) ; les règles viennent ensuite de la catégorie d'arrivée entière.
   for (const c of cells) {
     const wc = c.weight === null ? undefined : grid.weightClasses.find((w) => w.id === c.weight);
     const { lighter, heavier } = wc ? neighborWeightClasses(grid, wc) : { lighter: null, heavier: null };
-    const neighbors = [lighter?.id, heavier?.id].filter((id): id is string => id !== undefined);
-    const near = [c.weight, ...neighbors];
+    const near = [c.weight, ...[lighter?.id, heavier?.id].filter((id): id is string => id !== undefined)];
+    const nearby = (targets: Cell[]) => targets.filter((t) => near.includes(t.weight));
 
-    // Catégorie de poids voisine.
-    for (const t of group(c.discipline, c.ruleset, c.sex, c.band)) if (t.weight !== null && neighbors.includes(t.weight)) consider(c, t, ['weight']);
+    // Même groupe, classe égale ou voisine.
+    for (const t of nearby(group(c.discipline, c.ruleset, c.sex, c.band))) consider(c, near, t);
 
-    // Shobu → jiyu, même poids ou voisin (jamais l'inverse).
-    if (c.ruleset === 'shobu') {
-      for (const t of group(c.discipline, 'jiyu', c.sex, c.band)) if (near.includes(t.weight)) consider(c, t, ['shobuToJiyu', ...plusWeight(c, t)]);
-    }
+    // Shobu → jiyu, classe égale ou voisine (jamais l'inverse).
+    if (c.ruleset === 'shobu') for (const t of nearby(group(c.discipline, 'jiyu', c.sex, c.band))) consider(c, near, t);
 
-    // Autre discipline des préférences, même règlement ou shobu → jiyu.
+    // Autre discipline des préférences, même règlement ou shobu → jiyu, classe égale ou voisine.
     if (DISCIPLINES[c.discipline].inPreferences) {
       const rulesets: (Ruleset | null)[] = c.ruleset === 'shobu' ? ['shobu', 'jiyu'] : [c.ruleset];
       for (const d of Object.keys(DISCIPLINES) as DisciplineId[]) {
         if (d === c.discipline || !DISCIPLINES[d].inPreferences) continue;
-        for (const rs of rulesets) {
-          for (const t of group(d, rs, c.sex, c.band)) {
-            if (near.includes(t.weight)) consider(c, t, ['discipline', ...(rs !== c.ruleset ? (['shobuToJiyu'] as const) : []), ...plusWeight(c, t)]);
-          }
-        }
+        for (const rs of rulesets) for (const t of nearby(group(d, rs, c.sex, c.band))) consider(c, near, t);
       }
     }
 
-    // Tranches reliées par la grille : C vers le haut (ageUp) ou vers le bas (ageDown), D (seniors ↔ vétérans).
+    // Tranches reliées par la grille, classe la plus proche.
     const otherBands = new Set<string>();
     for (const l of grid.ageLinks) {
       if (l.from === c.band) otherBands.add(l.to);
       if (l.to === c.band) otherBands.add(l.from);
     }
-    for (const band of otherBands) {
-      const candidates: RuleId[][] = [];
-      for (const [move, rule] of [[ageMove(grid, c.band, band), 'ageUp'], [ageMove(grid, band, c.band), 'ageDown']] as const) {
-        if (move.kind !== 'C' && move.kind !== 'D') continue;
-        candidates.push([move.kind === 'D' ? 'seniorsVeterans' : rule, ...(move.crossesMinorAdult ? (['minorsAdults'] as const) : [])]);
-      }
-      if (candidates.length === 0) continue;
-      for (const t of nearest(group(c.discipline, c.ruleset, c.sex, band), c)) for (const rules of candidates) consider(c, t, rules);
-    }
+    for (const band of otherBands) for (const t of nearest(group(c.discipline, c.ruleset, c.sex, band), c)) consider(c, near, t);
 
-    // Mélange filles / garçons, pour les tranches cochées.
-    if (s.mixSexes.ageBandCodes.includes(c.band)) {
-      const other: Sex = c.sex === 'F' ? 'M' : 'F';
-      for (const t of nearest(group(c.discipline, c.ruleset, other, c.band), c)) consider(c, t, ['mixSexes']);
-    }
+    // Autre sexe, même tranche, classe la plus proche.
+    const other: Sex = c.sex === 'F' ? 'M' : 'F';
+    for (const t of nearest(group(c.discipline, c.ruleset, other, c.band), c)) consider(c, near, t);
   }
 
   const links = new Map<string, GalaxyLink>();

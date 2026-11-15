@@ -38,23 +38,36 @@ describe('galaxyLinks', () => {
     const cadet = kj('F', 'cadet', '-54');
     const junior = kj('F', 'junior', '-53');
     const l = between(galaxyLinks([cadet, junior], grid, settings()), cadet, junior)!;
-    expect(rulesFrom(l, cadet.id)).toContain('ageUp');
-    expect(rulesFrom(l, junior.id)).toContain('ageDown');
+    expect(rulesFrom(l, cadet.id)).toEqual(['ageUp']);
+    expect(rulesFrom(l, junior.id)).toEqual(['ageDown']);
   });
 
-  test('juniors → seniors ajoute minorsAdults ; seniors ↔ v1 = seniorsVeterans', () => {
+  test('entre vétérans (C dans les deux sens), ageUp des deux côtés ; ageUp éteint = pas de lien', () => {
+    const v1 = kj('F', 'v1', '-61');
+    const v2 = kj('F', 'v2', '-61');
+    const l = between(galaxyLinks([v1, v2], grid, settings()), v1, v2)!;
+    expect(l.fromA).toEqual(['ageUp']);
+    expect(l.fromB).toEqual(['ageUp']);
+    const off = settings({ replacementRules: { ...defaultSettings().replacementRules, off: ['ageUp'] } });
+    expect(galaxyLinks([v1, v2], grid, off)).toEqual([]);
+  });
+
+  test('juniors → seniors = minorsAdults seul ; seniors ↔ v1 = seniorsVeterans', () => {
     const junior = kj('F', 'junior', '-53');
     const senior = kj('F', 'senior', '-55');
     const v1 = kj('F', 'v1', '-55');
     const links = galaxyLinks([junior, senior, v1], grid, settings({ mixMinorsAdults: true }));
     const js = between(links, junior, senior)!;
-    expect(from(js, junior)).toEqual(['ageUp', 'minorsAdults']);
-    expect(from(js, senior)).toEqual(['ageDown', 'minorsAdults']);
+    expect(from(js, junior)).toEqual(['minorsAdults']);
+    expect(from(js, senior)).toEqual(['minorsAdults']);
     const sv = between(links, senior, v1)!;
     expect(sv.fromA).toEqual(['seniorsVeterans']);
     expect(sv.fromB).toEqual(['seniorsVeterans']);
     // Sans le mélange mineurs / adultes, plus de lien juniors ↔ seniors.
     expect(between(galaxyLinks([junior, senior], grid, settings()), junior, senior)).toBeUndefined();
+    // ageUp éteint : le passage reste possible, il ne demande que minorsAdults.
+    const noUp = settings({ mixMinorsAdults: true, replacementRules: { ...defaultSettings().replacementRules, off: ['ageUp'] } });
+    expect(from(between(galaxyLinks([junior, senior], grid, noUp), junior, senior)!, junior)).toEqual(['minorsAdults']);
   });
 
   test('karaté jiyu ↔ shido-mix même poids = discipline ; kata n’a aucun lien de discipline', () => {
@@ -69,6 +82,32 @@ describe('galaxyLinks', () => {
     expect(between(links, mix, kata)).toBeUndefined();
   });
 
+  test('autre discipline vers un poids voisin : discipline seule, même poids voisin éteint', () => {
+    const karate = kj('F', 'cadet', '-54');
+    const mix61 = node(key('shido-mix', 'jiyu', 'F', ['cadet'], ['cadet:F:-61']));
+    const noWeight = settings({ replacementRules: { ...defaultSettings().replacementRules, off: ['weight'] } });
+    const l = between(galaxyLinks([karate, mix61], grid, noWeight), karate, mix61)!;
+    expect(from(l, karate)).toEqual(['discipline']);
+    expect(from(l, mix61)).toEqual(['discipline']);
+  });
+
+  test('autre discipline et shobu → jiyu ensemble', () => {
+    const shobu = node(key('karate', 'shobu', 'F', ['senior'], ['senior:F:-55']));
+    const mixJiyu = node(key('shido-mix', 'jiyu', 'F', ['senior'], ['senior:F:-55']));
+    const l = between(galaxyLinks([shobu, mixJiyu], grid, settings({ shobuToJiyu: true })), shobu, mixJiyu)!;
+    expect(from(l, shobu)).toEqual(['discipline', 'shobuToJiyu']);
+    expect(from(l, mixJiyu)).toBeNull();
+  });
+
+  test('pas de shobu pour une tranche mineure', () => {
+    const cadetShobu = node(key('karate', 'shobu', 'F', ['cadet'], ['cadet:F:-54']));
+    const cadetMixShobu = node(key('shido-mix', 'shobu', 'F', ['cadet'], ['cadet:F:-54']));
+    expect(galaxyLinks([cadetShobu, cadetMixShobu], grid, settings())).toEqual([]);
+    const seniorShobu = node(key('karate', 'shobu', 'F', ['senior'], ['senior:F:-55']));
+    const seniorMixShobu = node(key('shido-mix', 'shobu', 'F', ['senior'], ['senior:F:-55']));
+    expect(between(galaxyLinks([seniorShobu, seniorMixShobu], grid, settings()), seniorShobu, seniorMixShobu)!.fromA).toEqual(['discipline']);
+  });
+
   test('shobu → jiyu possible, jiyu → shobu null', () => {
     const shobu = node(key('karate', 'shobu', 'F', ['senior'], ['senior:F:-55']));
     const jiyu = kj('F', 'senior', '-55');
@@ -78,6 +117,24 @@ describe('galaxyLinks', () => {
     expect(rulesFrom(l, jiyu.id)).toEqual(['shobuToJiyu']);
     // Réglage éteint : aucun lien.
     expect(galaxyLinks([shobu, jiyu], grid, settings())).toEqual([]);
+  });
+
+  test('shobu → jiyu vers un poids voisin : shobuToJiyu seul, même poids voisin éteint', () => {
+    const shobu = node(key('karate', 'shobu', 'F', ['senior'], ['senior:F:-55']));
+    const jiyu61 = kj('F', 'senior', '-61');
+    const s = settings({ shobuToJiyu: true, replacementRules: { ...defaultSettings().replacementRules, off: ['weight'] } });
+    expect(from(between(galaxyLinks([shobu, jiyu61], grid, s), shobu, jiyu61)!, shobu)).toEqual(['shobuToJiyu']);
+  });
+
+  test('entrer dans une catégorie mixte demande toujours mixSexes', () => {
+    const f47 = kj('F', 'cadet', '-47');
+    const mixed = node(key('karate', 'jiyu', 'X', ['cadet'], ['cadet:F:-47', 'cadet:M:-52']));
+    const off = between(galaxyLinks([f47, mixed], grid, settings()), f47, mixed);
+    expect(off && from(off, f47)).toBeFalsy();
+    const unticked = between(galaxyLinks([f47, mixed], grid, settings({ mixSexes: { enabled: true, ageBandCodes: ['pupille'] } })), f47, mixed);
+    expect(unticked && from(unticked, f47)).toBeFalsy();
+    const on = between(galaxyLinks([f47, mixed], grid, settings({ mixSexes: { enabled: true, ageBandCodes: ['cadet'] } })), f47, mixed)!;
+    expect(from(on, f47)).toEqual(['mixSexes']);
   });
 
   test('mixSexes seulement pour les tranches cochées', () => {
@@ -110,7 +167,16 @@ describe('galaxyLinks', () => {
     const links = galaxyLinks([merged, c47, j59, m55], grid, settings());
     expect(rulesFrom(between(links, merged, c47)!, merged.id)).toEqual(['weight']);
     expect(rulesFrom(between(links, merged, j59)!, merged.id)).toEqual(['weight']);
-    expect(rulesFrom(between(links, merged, m55)!, merged.id)).toEqual(['ageDown']);
+    // Au départ, une case suffit (cadets → minimes) ; à l'arrivée, toutes les tranches comptent (minimes → juniors interdit).
+    const mm = between(links, merged, m55)!;
+    expect(from(mm, merged)).toEqual(['ageDown']);
+    expect(from(mm, m55)).toBeNull();
+  });
+
+  test('arriver dans une catégorie regroupée : l’âge convient à toutes ses tranches', () => {
+    const v2 = kj('F', 'v2', '-61');
+    const v13 = node(key('karate', 'jiyu', 'F', ['v1', 'v3'], ['v1:F:-61', 'v3:F:-61']));
+    expect(from(between(galaxyLinks([v2, v13], grid, settings()), v2, v13)!, v2)).toEqual(['ageUp']);
   });
 
   test('poids le plus proche parmi les nœuds fournis', () => {
@@ -132,7 +198,8 @@ describe('galaxyLinks', () => {
     const j66 = kj('F', 'junior', '-66');
     const links = galaxyLinks([merged, j59, j66], grid, settings({ replacementRules: { ...defaultSettings().replacementRules, off: ['weight'] } }));
     expect(from(between(links, merged, j59)!, merged)).toEqual(['ageUp']);
-    expect(from(between(links, merged, j66)!, merged)).toBeNull();
+    // Juniors -66 n'entre pas non plus dans le regroupement : il a déjà des juniors, sans classe voisine de -66.
+    expect(between(links, merged, j66)).toBeUndefined();
   });
 
   test('tableau libre : aucun lien', () => {
@@ -148,7 +215,7 @@ describe('galaxyLinks', () => {
     const senior = kj('F', 'senior', '-55');
     const links = galaxyLinks([cf, cm, junior, senior], grid, null);
     expect(between(links, cf, cm)!.fromA).toEqual(['mixSexes']);
-    expect(from(between(links, junior, senior)!, junior)).toEqual(['ageUp', 'minorsAdults']);
+    expect(from(between(links, junior, senior)!, junior)).toEqual(['minorsAdults']);
   });
 });
 
@@ -169,8 +236,9 @@ describe('linkKind', () => {
     [['weight'], 'weight'],
     [['ageUp', 'minorsAdults'], 'age'],
     [['seniorsVeterans'], 'age'],
-    [['shobuToJiyu', 'weight'], 'ruleset'],
-    [['discipline', 'shobuToJiyu', 'weight'], 'discipline'],
+    [['minorsAdults'], 'age'],
+    [['shobuToJiyu'], 'ruleset'],
+    [['discipline', 'shobuToJiyu'], 'discipline'],
     [['mixSexes'], 'sex'],
   ] as const)('%j → %s', (rules, kind) => {
     expect(linkKind([...rules])).toBe(kind);
