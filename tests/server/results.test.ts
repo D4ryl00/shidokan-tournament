@@ -311,6 +311,40 @@ test('file des zones : absent tardif d’un kata commencé, signalé, et la fina
   expect(b.lineup!.list).toHaveLength(2);
 });
 
+test('kata lancé : un absent qui arrive entre au tableau en déverrouillant, les notes déjà saisies restent, la carte l’appelle', async () => {
+  const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
+  const k: { id: string; fighterId: string }[] = [];
+  for (let i = 0; i < 4; i++) k.push(await reg({ discipline: 'kata', ruleset: null, weightClassId: null }) as { id: string; fighterId: string });
+  const late = k[3]!;
+  await call('PUT', `/weigh-in/${late.fighterId}`, { presence: 'absent' });
+  type KataCat = Cat & { status: string; bracket: { order: string[] } };
+  const kataCat = async () => (await cats()).find((c) => c.registrationIds.includes(k[0]!.id))! as KataCat;
+  let c = await kataCat();
+  await call('PATCH', `/categories/${c.id}`, { zoneId: t1!.id });
+  expect(c.bracket.order).not.toContain(late.id);
+  const [p1, p2] = c.bracket.order;
+  await call('PUT', `/categories/${c.id}/kata/${p1}/round1`, { notes: [9, 9, 9] });
+  await call('PUT', `/categories/${c.id}/kata/${p2}/round1`, { notes: [8, 8, 8] });
+  expect((await kataCat()).status).toBe('started');
+  // Arrivée : sans déverrouiller, le tableau lancé ne bouge pas.
+  await call('PUT', `/weigh-in/${late.fighterId}`, { presence: 'present' });
+  expect((await kataCat()).bracket.order).not.toContain(late.id);
+  expect((await call('PATCH', `/categories/${c.id}`, { status: 'ready', unlock: true })).statusCode).toBe(200);
+  c = await kataCat();
+  expect(c.bracket.order).toContain(late.id);
+  const res = (await results(c.id)) as Res & { kataScores: { round1: Record<string, number[]> } };
+  expect(res.kataScores.round1).toEqual({ [p1!]: [9, 9, 9], [p2!]: [8, 8, 8] });
+  // La carte : le premier kataka sans notes dans le nouvel ordre se présente ; l'arrivant n'est pas marqué absent.
+  const names = (await call('GET', '/registrations')).json() as { id: string; fighter: { lastName: string } }[];
+  const nameOf = (id: string) => names.find((r) => r.id === id)!.fighter.lastName;
+  const b = (await queueOf(t1!.id)).find((x) => x.categoryId === c.id)!;
+  expect(b.lineup!.list.map((x) => [x.name.split(' ')[0], x.done, x.absent])).toEqual(
+    c.bracket.order.map((id) => [nameOf(id), id === p1 || id === p2, false]),
+  );
+  expect((await call('PUT', `/categories/${c.id}/kata/${late.id}/round1`, { notes: [7, 7, 7] })).statusCode).toBe(204);
+  expect((await kataCat()).status).toBe('started');
+});
+
 test('finale prête : pas « early » si le seul passage non joué plus petit est d’une autre session', async () => {
   const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
   for (let i = 0; i < 4; i++) await reg({ ageBandCode: 'minime', weightClassId: 'minime:F:-45' });
