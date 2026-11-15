@@ -4,6 +4,7 @@ import type { Category } from '../../domain/categories.js';
 import { finalMatchIds } from '../../domain/passages/index.js';
 import { ageGroupOf, combatTiming, isEmptyDurations, timingText, type CategoryDurations as Durations, type CombatTiming } from '../../domain/schedule/durations.js';
 import { useCompetition, useGrid, usePassages, useUpdateCategory } from '../api.js';
+import { draftFromCompetition } from './categoryDurationsDraft.js';
 import { categoryPassages } from '../passages.js';
 import { roundTitle } from './BracketView.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
@@ -11,7 +12,7 @@ import { MinSecInput, useInvalidFields } from './MinSecInput.js';
 import { IconTrash } from './ui/icons.js';
 import { SectionCard } from './ui/SectionCard.js';
 
-/** Rounds, round et repos d'une durée de combat (la prolongation reste celle de la compétition). */
+/** Rounds, round, repos et prolongation d'une durée de combat. */
 function TimingFields({ value, onChange, onValidity, testId }: {
   value: CombatTiming; onChange: (t: CombatTiming) => void; onValidity: (key: string) => (valid: boolean) => void; testId: string;
 }) {
@@ -22,6 +23,7 @@ function TimingFields({ value, onChange, onValidity, testId }: {
         onChange={(v) => onChange({ ...value, rounds: typeof v === 'number' ? v : 0 })} />
       <MinSecInput label="Round" min={10} max={900} value={value.roundSec} onChange={(roundSec) => onChange({ ...value, roundSec })} onValidityChange={onValidity('round')} />
       <MinSecInput label="Repos" min={0} max={600} value={value.restSec} onChange={(restSec) => onChange({ ...value, restSec })} onValidityChange={onValidity('rest')} />
+      <MinSecInput label="Prolongation" min={0} max={900} value={value.overtimeSec} onChange={(overtimeSec) => onChange({ ...value, overtimeSec })} onValidityChange={onValidity('overtime')} />
     </Group>
   );
 }
@@ -37,10 +39,11 @@ export function CategoryDurations({ competitionId, category, readOnly }: { compe
   const { data: grid } = useGrid(competitionId);
   const { data: plan } = usePassages(competitionId);
   const update = useUpdateCategory(competitionId);
-  const [draft, setDraft] = useState<CombatTiming | null>(null);
+  const [draft, setDraft] = useState<{ bracket: CombatTiming; finals: CombatTiming | null } | null>(null);
   const [exception, setException] = useState<{ matchId: string | null; timing: CombatTiming | null }>({ matchId: null, timing: null });
   // Durée en erreur dans l'un des deux formulaires : son bouton attend qu'elle soit corrigée.
   const ownFields = useInvalidFields();
+  const finalsFields = useInvalidFields();
   const exceptionFields = useInvalidFields();
   const bracket = category.bracket?.kind === 'combat' ? category.bracket : null;
   if (category.key.discipline === 'kata' || !competition || !grid) return null;
@@ -50,8 +53,10 @@ export function CategoryDurations({ competitionId, category, readOnly }: { compe
   const durations = category.durations;
   const inherited = combatTiming(base, group, null, null, false);
   const own = durations?.bracket ?? null;
-  const editing = draft ?? own;
+  const stored = own || durations?.finals ? { bracket: own ?? inherited, finals: durations?.finals ?? null } : null;
+  const editing = draft ?? stored;
   const mode = editing ? 'own' : 'inherit';
+  const competitionFinals = base.schedule.finals[group];
   const save = (d: Durations, after?: () => void) =>
     update.mutate({ cid: category.id, durations: isEmptyDurations(d) ? null : d }, { onSuccess: after });
   const matches = durations?.matches ?? {};
@@ -72,19 +77,34 @@ export function CategoryDurations({ competitionId, category, readOnly }: { compe
     <SectionCard title="Durée des combats" help="tableaux.durees" data-testid="category-durations">
       <Stack gap="sm">
         <Select size="sm" w={320} maw="100%" label="Durée des combats" disabled={readOnly || update.isPending} allowDeselect={false} data-testid="durations-mode"
-          data={[{ value: 'inherit', label: `Comme la compétition (${timingText(inherited)})` }, { value: 'own', label: 'Autre' }]}
+          data={[{ value: 'inherit', label: `Comme la compétition (${timingText(inherited)}${competitionFinals ? `, finale ${timingText(competitionFinals)}` : ''})` }, { value: 'own', label: 'Autre' }]}
           value={mode}
           onChange={(v) => {
-            if (v === 'inherit') { setDraft(null); if (own) save({ bracket: null, finals: durations?.finals ?? null, matches }); }
-            else setDraft(own ?? inherited);
+            if (v === 'inherit') { setDraft(null); if (stored) save({ bracket: null, finals: null, matches }); }
+            else setDraft(stored ?? draftFromCompetition(base, group));
           }} />
         {mode === 'own' && editing && (
-          readOnly ? <Text size="sm" data-testid="durations-own">{timingText(editing)}, repos {editing.restSec} s</Text> : (
-            <Group align="flex-end" gap="sm">
-              <TimingFields testId="durations-own" value={editing} onChange={setDraft} onValidity={ownFields.field} />
-              <Button size="sm" data-testid="durations-save" loading={update.isPending} disabled={!validTiming(editing) || ownFields.invalid}
-                onClick={() => save({ bracket: { ...inherited, ...editing }, finals: durations?.finals ?? null, matches }, () => setDraft(null))}>Enregistrer</Button>
-            </Group>
+          readOnly ? (
+            <Stack gap={2}>
+              <Text size="sm" data-testid="durations-own">{timingText(editing.bracket)}, repos {editing.bracket.restSec} s</Text>
+              {editing.finals && <Text size="sm" data-testid="durations-own-finals-text">Finale : {timingText(editing.finals)}, repos {editing.finals.restSec} s</Text>}
+            </Stack>
+          ) : (
+            <Stack gap="sm">
+              <TimingFields testId="durations-own" value={editing.bracket} onChange={(bracket) => setDraft({ ...editing, bracket })} onValidity={ownFields.field} />
+              <Select size="sm" w={320} maw="100%" label="Finale" allowDeselect={false} data-testid="durations-own-finals"
+                data={[{ value: 'same', label: 'Comme les autres combats du tableau' }, { value: 'other', label: 'Autre' }]}
+                value={editing.finals ? 'other' : 'same'}
+                onChange={(v) => v && setDraft({ ...editing, finals: v === 'other' ? editing.bracket : null })} />
+              {editing.finals && (
+                <TimingFields testId="durations-own-finals-fields" value={editing.finals} onChange={(finals) => setDraft({ ...editing, finals })} onValidity={finalsFields.field} />
+              )}
+              <div>
+                <Button size="sm" data-testid="durations-save" loading={update.isPending}
+                  disabled={!validTiming(editing.bracket) || (!!editing.finals && !validTiming(editing.finals)) || ownFields.invalid || finalsFields.invalid}
+                  onClick={() => save({ bracket: { ...inherited, ...editing.bracket }, finals: editing.finals, matches }, () => setDraft(null))}>Enregistrer</Button>
+              </div>
+            </Stack>
           )
         )}
         {bracket && (

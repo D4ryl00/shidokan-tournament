@@ -521,7 +521,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     title: 'Durée des combats du tableau',
     short: 'Comme la compétition, ou une durée propre au tableau, avec des exceptions combat par combat.',
     details: [
-      'Durée d’un combat = rounds × durée d’un round + (rounds − 1) × repos. Un combat avec une exception prend sa durée, sinon le tableau, sinon la compétition.',
+      'Durée d’un combat = rounds × durée d’un round + (rounds − 1) × repos. Un combat avec une exception prend sa durée ; sinon une finale prend la finale du tableau, puis le tableau, puis la finale de la compétition, puis la compétition.',
       'Modifiable même quand le tableau est lancé ou commencé : les heures estimées des spectateurs sont recalculées (« vers 14:30 »).',
     ],
   },
