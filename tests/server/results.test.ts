@@ -257,6 +257,24 @@ test('file des zones : bloc de kata, liste ordonnée qui avance, puis finale', a
   expect(b.lineup!.list.every((x) => !x.done)).toBe(true);
 });
 
+test('file des zones : égalité pour la 2e place de finale, pas de liste tant qu’elle n’est pas départagée', async () => {
+  const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
+  const k = [await reg({ discipline: 'kata', ruleset: null, weightClassId: null }), await reg({ discipline: 'kata', ruleset: null, weightClassId: null }), await reg({ discipline: 'kata', ruleset: null, weightClassId: null })];
+  const kata = (await cats()).find((c) => c.registrationIds.includes(k[0]!.id))!;
+  await call('PATCH', `/categories/${kata.id}`, { zoneId: t1!.id });
+  const names = (await call('GET', '/registrations')).json() as { id: string; fighter: { lastName: string } }[];
+  const nameOf = (id: string) => names.find((r) => r.id === id)!.fighter.lastName;
+  await call('PUT', `/categories/${kata.id}/kata/${k[0]!.id}/round1`, { notes: [9, 9, 9] });
+  await call('PUT', `/categories/${kata.id}/kata/${k[1]!.id}/round1`, { notes: [8, 8, 8] });
+  await call('PUT', `/categories/${kata.id}/kata/${k[2]!.id}/round1`, { notes: [8, 8, 8] });
+  const block = async () => (await queueOf(t1!.id)).find((x) => x.categoryId === kata.id)!;
+  expect((await block()).lineup).toBeNull();
+  await call('PUT', `/categories/${kata.id}/tie-break`, { scope: 'kata', order: [k[2]!.id, k[1]!.id] });
+  const b = await block();
+  expect(b.lineup!.round).toBe('finale');
+  expect(b.lineup!.list.map((x) => x.name.split(' ')[0]).sort()).toEqual([nameOf(k[0]!.id), nameOf(k[2]!.id)].sort());
+});
+
 test('finale prête : pas « early » si le seul passage non joué plus petit est d’une autre session', async () => {
   const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
   for (let i = 0; i < 4; i++) await reg({ ageBandCode: 'minime', weightClassId: 'minime:F:-45' });

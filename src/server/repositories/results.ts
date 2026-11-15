@@ -272,12 +272,15 @@ export async function schedule(db: AppDb, competitionId: string, waveId?: string
     // Tour 1 du kata terminé : chaque kataka présent a ses notes (un absent tardif d'une vague figée n'en aura pas).
     const present = (c.bracket?.entrants ?? []).filter((e) => !c.absentIds.includes(e.registrationId));
     const round1Done = c.bracket?.kind === 'kata' && present.every((e) => (scores.round1[e.registrationId] ?? []).length > 0);
-    // Kata : ses deux finalistes sont connus (kata à deux : d'emblée, sans tour 1).
-    const finalistsKnown = c.bracket?.kind === 'kata' && (c.bracket.entrants.length <= 2 || round1Done);
+    // Kata : ses deux finalistes sont connus (kata à deux : d'emblée, sans tour 1) et aucune égalité du tour 1 non départagée
+    // ne sépare un finaliste d'un non-finaliste (sinon la table d'appel préparerait peut-être le mauvais kataka).
+    const finalists = c.bracket?.kind === 'kata' ? resolveKata(c.bracket, scores, tb.kata, tb.kataFinal).finalists : [];
+    const finalistTie = progress.podium.ties.some((g, i) => progress.podium.tieScopes?.[i] === 'kata' && g.some((id) => finalists.includes(id)) && g.some((id) => !finalists.includes(id)));
+    const finalistsKnown = c.bracket?.kind === 'kata' && (c.bracket.entrants.length <= 2 || round1Done) && !finalistTie;
     // Katakas d'un tour, dans l'ordre de passage : tirage pour le tour 1, tableau de notation pour la finale.
     const lineup = (round: 'tour1' | 'finale') => {
       if (c.bracket?.kind !== 'kata') return [];
-      const ids = round === 'tour1' ? c.bracket.order : resolveKata(c.bracket, scores, tb.kata, tb.kataFinal).finalists;
+      const ids = round === 'tour1' ? c.bracket.order : finalists;
       return kataLineup(ids, c.absentIds, round === 'tour1' ? scores.round1 : scores.final).map((s) => ({ name: name(s.registrationId)!, club: who.get(s.registrationId)?.club ?? 'Sans club', done: s.done }));
     };
     state.set(c.id, { matches, finished: progress.status === 'finished', round1Done, finalistsKnown, lineup });

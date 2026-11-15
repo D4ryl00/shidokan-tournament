@@ -90,3 +90,6 @@ Faite le 2026-11-14 sur la branche `etape-45-zone-reservee` : voir le bilan. Cas
 
 ## Étape 46 : durée des finales
 Faite le 2026-11-15 sur la branche `etape-46-duree-des-finales` : voir le bilan. Réglages → Durées des combats : une ligne « Finale » par groupe d'âge (rounds, round, repos, prolongation) ; Tableaux → Durée des combats : prolongation réglable et ligne « Finale » propre au tableau. Les heures estimées (plan, spectateurs) prennent la durée de finale. Pas de migration. Spec : `docs/superpowers/specs/2026-11-15-duree-des-finales-design.md`.
+
+## Étape 47 : clubs dans les cartes des zones
+Faite le 2026-11-15 sur `main`. Jour J → Combats : chaque carte de zone montre le club de chaque combattant (à l'appel et sur les lignes « Ensuite ») ; un bloc de kata à l'appel montre « kataka i sur n », « Se présente » et « Se prépare » avec leur club (la carte avance à chaque kataka noté, les absents sont sautés) ; dans « Ensuite », un kata liste tous ses katakas avec leur club. Une égalité du tour 1 non départagée pour la place en finale masque la liste de la finale. Écran public inchangé. Spec : `docs/superpowers/specs/2026-11-15-clubs-dans-les-cartes-des-zones-design.md`, plan : `docs/superpowers/plans/2026-11-15-47-clubs-dans-les-cartes-des-zones.md`.
