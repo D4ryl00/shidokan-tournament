@@ -52,3 +52,11 @@
 .sk-tag { display: inline-flex; align-items: center; border-radius: 6px; padding: 1px 7px; font-size: 12px; line-height: 1.5; background: var(--sk-line); color: var(--sk-soft); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .sk-tag[data-kind='discipline'] { background: var(--sk-chip); color: var(--sk-chip-text); font-weight: 600; }
 .sk-tag[data-kind='sex'] { font-weight: 700; min-width: 22px; justify-content: center; }
+
+/* Galaxie : carte d'une catégorie à un seul combattant, anneau blanc qui pulse (comme son étoile ; jamais en rouge). */
+.sk-lone-ring { box-shadow: 0 0 0 2px #ffffff; animation: sk-lone-pulse 1.8s ease-out infinite; }
+@keyframes sk-lone-pulse {
+  0% { box-shadow: 0 0 0 2px #ffffff, 0 0 0 2px rgba(255, 255, 255, 0.7); }
+  100% { box-shadow: 0 0 0 2px #ffffff, 0 0 0 12px rgba(255, 255, 255, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .sk-lone-ring { animation: none; } }

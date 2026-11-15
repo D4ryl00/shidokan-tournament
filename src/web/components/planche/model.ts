@@ -4,6 +4,13 @@ import type { CategoryGrid } from '../../../domain/types.js';
 import type { Wave } from '../../../domain/waves.js';
 
 export type PlancheSort = 'categorie' | 'zone';
+/** Portée affichée : la session choisie, celles en attente, ou toutes. */
+export type Scope = 'wave' | 'waiting' | 'all';
+
+/** Catégorie dans la portée affichée (sans sessions : toujours). */
+export function inScope(c: Pick<Category, 'waveId'>, o: { waves: readonly unknown[]; scope: Scope; waveId: string | null }): boolean {
+  return o.waves.length === 0 || o.scope === 'all' || (o.scope === 'waiting' ? c.waveId === null : c.waveId === o.waveId);
+}
 export interface PlancheGroup { key: string; title: string; categories: Category[] }
 
 export const FREE_GROUP_TITLE = 'Tableaux libres';

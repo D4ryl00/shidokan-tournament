@@ -1,3 +1,4 @@
+import { Paper, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState, type HTMLAttributes, type ReactNode } from 'react';
 import { newSameClubSentences } from '../../../domain/brackets/same-club.js';
@@ -22,6 +23,8 @@ export function usePlancheDrop(o: { competitionId: string; categories: Category[
   chipProps: (registrationId: string, c: Category) => HTMLAttributes<HTMLDivElement>;
   cardProps: (c: Category) => DragAttrs;
   dialog: ReactNode;
+  /** Bandeau du clic-clic (« Sélection : … »), affiché tant qu'une pastille est choisie ; à rendre une fois. */
+  banner: ReactNode;
   nameOf: (rid?: string) => string;
 } {
   const { competitionId, categories, entrants, waves, readOnly } = o;
@@ -53,5 +56,11 @@ export function usePlancheDrop(o: { competitionId: string; categories: Category[
   };
   const cardProps = (c: Category) => drag.dropProps({ categoryId: c.id, locked: isLockedCategory(c) });
   const dialog = <DropConfirmDialog competitionId={competitionId} drop={drop} categories={categories} entrants={entrants} waves={waves} onClose={() => setDrop(null)} />;
-  return { drag, chipProps, cardProps, dialog, nameOf };
+  const banner = drag.selected && (
+    <Paper data-testid="planche-banner" role="status" px="sm" py={6} radius="sm"
+      style={{ position: 'fixed', top: 'calc(var(--sk-bar-h, 56px) + 8px)', left: '50%', transform: 'translateX(-50%)', width: 'min(900px, calc(100vw - 32px))', zIndex: 90, pointerEvents: 'none', boxShadow: 'var(--mantine-shadow-md)', backgroundColor: 'var(--sk-chip)', color: 'var(--sk-chip-text)', border: '1px solid var(--sk-accent)' }}>
+      <Text size="sm" fw={500}>Sélection : {nameOf(drag.selected)}. Cliquez sur un autre combattant pour échanger, ou sur une catégorie pour l’y déplacer. (Échap pour annuler)</Text>
+    </Paper>
+  );
+  return { drag, chipProps, cardProps, dialog, banner, nameOf };
 }

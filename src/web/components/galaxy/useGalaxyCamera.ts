@@ -56,6 +56,9 @@ export function useGalaxyCamera(o: {
       }
     }
     const again = latest.current.draw(c, now);
+    // Pour les tests : la caméra est-elle encore en route (vol ou adoucissement) ?
+    const cv = latest.current.canvasRef.current;
+    if (cv) cv.dataset.flying = moving ? 'true' : 'false';
     if (moving || again) raf.current = requestAnimationFrame((n) => frameRef.current(n));
   };
   const requestDraw = useCallback(() => {
@@ -143,7 +146,7 @@ export function useGalaxyCamera(o: {
     onPointerUp: (ev: ReactPointerEvent<HTMLCanvasElement>) => {
       const had = pointers.current.delete(ev.pointerId);
       const g = gesture.current;
-      ev.currentTarget.style.cursor = '';
+      ev.currentTarget.style.cursor = 'grab';
       if (pointers.current.size === 0) {
         gesture.current = null;
         if (had && g && !g.moved) { const p = local(ev); latest.current.onTap(p.x, p.y); }
@@ -163,6 +166,8 @@ export function useGalaxyCamera(o: {
     const Y0 = -c.py / c.k;
     const dist = Math.hypot(p.x - X0, p.y - Y0) * c.k;
     fly.current = { t0: performance.now(), ms: flyDuration(dist, c.k), k0: c.k, X0, Y0, X1: p.x, Y1: p.y, oy0: 0, oy1: offsetY };
+    const cv = latest.current.canvasRef.current;
+    if (cv) cv.dataset.flying = 'true';
     requestDraw();
   }, [requestDraw]);
 

@@ -97,8 +97,9 @@ test('galaxie : choisir la vue, chercher, voir les voisines en cartes, déplacer
   await expect(mix.getByTestId('card-session')).toHaveText('Soir');
   await expect(c61.getByTestId('card-session')).toHaveCount(0);
   await expect(page.getByTestId('galaxy-legend')).toHaveCSS('opacity', '0');
-  // Les cartes rapprochées tiennent sur l'écran sans s'empiler, et la page ne défile pas.
+  // Les cartes rapprochées tiennent sur l'écran sans s'empiler, et la page ne défile pas (une fois le vol fini).
   await expect(page.locator('[data-testid="galaxy"] [data-testid="planche-card"]:visible')).toHaveCount(5);
+  await expect(canvas(page)).toHaveAttribute('data-flying', 'false');
   await expect.poll(() => maxCardOverlap(page)).toBeGreaterThanOrEqual(0);
   await expect.poll(() => maxCardOverlap(page)).toBeLessThanOrEqual(3);
   for (const id of [ids.c61, ids.c54, ids.mix]) {
@@ -107,6 +108,32 @@ test('galaxie : choisir la vue, chercher, voir les voisines en cartes, déplacer
     expect(b.y + b.height).toBeLessThanOrEqual(720);
   }
   expect(await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1)).toBe(true);
+
+  // Jamais de rouge pour une catégorie à un seul combattant : anneau blanc et badge neutre.
+  await expect(mix).toHaveAttribute('data-lone', 'true');
+  await expect(c54).not.toHaveAttribute('data-lone', 'true');
+  const alone = await mix.getByTestId('card-alone').evaluate((el) => getComputedStyle(el).backgroundColor);
+  const [r, g, b] = alone.match(/\d+/g)!.map(Number);
+  expect(r! > 180 && g! < 130 && b! < 130, `badge ${alone}`).toBe(false);
+  expect(await mix.evaluate((el) => getComputedStyle(el).animationName)).toBe('sk-lone-pulse');
+
+  // Pendant un glisser, les cases restent figées : la carte survolée s'agrandit (indication de dépôt) sans que rien bouge.
+  const transforms = () => page.locator('[data-testid="galaxy-card"]').evaluateAll((els) => els.map((el) => (el as HTMLElement).style.transform));
+  const before = await transforms();
+  await c61.getByTestId('planche-chip').filter({ hasText: 'SOLO' }).hover();
+  await page.mouse.down();
+  const target = (await c54.getByTestId('card-count').boundingBox())!;
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 8 });
+  await page.mouse.move(target.x + target.width / 2 + 2, target.y + target.height / 2 + 1, { steps: 2 });
+  await expect(c54).toHaveAttribute('data-drop', 'ok');
+  await page.waitForTimeout(400);
+  await expect(c54).toHaveAttribute('data-drop', 'ok');
+  expect(await transforms()).toEqual(before);
+  // Lâché sur le ciel : rien ne se passe.
+  const sky = (await canvas(page).boundingBox())!;
+  await page.mouse.move(sky.x + 8, sky.y + sky.height - 8, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 
   // Clic sur le titre d'une voisine : elle devient la sélection ; puis retour au -61 par son titre.
   await mix.getByTestId('card-title').click();

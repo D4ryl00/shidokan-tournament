@@ -2,9 +2,9 @@ import { Button, Checkbox, Group, SegmentedControl, Select, TextInput } from '@m
 import type { ReactNode } from 'react';
 import type { Wave } from '../../../domain/waves.js';
 import { IconSearch } from '../ui/icons.js';
-import type { PlancheSort } from './model.js';
+import type { PlancheSort, Scope } from './model.js';
 
-export type Scope = 'wave' | 'waiting' | 'all';
+export type { Scope } from './model.js';
 
 /**
  * Barre de la planche : session, recherche, classement, « Seulement à traiter », Historique.

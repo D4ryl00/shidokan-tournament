@@ -1,4 +1,4 @@
-import { Box, Button, Center, Group, Loader, Paper, Text, UnstyledButton } from '@mantine/core';
+import { Box, Button, Center, Group, Loader, UnstyledButton } from '@mantine/core';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { activeEntrantCount, type Category } from '../../../domain/categories.js';
@@ -14,12 +14,12 @@ import { categoryPassages } from '../../passages.js';
 import type { EntrantInfo } from '../BracketView.js';
 import { useUndoHighlight } from '../history/highlight.js';
 import { CategoryCard } from '../planche/CategoryCard.js';
-import { cardTitle, plancheFilter, sessionLabel, shownOnPlanche } from '../planche/model.js';
+import { cardTitle, inScope, plancheFilter, sessionLabel, shownOnPlanche } from '../planche/model.js';
 import { PlancheToolbar, type Scope } from '../planche/PlancheToolbar.js';
 import { usePlancheDrop } from '../planche/usePlancheDrop.js';
 import { EmptyState } from '../ui/EmptyState.js';
 import { disciplineHue, drawGalaxy, fitCamera, SKY, starAt, toScreen, type Star } from './drawGalaxy.js';
-import { cardScale, displayedPositions, legendRules, linkStyle, pullFactor, slotLayout, sortedNeighbors, type Camera } from './scene.js';
+import { cardScale, displayedPositions, legendRules, linkStyle, pullFactor, slotLayout, sortedNeighbors, type Camera, type SlotLayout } from './scene.js';
 import { K_MIN, useGalaxyCamera } from './useGalaxyCamera.js';
 
 // Vue « Galaxie » de Jour J → Tableaux (spec étape 48, §3 et §4) : chaque catégorie est une étoile près de ses voisines ;
@@ -58,7 +58,7 @@ export function GalaxyView(p: {
   const { data: plan } = usePassages(competitionId);
   const undo = useUndoHighlight();
   // Glisser-déposer et clic-clic : le hook de la planche, sur toutes les catégories (la source peut être d'une autre session).
-  const { drag, chipProps, cardProps, dialog, nameOf } = usePlancheDrop({ competitionId, categories, entrants, waves, readOnly });
+  const { drag, chipProps, cardProps, dialog, banner } = usePlancheDrop({ competitionId, categories, entrants, waves, readOnly });
 
   const [query, setQuery] = useState('');
   const [onlyLone, setOnlyLone] = useState(false);
@@ -88,8 +88,7 @@ export function GalaxyView(p: {
   );
   const labelOf = useMemo(() => linkLabelOf(settings), [settings]);
 
-  const inScope = (c: Category) => waves.length === 0 || scope === 'all' || (scope === 'waiting' ? c.waveId === null : c.waveId === waveId);
-  const scopeCats = shown.filter(inScope);
+  const scopeCats = shown.filter((c) => inScope(c, { waves, scope, waveId }));
   const waiting = categories.filter((c) => c.waveId === null).length;
   // Une sélection vidée (catégorie disparue) : plus de sélection.
   const sel = selectedId !== null && byId.has(selectedId) ? selectedId : null;
@@ -156,7 +155,7 @@ export function GalaxyView(p: {
     const c = scopeCheck.current ? byId.get(scopeCheck.current) : undefined;
     if (!c || waves.length === 0) return;
     scopeCheck.current = null;
-    if (!inScope(c)) p.onScope('all');
+    if (!inScope(c, { waves, scope, waveId })) p.onScope('all');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [byId, base, waves]);
 
@@ -229,12 +228,7 @@ export function GalaxyView(p: {
   return (
     <Box data-testid="galaxy">
       {!staged && <Box mb="sm">{toolbar}</Box>}
-      {drag.selected && (
-        <Paper data-testid="planche-banner" role="status" px="sm" py={6} radius="sm"
-          style={{ position: 'fixed', top: 'calc(var(--sk-bar-h, 56px) + 8px)', left: '50%', transform: 'translateX(-50%)', width: 'min(900px, calc(100vw - 32px))', zIndex: 90, pointerEvents: 'none', boxShadow: 'var(--mantine-shadow-md)', backgroundColor: 'var(--sk-chip)', color: 'var(--sk-chip-text)', border: '1px solid var(--sk-accent)' }}>
-          <Text size="sm" fw={500}>Sélection : {nameOf(drag.selected)}. Cliquez sur un autre combattant pour échanger, ou sur une catégorie pour l’y déplacer. (Échap pour annuler)</Text>
-        </Paper>
-      )}
+      {banner}
       {!base && <Center h={300}><Loader /></Center>}
       {base && scopeCats.length === 0 && <EmptyState title="Aucune catégorie." />}
       {staged && (
@@ -277,6 +271,47 @@ function GalaxyStage(p: {
   const shownPos = useRef<Map<string, Point>>(p.base);
   const overlaid = useRef<ReadonlySet<string>>(NO_OVERLAY);
 
+  // Cases des voisines figées par (sélection, voisines, taille) : mesurées quand les cartes changent de taille
+  // (ResizeObserver), jamais pendant un glisser (l'indication de dépôt agrandit la carte survolée ; sans cela la carte
+  // bougerait sous le pointeur).
+  const frozen = useRef<{ key: string; layout: SlotLayout } | null>(null);
+  const remeasure = useRef(true);
+  const dragging = useRef(false);
+  const redraw = useRef<() => void>(() => undefined);
+  const sizeObserver = useMemo(() => (typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
+    if (dragging.current) return;
+    remeasure.current = true;
+    redraw.current();
+  })), []);
+  useEffect(() => {
+    const start = () => { dragging.current = true; };
+    const end = () => { dragging.current = false; remeasure.current = true; redraw.current(); };
+    // En capture : les pastilles et les cartes arrêtent la propagation de leurs événements de glisser.
+    document.addEventListener('dragstart', start, true);
+    document.addEventListener('dragend', end, true);
+    document.addEventListener('drop', end, true);
+    return () => {
+      document.removeEventListener('dragstart', start, true);
+      document.removeEventListener('dragend', end, true);
+      document.removeEventListener('drop', end, true);
+      sizeObserver?.disconnect();
+    };
+  }, [sizeObserver]);
+  // Une fonction de ref stable par carte : la carte est observée une fois, à son arrivée.
+  const refs = useRef(new Map<string, (el: HTMLDivElement | null) => void>());
+  const cardRef = (id: string) => {
+    let f = refs.current.get(id);
+    if (!f) {
+      f = (el) => {
+        const old = cardEls.current.get(id);
+        if (old && old !== el) { sizeObserver?.unobserve(old); cardEls.current.delete(id); }
+        if (el) { cardEls.current.set(id, el); sizeObserver?.observe(el); } else refs.current.delete(id);
+      };
+      refs.current.set(id, f);
+    }
+    return f;
+  };
+
   // Taille : toute la largeur, et toute la hauteur sous la barre de l'appli, sans faire défiler la page (les marges du bas
   // des conteneurs sont retirées).
   useLayoutEffect(() => {
@@ -317,12 +352,25 @@ function GalaxyStage(p: {
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const pull = s.sel ? pullFactor(cam.k) : 0;
-    // Cases des voisines : selon la place sous la barre et la taille mesurée des cartes (à l'échelle 1).
-    const heightOf = (id: string, fallback: number) => cardEls.current.get(id)?.offsetHeight || fallback;
-    const lay = s.sel
-      ? slotLayout({ sel: { w: SELECTED_CARD_PX, h: heightOf(s.sel, 200) }, neighbors: s.neighborIds.map((id) => ({ w: CARD_PX, h: heightOf(id, 180) })) },
-        { w, h: h - inset.current }, w < NARROW_PX ? 0.6 : 0.75)
-      : null;
+    // Cases des voisines : selon la place sous la barre et la taille des cartes (à l'échelle 1), figées (voir plus haut).
+    let lay: SlotLayout | null = null;
+    if (s.sel) {
+      const key = `${s.sel}|${s.neighborIds.join(',')}|${w}|${h}|${inset.current}`;
+      const f = frozen.current;
+      if (f && f.key === key && (!remeasure.current || dragging.current)) lay = f.layout;
+      else {
+        let missing = false;
+        const heightOf = (id: string, fallback: number) => {
+          const v = cardEls.current.get(id)?.offsetHeight;
+          if (!v) missing = true;
+          return v || fallback;
+        };
+        lay = slotLayout({ sel: { w: SELECTED_CARD_PX, h: heightOf(s.sel, 200) }, neighbors: s.neighborIds.map((id) => ({ w: CARD_PX, h: heightOf(id, 180) })) },
+          { w, h: h - inset.current }, w < NARROW_PX ? 0.6 : 0.75);
+        frozen.current = { key, layout: lay };
+        remeasure.current = missing;
+      }
+    }
     const pos = displayedPositions(s.base, s.sel, s.neighborIds, cam, { w, h }, lay?.slots);
     // Cartes posées par-dessus : la sélection et ses voisines rapprochées, à leur place affichée, à l'échelle.
     const show = s.sel !== null && pull > 0.2 && cardScale(cam.k, pull) * CARD_PX >= 70;
@@ -361,10 +409,12 @@ function GalaxyStage(p: {
       const id = x === null || y === null ? null : hit(x, y);
       if (id === hover.current) return;
       hover.current = id;
-      if (canvasRef.current) canvasRef.current.style.cursor = id ? 'pointer' : '';
+      if (canvasRef.current) canvasRef.current.style.cursor = id ? 'pointer' : 'grab';
       camera.requestDraw();
     },
   });
+
+  redraw.current = camera.requestDraw;
 
   // Chaque rendu (données, taille) : une image.
   useEffect(() => { camera.requestDraw(); });
@@ -409,14 +459,14 @@ function GalaxyStage(p: {
     {narrow && <Box mb="sm">{p.toolbar}</Box>}
     <Box ref={frameRef} data-testid="galaxy-frame"
       style={{ position: 'relative', height: size.h || 300, overflow: 'hidden', borderRadius: 'var(--mantine-radius-md)', backgroundColor: SKY, touchAction: 'none' }}>
-      <canvas ref={canvasRef} data-testid="galaxy-canvas" data-selected={p.sel ?? ''} data-stars={p.stars.length}
+      <canvas ref={canvasRef} data-testid="galaxy-canvas" data-selected={p.sel ?? ''} data-stars={p.stars.length} data-flying="false"
         width={Math.round(size.w * dpr)} height={Math.round(size.h * dpr)} {...camera.handlers}
         style={{ display: 'block', width: size.w, height: size.h, cursor: 'grab' }}
         aria-label="Galaxie des catégories : cliquez sur une étoile pour voir ses voisines" role="img" />
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
         {cards.map((id) => (
           <div key={id} data-testid="galaxy-card" data-category={id}
-            ref={(el) => { if (el) cardEls.current.set(id, el); else cardEls.current.delete(id); }}
+            ref={cardRef(id)}
             onMouseEnter={(e) => raise(e.currentTarget, true, id)}
             onMouseLeave={(e) => raise(e.currentTarget, false, id)}
             onDragEnter={(e) => raise(e.currentTarget, true, id)}

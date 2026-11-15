@@ -18,7 +18,7 @@ import { useUndoToast } from '../components/history/undoToast.js';
 import { HistoryPanel, HISTORY_DRAWER_WIDTH } from '../components/history/HistoryPanel.js';
 import { GalaxyView } from '../components/galaxy/GalaxyView.js';
 import { Planche, type SeeRequest } from '../components/planche/Planche.js';
-import type { Scope } from '../components/planche/PlancheToolbar.js';
+import { inScope as inScopeOf, type Scope } from '../components/planche/model.js';
 import { CategoryDurations } from '../components/CategoryDurations.js';
 import { MoveEntrantPanel } from '../components/MoveEntrantPanel.js';
 import { BracketView, type EntrantInfo } from '../components/BracketView.js';
@@ -125,7 +125,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   }, [replacement]);
   const activeCount = (c: Category) => activeEntrantCount(c);
   const allAbsent = (c: Category) => c.registrationIds.length > 0 && activeCount(c) === 0;
-  const inScope = (c: Category) => waves.length === 0 || scope === 'all' || (scope === 'waiting' ? c.waveId === null : c.waveId === waveId);
+  const inScope = (c: Category) => inScopeOf(c, { waves, scope, waveId });
   const shown = categories.filter(inScope);
   const filtered = shown.filter(
     (c) => (!search || normalizeName(c.label).includes(normalizeName(search))) && (!onlyAlone || activeCount(c) === 1),

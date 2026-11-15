@@ -52,7 +52,7 @@ export interface CardProps {
   selectedChip?: string | null;
   /**
    * Carte compacte (galaxie) : 4 combattants au plus puis « + n autres », les badges utiles seulement (état si lancée),
-   * sans « Agrandir ».
+   * sans « Agrandir » ; catégorie à un seul combattant : badge neutre et anneau blanc qui pulse (jamais de rouge).
    */
   compact?: boolean;
   /** Le titre devient un bouton (galaxie : la carte devient la sélection). */
@@ -99,7 +99,8 @@ export function CategoryCard(p: CardProps) {
   // Carte compacte : les combattants à la suite, sans les intitulés des combats.
   const compactIds = p.compact ? sections.flatMap((s) => s.ids) : [];
   return (
-    <Card withBorder padding={p.compact ? 'xs' : 'sm'} data-testid="planche-card" data-category={c.id} data-locked={locked || undefined} data-ring={p.ring ?? undefined} {...p.cardProps}
+    <Card withBorder padding={p.compact ? 'xs' : 'sm'} className={p.compact && active === 1 ? 'sk-lone-ring' : undefined} data-lone={(p.compact && active === 1) || undefined}
+      data-testid="planche-card" data-category={c.id} data-locked={locked || undefined} data-ring={p.ring ?? undefined} {...p.cardProps}
       style={{
         gridColumn: p.expanded ? '1 / -1' : undefined, opacity: locked ? 0.7 : undefined,
         outline: ringColor ? `3px solid ${ringColor}` : undefined, outlineOffset: 1, scrollMarginTop: 80, ...p.cardProps?.style,
@@ -120,7 +121,8 @@ export function CategoryCard(p: CardProps) {
           {p.zoneName && <StatusBadge tone="accent" size="sm" data-testid="card-zone">{p.zoneName}</StatusBadge>}
           <StatusBadge tone="neutral" size="sm" className="num" data-testid="card-count">{plural(active, 'inscrit')}{c.absentIds.length ? ` + ${plural(c.absentIds.length, 'absent')}` : ''}</StatusBadge>
           {(!p.compact || locked) && <StatusBadge tone={STATUS_TONES[c.status]} size="sm" data-testid="card-status">{STATUS_LABELS[c.status]}{c.status === 'started' ? ' 🔒' : ''}</StatusBadge>}
-          {active === 1 && <StatusBadge tone="danger" size="sm" data-testid="card-alone">Sans adversaire</StatusBadge>}
+          {/* Galaxie : jamais en rouge (le rouge y est aux liens éloignés) ; la carte porte l'anneau blanc qui pulse. */}
+          {active === 1 && <StatusBadge tone={p.compact ? 'neutral' : 'danger'} size="sm" data-testid="card-alone">Sans adversaire</StatusBadge>}
           {p.cases > 0 && (
             <Badge size="sm" variant="outline" color="orange" data-testid="card-cases" component={Link} to={`/competitions/${p.competitionId}/reaffectation`}
               style={{ cursor: 'pointer' }} title="Ouvrir la réaffectation">
