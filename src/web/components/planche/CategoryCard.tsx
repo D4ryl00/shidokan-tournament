@@ -27,6 +27,8 @@ export interface CardProps {
   /** Discipline · règlement (classement par zone, où le groupe n'est pas la discipline). */
   subtitle?: string;
   zoneName?: string | null;
+  /** Session de la catégorie, quand ce n'est pas la session affichée (vue galaxie). */
+  sessionName?: string | null;
   passages: Passages;
   zones: { id: string; name: string }[];
   entrants: Map<string, EntrantInfo>;
@@ -94,6 +96,7 @@ export function CategoryCard(p: CardProps) {
           {p.subtitle && <Text size="xs" c="dimmed">{p.subtitle}</Text>}
         </Stack>
         <Group gap={4}>
+          {p.sessionName && <StatusBadge tone="neutral" size="sm" data-testid="card-session">{p.sessionName}</StatusBadge>}
           {p.zoneName && <StatusBadge tone="accent" size="sm" data-testid="card-zone">{p.zoneName}</StatusBadge>}
           <StatusBadge tone="neutral" size="sm" className="num" data-testid="card-count">{plural(active, 'inscrit')}{c.absentIds.length ? ` + ${plural(c.absentIds.length, 'absent')}` : ''}</StatusBadge>
           <StatusBadge tone={STATUS_TONES[c.status]} size="sm" data-testid="card-status">{STATUS_LABELS[c.status]}{c.status === 'started' ? ' 🔒' : ''}</StatusBadge>

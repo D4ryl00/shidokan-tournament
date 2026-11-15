@@ -1,30 +1,23 @@
 import { Box, Grid, Paper, SimpleGrid, Stack, Text } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { newSameClubSentences } from '../../../domain/brackets/same-club.js';
 import { type Category } from '../../../domain/categories.js';
 import { DISCIPLINES, RULESETS } from '../../../domain/disciplines.js';
 import { normalizeName } from '../../../domain/names.js';
 import type { ProposalType } from '../../../domain/replacement/index.js';
 import type { Wave } from '../../../domain/waves.js';
-import { useGrid, useZones, usePassages, useSwap, type RecasementEntry } from '../../api.js';
+import { useGrid, useZones, usePassages, type RecasementEntry } from '../../api.js';
 import { categoryPassages } from '../../passages.js';
 import type { EntrantInfo } from '../BracketView.js';
 import { useUndoHighlight } from '../history/highlight.js';
-import { useUndoToast } from '../history/undoToast.js';
 import { EmptyState } from '../ui/EmptyState.js';
 import { CategoryCard } from './CategoryCard.js';
-import { DropConfirmDialog, type PendingDrop } from './DropConfirmDialog.js';
 import { LoneTray } from './LoneTray.js';
-import { cardTitle, isLockedCategory, LOCKED_DROP, loneFighters, plancheFilter, plancheGroups, shownOnPlanche, type PlancheSort } from './model.js';
+import { cardTitle, loneFighters, plancheFilter, plancheGroups, sessionLabel, shownOnPlanche, type PlancheSort } from './model.js';
 import { PlancheToolbar, type Scope } from './PlancheToolbar.js';
-import { useDragMove, type DragAttrs, type PlancheAction } from './useDragMove.js';
+import { usePlancheDrop } from './usePlancheDrop.js';
 import { JumpLinks } from '../ui/JumpLinks.js';
 
 export interface SeeRequest { ids: string[]; n: number }
-
-/** Une pastille est à la fois source (glisser, clic) et cible (dépôt). */
-const both = (a: DragAttrs, b: DragAttrs): DragAttrs => ({ ...a, ...b, onClick: a.onClick ?? b.onClick, style: { ...a.style, ...b.style } });
 
 /** La planche : toutes les catégories de la session en cartes, groupées, avec le bac « Sans adversaire ». */
 export function Planche({ competitionId, categories, waves, waveId, scope, onScope, readOnly, entrants, badges, badgeDetails, cases, aside, historyCount, onHistory, seeRequest, onConsumed, onOpenList }: {
@@ -58,34 +51,8 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [seen, setSeen] = useState<Set<string>>(new Set());
 
-  // Glisser-déposer et clic-clic : échange de places tout de suite, échange et déplacement après confirmation.
-  const swap = useSwap(competitionId);
-  const undoToast = useUndoToast(competitionId);
-  const [drop, setDrop] = useState<PendingDrop | null>(null);
-  const nameOf = (rid?: string) => (rid ? entrants.get(rid)?.name : undefined) ?? '?';
-  const onAction = (a: PlancheAction) => {
-    if (a.kind === 'none') return;
-    if (a.kind === 'locked') {
-      notifications.show({ id: 'planche-locked', color: 'orange', message: LOCKED_DROP });
-      return;
-    }
-    if (a.kind === 'swap' && a.target) {
-      const before = categories.find((c) => c.id === a.from)?.bracket ?? null;
-      const [x, y] = [a.source, a.target];
-      swap.mutate({ cid: a.from, a: x, b: y }, {
-        onSuccess: (c) => undoToast(`Places échangées : ${nameOf(x)} ↔ ${nameOf(y)}`, c.historyId ?? null, newSameClubSentences(before, c.bracket, (r) => entrants.get(r))),
-        onError: (e) => notifications.show({ color: 'red', message: e.message }),
-      });
-      return;
-    }
-    if (a.kind === 'exchange' || a.kind === 'move') setDrop({ kind: a.kind, source: a.source, target: a.target, from: a.from, to: a.to });
-  };
-  const drag = useDragMove({ readOnly, onAction });
-  const chipProps = (registrationId: string, c: Category) => {
-    const t = { registrationId, categoryId: c.id, locked: isLockedCategory(c) };
-    return both(drag.dragProps(t), drag.dropProps(t));
-  };
-  const cardProps = (c: Category) => drag.dropProps({ categoryId: c.id, locked: isLockedCategory(c) });
+  // Glisser-déposer et clic-clic : le hook partagé (la galaxie s'en sert aussi).
+  const { drag, chipProps, cardProps, dialog, nameOf } = usePlancheDrop({ competitionId, categories, entrants, waves, readOnly });
 
   const inScope = (c: Category) => waves.length === 0 || scope === 'all' || (scope === 'waiting' ? c.waveId === null : c.waveId === waveId);
   const waiting = categories.filter((c) => c.waveId === null).length;
@@ -103,8 +70,7 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
   const loneItems = lone.flatMap((l) => {
     const category = categories.find((c) => c.id === l.categoryId);
     if (!category) return [];
-    const sessionName = category.waveId === null ? (waves.length ? 'En attente' : null) : category.waveId === waveId ? null : (waves.find((w) => w.id === category.waveId)?.name ?? null);
-    return [{ category, registrationId: l.registrationId, sessionName }];
+    return [{ category, registrationId: l.registrationId, sessionName: sessionLabel(category, waves, waveId) }];
   });
 
   // « Voir » : lève les filtres, entoure les cartes ~2 s et défile jusqu'à la première (une fois les catégories chargées).
@@ -181,7 +147,7 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
           </Stack>
         </Grid.Col>
       </Grid>
-      <DropConfirmDialog competitionId={competitionId} drop={drop} categories={categories} entrants={entrants} waves={waves} onClose={() => setDrop(null)} />
+      {dialog}
     </Stack>
   );
 }

@@ -1,6 +1,7 @@
 import { activeEntrantCount, categoryLabelParts, compareKeys, isFreeKey, type Category } from '../../../domain/categories.js';
 import { normalizeName } from '../../../domain/names.js';
 import type { CategoryGrid } from '../../../domain/types.js';
+import type { Wave } from '../../../domain/waves.js';
 
 export type PlancheSort = 'categorie' | 'zone';
 export interface PlancheGroup { key: string; title: string; categories: Category[] }
@@ -135,4 +136,11 @@ export function dropKind(
 export function dropAction(src: { registrationId: string; categoryId: string }, target: { registrationId?: string; categoryId: string }, cats: Category[]): DropAction {
   const locked = (id: string) => isLockedCategory(cats.find((c) => c.id === id));
   return dropKind({ ...src, locked: locked(src.categoryId) }, { ...target, locked: locked(target.categoryId) });
+}
+
+/** Session d'une catégorie, pour l'afficher à côté de la session montrée : « En attente » s'il y a des vagues, le nom de la vague, `null` pour la session montrée. */
+export function sessionLabel(category: Category, waves: Wave[], shownWaveId: string | null): string | null {
+  if (category.waveId === null) return waves.length ? 'En attente' : null;
+  if (category.waveId === shownWaveId) return null;
+  return waves.find((w) => w.id === category.waveId)?.name ?? null;
 }
