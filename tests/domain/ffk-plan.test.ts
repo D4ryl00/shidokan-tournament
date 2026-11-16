@@ -147,7 +147,7 @@ describe('états des cartes', () => {
   test('catégorie acceptée : la carte au poids -20 passe de todo à auto', () => {
     const r = row({ lastName: 'PETIT', firstName: 'P', ageBandCode: 'poussin', weightLabel: '-20' });
     const before = planFfkCards([r], grid, base());
-    expect(before.weightClasses).toEqual([{ id: 'poussin:F:-20', ageBandCode: 'poussin', sex: 'F', label: '-20', maxKg: 20, sortOrder: 0, rows: 1, accepted: false }]);
+    expect(before.weightClasses).toEqual([{ id: 'poussin:F:-20', ageBandCode: 'poussin', sex: 'F', label: '-20', maxKg: 20, sortOrder: 0, rows: 1, fighters: 1, accepted: false }]);
     expect(before.cards[0]).toMatchObject({ state: 'todo', fighterId: null, missing: ['Catégorie de poids'] });
     const after = planFfkCards([r], grid, base(), { acceptedWeightClasses: ['poussin:F:-20'] });
     expect(after.weightClasses[0]!.accepted).toBe(true);
@@ -357,5 +357,15 @@ describe('rapprochements (repris de l’ancien plan)', () => {
   test('ligne sans licence puis ligne avec licence (autre discipline) du même combattant : la seconde n’est pas importée d’office', () => {
     const plan = planFfkCards([row({ licence: null }), row({ licence: 'L77', discipline: 'shido-boxing' })], grid, base());
     expect(plan.cards.map((c) => [c.state, c.fighterId])).toEqual([['auto', 'f1'], ['todo', null]]);
+  });
+});
+
+describe('nombre de combattants par club', () => {
+  test('un combattant sur deux lignes compte une fois ; les lignes restent comptées', () => {
+    const karate = row({ licence: 'Y1', discipline: 'karate' });
+    const kata = row({ licence: 'Y1', discipline: 'kata', weightLabel: null });
+    const other = row({ licence: 'Y2', lastName: 'AUTRE', firstName: 'B' });
+    expect(planFfkCards([karate, kata], grid, base()).clubs[0]).toMatchObject({ clubEntity: TANI, rows: 2, fighters: 1 });
+    expect(planFfkCards([karate, kata, other], grid, base()).clubs[0]).toMatchObject({ rows: 3, fighters: 2 });
   });
 });

@@ -67,6 +67,9 @@ const firstOf = <T>(rows: FfkRow[], pick: (r: FfkRow) => T | null | undefined): 
   return null;
 };
 
+/** Catégorie de poids de l’export absente de la grille : `rows` lignes de l’export, `fighters` combattants distincts (cartes). */
+export type NewWeightClass = WeightClass & { rows: number; fighters: number };
+
 /** Une carte par combattant de l’export : les lignes de même licence (à défaut même nom + sexe + club) sont regroupées. */
 export function buildCards(
   rows: FfkRow[],
@@ -74,7 +77,7 @@ export function buildCards(
   fighters: ExistingFighter[],
   grid: CategoryGrid,
   acceptedWeightClasses: ReadonlySet<string>,
-): { cards: FfkCardDraft[]; newWeightClasses: (WeightClass & { rows: number })[] } {
+): { cards: FfkCardDraft[]; newWeightClasses: NewWeightClass[] } {
   const groups = new Map<string, FfkRow[]>();
   for (const r of rows) {
     const k = cardKey(r);
@@ -83,7 +86,7 @@ export function buildCards(
     else groups.set(k, [r]);
   }
 
-  const newWeightClasses: (WeightClass & { rows: number })[] = [];
+  const newWeightClasses: NewWeightClass[] = [];
   /** Combattant → licence de la carte qui l’a déjà réclamé dans cet import. */
   const claimedBy = new Map<string, string | null>();
   const keyOf = (f: ExistingFighter) => normalizeName(`${f.line.lastName} ${f.line.firstName}`);
@@ -117,6 +120,8 @@ export function buildCards(
     // Catégorie de poids : existante, ou nouvelle (acceptée ou non).
     let weightClassId: string | null = null;
     let weightIssue: string | null = null;
+    /** Catégories nouvelles déjà comptées pour ce combattant (une par combattant, quel que soit son nombre de lignes). */
+    const counted = new Set<string>();
     for (const r of group) {
       weightIssue ??= r.weightIssue ?? null;
       if (!r.weightLabel || !r.ageBandCode || !r.sex) continue;
@@ -124,11 +129,14 @@ export function buildCards(
       const id = found?.id ?? `${r.ageBandCode}:${r.sex}:${r.weightLabel}`;
       if (!found) {
         const known = newWeightClasses.find((w) => w.id === id);
-        if (known) known.rows++;
-        else {
+        if (known) {
+          known.rows++;
+          if (!counted.has(id)) known.fighters++;
+        } else {
           const parsed = parseWeightLabel(r.weightLabel)!;
-          newWeightClasses.push({ id, ageBandCode: r.ageBandCode, sex: r.sex, label: parsed.label, maxKg: parsed.maxKg, sortOrder: 0, rows: 1 });
+          newWeightClasses.push({ id, ageBandCode: r.ageBandCode, sex: r.sex, label: parsed.label, maxKg: parsed.maxKg, sortOrder: 0, rows: 1, fighters: 1 });
         }
+        counted.add(id);
         if (!acceptedWeightClasses.has(id)) {
           weightIssue ??= `« ${r.weightLabel.replace('-', '−')} » n’est pas dans la grille.`;
           continue;

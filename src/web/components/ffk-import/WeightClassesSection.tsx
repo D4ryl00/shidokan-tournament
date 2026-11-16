@@ -24,7 +24,7 @@ export function WeightClassesSection({ grid, weightClasses, accepted, onToggle }
           <Paper key={w.id} withBorder p="sm" radius="md" data-testid="ffk-weight-class" style={{ backgroundColor: 'var(--sk-bg)' }}>
             <Checkbox checked={on} onChange={(e) => onToggle(w.id, e.currentTarget.checked)}
               label={<b>{ageBandLabel(grid, w.ageBandCode)} {w.sex} {w.label}</b>}
-              description={`${plural(w.rows, 'combattant')} · ${on ? 'sera créée' : 'pas créée'}`} />
+              description={`${plural(w.fighters, 'combattant')} · ${on ? 'sera créée' : 'pas créée'}`} />
           </Paper>
         );
       })}

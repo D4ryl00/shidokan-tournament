@@ -3,7 +3,7 @@ import { DISCIPLINES } from '../disciplines.js';
 import type { FfkRow } from '../ffk-import.js';
 import { normalizeName } from '../names.js';
 import type { CategoryGrid, WeightClass } from '../types.js';
-import { buildCards, type ExistingFighter, type FfkCardDraft } from './cards.js';
+import { buildCards, type ExistingFighter, type FfkCardDraft, type NewWeightClass } from './cards.js';
 import { linkClubs, type ClubLink, type ExistingClub } from './clubs.js';
 import { cardChanges, ffkCardDiffs, FIELD_LABELS, initialValue, missingFields, type ChangeLabels, type FfkCardDiff, type FfkCardValue } from './values.js';
 
@@ -60,9 +60,13 @@ export interface FfkOrphan {
   version: string;
 }
 
+/** Lien d’un club de l’export, avec le nombre de combattants distincts (cartes) de ce club. */
+export type FfkClubLink = ClubLink & { fighters: number };
+
 export interface FfkCardsPlan {
-  weightClasses: (WeightClass & { rows: number; accepted: boolean })[];
-  clubs: ClubLink[];
+  /** `rows` : lignes de l’export ; `fighters` : combattants distincts (cartes). */
+  weightClasses: (NewWeightClass & { accepted: boolean })[];
+  clubs: FfkClubLink[];
   cards: FfkCard[];
   orphans: FfkOrphan[];
   summary: { todo: number; auto: number; done: number; skip: number; clubsTodo: number; creates: number; updates: number; deletes: number };
@@ -257,7 +261,7 @@ export function planFfkCards(rows: FfkRow[], grid: CategoryGrid, existing: Exist
   const imported = cards.filter((c) => c.state === 'auto' || c.state === 'done');
   return {
     weightClasses: newWeightClasses.map((w) => ({ ...w, accepted: accepted.has(w.id) })),
-    clubs,
+    clubs: clubs.map((l) => ({ ...l, fighters: cards.filter((c) => c.clubEntity === l.clubEntity).length })),
     cards,
     orphans,
     summary: {

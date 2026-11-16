@@ -93,6 +93,13 @@ describe('poids', () => {
     expect(buildCards([r], links, [], grid, new Set(['poussin:M:-20'])).cards[0]!.exportLine.weightClassId).toBe('poussin:M:-20');
     expect(buildCards([r], links, [], grid, new Set()).newWeightClasses[0]).toMatchObject({ id: 'poussin:M:-20', rows: 1 });
   });
+  test('catégorie nouvelle : combattants comptés une fois, même sur deux lignes de combat', () => {
+    const karate = row({ licence: 'X1', ageBandCode: 'poussin', sex: 'M', weightLabel: '-20', discipline: 'karate' });
+    const boxing = row({ licence: 'X1', ageBandCode: 'poussin', sex: 'M', weightLabel: '-20', discipline: 'shido-boxing' });
+    const other = row({ licence: 'X2', lastName: 'AUTRE', ageBandCode: 'poussin', sex: 'M', weightLabel: '-20' });
+    expect(build([karate, boxing]).newWeightClasses).toEqual([expect.objectContaining({ id: 'poussin:M:-20', rows: 2, fighters: 1 })]);
+    expect(build([karate, boxing, other]).newWeightClasses[0]).toMatchObject({ rows: 3, fighters: 2 });
+  });
   test('poids illisible : la ligne devient une carte avec weightIssue', () => {
     const msg = 'Catégorie de poids « 70 » inconnue : écrire -70 ou +70.';
     const { cards } = build([row({ weightLabel: null, weightIssue: msg })]);

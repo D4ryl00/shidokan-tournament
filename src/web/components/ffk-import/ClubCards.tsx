@@ -1,6 +1,6 @@
 import { Button, Group, Paper, Stack, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
-import type { ClubLink } from '../../../domain/ffk-plan/clubs.js';
+import type { FfkClubLink as ClubLink } from '../../../domain/ffk-plan/plan.js';
 import { plural } from '../../../domain/plural.js';
 import type { Club, DirectoryInput } from '../../../domain/registration.js';
 import { useClubs, useCreateCompetitionClub } from '../../api.js';
@@ -89,7 +89,7 @@ function ClubCard({ link, target, clubs, created, onLink, onCreate }: {
         <Group justify="space-between" align="flex-start" wrap="nowrap" gap="sm">
           <div style={{ minWidth: 0 }}>
             <Text fw={700} style={{ overflowWrap: 'anywhere' }}>{link.clubEntity}</Text>
-            <Text size="sm" c="dimmed">{plural(link.rows, 'combattant')} dans l’export{targetName ? ` · → ${targetName}` : ''}</Text>
+            <Text size="sm" c="dimmed">{plural(link.fighters, 'combattant')} dans l’export{targetName ? ` · → ${targetName}` : ''}</Text>
           </div>
           <StatusBadge tone={target ? 'ok' : 'warn'} data-testid="ffk-club-status">{status}</StatusBadge>
         </Group>
