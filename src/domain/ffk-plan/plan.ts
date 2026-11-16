@@ -109,6 +109,11 @@ export const searchableFighters = (existing: ExistingData, grid: CategoryGrid): 
 
 export const ALREADY_RETAINED = 'combattant déjà retenu par une autre carte';
 export const HOMONYM = 'même nom qu’un autre combattant du club : changez le nom ou liez-le';
+export const FIGHTER_GONE = 'combattant introuvable';
+export const WEIGHT_CLASS_GONE = 'catégorie de poids absente de la grille';
+export const CLUB_GONE = 'club introuvable';
+/** Raisons pour lesquelles une carte validée est quand même laissée de côté (la page ne la montre pas « Validée »). */
+export const VALIDATED_REJECTIONS: readonly string[] = [FIGHTER_GONE, WEIGHT_CLASS_GONE, CLUB_GONE, ALREADY_RETAINED, HOMONYM];
 
 /** Clé de doublon de l’enregistrement d’une ligne (`duplicateOf`) : même nom, même sexe, même club ; sans club, jamais un doublon. */
 const homonymKey = (line: ClubFormLine, clubId: string | null): string | null =>
@@ -181,15 +186,15 @@ function planCard(draft: FfkCardDraft, choice: FfkCardChoice | undefined, fighte
   if (choice?.kind === 'none') return { ...base, reason: 'combattant pas choisi' };
   if (choice?.kind === 'validated') {
     const saved = fighter(choice.fighterId);
-    if (choice.fighterId !== 'new' && !saved) return { ...base, reason: 'combattant introuvable' };
+    if (choice.fighterId !== 'new' && !saved) return { ...base, reason: FIGHTER_GONE };
     const missing = missingFields(choice.value);
     if (missing.length) return { ...base, diffs: ffkCardDiffs(draft, saved), missing, reason: `reste à remplir : ${missing.join(', ')}` };
     // Valeur devenue impossible depuis sa validation (catégorie décochée, club supprimé) : jamais écrite.
     const { line } = choice.value;
     if (line.combats.length && line.weightClassId && !known.weightClassIds.has(line.weightClassId)) {
-      return { ...base, diffs: ffkCardDiffs(draft, saved), reason: 'catégorie de poids absente de la grille' };
+      return { ...base, diffs: ffkCardDiffs(draft, saved), reason: WEIGHT_CLASS_GONE };
     }
-    if (!known.clubIds.has(choice.value.clubId!)) return { ...base, diffs: ffkCardDiffs(draft, saved), reason: 'club introuvable' };
+    if (!known.clubIds.has(choice.value.clubId!)) return { ...base, diffs: ffkCardDiffs(draft, saved), reason: CLUB_GONE };
     return retained(choice.fighterId, choice.value, saved, 'done');
   }
 

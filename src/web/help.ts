@@ -31,10 +31,10 @@ export type HelpTopicId =
   | 'fiche-club.importer'
   | 'fiche-club.pdf-ffk'
   | 'fiche-club.saisir'
+  | 'import-ffk.categories'
   | 'import-ffk.clubs'
-  | 'import-ffk.rapprochements'
-  | 'import-ffk.mises-a-jour'
-  | 'import-ffk.creations'
+  | 'import-ffk.cartes'
+  | 'import-ffk.sans-ffk'
   | 'recasement.valides'
   | 'recasement.de-cote'
   | 'combats.categories'
@@ -380,41 +380,64 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
   },
   'import-ffk': {
     title: 'Import FFK',
-    short: 'Importez l’export des inscriptions FFK, vérifiez l’aperçu, tranchez les doutes, puis validez.',
+    short: 'Déposez l’export FFK, tranchez ce que vous pouvez sur une seule page, puis importez : le reste est laissé tel quel jusqu’au prochain import.',
     details: [
-      'L’export FFK fait foi pour l’âge et le poids. Les fichiers .xlsx, .xlsm, .ods et .csv sont acceptés.',
+      'Rien n’est enregistré avant « Importer… », et rien ne change sur une fiche sans votre accord. Les fichiers .xlsx, .xlsm, .ods et .csv sont acceptés.',
       [
         'Choisissez les onglets à importer et vérifiez la correspondance des colonnes (elle est mémorisée).',
-        'L’aperçu rapproche chaque ligne d’un combattant déjà connu (fiche club) ou en crée un nouveau.',
-        'Les rapprochements douteux (homonymes, fautes de frappe) doivent être tranchés avant l’import.',
+        '1. Catégories de poids absentes de la grille : cochez celles à créer.',
+        '2. Clubs : reliez chaque club de l’export à un club de la compétition, ou créez-le.',
+        '3. Combattants de l’export : une carte par combattant ; liez-le à un inscrit ou créez-le, choisissez les valeurs à garder, validez la carte.',
+        '4. Fiches club sans inscription FFK : gardez-les, rapprochez-les d’une ligne de l’export ou supprimez-les.',
       ],
-      'Réimporter un export plus récent ajoute, modifie ou retire des inscriptions sans créer de doublons.',
+      'Le résumé en haut compte ce qui reste à trancher. « Importer… » n’est jamais bloqué : la fenêtre « Confirmer l’import FFK » récapitule ce qui sera fait et ce qui est laissé de côté.',
+      'Ce qui n’est pas tranché revient au prochain import du même fichier. Les décisions ne sont pas mémorisées d’un import à l’autre : une carte validée avec la valeur de la fiche, différente de l’export, revient « À trancher ».',
+    ],
+  },
+  'import-ffk.categories': {
+    title: 'Catégories de poids absentes de la grille',
+    short: 'Rien n’est créé sans votre accord : cochez une catégorie pour la créer, sinon choisissez une catégorie existante dans la carte de chaque combattant.',
+    details: [
+      'Une case par catégorie que l’export utilise et que la grille n’a pas, avec le nombre de combattants concernés. Toutes sont décochées au départ.',
+      'Cochée : la catégorie sera créée à l’import et ses combattants y sont placés. Décochée : la catégorie de poids de ces combattants est à choisir dans leur carte, parmi celles de la grille.',
     ],
   },
   'import-ffk.clubs': {
     title: 'Clubs',
-    short: 'Vérifiez à quel club de l’app correspond chaque club de l’export FFK.',
+    short: 'Reliez chaque club de l’export à un club de la compétition, ou créez-le : le lien vaut pour tous ses combattants de cet import.',
     details: [
-      'Un lien « à vérifier » est une ressemblance de nom : vérifiez-le, et changez-le si ce n’est pas le bon club. Laissé tel quel, il est utilisé pour cet import.',
+      'Un club n’est relié d’office que si le lien est sûr (même club FFK, même nom ou même N° d’affiliation) : sa carte est repliée, « Modifier » la rouvre.',
+      'Un nom proche est « à vérifier » : rien n’est relié tant que vous ne cochez pas « Relier à … ». « Ne pas relier pour l’instant » laisse ses nouveaux combattants de côté.',
+      '« Chercher un autre club par son nom… » trouve un club de la compétition. « ➕ Créer un club… » ouvre la fenêtre « Ajouter un club » de l’annuaire, pré-remplie : le club est créé tout de suite, puis relié.',
+      'Le lien est mémorisé à l’import : au prochain import, le club est reconnu d’office.',
     ],
   },
-  'import-ffk.rapprochements': {
-    title: 'Rapprochements à trancher',
-    short: 'Pour chaque cas, dites s’il s’agit du même combattant ou d’un nouveau.',
+  'import-ffk.cartes': {
+    title: 'Combattants de l’export',
+    short: 'Cliquez sur le combattant à lier ou sur « Nouveau combattant » : la carte s’ouvre. Choisissez les valeurs à garder, puis validez la carte.',
     details: [
-      'L’app a trouvé un combattant proche (même nom dans un autre club, faute de frappe…). Choisissez le bon combattant, ou « Nouveau combattant ».',
-      'L’import reste bloqué tant qu’un cas n’est pas tranché.',
+      'Les lignes d’un même combattant (même licence, ou même nom, sexe et club) forment une seule carte, avec toutes ses disciplines.',
+      [
+        '« C’est … » : le combattant de l’app proposé, avec la raison (même licence, même nom…). « Pas dans la liste ? » cherche parmi tous les inscrits, par leur nom.',
+        '« ➕ Nouveau combattant » : il sera créé à l’import.',
+        '« Ne pas lier pour l’instant » : la ligne est laissée de côté.',
+      ],
+      'Carte ouverte : le formulaire du combattant. Les champs où l’export et la fiche diffèrent démarrent vides, encadrés en orange : cliquez sur « FFK » ou « Fiche club », ou saisissez une autre valeur.',
+      '« Valider la carte » (grisé tant qu’un champ obligatoire manque) la replie et ouvre la suivante. « Annuler mes modifications » revient à l’état de départ ; « Écarter cette ligne » la laisse de côté.',
+      'États : « À trancher », « À valider » (modifiée mais pas validée : laissée de côté à l’import), « Validée », « Sans problème » (importée telle quelle), « Écartée ». Les confirmées sans changement sont repliées ensemble.',
     ],
   },
-  'import-ffk.mises-a-jour': {
-    title: 'Mises à jour',
-    short: 'Les inscriptions déjà connues que l’export FFK va compléter ou corriger.',
-    details: ['L’âge et le poids de l’export remplacent ceux de la fiche club. Les préférences de la fiche sont gardées.'],
-  },
-  'import-ffk.creations': {
-    title: 'Créations',
-    short: 'Les inscriptions de l’export FFK qui n’existent pas encore et seront créées.',
-    details: ['Ces combattants n’ont pas envoyé de fiche club : ils n’auront pas de préférences, sauf si vous les ajoutez à la main.'],
+  'import-ffk.sans-ffk': {
+    title: 'Fiches club sans inscription FFK',
+    short: 'Inscrits de la compétition absents de l’export. Sans action de votre part, ils sont gardés tels quels.',
+    details: [
+      'Ils viennent d’une fiche club, ou d’un import FFK précédent (« présent dans l’export précédent »). Rien n’est retiré d’office.',
+      [
+        '« Garder » (par défaut) : la fiche reste telle quelle, sans la marque « confirmée FFK ».',
+        '« Rapprocher… » : cherchez la ligne de l’export qui est ce combattant ; sa carte se lie à lui et s’ouvre plus haut.',
+        '« Supprimer » : ses inscriptions sont supprimées à l’import (impossible si ses combats ont commencé).',
+      ],
+    ],
   },
   sessions: {
     title: 'Sessions',

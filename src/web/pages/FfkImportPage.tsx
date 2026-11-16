@@ -1,12 +1,15 @@
-import { Button, Card, Checkbox, FileButton, Group, List, Loader, Paper, Select, SimpleGrid, Stack, Text } from '@mantine/core';
-import { useRef, useState, type ReactNode } from 'react';
+import { Button, Card, Checkbox, FileButton, Group, Loader, Paper, Select, SimpleGrid, Stack, Text } from '@mantine/core';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router';
 import { FFK_FIELDS, FFK_FIELD_LABELS } from '../../domain/ffk-import.js';
 import type { FfkCardsPlan } from '../../domain/ffk-plan/plan.js';
 import { plural } from '../../domain/plural.js';
 import { type FfkSheetSetup, useGrid, useUploadFfk } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { pageState, type CardDraft } from '../components/ffk-import/cardState.js';
 import { ClubCards } from '../components/ffk-import/ClubCards.js';
+import { FighterCards } from '../components/ffk-import/FighterCards.js';
+import { ImportBar } from '../components/ffk-import/ImportBar.js';
 import { OrphansSection } from '../components/ffk-import/OrphansSection.js';
 import { useFfkPreview } from '../components/ffk-import/useFfkPreview.js';
 import { WeightClassesSection } from '../components/ffk-import/WeightClassesSection.js';
@@ -47,15 +50,26 @@ export function FfkImportPage() {
   const ffk = useFfkPreview(id);
   const [sheets, setSheets] = useState<FfkSheetSetup[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
-  // « Rapprocher… » d’une fiche sans inscription FFK : la carte choisie doit s’ouvrir liée à ce combattant (section 3, Task 9).
+  // « Rapprocher… » d’une fiche sans inscription FFK : la section 3 ouvre la carte choisie, liée à ce combattant.
   const [matchRequest, setMatchRequest] = useState<{ cardKey: string; fighterId: string } | null>(null);
+  // Cartes en cours (choisies ou modifiées, pas encore validées) : restent dans la page jusqu’à « Valider la carte ».
+  const [drafts, setDrafts] = useState<Record<string, CardDraft>>({});
   const resetFile = useRef<() => void>(null);
   const { plan, choices, updateChoices } = ffk;
+  const states = useMemo(
+    () => Object.fromEntries((plan?.cards ?? []).map((c) => [c.key, pageState(c, drafts[c.key], choices.cards?.[c.key])])),
+    [plan, drafts, choices.cards],
+  );
 
+  /** Nouveau fichier, ou import fait : la page repart de zéro. */
+  const clear = () => {
+    ffk.reset();
+    setDrafts({});
+    setMatchRequest(null);
+  };
   const onFile = (file: File | null) => {
     setFileName(file?.name ?? null);
-    ffk.reset();
-    setMatchRequest(null);
+    clear();
     if (!file) return;
     // Fichier envoyé : le champ est vidé pour qu’un nouveau choix du même fichier soit relu.
     resetFile.current?.();
@@ -115,30 +129,34 @@ export function FfkImportPage() {
         <>
           <PlanSummary summary={plan.summary} loading={ffk.loading} />
 
-          <SectionCard title={step(1, 'Catégories de poids absentes de la grille')} data-testid="ffk-weight-classes"
-            description="Rien n’est créé sans votre accord. Cochez une catégorie pour la créer : ses combattants sont alors importés dedans. Sinon, choisissez pour chacun une catégorie existante dans sa carte.">
+          <SectionCard title={step(1, 'Catégories de poids absentes de la grille')} data-testid="ffk-weight-classes" help="import-ffk.categories">
             <WeightClassesSection grid={grid} weightClasses={plan.weightClasses} accepted={choices.acceptedWeightClasses ?? []} onToggle={toggleWeightClass} />
           </SectionCard>
 
-          <SectionCard title={step(2, 'Clubs')} data-testid="ffk-clubs"
-            description="Reliez chaque club de l’export à un club de la compétition, ou créez-le. Le lien vaut pour tous ses combattants de cet import.">
+          <SectionCard title={step(2, 'Clubs')} data-testid="ffk-clubs" help="import-ffk.clubs">
             <ClubCards competitionId={id} links={plan.clubs} choices={choices.clubLinks} onLink={linkClub} />
           </SectionCard>
 
-          {/* 3. Combattants de l’export : les cartes (Task 9) ; en attendant, la liste brute des cartes à trancher. */}
-          <SectionCard title={step(3, 'Combattants de l’export')} data-testid="ffk-cards">
-            <List size="sm">
-              {plan.cards.filter((c) => c.state === 'todo').map((c) => (
-                <List.Item key={c.key}>{c.exportLine.lastName} {c.exportLine.firstName} : {c.reason}</List.Item>
-              ))}
-            </List>
+          <SectionCard title={step(3, 'Combattants de l’export')} data-testid="ffk-cards" help="import-ffk.cartes">
+            {/* Remontée à chaque fichier : filtre, carte ouverte et cartes vues repartent de zéro. */}
+            <FighterCards key={ffk.source?.uploadId} competitionId={id} plan={plan} grid={grid} choices={choices} updateChoices={updateChoices}
+              drafts={drafts} setDrafts={setDrafts} states={states} stale={ffk.stale} matchRequest={matchRequest} />
           </SectionCard>
 
-          <SectionCard title={step(4, 'Fiches club sans inscription FFK')} data-testid="ffk-orphans"
-            description="Inscrits de la compétition absents de l’export. Sans action de votre part, ils sont gardés tels quels.">
+          <SectionCard title={step(4, 'Fiches club sans inscription FFK')} data-testid="ffk-orphans" help="import-ffk.sans-ffk">
             <OrphansSection orphans={plan.orphans} cards={plan.cards} grid={grid} actions={choices.orphans} matched={matchRequest}
               onAction={setOrphan} onMatch={(cardKey, fighterId) => setMatchRequest({ cardKey, fighterId })} />
           </SectionCard>
+
+          {ffk.source && (
+            <ImportBar competitionId={id} source={ffk.source} choices={choices} plan={plan} states={states} grid={grid}
+              stale={ffk.stale} failed={!!ffk.error} onConflict={ffk.refresh}
+              onImported={() => {
+                setFileName(null);
+                setSheets([]);
+                clear();
+              }} />
+          )}
         </>
       )}
     </Stack>

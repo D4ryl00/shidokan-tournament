@@ -6,21 +6,12 @@ import { DISCIPLINES } from '../../domain/disciplines.js';
 import { FIELD_LABELS, type FfkCardValue, type FfkField } from '../../domain/ffk-plan/values.js';
 import type { DisciplineId } from '../../domain/types.js';
 import { ageBandChoices, applyChange, combatChoices, deriveAfterAgeChange, kataChoice, reclassChoices, rulesetChoices, toggleCombat, type LineFormContext } from './club-line/lineForm.js';
-import { cardFieldValue, decisionZone, pendingDecisions, type DecisionZone } from './club-line/decisions.js';
+import { cardFieldValue, decisionZone, pendingDecisions, type DecisionZone, type FieldDiff } from './club-line/decisions.js';
 import { FfkChoice } from './club-line/FfkChoice.js';
 import { choiceValues, ffkChoiceState, ffkValueAvailable, hiddenConflicts, importValueText, type FfkFormStep } from './club-line/ffkStep.js';
 import { OneOf } from './PaperEntryTable.js';
 
-export { pendingDecisions };
-
-/** Un écart entre la valeur importée et la fiche. `fiche` nul et `savedLabel` : seulement dans la fenêtre de l'import PDF / ODS. */
-export interface FieldDiff {
-  field: FfkField;
-  ffk: string;
-  fiche: string | null;
-  /** Remplace le titre de la case de la fiche, pour ce champ seulement. */
-  savedLabel?: string;
-}
+export { pendingDecisions, type FieldDiff };
 
 const ZONE_STYLE: Record<'decide' | 'decided', CSSProperties> = {
   decide: { border: '1px solid var(--mantine-color-orange-6)', background: 'var(--mantine-color-orange-light)', borderRadius: 10, padding: '10px 12px' },
