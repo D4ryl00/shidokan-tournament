@@ -113,11 +113,11 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
   const labelled = (text: string, key: FfkFormStep['marks'][number]) => <>{text}{mark(key)}</>;
   const hint = (key: keyof FfkFormStep['hints']) => (ffk?.hints[key] ? <Text size="xs" c="dimmed" style={{ whiteSpace: 'pre-line' }} data-testid={`ffk-hint-${key}`}>{ffk.hints[key]}</Text> : null);
   const FIELD_LABELS: Record<ImportField, string> = {
-    ageBandCode: 'Catégorie d’âge', weightClassId: 'Catégorie de poids', weightKg: 'Poids actuel', disciplines: 'Disciplines',
+    lastName: 'Nom', firstName: 'Prénom', sex: 'Sexe', ageBandCode: 'Catégorie d’âge', weightClassId: 'Catégorie de poids', weightKg: 'Poids actuel', disciplines: 'Disciplines',
     ruleset: 'Règlement', grade: 'Grade', prefs: 'Reclassement', shobuKeep: 'Priorité en shobu', licence: 'N° de licence',
   };
   const DISABLED: Record<ImportField, boolean> = {
-    ageBandCode: locked, disciplines: frozen, grade: frozen, weightClassId: combatFrozen, weightKg: combatFrozen, ruleset: combatFrozen, prefs: combatFrozen, shobuKeep: combatFrozen, licence: false,
+    lastName: frozen, firstName: frozen, sex: locked, ageBandCode: locked, disciplines: frozen, grade: frozen, weightClassId: combatFrozen, weightKg: combatFrozen, ruleset: combatFrozen, prefs: combatFrozen, shobuKeep: combatFrozen, licence: false,
   };
   const choice = (field: ImportField) => {
     const diff = ffk?.diffs.find((d) => d.field === field);

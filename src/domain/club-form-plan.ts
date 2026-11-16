@@ -5,7 +5,7 @@ import type { PlanLine } from './ffk-pdf-plan.js';
 import { normalizeName } from './names.js';
 import type { DisciplineId, Ruleset } from './types.js';
 
-export type ImportField = 'ageBandCode' | 'weightClassId' | 'weightKg' | 'disciplines' | 'ruleset' | 'grade' | 'prefs' | 'shobuKeep' | 'licence';
+export type ImportField = 'lastName' | 'firstName' | 'sex' | 'ageBandCode' | 'weightClassId' | 'weightKg' | 'disciplines' | 'ruleset' | 'grade' | 'prefs' | 'shobuKeep' | 'licence';
 /** `ffk` : la valeur importée (nom gardé du PDF FFK) ; `fiche` : la valeur enregistrée. */
 export interface ImportDiff {
   field: ImportField;
@@ -16,6 +16,9 @@ export interface ImportDiff {
 /** Valeur d'un champ sous forme de texte, pour comparer et pour les cases de choix ; `null` : vide. */
 export function fieldValue(line: ClubFormLine, field: ImportField): string | null {
   switch (field) {
+    case 'lastName': return line.lastName.trim() || null;
+    case 'firstName': return line.firstName.trim() || null;
+    case 'sex': return line.sex;
     case 'ageBandCode': return line.ageBandCode;
     case 'weightClassId': return line.weightClassId;
     case 'weightKg': return line.weightKg === null ? null : String(line.weightKg);
@@ -37,6 +40,9 @@ export function fieldValue(line: ClubFormLine, field: ImportField): string | nul
 /** Ce que la valeur texte d'un champ change dans une ligne (l'inverse de `fieldValue`). */
 export function fieldPatch(field: ImportField, value: string | null): Partial<ClubFormLine> {
   switch (field) {
+    case 'lastName': return { lastName: value ?? '' };
+    case 'firstName': return { firstName: value ?? '' };
+    case 'sex': return { sex: value as ClubFormLine['sex'] };
     case 'ageBandCode': return { ageBandCode: value };
     case 'weightClassId': return { weightClassId: value };
     case 'weightKg': return { weightKg: value === null || value === '' ? null : Number(value) };
@@ -56,12 +62,14 @@ export function fieldPatch(field: ImportField, value: string | null): Partial<Cl
   }
 }
 
+/** Champs que `clubFormDiffs` compare (nom, prénom et sexe ne sont comparés que par l'import FFK). */
 const FIELDS: ImportField[] = ['ageBandCode', 'weightClassId', 'weightKg', 'disciplines', 'ruleset', 'grade', 'prefs', 'shobuKeep', 'licence'];
 
 /** Champs où la fiche renvoyée a une valeur différente de l'enregistré ; une case vide ne crée aucune différence. */
 export function clubFormDiffs(file: ClubFormLine, saved: ClubFormLine): ImportDiff[] {
   const hasCombat = file.combats.length > 0;
   const counts: Record<ImportField, boolean> = {
+    lastName: false, firstName: false, sex: false,
     ageBandCode: true, weightKg: true, disciplines: true, prefs: true,
     weightClassId: hasCombat, ruleset: hasCombat, grade: file.kata, shobuKeep: file.ruleset === 'shobu', licence: true,
   };
