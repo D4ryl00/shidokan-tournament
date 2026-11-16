@@ -114,7 +114,9 @@ export function planClubFormImport(items: ClubFormItem[], lines: PlanLine[]): Cl
     }
     const saved = found[0]!;
     const diffs = clubFormDiffs(ffk.line, saved.line);
-    if (!diffs.length) {
+    // Licence apportée par la seule fiche renvoyée (aucune ici) : une étape sans écart, la fiche pré-remplie l'enregistre.
+    const newLicence = normalizeLicence(ffk.line.licence) !== null && normalizeLicence(saved.line.licence) === null && (saved.editable || saved.partlyEditable);
+    if (!diffs.length && !newLicence) {
       upToDate++;
       continue;
     }

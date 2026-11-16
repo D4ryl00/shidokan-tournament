@@ -128,6 +128,18 @@ describe('planClubFormImport', () => {
     expect(plan.upToDate).toBe(1);
     expect(plan.steps).toEqual([]);
   });
+  test('seule nouveauté une licence (aucune enregistrée) : étape « existant » sans écart, la licence pré-remplie', () => {
+    const plan = planClubFormImport([item(0, { licence: '1146 2640 r' })], [saved('a', { licence: null })]);
+    expect(plan.upToDate).toBe(0);
+    expect(plan.steps).toEqual([{ kind: 'existing', ffk: item(0, { licence: '1146 2640 r' }), fighterId: 'a', diffs: [] }]);
+    expect(prefillExistingFromFile(line({ licence: null }), [], [], line({ licence: '1146 2640 r' })).licence).toBe('11462640R');
+  });
+  test('licence déjà enregistrée, identique ou absente de la fiche : à jour ; fiche verrouillée : à jour', () => {
+    expect(planClubFormImport([item(0, { licence: '11462640R' })], [saved('a', { licence: '11462640R' })]).upToDate).toBe(1);
+    expect(planClubFormImport([item(0, { licence: null })], [saved('a', { licence: null })]).upToDate).toBe(1);
+    const locked: PlanLine = { ...saved('a'), editable: false, partlyEditable: false };
+    expect(planClubFormImport([item(0, { licence: '11462640R' })], [locked]).upToDate).toBe(1);
+  });
 });
 
 describe('prefillFromFile', () => {
