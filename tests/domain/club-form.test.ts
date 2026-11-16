@@ -470,7 +470,7 @@ describe('plusieurs combats', () => {
   });
 });
 
-test.each([['1146 2640 r', '11462640R'], ['  ', null], [null, null], [11462640, '11462640']])('normalizeLicence(%j)', (v, out) => expect(normalizeLicence(v)).toBe(out));
+test.each([['1146 2640 r', '11462640R'], ['  ', null], [null, null], [11462640, '11462640'], ['-', null], ['/', null], ['—', null], [' ? ', null], ['n/a', 'N/A']])('normalizeLicence(%j)', (v, out) => expect(normalizeLicence(v)).toBe(out));
 
 describe('colonne licence de la fiche', () => {
   const withLicence = (lines: Line[]): unknown[][] => {

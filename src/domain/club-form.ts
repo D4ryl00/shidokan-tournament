@@ -95,7 +95,8 @@ export const PREF_DISCIPLINES: readonly PrefDiscipline[] = ['karate', 'shido-box
 export function normalizeLicence(v: unknown): string | null {
   if (v === null || v === undefined) return null;
   const s = String(v).replace(/\s+/g, '').toUpperCase();
-  return s === '' ? null : s;
+  // Sans chiffre ni lettre (« - », « / », « ? ») : une case laissée vide à la main, pas une licence.
+  return /[\p{L}\p{N}]/u.test(s) ? s : null;
 }
 /** Une ligne de fiche telle que remplie (papier, .ods ou saisie) : un combattant. */
 export interface ClubFormLine {

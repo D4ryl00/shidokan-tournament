@@ -518,6 +518,8 @@ test('licence : saisie dans la fenêtre, relue normalisée ; vide, elle ne l\'ef
   await page.getByTestId('registration-add').click();
   await chooseClub(page, 'Tani Dojo');
   await fillFighter(page, { ...MARTIN });
+  // Nouveau combattant : rien d'enregistré, donc pas de rappel sous le champ.
+  await expect(page.getByTestId('club-line-form').getByText('Laissée vide, la licence déjà enregistrée est gardée.')).toHaveCount(0);
   await page.getByTestId('line-licence').fill('1146 2640 r');
   await page.getByTestId('line-save').click();
   await expect(page.getByTestId('club-line-form')).toHaveCount(0);

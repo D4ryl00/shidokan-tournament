@@ -43,7 +43,9 @@ function existingView(item: ClubFormItem, fresh: ClubLine, c: ClubFormStepContex
   const current = disciplinesOf(fresh.line);
   // Verrouillée : rien à choisir, l'encadré s'arrête aux disciplines.
   const base = current.length ? ffkBanner(fresh.line.firstName, current.map(disciplineLabel), { locked: true }) : null;
-  const banner = base === null ? (locked ? LOCKED_NO_DISCIPLINE_BANNER : NO_DISCIPLINE_BANNER) : locked ? base : `${base} Sous chaque différence, choisissez la valeur à garder.`;
+  // Seule nouveauté une licence (aucune différence) : l'encadré dit ce que la fiche apporte.
+  const licenceOnly = diffs.length === 0 && !fresh.line.licence && item.line.licence ? ` La fiche renvoyée ajoute seulement son N° de licence (${item.line.licence}).` : null;
+  const banner = base === null ? (locked ? LOCKED_NO_DISCIPLINE_BANNER : NO_DISCIPLINE_BANNER) : locked ? base : `${base}${licenceOnly ?? ' Sous chaque différence, choisissez la valeur à garder.'}`;
   // Combattant confirmé par l'export FFK : la case de droite dit ce qu'on remplace.
   const confirmed = (field: string) => fresh.ffkConfirmed === true && (field === 'ageBandCode' || field === 'weightClassId');
   return {
