@@ -10,8 +10,8 @@ import { ChoiceOption } from './ChoiceOption.js';
 import { searchByName, searchReady } from './search.js';
 
 /**
- * 2. Clubs de l’export : une carte par club, à relier à un club de la compétition. Seul un lien sûr est fait d’office (carte repliée,
- * « Modifier » l’ouvre) ; sinon le club démarre sur « Ne pas relier pour l’instant ». « ➕ Créer un club… » ouvre la fenêtre
+ * 2. Clubs de l’export : une carte par club, à relier à un club de la compétition. Seul un lien sûr est fait d’office (carte repliée tant
+ * qu’elle reste reliée à sa proposition, « Modifier » l’ouvre) ; sinon le club démarre sur « Ne pas relier pour l’instant ». « ➕ Créer un club… » ouvre la fenêtre
  * « Ajouter un club » de l’annuaire, pré-remplie : le club est créé tout de suite, puis relié.
  */
 export function ClubCards({ competitionId, links, choices, onLink }: {
@@ -64,19 +64,34 @@ function ClubCard({ link, target, clubs, created, onLink, onCreate }: {
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  /** Dernier club relié autre que la proposition (recherche, création) : il reste une option après « Ne pas relier ». */
+  const [other, setOther] = useState<string | null>(null);
+  /** Lien affiché au dernier rendu : un nouveau lien (choix, club créé) vide la recherche. */
+  const [shownTarget, setShownTarget] = useState(target);
   const { proposal } = link;
+  if (target !== shownTarget) {
+    setShownTarget(target);
+    setQuery('');
+    if (target && target !== proposal?.clubId) setOther(target);
+  }
   const sure = proposal?.certainty === 'sure';
-  const targetName = target ? (clubs.find((c) => c.id === target)?.name ?? (target === proposal?.clubId ? proposal.name : '…')) : null;
+  const nameOf = (id: string) => clubs.find((c) => c.id === id)?.name ?? (id === proposal?.clubId ? proposal.name : '…');
+  const targetName = target ? nameOf(target) : null;
   const status = !target
     ? (proposal?.certainty === 'doubtful' ? 'À vérifier' : sure ? 'Pas relié' : 'Nouveau')
     : created.has(target) ? 'Créé' : sure && target === proposal?.clubId ? 'Sûr' : 'Relié';
-  // Un club sûr reste replié (relié d’office) ; un club qu’on vient de créer reste ouvert sur « Club créé ».
-  const folded = sure && !open && !(target && created.has(target));
+  // Seul un club relié à sa proposition sûre reste replié (relié d’office) ; pas relié, ou un club qu’on vient de créer, reste ouvert.
+  const folded = sure && !open && target === proposal?.clubId && !created.has(target);
   const pick = (t: string | 'none') => {
     onLink(t);
     setQuery('');
+    // Un choix fait dans la carte ouverte la laisse ouverte (rien ne se replie sous le curseur) ; « Replier » la referme.
+    setOpen(true);
   };
   const results = searchByName(clubs, query, (c) => c.name);
+  // Option du club choisi par la recherche ou créé ici (cochée s’il est relié).
+  const extra = target && target !== proposal?.clubId ? target : other !== proposal?.clubId ? other : null;
+  const optionLabel = (id: string) => (created.has(id) ? 'Club créé : ' : 'Relier à ');
 
   return (
     <Paper withBorder p="sm" radius="md" data-testid="ffk-club" data-linked={target ? 'true' : 'false'}
@@ -96,9 +111,7 @@ function ClubCard({ link, target, clubs, created, onLink, onCreate }: {
         {link.warning && <Text size="sm" c="orange">{link.warning}</Text>}
         {folded ? (
           <Group justify="space-between" gap="xs">
-            <Text size="sm" c="dimmed">
-              {target === proposal?.clubId ? 'Relié d’office.' : target ? `Relié à ${targetName}.` : 'Pas relié pour l’instant.'}
-            </Text>
+            <Text size="sm" c="dimmed">Relié d’office.</Text>
             <Button variant="subtle" size="compact-sm" onClick={() => setOpen(true)}>Modifier</Button>
           </Group>
         ) : (
@@ -106,13 +119,13 @@ function ClubCard({ link, target, clubs, created, onLink, onCreate }: {
             <Stack gap={4} role="radiogroup" aria-label={`Lien du club ${link.clubName}`}>
               {proposal && (
                 <ChoiceOption checked={target === proposal.clubId} onClick={() => pick(proposal.clubId)}
-                  sub={sure ? 'reconnu d’office' : 'nom proche : à vérifier'}>
-                  Relier à <b>{proposal.name}</b>
+                  sub={created.has(proposal.clubId) ? undefined : sure ? 'reconnu d’office' : 'nom proche : à vérifier'}>
+                  {optionLabel(proposal.clubId)}<b>{proposal.name}</b>
                 </ChoiceOption>
               )}
-              {target && target !== proposal?.clubId && (
-                <ChoiceOption checked onClick={() => pick(target)}>
-                  {created.has(target) ? 'Club créé : ' : 'Relier à '}<b>{targetName}</b>
+              {extra && (
+                <ChoiceOption checked={target === extra} onClick={() => pick(extra)}>
+                  {optionLabel(extra)}<b>{nameOf(extra)}</b>
                 </ChoiceOption>
               )}
               <ChoiceOption checked={!target} onClick={() => pick('none')} sub="ses nouveaux combattants sont laissés de côté">
@@ -133,7 +146,7 @@ function ClubCard({ link, target, clubs, created, onLink, onCreate }: {
                   : <Text size="xs" c="dimmed">Aucun club ne contient « {query.trim()} ».</Text>}
               </Stack>
             )}
-            {sure && (
+            {sure && target === proposal?.clubId && !created.has(target) && (
               <Group justify="flex-end">
                 <Button variant="subtle" size="compact-sm" onClick={() => setOpen(false)}>Replier</Button>
               </Group>
