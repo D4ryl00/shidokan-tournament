@@ -6,6 +6,7 @@ import {
   parseFfkRows,
   planFfkImport,
   type ColumnMapping,
+  type ExistingClub,
   type ExistingData,
   type FfkChoices,
   type FfkImportPlan,
@@ -16,11 +17,11 @@ import { normalizeName } from '../../domain/names.js';
 import type { ProposalType } from '../../domain/replacement/types.js';
 import type { AppDb } from '../db/client.js';
 import { linkClub } from '../db/club-directory.js';
-import { clubAliases, clubs, fighters, importMappings, registrations, uploads, weightClasses } from '../db/schema.js';
+import { clubAliases, clubDirectory, clubs, fighters, importMappings, registrations, uploads, weightClasses } from '../db/schema.js';
 import { readWorkbook } from '../spreadsheet/read.js';
 import { closedSet } from './closed-categories.js';
 import { GridValidationError, getGrid } from './competitions.js';
-import { NotFoundError, RegistrationValidationError, listClubs } from './registrations.js';
+import { NotFoundError, RegistrationValidationError } from './registrations.js';
 
 export interface SheetSetup {
   name: string;
@@ -79,10 +80,25 @@ export async function analyzeUpload(db: AppDb, data: Buffer): Promise<SheetSetup
   return out;
 }
 
+/**
+ * Clubs de la compétition avec leur N° d'affiliation : celui du club, sinon celui de sa fiche d'annuaire.
+ * `''` = effacé par le club (choix explicite) : traité comme « aucun numéro », sans repli sur l'annuaire.
+ */
+function loadExistingClubs(db: AppDb, competitionId: string): ExistingClub[] {
+  return db
+    .select({ id: clubs.id, name: clubs.name, ffkEntity: clubs.ffkEntity, own: clubs.affiliationNumber, directory: clubDirectory.affiliationNumber })
+    .from(clubs)
+    .leftJoin(clubDirectory, eq(clubDirectory.id, clubs.directoryClubId))
+    .where(eq(clubs.competitionId, competitionId))
+    .orderBy(clubs.nameKey)
+    .all()
+    .map((c) => ({ id: c.id, name: c.name, ffkEntity: c.ffkEntity, affiliationNumber: (c.own ?? c.directory) || null }));
+}
+
 export async function loadExisting(db: AppDb, competitionId: string): Promise<ExistingData> {
   const regs = db.select().from(registrations).where(eq(registrations.competitionId, competitionId)).all();
   return {
-    clubs: await listClubs(db, competitionId),
+    clubs: loadExistingClubs(db, competitionId),
     fighters: db
       .select()
       .from(fighters)

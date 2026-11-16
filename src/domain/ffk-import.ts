@@ -2,7 +2,8 @@ import { ageBandFromLabel, closedEntryWarning, normalizeLicence, rulesetFromLabe
 import { DISCIPLINES, disciplineFromLabel } from './disciplines.js';
 import { normalizeName, parseSex, splitFullName } from './names.js';
 import { weightClassesFor } from './grid.js';
-import type { Club, Fighter, Registration } from './registration.js';
+import { linkClubs, type ExistingClub } from './ffk-plan/clubs.js';
+import type { Fighter, Registration } from './registration.js';
 import type { CategoryGrid, DisciplineId, Ruleset, Sex, WeightClass } from './types.js';
 import { parseWeightLabel, resolveWeightCell } from './weights.js';
 
@@ -192,8 +193,10 @@ export function parseFfkRows(
 
 // --- Plan d'import et rapprochement (spec §7.3) ---
 
+export { entityAffiliation, linkClubs, type ClubCertainty, type ClubLink, type ExistingClub } from './ffk-plan/clubs.js';
+
 export interface ExistingData {
-  clubs: Club[];
+  clubs: ExistingClub[];
   fighters: Fighter[];
   /** `original` : valeurs d'avant un recasement (l'export FFK porte toujours sur elles). */
   registrations: (Registration & { ffkConfirmed: boolean; original?: { discipline: DisciplineId; ruleset: Ruleset | null; weightClassId: string | null } | null })[];
@@ -201,7 +204,7 @@ export interface ExistingData {
   aliases: Record<string, string>;
 }
 
-export type ClubLink = {
+export type PlanClubLink = {
   clubEntity: string;
   clubName: string;
   target: { kind: 'existing'; clubId: string } | { kind: 'new' };
@@ -227,7 +230,7 @@ export type PlanItem =
   | { kind: 'error'; row: FfkRow };
 
 export interface FfkImportPlan {
-  clubs: ClubLink[];
+  clubs: PlanClubLink[];
   items: PlanItem[];
   newWeightClasses: WeightClass[];
   removals: { registrationId: string; label: string }[];
@@ -249,44 +252,39 @@ function levenshtein(a: string, b: string): number {
   return prev[b.length]!;
 }
 
-function linkClubs(rows: FfkRow[], existing: ExistingData, choices: FfkChoices): ClubLink[] {
-  const entities = new Map<string, string>();
-  for (const r of rows) if (r.clubEntity) entities.set(r.clubEntity, r.clubName ?? r.clubEntity);
-  const sameName = (name: string) => [...entities.values()].filter((n) => normalizeName(n) === normalizeName(name)).length > 1;
-  return [...entities].map(([clubEntity, clubName]): ClubLink => {
-    const link = linkOne(clubEntity, clubName);
-    return sameName(clubName) ? { ...link, warning: `Plusieurs entités FFK portent le même nom de club « ${clubName} » : vérifier le lien.` } : link;
-  });
-
-  function linkOne(clubEntity: string, clubName: string): ClubLink {
-    const key = normalizeName(clubName);
+/** Adaptation temporaire (jusqu'à la Task 4) : l'ancien plan garde sa forme de lien de club. */
+function linkClubsForPlan(rows: FfkRow[], existing: ExistingData, choices: FfkChoices): PlanClubLink[] {
+  const counts = new Map<string, { clubEntity: string; clubName: string; rows: number }>();
+  for (const r of rows) {
+    if (!r.clubEntity) continue;
+    const e = counts.get(r.clubEntity);
+    if (e) e.rows++;
+    else counts.set(r.clubEntity, { clubEntity: r.clubEntity, clubName: r.clubName ?? r.clubEntity, rows: 1 });
+  }
+  const mapped = Object.fromEntries(Object.entries(choices.clubLinks ?? {}).map(([k, v]) => [k, v === 'new' ? 'none' : v]));
+  return linkClubs([...counts.values()], existing.clubs, existing.aliases, mapped).map((l): PlanClubLink => {
     const containing = existing.clubs.filter((c) => {
       const k = normalizeName(c.name);
+      const key = normalizeName(l.clubName);
       return k !== key && k.length >= 3 && (key.includes(k) || k.includes(key));
     });
-    const candidates = containing.map((c) => ({ clubId: c.id, name: c.name }));
-    const chosen = choices.clubLinks?.[clubEntity];
-    if (chosen === 'new') return { clubEntity, clubName, target: { kind: 'new' }, certainty: 'sure', candidates };
-    if (chosen && existing.clubs.some((c) => c.id === chosen)) {
-      return { clubEntity, clubName, target: { kind: 'existing', clubId: chosen }, certainty: 'sure', candidates };
-    }
-    const byEntity = existing.clubs.find((c) => c.ffkEntity === clubEntity);
-    const byAlias = existing.clubs.find((c) => existing.aliases[normalizeName(c.name)] === clubEntity);
-    const byName = existing.clubs.find((c) => normalizeName(c.name) === key);
-    const sure = byEntity ?? byAlias ?? byName;
-    if (sure) return { clubEntity, clubName, target: { kind: 'existing', clubId: sure.id }, certainty: 'sure', candidates };
-    if (containing.length) {
-      return { clubEntity, clubName, target: { kind: 'existing', clubId: containing[0]!.id }, certainty: 'doubtful', candidates };
-    }
-    return { clubEntity, clubName, target: { kind: 'new' }, certainty: 'new', candidates };
-  }
+    const clubId = l.target ?? (!l.chosen && l.proposal ? l.proposal.clubId : null);
+    return {
+      clubEntity: l.clubEntity,
+      clubName: l.clubName,
+      target: clubId ? { kind: 'existing', clubId } : { kind: 'new' },
+      certainty: l.chosen || l.proposal?.certainty === 'sure' ? 'sure' : l.proposal ? 'doubtful' : 'new',
+      candidates: containing.map((c) => ({ clubId: c.id, name: c.name })),
+      warning: l.warning,
+    };
+  });
 }
 
-const fighterLabel = (f: Fighter, clubs: Club[]) =>
+const fighterLabel = (f: Fighter, clubs: ExistingClub[]) =>
   `${f.lastName} ${f.firstName}${f.clubId ? ` (${clubs.find((c) => c.id === f.clubId)?.name ?? '?'})` : ''}`;
 
 export function planFfkImport(rows: FfkRow[], grid: CategoryGrid, existing: ExistingData, choices: FfkChoices = {}): FfkImportPlan {
-  const clubs = linkClubs(rows, existing, choices);
+  const clubs = linkClubsForPlan(rows, existing, choices);
   const clubOf = (row: FfkRow): string | null => {
     const link = clubs.find((c) => c.clubEntity === row.clubEntity);
     return link?.target.kind === 'existing' ? link.target.clubId : null;

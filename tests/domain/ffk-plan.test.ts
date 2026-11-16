@@ -6,8 +6,8 @@ import { FFK_HEADER } from '../helpers/ffk-fixture.js';
 
 const grid = ffkDefaultGrid();
 
-function club(id: string, name: string, ffkEntity: string | null = null): Club {
-  return { id, competitionId: 'c', name, ffkEntity, coachName: null, coachPhone: null, coachEmails: [], preApproval: false };
+function club(id: string, name: string, ffkEntity: string | null = null): Club & { affiliationNumber: string | null } {
+  return { id, competitionId: 'c', name, ffkEntity, coachName: null, coachPhone: null, coachEmails: [], preApproval: false, affiliationNumber: null };
 }
 function fighter(id: string, clubId: string | null, lastName: string, firstName: string, over: Partial<Fighter> = {}): Fighter {
   return { id, competitionId: 'c', clubId, lastName, firstName, sex: 'F', ageBandCode: 'cadet', licence: null, grade: null, ...over };
