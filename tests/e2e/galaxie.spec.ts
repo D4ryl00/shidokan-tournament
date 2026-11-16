@@ -219,3 +219,18 @@ test('galaxie : 360 px sans débordement horizontal', async ({ page, request }) 
   expect(await clipped(page)).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+test('galaxie : « Voir dans la galaxie » depuis un cas de la Réaffectation', async ({ page, request }) => {
+  const errors = consoleErrors(page);
+  const id = await createCompetition(page, 'Galaxie réaffectation');
+  const ids = await seed(request, id);
+  await page.goto(`/competitions/${id}/reaffectation`);
+  const solo = page.getByTestId('replacement-case').filter({ hasText: 'SOLO' });
+  await expect(solo).toBeVisible();
+  await solo.getByTestId('case-see-galaxy').click();
+  await expect(page).toHaveURL(/\/tableaux/);
+  await expect(canvas(page)).toBeVisible();
+  await expect(canvas(page)).toHaveAttribute('data-selected', ids.c61);
+  await expect(card(page, ids.c61)).toBeVisible();
+  expect(errors).toEqual([]);
+});

@@ -1,7 +1,7 @@
 import { Alert, Box, Button, Card, Checkbox, Chip, Collapse, Group, Loader, Modal, SegmentedControl, Select, SimpleGrid, Stack, Switch, Table, Text, TextInput, type ComboboxData } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import type { Case, CaseKind, Proposal, ProposalType } from '../../domain/replacement/index.js';
 import {
   useApplyProposal,
@@ -317,6 +317,11 @@ export function ReplacementPage() {
             {!data.setAside[c.id] && (
               <Button size="compact-xs" variant="subtle" color="gray" data-testid="case-set-aside" onClick={() => { setNote(''); setDialog({ kind: 'set-aside', caseId: c.id }); }}>
                 Mettre de côté
+              </Button>
+            )}
+            {c.categoryId && (
+              <Button component={Link} to={`/competitions/${id}/tableaux?vue=galaxie&categorie=${c.categoryId}`} size="compact-xs" variant="subtle" data-testid="case-see-galaxy">
+                Voir dans la galaxie
               </Button>
             )}
           </Stack>
