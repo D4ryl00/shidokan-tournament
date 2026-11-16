@@ -524,6 +524,8 @@ test('licence : saisie dans la fenêtre, relue normalisée ; vide, elle ne l\'ef
   const edit = () => page.getByTestId('registration-row').first().getByRole('button', { name: 'Modifier' }).click();
   await edit();
   await expect(page.getByTestId('line-licence')).toHaveValue('11462640R');
+  // Vider le champ ne retire pas la licence : la fenêtre le dit sous le champ.
+  await expect(page.getByTestId('club-line-form').getByText('Laissée vide, la licence déjà enregistrée est gardée.')).toBeVisible();
   await page.getByTestId('line-licence').fill('');
   await page.getByTestId('line-save').click();
   await expect(page.getByTestId('club-line-form')).toHaveCount(0);
