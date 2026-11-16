@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  normalizeLicence,
   CLUB_FORM_COLUMNS,
   CLUB_FORM_SECOND_COMBAT_COLUMN,
   CLUB_FORM_LEGACY_COLUMNS,
@@ -467,3 +468,5 @@ describe('plusieurs combats', () => {
     expect(tidyReclass(two).prefs).toEqual({ 'shido-mix': 1 });
   });
 });
+
+test.each([['1146 2640 r', '11462640R'], ['  ', null], [null, null], [11462640, '11462640']])('normalizeLicence(%j)', (v, out) => expect(normalizeLicence(v)).toBe(out));

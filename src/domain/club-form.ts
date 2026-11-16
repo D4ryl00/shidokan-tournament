@@ -88,6 +88,12 @@ export type CombatDiscipline = 'karate' | 'shido-boxing' | 'shido-mix' | 'triath
 export type PrefDiscipline = 'karate' | 'shido-boxing' | 'shido-mix' | 'triathlon';
 export type PrefRank = 1 | 2 | 3;
 export const PREF_DISCIPLINES: readonly PrefDiscipline[] = ['karate', 'shido-boxing', 'shido-mix', 'triathlon'];
+/** Numéro de licence FFK : texte sans espaces, en majuscules ; vide = rien. */
+export function normalizeLicence(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  const s = String(v).replace(/\s+/g, '').toUpperCase();
+  return s === '' ? null : s;
+}
 /** Une ligne de fiche telle que remplie (papier, .ods ou saisie) : un combattant. */
 export interface ClubFormLine {
   lastName: string;
@@ -104,6 +110,8 @@ export interface ClubFormLine {
   ruleset: Ruleset | null;
   prefs: ClubFormPrefs;
   shobuKeep: 'ruleset' | 'discipline' | null;
+  /** Numéro de licence FFK (facultatif) ; absent ou vide : la licence déjà enregistrée est gardée. */
+  licence?: string | null;
 }
 export type ClubFormPrefs = Partial<Record<PrefDiscipline, PrefRank>>;
 /** Réglages de la compétition qui changent la lecture d'une ligne. */
@@ -217,7 +225,7 @@ export function lineToRows(line: ClubFormLine, lineNumber: number, grid: Categor
   if (line.combats.length > 1 && !opts.multipleCombats) common.push(ONE_COMBAT_ONLY);
   if (common.length || !line.sex || !line.ageBandCode) return [{ line: lineNumber, label, input: null, errors: common, warnings: [] }];
   const base = {
-    clubId: null, lastName: line.lastName.trim(), firstName: line.firstName.trim(), sex: line.sex, ageBandCode: line.ageBandCode,
+    clubId: null, lastName: line.lastName.trim(), firstName: line.firstName.trim(), sex: line.sex, ageBandCode: line.ageBandCode, licence: normalizeLicence(line.licence),
     source: 'club_form' as const,
   };
   const rows: ClubFormRow[] = [];

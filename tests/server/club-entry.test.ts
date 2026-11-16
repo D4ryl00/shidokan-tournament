@@ -28,7 +28,7 @@ afterEach(async () => app.close());
 
 const LINE: ClubFormLine = {
   lastName: 'MARTIN', firstName: 'Léa', sex: 'F', ageBandCode: 'senior', weightClassId: 'senior:F:-55', weightKg: 53.5, combats: ['karate'], kata: true, grade: '1er kyu',
-  ruleset: 'jiyu', prefs: { 'shido-mix': 1 }, shobuKeep: null,
+  ruleset: 'jiyu', prefs: { 'shido-mix': 1 }, shobuKeep: null, licence: null,
 };
 const url = (path = '') => `/api/inscription/${token}${path}`;
 type View = {
@@ -360,4 +360,15 @@ test('page du club : résumé des catégories non ouvertes', async () => {
   expect(((await view()) as View & { closedSummary: string[] }).closedSummary).toEqual([]);
   await closeCells([{ ageBandCode: 'senior', sex: 'F', discipline: 'kata', ruleset: null }]);
   expect(((await view()) as View & { closedSummary: string[] }).closedSummary).toEqual(['Seniors (F) : pas de Kata']);
+});
+
+test('licence : enregistrée normalisée ; vide ou absente = conservée', async () => {
+  const saved = (await add({ ...LINE, licence: '1146 2640 r' })).json() as { fighterId: string; version: string; line: ClubFormLine };
+  expect(saved.line.licence).toBe('11462640R');
+  const again = (await put(saved.fighterId, { ...LINE, licence: '' }, saved.version)).json() as { version: string; line: ClubFormLine };
+  expect(again.line.licence).toBe('11462640R');
+  const { licence: _omitted, ...absent } = LINE;
+  const last = await put(saved.fighterId, absent as ClubFormLine, again.version);
+  expect(last.json().line.licence).toBe('11462640R');
+  expect((await view()).lines[0]!.line.licence).toBe('11462640R');
 });
