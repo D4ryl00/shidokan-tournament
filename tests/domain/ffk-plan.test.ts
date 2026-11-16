@@ -3,7 +3,7 @@ import type { ClubFormLine } from '../../src/domain/club-form.js';
 import { guessColumnMapping, parseFfkRows, type FfkRow } from '../../src/domain/ffk-import.js';
 import type { ExistingFighter } from '../../src/domain/ffk-plan/cards.js';
 import type { ExistingClub } from '../../src/domain/ffk-plan/clubs.js';
-import { planFfkCards, planFingerprint, type ExistingData, type FfkCardChoice } from '../../src/domain/ffk-plan/plan.js';
+import { HOMONYM, planFfkCards, planFingerprint, type ExistingData, type FfkCardChoice } from '../../src/domain/ffk-plan/plan.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 import { FFK_HEADER } from '../helpers/ffk-fixture.js';
 
@@ -111,6 +111,30 @@ describe('états des cartes', () => {
     expect(ghost.cards[0]).toMatchObject({ state: 'todo', value: null, reason: 'club introuvable' });
   });
 
+  test('homonymes (même nom, même sexe, même club) : aucune carte écrite qui créerait un doublon, laissées de côté', () => {
+    // Deux licences différentes, même nom : deux nouveaux combattants qui ne peuvent coexister dans le club.
+    const a = row({ licence: 'A1', lastName: 'HOMO', firstName: 'NYME' });
+    const b = row({ licence: 'A2', lastName: 'HOMO', firstName: 'NYME' });
+    const other = row({ licence: 'A3', lastName: 'HOMO', firstName: 'NYME', sex: 'M', weightLabel: '-52' }); // autre sexe : pas un doublon
+    const plan = planFfkCards([a, b, other], grid, base());
+    const reason = 'même nom qu’un autre combattant du club : changez le nom ou liez-le';
+    expect(cardOf(plan, a)).toMatchObject({ state: 'todo', fighterId: null, value: null, reason });
+    expect(cardOf(plan, b)).toMatchObject({ state: 'todo', fighterId: null, value: null, reason });
+    expect(cardOf(plan, other)).toMatchObject({ state: 'auto', fighterId: 'new' });
+    expect(plan.summary).toMatchObject({ todo: 2, auto: 1, creates: 1 });
+
+    // Nouveau combattant validé au nom d’une fiche existante du club (non retenue par une carte) : à trancher, la fiche reste orpheline.
+    const c = row({ lastName: 'NOUVEAU', firstName: 'X' });
+    const value = { line: line('MARTIN', 'Lea', { licence: c.licence }), clubId: 'c1', publicNameHidden: false };
+    const clash = planFfkCards([c], grid, base(), { cards: { [`L:${c.licence}`]: { kind: 'validated', fighterId: 'new', value } } });
+    expect(clash.cards[0]).toMatchObject({ state: 'todo', value: null, reason });
+    // Le même nom dans un autre club : écrit.
+    const elsewhere = planFfkCards([c], grid, base(), { cards: { [`L:${c.licence}`]: { kind: 'validated', fighterId: 'new', value: { ...value, clubId: 'c2' } } } });
+    expect(elsewhere.cards[0]).toMatchObject({ state: 'done', fighterId: 'new' });
+    // Une carte qui écrit sa propre fiche sans changer de nom n’est pas un doublon d’elle-même.
+    expect(planFfkCards([row()], grid, base()).cards[0]).toMatchObject({ state: 'auto', fighterId: 'f1' });
+  });
+
   test('none et skip : todo / skip, rien importé', () => {
     const a = row();
     const b = row({ lastName: 'NOUVEAU', firstName: 'X' });
@@ -177,9 +201,20 @@ describe('orphelins et récapitulatif', () => {
     });
     expect(cardOf(plan, doubtful)).toMatchObject({ state: 'todo', candidates: [{ fighterId: 'f2', reason: 'même nom de famille, prénom différent' }] });
     expect(plan.orphans).toEqual([
-      { fighterId: 'f3', label: 'ABSENT Paul', clubName: 'Tani Dojo', disciplines: 'Karaté, Shido-boxing, Kata', fromFfk: true, action: 'keep', version: 'f3:1' },
-      { fighterId: 'f4', label: 'SEUL Jean', clubName: 'Sans club', disciplines: 'Karaté', fromFfk: false, action: 'delete', version: 'f4:1' },
+      { fighterId: 'f3', label: 'ABSENT Paul', clubName: 'Tani Dojo', disciplines: 'Karaté, Shido-boxing, Kata', fromFfk: true, action: 'keep', deletable: true, version: 'f3:1' },
+      { fighterId: 'f4', label: 'SEUL Jean', clubName: 'Sans club', disciplines: 'Karaté', fromFfk: false, action: 'delete', deletable: true, version: 'f4:1' },
     ]);
+  });
+
+  test('orphelin dont un combat a commencé : pas supprimable, un choix « delete » est ignoré (gardé)', () => {
+    const ex = base();
+    ex.fighters.push(
+      fighter('f2', 'c1', 'COMMENCE', 'Ana', { partlyEditable: true, editable: false, startedDisciplines: ['karate'] }),
+      fighter('f3', 'c1', 'LIBRE', 'Eve'),
+    );
+    const plan = planFfkCards([row()], grid, ex, { orphans: { f2: 'delete', f3: 'delete' } });
+    expect(plan.orphans.map((o) => [o.fighterId, o.deletable, o.action])).toEqual([['f2', false, 'keep'], ['f3', true, 'delete']]);
+    expect(plan.summary.deletes).toBe(1);
   });
 
   test('summary compte creates / updates / deletes / clubsTodo', () => {
@@ -280,7 +315,8 @@ describe('rapprochements (repris de l’ancien plan)', () => {
     const ex = base();
     ex.fighters[0] = fighter('f1', 'c1', 'MARTIN', 'Léa', { licence: 'L1' });
     const plan = planFfkCards([row({ licence: 'L1' }), row({ licence: 'L9' })], grid, ex);
-    expect(plan.cards.map((c) => [c.state, c.fighterId])).toEqual([['auto', 'f1'], ['auto', 'new']]);
+    // Le second ne peut pas être créé dans le même club sous le même nom (l’enregistrement le refuserait) : laissé de côté.
+    expect(plan.cards.map((c) => [c.state, c.fighterId, c.reason])).toEqual([['auto', 'f1', null], ['todo', null, HOMONYM]]);
   });
 
   test('même nom, deux licences dans l’import, combattant sans licence : la seconde est à trancher', () => {

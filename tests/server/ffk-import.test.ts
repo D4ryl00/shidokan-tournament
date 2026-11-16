@@ -110,7 +110,7 @@ type Line = Record<string, unknown> & { lastName: string; weightClassId: string 
 type Card = { key: string; state: string; fighterId: string | null; reason: string | null; changes: string[]; diffs: { field: string }[]; candidates: { fighterId: string; reason: string }[]; exportLine: Line };
 type Preview = {
   cards: Card[]; clubs: { clubEntity: string; target: string | null; proposal: { clubId: string; certainty: string } | null }[];
-  orphans: { fighterId: string; label: string; action: string }[]; weightClasses: { id: string; accepted: boolean }[];
+  orphans: { fighterId: string; label: string; action: string; deletable: boolean }[]; weightClasses: { id: string; accepted: boolean }[];
   summary: Record<string, number>; fingerprint: string;
   fighters: { fighterId: string; label: string; clubName: string; ageLabel: string; disciplines: string; line: Line; clubId: string | null; publicNameHidden: boolean; version: string; licence: string | null; editable: boolean; partlyEditable: boolean; startedDisciplines: string[]; fromFfk: boolean }[];
 };
@@ -585,4 +585,50 @@ test('loadExisting : N° d’affiliation du club, sinon de sa fiche d’annuaire
   } finally {
     repoDb.$client.close();
   }
+});
+
+test('homonymes à créer dans le même club : laissés de côté, l’import passe', async () => {
+  const tani = await newClub('Tani Dojo');
+  await register(tani, 'MARTIN', 'Léa', { licence: 'L001' });
+  const up = await uploadAll(buildFfkWorkbook({
+    Karate: [
+      karate[0]!,
+      ['MARTIN LEA', null, 'L099', TANI, 'Feminine', 'Karate', 'Cadet', -61, null], // même nom, autre licence : pas la même
+      ['HOMO NYME', null, 'H1', TANI, 'Masculin', 'Karate', 'Senior', -75, null],
+      ['HOMO NYME', null, 'H2', TANI, 'Masculin', 'Karate', 'Senior', -75, null],
+      ['NOUVEAU NOE', null, 'L006', TANI, 'Masculin', 'Karate', 'Senior', -75, null],
+    ],
+  }));
+  const p = await preview(up);
+  const reason = 'même nom qu’un autre combattant du club : changez le nom ou liez-le';
+  expect(p.cards.map((c) => [c.exportLine.lastName, c.state, c.reason])).toEqual([
+    ['MARTIN', 'auto', null],
+    ['MARTIN', 'todo', expect.any(String)],
+    ['HOMO', 'todo', reason],
+    ['HOMO', 'todo', reason],
+    ['NOUVEAU', 'auto', null],
+  ]);
+  const res = await commit(up, {}, p.fingerprint);
+  expect(res.statusCode).toBe(200);
+  expect(res.json()).toEqual({ created: 1, updated: 0, deleted: 0, weightClassesCreated: 0, leftAside: 3 });
+  expect(await regsOf('HOMO')).toEqual([]);
+  expect(counts()).toEqual({ f: 2, r: 2 });
+});
+
+test('fiche sans inscription FFK dont un combat a commencé : pas supprimable, gardée (ffkConfirmed false), l’import passe', async () => {
+  const tani = await newClub('Tani Dojo');
+  const commence = await register(tani, 'COMMENCE', 'Ana');
+  await register(tani, 'AUTRE', 'Eve');
+  sqlRun('update registrations set ffk_confirmed = 1');
+  const [cat] = (await json('GET', `${base}/categories`)).json() as { id: string }[];
+  expect((await app.inject({ method: 'PATCH', url: `${base}/categories/${cat!.id}`, payload: { status: 'started' } })).statusCode).toBe(200);
+  const up = await uploadAll(buildFfkWorkbook({ Karate: [['NOUVEAU NOE', null, 'L006', TANI, 'Masculin', 'Karate', 'Senior', -75, null]] }));
+  const choices = { orphans: { [commence.fighterId]: 'delete' } };
+  const p = await preview(up, choices);
+  expect(p.orphans.find((o) => o.fighterId === commence.fighterId)).toMatchObject({ deletable: false, action: 'keep' });
+  expect(p.summary.deletes).toBe(0);
+  const res = await commit(up, choices, p.fingerprint);
+  expect(res.statusCode).toBe(200);
+  expect(res.json()).toMatchObject({ created: 1, deleted: 0 });
+  expect(await regsOf('COMMENCE')).toEqual([expect.objectContaining({ id: commence.id, ffkConfirmed: false })]);
 });

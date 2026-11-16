@@ -1,5 +1,7 @@
+import type { ClubFormLine } from '../club-form.js';
 import { DISCIPLINES } from '../disciplines.js';
 import type { FfkRow } from '../ffk-import.js';
+import { normalizeName } from '../names.js';
 import type { CategoryGrid, WeightClass } from '../types.js';
 import { buildCards, type ExistingFighter, type FfkCardDraft } from './cards.js';
 import { linkClubs, type ClubLink, type ExistingClub } from './clubs.js';
@@ -53,6 +55,8 @@ export interface FfkOrphan {
   /** A une inscription venue d’un import FFK précédent. */
   fromFfk: boolean;
   action: 'keep' | 'delete';
+  /** Faux si une discipline a commencé : « Supprimer » est refusé (un choix « delete » est ignoré). */
+  deletable: boolean;
   version: string;
 }
 
@@ -100,6 +104,43 @@ export const searchableFighters = (existing: ExistingData, grid: CategoryGrid): 
   existing.fighters.map((f) => ({ ...f, ...fighterDisplay(f, existing.clubs, grid) }));
 
 export const ALREADY_RETAINED = 'combattant déjà retenu par une autre carte';
+export const HOMONYM = 'même nom qu’un autre combattant du club : changez le nom ou liez-le';
+
+/** Clé de doublon de l’enregistrement d’une ligne (`duplicateOf`) : même nom, même sexe, même club ; sans club, jamais un doublon. */
+const homonymKey = (line: ClubFormLine, clubId: string | null): string | null =>
+  clubId && line.sex ? `${normalizeName(`${line.lastName} ${line.firstName}`)}|${line.sex}|${clubId}` : null;
+
+/**
+ * Cartes qui écriraient un combattant de même nom, même sexe et même club qu’un autre (autre carte écrite, ou fiche que l’import ne
+ * réécrit pas) : l’enregistrement les refuserait, elles sont laissées de côté. Seule reste écrite, dans un groupe, la carte qui réécrit
+ * sa fiche sans en changer la clé quand rien d’autre n’y est déjà. Recommencé jusqu’à ce qu’il n’en reste plus (une carte remise à
+ * trancher rend sa fiche telle quelle).
+ */
+function demoteHomonyms(cards: FfkCard[], fighters: ExistingFighter[]): void {
+  const written = (c: FfkCard) => (c.state === 'auto' || c.state === 'done') && c.value !== null;
+  const keyOf = new Map(fighters.map((f) => [f.fighterId, homonymKey(f.line, f.clubId)]));
+  for (;;) {
+    const rewritten = new Set(cards.filter((c) => written(c) && c.fighterId !== 'new').map((c) => c.fighterId));
+    /** Par clé : fiches déjà là (non réécrites, ou réécrites sans changer de clé) et cartes qui l’écriraient. */
+    const groups = new Map<string, { settled: number; cards: { i: number; settled: boolean }[] }>();
+    const group = (key: string) => groups.get(key) ?? groups.set(key, { settled: 0, cards: [] }).get(key)!;
+    for (const f of fighters) {
+      const key = keyOf.get(f.fighterId);
+      if (key && !rewritten.has(f.fighterId)) group(key).settled++;
+    }
+    cards.forEach((c, i) => {
+      const key = written(c) ? homonymKey(c.value!.line, c.value!.clubId) : null;
+      if (!key) return;
+      const settled = c.fighterId !== 'new' && keyOf.get(c.fighterId!) === key;
+      const g = group(key);
+      g.cards.push({ i, settled });
+      if (settled) g.settled++;
+    });
+    const colliding = [...groups.values()].flatMap((g) => (g.settled + g.cards.filter((c) => !c.settled).length > 1 ? g.cards.filter((c) => !c.settled || g.settled > 1) : []));
+    if (!colliding.length) return;
+    for (const { i } of colliding) cards[i] = { ...cards[i]!, state: 'todo', fighterId: null, value: null, changes: [], version: null, reason: HOMONYM };
+  }
+}
 
 /** Libellés de « Ce qui change », tirés de la grille (et des catégories nouvelles) et des clubs. */
 function changeLabels(grid: CategoryGrid, added: WeightClass[], clubs: ExistingClub[]): ChangeLabels {
@@ -192,14 +233,18 @@ export function planFfkCards(rows: FfkRow[], grid: CategoryGrid, existing: Exist
     });
   }
 
-  // Fiches sans inscription FFK : aucune carte ne les retient, et elles ne sont candidates d’aucune carte laissée de côté.
+  demoteHomonyms(cards, existing.fighters);
+
+  // Fiches sans inscription FFK : aucune carte ne les retient (ou une carte remise à trancher), et elles ne sont candidates d’aucune carte laissée de côté.
   const concerned = new Set(claimed);
   for (const c of cards) if (c.state === 'todo' || c.state === 'skip') for (const k of c.candidates) concerned.add(k.fighterId);
   const orphans = existing.fighters
     .filter((f) => !concerned.has(f.fighterId))
     .map((f): FfkOrphan => {
       const { label, clubName, disciplines } = fighterDisplay(f, existing.clubs, grid);
-      return { fighterId: f.fighterId, label, clubName, disciplines, fromFfk: f.fromFfk, action: choices.orphans?.[f.fighterId] ?? 'keep', version: f.version };
+      const deletable = f.startedDisciplines.length === 0;
+      const action = deletable ? (choices.orphans?.[f.fighterId] ?? 'keep') : 'keep';
+      return { fighterId: f.fighterId, label, clubName, disciplines, fromFfk: f.fromFfk, action, deletable, version: f.version };
     });
 
   const count = (s: FfkCardState) => cards.filter((c) => c.state === s).length;
