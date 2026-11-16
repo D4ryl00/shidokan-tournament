@@ -1,5 +1,6 @@
 import { Box, UnstyledButton } from '@mantine/core';
 import { useState } from 'react';
+import { FORBIDDEN_COLOR } from './scene.js';
 
 const LEGEND_KEY = 'galaxie-legende';
 
@@ -42,6 +43,9 @@ export function GalaxyLegend({ hues, rules }: { hues: { key: string; color: stri
               ))}
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <i style={{ width: 18, height: 0, borderTop: '3px dashed #ff3b3b', display: 'inline-block', flexShrink: 0 }} />au-delà de la coupure
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <i style={{ width: 18, height: 0, borderTop: `2px dotted ${FORBIDDEN_COLOR}`, display: 'inline-block', flexShrink: 0 }} />interdit par les réglages (déplacement à la main, avec confirmation)
               </span>
             </div>
           )}

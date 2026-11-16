@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Link } from 'react-router';
 import { activeEntrantCount, type Category } from '../../../domain/categories.js';
 import { cachedGalaxyLayout, placeCategories } from '../../../domain/galaxy/layout.js';
-import { galaxyLinks, rulesFrom, type GalaxyLink } from '../../../domain/galaxy/links.js';
+import { forbiddenLinks, galaxyLinks, rulesFrom, type GalaxyLink } from '../../../domain/galaxy/links.js';
 import { normalizeName } from '../../../domain/names.js';
 import { RULE_LABELS } from '../../../domain/replacement/rules.js';
 import type { ProposalType } from '../../../domain/replacement/index.js';
@@ -23,12 +23,19 @@ import { EmptyState } from '../ui/EmptyState.js';
 import { disciplineHue, type Star } from './drawGalaxy.js';
 import { GalaxyLegend } from './GalaxyLegend.js';
 import { GalaxyStage } from './GalaxyStage.js';
-import { bestFrom, legendRules, linkStyle, sortedNeighbors } from './scene.js';
+import { bestFrom, FORBIDDEN_COLOR, forbiddenLabel, legendRules, linkStyle, orderedNeighbors } from './scene.js';
 
 // Vue « Galaxie » de Jour J → Tableaux (spec étape 48, §3 et §4) : chaque catégorie est une étoile près de ses voisines ;
 // la sélection et ses voisines rapprochées sont de vraies cartes de la planche, où l'on glisse un combattant.
 
 const NO_STYLE = { color: '#2fd27a', dashed: false };
+
+/** Liens de chaque catégorie. */
+function adjacencyOf(links: GalaxyLink[]): Map<string, GalaxyLink[]> {
+  const out = new Map<string, GalaxyLink[]>();
+  for (const l of links) for (const id of [l.a, l.b]) out.set(id, [...(out.get(id) ?? []), l]);
+  return out;
+}
 
 /** Teinte, titre de carte, nom d'étoile et seconde ligne d'une catégorie : les mêmes sur l'étoile et sur sa carte. */
 function categoryTexts(c: Category, grid: CategoryGrid | undefined) {
@@ -84,12 +91,12 @@ export function GalaxyView(p: {
     () => (grid && layout ? placeCategories(shown.map((c) => ({ id: c.id, key: c.key, label: c.label })), layout, grid) : null),
     [shown, layout, grid],
   );
-  const links = useMemo(() => (grid && settings ? galaxyLinks(shown.map((c) => ({ id: c.id, key: c.key })), grid, settings) : []), [shown, grid, settings]);
-  const adjacency = useMemo(() => {
-    const out = new Map<string, GalaxyLink[]>();
-    for (const l of links) for (const id of [l.a, l.b]) out.set(id, [...(out.get(id) ?? []), l]);
-    return out;
-  }, [links]);
+  const nodes = useMemo(() => shown.map((c) => ({ id: c.id, key: c.key })), [shown]);
+  const links = useMemo(() => (grid && settings ? galaxyLinks(nodes, grid, settings) : []), [nodes, grid, settings]);
+  // Voisines interdites par les réglages (étape 49) : liens du calcul avec tous les réglages ouverts, absents des permis.
+  const forbidden = useMemo(() => (grid && settings ? forbiddenLinks(nodes, grid, settings, links) : []), [nodes, grid, settings, links]);
+  const adjacency = useMemo(() => adjacencyOf(links), [links]);
+  const forbiddenAdjacency = useMemo(() => adjacencyOf(forbidden), [forbidden]);
   const legend = useMemo(() => (settings ? legendRules(settings) : []), [settings]);
   // Style de chaque lien, gardé par lien et par sens : avec « Tous les liens », le dessin le demande pour des milliers de
   // liens à chaque image. Les liens sont recréés quand les catégories ou les réglages changent : le cache part avec eux.
@@ -128,21 +135,24 @@ export function GalaxyView(p: {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- scopeCats suit shown et la portée
   }, [selectedId, sel, base, shown]);
 
-  const neighborIds = useMemo(() => (sel && settings ? sortedNeighbors(sel, adjacency.get(sel) ?? [], settings).map((n) => n.id) : []), [sel, adjacency, settings]);
+  const neighborIds = useMemo(
+    () => (sel && settings ? orderedNeighbors(sel, adjacency.get(sel) ?? [], forbiddenAdjacency.get(sel) ?? [], settings).map((n) => n.id) : []),
+    [sel, adjacency, forbiddenAdjacency, settings],
+  );
   // Étoiles dessinées : la portée, et la sélection avec toutes ses voisines, quelle que soit leur session.
   const scopeKey = scopeCats.map((c) => c.id).join(',');
   const drawnCats = useMemo(() => {
     const ids = new Set(scopeKey ? scopeKey.split(',') : []);
     if (sel) {
       ids.add(sel);
-      for (const l of adjacency.get(sel) ?? []) ids.add(l.a === sel ? l.b : l.a);
+      for (const l of [...(adjacency.get(sel) ?? []), ...(forbiddenAdjacency.get(sel) ?? [])]) ids.add(l.a === sel ? l.b : l.a);
     }
     return shown.filter((c) => ids.has(c.id));
-  }, [shown, scopeKey, sel, adjacency]);
-  const drawnLinks = useMemo(() => {
-    const ids = new Set(drawnCats.map((c) => c.id));
-    return links.filter((l) => ids.has(l.a) && ids.has(l.b));
-  }, [links, drawnCats]);
+  }, [shown, scopeKey, sel, adjacency, forbiddenAdjacency]);
+  const drawnIds = useMemo(() => new Set(drawnCats.map((c) => c.id)), [drawnCats]);
+  const drawnLinks = useMemo(() => links.filter((l) => drawnIds.has(l.a) && drawnIds.has(l.b)), [links, drawnIds]);
+  const drawnForbidden = useMemo(() => forbidden.filter((l) => drawnIds.has(l.a) && drawnIds.has(l.b)), [forbidden, drawnIds]);
+  const forbiddenLabelOf = useCallback((l: GalaxyLink, fromId: string) => (settings ? forbiddenLabel(l, fromId, settings) : ''), [settings]);
   const stars = useMemo<Star[]>(() => {
     if (!grid) return [];
     return drawnCats.map((c) => {
@@ -210,16 +220,20 @@ export function GalaxyView(p: {
     const c = byId.get(id);
     if (!c) return null;
     // Voisine : la règle de son lien, à sa couleur, posée sur le bord de la carte (le nom sur le lien est souvent caché).
-    const link = sel && !isSel ? (adjacency.get(sel) ?? []).find((l) => l.a === id || l.b === id) : undefined;
-    const rule = link && sel ? { label: labelOf(link, sel), ...styleOf(link, sel) } : null;
+    const touches = (l: GalaxyLink) => l.a === id || l.b === id;
+    const link = sel && !isSel ? (adjacency.get(sel) ?? []).find(touches) : undefined;
+    const banned = sel && !isSel && !link ? (forbiddenAdjacency.get(sel) ?? []).find(touches) : undefined;
+    const rule = link && sel ? { label: labelOf(link, sel), ...styleOf(link, sel), border: styleOf(link, sel).dashed ? 'dashed' : 'solid', forbidden: false }
+      : banned && sel ? { label: forbiddenLabelOf(banned, sel), color: FORBIDDEN_COLOR, border: 'dotted', forbidden: true }
+      : null;
     const { title, sub } = categoryTexts(c, grid);
     const n = p.cases.get(c.id) ?? 0;
     return (
       <>
       {rule && (
-        <span data-testid="galaxy-card-rule" style={{
+        <span data-testid="galaxy-card-rule" data-forbidden={rule.forbidden || undefined} style={{
           position: 'absolute', top: -9, right: 8, zIndex: 1, maxWidth: 'calc(100% - 16px)', fontSize: 10.5, lineHeight: '16px', padding: '0 7px',
-          borderRadius: 999, background: '#0b0e16', color: rule.color, border: `1px ${rule.dashed ? 'dashed' : 'solid'} ${rule.color}`,
+          borderRadius: 999, background: '#0b0e16', color: rule.color, border: `1px ${rule.border} ${rule.color}`,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', pointerEvents: 'none',
         }}>{rule.label}</span>
       )}
@@ -273,7 +287,7 @@ export function GalaxyView(p: {
       {base && scopeCats.length === 0 && <EmptyState title="Aucune catégorie." />}
       {staged && (
         <GalaxyStage toolbar={toolbar} stars={stars} base={base} links={drawnLinks} sel={sel} neighborIds={neighborIds} matched={matched} allLinks={allLinks}
-          linkStyle={styleOf} linkFrom={fromOf} linkLabel={labelOf} fitIds={fitIds} fitKey={`${scope}|${waveId ?? ''}|${onlyLone}|${refit}`}
+          linkStyle={styleOf} linkFrom={fromOf} linkLabel={labelOf} forbidden={drawnForbidden} forbiddenLabel={forbiddenLabelOf} fitIds={fitIds} fitKey={`${scope}|${waveId ?? ''}|${onlyLone}|${refit}`}
           onSelect={setSelectedId} chipSelected={drag.selected !== null} onCancelChip={drag.cancel} renderCard={renderCard}
           legend={<GalaxyLegend hues={presentHues} rules={legend} />} />
       )}

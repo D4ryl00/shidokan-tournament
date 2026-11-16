@@ -8,15 +8,15 @@ interface Cat { id: string; label: string; registrationIds: string[] }
  * BOXA et BOXB en Shido-boxing -61, TRIA en triathlon -61 (des voisines du -61 de tailles différentes).
  * Sessions « Matin » (cadets), « Soir » (seniors) et « Vide » (vétérans 1) ; le Mix -61 est mis dans « Soir » à la main.
  */
-async function seed(request: APIRequestContext, id: string): Promise<{ c54: string; c61: string; mix: string; soir: string }> {
-  const reg = async (lastName: string, discipline: string, weightClassId: string) => {
+async function seed(request: APIRequestContext, id: string, o: { soloOtherDisciplines?: string[] } = {}): Promise<{ c54: string; c61: string; mix: string; soir: string }> {
+  const reg = async (lastName: string, discipline: string, weightClassId: string, otherDisciplines: string[] = []) => {
     const res = await request.post(`/api/competitions/${id}/registrations`, {
-      data: { clubId: null, firstName: 'x', lastName, sex: 'F', ageBandCode: 'cadet', discipline, ruleset: 'jiyu', weightClassId, source: 'manual' },
+      data: { clubId: null, firstName: 'x', lastName, sex: 'F', ageBandCode: 'cadet', discipline, ruleset: 'jiyu', weightClassId, source: 'manual', otherDisciplines },
     });
     expect(res.ok(), await res.text()).toBeTruthy();
   };
   for (const n of ['ALBA', 'BRUN', 'CARO', 'DIDI', 'EVAN']) await reg(n, 'karate', 'cadet:F:-54');
-  await reg('SOLO', 'karate', 'cadet:F:-61');
+  await reg('SOLO', 'karate', 'cadet:F:-61', o.soloOtherDisciplines);
   await reg('MIXA', 'shido-mix', 'cadet:F:-61');
   for (const n of ['BOXA', 'BOXB']) await reg(n, 'shido-boxing', 'cadet:F:-61');
   await reg('TRIA', 'triathlon', 'cadet:F:-61');
@@ -351,6 +351,50 @@ test('galaxie : grille introuvable : un message d’erreur, pas un chargement sa
   await page.getByTestId('brackets-view').getByText('Galaxie', { exact: true }).click();
   await expect(page.getByTestId('galaxy').getByTestId('api-error')).toBeVisible({ timeout: 15_000 });
   await expect(canvas(page)).toHaveCount(0);
+});
+
+test('galaxie : voisine interdite par les réglages : lien gris, carte, dépôt avec confirmation', async ({ page, request }) => {
+  const errors = consoleErrors(page);
+  const id = await createCompetition(page, 'Galaxie interdite');
+  // SOLO accepte le Shido-mix : seul le réglage interdit le passage (pas ses préférences).
+  const ids = await seed(request, id, { soloOtherDisciplines: ['shido-mix'] });
+  // « Autre discipline » désactivée : le Mix -61 n'est plus une voisine permise du karaté -61.
+  const comp = await (await request.get(`/api/competitions/${id}`)).json();
+  const settings = { ...comp.settings, replacementRules: { ...comp.settings.replacementRules, off: ['discipline'] } };
+  expect((await request.patch(`/api/competitions/${id}`, { data: { settings } })).ok()).toBe(true);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await openGalaxy(page, id);
+  await page.getByTestId('planche-search').fill('-61 Karaté');
+  await expect(canvas(page)).toHaveAttribute('data-selected', ids.c61);
+
+  // La voisine interdite vient quand même en carte, avec l'étiquette grise du réglage et son badge de session.
+  const mix = card(page, ids.mix);
+  await expect(mix).toBeVisible();
+  const badge = page.locator(`[data-testid="galaxy-card"][data-category="${ids.mix}"] [data-testid="galaxy-card-rule"]`);
+  await expect(badge).toHaveAttribute('data-forbidden', 'true');
+  await expect(badge).toHaveText('Interdit : Autre discipline (préférences)');
+  await expect(mix.getByTestId('card-session')).toHaveText('Soir');
+  // La voisine permise (-54) n'a pas l'étiquette d'interdit.
+  await expect(page.locator(`[data-testid="galaxy-card"][data-category="${ids.c54}"] [data-testid="galaxy-card-rule"]`)).not.toHaveAttribute('data-forbidden', 'true');
+
+  // Légende : la ligne des liens interdits (sans sélection : elle s'efface au zoom maximal). Échap est ignoré dans la
+  // recherche : on la quitte d'abord.
+  await page.getByTestId('planche-search').blur();
+  await page.keyboard.press('Escape');
+  await expect(canvas(page)).toHaveAttribute('data-selected', '');
+  await page.getByTestId('galaxy-legend-toggle').click();
+  await expect(page.getByTestId('galaxy-legend')).toContainText('interdit par les réglages (déplacement à la main, avec confirmation)');
+
+  // Clic-clic : SOLO vers la carte interdite → la confirmation nomme la règle désactivée.
+  await page.getByTestId('planche-search').fill('');
+  await page.getByTestId('planche-search').fill('-61 Karaté');
+  await expect(card(page, ids.c61)).toBeVisible();
+  await expect(mix).toBeVisible();
+  await card(page, ids.c61).getByTestId('planche-chip').filter({ hasText: 'SOLO' }).click();
+  await expect(page.getByTestId('planche-banner')).toBeVisible();
+  await mix.getByTestId('card-count').click();
+  await expect(page.getByRole('dialog')).toContainText('Règle « Autre discipline (préférences) » désactivée (réglages de réaffectation).');
+  expect(errors).toEqual([]);
 });
 
 test('galaxie : « Voir dans la galaxie » depuis un cas de la Réaffectation', async ({ page, request }) => {

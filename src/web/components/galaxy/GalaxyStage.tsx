@@ -29,6 +29,9 @@ export function GalaxyStage(p: {
   linkStyle: (l: GalaxyLink, fromId: string) => { color: string; dashed: boolean };
   linkFrom: (l: GalaxyLink) => string;
   linkLabel: (l: GalaxyLink, fromId: string) => string;
+  /** Liens interdits par les réglages, entre étoiles dessinées (étape 49). */
+  forbidden: GalaxyLink[];
+  forbiddenLabel: (l: GalaxyLink, fromId: string) => string;
   fitIds: string[]; fitKey: string;
   onSelect: (id: string | null) => void; chipSelected: boolean; onCancelChip: () => void;
   renderCard: (id: string, selected: boolean) => ReactNode; legend: ReactNode;
@@ -210,7 +213,7 @@ export function GalaxyStage(p: {
     return drawGalaxy(ctx, w, h, cam, {
       stars: s.stars, pos, links: s.links, selectedId: s.sel, hoverId: hover.current, overlaid: over, pulledIds: s.neighborIds,
       matched: s.matched, allLinks: s.allLinks, pull, linkStyle: s.linkStyle, linkFrom: s.linkFrom, linkLabel: s.linkLabel,
-      forbidden: [], forbiddenLabel: () => '',
+      forbidden: s.forbidden, forbiddenLabel: s.forbiddenLabel,
     }, now);
   };
 
