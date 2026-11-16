@@ -260,10 +260,12 @@ export function forbiddenLinks(nodes: GalaxyNode[], grid: CategoryGrid, settings
 }
 
 /**
- * Réglages qui interdisent un passage aux règles `rules` : les règles éteintes. Aucune, mais un mélange filles /
- * garçons : sa tranche n'est pas cochée (l'interrupteur, lui, est ouvert).
+ * Réglages qui interdisent un passage aux règles `rules`, depuis une catégorie des tranches `sourceBands` : les règles
+ * éteintes, et le mélange filles / garçons quand une de ces tranches n'est pas cochée (même interrupteur ouvert).
+ * Une catégorie regroupée dont une tranche seulement est cochée compte comme bloquée : le mélange y est interdit pour
+ * une partie de ses combattants.
  */
-export function blockedRules(rules: RuleId[], settings: CompetitionSettings): RuleId[] {
-  const off = rules.filter((r) => !isRuleOn(settings, r));
-  return off.length === 0 && rules.includes('mixSexes') ? ['mixSexes'] : off;
+export function blockedRules(rules: RuleId[], settings: CompetitionSettings, sourceBands: string[]): RuleId[] {
+  const unticked = sourceBands.some((b) => !settings.mixSexes.ageBandCodes.includes(b));
+  return rules.filter((r) => !isRuleOn(settings, r) || (r === 'mixSexes' && unticked));
 }

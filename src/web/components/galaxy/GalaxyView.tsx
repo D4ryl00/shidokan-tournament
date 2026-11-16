@@ -154,7 +154,10 @@ export function GalaxyView(p: {
   const drawnIds = useMemo(() => new Set(drawnCats.map((c) => c.id)), [drawnCats]);
   const drawnLinks = useMemo(() => links.filter((l) => drawnIds.has(l.a) && drawnIds.has(l.b)), [links, drawnIds]);
   const drawnForbidden = useMemo(() => forbidden.filter((l) => drawnIds.has(l.a) && drawnIds.has(l.b)), [forbidden, drawnIds]);
-  const forbiddenLabelOf = useCallback((l: GalaxyLink, fromId: string) => (settings ? forbiddenLabel(l, fromId, settings) : ''), [settings]);
+  const forbiddenLabelOf = useCallback(
+    (l: GalaxyLink, fromId: string) => (settings ? forbiddenLabel(l, fromId, settings, byId.get(fromId)?.key.ageBandCodes ?? []) : ''),
+    [settings, byId],
+  );
   const stars = useMemo<Star[]>(() => {
     if (!grid) return [];
     return drawnCats.map((c) => {

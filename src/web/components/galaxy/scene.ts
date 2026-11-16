@@ -95,9 +95,9 @@ export function orderedNeighbors(
   return [...first, ...then].slice(0, SLOTS.length);
 }
 
-/** Étiquette d'un lien interdit vu depuis `fromId` : « Interdit : » et les réglages en cause. */
-export function forbiddenLabel(link: GalaxyLink, fromId: string, settings: CompetitionSettings): string {
-  return `Interdit : ${blockedRules(rulesFrom(link, fromId), settings).map((r) => RULE_LABELS[r]).join(' + ')}`;
+/** Étiquette d'un lien interdit vu depuis `fromId` (tranches `fromBands`) : « Interdit : » et les réglages en cause. */
+export function forbiddenLabel(link: GalaxyLink, fromId: string, settings: CompetitionSettings, fromBands: string[]): string {
+  return `Interdit : ${blockedRules(rulesFrom(link, fromId), settings, fromBands).map((r) => RULE_LABELS[r]).join(' + ')}`;
 }
 
 function gradient(t: number): string {

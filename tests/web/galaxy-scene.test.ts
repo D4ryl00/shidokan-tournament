@@ -247,9 +247,9 @@ test('orderedNeighbors : permises d’abord, puis interdites ; sans doublon ; 14
 
 test('forbiddenLabel : « Interdit : » et les réglages en cause', () => {
   const s = { ...defaultSettings(), mixMinorsAdults: false };
-  expect(forbiddenLabel(link('a', 'b', ['minorsAdults']), 'a', s)).toBe('Interdit : Mélange mineurs / adultes');
+  expect(forbiddenLabel(link('a', 'b', ['minorsAdults']), 'a', s, ['junior'])).toBe('Interdit : Mélange mineurs / adultes');
   const two = { ...s, replacementRules: { ...s.replacementRules, off: ['discipline' as const] } };
-  expect(forbiddenLabel(link('a', 'b', ['discipline', 'minorsAdults']), 'a', two)).toBe('Interdit : Autre discipline (préférences) + Mélange mineurs / adultes');
+  expect(forbiddenLabel(link('a', 'b', ['discipline', 'minorsAdults']), 'a', two, ['junior'])).toBe('Interdit : Autre discipline (préférences) + Mélange mineurs / adultes');
   expect(FORBIDDEN_COLOR).toBe('#8a93ad');
 });
 

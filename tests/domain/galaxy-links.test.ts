@@ -275,7 +275,7 @@ describe('forbiddenLinks', () => {
     const forbidden = forbiddenLinks(nodes, grid, s, allowed);
     const l = between(forbidden, mixJ, mixS)!;
     expect(from(l, mixJ)).toEqual(['minorsAdults']);
-    expect(blockedRules(rulesFrom(l, mixJ.id), s)).toEqual(['minorsAdults']);
+    expect(blockedRules(rulesFrom(l, mixJ.id), s, ['junior'])).toEqual(['minorsAdults']);
     // La voisine de poids, permise, n'est pas dans les interdits.
     expect(between(forbidden, mixJ, mixJ76)).toBeUndefined();
   });
@@ -303,7 +303,7 @@ describe('forbiddenLinks', () => {
     const allowed = galaxyLinks([karate, mix], grid, s);
     expect(between(allowed, karate, mix)).toBeUndefined();
     const l = between(forbiddenLinks([karate, mix], grid, s, allowed), karate, mix)!;
-    expect(blockedRules(rulesFrom(l, karate.id), s)).toEqual(['discipline']);
+    expect(blockedRules(rulesFrom(l, karate.id), s, ['cadet'])).toEqual(['discipline']);
   });
 
   test('filles / garçons : interrupteur ouvert mais tranche non cochée → « mixSexes »', () => {
@@ -312,7 +312,7 @@ describe('forbiddenLinks', () => {
     const allowed = galaxyLinks([f, m], grid, s);
     expect(between(allowed, f, m)).toBeUndefined();
     const l = between(forbiddenLinks([f, m], grid, s, allowed), f, m)!;
-    expect(blockedRules(rulesFrom(l, f.id), s)).toEqual(['mixSexes']);
+    expect(blockedRules(rulesFrom(l, f.id), s, ['cadet'])).toEqual(['mixSexes']);
   });
 
   test('jamais possible (cadette vers le shobu) : pas de lien interdit', () => {
@@ -320,5 +320,14 @@ describe('forbiddenLinks', () => {
     const cadet = kj('F', 'cadet', '-54');
     const shobu = node(key('karate', 'shobu', 'F', ['senior'], ['senior:F:-55']));
     expect(forbiddenLinks([cadet, shobu], grid, s, galaxyLinks([cadet, shobu], grid, s))).toEqual([]);
+  });
+
+  test('blockedRules : une règle éteinte et une tranche non cochée pour le mélange filles / garçons : les deux nommées', () => {
+    const s = settings({ mixSexes: { enabled: true, ageBandCodes: ['junior'] }, replacementRules: { ...defaultSettings().replacementRules, off: ['discipline'] } });
+    expect(blockedRules(['mixSexes', 'discipline'], s, ['cadet'])).toEqual(['mixSexes', 'discipline']);
+    // Tranche cochée : seule la règle éteinte bloque.
+    expect(blockedRules(['mixSexes', 'discipline'], s, ['junior'])).toEqual(['discipline']);
+    // Interrupteur fermé : le mélange bloque, quelle que soit la tranche.
+    expect(blockedRules(['mixSexes'], { ...s, mixSexes: { enabled: false, ageBandCodes: ['cadet'] } }, ['cadet'])).toEqual(['mixSexes']);
   });
 });
