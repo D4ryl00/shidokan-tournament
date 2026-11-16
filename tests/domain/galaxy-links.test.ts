@@ -253,4 +253,11 @@ describe('rulesRank', () => {
     expect(rulesRank(['discipline'], s).beyondCut).toBe(false);
     expect(rulesRank(['mixSexes'], settings({ replacementRules: { ...s.replacementRules, cutAfter: 'discipline' } })).beyondCut).toBe(true);
   });
+
+  test('une coupure absente de l’ordre ne coupe rien', () => {
+    const s = settings();
+    const broken = settings({ replacementRules: { ...s.replacementRules, order: s.replacementRules.order.filter((r) => r !== s.replacementRules.cutAfter) } });
+    expect(rulesRank(['mixSexes'], broken).beyondCut).toBe(false);
+    expect(rulesRank([], s)).toEqual({ rank: -1, beyondCut: false });
+  });
 });

@@ -90,21 +90,31 @@ function gradient(t: number): string {
 
 const legendColor = (i: number, n: number): string => (n <= 1 ? HUES[0]! : gradient(i / (n - 1)));
 
-/** Légende : règles actives jusqu'à la coupure, dans l'ordre, avec leur couleur. */
-export function legendRules(settings: CompetitionSettings): { rule: RuleId; label: string; color: string }[] {
-  const { order, cutAfter } = settings.replacementRules;
-  const cut = order.indexOf(cutAfter);
-  const rules = order.filter((r, i) => i <= cut && !NOT_IN_LEGEND.has(r) && isRuleOn(settings, r));
-  return rules.map((rule, i) => ({ rule, label: RULE_LABELS[rule], color: legendColor(i, rules.length) }));
-}
+type Legend = { rule: RuleId; label: string; color: string }[];
+/** Légendes déjà calculées, par objet de réglages (les réglages reçus de l'API ne sont pas modifiés en place). */
+const legends = new WeakMap<CompetitionSettings, Legend>();
 
 /**
- * Couleur et pointillés d'un lien vu depuis `fromId` : couleur de sa règle la plus loin dans la légende.
- * `legend` : `legendRules(settings)` déjà calculée (le dessin l'appelle pour chaque lien, à chaque image).
+ * Légende : règles actives jusqu'à la coupure, dans l'ordre, avec leur couleur. Une coupure absente de l'ordre (réglage
+ * abîmé) ne coupe rien, comme `rulesRank`. Gardée en mémoire par objet de réglages : ne pas modifier le tableau rendu.
  */
+export function legendRules(settings: CompetitionSettings): Legend {
+  const known = legends.get(settings);
+  if (known) return known;
+  const { order, cutAfter } = settings.replacementRules;
+  const at = order.indexOf(cutAfter);
+  const cut = at < 0 ? order.length - 1 : at;
+  const rules = order.filter((r, i) => i <= cut && !NOT_IN_LEGEND.has(r) && isRuleOn(settings, r));
+  const legend = rules.map((rule, i) => ({ rule, label: RULE_LABELS[rule], color: legendColor(i, rules.length) }));
+  legends.set(settings, legend);
+  return legend;
+}
+
+/** Couleur et pointillés d'un lien vu depuis `fromId` : couleur de sa règle la plus loin dans la légende. */
 export function linkStyle(
-  link: GalaxyLink, fromId: string, settings: CompetitionSettings, legend: { rule: RuleId; color: string }[] = legendRules(settings),
+  link: GalaxyLink, fromId: string, settings: CompetitionSettings,
 ): { color: string; dashed: boolean } {
+  const legend = legendRules(settings);
   const { rank, beyondCut } = rulesRank(rulesFrom(link, fromId), settings);
   if (beyondCut) return { color: BEYOND, dashed: true };
   const { order } = settings.replacementRules;

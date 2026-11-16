@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { categoryLabel, freeKey, type Category, type CategoryKey } from '../../src/domain/categories.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
-import { cardTitle, dropAction, groupTitle, loneFighters, plancheFilter, plancheGroups, shownOnPlanche } from '../../src/web/components/planche/model.js';
+import { cardTitle, dropAction, groupTitle, loneFighters, plancheFilter, plancheGroups, sessionLabel, shownOnPlanche } from '../../src/web/components/planche/model.js';
 
 const grid = ffkDefaultGrid();
 let n = 0;
@@ -59,6 +59,18 @@ test('shownOnPlanche', () => {
   expect(shownOnPlanche(cats[0]!)).toBe(true);
   expect(shownOnPlanche(cat(k('kata', 'cadet', 'F', null), { absentIds: ['a', 'b'] }))).toBe(false);
   expect(shownOnPlanche(cats[1]!)).toBe(true);
+});
+
+test('sessionLabel : rien pour la session montrée, le nom des autres, « En attente » s’il y a des sessions', () => {
+  const waves = [{ id: 'w1', name: 'Matin' }, { id: 'w2', name: 'Après-midi' }] as unknown as Parameters<typeof sessionLabel>[1];
+  expect(sessionLabel(cat(k('kata', 'cadet', 'F', null), { waveId: 'w1' }), waves, 'w1')).toBeNull();
+  expect(sessionLabel(cat(k('kata', 'cadet', 'F', null), { waveId: 'w2' }), waves, 'w1')).toBe('Après-midi');
+  // « Toutes » (aucune session montrée) : chaque catégorie dit la sienne.
+  expect(sessionLabel(cat(k('kata', 'cadet', 'F', null), { waveId: 'w1' }), waves, null)).toBe('Matin');
+  expect(sessionLabel(cat(k('kata', 'cadet', 'F', null), { waveId: null }), waves, 'w1')).toBe('En attente');
+  expect(sessionLabel(cat(k('kata', 'cadet', 'F', null), { waveId: null }), [], null)).toBeNull();
+  // Session supprimée entre-temps : pas de badge plutôt qu'un nom faux.
+  expect(sessionLabel(cat(k('kata', 'cadet', 'F', null), { waveId: 'w9' }), waves, 'w1')).toBeNull();
 });
 
 test('loneFighters : session affichée et catégories en attente', () => {

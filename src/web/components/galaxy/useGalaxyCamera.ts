@@ -67,6 +67,8 @@ export function useGalaxyCamera(o: {
   canvasRef: RefObject<HTMLCanvasElement | null>;
   /** Élément qui reçoit la molette (le canevas et les cartes posées dessus). */
   wheelRef: RefObject<HTMLElement | null>;
+  /** Molette laissée à la page (pas de zoom) sur cet élément. */
+  ignoreWheel?: (target: EventTarget | null) => boolean;
   size: { w: number; h: number };
   /** Dessine une image ; `true` : redessiner à l'image suivante même si la caméra est immobile. */
   draw: (cam: Camera, now: number) => boolean;
@@ -138,7 +140,7 @@ export function useGalaxyCamera(o: {
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       const canvas = latest.current.canvasRef.current;
-      if (!canvas) return;
+      if (!canvas || latest.current.ignoreWheel?.(e.target)) return;
       e.preventDefault();
       const r = canvas.getBoundingClientRect();
       const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
@@ -197,10 +199,13 @@ export function useGalaxyCamera(o: {
     onPointerUp: (ev: ReactPointerEvent<HTMLCanvasElement>) => {
       const had = pointers.current.delete(ev.pointerId);
       const g = gesture.current;
+      const p = local(ev);
       ev.currentTarget.style.cursor = 'grab';
       if (pointers.current.size === 0) {
         gesture.current = null;
-        if (had && g && !g.moved) { const p = local(ev); latest.current.onTap(p.x, p.y); }
+        if (had && g && !g.moved) latest.current.onTap(p.x, p.y);
+        // Souris : le curseur et le survol suivent de nouveau ce qui est sous le pointeur (une étoile : la main).
+        if (ev.pointerType === 'mouse') latest.current.onHover(p.x, p.y);
       } else if (g) { g.dist = undefined; g.mid = undefined; }
     },
     onPointerCancel: (ev: ReactPointerEvent<HTMLCanvasElement>) => {

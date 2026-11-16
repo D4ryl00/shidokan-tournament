@@ -301,12 +301,56 @@ test('galaxie : 360 px sans débordement horizontal', async ({ page, request }) 
   expect(await clipped(page)).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
-  // Au téléphone, choisir une étoile fait défiler la page jusqu'au canevas (les cartes ne finissent pas sous la barre).
+  // Au téléphone, choisir une étoile fait défiler la page jusqu'au canevas (les cartes ne finissent pas sous la barre) ;
+  // une bande de page reste au-dessus, pour faire défiler la page sans passer par le canevas.
   expect(box.y).toBeGreaterThan(200);
   await page.getByTestId('planche-search').fill('SOLO');
   await expect(canvas(page)).not.toHaveAttribute('data-selected', '');
-  await expect.poll(async () => Math.abs((await canvas(page).boundingBox())!.y)).toBeLessThanOrEqual(2);
+  // Sous la barre collante de l'appli et la bande de 64 px, et le bas dans l'écran.
+  const bar = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sk-bar-h')) || 0);
+  await expect.poll(async () => Math.abs((await canvas(page).boundingBox())!.y - (bar + 64))).toBeLessThanOrEqual(2);
+  const placed = (await canvas(page).boundingBox())!;
+  expect(placed.y + placed.height).toBeLessThanOrEqual(740 + 1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  // La bande fait défiler la page (ici à la molette, au-dessus du canevas) : la barre revient.
+  await page.mouse.move(180, bar + 30);
+  await page.mouse.wheel(0, -2000);
+  await expect.poll(async () => (await page.getByTestId('planche-search').boundingBox())!.y).toBeGreaterThan(0);
+});
+
+test('galaxie : passer sous 600 px garde la barre (la recherche garde la main) ; un clic entre ses boutons va au canevas', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Galaxie souple');
+  const ids = await seed(request, id);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await openGalaxy(page, id);
+  await expect.poll(async () => Number(await canvas(page).getAttribute('data-stars'))).toBeGreaterThanOrEqual(2);
+
+  // Bureau : la bande de la barre flotte sur le canevas ; un clic entre « Tous les liens » et le sélecteur de vue tombe
+  // sur le canevas (ciel vide : rien ne change), pas sur la bande.
+  const allLinks = (await page.getByTestId('galaxy-all-links').boundingBox())!;
+  const between = { x: allLinks.x + allLinks.width + 3, y: allLinks.y + allLinks.height / 2 };
+  const under = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.getAttribute('data-testid') ?? null, between);
+  expect(under).toBe('galaxy-canvas');
+
+  // Recherche en cours, puis la fenêtre passe sous 600 px : la barre passe au-dessus du canevas sans être recréée.
+  const search = page.getByTestId('planche-search');
+  await search.click();
+  await search.pressSequentially('-6');
+  await page.setViewportSize({ width: 500, height: 720 });
+  await expect.poll(async () => (await search.boundingBox())!.y + 10 < (await canvas(page).boundingBox())!.y).toBe(true);
+  await expect(search).toBeFocused();
+  await search.pressSequentially('1 Karaté');
+  await expect(canvas(page)).toHaveAttribute('data-selected', ids.c61);
+});
+
+test('galaxie : grille introuvable : un message d’erreur, pas un chargement sans fin', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Galaxie sans grille');
+  await seed(request, id);
+  await page.route(`**/api/competitions/${id}/grid`, (r) => r.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'grille cassée' }) }));
+  await page.goto(`/competitions/${id}/tableaux`);
+  await page.getByTestId('brackets-view').getByText('Galaxie', { exact: true }).click();
+  await expect(page.getByTestId('galaxy').getByTestId('api-error')).toBeVisible({ timeout: 15_000 });
+  await expect(canvas(page)).toHaveCount(0);
 });
 
 test('galaxie : « Voir dans la galaxie » depuis un cas de la Réaffectation', async ({ page, request }) => {

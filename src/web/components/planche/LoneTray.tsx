@@ -1,5 +1,5 @@
 import { Card, Stack, Text } from '@mantine/core';
-import type { HTMLAttributes } from 'react';
+import type { DragAttrs } from './useDragMove.js';
 import type { Category } from '../../../domain/categories.js';
 import type { ProposalType } from '../../../domain/replacement/index.js';
 import type { RecasementEntry } from '../../api.js';
@@ -15,7 +15,7 @@ export function LoneTray({ items, entrants, badges, badgeDetails, chipProps, sel
   entrants: Map<string, EntrantInfo>;
   badges: Map<string, ProposalType>;
   badgeDetails: Map<string, RecasementEntry>;
-  chipProps?: (registrationId: string, category: Category) => HTMLAttributes<HTMLDivElement>;
+  chipProps?: (registrationId: string, category: Category) => DragAttrs;
   /** Pastille choisie (clic-clic). */
   selectedChip?: string | null;
 }) {

@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import type { GalaxyLink } from '../../src/domain/galaxy/links.js';
 import type { Point } from '../../src/domain/galaxy/layout.js';
 import { defaultSettings } from '../../src/domain/settings.js';
-import { drawGalaxy, type Scene, type Star } from '../../src/web/components/galaxy/drawGalaxy.js';
+import { drawGalaxy, starAt, type Scene, type Star } from '../../src/web/components/galaxy/drawGalaxy.js';
 import { bestFrom, linkStyle } from '../../src/web/components/galaxy/scene.js';
 
 /** Contexte 2D factice : relève la couleur de chaque trait tracé. */
@@ -46,4 +46,27 @@ test('« Tous les liens », rien de choisi : chaque lien a la couleur du meilleu
   drawGalaxy(cx, 800, 600, { k: 1, px: 0, py: 0 }, scene, 0);
   expect(strokes[0]).toBe(linkStyle(l, 'b', settings).color);
   expect(strokes[0]).not.toBe(linkStyle(l, 'a', settings).color);
+});
+
+test('starAt : l’étoile à moins de 14 px, la plus proche ; jamais une étoile posée en carte par-dessus', () => {
+  // Caméra k = 1, centrée : la place (x, y) est à l'écran en (400 + x, 300 + y).
+  const pos = new Map<string, Point>([['a', { x: 0, y: 0 }], ['b', { x: 20, y: 0 }]]);
+  const s = { stars: [star('a'), star('b')], pos, overlaid: new Set<string>() };
+  const cam = { k: 1, px: 0, py: 0 };
+  expect(starAt(s, cam, 800, 600, 405, 300)).toBe('a');
+  expect(starAt(s, cam, 800, 600, 412, 300)).toBe('b');
+  expect(starAt(s, cam, 800, 600, 400, 330)).toBeNull();
+  expect(starAt({ ...s, overlaid: new Set(['a']) }, cam, 800, 600, 408, 300)).toBe('b');
+  // La caméra déplacée : la même étoile sous le pointeur déplacé d'autant.
+  expect(starAt(s, { k: 1, px: 100, py: -50 }, 800, 600, 505, 250)).toBe('a');
+});
+
+test('starAt : zoomé (cartes dessinées), un clic dans le rectangle de la carte', () => {
+  // k = 2 : cartes de 80 × 16 px (sans les noms).
+  const pos = new Map<string, Point>([['a', { x: 0, y: 0 }]]);
+  const s = { stars: [star('a')], pos, overlaid: new Set<string>() };
+  const cam = { k: 2, px: 0, py: 0 };
+  expect(starAt(s, cam, 800, 600, 400 + 35, 300 + 5)).toBe('a');
+  expect(starAt(s, cam, 800, 600, 400 + 45, 300)).toBeNull();
+  expect(starAt(s, cam, 800, 600, 400, 300 + 12)).toBeNull();
 });

@@ -116,9 +116,11 @@ function nearPairs(xs: Float64Array, ys: Float64Array, size: number): { pairs: I
 
 /**
  * Écartement : deux cartes dont les rectangles se recouvrent (détection `w` × `h`) s'écartent sur l'axe du plus petit
- * recouvrement, jusqu'à GAP_W × GAP_H. S'arrête plus tôt quand plus rien ne se recouvre.
+ * recouvrement, jusqu'à GAP_W × GAP_H. S'arrête plus tôt quand plus rien ne se recouvre. Repli (grille trop dense pour
+ * converger en SEPARATION_PASSES passes) : chaque carte encore en recouvrement va à la place libre la plus proche.
+ * Rend false si ce repli a servi.
  */
-function separate(xs: Float64Array, ys: Float64Array, w: number, h: number): void {
+export function separate(xs: Float64Array, ys: Float64Array, w: number, h: number): boolean {
   for (let pass = 0; pass < SEPARATION_PASSES; pass++) {
     let moved = false;
     const { pairs, count } = nearPairs(xs, ys, Math.max(GAP_W, GAP_H));
@@ -141,7 +143,48 @@ function separate(xs: Float64Array, ys: Float64Array, w: number, h: number): voi
         ys[j] = ys[j]! + m;
       }
     }
-    if (!moved) return;
+    if (!moved) return true;
+  }
+  settle(xs, ys, w, h);
+  return false;
+}
+
+/**
+ * Repli de `separate` : les cartes sont reprises dans l'ordre ; une carte qui recouvre une carte déjà posée va à la
+ * place libre la plus proche, cherchée sur des anneaux de plus en plus grands de pas GAP_W × GAP_H. Déterministe, et
+ * sans recouvrement à la fin.
+ */
+function settle(xs: Float64Array, ys: Float64Array, w: number, h: number): void {
+  // Cartes posées, rangées par seau de GAP_W × GAP_H : un recouvrement ne se cherche que dans les seaux voisins.
+  const buckets = new Map<string, number[]>();
+  const cell = (x: number, y: number) => [Math.floor(x / GAP_W), Math.floor(y / GAP_H)] as const;
+  const free = (x: number, y: number) => {
+    const [cx, cy] = cell(x, y);
+    for (let bx = cx - 1; bx <= cx + 1; bx++) {
+      for (let by = cy - 1; by <= cy + 1; by++) {
+        for (const j of buckets.get(`${bx},${by}`) ?? []) if (Math.abs(xs[j]! - x) < w && Math.abs(ys[j]! - y) < h) return false;
+      }
+    }
+    return true;
+  };
+  for (let i = 0; i < xs.length; i++) {
+    const [x0, y0] = [xs[i]!, ys[i]!];
+    if (!free(x0, y0)) {
+      search: for (let r = 1; ; r++) {
+        // Anneau r : les places à r pas (sur l'un des axes au moins), de la plus proche à la plus loin.
+        const ring: [number, number][] = [];
+        for (let a = -r; a <= r; a++) for (let b = -r; b <= r; b++) if (Math.max(Math.abs(a), Math.abs(b)) === r) ring.push([a * GAP_W, b * GAP_H]);
+        ring.sort((p, q) => p[0] * p[0] + p[1] * p[1] - (q[0] * q[0] + q[1] * q[1]) || p[1] - q[1] || p[0] - q[0]);
+        for (const [dx, dy] of ring) {
+          if (free(x0 + dx, y0 + dy)) { xs[i] = x0 + dx; ys[i] = y0 + dy; break search; }
+        }
+      }
+    }
+    const [cx, cy] = cell(xs[i]!, ys[i]!);
+    const k = `${cx},${cy}`;
+    const list = buckets.get(k);
+    if (list) list.push(i);
+    else buckets.set(k, [i]);
   }
 }
 
@@ -177,13 +220,15 @@ export function galaxyLayout(grid: CategoryGrid): Map<string, Point> {
     kind: linkKind(rulesFrom(l, l.a)),
   }));
   const kinds = Object.keys(LENGTH) as LinkKind[];
+  const kindIndex = new Map(kinds.map((k, i) => [k, i]));
   const perCell = new Int32Array(n * kinds.length); // nombre de liens de chaque nature, par case
+  const slot = (cell: number, kind: LinkKind) => cell * kinds.length + kindIndex.get(kind)!;
   for (const { i, j, kind } of links) {
-    perCell[i * kinds.length + kinds.indexOf(kind)]!++;
-    perCell[j * kinds.length + kinds.indexOf(kind)]!++;
+    perCell[slot(i, kind)]!++;
+    perCell[slot(j, kind)]!++;
   }
   const springs = links.map(({ i, j, kind }) => {
-    const shared = (perCell[i * kinds.length + kinds.indexOf(kind)]! + perCell[j * kinds.length + kinds.indexOf(kind)]!) / 2;
+    const shared = (perCell[slot(i, kind)]! + perCell[slot(j, kind)]!) / 2;
     return { i, j, length: L * LENGTH[kind], stiffness: (STIFFNESS * STRENGTH[kind]) / shared };
   });
 
@@ -279,9 +324,15 @@ export function placeCategories(cats: { id: string; key: CategoryKey; label: str
 
   // Amas à part : colonnes de haut en bas, à droite de toutes les cases de la grille, centré sur le nuage.
   if (apart.length > 0) {
-    const all = [...layout.values()];
-    const maxX = all.length ? Math.max(...all.map((p) => p.x)) : 0;
-    const cy = all.length ? (Math.min(...all.map((p) => p.y)) + Math.max(...all.map((p) => p.y))) / 2 : 0;
+    // Bornes en boucle (pas de Math.max(...) : sa liste d'arguments est limitée, une grande grille la dépasserait).
+    let [maxX, minY, maxY] = [-Infinity, Infinity, -Infinity];
+    for (const p of layout.values()) {
+      maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+    }
+    if (layout.size === 0) [maxX, minY, maxY] = [0, 0, 0];
+    const cy = (minY + maxY) / 2;
     const rows = Math.ceil(Math.sqrt(apart.length));
     apart.sort((a, b) => compareLabels(a.label, b.label) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     apart.forEach((c, i) => {

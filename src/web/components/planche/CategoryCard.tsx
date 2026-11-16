@@ -1,5 +1,5 @@
 import { Badge, Button, Card, Group, Stack, Text, UnstyledButton } from '@mantine/core';
-import type { HTMLAttributes, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { newSameClubSentences, sameClubFirstRound } from '../../../domain/brackets/same-club.js';
 import { activeEntrantCount, isFreeKey, type Category } from '../../../domain/categories.js';
@@ -47,7 +47,7 @@ export interface CardProps {
   ring?: 'undo' | 'see' | null;
   /** Attributs ajoutés à la carte et à chaque pastille (glisser-déposer). */
   cardProps?: DragAttrs;
-  chipProps?: (registrationId: string, category: Category) => HTMLAttributes<HTMLDivElement>;
+  chipProps?: (registrationId: string, category: Category) => DragAttrs;
   /** Pastille choisie (clic-clic). */
   selectedChip?: string | null;
   /**

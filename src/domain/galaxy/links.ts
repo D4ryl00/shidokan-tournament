@@ -47,11 +47,16 @@ export function cellsOf(key: CategoryKey, grid: CategoryGrid): CategoryKey[] {
   return out;
 }
 
-/** Rang d'un ensemble de règles = indice, dans replacementRules.order, de sa règle la plus loin ; beyondCut si cet indice dépasse celui de cutAfter. */
+/**
+ * Rang d'un ensemble de règles = indice, dans replacementRules.order, de sa règle la plus loin ; beyondCut si cet indice
+ * dépasse celui de cutAfter. Une coupure absente de l'ordre (réglage abîmé) ne coupe rien.
+ */
 export function rulesRank(rules: RuleId[], settings: CompetitionSettings): { rank: number; beyondCut: boolean } {
   const { order, cutAfter } = settings.replacementRules;
-  const rank = Math.max(-1, ...rules.map((r) => order.indexOf(r)));
-  return { rank, beyondCut: rank > order.indexOf(cutAfter) };
+  let rank = -1;
+  for (const r of rules) rank = Math.max(rank, order.indexOf(r));
+  const cut = order.indexOf(cutAfter);
+  return { rank, beyondCut: cut >= 0 && rank > cut };
 }
 
 /** Nature d'un lien, pour sa forme : la règle la plus marquante l'emporte. */
@@ -106,15 +111,19 @@ export function galaxyLinks(nodes: GalaxyNode[], grid: CategoryGrid, settings: C
   }
   const group = (discipline: DisciplineId, ruleset: Ruleset | null, sex: Sex, band: string) => groups.get(groupKey(discipline, ruleset, sex, band)) ?? [];
 
-  /** Cases du groupe, hors du nœud de `c`, dont la classe est la plus proche en kg de celle de `c` (toutes à égalité). */
+  /**
+   * Cases du groupe, hors du nœud de `c`, dont la classe est la plus proche en kg de celle de `c`. À égalité (une classe
+   * plus légère et une plus lourde à la même distance), toutes sont gardées, dans l'ordre du groupe (celui des nœuds).
+   */
   const nearest = (group: Cell[], c: Cell): Cell[] => {
-    const targets = group.filter((t) => t.node !== c.node);
     const dist = (t: Cell) => {
       if (c.weight === null || t.weight === null) return c.weight === t.weight ? 0 : Infinity;
       return Math.abs((kgOf.get(c.weight) ?? Infinity) - (kgOf.get(t.weight) ?? Infinity));
     };
-    const min = Math.min(...targets.map(dist));
-    return Number.isFinite(min) ? targets.filter((t) => dist(t) <= min + 1e-9) : [];
+    const scored = group.filter((t) => t.node !== c.node).map((t) => ({ t, d: dist(t) }));
+    let min = Infinity;
+    for (const { d } of scored) min = Math.min(min, d);
+    return Number.isFinite(min) ? scored.filter(({ d }) => d <= min + 1e-9).map(({ t }) => t) : [];
   };
 
   /**

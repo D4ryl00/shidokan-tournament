@@ -60,3 +60,8 @@
   100% { box-shadow: 0 0 0 2px #ffffff, 0 0 0 12px rgba(255, 255, 255, 0); }
 }
 @media (prefers-reduced-motion: reduce) { .sk-lone-ring { animation: none; } }
+
+/* Galaxie : la bande de la barre d'outils flottante laisse passer les clics entre ses boutons jusqu'au canevas. */
+.sk-pass-through, .sk-pass-through [data-testid="planche-toolbar"], .sk-pass-through [data-pass-through] { pointer-events: none; }
+.sk-pass-through [data-testid="planche-toolbar"] > *, .sk-pass-through [data-pass-through] > * { pointer-events: auto; }
+.sk-pass-through [data-testid="planche-toolbar"] > [data-pass-through] { pointer-events: none; }

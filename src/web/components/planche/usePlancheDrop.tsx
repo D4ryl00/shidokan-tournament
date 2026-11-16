@@ -1,6 +1,6 @@
 import { Paper, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useState, type HTMLAttributes, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { newSameClubSentences } from '../../../domain/brackets/same-club.js';
 import type { Category } from '../../../domain/categories.js';
 import type { Wave } from '../../../domain/waves.js';
@@ -20,7 +20,7 @@ const both = (a: DragAttrs, b: DragAttrs): DragAttrs => ({ ...a, ...b, onClick: 
  */
 export function usePlancheDrop(o: { competitionId: string; categories: Category[]; entrants: Map<string, EntrantInfo>; waves: Wave[]; readOnly: boolean }): {
   drag: ReturnType<typeof useDragMove>;
-  chipProps: (registrationId: string, c: Category) => HTMLAttributes<HTMLDivElement>;
+  chipProps: (registrationId: string, c: Category) => DragAttrs;
   cardProps: (c: Category) => DragAttrs;
   dialog: ReactNode;
   /** Bandeau du clic-clic (« Sélection : … »), affiché tant qu'une pastille est choisie ; à rendre une fois. */

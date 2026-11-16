@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { freeKey, keyString, type CategoryKey } from '../../src/domain/categories.js';
-import { CARD_H, CARD_W, cachedGalaxyLayout, galaxyLayout, gridCells, placeCategories, type Point } from '../../src/domain/galaxy/layout.js';
+import { CARD_H, CARD_W, cachedGalaxyLayout, galaxyLayout, gridCells, placeCategories, separate, type Point } from '../../src/domain/galaxy/layout.js';
 import { galaxyLinks, linkKind, rulesFrom, type LinkKind } from '../../src/domain/galaxy/links.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 import type { DisciplineId, Ruleset } from '../../src/domain/types.js';
@@ -151,5 +151,34 @@ describe('placeCategories', () => {
     const k = key('karate', 'jiyu', 'X', ['cadet'], ['cadet:F:-54', 'cadet:M:-57']);
     const places = placeCategories([{ id: 'a', key: k, label: 'a' }, { id: 'b', key: k, label: 'b' }], layout, grid);
     expect(overlaps(places.get('a')!, places.get('b')!)).toBe(false);
+  });
+
+  test('une catégorie garde sa place quand d’autres catégories arrivent ailleurs', () => {
+    const k = key('karate', 'jiyu', 'F', ['cadet'], ['cadet:F:-54']);
+    const alone = placeCategories([{ id: 'c', key: k, label: 'c' }], layout, grid).get('c');
+    const others = [
+      { id: 'j', key: key('karate', 'jiyu', 'M', ['junior'], ['junior:M:-60']), label: 'j' },
+      { id: 'k', key: key('kata', null, 'F', ['minime'], []), label: 'k' },
+      { id: 'l', key: freeKey('Open', 'karate', 'jiyu'), label: 'Open' },
+    ];
+    expect(placeCategories([...others, { id: 'c', key: k, label: 'c' }], layout, grid).get('c')).toEqual(alone);
+  });
+});
+
+describe('separate', () => {
+  test('deux cartes l’une sur l’autre : écartées sans le repli', () => {
+    const [xs, ys] = [Float64Array.from([0, 1]), Float64Array.from([0, 1])];
+    expect(separate(xs, ys, CARD_W, CARD_H)).toBe(true);
+    expect(overlaps({ x: xs[0]!, y: ys[0]! }, { x: xs[1]!, y: ys[1]! })).toBe(false);
+  });
+
+  test('une grille dense (200 cartes au même endroit) finit sans chevauchement, par le repli', () => {
+    const n = 200;
+    const xs = Float64Array.from({ length: n }, (_, i) => (i % 7) * 0.5);
+    const ys = Float64Array.from({ length: n }, (_, i) => Math.floor(i / 7) * 0.5);
+    expect(separate(xs, ys, CARD_W, CARD_H)).toBe(false);
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) expect(overlaps({ x: xs[i]!, y: ys[i]! }, { x: xs[j]!, y: ys[j]! })).toBe(false);
+    }
   });
 });

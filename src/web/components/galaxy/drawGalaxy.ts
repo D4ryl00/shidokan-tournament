@@ -288,9 +288,13 @@ export function starAt(s: Pick<Scene, 'stars' | 'pos' | 'overlaid'>, cam: Camera
 /** Caméra qui cadre ces places (zoom borné entre `kMin` et 2). */
 export function fitCamera(points: Point[], w: number, h: number, kMin: number): Camera {
   if (points.length === 0) return { k: 1, px: 0, py: 0 };
-  const xs = points.map((p) => p.x);
-  const ys = points.map((p) => p.y);
-  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  let [x0, x1, y0, y1] = [Infinity, -Infinity, Infinity, -Infinity];
+  for (const p of points) {
+    x0 = Math.min(x0, p.x);
+    x1 = Math.max(x1, p.x);
+    y0 = Math.min(y0, p.y);
+    y1 = Math.max(y1, p.y);
+  }
   const k = Math.max(kMin, Math.min(2, (w - 40) / (x1 - x0 + 160), (h - 40) / (y1 - y0 + 100)));
   return { k, px: -((x0 + x1) / 2) * k, py: -((y0 + y1) / 2) * k };
 }
