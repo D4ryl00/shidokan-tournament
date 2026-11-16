@@ -31,6 +31,7 @@ const CARD_PX = 220;
 const SELECTED_CARD_PX = 240;
 /** En dessous de cette largeur (téléphone) : barre au-dessus du canevas, cartes jusqu'à 0,6. */
 const NARROW_PX = 600;
+const LEGEND_KEY = 'galaxie-legende';
 
 /** Règles d'un lien vues depuis `fromId`, dans l'ordre de la compétition. */
 function linkLabelOf(settings: CompetitionSettings | null) {
@@ -64,6 +65,8 @@ export function GalaxyView(p: {
   const [onlyLone, setOnlyLone] = useState(false);
   const [allLinks, setAllLinks] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Recadrage demandé (la sélection a disparu sans qu'on sache où sont partis ses combattants).
+  const [refit, setRefit] = useState(0);
 
   const names = useMemo(() => new Map([...entrants].map(([id, e]) => [id, e.name])), [entrants]);
   // Les catégories que la planche montre, toutes sessions confondues : les voisines hors de la session en font partie.
@@ -92,7 +95,19 @@ export function GalaxyView(p: {
   const waiting = categories.filter((c) => c.waveId === null).length;
   // Une sélection vidée (catégorie disparue) : plus de sélection.
   const sel = selectedId !== null && byId.has(selectedId) ? selectedId : null;
-  useEffect(() => { if (selectedId !== null && sel === null && base) setSelectedId(null); }, [selectedId, sel, base]);
+  // Une sélection vidée par un déplacement : la galaxie suit ses combattants dans leur nouvelle catégorie ; sinon, plus
+  // de sélection et retour à la vue d'ensemble (pas de zoom maximal sur un ciel vide).
+  const selRegs = useRef<{ id: string; regs: string[] } | null>(null);
+  useEffect(() => {
+    if (sel) selRegs.current = { id: sel, regs: byId.get(sel)?.registrationIds ?? [] };
+  }, [sel, byId]);
+  useEffect(() => {
+    if (selectedId === null || sel !== null || !base) return;
+    const regs = selRegs.current?.id === selectedId ? selRegs.current.regs : [];
+    const dest = shown.find((c) => regs.some((r) => c.registrationIds.includes(r)));
+    if (dest) setSelectedId(dest.id);
+    else { setSelectedId(null); setRefit((n) => n + 1); }
+  }, [selectedId, sel, base, shown]);
 
   const neighborIds = useMemo(() => (sel && settings ? sortedNeighbors(sel, adjacency.get(sel) ?? [], settings).map((n) => n.id) : []), [sel, adjacency, settings]);
   // Étoiles dessinées : la portée, et la sélection avec toutes ses voisines, quelle que soit leur session.
@@ -233,7 +248,7 @@ export function GalaxyView(p: {
       {base && scopeCats.length === 0 && <EmptyState title="Aucune catégorie." />}
       {staged && (
         <GalaxyStage toolbar={toolbar} stars={stars} base={base} links={drawnLinks} sel={sel} neighborIds={neighborIds} matched={matched} allLinks={allLinks}
-          linkStyle={styleOf} linkLabel={labelOf} fitIds={fitIds} fitKey={`${scope}|${waveId ?? ''}|${onlyLone}`}
+          linkStyle={styleOf} linkLabel={labelOf} fitIds={fitIds} fitKey={`${scope}|${waveId ?? ''}|${onlyLone}|${refit}`}
           onSelect={setSelectedId} chipSelected={drag.selected !== null} onCancelChip={drag.cancel} renderCard={renderCard}
           legend={<GalaxyLegend hues={presentHues} rules={legend} />} />
       )}
@@ -326,9 +341,9 @@ function GalaxyStage(p: {
         below += (parseFloat(cs.paddingBottom) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
       }
       const isNarrow = window.innerWidth < NARROW_PX;
-      // Au téléphone, la barre de l'appli prend la moitié de l'écran : le canevas garde au moins 70 % de la hauteur (on
-      // fait défiler la page jusqu'à lui).
-      const floor = isNarrow ? Math.min(560, Math.round(window.innerHeight * 0.7)) : 300;
+      // Au téléphone, la barre de l'appli prend la moitié de l'écran : le canevas a toute la hauteur de l'écran, et la page
+      // défile jusqu'à lui quand on choisit une étoile.
+      const floor = isNarrow ? Math.floor(window.innerHeight - below) : 300;
       const h = Math.max(floor, Math.floor(window.innerHeight - (r.top + window.scrollY) - below));
       setSize((s) => (s.w === w && s.h === h ? s : { w, h }));
       setNarrow(isNarrow);
@@ -403,7 +418,11 @@ function GalaxyStage(p: {
     onTap: (x, y) => {
       // Pendant un clic-clic, un clic à côté des cartes l'annule ; sinon : l'étoile touchée, ou plus de sélection.
       if (scene.current.chipSelected) { scene.current.onCancelChip(); return; }
-      scene.current.onSelect(hit(x, y));
+      const id = hit(x, y);
+      // L'étoile déjà choisie (après un dézoom) : on y retourne, comme à la première sélection.
+      const q = id !== null && id === scene.current.sel ? scene.current.base.get(id) : undefined;
+      if (q) camera.flyTo(q, inset.current / 2);
+      else scene.current.onSelect(id);
     },
     onHover: (x, y) => {
       const id = x === null || y === null ? null : hit(x, y);
@@ -437,6 +456,9 @@ function GalaxyStage(p: {
     hover.current = null;
     const q = p.sel ? scene.current.base.get(p.sel) : undefined;
     if (q && size.w > 0) camera.flyTo(q, inset.current / 2);
+    // Téléphone : le canevas commence bas dans la page ; on le fait monter pour que les cartes ne finissent pas sous la
+    // barre du navigateur.
+    if (q && window.innerWidth < NARROW_PX) frameRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.sel, size.w > 0]);
 
@@ -496,7 +518,15 @@ function GalaxyStage(p: {
 
 /** Légende : teintes des disciplines, anneau, règles actives dans l'ordre avec leur couleur de lien. Repliable. */
 function GalaxyLegend({ hues, rules }: { hues: { key: string; color: string; label: string }[]; rules: { rule: string; label: string; color: string }[] }) {
-  const [open, setOpen] = useState(() => typeof window === 'undefined' || window.innerWidth >= 600);
+  // Repliée par défaut (elle cache des étoiles) ; ouverte ou non, retenu sur le poste.
+  const [open, setOpenState] = useState(() => {
+    try { return localStorage.getItem(LEGEND_KEY) === 'ouverte'; } catch { return false; }
+  });
+  const setOpen = (f: (o: boolean) => boolean) => setOpenState((o) => {
+    const next = f(o);
+    try { localStorage.setItem(LEGEND_KEY, next ? 'ouverte' : 'repliee'); } catch { /* stockage indisponible : vaut pour cette visite */ }
+    return next;
+  });
   const muted = '#9aa3bd';
   return (
     <Box style={{ background: '#0e1119ee', border: '1px solid #262b3a', borderRadius: 8, padding: '6px 10px', color: '#d5dae8', fontSize: 12, maxWidth: 420 }}>

@@ -143,6 +143,19 @@ test('galaxie : choisir la vue, chercher, voir les voisines en cartes, déplacer
   await expect(canvas(page)).toHaveAttribute('data-selected', ids.c61);
   await expect(c54).toBeVisible();
 
+  // Dézoomer renvoie les cartes à leur place ; un clic sur l'étoile choisie y retourne (et ne désélectionne pas).
+  await expect(canvas(page)).toHaveAttribute('data-flying', 'false');
+  const at = (await c61.boundingBox())!;
+  const [sx, sy] = [at.x + at.width / 2, at.y + at.height / 2];
+  await page.mouse.move(sx, sy);
+  for (let i = 0; i < 10; i++) await page.mouse.wheel(0, 200);
+  await expect(c61).toBeHidden();
+  await expect(canvas(page)).toHaveAttribute('data-flying', 'false');
+  await page.mouse.click(sx, sy);
+  await expect(canvas(page)).toHaveAttribute('data-selected', ids.c61);
+  await expect(c61).toBeVisible();
+  await expect(canvas(page)).toHaveAttribute('data-flying', 'false');
+
   // Clic-clic : SOLO, puis la carte -54 → confirmation → déplacement.
   await c61.getByTestId('planche-chip').filter({ hasText: 'SOLO' }).click();
   await expect(page.getByTestId('planche-banner')).toBeVisible();
@@ -151,9 +164,11 @@ test('galaxie : choisir la vue, chercher, voir les voisines en cartes, déplacer
   const moved = page.waitForResponse((r) => r.url().endsWith('/replacement/move') && r.request().method() === 'POST');
   await page.getByTestId('drop-confirm').click();
   expect((await moved).ok()).toBeTruthy();
-  // Le -61 vidé a disparu : plus de sélection, plus de cartes, et aucune erreur.
-  await expect(canvas(page)).toHaveAttribute('data-selected', '');
+  // Le -61 vidé a disparu : la galaxie suit SOLO dans sa nouvelle catégorie, et aucune erreur.
   await expect(c61).toHaveCount(0);
+  await expect(canvas(page)).toHaveAttribute('data-selected', ids.c54);
+  await expect(c54.getByTestId('planche-chip').filter({ hasText: 'SOLO' })).toBeVisible();
+  await expect(canvas(page)).toHaveAttribute('data-flying', 'false');
   expect(errors).toEqual([]);
 
   // « Annuler » : SOLO revient dans le -61.
@@ -174,8 +189,15 @@ test('galaxie : la vue est retenue sur le poste, Échap désélectionne, portée
   const id = await createCompetition(page, 'Galaxie retenue');
   const ids = await seed(request, id);
   await openGalaxy(page, id);
+  // La légende est repliée au départ ; son état est retenu sur le poste.
+  const legendToggle = page.getByTestId('galaxy-legend-toggle');
+  await expect(legendToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(legendToggle).toHaveText('Légende ▸');
+  await legendToggle.click();
+  await expect(legendToggle).toHaveAttribute('aria-expanded', 'true');
   await page.reload();
   await expect(canvas(page)).toBeVisible();
+  await expect(legendToggle).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByTestId('planche')).toHaveCount(0);
 
   await page.getByTestId('planche-search').fill('ALBA');
@@ -204,6 +226,17 @@ test('galaxie : la vue est retenue sur le poste, Échap désélectionne, portée
   await expect(page.getByTestId('brackets-wave').locator('input[value="all"]')).toBeChecked();
   await expect(card(page, ids.mix)).toBeVisible();
   await expect(page).not.toHaveURL(/categorie=/);
+  await expect(canvas(page)).toHaveAttribute('data-flying', 'false');
+  expect(Number(await canvas(page).getAttribute('data-zoom'))).toBe(4);
+
+  // La catégorie choisie disparaît sans que son combattant aille ailleurs (inscription supprimée) : plus de sélection,
+  // retour à la vue d'ensemble.
+  const regs = (await (await request.get(`/api/competitions/${id}/registrations`)).json()) as { id: string; fighter: { lastName: string } }[];
+  const mixa = regs.find((r) => r.fighter.lastName === 'MIXA')!.id;
+  expect((await request.delete(`/api/competitions/${id}/registrations/${mixa}`)).ok()).toBeTruthy();
+  await expect(canvas(page)).toHaveAttribute('data-selected', '');
+  await expect(card(page, ids.mix)).toHaveCount(0);
+  await expect.poll(async () => Number(await canvas(page).getAttribute('data-zoom'))).toBeLessThan(2);
   expect(errors).toEqual([]);
 });
 
@@ -217,6 +250,13 @@ test('galaxie : 360 px sans débordement horizontal', async ({ page, request }) 
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(360);
   expect(await clipped(page)).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  // Au téléphone, choisir une étoile fait défiler la page jusqu'au canevas (les cartes ne finissent pas sous la barre).
+  expect(box.y).toBeGreaterThan(200);
+  await page.getByTestId('planche-search').fill('SOLO');
+  await expect(canvas(page)).not.toHaveAttribute('data-selected', '');
+  await expect.poll(async () => Math.abs((await canvas(page).boundingBox())!.y)).toBeLessThanOrEqual(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 

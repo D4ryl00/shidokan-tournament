@@ -58,7 +58,7 @@ export function useGalaxyCamera(o: {
     const again = latest.current.draw(c, now);
     // Pour les tests : la caméra est-elle encore en route (vol ou adoucissement) ?
     const cv = latest.current.canvasRef.current;
-    if (cv) cv.dataset.flying = moving ? 'true' : 'false';
+    if (cv) { cv.dataset.flying = moving ? 'true' : 'false'; cv.dataset.zoom = c.k.toFixed(2); }
     if (moving || again) raf.current = requestAnimationFrame((n) => frameRef.current(n));
   };
   const requestDraw = useCallback(() => {
