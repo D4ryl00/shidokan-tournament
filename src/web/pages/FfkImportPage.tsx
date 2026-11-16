@@ -104,9 +104,9 @@ export function FfkImportPage() {
   return (
     <Stack gap="lg">
       <SectionCard title="Déposer l’export FFK"
-        description="Fichier .xlsx, .ods ou .csv. Rien n’est enregistré avant « Importer ». L’export FFK fait foi pour l’âge, le poids et le club ; un règlement vide ne remplace pas celui de la fiche club.">
+        description="Fichier .xlsx, .xlsm, .ods ou .csv. Rien n’est enregistré avant « Importer ». L’export FFK fait foi pour l’âge, le poids et le club ; un règlement vide ne remplace pas celui de la fiche club.">
         <Group gap="sm">
-          <FileButton onChange={onFile} accept=".xlsx,.xls,.ods,.csv" resetRef={resetFile} inputProps={{ 'data-testid': 'ffk-file' } as object}>
+          <FileButton onChange={onFile} accept=".xlsx,.xlsm,.xls,.ods,.csv" resetRef={resetFile} inputProps={{ 'data-testid': 'ffk-file' } as object}>
             {(props) => <Button variant={uploadId ? 'default' : 'filled'} loading={upload.isPending} {...props}>Choisir l’export FFK</Button>}
           </FileButton>
           {fileName && <Text size="sm" c="dimmed" className="sk-ellipsis" title={fileName}>{fileName}</Text>}

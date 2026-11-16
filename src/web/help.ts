@@ -380,7 +380,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     title: 'Import FFK',
     short: 'Importez l’export des inscriptions FFK, vérifiez l’aperçu, tranchez les doutes, puis validez.',
     details: [
-      'L’export FFK fait foi pour l’âge et le poids. Les fichiers .xlsx, .ods et .csv sont acceptés.',
+      'L’export FFK fait foi pour l’âge et le poids. Les fichiers .xlsx, .xlsm, .ods et .csv sont acceptés.',
       [
         'Choisissez les onglets à importer et vérifiez la correspondance des colonnes (elle est mémorisée).',
         'L’aperçu rapproche chaque ligne d’un combattant déjà connu (fiche club) ou en crée un nouveau.',

@@ -70,6 +70,13 @@ export function disciplineFromSheetName(name: string): DisciplineId | null {
   return null;
 }
 
+/** « Séniors jiyu ippon kumite » → âge « Séniors » + règlement jiyu ; sinon la case telle quelle. */
+export function splitAgeCell(v: unknown): { age: unknown; ruleset: Ruleset | null } {
+  const m = /^(.*?)\s+((?:JIYU|JI YU|SHOBU)(?: IPPON KUMITE)?)$/.exec(normalizeName(text(v)));
+  const ruleset = m ? rulesetFromLabel(m[2]) : null;
+  return m && m[1] && ruleset ? { age: m[1], ruleset } : { age: v, ruleset: null };
+}
+
 export interface FfkRow {
   /** `${sheet}#${line}` : clé stable pour les décisions de l'organisateur. */
   key: string;
@@ -121,7 +128,8 @@ export function parseFfkRows(
     const sex = parseSex(sexCell);
     if (!sex) errors.push(`Sexe incompréhensible : « ${text(sexCell)} ».`);
 
-    const ageCell = get(row, 'ageBand');
+    // Export FFK 2026-2027 : le règlement des seniors est écrit dans l'âge (« Séniors shobu ippon kumité »).
+    const { age: ageCell, ruleset: ageRuleset } = splitAgeCell(get(row, 'ageBand'));
     const ageBandCode = ageBandFromLabel(ageCell, grid);
     if (!ageBandCode) errors.push(`Catégorie d'âge manquante ou incompréhensible : « ${text(ageCell)} ».`);
     else if (/^VETERANS?$/.test(normalizeName(text(ageCell)))) {
@@ -133,8 +141,12 @@ export function parseFfkRows(
     if (!discipline) errors.push(`Discipline incompréhensible : « ${text(disciplineCell) || sheetName} ».`);
 
     const rulesetCell = get(row, 'ruleset');
-    const ruleset = rulesetFromLabel(rulesetCell);
-    if (text(rulesetCell) && !ruleset) warnings.push(`Règlement ignoré : « ${text(rulesetCell)} ».`);
+    const columnRuleset = rulesetFromLabel(rulesetCell);
+    if (text(rulesetCell) && !columnRuleset) warnings.push(`Règlement ignoré : « ${text(rulesetCell)} ».`);
+    if (columnRuleset && ageRuleset && columnRuleset !== ageRuleset) {
+      warnings.push(`Règlement « ${text(rulesetCell)} » différent de celui de l’âge (« ${text(get(row, 'ageBand'))} ») : « ${text(rulesetCell)} » retenu.`);
+    }
+    const ruleset = columnRuleset ?? ageRuleset;
 
     let weightLabel: string | null = null;
     if (discipline && DISCIPLINES[discipline].hasWeight && sex && ageBandCode) {

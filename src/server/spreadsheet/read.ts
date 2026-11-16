@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 
 export class UnreadableFileError extends Error {
-  constructor(message = 'Fichier illisible : formats acceptés .xlsx, .ods, .csv') {
+  constructor(message = 'Fichier illisible : formats acceptés .xlsx, .xlsm, .ods, .csv') {
     super(message);
   }
 }
@@ -16,7 +16,7 @@ function decodeText(buf: Buffer): string {
   return text.includes('�') ? new TextDecoder('windows-1252').decode(buf) : text.replace(/^﻿/, '');
 }
 
-/** Lit .xlsx, .ods (et .xls) ou .csv (séparateur et encodage détectés) en tableaux 2D de cellules. */
+/** Lit .xlsx, .xlsm, .ods (et .xls) ou .csv (séparateur et encodage détectés) en tableaux 2D de cellules. */
 export function readWorkbook(buf: Buffer): { sheets: { name: string; cells: unknown[][] }[] } {
   if (buf.length === 0) throw new UnreadableFileError('Le fichier est vide.');
   let wb: XLSX.WorkBook;

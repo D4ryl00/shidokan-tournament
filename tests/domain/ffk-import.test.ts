@@ -90,3 +90,32 @@ describe('parseFfkRows', () => {
     expect(r!.warnings.join(' ')).toContain('-45'); // -45 n'existe pas en cadets M (FFK : -52 …) : sera créée
   });
 });
+
+describe('export FFK 2026-2027 (Prénom avant Nom, « Technique », règlement dans l’âge)', () => {
+  const NEW_HEADER = ['Prénom', 'Nom', 'Numero', 'Entite rattachement', 'Genre', 'Type', 'Age', 'Categorie', 'Technique'];
+  const mapping = guessColumnMapping(NEW_HEADER);
+  const parse = (lines: (string | number | null)[][], sheet = 'Mix Martial') => parseFfkRows([NEW_HEADER, ...lines], 0, mapping, sheet, grid);
+
+  test('colonnes reconnues, « Technique » laissée de côté', () => {
+    expect(mapping).toEqual({ lastName: 1, firstName: 0, licence: 2, club: 3, sex: 4, discipline: 5, ageBand: 6, weight: 7, ruleset: null });
+  });
+  test('« Séniors jiyu ippon kumite » / « Séniors shobu ippon kumité » : âge et règlement', () => {
+    const rows = parse([
+      ['JADE', 'CISAR', '1', '0060781 SAISHO DOJO', 'Féminin', 'Kmix', 'Séniors jiyu ippon kumite', '-68', null],
+      ['LOUIS', 'SARRAT', '2', '0060781 SAISHO DOJO', 'Masculin', 'Kmix', 'Séniors shobu ippon kumité', '-75', null],
+      ['HUGO', 'FARGE', '3', '0060781 SAISHO DOJO', 'Masculin', 'Kmix', 'Minime', '-40', null],
+    ]);
+    expect(rows.map((r) => [r.lastName, r.firstName, r.ageBandCode, r.ruleset, r.discipline, r.weightLabel, r.errors])).toEqual([
+      ['CISAR', 'JADE', 'senior', 'jiyu', 'shido-mix', '-68', []],
+      ['SARRAT', 'LOUIS', 'senior', 'shobu', 'shido-mix', '-75', []],
+      ['FARGE', 'HUGO', 'minime', null, 'shido-mix', '-40', []],
+    ]);
+  });
+  test('la colonne Règlement, quand elle est remplie, prime sur l’âge (avec un avertissement si elles diffèrent)', () => {
+    const [r] = parseFfkRows(
+      [FFK_HEADER, ['A B', null, '1', '1 C', 'Masculin', 'Karate', 'Seniors shobu ippon kumite', -75, 'Jiyu']], 0, STD, 'Karate', grid,
+    );
+    expect(r).toMatchObject({ ageBandCode: 'senior', ruleset: 'jiyu', errors: [] });
+    expect(r!.warnings).toContain('Règlement « Jiyu » différent de celui de l’âge (« Seniors shobu ippon kumite ») : « Jiyu » retenu.');
+  });
+});
