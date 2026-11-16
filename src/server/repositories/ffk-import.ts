@@ -1,15 +1,19 @@
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { enteredValues } from '../../domain/club-line.js';
 import { findHeaderRow, guessColumnMapping, headerSignature, parseFfkRows, type ColumnMapping, type FfkRow } from '../../domain/ffk-import.js';
 import type { ExistingFighter } from '../../domain/ffk-plan/cards.js';
 import type { ExistingClub } from '../../domain/ffk-plan/clubs.js';
-import { planFfkCards, type ExistingData, type FfkCardsPlan, type FfkChoices } from '../../domain/ffk-plan/plan.js';
+import { planFfkCards, type ExistingData, type FfkCardsPlan, type FfkChoices, type FfkImportResult } from '../../domain/ffk-plan/plan.js';
+import { mergeWeightClasses, validateGrid } from '../../domain/grid.js';
+import type { CategoryGrid, WeightClass } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
-import { clubAliases, clubDirectory, clubs, fighters, importMappings, registrations, uploads } from '../db/schema.js';
+import { linkClub } from '../db/club-directory.js';
+import { clubAliases, clubDirectory, clubs, fighters, importMappings, registrations, uploads, weightClasses } from '../db/schema.js';
 import { readWorkbook } from '../spreadsheet/read.js';
 import { closedSet } from './closed-categories.js';
-import { fighterLine } from './club-entry.js';
-import { getGrid } from './competitions.js';
-import { NotFoundError } from './registrations.js';
+import { fighterLine, fighterLines, LineReadOnlyError, StaleLineError, writeClubLineInTx } from './club-entry.js';
+import { GridValidationError, getGrid } from './competitions.js';
+import { NotFoundError, RegistrationValidationError } from './registrations.js';
 
 export interface SheetSetup {
   name: string;
@@ -90,60 +94,148 @@ export async function loadExisting(db: AppDb, competitionId: string): Promise<Ex
   );
   return {
     clubs: loadExistingClubs(db, competitionId),
-    fighters: db
-      .select()
-      .from(fighters)
-      .where(eq(fighters.competitionId, competitionId))
-      .orderBy(fighters.nameKey)
-      .all()
-      .map((f): ExistingFighter => {
-        // La ligne vue par l'organisateur (formulaire combattant), avec sa version et ses verrous.
-        const l = fighterLine(db, competitionId, f.id);
-        return {
-          fighterId: f.id, clubId: f.clubId, licence: f.licence, line: l.line, publicNameHidden: l.publicNameHidden, version: l.version,
-          editable: l.editable, partlyEditable: l.partlyEditable, startedDisciplines: l.startedDisciplines, fromFfk: ffkFighters.has(f.id),
-        };
-      }),
+    // La ligne vue par l'organisateur (formulaire combattant), avec sa version et ses verrous ; ordre des noms puis des ids (empreinte stable).
+    fighters: fighterLines(db, competitionId).map((l): ExistingFighter => ({
+      fighterId: l.fighterId, clubId: l.clubId || null, licence: l.line.licence ?? null, line: l.line, publicNameHidden: l.publicNameHidden, version: l.version,
+      editable: l.editable, partlyEditable: l.partlyEditable, startedDisciplines: l.startedDisciplines, fromFfk: ffkFighters.has(l.fighterId),
+    })),
     aliases: Object.fromEntries(db.select().from(clubAliases).all().map((a) => [a.nameKey, a.clubEntity])),
   };
 }
 
-/** Lit les onglets retenus et calcule le plan (aucune écriture). */
+/** Lit les onglets retenus et calcule le plan (aucune écriture). Rend aussi la grille et ce que le plan connaît de la compétition. */
 export async function buildFfkPlan(
   db: AppDb,
   competitionId: string,
   uploadId: string,
   sheets: Pick<SheetSetup, 'name' | 'headerRow' | 'mapping' | 'include'>[],
   choices: FfkChoices = {},
-): Promise<{ plan: FfkCardsPlan; rows: FfkRow[] }> {
+): Promise<{ plan: FfkCardsPlan; rows: FfkRow[]; grid: CategoryGrid; existing: ExistingData }> {
   const data = await loadUpload(db, competitionId, uploadId);
   const grid = await getGrid(db, competitionId);
   const book = readWorkbook(data);
+  const closed = closedSet(db, competitionId);
   const rows: FfkRow[] = [];
   for (const s of sheets.filter((x) => x.include)) {
     const sheet = book.sheets.find((x) => x.name === s.name);
-    if (sheet) rows.push(...parseFfkRows(sheet.cells, s.headerRow, s.mapping, s.name, grid, closedSet(db, competitionId)));
+    if (sheet) rows.push(...parseFfkRows(sheet.cells, s.headerRow, s.mapping, s.name, grid, closed));
   }
-  return { plan: planFfkCards(rows, grid, await loadExisting(db, competitionId), choices), rows };
+  const existing = await loadExisting(db, competitionId);
+  return { plan: planFfkCards(rows, grid, existing, choices), rows, grid, existing };
 }
 
-/** Import refusé tant que l'écriture par cartes n'est pas branchée. */
-export class FfkImportUnavailableError extends Error {
-  readonly statusCode = 503;
-  constructor() {
-    super('Import FFK en cours de refonte : l’import n’est pas encore disponible (aperçu seulement).');
-  }
+/** Erreur d'écriture d'une carte, le nom du combattant en tête (l'import entier est annulé). */
+function withName(label: string, e: unknown): unknown {
+  if (e instanceof RegistrationValidationError) return new RegistrationValidationError(e.errors.length ? e.errors.map((m) => `${label} : ${m}`) : [`${label} : ligne refusée.`]);
+  if (e instanceof LineReadOnlyError) return new LineReadOnlyError(`${label} : ${e.message}`);
+  if (e instanceof StaleLineError) return new LineReadOnlyError(`${label} : ${e.message}`);
+  return e;
 }
 
 /**
- * Applique le plan. Temporaire (étape 51, Task 4) : l'écriture par cartes (cartes validées et sans problème, catégories
- * acceptées, liens de club, fiches à supprimer) est réécrite à la Task 6 ; d'ici là, l'import est refusé sans rien écrire.
+ * Applique le plan, dans une transaction : catégories cochées ; liens de club (sûrs ou choisis, mémorisés) ; cartes `auto` et `done`
+ * (valeurs de la carte, écrites comme une ligne du formulaire combattant) ; fiches sans inscription FFK supprimées ou gardées ; correspondances
+ * de colonnes. Une carte laissée de côté (`todo`, `skip`) ne touche pas aux inscriptions de son combattant. Une ligne refusée annule tout.
  */
-export async function applyFfkPlan(
-  _db: AppDb,
-  _competitionId: string,
-  _plan: FfkCardsPlan,
-  _mappings: { headers: string[]; mapping: ColumnMapping }[],
-): Promise<{ created: number; updated: number; deleted: number; weightClassesCreated: number }> {
-  throw new FfkImportUnavailableError();
+export async function applyFfkCards(
+  db: AppDb,
+  competitionId: string,
+  plan: FfkCardsPlan,
+  mappings: { headers: string[]; mapping: ColumnMapping }[],
+): Promise<FfkImportResult> {
+  const added: WeightClass[] = plan.weightClasses.filter((w) => w.accepted).map(({ rows: _r, accepted: _a, ...w }) => w);
+  const merged = mergeWeightClasses(await getGrid(db, competitionId), added);
+  const gridErrors = validateGrid(merged);
+  if (gridErrors.length) throw new GridValidationError(gridErrors);
+  const touched = new Set(added.map((w) => `${w.ageBandCode}|${w.sex}`));
+
+  return db.transaction((tx) => {
+    const t = tx as unknown as AppDb;
+
+    // 1. Catégories de poids cochées ; ordre et catégorie ouverte recalculés dans les groupes touchés.
+    for (const w of added) t.insert(weightClasses).values({ ...w, competitionId }).run();
+    for (const w of merged.weightClasses.filter((x) => touched.has(`${x.ageBandCode}|${x.sex}`))) {
+      t.update(weightClasses)
+        .set({ label: w.label, sortOrder: w.sortOrder })
+        .where(and(eq(weightClasses.competitionId, competitionId), eq(weightClasses.id, w.id)))
+        .run();
+    }
+
+    // 2. Clubs reliés (lien sûr ou choisi) : l'entité FFK et l'alias nom → entité sont mémorisés ; un lien « à vérifier » non choisi ne l'est pas.
+    for (const link of plan.clubs) {
+      if (!link.target) continue;
+      const club = t.select().from(clubs).where(and(eq(clubs.id, link.target), eq(clubs.competitionId, competitionId))).get();
+      if (!club) throw new NotFoundError('Club introuvable');
+      if (link.chosen) {
+        // Lien corrigé : l'entité quitte l'ancien club (et son alias), le nouveau lien le remplace.
+        const previous = t.select().from(clubs)
+          .where(and(eq(clubs.competitionId, competitionId), eq(clubs.ffkEntity, link.clubEntity), ne(clubs.id, club.id))).all();
+        for (const p of previous) {
+          t.update(clubs).set({ ffkEntity: null }).where(eq(clubs.id, p.id)).run();
+          if (p.nameKey !== club.nameKey) t.delete(clubAliases).where(and(eq(clubAliases.nameKey, p.nameKey), eq(clubAliases.clubEntity, link.clubEntity))).run();
+        }
+      }
+      t.update(clubs).set({ ffkEntity: link.clubEntity }).where(eq(clubs.id, club.id)).run();
+      t.insert(clubAliases)
+        .values({ nameKey: club.nameKey, clubEntity: link.clubEntity })
+        .onConflictDoUpdate({ target: clubAliases.nameKey, set: { clubEntity: link.clubEntity } })
+        .run();
+      linkClub(t, club.id);
+    }
+
+    // 3. Cartes retenues : la valeur de la carte, écrite comme une ligne du formulaire combattant (verrous des combats commencés, recasements).
+    let created = 0;
+    let updated = 0;
+    for (const card of plan.cards) {
+      if ((card.state !== 'auto' && card.state !== 'done') || !card.value || !card.fighterId) continue;
+      const { line, clubId, publicNameHidden } = card.value;
+      const isNew = card.fighterId === 'new';
+      let fighterId: string;
+      try {
+        fighterId = writeClubLineInTx(t, competitionId, {
+          fighterId: isNew ? null : card.fighterId, line, clubId: clubId!, expectedVersion: card.version, writer: { kind: 'organiser' },
+          publicNameHidden, source: 'ffk', licence: line.licence,
+        });
+      } catch (e) {
+        throw withName(`${line.lastName} ${line.firstName}`.trim(), e);
+      }
+      if (isNew) created++;
+      else if (card.changes.length) updated++;
+      // Confirmées par l'export : les inscriptions de ses disciplines ; les autres (gardées de la fiche) ne le sont pas.
+      const exported = new Set(card.rows.map((r) => r.discipline).filter((d) => d !== null));
+      for (const r of t.select().from(registrations).where(eq(registrations.fighterId, fighterId)).all()) {
+        const ffkConfirmed = exported.has(enteredValues({ ...r, otherDisciplines: [] }).discipline);
+        if (r.ffkConfirmed !== ffkConfirmed) t.update(registrations).set({ ffkConfirmed }).where(eq(registrations.id, r.id)).run();
+      }
+    }
+
+    // 4. Fiches sans inscription FFK : supprimées sur demande, sinon gardées mais plus confirmées par l'export.
+    let deleted = 0;
+    for (const orphan of plan.orphans) {
+      if (orphan.action === 'delete') {
+        const current = fighterLine(t, competitionId, orphan.fighterId);
+        if (current.startedDisciplines.length) {
+          throw new RegistrationValidationError([`${orphan.label} : ses combats ont commencé, il ne peut pas être supprimé.`]);
+        }
+        t.delete(registrations).where(eq(registrations.fighterId, orphan.fighterId)).run();
+        t.delete(fighters).where(eq(fighters.id, orphan.fighterId)).run();
+        deleted++;
+      } else {
+        t.update(registrations)
+          .set({ ffkConfirmed: false })
+          .where(and(eq(registrations.fighterId, orphan.fighterId), eq(registrations.ffkConfirmed, true)))
+          .run();
+      }
+    }
+
+    // 5. Correspondances de colonnes.
+    for (const m of mappings) {
+      const signature = headerSignature(m.headers);
+      t.insert(importMappings)
+        .values({ signature, mappingJson: JSON.stringify(m.mapping) })
+        .onConflictDoUpdate({ target: importMappings.signature, set: { mappingJson: JSON.stringify(m.mapping) } })
+        .run();
+    }
+    return { created, updated, deleted, weightClassesCreated: added.length, leftAside: plan.summary.todo + plan.summary.skip };
+  });
 }

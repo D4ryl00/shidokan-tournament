@@ -7,7 +7,7 @@ import type { Category, CategoryStatus } from '../domain/categories.js';
 import type { ClubFormHeader, ClubFormLine, ClubFormParse } from '../domain/club-form.js';
 import type { ClosedCategoriesView, EntryCell } from '../domain/closed-categories.js';
 import type { ColumnMapping } from '../domain/ffk-import.js';
-import type { FfkCardsPlan, FfkChoices } from '../domain/ffk-plan/plan.js';
+import type { FfkCardsPlan, FfkChoices, FfkImportResult, FfkSearchFighter } from '../domain/ffk-plan/plan.js';
 import type { ClubField, ClubValues } from '../domain/club-changes.js';
 import type { Club, DirectoryEntry, DirectoryInput, RegistrationRow } from '../domain/registration.js';
 import type { Case, MoveView, Presence, Proposal, ProposalType } from '../domain/replacement/index.js';
@@ -261,7 +261,7 @@ export function useUploadFfk(id: string) {
 export function usePreviewFfk(id: string) {
   return useMutation({
     mutationFn: ({ uploadId, sheets, choices }: { uploadId: string; sheets: FfkSheetSetup[]; choices: FfkChoices }) =>
-      api<FfkCardsPlan & { fingerprint: string }>('POST', `/api/competitions/${id}/ffk-imports/${uploadId}/preview`, { sheets, choices }),
+      api<FfkCardsPlan & { fingerprint: string; fighters: FfkSearchFighter[] }>('POST', `/api/competitions/${id}/ffk-imports/${uploadId}/preview`, { sheets, choices }),
   });
 }
 
@@ -269,7 +269,7 @@ export function useCommitFfk(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ uploadId, sheets, choices, fingerprint }: { uploadId: string; sheets: FfkSheetSetup[]; choices: FfkChoices; fingerprint?: string }) =>
-      api<{ created: number; updated: number; deleted: number; weightClassesCreated: number }>(
+      api<FfkImportResult>(
         'POST',
         `/api/competitions/${id}/ffk-imports/${uploadId}/commit`,
         { sheets, choices, fingerprint },

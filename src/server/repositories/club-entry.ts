@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { closedEntryWarning, lineToRows, normalizeLicence, WEIGHT_MISSING, type ClubFormLine, type CombatDiscipline } from '../../domain/club-form.js';
 import { closedSummary, columnLabel, entryKey, isEntryClosed, offeredAgeBands } from '../../domain/closed-categories.js';
 import { DISCIPLINES } from '../../domain/disciplines.js';
@@ -117,10 +117,32 @@ export function assertWritable(db: AppDb, access: ClubAccess): void {
   if (!isEditable(competitionRow(db, access))) throw new ClubEntryClosedError();
 }
 
+/** Ce que la ligne d'un combattant relit hors de ses inscriptions : lu une seule fois pour toute la compétition par `fighterLines`. */
+interface LineContext {
+  closed: Set<string>;
+  /** Catégories commencées (ou terminées). */
+  started: Set<string>;
+  /** Réglage « plusieurs disciplines de combat par jour » (lu seulement si besoin). */
+  multipleCombatsAllowed: () => boolean;
+}
+
 /** Ligne d'un combattant du club, avec sa version et son verrou. */
 function lineOf(db: AppDb, fighter: typeof fighters.$inferSelect, viewer: LineWriter['kind'] = 'coach'): ClubLine {
-  const regs = db.select().from(registrations).where(eq(registrations.fighterId, fighter.id)).all();
-  const startedRegs = startedRegistrations(db, regs);
+  const regs = db.select().from(registrations).where(eq(registrations.fighterId, fighter.id)).orderBy(sql`rowid`).all();
+  return lineFrom(fighter, regs, lineContext(db, fighter.competitionId, regs), viewer);
+}
+
+function lineContext(db: AppDb, competitionId: string, regs: { categoryId: string | null }[]): LineContext {
+  let allowed: boolean | undefined;
+  return {
+    closed: closedSet(db, competitionId),
+    started: startedCategoryIds(db, regs),
+    multipleCombatsAllowed: () => (allowed ??= !!getCompetitionSync(db, competitionId)?.settings.multipleCombatDisciplinesPerDay),
+  };
+}
+
+function lineFrom(fighter: typeof fighters.$inferSelect, regs: (typeof registrations.$inferSelect)[], ctx: LineContext, viewer: LineWriter['kind']): ClubLine {
+  const startedRegs = regs.filter((r) => r.categoryId !== null && ctx.started.has(r.categoryId));
   const locked = startedRegs.length > 0;
   const startedDisciplines = [...new Set(startedRegs.map((r) => enteredValues({ ...r, otherDisciplines: [] }).discipline))];
   const { line, editable, reason, warnings } = registrationsToLine(
@@ -131,7 +153,7 @@ function lineOf(db: AppDb, fighter: typeof fighters.$inferSelect, viewer: LineWr
     })),
   );
   const version = [String(fighter.version ?? 0), ...regs.map((r) => `${r.id}:${r.version ?? 0}`).sort()].join('|');
-  const closed = closedSet(db, fighter.competitionId);
+  const closed = ctx.closed;
   const notices = [...warnings, ...regs.flatMap((r) => {
     const cell = { ageBandCode: fighter.ageBandCode, sex: fighter.sex, discipline: r.discipline, ruleset: r.ruleset };
     if (r.withdrawnReason) return [WITHDRAWN_NOTICE(columnLabel(cell))];
@@ -140,7 +162,7 @@ function lineOf(db: AppDb, fighter: typeof fighters.$inferSelect, viewer: LineWr
     return [viewer === 'organiser' ? closedEntryWarning(cell, closed)! : CLOSED_NOTICE(columnLabel(cell))];
   })];
   // L'organisateur peut inscrire plusieurs combats malgré le réglage : il le voit rappelé.
-  if (viewer === 'organiser' && line.combats.length > 1 && !getCompetitionSync(db, fighter.competitionId)?.settings.multipleCombatDisciplinesPerDay) notices.push(MULTIPLE_COMBATS_OFF);
+  if (viewer === 'organiser' && line.combats.length > 1 && !ctx.multipleCombatsAllowed()) notices.push(MULTIPLE_COMBATS_OFF);
   const base = {
     fighterId: fighter.id, clubId: fighter.clubId ?? '', publicNameHidden: fighter.publicNameHidden, version, line, notices, partlyEditable: false, startedDisciplines,
     ffkConfirmed: viewer === 'organiser' && regs.some((r) => r.ffkConfirmed),
@@ -151,11 +173,16 @@ function lineOf(db: AppDb, fighter: typeof fighters.$inferSelect, viewer: LineWr
     : { ...base, editable: false, reason: LOCKED_REASON };
 }
 
+/** Catégories commencées (ou terminées) parmi celles de ces inscriptions. */
+function startedCategoryIds(db: AppDb, regs: { categoryId: string | null }[]): Set<string> {
+  const catIds = [...new Set(regs.map((r) => r.categoryId).filter((x): x is string => !!x))];
+  if (!catIds.length) return new Set();
+  return new Set(db.select().from(categories).where(inArray(categories.id, catIds)).all().filter((c) => c.status === 'started' || c.status === 'finished').map((c) => c.id));
+}
+
 /** Inscriptions dont la catégorie a commencé (ou est terminée). */
 function startedRegistrations<R extends { categoryId: string | null }>(db: AppDb, regs: R[]): R[] {
-  const catIds = regs.map((r) => r.categoryId).filter((x): x is string => !!x);
-  if (!catIds.length) return [];
-  const started = new Set(db.select().from(categories).where(inArray(categories.id, catIds)).all().filter((c) => c.status === 'started' || c.status === 'finished').map((c) => c.id));
+  const started = startedCategoryIds(db, regs);
   return regs.filter((r) => r.categoryId !== null && started.has(r.categoryId));
 }
 
@@ -169,9 +196,28 @@ export function reloadLine(db: AppDb, saved: ClubLine, viewer: LineWriter['kind'
 export function fighterLine(db: AppDb, competitionId: string, fighterId: string): ClubLine {
   const fighter = db.select().from(fighters).where(and(eq(fighters.id, fighterId), eq(fighters.competitionId, competitionId))).get();
   if (!fighter) throw new NotFoundError('Combattant introuvable');
-  const line = lineOf(db, fighter, 'organiser');
-  // Sans club et combats commencés : rien à corriger ici (l'étape club viendrait d'abord, et le club est verrouillé).
-  return fighter.clubId ? line : { ...line, editable: false, partlyEditable: false, reason: line.partlyEditable ? line.reason : null };
+  return organiserLine(fighter, lineOf(db, fighter, 'organiser'));
+}
+
+/** Sans club et combats commencés : rien à corriger ici (l'étape club viendrait d'abord, et le club est verrouillé). */
+const organiserLine = (fighter: typeof fighters.$inferSelect, line: ClubLine): ClubLine =>
+  fighter.clubId ? line : { ...line, editable: false, partlyEditable: false, reason: line.partlyEditable ? line.reason : null };
+
+/**
+ * Lignes de tous les combattants de la compétition, vues par l'organisateur (comme `fighterLine`), dans l'ordre des noms (puis des ids) :
+ * inscriptions, catégories commencées, catégories fermées et réglages lus une seule fois (l'aperçu de l'import FFK se recalcule à chaque choix).
+ */
+export function fighterLines(db: AppDb, competitionId: string): ClubLine[] {
+  const all = db.select().from(fighters).where(eq(fighters.competitionId, competitionId)).orderBy(fighters.nameKey, fighters.id).all();
+  const regs = db.select().from(registrations).where(eq(registrations.competitionId, competitionId)).orderBy(sql`rowid`).all();
+  const byFighter = new Map<string, (typeof registrations.$inferSelect)[]>();
+  for (const r of regs) {
+    const list = byFighter.get(r.fighterId);
+    if (list) list.push(r);
+    else byFighter.set(r.fighterId, [r]);
+  }
+  const ctx = lineContext(db, competitionId, regs);
+  return all.map((f) => organiserLine(f, lineFrom(f, byFighter.get(f.id) ?? [], ctx, 'organiser')));
 }
 
 function headerOf(db: AppDb, club: typeof clubs.$inferSelect): ClubEntryView['club'] {

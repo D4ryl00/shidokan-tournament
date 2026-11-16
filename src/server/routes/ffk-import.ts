@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { FFK_FIELDS } from '../../domain/ffk-import.js';
-import { planFingerprint } from '../../domain/ffk-plan/plan.js';
+import { planFingerprint, searchableFighters } from '../../domain/ffk-plan/plan.js';
 import type { AppDb } from '../db/client.js';
 import { getCompetition } from '../repositories/competitions.js';
-import { analyzeUpload, applyFfkPlan, buildFfkPlan, deleteUpload, loadUpload, saveUpload } from '../repositories/ffk-import.js';
+import { analyzeUpload, applyFfkCards, buildFfkPlan, deleteUpload, loadUpload, saveUpload } from '../repositories/ffk-import.js';
 import { UnreadableFileError } from '../spreadsheet/read.js';
 import { clubFormLineSchema } from './registrations.js';
 
@@ -62,22 +62,23 @@ export async function ffkImportRoutes(app: FastifyInstance, { db }: { db: AppDb 
 
   app.post<P>('/api/competitions/:id/ffk-imports/:uploadId/preview', async (req) => {
     const body = bodySchema.parse(req.body);
-    const { plan } = await buildFfkPlan(db, req.params.id, req.params.uploadId, body.sheets, body.choices);
-    return { ...plan, fingerprint: planFingerprint(plan) };
+    const { plan, grid, existing } = await buildFfkPlan(db, req.params.id, req.params.uploadId, body.sheets, body.choices);
+    // `fighters` : tous les combattants de la compétition, pour la recherche « Pas dans la liste ? » de la page.
+    return { ...plan, fingerprint: planFingerprint(plan), fighters: searchableFighters(existing, grid) };
   });
 
   app.post<P>('/api/competitions/:id/ffk-imports/:uploadId/commit', async (req, reply) => {
     const body = bodySchema.parse(req.body);
     const { plan } = await buildFfkPlan(db, req.params.id, req.params.uploadId, body.sheets, body.choices);
     if (body.fingerprint && body.fingerprint !== planFingerprint(plan)) {
-      return reply.status(409).send({ error: "Les inscriptions ont changé depuis l'aperçu : relancez l'aperçu avant d'importer." });
+      return reply.status(409).send({ error: 'Les inscriptions ont changé depuis l’aperçu : relancez l’aperçu avant d’importer.' });
     }
     const included = body.sheets.filter((s) => s.include);
     // En-têtes relus depuis le fichier si le client ne les renvoie pas.
     const data = await loadUpload(db, req.params.id, req.params.uploadId);
     const analyzed = included.some((s) => !s.headers) ? await analyzeUpload(db, data) : [];
     const mappings = included.map((s) => ({ headers: s.headers ?? analyzed.find((a) => a.name === s.name)?.headers ?? [], mapping: s.mapping }));
-    const result = await applyFfkPlan(db, req.params.id, plan, mappings);
+    const result = await applyFfkCards(db, req.params.id, plan, mappings);
     await deleteUpload(db, req.params.uploadId);
     return result;
   });

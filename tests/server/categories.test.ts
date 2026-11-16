@@ -102,8 +102,8 @@ test('réglage de compétition (repêchage) appliqué aux catégories sans valeu
   expect(c!.bracket!.matches!.some((m) => m.id.startsWith('rep'))).toBe(true);
 });
 
-// Import FFK par cartes : réécrit à la Task 6 (étape 51).
-test.skip('import FFK → une catégorie par clé distincte', async () => {
+test('import FFK → une catégorie par clé distincte', async () => {
+  await req('POST', '/clubs', { name: 'C' }); // le club de l'export, relié par son nom
   const file = buildFfkWorkbook({
     Karate: [
       ['A A', null, 'L1', '1 C', 'Feminine', 'Karate', 'Cadet', -54, null],
@@ -112,7 +112,7 @@ test.skip('import FFK → une catégorie par clé distincte', async () => {
     ],
   });
   const up = (await app.inject({ method: 'POST', url: `${base}/ffk-imports`, payload: file, headers: { 'content-type': 'application/octet-stream' } })).json();
-  await req('POST', `/ffk-imports/${up.uploadId}/commit`, { sheets: up.sheets });
+  expect((await req('POST', `/ffk-imports/${up.uploadId}/commit`, { sheets: up.sheets })).json()).toMatchObject({ created: 3, leftAside: 0 });
   expect((await categories()).map((c) => c.registrationIds.length)).toEqual([2, 1]);
 });
 

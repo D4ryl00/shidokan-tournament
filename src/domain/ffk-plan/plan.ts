@@ -64,6 +64,41 @@ export interface FfkCardsPlan {
   summary: { todo: number; auto: number; done: number; skip: number; clubsTodo: number; creates: number; updates: number; deletes: number };
 }
 
+/** Combattant de la compétition tel que la page le cherche (« Pas dans la liste ? ») : tout `ExistingFighter`, plus de quoi l’afficher. */
+export interface FfkSearchFighter extends ExistingFighter {
+  /** « NOM Prénom ». */
+  label: string;
+  clubName: string;
+  ageLabel: string;
+  /** « Karaté, Kata ». */
+  disciplines: string;
+}
+
+/** Résultat de l’import : `deleted` = fiches supprimées, `leftAside` = cartes laissées de côté (à trancher ou écartées). */
+export interface FfkImportResult {
+  created: number;
+  updated: number;
+  deleted: number;
+  weightClassesCreated: number;
+  leftAside: number;
+}
+
+/** Libellés d’un combattant : nom, club, catégorie d’âge, disciplines en clair. */
+export function fighterDisplay(f: ExistingFighter, clubs: ExistingClub[], grid: CategoryGrid): Pick<FfkSearchFighter, 'label' | 'clubName' | 'ageLabel' | 'disciplines'> {
+  const disciplines = [...f.line.combats.map((d) => DISCIPLINES[d].label), ...(f.line.kata ? [DISCIPLINES.kata.label] : [])];
+  const age = f.line.ageBandCode;
+  return {
+    label: `${f.line.lastName} ${f.line.firstName}`,
+    clubName: (f.clubId && clubs.find((c) => c.id === f.clubId)?.name) || 'Sans club',
+    ageLabel: age ? (grid.ageBands.find((b) => b.code === age)?.label ?? age) : '—',
+    disciplines: disciplines.join(', ') || '—',
+  };
+}
+
+/** Tous les combattants de la compétition, pour la recherche de la page. */
+export const searchableFighters = (existing: ExistingData, grid: CategoryGrid): FfkSearchFighter[] =>
+  existing.fighters.map((f) => ({ ...f, ...fighterDisplay(f, existing.clubs, grid) }));
+
 export const ALREADY_RETAINED = 'combattant déjà retenu par une autre carte';
 
 /** Libellés de « Ce qui change », tirés de la grille (et des catégories nouvelles) et des clubs. */
@@ -82,7 +117,13 @@ function changeLabels(grid: CategoryGrid, added: WeightClass[], clubs: ExistingC
 
 const unique = (items: string[]) => [...new Set(items)];
 
-function planCard(draft: FfkCardDraft, choice: FfkCardChoice | undefined, fighters: Map<string, ExistingFighter>, labels: ChangeLabels): FfkCard {
+/** Ce qu’une valeur validée peut désigner : catégories de poids de la grille (et nouvelles cochées), clubs de la compétition. */
+interface Known {
+  weightClassIds: ReadonlySet<string>;
+  clubIds: ReadonlySet<string>;
+}
+
+function planCard(draft: FfkCardDraft, choice: FfkCardChoice | undefined, fighters: Map<string, ExistingFighter>, labels: ChangeLabels, known: Known): FfkCard {
   const fighter = (id: string | null) => (id && id !== 'new' ? (fighters.get(id) ?? null) : null);
   const base: FfkCard = {
     ...draft, state: 'todo', fighterId: null, value: null, diffs: ffkCardDiffs(draft, fighter(draft.sure)), missing: [], changes: [], reason: null, version: null,
@@ -98,6 +139,12 @@ function planCard(draft: FfkCardDraft, choice: FfkCardChoice | undefined, fighte
     if (choice.fighterId !== 'new' && !saved) return { ...base, reason: 'combattant introuvable' };
     const missing = missingFields(choice.value);
     if (missing.length) return { ...base, diffs: ffkCardDiffs(draft, saved), missing, reason: `reste à remplir : ${missing.join(', ')}` };
+    // Valeur devenue impossible depuis sa validation (catégorie décochée, club supprimé) : jamais écrite.
+    const { line } = choice.value;
+    if (line.combats.length && line.weightClassId && !known.weightClassIds.has(line.weightClassId)) {
+      return { ...base, diffs: ffkCardDiffs(draft, saved), reason: 'catégorie de poids absente de la grille' };
+    }
+    if (!known.clubIds.has(choice.value.clubId!)) return { ...base, diffs: ffkCardDiffs(draft, saved), reason: 'club introuvable' };
     return retained(choice.fighterId, choice.value, saved, 'done');
   }
 
@@ -130,7 +177,11 @@ export function planFfkCards(rows: FfkRow[], grid: CategoryGrid, existing: Exist
   const labels = changeLabels(grid, newWeightClasses, existing.clubs);
   const byId = new Map(existing.fighters.map((f) => [f.fighterId, f]));
 
-  const cards = drafts.map((d) => planCard(d, choices.cards?.[d.key], byId, labels));
+  const known: Known = {
+    weightClassIds: new Set([...grid.weightClasses, ...newWeightClasses.filter((w) => accepted.has(w.id))].map((w) => w.id)),
+    clubIds: new Set(existing.clubs.map((c) => c.id)),
+  };
+  const cards = drafts.map((d) => planCard(d, choices.cards?.[d.key], byId, labels, known));
   // Un combattant n’est écrit que par une carte : un choix validé passe avant un rapprochement d’office, puis l’ordre de l’export.
   const claimed = new Set<string>();
   for (const pass of ['done', 'auto'] as const) {
@@ -147,16 +198,8 @@ export function planFfkCards(rows: FfkRow[], grid: CategoryGrid, existing: Exist
   const orphans = existing.fighters
     .filter((f) => !concerned.has(f.fighterId))
     .map((f): FfkOrphan => {
-      const disciplines = [...f.line.combats.map((d) => DISCIPLINES[d].label), ...(f.line.kata ? [DISCIPLINES.kata.label] : [])];
-      return {
-        fighterId: f.fighterId,
-        label: `${f.line.lastName} ${f.line.firstName}`,
-        clubName: (f.clubId && existing.clubs.find((c) => c.id === f.clubId)?.name) || 'Sans club',
-        disciplines: disciplines.join(', ') || '—',
-        fromFfk: f.fromFfk,
-        action: choices.orphans?.[f.fighterId] ?? 'keep',
-        version: f.version,
-      };
+      const { label, clubName, disciplines } = fighterDisplay(f, existing.clubs, grid);
+      return { fighterId: f.fighterId, label, clubName, disciplines, fromFfk: f.fromFfk, action: choices.orphans?.[f.fighterId] ?? 'keep', version: f.version };
     });
 
   const count = (s: FfkCardState) => cards.filter((c) => c.state === s).length;

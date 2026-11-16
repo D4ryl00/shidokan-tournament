@@ -80,13 +80,14 @@ test('renommer un club de compétition garde son entrée', async () => {
   expect(entries(d)).toHaveLength(1);
 });
 
-// Import FFK par cartes : réécrit à la Task 6 (étape 51).
-test.skip('import FFK : club créé → relié avec son numéro ; lien sûr vers un club existant → son entrée reçoit le numéro', async () => {
+test('import FFK : lien sûr vers un club existant ou lien choisi → son entrée d’annuaire reçoit le numéro de l’entité', async () => {
   const dbPath = tmpDbPath();
   app = await buildApp({ dbPath });
   const base = `/api/competitions/${(await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22' } })).json().id}`;
   const tpl = (await app.inject({ method: 'GET', url: `${base}/club-form.ods` })).rawPayload;
   await app!.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Tani Dojo' } }); // le club de la fiche existe déjà
+  // Club créé par l'organisateur (« Ajouter un club »), relié à la main : l'import ne crée plus de club.
+  const shin = (await app!.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Shinsengumi' } })).json().id as string;
   const form = fillClubForm(tpl, ['Tani Dojo', 'Coach', null, null, 'Non'], [['MARTIN', 'Léa', 'Féminin', 'Cadets', '-54', 'Karaté', 'Jiyu', '2', null, null]]);
   const send = (url: string, file: Buffer) => app!.inject({ method: 'POST', url, payload: file, headers: { 'content-type': 'application/octet-stream', 'x-file-name': 'export.xlsx' } });
   expect((await send(`${base}/club-forms/import`, form)).statusCode).toBe(200);
@@ -97,13 +98,16 @@ test.skip('import FFK : club créé → relié avec son numéro ; lien sûr vers
     ],
   });
   const up = (await send(`${base}/ffk-imports`, ffk)).json();
-  const commit = await app.inject({ method: 'POST', url: `${base}/ffk-imports/${up.uploadId}/commit`, payload: { sheets: up.sheets } });
+  const commit = await app.inject({
+    method: 'POST', url: `${base}/ffk-imports/${up.uploadId}/commit`,
+    payload: { sheets: up.sheets, choices: { clubLinks: { '0060789 SHINSENGUMI DOJO VESUBIE': shin } } },
+  });
   expect(commit.statusCode).toBe(200);
   const r = new Database(dbPath, { readonly: true });
   const rows = r.prepare('select c.name as club, e.affiliation_number as number from clubs c join club_directory e on e.id = c.directory_club_id order by c.name').all();
   r.close();
   expect(rows).toEqual([
-    { club: 'SHINSENGUMI DOJO VESUBIE', number: '0060789' },
+    { club: 'Shinsengumi', number: '0060789' },
     { club: 'Tani Dojo', number: '0060893' },
   ]);
 });

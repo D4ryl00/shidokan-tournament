@@ -214,8 +214,7 @@ test('import d’une fiche club après une saisie du coach : la fiche reste vide
   expect(changes().filter((c) => c.club_id === a.clubId)).toHaveLength(1);
 });
 
-// Import FFK par cartes : réécrit à la Task 6 (étape 51).
-test.skip('import FFK après une saisie du coach : pas de ligne créée, la ligne existante reste, coordonnées de la fiche inchangées', async () => {
+test('import FFK après une saisie du coach : pas de ligne créée, la ligne existante reste, coordonnées de la fiche inchangées', async () => {
   const a = await emptyFicheAccess();
   await a.save({ coachPhone: '0655555555' });
   const lines: FfkLine[] = [['MARTIN LEA', null, 'L001', '0060893 VIDE DOJO', 'Feminine', 'Karate', 'Cadet', -61, null], BLANK];
@@ -223,12 +222,12 @@ test.skip('import FFK après une saisie du coach : pas de ligne créée, la lign
   const up = (await app.inject({ method: 'POST', url: `/api/competitions/${a.other}/ffk-imports`, payload: file, headers: { 'content-type': 'application/octet-stream', 'x-file-name': 'export.xlsx' } })).json();
   const commit = await app.inject({ method: 'POST', url: `/api/competitions/${a.other}/ffk-imports/${up.uploadId}/commit`, payload: { sheets: up.sheets } });
   expect(commit.statusCode).toBe(200);
+  expect(commit.json()).toMatchObject({ created: 1 }); // club relié d'office (même nom)
   expect(await a.fiche()).toMatchObject({ coachPhone: null });
   expect(changes().filter((c) => c.club_id === a.clubId)).toHaveLength(1);
 });
 
-// Import FFK par cartes : réécrit à la Task 6 (étape 51).
-test.skip('import d’une fiche et import FFK d’un club neuf ne créent aucune ligne', async () => {
+test('import d’une fiche et import FFK d’un club neuf (relié à la main) ne créent aucune ligne', async () => {
   const repoDb = openDb(dbPath);
   const other = (await createCompetition(repoDb, { name: 'Autre', date: inDays(32) })).id;
   // Le club est créé avant l'import (choix du club), avec les coordonnées de la fiche : rien à examiner.
@@ -238,7 +237,12 @@ test.skip('import d’une fiche et import FFK d’un club neuf ne créent aucune
   expect(changes()).toHaveLength(0);
   const file = buildFfkWorkbook({ 'Coupe Shidokan Karate': [['MARTIN LEA', null, 'L001', '0060999 AUTRE DOJO', 'Feminine', 'Karate', 'Cadet', -61, null], BLANK] });
   const up = (await app.inject({ method: 'POST', url: `/api/competitions/${other}/ffk-imports`, payload: file, headers: { 'content-type': 'application/octet-stream', 'x-file-name': 'export.xlsx' } })).json();
-  expect((await app.inject({ method: 'POST', url: `/api/competitions/${other}/ffk-imports/${up.uploadId}/commit`, payload: { sheets: up.sheets } })).statusCode).toBe(200);
+  const commit = await app.inject({
+    method: 'POST', url: `/api/competitions/${other}/ffk-imports/${up.uploadId}/commit`,
+    payload: { sheets: up.sheets, choices: { clubLinks: { '0060999 AUTRE DOJO': neuf.id } } },
+  });
+  expect(commit.statusCode).toBe(200);
+  expect(commit.json()).toMatchObject({ created: 1 });
   expect(changes()).toHaveLength(0);
 });
 

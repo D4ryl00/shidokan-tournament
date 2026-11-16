@@ -96,6 +96,21 @@ describe('états des cartes', () => {
     expect(plan.cards[0]).toMatchObject({ state: 'todo', fighterId: null, value: null, missing: ['Catégorie d’âge', 'Club'], reason: 'reste à remplir : Catégorie d’âge, Club' });
   });
 
+  test('choix validé avec une catégorie de poids hors grille (décochée après validation) ou un club inconnu : à trancher, jamais écrit', () => {
+    const r = row({ lastName: 'PETIT', firstName: 'P', ageBandCode: 'poussin', weightLabel: '-20' });
+    const value = { line: line('PETIT', 'P', { ageBandCode: 'poussin', weightClassId: 'poussin:F:-20', licence: r.licence }), clubId: 'c1', publicNameHidden: false };
+    const cards = { [`L:${r.licence}`]: { kind: 'validated', fighterId: 'new', value } as FfkCardChoice };
+    expect(planFfkCards([r], grid, base(), { cards, acceptedWeightClasses: ['poussin:F:-20'] }).cards[0]).toMatchObject({ state: 'done', fighterId: 'new' });
+    const unticked = planFfkCards([r], grid, base(), { cards });
+    expect(unticked.cards[0]).toMatchObject({ state: 'todo', fighterId: null, value: null, reason: 'catégorie de poids absente de la grille' });
+    expect(unticked.summary).toMatchObject({ todo: 1, done: 0, creates: 0 });
+    // Une catégorie de la grille passe ; un club qui n'est pas dans la compétition, non.
+    const inGrid = { ...value, line: { ...value.line, ageBandCode: 'cadet', weightClassId: 'cadet:F:-54' } };
+    expect(planFfkCards([r], grid, base(), { cards: { [`L:${r.licence}`]: { kind: 'validated', fighterId: 'new', value: inGrid } } }).cards[0]!.state).toBe('done');
+    const ghost = planFfkCards([r], grid, base(), { cards: { [`L:${r.licence}`]: { kind: 'validated', fighterId: 'new', value: { ...inGrid, clubId: 'c-supprimé' } } } });
+    expect(ghost.cards[0]).toMatchObject({ state: 'todo', value: null, reason: 'club introuvable' });
+  });
+
   test('none et skip : todo / skip, rien importé', () => {
     const a = row();
     const b = row({ lastName: 'NOUVEAU', firstName: 'X' });
