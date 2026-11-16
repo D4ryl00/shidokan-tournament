@@ -76,13 +76,13 @@ describe('parseFfkRows', () => {
     const [r] = parse([['A B', null, '1', '1 C', 'Masculin', null, 'Senior', -75, null]], 'Boxe');
     expect(r!.discipline).toBe('shido-boxing');
   });
-  test('poids absent pour un combat', () => {
+  test('poids absent pour un combat → weightIssue', () => {
     const [r] = parse([['A B', null, '1', '1 C', 'Masculin', 'Karate', 'Senior', null, null]]);
-    expect(r!.errors.join(' ')).toContain('poids');
+    expect(r!.weightIssue).toContain('poids');
   });
-  test('catégorie ouverte inconnue → erreur', () => {
+  test('catégorie ouverte inconnue → weightIssue', () => {
     const [r] = parse([['A B', null, '1', '1 C', 'Masculin', 'Karate', 'Senior', '+80', null]]);
-    expect(r!.errors.join(' ')).toContain('+80');
+    expect(r!.weightIssue).toContain('+80');
   });
   test('catégorie non ouverte inconnue → pas d’erreur', () => {
     const [r] = parse([['A B', null, '1', '1 C', 'Feminine', 'Karate', 'Poussin', -20, null]]);

@@ -2,6 +2,7 @@ import { ageBandFromLabel, closedEntryWarning, normalizeLicence, rulesetFromLabe
 import { DISCIPLINES, disciplineFromLabel } from './disciplines.js';
 import { normalizeName, parseSex, splitFullName } from './names.js';
 import { weightClassesFor } from './grid.js';
+import { levenshtein } from './ffk-plan/cards.js';
 import { linkClubs, type ExistingClub } from './ffk-plan/clubs.js';
 import type { Fighter, Registration } from './registration.js';
 import type { CategoryGrid, DisciplineId, Ruleset, Sex, WeightClass } from './types.js';
@@ -95,6 +96,8 @@ export interface FfkRow {
   ruleset: Ruleset | null;
   /** Libellé normalisé (« -35 », « +84 ») ; null pour le kata. */
   weightLabel: string | null;
+  /** Poids illisible (non bloquant : la carte le signale) ; `weightLabel` reste alors null. */
+  weightIssue?: string | null;
   errors: string[];
   warnings: string[];
 }
@@ -151,18 +154,19 @@ export function parseFfkRows(
     const ruleset = columnRuleset ?? ageRuleset;
 
     let weightLabel: string | null = null;
+    let weightIssue: string | null = null;
     if (discipline && DISCIPLINES[discipline].hasWeight && sex && ageBandCode) {
       const res = resolveWeightCell(grid, ageBandCode, sex, get(row, 'weight'));
       if (res.kind === 'ok') {
         weightLabel = res.weightClass.label;
         if (res.warning) warnings.push(res.warning);
       } else if (res.kind === 'unknown') {
-        if (res.maxKg === null) errors.push(`Catégorie ouverte « ${res.label} » inconnue dans la grille pour cette catégorie d'âge.`);
+        if (res.maxKg === null) weightIssue = `Catégorie ouverte « ${res.label} » inconnue dans la grille pour cette catégorie d'âge.`;
         else {
           weightLabel = res.label;
           warnings.push(`Catégorie de poids « ${res.label} » absente de la grille : elle sera créée.`);
         }
-      } else errors.push(res.message);
+      } else weightIssue = res.message;
     }
 
     // Règlement absent : jiyu à l'import (comme le fait l'import lui-même).
@@ -184,6 +188,7 @@ export function parseFfkRows(
       discipline,
       ruleset,
       weightLabel,
+      weightIssue,
       errors,
       warnings,
     });
@@ -238,20 +243,6 @@ export interface FfkImportPlan {
   summary: { create: number; update: number; doubtful: number; errors: number; removals: number; newWeightClasses: number };
 }
 
-function levenshtein(a: string, b: string): number {
-  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    let diag = prev[0]!;
-    prev[0] = i;
-    for (let j = 1; j <= b.length; j++) {
-      const tmp = prev[j]!;
-      prev[j] = Math.min(prev[j]! + 1, prev[j - 1]! + 1, diag + (a[i - 1] === b[j - 1] ? 0 : 1));
-      diag = tmp;
-    }
-  }
-  return prev[b.length]!;
-}
-
 /** Adaptation temporaire (jusqu'à la Task 4) : l'ancien plan garde sa forme de lien de club. */
 function linkClubsForPlan(rows: FfkRow[], existing: ExistingData, choices: FfkChoices): PlanClubLink[] {
   const counts = new Map<string, { clubEntity: string; clubName: string; rows: number }>();
@@ -283,7 +274,9 @@ function linkClubsForPlan(rows: FfkRow[], existing: ExistingData, choices: FfkCh
 const fighterLabel = (f: Fighter, clubs: ExistingClub[]) =>
   `${f.lastName} ${f.firstName}${f.clubId ? ` (${clubs.find((c) => c.id === f.clubId)?.name ?? '?'})` : ''}`;
 
-export function planFfkImport(rows: FfkRow[], grid: CategoryGrid, existing: ExistingData, choices: FfkChoices = {}): FfkImportPlan {
+export function planFfkImport(rawRows: FfkRow[], grid: CategoryGrid, existing: ExistingData, choices: FfkChoices = {}): FfkImportPlan {
+  // Ancien plan (supprimé à la Task 4) : un poids illisible reste une erreur bloquante.
+  const rows = rawRows.map((r) => (r.weightIssue ? { ...r, errors: [...r.errors, r.weightIssue] } : r));
   const clubs = linkClubsForPlan(rows, existing, choices);
   const clubOf = (row: FfkRow): string | null => {
     const link = clubs.find((c) => c.clubEntity === row.clubEntity);
