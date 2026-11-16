@@ -247,3 +247,23 @@ export function galaxyLinks(nodes: GalaxyNode[], grid: CategoryGrid, settings: C
   }
   return [...links.values()].sort((x, y) => (x.a < y.a ? -1 : x.a > y.a ? 1 : x.b < y.b ? -1 : x.b > y.b ? 1 : 0));
 }
+
+/**
+ * Liens interdits par les réglages de la compétition (étape 49) : ceux du calcul avec tous les réglages ouverts
+ * (`withAllRules`, même ordre et même coupure) dont la paire n'est pas déjà reliée dans `allowed` (le calcul avec les
+ * réglages réels), dans un sens ou dans l'autre. `fromA` / `fromB` : règles du calcul ouvert. Les interdits qui ne
+ * viennent pas des réglages (mineur en shobu, jiyu → shobu, plus d'une tranche d'écart…) n'y sont pas non plus.
+ */
+export function forbiddenLinks(nodes: GalaxyNode[], grid: CategoryGrid, settings: CompetitionSettings, allowed: GalaxyLink[]): GalaxyLink[] {
+  const linked = new Set(allowed.map((l) => `${l.a}\n${l.b}`));
+  return galaxyLinks(nodes, grid, withAllRules(settings, grid)).filter((l) => !linked.has(`${l.a}\n${l.b}`));
+}
+
+/**
+ * Réglages qui interdisent un passage aux règles `rules` : les règles éteintes. Aucune, mais un mélange filles /
+ * garçons : sa tranche n'est pas cochée (l'interrupteur, lui, est ouvert).
+ */
+export function blockedRules(rules: RuleId[], settings: CompetitionSettings): RuleId[] {
+  const off = rules.filter((r) => !isRuleOn(settings, r));
+  return off.length === 0 && rules.includes('mixSexes') ? ['mixSexes'] : off;
+}

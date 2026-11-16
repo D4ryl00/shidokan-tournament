@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { freeKey, keyString, type CategoryKey } from '../../src/domain/categories.js';
-import { cellsOf, galaxyLinks, linkKind, rulesFrom, rulesRank, type GalaxyLink, type GalaxyNode } from '../../src/domain/galaxy/links.js';
+import { blockedRules, cellsOf, forbiddenLinks, galaxyLinks, linkKind, rulesFrom, rulesRank, type GalaxyLink, type GalaxyNode } from '../../src/domain/galaxy/links.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 import { defaultSettings, type CompetitionSettings } from '../../src/domain/settings.js';
 import type { DisciplineId, Ruleset } from '../../src/domain/types.js';
@@ -259,5 +259,66 @@ describe('rulesRank', () => {
     const broken = settings({ replacementRules: { ...s.replacementRules, order: s.replacementRules.order.filter((r) => r !== s.replacementRules.cutAfter) } });
     expect(rulesRank(['mixSexes'], broken).beyondCut).toBe(false);
     expect(rulesRank([], s)).toEqual({ rank: -1, beyondCut: false });
+  });
+});
+
+describe('forbiddenLinks', () => {
+  const mixJ = node(key('shido-mix', 'jiyu', 'M', ['junior'], ['junior:M:+76']));
+  const mixS = node(key('shido-mix', 'jiyu', 'M', ['senior'], ['senior:M:-84']));
+  const mixJ76 = node(key('shido-mix', 'jiyu', 'M', ['junior'], ['junior:M:-76']));
+
+  test('juniors → seniors, mélange mineurs / adultes fermé : interdit, la règle en cause nommée', () => {
+    const s = settings({ mixMinorsAdults: false });
+    const nodes = [mixJ, mixS, mixJ76];
+    const allowed = galaxyLinks(nodes, grid, s);
+    expect(between(allowed, mixJ, mixS)).toBeUndefined();
+    const forbidden = forbiddenLinks(nodes, grid, s, allowed);
+    const l = between(forbidden, mixJ, mixS)!;
+    expect(from(l, mixJ)).toEqual(['minorsAdults']);
+    expect(blockedRules(rulesFrom(l, mixJ.id), s)).toEqual(['minorsAdults']);
+    // La voisine de poids, permise, n'est pas dans les interdits.
+    expect(between(forbidden, mixJ, mixJ76)).toBeUndefined();
+  });
+
+  test('mélange ouvert : plus rien d’interdit entre ces deux-là', () => {
+    const s = settings({ mixMinorsAdults: true });
+    const allowed = galaxyLinks([mixJ, mixS], grid, s);
+    expect(between(allowed, mixJ, mixS)).toBeDefined();
+    expect(forbiddenLinks([mixJ, mixS], grid, s, allowed)).toEqual([]);
+  });
+
+  test('paire permise dans un sens : pas de lien interdit en plus', () => {
+    // ageUp éteint : cadets ↔ juniors reste relié par le sens permis (ageDown, vu des juniors).
+    const s = settings({ replacementRules: { ...defaultSettings().replacementRules, off: ['ageUp'] } });
+    const [c, j] = [kj('F', 'cadet', '-54'), kj('F', 'junior', '-53')];
+    const allowed = galaxyLinks([c, j], grid, s);
+    expect(between(allowed, c, j)).toBeDefined();
+    expect(between(forbiddenLinks([c, j], grid, s, allowed), c, j)).toBeUndefined();
+  });
+
+  test('règle de la liste éteinte : interdit, nommée', () => {
+    const s = settings({ replacementRules: { ...defaultSettings().replacementRules, off: ['discipline'] } });
+    const karate = kj('F', 'cadet', '-54');
+    const mix = node(key('shido-mix', 'jiyu', 'F', ['cadet'], ['cadet:F:-54']));
+    const allowed = galaxyLinks([karate, mix], grid, s);
+    expect(between(allowed, karate, mix)).toBeUndefined();
+    const l = between(forbiddenLinks([karate, mix], grid, s, allowed), karate, mix)!;
+    expect(blockedRules(rulesFrom(l, karate.id), s)).toEqual(['discipline']);
+  });
+
+  test('filles / garçons : interrupteur ouvert mais tranche non cochée → « mixSexes »', () => {
+    const s = settings({ mixSexes: { enabled: true, ageBandCodes: [] } });
+    const [f, m] = [kj('F', 'cadet', '-54'), kj('M', 'cadet', '-52')];
+    const allowed = galaxyLinks([f, m], grid, s);
+    expect(between(allowed, f, m)).toBeUndefined();
+    const l = between(forbiddenLinks([f, m], grid, s, allowed), f, m)!;
+    expect(blockedRules(rulesFrom(l, f.id), s)).toEqual(['mixSexes']);
+  });
+
+  test('jamais possible (cadette vers le shobu) : pas de lien interdit', () => {
+    const s = settings();
+    const cadet = kj('F', 'cadet', '-54');
+    const shobu = node(key('karate', 'shobu', 'F', ['senior'], ['senior:F:-55']));
+    expect(forbiddenLinks([cadet, shobu], grid, s, galaxyLinks([cadet, shobu], grid, s))).toEqual([]);
   });
 });
