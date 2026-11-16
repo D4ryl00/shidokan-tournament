@@ -79,3 +79,23 @@ function lineWarnings(regs: LineRegistration[]): string[] {
   if (new Set(combats.map((e) => e.weightClassId)).size > 1) warnings.push('Catégories de poids différentes selon les combats : à l’enregistrement, tous ses combats prennent celle choisie ici.');
   return warnings;
 }
+
+/** Disciplines commencées absentes de la ligne soumise : elles ne se retirent pas (« Karaté : commencé, ne se retire pas. »). */
+export function startedRemovedError(started: DisciplineId[], submitted: ClubFormLine): string | null {
+  const removed = started.filter((d) => (d === 'kata' ? !submitted.kata : !submitted.combats.includes(d as CombatDiscipline)));
+  return removed.length ? `${removed.map((d) => DISCIPLINES[d].label).join(', ')} : commencé, ne se retire pas.` : null;
+}
+
+/**
+ * Ligne d'un combattant dont des disciplines ont commencé, telle que l'organisateur peut l'écrire : sexe et âge gardés ; poids,
+ * règlement et reclassement gardés dès qu'un combat a commencé (le retrait d'une discipline commencée se vérifie à part).
+ */
+export function startedLine(saved: ClubFormLine, started: DisciplineId[], submitted: ClubFormLine): ClubFormLine {
+  const combatStarted = started.some((d) => d !== 'kata');
+  return {
+    ...submitted,
+    sex: saved.sex,
+    ageBandCode: saved.ageBandCode,
+    ...(combatStarted ? { weightClassId: saved.weightClassId, weightKg: saved.weightKg, ruleset: saved.ruleset, prefs: saved.prefs, shobuKeep: saved.shobuKeep } : {}),
+  };
+}

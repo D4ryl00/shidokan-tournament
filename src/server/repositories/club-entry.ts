@@ -2,7 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { closedEntryWarning, lineToRows, normalizeLicence, WEIGHT_MISSING, type ClubFormLine, type CombatDiscipline } from '../../domain/club-form.js';
 import { closedSummary, columnLabel, entryKey, isEntryClosed, offeredAgeBands } from '../../domain/closed-categories.js';
 import { DISCIPLINES } from '../../domain/disciplines.js';
-import { enteredValues, registrationsToLine } from '../../domain/club-line.js';
+import { enteredValues, registrationsToLine, startedLine, startedRemovedError } from '../../domain/club-line.js';
 import { renderPrivacyNotice } from '../../domain/app-settings.js';
 import { getAppSettings } from './app-settings.js';
 import { normalizeName } from '../../domain/names.js';
@@ -441,17 +441,9 @@ export function writeClubLineInTx(
  * règlement et reclassement gardés dès qu'un combat a commencé ; une discipline commencée ne se retire pas.
  */
 function startedMerge(current: ClubLine, submitted: ClubFormLine): ClubFormLine {
-  const started = current.startedDisciplines;
-  const removed = started.filter((d) => (d === 'kata' ? !submitted.kata : !submitted.combats.includes(d as CombatDiscipline)));
-  if (removed.length) throw new LineReadOnlyError(`${removed.map((d) => DISCIPLINES[d].label).join(', ')} : commencé, ne se retire pas.`);
-  const saved = current.line;
-  const combatStarted = started.some((d) => d !== 'kata');
-  return {
-    ...submitted,
-    sex: saved.sex,
-    ageBandCode: saved.ageBandCode,
-    ...(combatStarted ? { weightClassId: saved.weightClassId, weightKg: saved.weightKg, ruleset: saved.ruleset, prefs: saved.prefs, shobuKeep: saved.shobuKeep } : {}),
-  };
+  const removed = startedRemovedError(current.startedDisciplines, submitted);
+  if (removed) throw new LineReadOnlyError(removed);
+  return startedLine(current.line, current.startedDisciplines, submitted);
 }
 
 /** Vrai si l'une des inscriptions commencées a cette discipline déclarée. */

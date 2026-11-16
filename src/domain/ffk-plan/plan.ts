@@ -1,6 +1,8 @@
-import type { ClubFormLine } from '../club-form.js';
+import { lineToRows, WEIGHT_MISSING, type ClubFormLine } from '../club-form.js';
+import { startedLine, startedRemovedError } from '../club-line.js';
 import { DISCIPLINES } from '../disciplines.js';
 import type { FfkRow } from '../ffk-import.js';
+import { mergeWeightClasses } from '../grid.js';
 import { normalizeName } from '../names.js';
 import type { CategoryGrid, WeightClass } from '../types.js';
 import { buildCards, type ExistingFighter, type FfkCardDraft, type NewWeightClass } from './cards.js';
@@ -15,8 +17,11 @@ export interface ExistingData {
   aliases: Record<string, string>;
 }
 
-/** Décision de l’organisateur sur une carte : ne pas lier, écarter, ou valider (combattant + valeurs à enregistrer). */
-export type FfkCardChoice = { kind: 'none' } | { kind: 'skip' } | { kind: 'validated'; fighterId: string | 'new'; value: FfkCardValue };
+/**
+ * Décision de l’organisateur sur une carte : ne pas lier, écarter, ou valider (combattant + valeurs à enregistrer). `version` : celle de la
+ * fiche dont la carte est partie (aucune pour un nouveau combattant) ; si la fiche a changé depuis, la carte n’est pas écrite.
+ */
+export type FfkCardChoice = { kind: 'none' } | { kind: 'skip' } | { kind: 'validated'; fighterId: string | 'new'; value: FfkCardValue; version?: string };
 
 export interface FfkChoices {
   /** Catégories de poids absentes de la grille, cochées pour être créées. */
@@ -45,6 +50,8 @@ export interface FfkCard extends FfkCardDraft {
   reason: string | null;
   /** Version de la fiche retenue (empreinte de l’aperçu) ; `null` pour un nouveau combattant ou une carte non liée. */
   version: string | null;
+  /** Choix validé refusé par le plan : la carte est à trancher malgré sa validation (`reason` dit pourquoi). */
+  rejected: boolean;
 }
 
 export interface FfkOrphan {
@@ -112,8 +119,37 @@ export const HOMONYM = 'même nom qu’un autre combattant du club : changez le 
 export const FIGHTER_GONE = 'combattant introuvable';
 export const WEIGHT_CLASS_GONE = 'catégorie de poids absente de la grille';
 export const CLUB_GONE = 'club introuvable';
-/** Raisons pour lesquelles une carte validée est quand même laissée de côté (la page ne la montre pas « Validée »). */
-export const VALIDATED_REJECTIONS: readonly string[] = [FIGHTER_GONE, WEIGHT_CLASS_GONE, CLUB_GONE, ALREADY_RETAINED, HOMONYM];
+export const FICHE_CHANGED = 'fiche modifiée depuis la validation : revalidez la carte';
+export const STARTED_CLUB = 'combats commencés : le club ne change plus';
+
+/** Carte retenue remise à trancher : rien n’est écrit ; refusée si c’était un choix validé. */
+const demoted = (c: FfkCard, reason: string): FfkCard =>
+  ({ ...c, state: 'todo', fighterId: null, value: null, changes: [], version: null, reason, rejected: c.state === 'done' });
+
+/** Tolérance de pesée : sans effet ici, une carte retenue a toujours sa catégorie de poids (`missingFields`). */
+const NO_TOLERANCE = { M: 0, F: 0 };
+
+/** « Le Shobu … (Cadets). » → « le Shobu … (Cadets) » : une erreur d’enregistrement dite comme raison. */
+const asReason = (error: string) => error.replace(/\.$/, '').replace(/^./, (c) => c.toLowerCase());
+
+/**
+ * Ce que l’enregistrement de la carte (`writeClubLineInTx`, organisateur) refuserait : la première erreur, ou `null`.
+ * Combats commencés : le club ne change plus, une discipline commencée ne se retire pas, ce qui a commencé est gardé ;
+ * puis la ligne, avec la grille de l’import (catégories cochées comprises).
+ */
+function writeError(value: FfkCardValue, saved: ExistingFighter | null, grid: CategoryGrid): string | null {
+  let line = value.line;
+  if (saved && saved.startedDisciplines.length) {
+    if (saved.clubId !== value.clubId) return STARTED_CLUB;
+    const removed = startedRemovedError(saved.startedDisciplines, line);
+    if (removed) return asReason(removed);
+    line = startedLine(saved.line, saved.startedDisciplines, line);
+  }
+  const rows = lineToRows(line, 1, grid, NO_TOLERANCE, new Set(), { multipleCombats: true });
+  const error = rows.flatMap((r) => r.errors).find((e) => e !== WEIGHT_MISSING);
+  if (error) return asReason(error);
+  return rows.some((r) => !r.input) ? 'ligne refusée à l’enregistrement' : null;
+}
 
 /** Clé de doublon de l’enregistrement d’une ligne (`duplicateOf`) : même nom, même sexe, même club ; sans club, jamais un doublon. */
 const homonymKey = (line: ClubFormLine, clubId: string | null): string | null =>
@@ -147,7 +183,7 @@ function demoteHomonyms(cards: FfkCard[], fighters: ExistingFighter[]): void {
     });
     const colliding = [...groups.values()].flatMap((g) => (g.settled + g.cards.filter((c) => !c.settled).length > 1 ? g.cards.filter((c) => !c.settled || g.settled > 1) : []));
     if (!colliding.length) return;
-    for (const { i } of colliding) cards[i] = { ...cards[i]!, state: 'todo', fighterId: null, value: null, changes: [], version: null, reason: HOMONYM };
+    for (const { i } of colliding) cards[i] = demoted(cards[i]!, HOMONYM);
   }
 }
 
@@ -171,30 +207,37 @@ const unique = (items: string[]) => [...new Set(items)];
 interface Known {
   weightClassIds: ReadonlySet<string>;
   clubIds: ReadonlySet<string>;
+  /** Grille telle que l’import l’écrira (catégories cochées ajoutées), pour vérifier l’enregistrement. */
+  grid: CategoryGrid;
 }
 
 function planCard(draft: FfkCardDraft, choice: FfkCardChoice | undefined, fighters: Map<string, ExistingFighter>, labels: ChangeLabels, known: Known): FfkCard {
   const fighter = (id: string | null) => (id && id !== 'new' ? (fighters.get(id) ?? null) : null);
   const base: FfkCard = {
-    ...draft, state: 'todo', fighterId: null, value: null, diffs: ffkCardDiffs(draft, fighter(draft.sure)), missing: [], changes: [], reason: null, version: null,
+    ...draft, state: 'todo', fighterId: null, value: null, diffs: ffkCardDiffs(draft, fighter(draft.sure)), missing: [], changes: [], reason: null, version: null, rejected: false,
   };
-  const retained = (fighterId: string | 'new', value: FfkCardValue, saved: ExistingFighter | null, state: 'auto' | 'done'): FfkCard => ({
-    ...base, state, fighterId, value, diffs: ffkCardDiffs(draft, saved), changes: cardChanges(saved, value, labels), version: saved?.version ?? null,
-  });
+  /** Retenue si l’enregistrement l’accepte ; sinon à trancher, avec la première erreur (refusée si c’était un choix validé). */
+  const retained = (fighterId: string | 'new', value: FfkCardValue, saved: ExistingFighter | null, state: 'auto' | 'done'): FfkCard => {
+    const diffs = ffkCardDiffs(draft, saved);
+    const error = writeError(value, saved, known.grid);
+    if (error) return { ...base, diffs, reason: error, rejected: state === 'done' };
+    return { ...base, state, fighterId, value, diffs, changes: cardChanges(saved, value, labels), version: saved?.version ?? null };
+  };
 
   if (choice?.kind === 'skip') return { ...base, state: 'skip' };
   if (choice?.kind === 'none') return { ...base, reason: 'combattant pas choisi' };
   if (choice?.kind === 'validated') {
     const saved = fighter(choice.fighterId);
-    if (choice.fighterId !== 'new' && !saved) return { ...base, reason: FIGHTER_GONE };
+    const rejected = (reason: string, missing: string[] = []): FfkCard => ({ ...base, diffs: ffkCardDiffs(draft, saved), missing, reason, rejected: true });
+    if (choice.fighterId !== 'new' && !saved) return { ...base, reason: FIGHTER_GONE, rejected: true };
+    // Fiche modifiée ailleurs depuis que la carte en est partie : la valeur validée l’écraserait.
+    if (saved && saved.version !== choice.version) return rejected(FICHE_CHANGED);
     const missing = missingFields(choice.value);
-    if (missing.length) return { ...base, diffs: ffkCardDiffs(draft, saved), missing, reason: `reste à remplir : ${missing.join(', ')}` };
+    if (missing.length) return rejected(`reste à remplir : ${missing.join(', ')}`, missing);
     // Valeur devenue impossible depuis sa validation (catégorie décochée, club supprimé) : jamais écrite.
     const { line } = choice.value;
-    if (line.combats.length && line.weightClassId && !known.weightClassIds.has(line.weightClassId)) {
-      return { ...base, diffs: ffkCardDiffs(draft, saved), reason: WEIGHT_CLASS_GONE };
-    }
-    if (!known.clubIds.has(choice.value.clubId!)) return { ...base, diffs: ffkCardDiffs(draft, saved), reason: CLUB_GONE };
+    if (line.combats.length && line.weightClassId && !known.weightClassIds.has(line.weightClassId)) return rejected(WEIGHT_CLASS_GONE);
+    if (!known.clubIds.has(choice.value.clubId!)) return rejected(CLUB_GONE);
     return retained(choice.fighterId, choice.value, saved, 'done');
   }
 
@@ -227,9 +270,11 @@ export function planFfkCards(rows: FfkRow[], grid: CategoryGrid, existing: Exist
   const labels = changeLabels(grid, newWeightClasses, existing.clubs);
   const byId = new Map(existing.fighters.map((f) => [f.fighterId, f]));
 
+  const added: WeightClass[] = newWeightClasses.filter((w) => accepted.has(w.id)).map(({ rows: _r, fighters: _f, ...w }) => w);
   const known: Known = {
-    weightClassIds: new Set([...grid.weightClasses, ...newWeightClasses.filter((w) => accepted.has(w.id))].map((w) => w.id)),
+    weightClassIds: new Set([...grid.weightClasses, ...added].map((w) => w.id)),
     clubIds: new Set(existing.clubs.map((c) => c.id)),
+    grid: mergeWeightClasses(grid, added),
   };
   const cards = drafts.map((d) => planCard(d, choices.cards?.[d.key], byId, labels, known));
   // Un combattant n’est écrit que par une carte : un choix validé passe avant un rapprochement d’office, puis l’ordre de l’export.
@@ -237,7 +282,7 @@ export function planFfkCards(rows: FfkRow[], grid: CategoryGrid, existing: Exist
   for (const pass of ['done', 'auto'] as const) {
     cards.forEach((c, i) => {
       if (c.state !== pass || !c.fighterId || c.fighterId === 'new') return;
-      if (claimed.has(c.fighterId)) cards[i] = { ...c, state: 'todo', fighterId: null, value: null, changes: [], version: null, reason: ALREADY_RETAINED };
+      if (claimed.has(c.fighterId)) cards[i] = demoted(c, ALREADY_RETAINED);
       else claimed.add(c.fighterId);
     });
   }

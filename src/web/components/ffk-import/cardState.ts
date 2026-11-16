@@ -1,4 +1,4 @@
-import { VALIDATED_REJECTIONS, type FfkCard, type FfkCardChoice } from '../../../domain/ffk-plan/plan.js';
+import type { FfkCard, FfkCardChoice } from '../../../domain/ffk-plan/plan.js';
 import { initialValue, missingFields, type FfkCardValue } from '../../../domain/ffk-plan/values.js';
 import type { ExistingFighter } from '../../../domain/ffk-plan/cards.js';
 import type { ClubFormLine } from '../../../domain/club-form.js';
@@ -7,8 +7,10 @@ import { disciplineLabel } from '../../labels.js';
 /**
  * Ce que l’organisateur a en cours sur une carte, avant « Valider la carte » : le combattant choisi (`'new'` : nouveau) et les
  * valeurs du formulaire. `dirty` : choisi ou modifié ici (la carte est alors laissée de côté à l’import tant qu’elle n’est pas validée).
+ * `version` : celle de la fiche dont les valeurs sont parties (`null` : nouveau combattant) ; validée, la carte n’écrase pas une
+ * fiche modifiée depuis.
  */
-export interface CardDraft { fighterId: string | 'new' | null; value: FfkCardValue; dirty: boolean }
+export interface CardDraft { fighterId: string | 'new' | null; value: FfkCardValue; dirty: boolean; version: string | null }
 
 /** État d’une carte sur la page : celui de l’aperçu, plus « À valider » (`pending` : modifiée, pas validée). */
 export type PageCardState = 'todo' | 'pending' | 'done' | 'auto' | 'skip';
@@ -23,7 +25,7 @@ export type CardFilter = 'todo' | 'done' | 'auto' | 'all';
 export function pageState(card: FfkCard, draft: CardDraft | undefined, choice: FfkCardChoice | undefined): PageCardState {
   if (choice?.kind === 'skip') return 'skip';
   if (draft?.dirty) return draft.fighterId !== null && missingFields(draft.value).length === 0 ? 'pending' : 'todo';
-  if (choice?.kind === 'validated') return card.state === 'todo' && card.reason !== null && VALIDATED_REJECTIONS.includes(card.reason) ? 'todo' : 'done';
+  if (choice?.kind === 'validated') return card.rejected ? 'todo' : 'done';
   if (choice?.kind === 'none') return 'todo';
   return card.state;
 }
@@ -56,13 +58,19 @@ export function chosenFighter(card: FfkCard, draft: CardDraft | undefined, choic
 /**
  * Valeurs que montre la carte ouverte : le brouillon, sinon le choix validé, sinon la valeur de départ du combattant de l’aperçu
  * (`initialValue` : rien de pris d’office là où l’export et la fiche diffèrent). `null` : aucun combattant choisi.
+ * Choix validé dont la fiche a changé depuis (autre poste, coach) : la carte repart de la fiche telle qu’elle est maintenant.
  */
 export function workingDraft(card: FfkCard, draft: CardDraft | undefined, choice: FfkCardChoice | undefined, fighter: (id: string) => ExistingFighter | null): CardDraft | null {
   if (draft) return draft;
-  if (choice?.kind === 'validated') return { fighterId: choice.fighterId, value: choice.value, dirty: false };
+  if (choice?.kind === 'validated') {
+    const saved = choice.fighterId === 'new' ? null : fighter(choice.fighterId);
+    if (!saved || saved.version === choice.version) return { fighterId: choice.fighterId, value: choice.value, dirty: false, version: choice.version ?? null };
+    return { fighterId: choice.fighterId, value: initialValue(card, saved), dirty: false, version: saved.version };
+  }
   const fighterId = chosenFighter(card, draft, choice);
   if (fighterId === null) return null;
-  return { fighterId, value: initialValue(card, fighterId === 'new' ? null : fighter(fighterId)), dirty: false };
+  const saved = fighterId === 'new' ? null : fighter(fighterId);
+  return { fighterId, value: initialValue(card, saved), dirty: false, version: saved?.version ?? null };
 }
 
 /** « Karaté, Kata » : les disciplines d’une ligne ; « — » sans discipline. */

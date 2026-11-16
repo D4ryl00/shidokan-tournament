@@ -192,8 +192,8 @@ function hint(card: FfkCard, state: PageCardState, chosen: string | 'new' | null
     const why = !stale && card.reason && card.reason !== 'combattant pas choisi' ? ` (${card.reason})` : '';
     return `Choisissez le combattant pour ouvrir la carte. Sinon cette ligne n’est pas importée${why}.`;
   }
-  // Validée, mais refusée par l’aperçu (combattant déjà retenu, club ou catégorie disparus…).
-  if (choice?.kind === 'validated' && !stale && card.reason) return `Validée, mais laissée de côté : ${card.reason}. Ouvrez-la pour corriger.`;
+  // Validée, mais refusée par l’aperçu (fiche modifiée depuis, combattant déjà retenu, club ou catégorie disparus, enregistrement refusé…).
+  if (choice?.kind === 'validated' && !stale && card.rejected && card.reason) return `Validée, mais laissée de côté : ${card.reason}. Ouvrez-la pour corriger.`;
   const missing = working ? missingFields(working.value) : [];
   if (missing.length) return `Reste à remplir : ${missing.join(', ').toLowerCase()}. Cliquez sur le combattant pour ouvrir la carte.`;
   return 'Cliquez sur le combattant pour ouvrir la carte.';

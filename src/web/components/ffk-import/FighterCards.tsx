@@ -93,8 +93,8 @@ export function FighterCards({ competitionId, plan, grid, choices, updateChoices
       setOpenKey(toggle && openKey === key ? null : key);
       return;
     }
-    const value = initialValue(card, target === 'new' ? null : env.fighter(target));
-    setDrafts((d) => ({ ...d, [key]: { fighterId: target, value, dirty: true } }));
+    const saved = target === 'new' ? null : env.fighter(target);
+    setDrafts((d) => ({ ...d, [key]: { fighterId: target, value: initialValue(card, saved), dirty: true, version: saved?.version ?? null } }));
     unsettle(key);
     setOpenKey(key);
   };
@@ -114,7 +114,8 @@ export function FighterCards({ competitionId, plan, grid, choices, updateChoices
       validate: () => {
         const working = workingDraft(card, drafts[key], choices.cards?.[key], env.fighter);
         if (!working || working.fighterId === null) return;
-        setChoice(key, { kind: 'validated', fighterId: working.fighterId, value: working.value });
+        // La version de la fiche dont la carte est partie : l’import n’écrase pas une fiche modifiée depuis.
+        setChoice(key, { kind: 'validated', fighterId: working.fighterId, value: working.value, ...(working.version ? { version: working.version } : {}) });
         dropDraft(key);
         // La carte suivante à trancher s’ouvre, et la page y défile.
         const next = nextToSettle(cards, key, { ...states, [key]: 'done' });

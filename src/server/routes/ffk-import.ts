@@ -27,6 +27,8 @@ const bodySchema = z.object({
               kind: z.literal('validated'),
               fighterId: z.string().min(1),
               value: z.object({ line: clubFormLineSchema, clubId: z.string().nullable(), publicNameHidden: z.boolean() }),
+              /** Version de la fiche dont la carte est partie : une fiche modifiée depuis n’est pas écrasée. */
+              version: z.string().min(1).optional(),
             }),
           ]),
         )

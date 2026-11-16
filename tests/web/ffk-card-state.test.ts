@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import type { ClubFormLine } from '../../src/domain/club-form.js';
 import { ALREADY_RETAINED, type FfkCard, type FfkCardState } from '../../src/domain/ffk-plan/plan.js';
+import type { ExistingFighter } from '../../src/domain/ffk-plan/cards.js';
 import type { FfkCardValue } from '../../src/domain/ffk-plan/values.js';
-import { nextToSettle, pageState, type CardDraft, type PageCardState } from '../../src/web/components/ffk-import/cardState.js';
+import { nextToSettle, pageState, workingDraft, type CardDraft, type PageCardState } from '../../src/web/components/ffk-import/cardState.js';
 
 const line: ClubFormLine = {
   lastName: 'NAVARO', firstName: 'Tess', sex: 'F', ageBandCode: 'B', weightClassId: 'B:F:-35', weightKg: null, combats: ['karate'], kata: false,
@@ -10,13 +11,13 @@ const line: ClubFormLine = {
 };
 const value: FfkCardValue = { line, clubId: 'club-1', publicNameHidden: false };
 
-const card = (key: string, state: FfkCardState, reason: string | null = state === 'todo' ? 'combattant pas choisi' : null): FfkCard => ({
+const card = (key: string, state: FfkCardState, reason: string | null = state === 'todo' ? 'combattant pas choisi' : null, rejected = false): FfkCard => ({
   key, rows: [], exportLine: line, clubEntity: '0060690 ETOILE', clubId: 'club-1', weightIssue: null, notes: [], candidates: [], sure: null,
   state, fighterId: state === 'auto' || state === 'done' ? 'f-1' : null, value: state === 'auto' || state === 'done' ? value : null,
-  diffs: [], missing: [], changes: [], reason, version: null,
+  diffs: [], missing: [], changes: [], reason, version: null, rejected,
 });
 
-const draft = (patch: Partial<CardDraft> = {}): CardDraft => ({ fighterId: 'f-1', value, dirty: true, ...patch });
+const draft = (patch: Partial<CardDraft> = {}): CardDraft => ({ fighterId: 'f-1', value, dirty: true, version: 'v1', ...patch });
 
 describe('pageState', () => {
   test('carte non touchée : l’état de l’aperçu', () => {
@@ -42,14 +43,33 @@ describe('pageState', () => {
     expect(pageState(card('a', 'done'), undefined, { kind: 'validated', fighterId: 'f-1', value })).toBe('done');
   });
 
-  test('choix validé que l’aperçu a refusé (combattant déjà retenu, club disparu…) → « À trancher »', () => {
-    expect(pageState(card('a', 'todo', ALREADY_RETAINED), undefined, { kind: 'validated', fighterId: 'f-1', value })).toBe('todo');
-    expect(pageState(card('a', 'todo', 'club introuvable'), undefined, { kind: 'validated', fighterId: 'f-1', value })).toBe('todo');
+  test('choix validé que l’aperçu a refusé (combattant déjà retenu, club disparu, fiche modifiée…) → « À trancher »', () => {
+    expect(pageState(card('a', 'todo', ALREADY_RETAINED, true), undefined, { kind: 'validated', fighterId: 'f-1', value })).toBe('todo');
+    expect(pageState(card('a', 'todo', 'club introuvable', true), undefined, { kind: 'validated', fighterId: 'f-1', value })).toBe('todo');
+    // Remise à trancher d’une autre carte, sans refus : la validation passe.
+    expect(pageState(card('a', 'todo', ALREADY_RETAINED), undefined, { kind: 'validated', fighterId: 'f-1', value })).toBe('done');
   });
 
   test('écartée, ou « Ne pas lier pour l’instant »', () => {
     expect(pageState(card('a', 'auto'), undefined, { kind: 'skip' })).toBe('skip');
     expect(pageState(card('a', 'auto'), undefined, { kind: 'none' })).toBe('todo');
+  });
+});
+
+describe('workingDraft : version de la fiche', () => {
+  const saved = (version: string): ExistingFighter => ({
+    fighterId: 'f-1', clubId: 'club-1', licence: null, line: { ...line, weightKg: 31 }, publicNameHidden: true, version,
+    editable: true, partlyEditable: false, startedDisciplines: [], fromFfk: false,
+  });
+  test('carte non touchée : la version de la fiche rapprochée ; nouveau combattant : aucune', () => {
+    expect(workingDraft(card('a', 'auto'), undefined, undefined, () => saved('v1'))).toMatchObject({ fighterId: 'f-1', version: 'v1' });
+    expect(workingDraft({ ...card('a', 'auto'), fighterId: 'new' }, undefined, undefined, () => null)).toMatchObject({ fighterId: 'new', version: null });
+  });
+  test('choix validé : ses valeurs et sa version ; fiche modifiée depuis : repart de la fiche actuelle', () => {
+    const choice = { kind: 'validated' as const, fighterId: 'f-1', value, version: 'v1' };
+    expect(workingDraft(card('a', 'done'), undefined, choice, () => saved('v1'))).toEqual({ fighterId: 'f-1', value, dirty: false, version: 'v1' });
+    const fresh = workingDraft(card('a', 'todo', 'fiche modifiée', true), undefined, choice, () => saved('v2'))!;
+    expect(fresh).toMatchObject({ fighterId: 'f-1', version: 'v2', value: { publicNameHidden: true, line: { weightKg: 31 } } });
   });
 });
 
