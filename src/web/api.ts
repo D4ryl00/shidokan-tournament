@@ -258,10 +258,13 @@ export function useUploadFfk(id: string) {
   });
 }
 
+/** Aperçu de l’import FFK : le plan par cartes, son empreinte (exigée par « Importer ») et les combattants de la compétition à chercher. */
+export type FfkPreview = FfkCardsPlan & { fingerprint: string; fighters: FfkSearchFighter[] };
+
 export function usePreviewFfk(id: string) {
   return useMutation({
     mutationFn: ({ uploadId, sheets, choices }: { uploadId: string; sheets: FfkSheetSetup[]; choices: FfkChoices }) =>
-      api<FfkCardsPlan & { fingerprint: string; fighters: FfkSearchFighter[] }>('POST', `/api/competitions/${id}/ffk-imports/${uploadId}/preview`, { sheets, choices }),
+      api<FfkPreview>('POST', `/api/competitions/${id}/ffk-imports/${uploadId}/preview`, { sheets, choices }),
   });
 }
 
