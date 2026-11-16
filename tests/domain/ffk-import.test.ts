@@ -7,7 +7,7 @@ import {
   type ColumnMapping,
 } from '../../src/domain/ffk-import.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
-import { BLANK, FFK_HEADER } from '../helpers/ffk-fixture.js';
+import { BLANK, FFK_HEADER, FFK_HEADER_2026 } from '../helpers/ffk-fixture.js';
 
 const grid = ffkDefaultGrid();
 const STD: ColumnMapping = { lastName: 0, firstName: 1, licence: 2, club: 3, sex: 4, discipline: 5, ageBand: 6, weight: 7, ruleset: 8 };
@@ -97,7 +97,7 @@ describe('parseFfkRows', () => {
 });
 
 describe('export FFK 2026-2027 (Prénom avant Nom, « Technique », règlement dans l’âge)', () => {
-  const NEW_HEADER = ['Prénom', 'Nom', 'Numero', 'Entite rattachement', 'Genre', 'Type', 'Age', 'Categorie', 'Technique'];
+  const NEW_HEADER = FFK_HEADER_2026;
   const mapping = guessColumnMapping(NEW_HEADER);
   const parse = (lines: (string | number | null)[][], sheet = 'Mix Martial') => parseFfkRows([NEW_HEADER, ...lines], 0, mapping, sheet, grid);
 
