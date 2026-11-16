@@ -48,7 +48,7 @@ export function PaperEntryTable({ competitionId, grid }: { competitionId: string
   const offered = offeredAgeBands(grid, new Set((closedView?.closed ?? []).map(entryKey)));
   const abbr = ageBandAbbreviations(offered);
   const bands = offered.map((b) => [b.code, abbr.get(b.code)!] as [string, string]);
-  const isEmpty = (l: ClubFormLine) => !l.lastName && !l.firstName && !l.sex && !l.ageBandCode && l.weightKg === null && !l.combats.length && !l.kata && !l.grade && !l.ruleset && !Object.keys(l.prefs).length && !l.shobuKeep;
+  const isEmpty = (l: ClubFormLine) => !l.lastName && !l.firstName && !l.licence && !l.sex && !l.ageBandCode && l.weightKg === null && !l.combats.length && !l.kata && !l.grade && !l.ruleset && !Object.keys(l.prefs).length && !l.shobuKeep;
   useUnsaved('paper-entry', !!choice || lines.some((l) => !isEmpty(l)));
 
   const changed = () => {
@@ -101,10 +101,10 @@ export function PaperEntryTable({ competitionId, grid }: { competitionId: string
         <Checkbox mt="lg" label="Pré-accord du coach (poids et âge)" checked={preApproval} onChange={(e) => { changed(); setPreApproval(e.currentTarget.checked); }} />
       </SimpleGrid>
       <ScrollArea type="auto" offsetScrollbars="x">
-        <Table withTableBorder withColumnBorders miw={1440} verticalSpacing={4}>
+        <Table withTableBorder withColumnBorders miw={1550} verticalSpacing={4}>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Nom</Table.Th><Table.Th>Prénom</Table.Th><Table.Th>Sexe</Table.Th><Table.Th>Catégorie d’âge</Table.Th>
+              <Table.Th>Nom</Table.Th><Table.Th>Prénom</Table.Th><Table.Th>N° de licence</Table.Th><Table.Th>Sexe</Table.Th><Table.Th>Catégorie d’âge</Table.Th>
               <Table.Th>Poids actuel</Table.Th><Table.Th>Disciplines</Table.Th><Table.Th>Grade</Table.Th><Table.Th>Règlement</Table.Th>
               <Table.Th>Si seul : autre discipline ? (1, 2, 3)</Table.Th><Table.Th>Shobu : si seul, d’abord…</Table.Th>
             </Table.Tr>
@@ -114,6 +114,7 @@ export function PaperEntryTable({ competitionId, grid }: { competitionId: string
               <Table.Tr key={i} data-testid="paper-entry-row">
                 <Table.Td w={150}><TextInput size="xs" aria-label="Nom" value={l.lastName} onChange={(e) => setLine(i, { lastName: e.currentTarget.value })} /></Table.Td>
                 <Table.Td w={130}><TextInput size="xs" aria-label="Prénom" value={l.firstName} onChange={(e) => setLine(i, { firstName: e.currentTarget.value })} /></Table.Td>
+                <Table.Td w={110}><TextInput size="xs" aria-label="N° de licence" value={l.licence ?? ''} onChange={(e) => setLine(i, { licence: e.currentTarget.value || null })} /></Table.Td>
                 <Table.Td role="group" aria-label={`Ligne ${i + 1} — Sexe`}><OneOf value={l.sex} options={[['F', 'F'], ['M', 'M']]} onChange={(sex) => setLine(i, { sex })} /></Table.Td>
                 <Table.Td role="group" aria-label={`Ligne ${i + 1} — Catégorie d’âge`} w={280}><OneOf value={l.ageBandCode} options={bands} onChange={(ageBandCode) => setLine(i, { ageBandCode })} /></Table.Td>
                 <Table.Td w={90}>

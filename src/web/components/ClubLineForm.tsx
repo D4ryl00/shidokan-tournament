@@ -169,6 +169,8 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
               <TextInput data-testid="line-first-name" label={labelled('Prénom', 'name')} required value={form.firstName} onChange={(e) => set({ firstName: e.currentTarget.value })} />
             </SimpleGrid>
             {hint('name')}
+            <TextInput data-testid="line-licence" label="N° de licence (facultatif)" value={form.licence ?? ''} onChange={(e) => set({ licence: e.currentTarget.value || null })} />
+            {choice('licence')}
             </Part>
             <Part disabled={locked}>
             <Input.Wrapper label={labelled('Sexe', 'sex')} required labelElement="div" role="group" aria-label="Sexe">
