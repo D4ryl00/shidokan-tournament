@@ -237,7 +237,13 @@ export function planFfkCards(rows: FfkRow[], grid: CategoryGrid, existing: Exist
 
   // Fiches sans inscription FFK : aucune carte ne les retient (ou une carte remise à trancher), et elles ne sont candidates d’aucune carte laissée de côté.
   const concerned = new Set(claimed);
-  for (const c of cards) if (c.state === 'todo' || c.state === 'skip') for (const k of c.candidates) concerned.add(k.fighterId);
+  for (const c of cards) {
+    if (c.state !== 'todo' && c.state !== 'skip') continue;
+    for (const k of c.candidates) concerned.add(k.fighterId);
+    // Combattant choisi (par la recherche, hors candidats) d’une carte validée retombée à trancher : laissé de côté avec elle.
+    const choice = choices.cards?.[c.key];
+    if (choice?.kind === 'validated' && choice.fighterId !== 'new') concerned.add(choice.fighterId);
+  }
   const orphans = existing.fighters
     .filter((f) => !concerned.has(f.fighterId))
     .map((f): FfkOrphan => {

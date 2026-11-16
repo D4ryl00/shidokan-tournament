@@ -268,7 +268,7 @@ export function usePreviewFfk(id: string) {
 export function useCommitFfk(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ uploadId, sheets, choices, fingerprint }: { uploadId: string; sheets: FfkSheetSetup[]; choices: FfkChoices; fingerprint?: string }) =>
+    mutationFn: ({ uploadId, sheets, choices, fingerprint }: { uploadId: string; sheets: FfkSheetSetup[]; choices: FfkChoices; fingerprint: string }) =>
       api<FfkImportResult>(
         'POST',
         `/api/competitions/${id}/ffk-imports/${uploadId}/commit`,

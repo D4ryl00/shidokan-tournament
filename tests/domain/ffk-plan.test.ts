@@ -206,6 +206,22 @@ describe('orphelins et récapitulatif', () => {
     ]);
   });
 
+  test('combattant choisi par la recherche d’une carte validée retombée à trancher : jamais orphelin', () => {
+    const ex = base();
+    ex.fighters.push(fighter('f9', 'c2', 'LOIN', 'Paula')); // ni candidat, ni rapproché
+    const r = row({ lastName: 'PETIT', firstName: 'P', ageBandCode: 'poussin', weightLabel: '-20' });
+    const value = { line: line('LOIN', 'Paula', { ageBandCode: 'poussin', weightClassId: 'poussin:F:-20', licence: r.licence }), clubId: 'c2', publicNameHidden: false };
+    const cards = { [`L:${r.licence}`]: { kind: 'validated', fighterId: 'f9', value } as FfkCardChoice };
+    // Catégorie cochée : la carte est validée, f9 retenu.
+    expect(planFfkCards([r], grid, ex, { cards, acceptedWeightClasses: ['poussin:F:-20'] }).cards[0]).toMatchObject({ state: 'done', fighterId: 'f9' });
+    // Décochée ensuite : la carte retombe à trancher, f9 n’est pas proposé à la suppression (ni passé non confirmé).
+    const plan = planFfkCards([r], grid, ex, { cards, orphans: { f9: 'delete' } });
+    expect(plan.cards[0]).toMatchObject({ state: 'todo', reason: 'catégorie de poids absente de la grille' });
+    expect(plan.cards[0]!.candidates.map((c) => c.fighterId)).not.toContain('f9');
+    expect(plan.orphans.map((o) => o.fighterId)).toEqual(['f1']);
+    expect(plan.summary.deletes).toBe(0);
+  });
+
   test('orphelin dont un combat a commencé : pas supprimable, un choix « delete » est ignoré (gardé)', () => {
     const ex = base();
     ex.fighters.push(

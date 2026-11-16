@@ -131,8 +131,11 @@ async function preview(up: Upload, choices: object = {}, at = base): Promise<Pre
   expect(res.statusCode).toBe(200);
   return res.json() as Preview;
 }
-const commit = (up: Upload, choices: object = {}, fingerprint?: string) =>
-  json('POST', `${base}/ffk-imports/${up.uploadId}/commit`, { sheets: up.sheets, choices, ...(fingerprint ? { fingerprint } : {}) });
+/** Import avec l'empreinte donnée, sinon celle d'un aperçu relancé à l'instant (comme la page, qui l'envoie toujours). */
+async function commit(up: Upload, choices: object = {}, fingerprint?: string, sheets: unknown[] = up.sheets) {
+  fingerprint ??= (await json('POST', `${base}/ffk-imports/${up.uploadId}/preview`, { sheets, choices })).json().fingerprint as string;
+  return json('POST', `${base}/ffk-imports/${up.uploadId}/commit`, { sheets, choices, fingerprint });
+}
 const cardOf = (p: Preview, lastName: string) => p.cards.find((c) => c.exportLine.lastName === lastName)!;
 /** Lecture directe de la base de test (jamais la base vivante). */
 function sqlAll<T>(query: string, ...params: unknown[]): T[] {
@@ -431,6 +434,15 @@ test('fiche modifiée entre aperçu et import : 409 « Les inscriptions ont chan
   expect(ok.json()).toMatchObject({ created: 1, leftAside: 1 });
 });
 
+test('import sans empreinte de l’aperçu : refusé (400), rien écrit', async () => {
+  await newClub('Tani Dojo');
+  const up = await uploadAll(buildFfkWorkbook({ Karate: [karate[0]!] }));
+  const res = await json('POST', `${base}/ffk-imports/${up.uploadId}/commit`, { sheets: up.sheets, choices: {} });
+  expect(res.statusCode).toBe(400);
+  expect(counts()).toEqual({ f: 0, r: 0 });
+  expect((await commit(up)).statusCode).toBe(200);
+});
+
 test('une ligne refusée à l’écriture annule tout l’import (400), le nom du combattant en tête du message', async () => {
   const tani = await newClub('Tani Dojo');
   const up = await uploadAll(buildFfkWorkbook({
@@ -520,7 +532,7 @@ test('cas douteux : laissé de côté sans choix, écrit une fois tranché', asy
 test('correspondance de colonnes mémorisée', async () => {
   const up = await uploadAll();
   const sheets = up.sheets.map((s) => ({ ...s, mapping: { ...s.mapping, ruleset: null } }));
-  expect((await json('POST', `${base}/ffk-imports/${up.uploadId}/commit`, { sheets })).statusCode).toBe(200);
+  expect((await commit(up, {}, undefined, sheets)).statusCode).toBe(200);
   const again = await uploadAll();
   expect(again.sheets[0]!.mapping.ruleset).toBeNull();
 });

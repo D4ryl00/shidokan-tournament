@@ -8,6 +8,7 @@ import { createCompetition } from '../../src/server/repositories/competitions.js
 import { updateClub, upsertClub } from '../../src/server/repositories/registrations.js';
 import { fillClubForm } from '../helpers/club-form-fill.js';
 import { buildFfkWorkbook } from '../helpers/ffk-fixture.js';
+import { ffkCommit } from '../helpers/ffk-commit.js';
 import { olderDb } from '../helpers/older-db.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
@@ -98,10 +99,7 @@ test('import FFK : lien sûr vers un club existant ou lien choisi → son entré
     ],
   });
   const up = (await send(`${base}/ffk-imports`, ffk)).json();
-  const commit = await app.inject({
-    method: 'POST', url: `${base}/ffk-imports/${up.uploadId}/commit`,
-    payload: { sheets: up.sheets, choices: { clubLinks: { '0060789 SHINSENGUMI DOJO VESUBIE': shin } } },
-  });
+  const commit = await ffkCommit(app, base, up, { clubLinks: { '0060789 SHINSENGUMI DOJO VESUBIE': shin } });
   expect(commit.statusCode).toBe(200);
   const r = new Database(dbPath, { readonly: true });
   const rows = r.prepare('select c.name as club, e.affiliation_number as number from clubs c join club_directory e on e.id = c.directory_club_id order by c.name').all();

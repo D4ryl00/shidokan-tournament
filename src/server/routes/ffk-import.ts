@@ -34,9 +34,9 @@ const bodySchema = z.object({
       orphans: z.record(z.string(), z.enum(['keep', 'delete'])).optional(),
     })
     .optional(),
-  /** Empreinte de l'aperçu affiché : la validation est refusée si le plan a changé entre-temps. */
-  fingerprint: z.string().optional(),
 });
+/** Import : l'empreinte de l'aperçu affiché est obligatoire ; l'import est refusé (409) si le plan a changé entre-temps. */
+const commitSchema = bodySchema.extend({ fingerprint: z.string().min(1) });
 
 type P = { Params: { id: string; uploadId: string } };
 
@@ -68,9 +68,9 @@ export async function ffkImportRoutes(app: FastifyInstance, { db }: { db: AppDb 
   });
 
   app.post<P>('/api/competitions/:id/ffk-imports/:uploadId/commit', async (req, reply) => {
-    const body = bodySchema.parse(req.body);
+    const body = commitSchema.parse(req.body);
     const { plan } = await buildFfkPlan(db, req.params.id, req.params.uploadId, body.sheets, body.choices);
-    if (body.fingerprint && body.fingerprint !== planFingerprint(plan)) {
+    if (body.fingerprint !== planFingerprint(plan)) {
       return reply.status(409).send({ error: 'Les inscriptions ont changé depuis l’aperçu : relancez l’aperçu avant d’importer.' });
     }
     const included = body.sheets.filter((s) => s.include);

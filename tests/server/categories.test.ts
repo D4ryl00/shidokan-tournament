@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { generateBracket, type Bracket, type BracketFormat } from '../../src/domain/brackets/index.js';
 import { buildApp } from '../../src/server/app.js';
 import { buildFfkWorkbook } from '../helpers/ffk-fixture.js';
+import { ffkCommit } from '../helpers/ffk-commit.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
@@ -112,7 +113,7 @@ test('import FFK → une catégorie par clé distincte', async () => {
     ],
   });
   const up = (await app.inject({ method: 'POST', url: `${base}/ffk-imports`, payload: file, headers: { 'content-type': 'application/octet-stream' } })).json();
-  expect((await req('POST', `/ffk-imports/${up.uploadId}/commit`, { sheets: up.sheets })).json()).toMatchObject({ created: 3, leftAside: 0 });
+  expect((await ffkCommit(app, base, up)).json()).toMatchObject({ created: 3, leftAside: 0 });
   expect((await categories()).map((c) => c.registrationIds.length)).toEqual([2, 1]);
 });
 
