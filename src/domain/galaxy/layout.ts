@@ -1,6 +1,7 @@
 import { keyString, type CategoryKey } from '../categories.js';
 import { DISCIPLINES, RULESETS } from '../disciplines.js';
 import { weightClassesFor } from '../grid.js';
+import { normalizeName } from '../names.js';
 import type { CategoryGrid, DisciplineId, Ruleset, Sex } from '../types.js';
 import { cellsOf, galaxyLinks, linkKind, rulesFrom, type LinkKind } from './links.js';
 
@@ -210,7 +211,8 @@ export function galaxyLayout(grid: CategoryGrid): Map<string, Point> {
     for (const { i, j, length, stiffness } of springs) {
       const dx = xs[j]! - xs[i]!;
       const dy = ys[j]! - ys[i]!;
-      const d = Math.hypot(dx, dy) + 0.01;
+      // Math.sqrt, pas Math.hypot : la racine est arrondie pareil sur tous les moteurs (mêmes places sur tous les postes).
+      const d = Math.sqrt(dx * dx + dy * dy) + 0.01;
       const k = ((d - length) / d) * stiffness;
       fx[i] = fx[i]! + dx * k;
       fy[i] = fy[i]! + dy * k;
@@ -226,6 +228,32 @@ export function galaxyLayout(grid: CategoryGrid): Map<string, Point> {
 
   separate(xs, ys, GAP_W, GAP_H);
   return new Map(ids.map((id, i) => [id, { x: xs[i]!, y: ys[i]! }]));
+}
+
+/** Dernière grille calculée : sa signature, la grille elle-même (raccourci) et ses places. */
+let cache: { grid: CategoryGrid; signature: string; layout: Map<string, Point> } | null = null;
+
+/**
+ * `galaxyLayout`, gardé en mémoire tant que la grille ne change pas (spec §5.2) : d'une ouverture de la galaxie à
+ * l'autre, le calcul (≈ 350 ms) n'est pas refait. Une seule grille retenue (la compétition ouverte). La Map rendue est
+ * partagée : ne pas la modifier.
+ */
+export function cachedGalaxyLayout(grid: CategoryGrid): Map<string, Point> {
+  if (cache?.grid === grid) return cache.layout;
+  const signature = JSON.stringify(grid);
+  if (cache?.signature === signature) {
+    cache.grid = grid;
+    return cache.layout;
+  }
+  cache = { grid, signature, layout: galaxyLayout(grid) };
+  return cache.layout;
+}
+
+/** Ordre des libellés, le même sur tous les postes (sans dépendre de la langue du navigateur) : sans accents ni casse, puis tel quel. */
+function compareLabels(a: string, b: string): number {
+  const [x, y] = [normalizeName(a), normalizeName(b)];
+  if (x !== y) return x < y ? -1 : 1;
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 /**
@@ -255,7 +283,7 @@ export function placeCategories(cats: { id: string; key: CategoryKey; label: str
     const maxX = all.length ? Math.max(...all.map((p) => p.x)) : 0;
     const cy = all.length ? (Math.min(...all.map((p) => p.y)) + Math.max(...all.map((p) => p.y))) / 2 : 0;
     const rows = Math.ceil(Math.sqrt(apart.length));
-    apart.sort((a, b) => a.label.localeCompare(b.label, 'fr') || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    apart.sort((a, b) => compareLabels(a.label, b.label) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     apart.forEach((c, i) => {
       out.set(c.id, { x: maxX + 2 * CARD_W + Math.floor(i / rows) * GAP_W, y: cy + (i % rows - (rows - 1) / 2) * GAP_H });
     });

@@ -114,6 +114,12 @@ export function linkStyle(
   return { color: legend[Math.max(0, idx)]?.color ?? HUES[0]!, dashed: false };
 }
 
+/** Le meilleur des deux sens d'un lien (rang le plus bas) : le sens d'où il est vu quand rien n'est choisi (spec §5.1). */
+export function bestFrom(link: GalaxyLink, settings: CompetitionSettings): string {
+  if (link.fromA === null || link.fromB === null) return link.fromA === null ? link.b : link.a;
+  return rulesRank(rulesFrom(link, link.b), settings).rank < rulesRank(rulesFrom(link, link.a), settings).rank ? link.b : link.a;
+}
+
 /** Durée du vol de caméra, en ms. */
 export function flyDuration(distancePx: number, k0: number): number {
   return Math.min(1800, 1100 + 0.6 * distancePx + Math.abs(Math.log(K_FULL / k0)) * 150);

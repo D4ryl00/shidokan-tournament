@@ -60,6 +60,8 @@ export interface Scene {
   allLinks: boolean;
   pull: number;
   linkStyle: (l: GalaxyLink, fromId: string) => { color: string; dashed: boolean };
+  /** Sens d'où voir un lien qui ne touche pas l'étoile choisie : le meilleur des deux. */
+  linkFrom: (l: GalaxyLink) => string;
   linkLabel: (l: GalaxyLink, fromId: string) => string;
 }
 
@@ -123,7 +125,7 @@ export function drawGalaxy(cx: CanvasRenderingContext2D, w: number, h: number, c
     if (!a || !b) continue;
     const hot = focus !== null && (l.a === focus || l.b === focus);
     if (!hot && (!s.allLinks || !vis(l.a) || !vis(l.b))) continue;
-    const st = s.linkStyle(l, hot ? focus! : l.a);
+    const st = s.linkStyle(l, hot ? focus! : s.linkFrom(l));
     cx.strokeStyle = st.color;
     cx.globalAlpha = hot ? 0.95 : focus ? 0.04 : Math.min(0.28, 0.08 + cam.k * 0.12);
     cx.lineWidth = hot ? (s.selectedId ? 3 : 2.2) : 1;

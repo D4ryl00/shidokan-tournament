@@ -4,13 +4,64 @@ import { flyDuration, K_FULL, type Camera } from './scene.js';
 
 // Caméra de la galaxie (maquette v14) : molette et pincement autour du pointeur, glisser pour déplacer, vol vers une
 // étoile (accélération puis ralentissement, zoom en échelle log). Les images ne sont demandées que tant que quelque chose
-// bouge : la caméra, un vol, ou ce que `draw` signale (anneaux qui pulsent).
+// bouge : la caméra, un vol (à pleine cadence), ou ce que `draw` signale (anneaux qui pulsent, environ 24 images/s).
 
 export const K_MIN = 0.15;
 const EASE = 0.18;
 const clampK = (k: number) => Math.max(K_MIN, Math.min(K_FULL, k));
 interface Fly { t0: number; ms: number; k0: number; X0: number; Y0: number; X1: number; Y1: number; oy0: number; oy1: number }
 interface Gesture { moved: boolean; sx: number; sy: number; dist?: number; mid?: Point }
+
+/** Seul un anneau pulse (caméra immobile) : environ 24 images par seconde suffisent. */
+export const RING_FRAME_MS = 1000 / 24;
+
+/** Horloge des images (la fenêtre ; une horloge factice dans les tests). */
+export interface FrameEnv {
+  raf: (cb: (now: number) => void) => number;
+  cancelRaf: (id: number) => void;
+  setTimeout: (cb: () => void, ms: number) => unknown;
+  clearTimeout: (id: unknown) => void;
+  now: () => number;
+}
+
+const windowEnv = (): FrameEnv => ({
+  raf: (cb) => requestAnimationFrame(cb),
+  cancelRaf: (id) => cancelAnimationFrame(id),
+  setTimeout: (cb, ms) => window.setTimeout(cb, ms),
+  clearTimeout: (id) => window.clearTimeout(id as number),
+  now: () => performance.now(),
+});
+
+/**
+ * Boucle d'images : à chaque image du navigateur tant que `step` dit que ça bouge (caméra, vol) ; environ 24 images
+ * par seconde quand seul un anneau pulse (`again`) ; arrêtée sinon, jusqu'à la prochaine demande (`request`).
+ */
+export function frameLoop(step: (now: number) => { moving: boolean; again: boolean }, env: FrameEnv): { request: () => void; stop: () => void } {
+  let raf = 0;
+  let timer: unknown = null;
+  const run = (now: number) => {
+    raf = 0;
+    if (timer !== null) { env.clearTimeout(timer); timer = null; }
+    const { moving, again } = step(now);
+    if (moving) raf = env.raf(run);
+    else if (again) {
+      timer = env.setTimeout(() => {
+        timer = null;
+        // Une image déjà demandée (la caméra repart) s'en charge.
+        if (!raf) run(env.now());
+      }, RING_FRAME_MS);
+    }
+  };
+  return {
+    request: () => { if (!raf) raf = env.raf(run); },
+    stop: () => {
+      if (raf) env.cancelRaf(raf);
+      raf = 0;
+      if (timer !== null) env.clearTimeout(timer);
+      timer = null;
+    },
+  };
+}
 
 export function useGalaxyCamera(o: {
   canvasRef: RefObject<HTMLCanvasElement | null>;
@@ -26,15 +77,13 @@ export function useGalaxyCamera(o: {
   const cam = useRef<Camera>({ k: 1, px: 0, py: 0 });
   const target = useRef<Camera>({ k: 1, px: 0, py: 0 });
   const fly = useRef<Fly | null>(null);
-  const raf = useRef(0);
   const latest = useRef(o);
   latest.current = o;
   const pointers = useRef(new Map<number, Point>());
   const gesture = useRef<Gesture | null>(null);
 
-  const frameRef = useRef<(now: number) => void>(() => undefined);
+  const frameRef = useRef<(now: number) => { moving: boolean; again: boolean }>(() => ({ moving: false, again: false }));
   frameRef.current = (now: number) => {
-    raf.current = 0;
     const c = cam.current;
     const t = target.current;
     let moving = false;
@@ -59,12 +108,14 @@ export function useGalaxyCamera(o: {
     // Pour les tests : la caméra est-elle encore en route (vol ou adoucissement) ?
     const cv = latest.current.canvasRef.current;
     if (cv) { cv.dataset.flying = moving ? 'true' : 'false'; cv.dataset.zoom = c.k.toFixed(2); }
-    if (moving || again) raf.current = requestAnimationFrame((n) => frameRef.current(n));
+    return { moving, again };
   };
+  const loop = useRef<ReturnType<typeof frameLoop> | null>(null);
   const requestDraw = useCallback(() => {
-    if (!raf.current) raf.current = requestAnimationFrame((n) => frameRef.current(n));
+    loop.current ??= frameLoop((now) => frameRef.current(now), windowEnv());
+    loop.current.request();
   }, []);
-  useEffect(() => () => { cancelAnimationFrame(raf.current); raf.current = 0; }, []);
+  useEffect(() => () => { loop.current?.stop(); }, []);
 
   /** Zoom autour d'un point du canevas ; `direct` : sans adoucissement (pincement). Annule le vol en cours. */
   const zoomAt = (x: number, y: number, factor: number, direct: boolean) => {

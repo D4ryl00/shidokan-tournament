@@ -1,6 +1,6 @@
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { freeKey, keyString, type CategoryKey } from '../../src/domain/categories.js';
-import { CARD_H, CARD_W, galaxyLayout, gridCells, placeCategories, type Point } from '../../src/domain/galaxy/layout.js';
+import { CARD_H, CARD_W, cachedGalaxyLayout, galaxyLayout, gridCells, placeCategories, type Point } from '../../src/domain/galaxy/layout.js';
 import { galaxyLinks, linkKind, rulesFrom, type LinkKind } from '../../src/domain/galaxy/links.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 import type { DisciplineId, Ruleset } from '../../src/domain/types.js';
@@ -13,7 +13,8 @@ const key = (discipline: DisciplineId, ruleset: Ruleset | null, sex: 'F' | 'M' |
   discipline, ruleset, sex, ageBandCodes: bands, weightClassIds: weights,
 });
 const at = (k: CategoryKey): Point => layout.get(keyString(k))!;
-const dist = (p: Point, q: Point) => Math.hypot(p.x - q.x, p.y - q.y);
+const dist = (p: Point, q: Point) => Math.sqrt((p.x - q.x) ** 2 + (p.y - q.y) ** 2);
+afterEach(() => { vi.restoreAllMocks(); });
 const overlaps = (p: Point, q: Point) => Math.abs(p.x - q.x) < CARD_W && Math.abs(p.y - q.y) < CARD_H;
 
 describe('gridCells', () => {
@@ -36,6 +37,23 @@ describe('galaxyLayout', () => {
 
   test('est déterministe', () => {
     expect(galaxyLayout(grid)).toEqual(layout);
+  });
+
+  test('les mêmes places sur tous les moteurs : ni Math.hypot ni comparaison selon la langue (spec §5.2)', () => {
+    // Math.hypot n'est pas arrondi pareil partout (Safari / Chrome) ; Math.sqrt l'est (IEEE 754).
+    const hypot = vi.spyOn(Math, 'hypot').mockImplementation(() => { throw new Error('Math.hypot dans le calcul des places'); });
+    const compare = vi.spyOn(String.prototype, 'localeCompare').mockImplementation(() => { throw new Error('localeCompare dans le calcul des places'); });
+    const fresh = galaxyLayout(grid);
+    expect(fresh).toEqual(layout);
+    const cats = [
+      { id: 'b', key: freeKey('Open', 'karate', 'jiyu'), label: 'Open' },
+      { id: 'a', key: freeKey('Éclair', 'karate', 'jiyu'), label: 'Éclair' },
+    ];
+    const places = placeCategories(cats, fresh, grid);
+    // Rangés par libellé sans accent : Éclair (E) avant Open.
+    expect(places.get('a')!.y).toBeLessThan(places.get('b')!.y);
+    expect(hypot).not.toHaveBeenCalled();
+    expect(compare).not.toHaveBeenCalled();
   });
 
   test('aucune carte ne chevauche une autre', () => {
@@ -69,6 +87,23 @@ describe('galaxyLayout', () => {
     expect(meanFor('weight')).toBeLessThanOrEqual(0.7 * meanFor('discipline'));
     expect(meanFor('age')).toBeLessThan(meanFor('discipline'));
     expect(meanFor('discipline')).toBeLessThan(median);
+  });
+});
+
+describe('cachedGalaxyLayout', () => {
+  test('gardé en mémoire tant que la grille ne change pas (spec §5.2), recalculé quand elle change', () => {
+    const first = cachedGalaxyLayout(grid);
+    expect(first).toEqual(layout);
+    // Une grille égale (autre objet, comme après un nouveau chargement) : pas de nouveau calcul, la même Map.
+    expect(cachedGalaxyLayout(structuredClone(grid))).toBe(first);
+    expect(cachedGalaxyLayout(grid)).toBe(first);
+    // Une grille modifiée : nouveau calcul.
+    const changed = structuredClone(grid);
+    changed.weightClasses = changed.weightClasses.filter((w) => w.id !== 'cadet:F:-54');
+    const other = cachedGalaxyLayout(changed);
+    expect(other).not.toBe(first);
+    expect(other.has(keyString(key('karate', 'jiyu', 'F', ['cadet'], ['cadet:F:-54'])))).toBe(false);
+    expect(cachedGalaxyLayout(changed)).toBe(other);
   });
 });
 

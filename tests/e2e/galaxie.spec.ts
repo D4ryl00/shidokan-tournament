@@ -129,6 +129,8 @@ test('galaxie : choisir la vue, chercher, voir les voisines en cartes, déplacer
   await page.waitForTimeout(400);
   await expect(c54).toHaveAttribute('data-drop', 'ok');
   expect(await transforms()).toEqual(before);
+  // La carte survolée grandit vers le bas : ce qui est sous le pointeur ne bouge pas (sinon le dépôt tombe sur une pastille).
+  expect(Math.abs((await c54.getByTestId('card-count').boundingBox())!.y - target.y)).toBeLessThanOrEqual(1);
   // Lâché sur le ciel : rien ne se passe.
   const sky = (await canvas(page).boundingBox())!;
   await page.mouse.move(sky.x + 8, sky.y + sky.height - 8, { steps: 6 });
@@ -182,6 +184,39 @@ test('galaxie : choisir la vue, chercher, voir les voisines en cartes, déplacer
     return cats.find((c) => c.registrationIds.includes(solo))?.label ?? '';
   }).toMatch(/^Karaté · Jiyu · Cadets F · -61 kg$/);
   expect(errors).toEqual([]);
+
+  // Glisser-déposer à la souris : le -61 revenu redevient la sélection (clic sur son titre) ; SOLO, glissé de sa carte,
+  // lâché sur la carte -54 (voisine) → confirmation → déplacement.
+  const solo = page.locator('[data-testid="galaxy"] [data-testid="planche-chip"]').filter({ hasText: 'SOLO' });
+  await expect(solo).toBeVisible();
+  const back61 = page.locator('[data-testid="galaxy"] [data-testid="planche-card"]').filter({ has: page.getByTestId('planche-chip').filter({ hasText: 'SOLO' }) });
+  const back61Id = (await back61.getAttribute('data-category'))!;
+  await back61.getByTestId('card-title').click();
+  await expect(canvas(page)).toHaveAttribute('data-selected', back61Id);
+  await expect(c54).toBeVisible();
+  await expect(canvas(page)).toHaveAttribute('data-flying', 'false');
+  await expect(page.locator('.mantine-Notification-root')).toHaveCount(0, { timeout: 10_000 });
+  await solo.hover();
+  await page.mouse.down();
+  const onto = (await c54.getByTestId('card-count').boundingBox())!;
+  await page.mouse.move(onto.x + onto.width / 2, onto.y + onto.height / 2, { steps: 8 });
+  await page.mouse.move(onto.x + onto.width / 2 + 2, onto.y + onto.height / 2 + 1, { steps: 2 });
+  await expect(c54).toHaveAttribute('data-drop', 'ok');
+  await page.mouse.up();
+  await expect(page.getByRole('dialog')).toContainText('Déplacement manuel');
+  const dropped = page.waitForResponse((r) => r.url().endsWith('/replacement/move') && r.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Confirmer le déplacement' }).click();
+  expect((await dropped).ok()).toBeTruthy();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(c54.getByTestId('planche-chip').filter({ hasText: 'SOLO' })).toBeVisible();
+  await expect(canvas(page)).toHaveAttribute('data-selected', ids.c54);
+  // « Annuler » du message : SOLO revient dans le -61.
+  const undoneAgain = page.waitForResponse((r) => r.url().includes('/history/undo') && r.request().method() === 'POST');
+  await page.locator('.mantine-Notification-root').filter({ hasText: 'SOLO' }).getByTestId('undo-toast-action').click();
+  expect((await undoneAgain).ok()).toBeTruthy();
+  await expect(c54.getByTestId('planche-chip').filter({ hasText: 'SOLO' })).toHaveCount(0);
+  await expect(solo).toBeVisible();
+  expect(errors).toEqual([]);
 });
 
 test('galaxie : la vue est retenue sur le poste, Échap désélectionne, portée vide sans erreur', async ({ page, request }) => {
@@ -202,9 +237,23 @@ test('galaxie : la vue est retenue sur le poste, Échap désélectionne, portée
 
   await page.getByTestId('planche-search').fill('ALBA');
   await expect(canvas(page)).toHaveAttribute('data-selected', ids.c54);
+  // Échap dans le champ de recherche ne retire pas la sélection ; hors du champ, si.
+  await page.getByTestId('planche-search').press('Escape');
+  await expect(canvas(page)).toHaveAttribute('data-selected', ids.c54);
   await page.getByTestId('planche-search').blur();
   await page.keyboard.press('Escape');
   await expect(canvas(page)).toHaveAttribute('data-selected', '');
+
+  // Changer de session recadre : la sélection est retirée et la vue d'ensemble revient (spec §4.1).
+  await page.getByTestId('planche-search').fill('BRUN');
+  await expect(canvas(page)).toHaveAttribute('data-selected', ids.c54);
+  await expect(canvas(page)).toHaveAttribute('data-flying', 'false');
+  expect(Number(await canvas(page).getAttribute('data-zoom'))).toBe(4);
+  await page.getByTestId('brackets-wave').getByText('Toutes', { exact: true }).click();
+  await expect(canvas(page)).toHaveAttribute('data-selected', '');
+  await expect(card(page, ids.c54)).toBeHidden();
+  await expect.poll(async () => Number(await canvas(page).getAttribute('data-zoom'))).toBeLessThan(2);
+  await page.getByTestId('planche-search').fill('');
 
   // Une session sans catégorie : pas de canevas, « Aucune catégorie. ».
   await page.getByTestId('brackets-wave').getByText('Vide', { exact: true }).click();
