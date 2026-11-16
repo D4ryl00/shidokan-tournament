@@ -367,21 +367,31 @@ export function locate(cells: unknown[][]): { headerRows: Map<string, number>; c
   return { headerRows, columnsRow };
 }
 
+/** Au-delà (espaces retirés), le texte de la case licence n'est pas un numéro (« Licence en cours de renouvellement ») : ignoré. */
+export const LICENCE_MAX_LENGTH = 20;
+export const licenceIgnoredWarning = (raw: string): string => `N° de licence ignoré (trop long) : « ${raw} ».`;
+
 /**
  * Retire la colonne licence (repérée à son titre sur la ligne des colonnes) des lignes du tableau : la lecture par position reste
  * celle d'avant. Renvoie les licences normalisées par ligne (0-based) ; cellules inchangées si la fiche n'a pas la colonne.
+ * Un texte trop long n'est pas gardé (licence nulle) : son avertissement est dans `ignored`, la ligne se lit quand même.
  */
-export function splitLicenceColumn(cells: unknown[][], columnsRow: number): { cells: unknown[][]; licences: Map<number, string | null> } {
+export function splitLicenceColumn(cells: unknown[][], columnsRow: number): { cells: unknown[][]; licences: Map<number, string | null>; ignored: Map<number, string> } {
   const title = normalizeName(CLUB_FORM_LICENCE_COLUMN);
   const index = (cells[columnsRow] ?? []).findIndex((c) => normalizeName(text(c)) === title);
   const licences = new Map<number, string | null>();
-  if (index < 0) return { cells, licences };
+  const ignored = new Map<number, string>();
+  if (index < 0) return { cells, licences, ignored };
   const out = cells.map((row, r) => {
     if (r < columnsRow || !row) return row;
-    licences.set(r, normalizeLicence(row[index]));
+    const licence = normalizeLicence(row[index]);
+    if (licence !== null && licence.length > LICENCE_MAX_LENGTH) {
+      licences.set(r, null);
+      if (r > columnsRow) ignored.set(r, licenceIgnoredWarning(text(row[index])));
+    } else licences.set(r, licence);
     return [...row.slice(0, index), ...row.slice(index + 1)];
   });
-  return { cells: out, licences };
+  return { cells: out, licences, ignored };
 }
 
 export function parseHeader(cells: unknown[][], headerRows: Map<string, number>): ClubFormHeader {
@@ -463,7 +473,7 @@ function parseRow(row: unknown[], line: number, grid: CategoryGrid): ClubFormRow
 /** Lit une fiche club à partir des cellules du tableur (cells[ligne 0-based][colonne 0-based]). */
 export function parseClubForm(sheetCells: unknown[][], grid: CategoryGrid, tolerance: WeighInTolerance = { M: 0, F: 0 }, closed: ReadonlySet<string> = new Set(), opts: LineOptions = {}): ClubFormParse {
   const { headerRows, columnsRow } = locate(sheetCells);
-  const { cells, licences } = splitLicenceColumn(sheetCells, columnsRow);
+  const { cells, licences, ignored } = splitLicenceColumn(sheetCells, columnsRow);
   const header = parseHeader(cells, headerRows);
   // Nouveau format reconnu à sa 5e colonne (« Poids actuel ») ; sinon, ancien format.
   const isNew = normalizeName(text(cells[columnsRow]?.[4])).startsWith('POIDS ACTUEL');
@@ -497,6 +507,8 @@ export function parseClubForm(sheetCells: unknown[][], grid: CategoryGrid, toler
       : warnClosed([parseRow(row, r + 1, grid)], closed);
     const who = normalizeName(`${text(row[0])} ${text(row[1])}`);
     if (/^VETERANS?$/.test(normalizeName(text(row[3])))) parsedRows[0]!.warnings.push('« Vétéran » sans numéro : placé en V1 (à corriger si besoin).');
+    const licenceIgnored = ignored.get(r);
+    if (licenceIgnored) parsedRows[0]!.warnings.push(licenceIgnored);
     rows.push(...checkRows(parsedRows, who, r + 1, seen, combatByFighter, opts));
   }
   return { header, rows };

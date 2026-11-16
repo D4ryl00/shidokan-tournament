@@ -48,7 +48,7 @@ const text = (v: unknown): string => (v === null || v === undefined ? '' : Strin
 /** Lit une fiche renvoyée (nouveau modèle) : l'en-tête et un combattant par ligne, sans rien rejeter. */
 export function readClubFormLines(sheetCells: unknown[][], grid: CategoryGrid, tolerance: WeighInTolerance): ClubFormRead {
   const { headerRows, columnsRow } = locate(sheetCells);
-  const { cells, licences } = splitLicenceColumn(sheetCells, columnsRow);
+  const { cells, licences, ignored } = splitLicenceColumn(sheetCells, columnsRow);
   const base = parseHeader(cells, headerRows);
   const isNew = normalizeName(text(cells[columnsRow]?.[4])).startsWith('POIDS ACTUEL');
   if (!isNew) throw new NotAClubFormError(LEGACY_FORM_REFUSED);
@@ -75,6 +75,8 @@ export function readClubFormLines(sheetCells: unknown[][], grid: CategoryGrid, t
     line.licence = licence;
     const notes = [...errors, ...warnings];
     if (/^VETERANS?$/.test(normalizeName(text(row[3])))) notes.push('« Vétéran » sans numéro : placé en V1 (à corriger si besoin).');
+    const licenceIgnored = ignored.get(r);
+    if (licenceIgnored) notes.push(licenceIgnored);
     // Une ligne sans nom n'est jamais fusionnée : chacune reste son propre combattant.
     const name = normalizeName(`${line.lastName} ${line.firstName}`);
     const key = name ? `${name}|${line.sex ?? ''}` : `#${r}`;

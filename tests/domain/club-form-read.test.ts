@@ -147,6 +147,16 @@ describe('colonne licence', () => {
     const r = readClubFormLines(sheet([['MARTIN', 'Léa', '1146 2640 r', 'F', 'Cadets', '52', 'Karaté', 'Non', '', 'Jiyu', '', '', '', '']], 'non', columns), grid, TOL);
     expect(r.items[0]!.line).toMatchObject({ licence: '11462640R', lastName: 'MARTIN', sex: 'F', combats: ['karate'], weightKg: 52 });
   });
+  test('texte trop long dans la case licence : ligne lue, licence ignorée, remarque', () => {
+    const r = readClubFormLines(sheet([['MARTIN', 'Léa', 'Licence en cours de renouvellement', 'F', 'Cadets', '52', 'Karaté', 'Non', '', 'Jiyu', '', '', '', '']], 'non', columns), grid, TOL);
+    expect(r.items[0]!.line).toMatchObject({ licence: null, lastName: 'MARTIN', combats: ['karate'] });
+    expect(r.items[0]!.notes).toContain('N° de licence ignoré (trop long) : « Licence en cours de renouvellement ».');
+  });
+  test('licence de 20 caractères (espaces retirés) : gardée', () => {
+    const r = readClubFormLines(sheet([['MARTIN', 'Léa', '1234 5678 9012 3456 7890', 'F', 'Cadets', '52', 'Karaté', 'Non', '', 'Jiyu', '', '', '', '']], 'non', columns), grid, TOL);
+    expect(r.items[0]!.line.licence).toBe('12345678901234567890');
+    expect(r.items[0]!.notes).toEqual([]);
+  });
   test('fiche sans la colonne : licence nulle', () => {
     const r = readClubFormLines(sheet([['MARTIN', 'Léa', 'F', 'Cadets', '52', 'Karaté', 'Non', '', 'Jiyu', '', '', '', '', '']]), grid, TOL);
     expect(r.items[0]!.line.licence).toBeNull();

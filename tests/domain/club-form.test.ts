@@ -484,6 +484,13 @@ describe('colonne licence de la fiche', () => {
     const line: Line = [moreau[0]!, moreau[1]!, '1146 2640 r', ...moreau.slice(2)];
     expect(parseClubForm(withLicence([line]), grid).rows[0]!.input).toMatchObject({ lastName: 'MOREAU', licence: '11462640R', discipline: 'karate', ageBandCode: 'poussin' });
   });
+  test('texte trop long dans la case licence : inscription lue, licence ignorée, avertissement', () => {
+    const line: Line = [moreau[0]!, moreau[1]!, 'Licence en cours de renouvellement', ...moreau.slice(2)];
+    const [row] = parseClubForm(withLicence([line]), grid).rows;
+    expect(row!.input).toMatchObject({ lastName: 'MOREAU', licence: null, discipline: 'karate' });
+    expect(row!.errors).toEqual([]);
+    expect(row!.warnings).toContain('N° de licence ignoré (trop long) : « Licence en cours de renouvellement ».');
+  });
   test('fiche sans la colonne (envoyée avant) : lue comme avant, licence nulle', () => {
     expect(parseClubForm(sheetNew([moreau]), grid).rows[0]!.input).toMatchObject({ lastName: 'MOREAU', licence: null, discipline: 'karate' });
   });

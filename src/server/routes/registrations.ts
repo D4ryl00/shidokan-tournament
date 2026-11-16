@@ -47,7 +47,8 @@ export const clubFormLineSchema = z.object({
   ruleset: z.enum(['jiyu', 'shobu']).nullable(),
   prefs: z.object({ karate: pref, 'shido-boxing': pref, 'shido-mix': pref, triathlon: pref }),
   shobuKeep: z.enum(['ruleset', 'discipline']).nullable(),
-  licence: z.string().max(30).nullable().optional(),
+  // Texte brut (espaces compris) : normalisé à l'enregistrement.
+  licence: z.string().max(60).nullable().optional(),
 });
 
 /** Fiche papier saisie à l'écran : le club (sans coordonnées), le pré-accord et les lignes (un combattant par ligne). */
