@@ -145,7 +145,9 @@ export function GalaxyView(p: {
     const ids = new Set(scopeKey ? scopeKey.split(',') : []);
     if (sel) {
       ids.add(sel);
-      for (const l of [...(adjacency.get(sel) ?? []), ...(forbiddenAdjacency.get(sel) ?? [])]) ids.add(l.a === sel ? l.b : l.a);
+      for (const l of adjacency.get(sel) ?? []) ids.add(l.a === sel ? l.b : l.a);
+      // Voisines interdites dans le sens depuis la sélection (l'autre sens peut être impossible).
+      for (const l of forbiddenAdjacency.get(sel) ?? []) if ((l.a === sel ? l.fromA : l.fromB) !== null) ids.add(l.a === sel ? l.b : l.a);
     }
     return shown.filter((c) => ids.has(c.id));
   }, [shown, scopeKey, sel, adjacency, forbiddenAdjacency]);

@@ -89,7 +89,9 @@ export function orderedNeighbors(
 ): { id: string; rules: RuleId[]; forbidden: boolean }[] {
   const first = sortedNeighbors(id, allowed, settings).map((n) => ({ ...n, forbidden: false }));
   const seen = new Set(first.map((n) => n.id));
-  const then = sortedNeighbors(id, forbidden, settings).filter((n) => !seen.has(n.id)).map((n) => ({ ...n, forbidden: true }));
+  // Une voisine interdite seulement dans l'autre sens (le sens depuis `id` n'est jamais possible) n'est pas rapprochée.
+  const ownWay = forbidden.filter((l) => (l.a === id ? l.fromA : l.fromB) !== null);
+  const then = sortedNeighbors(id, ownWay, settings).filter((n) => !seen.has(n.id)).map((n) => ({ ...n, forbidden: true }));
   return [...first, ...then].slice(0, SLOTS.length);
 }
 

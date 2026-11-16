@@ -172,7 +172,7 @@ function manualRules(state: State, m: Member, t: CategoryState): RuleId[] | null
 }
 
 /** Règles de la liste de réaffectation qu'un déplacement libre peut enfreindre en étant désactivées (l'écart de poids a son propre message). */
-const LISTED_RULES: ReadonlySet<RuleId> = new Set<RuleId>(['weight', 'split', 'ageUp', 'ageDown', 'discipline']);
+const LISTED_RULES: ReadonlySet<RuleId> = new Set<RuleId>(['weight', 'ageUp', 'ageDown', 'discipline']);
 
 /** Drapeaux dérivés des règles d'une proposition ; `null` si une règle utilisée est désactivée (sauf si elle s'impose). */
 function withRules<T extends ProfileInput>(state: State, movers: Member[], p: T): (T & Pick<Proposal, 'rules' | 'manual' | 'preApproved'>) | null {
@@ -450,7 +450,11 @@ export function moveViolations(state: State, m: Member, t: CategoryState): strin
     if (gap > threshold + 1e-9) v.push(`Écart de poids de ${gap.toFixed(1).replace('.', ',')} kg (maximum ${threshold} kg).`);
   }
   // Une règle désactivée dans la liste des règles de réaffectation (étape 49 : la galaxie y mène à la main).
+  // « Catégorie de poids voisine » sert aussi de profil par défaut : vers une catégorie qui a déjà la classe du
+  // combattant (tableau dédoublé, retour), aucune classe voisine n'est en jeu.
+  const sameClass = m.weightClassId !== null && t.key.weightClassIds.includes(m.weightClassId);
   for (const r of manualRules(state, m, t) ?? []) {
+    if (r === 'weight' && sameClass) continue;
     if (LISTED_RULES.has(r) && !isRuleOn(settings, r)) v.push(`Règle « ${RULE_LABELS[r]} » désactivée (réglages de réaffectation).`);
   }
   return v;

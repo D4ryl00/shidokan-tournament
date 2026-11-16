@@ -252,3 +252,11 @@ test('forbiddenLabel : « Interdit : » et les réglages en cause', () => {
   expect(forbiddenLabel(link('a', 'b', ['discipline', 'minorsAdults']), 'a', two)).toBe('Interdit : Autre discipline (préférences) + Mélange mineurs / adultes');
   expect(FORBIDDEN_COLOR).toBe('#8a93ad');
 });
+
+test('orderedNeighbors : une voisine interdite seulement dans l’autre sens n’est pas rapprochée', () => {
+  const s = defaultSettings();
+  // a → b interdit par les réglages ; b → a jamais possible (null) : vu de b, rien à rapprocher.
+  const l: GalaxyLink = { a: 'a', b: 'b', fromA: ['shobuToJiyu'], fromB: null };
+  expect(orderedNeighbors('a', [], [l], s).map((n) => n.id)).toEqual(['b']);
+  expect(orderedNeighbors('b', [], [l], s)).toEqual([]);
+});

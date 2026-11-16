@@ -88,3 +88,20 @@ test('lien interdit : gris, seulement pour l’étoile en focus, jamais avec « 
   drawGalaxy(hovered.cx, 800, 600, { k: 1, px: 0, py: 0 }, scene('a'), 0);
   expect(hovered.strokes).toContain(FORBIDDEN_COLOR);
 });
+
+test('lien interdit : pas dessiné depuis l’étoile dont le sens est impossible', () => {
+  const settings = defaultSettings();
+  const l: GalaxyLink = { a: 'a', b: 'b', fromA: ['shobuToJiyu'], fromB: null };
+  const pos = new Map<string, Point>([['a', { x: -50, y: 0 }], ['b', { x: 50, y: 0 }]]);
+  const scene = (hoverId: string): Scene => ({
+    stars: [star('a'), star('b')], pos, links: [], selectedId: null, hoverId, overlaid: new Set(), pulledIds: [], matched: null,
+    allLinks: false, pull: 0, linkStyle: (x, from) => linkStyle(x, from, settings), linkFrom: (x) => bestFrom(x, settings), linkLabel: () => '',
+    forbidden: [l], forbiddenLabel: () => '',
+  });
+  const fromB = fakeContext();
+  drawGalaxy(fromB.cx, 800, 600, { k: 1, px: 0, py: 0 }, scene('b'), 0);
+  expect(fromB.strokes).not.toContain(FORBIDDEN_COLOR);
+  const fromA = fakeContext();
+  drawGalaxy(fromA.cx, 800, 600, { k: 1, px: 0, py: 0 }, scene('a'), 0);
+  expect(fromA.strokes).toContain(FORBIDDEN_COLOR);
+});

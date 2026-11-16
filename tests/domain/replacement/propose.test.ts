@@ -114,6 +114,21 @@ describe('propositions', () => {
     const on = { ...s, settings: defaultSettings() };
     expect(moveViolations(on, karate, target)).toEqual([]);
   });
+  test('déplacement libre, « Catégorie de poids voisine » éteinte : pas d’avertissement vers la même classe de poids', () => {
+    const a = member({ weightClassId: 'cadet:F:-54' });
+    const b = member({ weightClassId: 'cadet:F:-54' });
+    const s = makeState([a, b], { settings: { ...defaultSettings(), replacementRules: { ...defaultSettings().replacementRules, off: ['weight'] } } });
+    // Une seconde catégorie de la même classe (tableau dédoublé) : même poids, aucune règle de la liste en jeu.
+    const twin = { id: 'cat:twin', key: s.categories.find((c) => c.id === b.categoryId)!.key, status: 'provisional' as const, aliasKeys: [], waveOverride: null };
+    const s2 = { ...s, categories: [...s.categories, twin] };
+    expect(moveViolations(s2, a, twin).some((w) => w.includes('Catégorie de poids voisine'))).toBe(false);
+    // Vers la classe voisine (poids proches : pas d'écart de poids), l'avertissement reste.
+    a.approxWeightKg = 53.5;
+    const c = member({ weightClassId: 'cadet:F:-61', approxWeightKg: 55 });
+    const s3 = makeState([a, b, c], { settings: s.settings });
+    const neighbour = s3.categories.find((x) => x.id === c.categoryId)!;
+    expect(moveViolations(s3, a, neighbour)).toContain('Règle « Catégorie de poids voisine » désactivée (réglages de réaffectation).');
+  });
   test('G seulement si le passage shobu → jiyu est autorisé dans les réglages', () => {
     const shobu = member({ ageBandCode: 'senior', sex: 'M', ruleset: 'shobu', weightClassId: 'senior:M:-75', approxWeightKg: 74, acceptsJiyuFirst: true });
     const jiyu = member({ ageBandCode: 'senior', sex: 'M', ruleset: 'jiyu', weightClassId: 'senior:M:-75', approxWeightKg: 74 });

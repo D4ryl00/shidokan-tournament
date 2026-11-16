@@ -117,7 +117,11 @@ export function drawGalaxy(cx: CanvasRenderingContext2D, w: number, h: number, c
   }
   const focus = s.selectedId ?? s.hoverId;
   const focusN = new Set<string>();
-  if (focus) for (const l of [...s.links, ...s.forbidden]) if (l.a === focus) focusN.add(l.b); else if (l.b === focus) focusN.add(l.a);
+  if (focus) {
+    for (const l of s.links) if (l.a === focus) focusN.add(l.b); else if (l.b === focus) focusN.add(l.a);
+    // Voisines interdites : seulement dans le sens depuis l'étoile en focus (comme leur trait).
+    for (const l of s.forbidden) if (l.a === focus && l.fromA) focusN.add(l.b); else if (l.b === focus && l.fromB) focusN.add(l.a);
+  }
   const vis = (id: string) => s.matched === null || s.matched.has(id);
 
   // Liens : ceux de l'étoile survolée ou sélectionnée ; tous, très légers, avec « Tous les liens ».
@@ -145,7 +149,9 @@ export function drawGalaxy(cx: CanvasRenderingContext2D, w: number, h: number, c
     cx.lineWidth = 1.5;
     cx.setLineDash([2, 5]);
     for (const l of s.forbidden) {
-      if (l.a !== focus && l.b !== focus) continue;
+      // Seulement dans le sens depuis l'étoile en focus : l'autre sens peut être impossible (jiyu → shobu).
+      const own = l.a === focus ? l.fromA : l.b === focus ? l.fromB : null;
+      if (own === null) continue;
       const a = P.get(l.a);
       const b = P.get(l.b);
       if (!a || !b) continue;
