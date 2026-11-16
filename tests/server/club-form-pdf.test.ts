@@ -96,3 +96,11 @@ test('fiche papier PDF : réglage activé, plusieurs cases de combat ; désactiv
   expect(on).toContain('Règlement');
   expect(on).toContain('une seule case');
 });
+
+test('fiche papier PDF : colonne « N° de licence (facultatif) » après Prénom, toujours une page', async () => {
+  const pdf = (await app.inject({ method: 'GET', url: `${base}/club-form.pdf` })).rawPayload;
+  expect(await pages(pdf)).toBe(1);
+  const text = pdfText(pdf);
+  expect(text).toMatch(/Prénom\s+N° de licence/);
+  expect(text).toContain('facultatif');
+});
