@@ -147,11 +147,11 @@ test('import ffk : relier un club, créer un club, valider une carte avec écart
   await expect(recap).toContainText('validée');
   await expect(recap).toContainText('Confirmées sans changement (1)');
   await expect(recap).toContainText('Combattants créés (2)');
-  await expect(recap).toContainText('Laissé de côté (2)');
+  await expect(recap).toContainText('Laissé de côté : 2 combattants');
   await expect(recap).toContainText('FARGE Hugo — Karaté : reste à remplir');
   await expect(recap).toContainText('MARTINNI Jules — Karaté : écartée');
   await confirmImport(page);
-  await expect(page.getByText('Import FFK : 2 combattants créés, 1 mis à jour, 0 supprimé, 0 catégorie créée, 2 laissés de côté.')).toBeVisible();
+  await expect(page.getByText('Import FFK : 2 combattants créés, 1 mis à jour, 0 supprimé, 0 catégorie créée, 2 combattants laissés de côté.')).toBeVisible();
 
   // Ce qui a été écrit : la carte validée, les nouveaux combattants (règlement lu dans l'âge), les liens de club mémorisés.
   const [lea] = await regOf(page, id, 'MARTIN');
@@ -183,7 +183,7 @@ test('import ffk : catégorie cochée puis décochée', async ({ page }) => {
   // −90 n'existe pas chez les seniors : case décochée, rien n'est créé d'office, le poids est à choisir.
   const category = page.getByTestId('ffk-weight-class');
   await expect(category).toHaveCount(1);
-  await expect(category).toContainText('Seniors M -90');
+  await expect(category).toContainText('Seniors · Masculin · -90 kg');
   await expect(category).toContainText('1 combattant · pas créée');
   await expect(category.getByRole('checkbox')).not.toBeChecked();
   const leroy = fighterCard(page, 'LEROY Marc');
@@ -205,10 +205,10 @@ test('import ffk : catégorie cochée puis décochée', async ({ page }) => {
   // Import : aucune catégorie créée, la ligne est laissée de côté.
   await expect(page.getByTestId('ffk-commit')).toBeEnabled();
   await page.getByTestId('ffk-commit').click();
-  await expect(page.getByTestId('ffk-recap')).toContainText('Laissé de côté (1)');
+  await expect(page.getByTestId('ffk-recap')).toContainText('Laissé de côté : 1 combattant');
   await expect(page.getByTestId('ffk-recap')).not.toContainText('Catégories de poids créées');
   await confirmImport(page);
-  await expect(page.getByText('Import FFK : 0 combattant créé, 0 mis à jour, 0 supprimé, 0 catégorie créée, 1 laissé de côté.')).toBeVisible();
+  await expect(page.getByText('Import FFK : 0 combattant créé, 0 mis à jour, 0 supprimé, 0 catégorie créée, 1 combattant laissé de côté.')).toBeVisible();
   const grid = (await (await page.request.get(`/api/competitions/${id}/grid`)).json()) as { weightClasses: { id: string }[] };
   expect(grid.weightClasses.map((w) => w.id)).not.toContain('senior:M:-90');
   expect(await registrations(page, id)).toEqual([]);

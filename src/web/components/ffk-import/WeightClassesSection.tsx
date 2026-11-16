@@ -2,7 +2,7 @@ import { Checkbox, Paper, SimpleGrid, Text } from '@mantine/core';
 import type { FfkCardsPlan } from '../../../domain/ffk-plan/plan.js';
 import { plural } from '../../../domain/plural.js';
 import type { CategoryGrid } from '../../../domain/types.js';
-import { ageBandLabel } from '../../labels.js';
+import { weightClassTitle } from '../../labels.js';
 
 /**
  * 1. Catégories de poids que l’export utilise et que la grille n’a pas : une case par catégorie, décochée par défaut.
@@ -23,7 +23,7 @@ export function WeightClassesSection({ grid, weightClasses, accepted, onToggle }
         return (
           <Paper key={w.id} withBorder p="sm" radius="md" data-testid="ffk-weight-class" style={{ backgroundColor: 'var(--sk-bg)' }}>
             <Checkbox checked={on} onChange={(e) => onToggle(w.id, e.currentTarget.checked)}
-              label={<b>{ageBandLabel(grid, w.ageBandCode)} {w.sex} {w.label}</b>}
+              label={<b>{weightClassTitle(grid, w)}</b>}
               description={`${plural(w.fighters, 'combattant')} · ${on ? 'sera créée' : 'pas créée'}`} />
           </Paper>
         );

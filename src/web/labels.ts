@@ -10,6 +10,10 @@ export const DISCIPLINE_OPTIONS = (Object.keys(DISCIPLINES) as DisciplineId[]).m
 export function ageBandLabel(grid: CategoryGrid | undefined, code: string): string {
   return grid?.ageBands.find((b) => b.code === code)?.label ?? code;
 }
+/** « Seniors · Masculin · -90 kg » : une catégorie de poids nommée en clair (tranche d’âge, sexe, poids). */
+export function weightClassTitle(grid: CategoryGrid | undefined, w: { ageBandCode: string; sex: Sex; label: string }): string {
+  return `${ageBandLabel(grid, w.ageBandCode)} · ${SEX_LABELS[w.sex]} · ${w.label} kg`;
+}
 export function weightLabel(grid: CategoryGrid | undefined, id: string | null): string {
   if (!id) return '—';
   return grid?.weightClasses.find((w) => w.id === id)?.label ?? '?';

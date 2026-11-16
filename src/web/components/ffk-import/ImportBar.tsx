@@ -1,87 +1,22 @@
 import { Badge, Button, Group, List, Modal, Stack, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useState, type ReactNode } from 'react';
-import type { FfkChoices, FfkImportResult } from '../../../domain/ffk-plan/plan.js';
-import { plural } from '../../../domain/plural.js';
+import { useState } from 'react';
+import type { FfkChoices } from '../../../domain/ffk-plan/plan.js';
 import type { CategoryGrid } from '../../../domain/types.js';
 import { ApiError, useClubs, useCommitFfk, type FfkPreview } from '../../api.js';
-import { ageBandLabel } from '../../labels.js';
 import { ApiErrorAlert } from '../ApiErrorAlert.js';
-import { lineDisciplines, type PageCardState } from './cardState.js';
+import type { PageCardState } from './cardState.js';
+import { recap, resultMessage, type RecapItem } from './recap.js';
 import type { FfkSource } from './useFfkPreview.js';
 
-/** Une rubrique du récapitulatif : titre, puis une liste ou une phrase. */
-interface RecapBlock { title: string; items?: ReactNode[]; note?: string; aside?: boolean }
-
-/** Récapitulatif de « Confirmer l’import FFK », tiré de l’aperçu (ce que l’import appliquera, et ce qu’il laisse de côté). */
-function recap(plan: FfkPreview, states: Record<string, PageCardState>, grid: CategoryGrid | undefined, clubName: (id: string) => string): RecapBlock[] {
-  const blocks: RecapBlock[] = [];
-  const name = (l: { lastName: string; firstName: string }) => `${l.lastName} ${l.firstName}`;
-  const fighterLabel = (id: string) => plan.fighters.find((f) => f.fighterId === id)?.label ?? '…';
-
-  const created = plan.weightClasses.filter((w) => w.accepted);
-  if (created.length) blocks.push({ title: 'Catégories de poids créées', items: created.map((w) => `${ageBandLabel(grid, w.ageBandCode)} ${w.sex} ${w.label}`) });
-  const linked = plan.clubs.filter((c) => c.chosen && c.target);
-  if (linked.length) blocks.push({ title: 'Clubs reliés ou créés', items: linked.map((c) => <>{c.clubName} → <b>{clubName(c.target!)}</b></>) });
-
-  const imported = plan.cards.filter((c) => c.state === 'auto' || c.state === 'done');
-  const updates = imported.filter((c) => c.fighterId !== 'new' && c.changes.length > 0);
-  if (updates.length) {
-    blocks.push({
-      title: `Inscriptions mises à jour (${updates.length.toLocaleString('fr-FR')})`,
-      items: updates.map((c) => (
-        <>
-          {fighterLabel(c.fighterId!)} — {lineDisciplines(c.value!.line)} : {c.changes.join(' ; ')}
-          {c.state === 'done' && <Badge size="xs" color="green" variant="light" ml={6}>validée</Badge>}
-        </>
-      )),
-    });
-  }
-  const confirmed = imported.filter((c) => c.fighterId !== 'new' && c.changes.length === 0).length;
-  blocks.push({ title: `Confirmées sans changement (${confirmed.toLocaleString('fr-FR')})`, note: 'Marquées « confirmée FFK ».' });
-  const creates = imported.filter((c) => c.fighterId === 'new');
-  if (creates.length) {
-    blocks.push({
-      title: `Combattants créés (${creates.length.toLocaleString('fr-FR')})`,
-      items: creates.map((c) => {
-        const l = c.value!.line;
-        const age = l.ageBandCode ? ageBandLabel(grid, l.ageBandCode) : '—';
-        return `${name(l)} — ${lineDisciplines(l)}, ${age}${c.value!.clubId ? `, ${clubName(c.value!.clubId)}` : ''}`;
-      }),
-    });
-  }
-  const deleted = plan.orphans.filter((o) => o.action === 'delete');
-  if (deleted.length) blocks.push({ title: `Inscriptions supprimées (${deleted.length.toLocaleString('fr-FR')})`, items: deleted.map((o) => `${o.label} — ${o.disciplines}`) });
-  const kept = plan.orphans.length - deleted.length;
-  if (kept) blocks.push({ title: `Fiches club sans inscription FFK gardées (${kept.toLocaleString('fr-FR')})`, note: 'Gardées telles quelles, sans la marque « confirmée FFK ».' });
-
-  const clubsAside = plan.clubs.filter((c) => !c.target);
-  const cardsAside = plan.cards.filter((c) => c.state === 'todo' || c.state === 'skip');
-  if (clubsAside.length || cardsAside.length) {
-    blocks.push({
-      title: `Laissé de côté (${(clubsAside.length + cardsAside.length).toLocaleString('fr-FR')})`,
-      aside: true,
-      items: [
-        ...clubsAside.map((c) => `Club ${c.clubName} : pas relié, ses nouveaux combattants ne sont pas créés`),
-        ...cardsAside.map((c) => {
-          const why = c.state === 'skip' ? 'écartée' : states[c.key] === 'pending' ? 'carte modifiée mais pas validée' : (c.reason ?? 'à trancher');
-          return `${name(c.exportLine)} — ${lineDisciplines(c.exportLine)} : ${why}`;
-        }),
-      ],
-      note: 'Rien ne change pour eux. Réimportez le même fichier plus tard pour les traiter.',
-    });
-  }
-  return blocks;
-}
-
-const resultMessage = (r: FfkImportResult) =>
-  `Import FFK : ${[
-    plural(r.created, 'combattant créé', 'combattants créés'),
-    plural(r.updated, 'mis à jour', 'mis à jour'),
-    plural(r.deleted, 'supprimé', 'supprimés'),
-    plural(r.weightClassesCreated, 'catégorie créée', 'catégories créées'),
-    ...(r.leftAside ? [plural(r.leftAside, 'laissé de côté', 'laissés de côté')] : []),
-  ].join(', ')}.`;
+/** Une ligne du récapitulatif : son texte, la partie en gras, la marque « validée ». */
+const Item = ({ item }: { item: RecapItem }) => (
+  <>
+    {item.text}
+    {item.strong && <b>{item.strong}</b>}
+    {item.validated && <Badge size="xs" color="green" variant="light" ml={6}>validée</Badge>}
+  </>
+);
 
 /**
  * Barre collée en bas de la page : ce qui reste à trancher (laissé de côté si on importe maintenant) et « Importer… », jamais bloqué
@@ -107,7 +42,6 @@ export function ImportBar({ competitionId, source, choices, plan, states, grid, 
   const { data: clubs = [] } = useClubs(competitionId);
   const [confirming, setConfirming] = useState(false);
   const todo = plan.summary.clubsTodo + plan.summary.todo;
-  const clubName = (id: string) => clubs.find((c) => c.id === id)?.name ?? '…';
 
   const open = () => {
     commit.reset();
@@ -152,10 +86,10 @@ export function ImportBar({ competitionId, source, choices, plan, states, grid, 
 
       <Modal opened={confirming} onClose={() => setConfirming(false)} title="Confirmer l’import FFK" size="lg">
         <Stack gap="md" data-testid="ffk-recap">
-          {confirming && recap(plan, states, grid, clubName).map((b) => (
+          {confirming && recap(plan, states, grid, clubs).map((b) => (
             <Stack key={b.title} gap={4}>
               <Title order={4} fz="sm" c={b.aside ? 'var(--sk-warn-text)' : undefined}>{b.title}</Title>
-              {b.items && <List size="sm" spacing={2}>{b.items.map((item, i) => <List.Item key={i}>{item}</List.Item>)}</List>}
+              {b.items && <List size="sm" spacing={2}>{b.items.map((item, i) => <List.Item key={i}><Item item={item} /></List.Item>)}</List>}
               {b.note && <Text size="xs" c="dimmed">{b.note}</Text>}
             </Stack>
           ))}
