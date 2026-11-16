@@ -3,6 +3,7 @@ import {
   CLUB_FORM_COLUMNS,
   CLUB_FORM_FIRST_ROW,
   CLUB_FORM_HEADER_FIELDS,
+  CLUB_FORM_LICENCE_COLUMN,
   CLUB_FORM_LEGACY_COLUMNS,
   CLUB_FORM_TITLE,
   NotAClubFormError,
@@ -137,5 +138,17 @@ describe('readClubFormLines', () => {
     const cells = sheet([], 'non', CLUB_FORM_LEGACY_COLUMNS);
     expect(() => readClubFormLines(cells, grid, TOL)).toThrow(NotAClubFormError);
     expect(() => readClubFormLines(cells, grid, TOL)).toThrow(LEGACY_FORM_REFUSED);
+  });
+});
+
+describe('colonne licence', () => {
+  const columns = [CLUB_FORM_COLUMNS[0], CLUB_FORM_COLUMNS[1], CLUB_FORM_LICENCE_COLUMN, ...CLUB_FORM_COLUMNS.slice(2)];
+  test('fiche renvoyée : la licence entre dans la ligne lue', () => {
+    const r = readClubFormLines(sheet([['MARTIN', 'Léa', '1146 2640 r', 'F', 'Cadets', '52', 'Karaté', 'Non', '', 'Jiyu', '', '', '', '']], 'non', columns), grid, TOL);
+    expect(r.items[0]!.line).toMatchObject({ licence: '11462640R', lastName: 'MARTIN', sex: 'F', combats: ['karate'], weightKg: 52 });
+  });
+  test('fiche sans la colonne : licence nulle', () => {
+    const r = readClubFormLines(sheet([['MARTIN', 'Léa', 'F', 'Cadets', '52', 'Karaté', 'Non', '', 'Jiyu', '', '', '', '', '']]), grid, TOL);
+    expect(r.items[0]!.line.licence).toBeNull();
   });
 });

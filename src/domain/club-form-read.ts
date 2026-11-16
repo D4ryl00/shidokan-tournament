@@ -7,6 +7,7 @@ import {
   kgText,
   locate,
   parseHeader,
+  splitLicenceColumn,
   tidyReclass,
   type ClubFormLine,
   type CombatDiscipline,
@@ -45,8 +46,9 @@ export const LEGACY_FORM_REFUSED = 'Ancien modèle de fiche : demandez au club d
 const text = (v: unknown): string => (v === null || v === undefined ? '' : String(v).trim());
 
 /** Lit une fiche renvoyée (nouveau modèle) : l'en-tête et un combattant par ligne, sans rien rejeter. */
-export function readClubFormLines(cells: unknown[][], grid: CategoryGrid, tolerance: WeighInTolerance): ClubFormRead {
-  const { headerRows, columnsRow } = locate(cells);
+export function readClubFormLines(sheetCells: unknown[][], grid: CategoryGrid, tolerance: WeighInTolerance): ClubFormRead {
+  const { headerRows, columnsRow } = locate(sheetCells);
+  const { cells, licences } = splitLicenceColumn(sheetCells, columnsRow);
   const base = parseHeader(cells, headerRows);
   const isNew = normalizeName(text(cells[columnsRow]?.[4])).startsWith('POIDS ACTUEL');
   if (!isNew) throw new NotAClubFormError(LEGACY_FORM_REFUSED);
@@ -67,8 +69,10 @@ export function readClubFormLines(cells: unknown[][], grid: CategoryGrid, tolera
   const groups = new Map<string, Group>();
   for (let r = columnsRow + 1; r < cells.length; r++) {
     const row = cells[r] ?? [];
-    if (row.slice(0, width).every((c) => text(c) === '')) continue;
+    const licence = licences.get(r) ?? null;
+    if (licence === null && row.slice(0, width).every((c) => text(c) === '')) continue;
     const { line, warnings, errors } = cellsToLine(row, grid, triathlonColumn, secondCombatColumn);
+    line.licence = licence;
     const notes = [...errors, ...warnings];
     if (/^VETERANS?$/.test(normalizeName(text(row[3])))) notes.push('« Vétéran » sans numéro : placé en V1 (à corriger si besoin).');
     // Une ligne sans nom n'est jamais fusionnée : chacune reste son propre combattant.
@@ -133,6 +137,7 @@ function mergeLines(lines: ClubFormLine[]): ClubFormLine {
   for (const l of rest) {
     out.lastName ||= l.lastName;
     out.firstName ||= l.firstName;
+    out.licence ??= l.licence;
     out.sex ??= l.sex;
     out.ageBandCode ??= l.ageBandCode;
     out.weightKg ??= l.weightKg;

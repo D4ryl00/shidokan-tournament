@@ -38,6 +38,9 @@ export const CLUB_FORM_COLUMNS = [
 ] as const;
 /** Colonne ajoutée à la fin quand la compétition autorise plusieurs combats par jour ; reconnue à son libellé. */
 export const CLUB_FORM_SECOND_COMBAT_COLUMN = '2e discipline de combat';
+/** Colonne facultative juste après Prénom, repérée à son titre (les fiches envoyées avant n'en ont pas). */
+export const CLUB_FORM_LICENCE_COLUMN = 'N° de licence (facultatif)';
+export const CLUB_FORM_LICENCE_INDEX = 2;
 export const CLUB_FORM_RECLASS_HEADER = 'Si seul : autre discipline ? 1, 2, 3, vide = non';
 /** Valeurs de la dernière colonne : ce qu'on propose d'abord à un combattant shobu qui a accepté une autre discipline. */
 export const SHOBU_KEEP_LABELS = { ruleset: 'Autre discipline', discipline: 'Passer en jiyu' } as const;
@@ -364,6 +367,23 @@ export function locate(cells: unknown[][]): { headerRows: Map<string, number>; c
   return { headerRows, columnsRow };
 }
 
+/**
+ * Retire la colonne licence (repérée à son titre sur la ligne des colonnes) des lignes du tableau : la lecture par position reste
+ * celle d'avant. Renvoie les licences normalisées par ligne (0-based) ; cellules inchangées si la fiche n'a pas la colonne.
+ */
+export function splitLicenceColumn(cells: unknown[][], columnsRow: number): { cells: unknown[][]; licences: Map<number, string | null> } {
+  const title = normalizeName(CLUB_FORM_LICENCE_COLUMN);
+  const index = (cells[columnsRow] ?? []).findIndex((c) => normalizeName(text(c)) === title);
+  const licences = new Map<number, string | null>();
+  if (index < 0) return { cells, licences };
+  const out = cells.map((row, r) => {
+    if (r < columnsRow || !row) return row;
+    licences.set(r, normalizeLicence(row[index]));
+    return [...row.slice(0, index), ...row.slice(index + 1)];
+  });
+  return { cells: out, licences };
+}
+
 export function parseHeader(cells: unknown[][], headerRows: Map<string, number>): ClubFormHeader {
   const value = (i: number) => {
     const row = headerRows.get(CLUB_FORM_HEADER_FIELDS[i]!);
@@ -441,8 +461,9 @@ function parseRow(row: unknown[], line: number, grid: CategoryGrid): ClubFormRow
 }
 
 /** Lit une fiche club à partir des cellules du tableur (cells[ligne 0-based][colonne 0-based]). */
-export function parseClubForm(cells: unknown[][], grid: CategoryGrid, tolerance: WeighInTolerance = { M: 0, F: 0 }, closed: ReadonlySet<string> = new Set(), opts: LineOptions = {}): ClubFormParse {
-  const { headerRows, columnsRow } = locate(cells);
+export function parseClubForm(sheetCells: unknown[][], grid: CategoryGrid, tolerance: WeighInTolerance = { M: 0, F: 0 }, closed: ReadonlySet<string> = new Set(), opts: LineOptions = {}): ClubFormParse {
+  const { headerRows, columnsRow } = locate(sheetCells);
+  const { cells, licences } = splitLicenceColumn(sheetCells, columnsRow);
   const header = parseHeader(cells, headerRows);
   // Nouveau format reconnu à sa 5e colonne (« Poids actuel ») ; sinon, ancien format.
   const isNew = normalizeName(text(cells[columnsRow]?.[4])).startsWith('POIDS ACTUEL');
@@ -455,10 +476,12 @@ export function parseClubForm(cells: unknown[][], grid: CategoryGrid, tolerance:
   const combatByFighter = new Map<string, Set<DisciplineId>>();
   for (let r = columnsRow + 1; r < cells.length; r++) {
     const row = cells[r] ?? [];
-    if (row.slice(0, width).every((c) => text(c) === '')) continue;
+    const licence = licences.get(r) ?? null;
+    if (licence === null && row.slice(0, width).every((c) => text(c) === '')) continue;
     const parsedRows = isNew
       ? (() => {
           const { line, warnings, errors } = cellsToLine(row, grid, triathlonColumn, secondCombatColumn);
+          line.licence = licence;
           // Une valeur illisible prime sur « manquant » (même ligne, un seul message par case).
           if (errors.length) return [{ line: r + 1, label: `${line.lastName} ${line.firstName}`.trim(), input: null, errors, warnings }];
           const out = lineToRows(line, r + 1, grid, tolerance, closed, opts);
