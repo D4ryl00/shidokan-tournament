@@ -38,7 +38,7 @@ function newView(item: ClubFormItem, c: ClubFormStepContext): StepView<ClubFormI
 function existingView(item: ClubFormItem, fresh: ClubLine, c: ClubFormStepContext): StepView<ClubFormItem> {
   // Nom, prénom et sexe ne sont jamais comparés : la fiche a pu être renommée, seuls les autres champs comptent.
   const diffs = clubFormDiffs(item.line, fresh.line);
-  const initial = fitWeightClass(lockedKept(fresh, prefillExistingFromFile(fresh.line, diffs, fresh.startedDisciplines)), c.weightClasses);
+  const initial = fitWeightClass(lockedKept(fresh, prefillExistingFromFile(fresh.line, diffs, fresh.startedDisciplines, item.line)), c.weightClasses);
   const locked = !fresh.editable && !fresh.partlyEditable;
   const current = disciplinesOf(fresh.line);
   // Verrouillée : rien à choisir, l'encadré s'arrête aux disciplines.

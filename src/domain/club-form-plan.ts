@@ -1,11 +1,11 @@
-import { PREF_DISCIPLINES, orderedPrefs, tidyReclass, type ClubFormLine, type ClubFormPrefs, type CombatDiscipline, type PrefDiscipline } from './club-form.js';
+import { PREF_DISCIPLINES, normalizeLicence, orderedPrefs, tidyReclass, type ClubFormLine, type ClubFormPrefs, type CombatDiscipline, type PrefDiscipline } from './club-form.js';
 import type { ClubFormItem, ClubFormReadHeader } from './club-form-read.js';
 import { cleanEmails, sameEmail } from './emails.js';
 import type { PlanLine } from './ffk-pdf-plan.js';
 import { normalizeName } from './names.js';
 import type { DisciplineId, Ruleset } from './types.js';
 
-export type ImportField = 'ageBandCode' | 'weightClassId' | 'weightKg' | 'disciplines' | 'ruleset' | 'grade' | 'prefs' | 'shobuKeep';
+export type ImportField = 'ageBandCode' | 'weightClassId' | 'weightKg' | 'disciplines' | 'ruleset' | 'grade' | 'prefs' | 'shobuKeep' | 'licence';
 /** `ffk` : la valeur importée (nom gardé du PDF FFK) ; `fiche` : la valeur enregistrée. */
 export interface ImportDiff {
   field: ImportField;
@@ -30,6 +30,7 @@ export function fieldValue(line: ClubFormLine, field: ImportField): string | nul
       return list.length ? list.join(',') : null;
     }
     case 'shobuKeep': return line.shobuKeep;
+    case 'licence': return normalizeLicence(line.licence);
   }
 }
 
@@ -51,17 +52,18 @@ export function fieldPatch(field: ImportField, value: string | null): Partial<Cl
       return { prefs };
     }
     case 'shobuKeep': return { shobuKeep: value as ClubFormLine['shobuKeep'] };
+    case 'licence': return { licence: value };
   }
 }
 
-const FIELDS: ImportField[] = ['ageBandCode', 'weightClassId', 'weightKg', 'disciplines', 'ruleset', 'grade', 'prefs', 'shobuKeep'];
+const FIELDS: ImportField[] = ['ageBandCode', 'weightClassId', 'weightKg', 'disciplines', 'ruleset', 'grade', 'prefs', 'shobuKeep', 'licence'];
 
 /** Champs où la fiche renvoyée a une valeur différente de l'enregistré ; une case vide ne crée aucune différence. */
 export function clubFormDiffs(file: ClubFormLine, saved: ClubFormLine): ImportDiff[] {
   const hasCombat = file.combats.length > 0;
   const counts: Record<ImportField, boolean> = {
     ageBandCode: true, weightKg: true, disciplines: true, prefs: true,
-    weightClassId: hasCombat, ruleset: hasCombat, grade: file.kata, shobuKeep: file.ruleset === 'shobu',
+    weightClassId: hasCombat, ruleset: hasCombat, grade: file.kata, shobuKeep: file.ruleset === 'shobu', licence: true,
   };
   const diffs: ImportDiff[] = [];
   for (const field of FIELDS) {
@@ -69,6 +71,8 @@ export function clubFormDiffs(file: ClubFormLine, saved: ClubFormLine): ImportDi
     const ffk = fieldValue(file, field);
     if (ffk === null) continue;
     const fiche = fieldValue(saved, field);
+    // Licence : un côté vide ne fait pas d'écart (la licence existante est gardée ou complétée par la fiche).
+    if (field === 'licence' && fiche === null) continue;
     if (ffk !== fiche) diffs.push({ field, ffk, fiche });
   }
   return diffs;
@@ -126,9 +130,11 @@ export function prefillFromFile(file: ClubFormLine, minorBands: Set<string>): Cl
   return tidyReclass(out);
 }
 
-/** La fiche enregistrée avec les valeurs de la fiche renvoyée pour chaque différence ; une discipline commencée reste. */
-export function prefillExistingFromFile(saved: ClubFormLine, diffs: ImportDiff[], startedDisciplines: DisciplineId[]): ClubFormLine {
+/** La fiche enregistrée avec les valeurs de la fiche renvoyée pour chaque différence ; une discipline commencée reste. Licence : celle d'ici, sinon celle de la fiche renvoyée. */
+export function prefillExistingFromFile(saved: ClubFormLine, diffs: ImportDiff[], startedDisciplines: DisciplineId[], file?: ClubFormLine): ClubFormLine {
   let out: ClubFormLine = { ...saved, combats: [...saved.combats], prefs: { ...saved.prefs } };
+  const licence = normalizeLicence(saved.licence) ?? normalizeLicence(file?.licence);
+  if (licence !== null) out.licence = licence;
   for (const d of diffs) out = { ...out, ...fieldPatch(d.field, d.ffk) };
   for (const d of startedDisciplines) {
     if (d === 'kata') {
