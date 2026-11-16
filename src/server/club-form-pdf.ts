@@ -16,7 +16,7 @@ const ROWS = 10;
 const BLACK = rgb(0, 0, 0);
 const GREY_LINE = rgb(0.47, 0.47, 0.47);
 const GREY_FILL = rgb(0.95, 0.95, 0.95);
-const COLUMNS = [8.5, 7.5, 8, 4.5, 17, 5.5, 15.5, 6, 6.5, 9, 12];
+const COLUMNS = [8.5, 7.5, 8, 4.5, 17, 5.5, 15.5, 6, 6.5, 10, 11];
 const NOTE: [string, string][] = [
   ['Reclassement : à quoi ça sert ? ', 'Si un combattant se retrouve seul dans sa catégorie, l’organisation cherche à lui trouver un adversaire. Vos réponses disent ce qu’on peut lui proposer.'],
   ['Pré-accord : ', PRE_APPROVAL_TEXT],
@@ -224,8 +224,8 @@ export async function buildClubFormPdf(competition: Competition, grid: CategoryG
     checks(page, f, xs[6]! + pad, line2, ['Triathlon', 'Kata']);
     checks(page, f, xs[8]! + pad, line1, ['Jiyu']);
     checks(page, f, xs[8]! + pad, line2, ['Shobu']);
-    checks(page, f, xs[9]! + pad, line1, ['Karaté', 'Box.'], 8.5, 2.6 * MM);
-    checks(page, f, xs[9]! + pad, line2, ['Mix', 'Tri.'], 8.5, 2.6 * MM);
+    checks(page, f, xs[9]! + pad, line1, ['Karaté', 'Box.'], 8.5, 3.6 * MM);
+    checks(page, f, xs[9]! + pad, line2, ['Mix', 'Tri.'], 8.5, 3.6 * MM);
     checks(page, f, xs[10]! + pad, line1, ['autre discipline']);
     checks(page, f, xs[10]! + pad, line2, ['passer en jiyu']);
     top = y;
