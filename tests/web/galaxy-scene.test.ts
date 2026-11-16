@@ -260,3 +260,21 @@ test('orderedNeighbors : une voisine interdite seulement dans l’autre sens n�
   expect(orderedNeighbors('a', [], [l], s).map((n) => n.id)).toEqual(['b']);
   expect(orderedNeighbors('b', [], [l], s)).toEqual([]);
 });
+
+test('slotLayout : téléphone 402 × 600, 5 voisines : une seule colonne (dessus, dessous), rien sur les côtés, sans chevauchement', () => {
+  const cards = sizes([200, 150, 180, 220, 160]);
+  const { slots, scale } = slotLayout(cards, { w: 402, h: 600 }, 0.6);
+  expect(scale).toBeGreaterThanOrEqual(0.6);
+  expect(slots.map((p) => p.x)).toEqual([0, 0, 0, 0, 0]);
+  const rs = rects(cards, slots, scale);
+  expect(anyOverlap(rs)).toBe(false);
+  for (const r of rs) {
+    expect(r.x0).toBeGreaterThanOrEqual(-201);
+    expect(r.x1).toBeLessThanOrEqual(201);
+  }
+  // Les mieux classées au plus près de la sélection : la 1re juste au-dessus, la 2e juste au-dessous, puis plus loin.
+  expect(slots[0]!.y).toBeLessThan(0);
+  expect(slots[1]!.y).toBeGreaterThan(0);
+  expect(Math.abs(slots[2]!.y)).toBeGreaterThan(Math.abs(slots[0]!.y));
+  expect(Math.abs(slots[3]!.y)).toBeGreaterThan(Math.abs(slots[1]!.y));
+});

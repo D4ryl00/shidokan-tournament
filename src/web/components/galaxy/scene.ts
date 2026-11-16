@@ -181,8 +181,9 @@ function tryLayout(cards: CardSizes, area: { w: number; h: number }, s: number, 
   const availW = (area.w - 2 * MARGIN) / s;
   const availH = (area.h - 2 * MARGIN) / s;
   const colW = Math.max(0, ...cards.neighbors.map((c) => c.w));
-  // Colonnes de côté qui tiennent en largeur (au moins une de chaque côté quand on force) ; sans elles, le centre seul.
-  const side = Math.max(force ? 1 : 0, Math.floor((availW - cards.sel.w - 2 * GAP) / 2 / (colW + GAP)));
+  // Colonnes de côté qui tiennent en largeur ; aucune (téléphone) : toutes les voisines dans la colonne du centre.
+  const side = Math.floor((availW - cards.sel.w - 2 * GAP) / 2 / (colW + GAP));
+  if (side < 1) return centreColumn(cards, availH, s, force);
   // Piles : colonne → indices des voisines, la première au milieu, puis en alternance dessus et dessous.
   const stacks = new Map<number, number[]>();
   let top: number | null = null;
@@ -229,6 +230,31 @@ function tryLayout(cards: CardSizes, area: { w: number; h: number }, s: number, 
     }
   }
   return out.map((p) => ({ x: p.x * s, y: p.y * s }));
+}
+
+/**
+ * Téléphone : pas de place pour une colonne de côté. Les voisines s'empilent au-dessus et au-dessous de la sélection,
+ * la mieux classée juste au-dessus, la suivante juste au-dessous, et ainsi de suite (du côté le moins haut). Sans
+ * `force`, null si la colonne dépasse en hauteur ; forcée, elle dépasse en hauteur (on y va en déplaçant la galaxie),
+ * jamais sur les côtés.
+ */
+function centreColumn(cards: CardSizes, availH: number, s: number, force: boolean): Point[] | null {
+  const above: number[] = [];
+  const below: number[] = [];
+  const height = (ids: number[]) => ids.reduce((sum, i) => sum + cards.neighbors[i]!.h + GAP, 0);
+  cards.neighbors.forEach((_, i) => (height(above) <= height(below) ? above : below).push(i));
+  const half = cards.sel.h / 2;
+  if (!force && (half + height(above) > availH / 2 || half + height(below) > availH / 2)) return null;
+  const out: Point[] = cards.neighbors.map(() => ({ x: 0, y: 0 }));
+  for (const [ids, dir] of [[above, -1], [below, 1]] as const) {
+    let edge = half + GAP;
+    for (const i of ids) {
+      const h = cards.neighbors[i]!.h;
+      out[i] = { x: 0, y: dir * (edge + h / 2) * s };
+      edge += h + GAP;
+    }
+  }
+  return out;
 }
 
 /**
