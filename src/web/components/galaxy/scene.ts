@@ -1,5 +1,5 @@
 import { CARD_W, type Point } from '../../../domain/galaxy/layout.js';
-import { rulesFrom, rulesRank, type GalaxyLink } from '../../../domain/galaxy/links.js';
+import { blockedRules, rulesFrom, rulesRank, type GalaxyLink } from '../../../domain/galaxy/links.js';
 import { isRuleOn, RULE_LABELS } from '../../../domain/replacement/rules.js';
 import type { CompetitionSettings, RuleId } from '../../../domain/settings.js';
 
@@ -15,6 +15,8 @@ export const SLOTS: [number, number][] = [
 export interface Camera { k: number; px: number; py: number }
 
 const HUES = ['#2fd27a', '#b6dc3c', '#ffd23c', '#ff8a2a', '#ff3b3b'];
+/** Lien interdit par les réglages (étape 49) : gris, distinct du rouge « au-delà de la coupure » qui, lui, est permis. */
+export const FORBIDDEN_COLOR = '#8a93ad';
 const BEYOND = '#ff3b3b';
 /** Règles sans couleur de lien : retour, split et écart de poids ne sont pas des liens de la galaxie. */
 const NOT_IN_LEGEND: ReadonlySet<RuleId> = new Set<RuleId>(['return', 'split', 'weightGap']);
@@ -76,6 +78,24 @@ export function sortedNeighbors(id: string, links: GalaxyLink[], settings: Compe
     .sort((x, y) => x.rank - y.rank || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0))
     .slice(0, SLOTS.length)
     .map(({ id: nid, rules }) => ({ id: nid, rules }));
+}
+
+/**
+ * Voisines rapprochées : les permises (triées comme `sortedNeighbors`), puis les interdites par les réglages (même tri),
+ * sans doublon, au plus SLOTS.length.
+ */
+export function orderedNeighbors(
+  id: string, allowed: GalaxyLink[], forbidden: GalaxyLink[], settings: CompetitionSettings,
+): { id: string; rules: RuleId[]; forbidden: boolean }[] {
+  const first = sortedNeighbors(id, allowed, settings).map((n) => ({ ...n, forbidden: false }));
+  const seen = new Set(first.map((n) => n.id));
+  const then = sortedNeighbors(id, forbidden, settings).filter((n) => !seen.has(n.id)).map((n) => ({ ...n, forbidden: true }));
+  return [...first, ...then].slice(0, SLOTS.length);
+}
+
+/** Étiquette d'un lien interdit vu depuis `fromId` : « Interdit : » et les réglages en cause. */
+export function forbiddenLabel(link: GalaxyLink, fromId: string, settings: CompetitionSettings): string {
+  return `Interdit : ${blockedRules(rulesFrom(link, fromId), settings).map((r) => RULE_LABELS[r]).join(' + ')}`;
 }
 
 function gradient(t: number): string {

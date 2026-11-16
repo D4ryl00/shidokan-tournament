@@ -3,7 +3,7 @@ import type { GalaxyLink } from '../../src/domain/galaxy/links.js';
 import type { Point } from '../../src/domain/galaxy/layout.js';
 import { defaultSettings } from '../../src/domain/settings.js';
 import { drawGalaxy, starAt, type Scene, type Star } from '../../src/web/components/galaxy/drawGalaxy.js';
-import { bestFrom, linkStyle } from '../../src/web/components/galaxy/scene.js';
+import { bestFrom, FORBIDDEN_COLOR, linkStyle } from '../../src/web/components/galaxy/scene.js';
 
 /** Contexte 2D factice : relève la couleur de chaque trait tracé. */
 function fakeContext(): { cx: CanvasRenderingContext2D; strokes: string[] } {
@@ -41,6 +41,7 @@ test('« Tous les liens », rien de choisi : chaque lien a la couleur du meilleu
   const scene: Scene = {
     stars: [star('a'), star('b')], pos, links: [l], selectedId: null, hoverId: null, overlaid: new Set(), pulledIds: [], matched: null,
     allLinks: true, pull: 0, linkStyle: (x, from) => linkStyle(x, from, settings), linkFrom: (x) => bestFrom(x, settings), linkLabel: () => '',
+    forbidden: [], forbiddenLabel: () => '',
   };
   const { cx, strokes } = fakeContext();
   drawGalaxy(cx, 800, 600, { k: 1, px: 0, py: 0 }, scene, 0);
@@ -69,4 +70,21 @@ test('starAt : zoomé (cartes dessinées), un clic dans le rectangle de la carte
   expect(starAt(s, cam, 800, 600, 400 + 35, 300 + 5)).toBe('a');
   expect(starAt(s, cam, 800, 600, 400 + 45, 300)).toBeNull();
   expect(starAt(s, cam, 800, 600, 400, 300 + 12)).toBeNull();
+});
+
+test('lien interdit : gris, seulement pour l’étoile en focus, jamais avec « Tous les liens » seul', () => {
+  const settings = defaultSettings();
+  const l: GalaxyLink = { a: 'a', b: 'b', fromA: ['minorsAdults'], fromB: null };
+  const pos = new Map<string, Point>([['a', { x: -50, y: 0 }], ['b', { x: 50, y: 0 }]]);
+  const scene = (hoverId: string | null): Scene => ({
+    stars: [star('a'), star('b')], pos, links: [], selectedId: null, hoverId, overlaid: new Set(), pulledIds: [], matched: null,
+    allLinks: true, pull: 0, linkStyle: (x, from) => linkStyle(x, from, settings), linkFrom: (x) => bestFrom(x, settings), linkLabel: () => '',
+    forbidden: [l], forbiddenLabel: () => 'Interdit : Mélange mineurs / adultes',
+  });
+  const idle = fakeContext();
+  drawGalaxy(idle.cx, 800, 600, { k: 1, px: 0, py: 0 }, scene(null), 0);
+  expect(idle.strokes).not.toContain(FORBIDDEN_COLOR);
+  const hovered = fakeContext();
+  drawGalaxy(hovered.cx, 800, 600, { k: 1, px: 0, py: 0 }, scene('a'), 0);
+  expect(hovered.strokes).toContain(FORBIDDEN_COLOR);
 });

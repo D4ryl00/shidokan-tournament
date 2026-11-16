@@ -1,7 +1,7 @@
 import type { CategoryKey } from '../../../domain/categories.js';
 import { CARD_W, type Point } from '../../../domain/galaxy/layout.js';
 import type { GalaxyLink } from '../../../domain/galaxy/links.js';
-import type { Camera } from './scene.js';
+import { FORBIDDEN_COLOR, type Camera } from './scene.js';
 
 // Dessin de la galaxie des catégories dans un <canvas> (spec étape 48, §3.2, §3.3, §5.3), repris de la maquette v14
 // (« nuage à plat ») : ciel étoilé, liens, étoiles et leurs noms, puis cartes dessinées quand on zoome. Sans React.
@@ -63,6 +63,9 @@ export interface Scene {
   /** Sens d'où voir un lien qui ne touche pas l'étoile choisie : le meilleur des deux. */
   linkFrom: (l: GalaxyLink) => string;
   linkLabel: (l: GalaxyLink, fromId: string) => string;
+  /** Liens interdits par les réglages (étape 49) : dessinés seulement pour l'étoile en focus. */
+  forbidden: GalaxyLink[];
+  forbiddenLabel: (l: GalaxyLink, fromId: string) => string;
 }
 
 /** Ciel de fond : points fixes (graine fixe), légère parallaxe. */
@@ -114,7 +117,7 @@ export function drawGalaxy(cx: CanvasRenderingContext2D, w: number, h: number, c
   }
   const focus = s.selectedId ?? s.hoverId;
   const focusN = new Set<string>();
-  if (focus) for (const l of s.links) if (l.a === focus) focusN.add(l.b); else if (l.b === focus) focusN.add(l.a);
+  if (focus) for (const l of [...s.links, ...s.forbidden]) if (l.a === focus) focusN.add(l.b); else if (l.b === focus) focusN.add(l.a);
   const vis = (id: string) => s.matched === null || s.matched.has(id);
 
   // Liens : ceux de l'étoile survolée ou sélectionnée ; tous, très légers, avec « Tous les liens ».
@@ -135,20 +138,38 @@ export function drawGalaxy(cx: CanvasRenderingContext2D, w: number, h: number, c
     cx.lineTo(b.x, b.y);
     cx.stroke();
   }
+  // Liens interdits par les réglages : seulement ceux de l'étoile en focus, gris en pointillés fins.
+  if (focus) {
+    cx.strokeStyle = FORBIDDEN_COLOR;
+    cx.globalAlpha = 0.9;
+    cx.lineWidth = 1.5;
+    cx.setLineDash([2, 5]);
+    for (const l of s.forbidden) {
+      if (l.a !== focus && l.b !== focus) continue;
+      const a = P.get(l.a);
+      const b = P.get(l.b);
+      if (!a || !b) continue;
+      cx.beginPath();
+      cx.moveTo(a.x, a.y);
+      cx.lineTo(b.x, b.y);
+      cx.stroke();
+    }
+  }
   cx.setLineDash([]);
   cx.globalAlpha = 1;
 
-  // Nom de la règle sur chaque lien rapproché.
+  // Nom de la règle sur chaque lien rapproché (pour un lien interdit : le réglage qui l'interdit).
   if (s.selectedId && s.pull > 0.3) {
     const a = P.get(s.selectedId);
     const pulled = new Set(s.pulledIds);
     cx.font = `11px ${FONT}`;
-    for (const l of s.links) {
+    const labelled = [...s.links.map((l) => ({ l, forbidden: false })), ...s.forbidden.map((l) => ({ l, forbidden: true }))];
+    for (const { l, forbidden } of labelled) {
       const other = l.a === s.selectedId ? l.b : l.b === s.selectedId ? l.a : null;
       const b = other ? P.get(other) : undefined;
       if (!a || !b || !pulled.has(other!)) continue;
-      const st = s.linkStyle(l, s.selectedId);
-      const text = s.linkLabel(l, s.selectedId);
+      const st = forbidden ? { color: FORBIDDEN_COLOR } : s.linkStyle(l, s.selectedId);
+      const text = forbidden ? s.forbiddenLabel(l, s.selectedId) : s.linkLabel(l, s.selectedId);
       const mx = (a.x + b.x) / 2;
       const my = (a.y + b.y) / 2;
       const tw = cx.measureText(text).width;

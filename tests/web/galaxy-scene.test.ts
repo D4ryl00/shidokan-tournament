@@ -3,7 +3,7 @@ import type { GalaxyLink } from '../../src/domain/galaxy/links.js';
 import type { Point } from '../../src/domain/galaxy/layout.js';
 import { defaultSettings, type CompetitionSettings, type RuleId } from '../../src/domain/settings.js';
 import { CARD_W } from '../../src/domain/galaxy/layout.js';
-import { K_FULL, SLOTS, cardScale, displayedPositions, flyDuration, legendRules, linkStyle, pullFactor, slotGap, slotLayout, sortedNeighbors, type CardSizes } from '../../src/web/components/galaxy/scene.js';
+import { FORBIDDEN_COLOR, K_FULL, SLOTS, cardScale, forbiddenLabel, orderedNeighbors, displayedPositions, flyDuration, legendRules, linkStyle, pullFactor, slotGap, slotLayout, sortedNeighbors, type CardSizes } from '../../src/web/components/galaxy/scene.js';
 
 const link = (a: string, b: string, rules: GalaxyLink['fromA']): GalaxyLink => ({ a, b, fromA: rules, fromB: rules });
 
@@ -228,4 +228,27 @@ test('displayedPositions : avec les cases de slotLayout, la voisine va à son é
   const out = displayedPositions(base, 's', ['n1'], { k: K_FULL, px: 0, py: 0 }, { w: 1280, h: 720 }, [{ x: -260, y: 40 }]);
   expect(out.get('n1')!.x).toBeCloseTo(100 - 260 / K_FULL, 6);
   expect(out.get('n1')!.y).toBeCloseTo(50 + 40 / K_FULL, 6);
+});
+
+test('orderedNeighbors : permises d’abord, puis interdites ; sans doublon ; 14 au plus ; seules interdites gardées', () => {
+  const s = defaultSettings();
+  const allowed = [link('a', 'w', ['weight'])];
+  const forbidden = [link('a', 'm', ['minorsAdults']), link('a', 'w', ['minorsAdults'])];
+  expect(orderedNeighbors('a', allowed, forbidden, s)).toEqual([
+    { id: 'w', rules: ['weight'], forbidden: false },
+    { id: 'm', rules: ['minorsAdults'], forbidden: true },
+  ]);
+  expect(orderedNeighbors('a', [], forbidden.slice(0, 1), s).map((n) => n.id)).toEqual(['m']);
+  const many = Array.from({ length: 20 }, (_, i) => link('a', `f${String(i).padStart(2, '0')}`, ['minorsAdults']));
+  const kept = orderedNeighbors('a', allowed, many, s);
+  expect(kept).toHaveLength(14);
+  expect(kept[0]).toEqual({ id: 'w', rules: ['weight'], forbidden: false });
+});
+
+test('forbiddenLabel : « Interdit : » et les réglages en cause', () => {
+  const s = { ...defaultSettings(), mixMinorsAdults: false };
+  expect(forbiddenLabel(link('a', 'b', ['minorsAdults']), 'a', s)).toBe('Interdit : Mélange mineurs / adultes');
+  const two = { ...s, replacementRules: { ...s.replacementRules, off: ['discipline' as const] } };
+  expect(forbiddenLabel(link('a', 'b', ['discipline', 'minorsAdults']), 'a', two)).toBe('Interdit : Autre discipline (préférences) + Mélange mineurs / adultes');
+  expect(FORBIDDEN_COLOR).toBe('#8a93ad');
 });

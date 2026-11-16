@@ -210,6 +210,7 @@ export function GalaxyStage(p: {
     return drawGalaxy(ctx, w, h, cam, {
       stars: s.stars, pos, links: s.links, selectedId: s.sel, hoverId: hover.current, overlaid: over, pulledIds: s.neighborIds,
       matched: s.matched, allLinks: s.allLinks, pull, linkStyle: s.linkStyle, linkFrom: s.linkFrom, linkLabel: s.linkLabel,
+      forbidden: [], forbiddenLabel: () => '',
     }, now);
   };
 
