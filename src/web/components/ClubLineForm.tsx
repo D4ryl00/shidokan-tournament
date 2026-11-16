@@ -1,17 +1,14 @@
-import { Alert, Badge, Button, Checkbox, Chip, FocusTrap, Group, Input, Modal, NativeSelect, Paper, Radio, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, Button, FocusTrap, Group, Modal, Stack, Text } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { Children, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { fieldPatch, fieldValue, type ImportField } from '../../domain/club-form-plan.js';
-import { choosePref, kgText, orderedPrefs, weightWarning, type ClubFormLine, type PrefDiscipline, type PrefRank } from '../../domain/club-form.js';
-import { DISCIPLINES } from '../../domain/disciplines.js';
-import type { DisciplineId } from '../../domain/types.js';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import type { ClubFormLine } from '../../domain/club-form.js';
+import type { FfkCardValue } from '../../domain/ffk-plan/values.js';
 import { ApiError, RELOAD_STATUSES, type ClubEntryView, type ClubLine, type LineOps } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
-import { ageBandChoices, applyChange, combatChoices, deriveAfterAgeChange, kataChoice, reclassChoices, rulesetChoices, toggleCombat, type LineFormContext } from './club-line/lineForm.js';
-import { FfkChoice } from './club-line/FfkChoice.js';
+import { ClubLineFields } from './ClubLineFields.js';
+import type { LineFormContext } from './club-line/lineForm.js';
 import { FfkProgress } from './club-line/FfkProgress.js';
-import { choiceValues, ffkChoiceState, ffkValueAvailable, hiddenConflicts, importValueText, type FfkFormStep } from './club-line/ffkStep.js';
-import { OneOf } from './PaperEntryTable.js';
+import type { FfkFormStep } from './club-line/ffkStep.js';
 
 /** Suite d'un enregistrement : l'avis éventuel du serveur et la ligne enregistrée. */
 export type SavedThen = (message?: string, saved?: ClubLine) => void;
@@ -46,10 +43,8 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
 }) {
   const mobile = useMediaQuery('(max-width: 600px)');
   // Le parent remonte le formulaire (key) pour chaque combattant : l'état part de la ligne ouverte.
-  const [form, setForm] = useState<ClubFormLine>(ffk?.initial ?? line?.line ?? EMPTY_LINE);
-  const startLine = ffk?.initial ?? line?.line ?? null;
-  const [weight, setWeight] = useState(startLine?.weightKg != null ? kgText(startLine.weightKg) : '');
-  const [nameHidden, setNameHidden] = useState(line?.publicNameHidden ?? false);
+  // Le club n'est pas un champ de la fenêtre (`clubId` reste nul) : la ligne est enregistrée dans le club ouvert.
+  const [value, setValue] = useState<FfkCardValue>({ line: ffk?.initial ?? line?.line ?? EMPTY_LINE, clubId: null, publicNameHidden: line?.publicNameHidden ?? false });
   const [confirmDelete, setConfirmDelete] = useState(false);
   // L'erreur de `ops` est partagée par toutes les fenêtres (et les étapes de l'import) : seule celle d'un essai fait ici s'affiche.
   const [tried, setTried] = useState(false);
@@ -60,8 +55,6 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
   const locked = !!line && !line.editable;
   const partly = locked && !!line?.partlyEditable;
   const frozen = locked && !partly;
-  const started = new Set(partly ? line!.startedDisciplines : []);
-  const combatFrozen = frozen || [...started].some((d) => d !== 'kata');
   const lastNameRef = useRef<HTMLInputElement>(null);
   // Fenêtre remontée à vide (« Enregistrer et ajouter un autre ») : le curseur revient sur le nom.
   useEffect(() => {
@@ -72,28 +65,13 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
   const saved = line?.line ?? null;
   // L'organisateur coche plusieurs combats même si le réglage ne le prévoit pas (un avis le rappelle).
   const ctx: LineFormContext = { mode, multipleCombats: multipleCombats || mode === 'organiser', closed: new Set(closed), ageBands, weightClasses, saved };
-  // Import d'une fiche renvoyée : la tranche d'âge choisie déduit la catégorie de poids et le Jiyu d'un mineur.
-  const set = (patch: Partial<ClubFormLine>) => setForm((f) => { const next = applyChange(f, patch, ctx); return ffk ? deriveAfterAgeChange(next, patch, ctx) : next; });
-  const band = ageBands.find((b) => b.code === form.ageBandCode);
-  const classes = weightClasses.filter((w) => w.ageBandCode === form.ageBandCode && w.sex === form.sex);
-  const warning = weightWarning(form, weightClasses);
-  const hasCombat = form.combats.length > 0;
-  const combats = combatChoices(form, ctx);
-  const rulesets = rulesetChoices(form, ctx);
-  const kata = kataChoice(form, ctx);
-  const otherChoices = reclassChoices(form, ctx);
-  const chosen = orderedPrefs(form.prefs);
-  // Un rang de plus s'affiche quand le précédent est choisi et qu'il reste une discipline à proposer.
-  const shownRanks = ([1, 2, 3] as PrefRank[]).filter((rank) => rank === 1 || (chosen.length >= rank - 1 && otherChoices.length >= rank));
-  const ownLabel = form.combats.map((c) => DISCIPLINES[c].label.toLowerCase()).join(' et ');
-  const nothingOpen = mode === 'coach' && !!band && !!form.sex && combats.length === 0 && !kata.shown;
   // Un refus parce que la ligne a changé ou disparu entre-temps (ou que les inscriptions sont closes) ferme le formulaire : la liste est rechargée.
   const onError = (e: unknown) => {
     if (e instanceof ApiError && RELOAD_STATUSES.has(e.status)) onClose(e.message);
   };
   const submit = (then: SavedThen = onClose) => {
     setTried(true);
-    return ops.save({ fighterId: line?.fighterId ?? null, line: form, version: line?.version ?? null, publicNameHidden: nameHidden })
+    return ops.save({ fighterId: line?.fighterId ?? null, line: value.line, version: line?.version ?? null, publicNameHidden: value.publicNameHidden })
       // L'organisateur peut choisir une catégorie fermée : le serveur l'enregistre avec un avis, qu'on lui montre.
       .then((done) => then(mode === 'organiser' && done.notices.length ? done.notices.join(' ') : undefined, done), onError);
   };
@@ -108,41 +86,6 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
       else submit(ffk.onSaved);
     } else onEnter!(submit);
   };
-  // Mode import : marque « FFK » à côté d'une étiquette, comparaison sous un champ.
-  const mark = (key: FfkFormStep['marks'][number]) => ffk?.marks.includes(key) && <Badge variant="outline" size="xs" ml={6} data-testid={`ffk-mark-${key}`}>FFK</Badge>;
-  const labelled = (text: string, key: FfkFormStep['marks'][number]) => <>{text}{mark(key)}</>;
-  const hint = (key: keyof FfkFormStep['hints']) => (ffk?.hints[key] ? <Text size="xs" c="dimmed" style={{ whiteSpace: 'pre-line' }} data-testid={`ffk-hint-${key}`}>{ffk.hints[key]}</Text> : null);
-  const FIELD_LABELS: Record<ImportField, string> = {
-    lastName: 'Nom', firstName: 'Prénom', sex: 'Sexe', ageBandCode: 'Catégorie d’âge', weightClassId: 'Catégorie de poids', weightKg: 'Poids actuel', disciplines: 'Disciplines',
-    ruleset: 'Règlement', grade: 'Grade', prefs: 'Reclassement', shobuKeep: 'Priorité en shobu', licence: 'N° de licence',
-  };
-  const DISABLED: Record<ImportField, boolean> = {
-    lastName: frozen, firstName: frozen, sex: locked, ageBandCode: locked, disciplines: frozen, grade: frozen, weightClassId: combatFrozen, weightKg: combatFrozen, ruleset: combatFrozen, prefs: combatFrozen, shobuKeep: combatFrozen, licence: false,
-  };
-  const choice = (field: ImportField) => {
-    const diff = ffk?.diffs.find((d) => d.field === field);
-    if (!diff || !ffk) return null;
-    const options = field === 'ageBandCode' ? ageBandChoices(form, ctx).map((o) => o.value)
-      : field === 'weightClassId' ? classes.map((w) => w.id) : field === 'ruleset' ? rulesets.map(([r]) => r) : null;
-    const labels = ffk.labels ?? { imported: 'FFK', saved: 'Votre fiche' };
-    // Disciplines commencées : le formulaire les garde cochées, les cases aussi ; plus rien à choisir si elles étaient la seule différence.
-    const values = choiceValues(diff, [...started]);
-    if (!values) return null;
-    const { imported, saved } = values;
-    const pick = (value: string | null) => {
-      set(fieldPatch(field, value));
-      if (field === 'weightKg') setWeight(value ? kgText(Number(value)) : '');
-    };
-    return (
-      <FfkChoice label={FIELD_LABELS[field]} state={ffkChoiceState(fieldValue(form, field), { ...diff, ffk: imported, fiche: saved })} ffk={importValueText(field, imported, ctx)} fiche={importValueText(field, saved, ctx)} disabled={DISABLED[field]}
-        titles={{ ffk: labels.imported, fiche: diff.savedLabel ?? labels.saved }}
-        unavailable={options ? { ffk: !ffkValueAvailable(diff.ffk, options), fiche: !ffkValueAvailable(diff.fiche, options) } : undefined}
-        onPick={(which) => pick(which === 'ffk' ? imported : saved)} />
-    );
-  };
-
-  const elsewhere = ffk ? hiddenConflicts(ffk.diffs, { reclassShown: hasCombat && otherChoices.length > 0, shobu: form.ruleset === 'shobu', kata: form.kata }) : [];
-
   const doDelete = () => line && (setTried(true), ops.remove({ fighterId: line.fighterId, version: line.version }).then(() => onClose(), onError));
 
   return (
@@ -162,135 +105,8 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
         {!frozen && line && line.notices.length > 0 && (
           <Alert color="yellow" data-testid="line-notices"><Stack gap={4}>{line.notices.map((n) => <Text key={n} size="sm">{n}</Text>)}</Stack></Alert>
         )}
-        <Stack>
-            <Part disabled={frozen}>
-            <SimpleGrid cols={{ base: 1, xs: 2 }}>
-              <TextInput ref={lastNameRef} data-autofocus={(!line && !ffk) || undefined} data-testid="line-last-name" label={labelled('Nom', 'name')} required value={form.lastName} onChange={(e) => set({ lastName: e.currentTarget.value })} />
-              <TextInput data-testid="line-first-name" label={labelled('Prénom', 'name')} required value={form.firstName} onChange={(e) => set({ firstName: e.currentTarget.value })} />
-            </SimpleGrid>
-            {hint('name')}
-            <TextInput data-testid="line-licence" label="N° de licence (facultatif)" description={line?.line.licence ? 'Laissée vide, la licence déjà enregistrée est gardée.' : undefined} value={form.licence ?? ''} onChange={(e) => set({ licence: e.currentTarget.value || null })} />
-            {choice('licence')}
-            </Part>
-            <Part disabled={locked}>
-            <Input.Wrapper label={labelled('Sexe', 'sex')} required labelElement="div" role="group" aria-label="Sexe">
-              <OneOf value={form.sex} options={[['F', 'Féminin'], ['M', 'Masculin']]} onChange={(sex) => set({ sex })} />
-            </Input.Wrapper>
-            </Part>
-            <SimpleGrid cols={{ base: 1, xs: 2 }}>
-              <Stack gap={4}>
-              <Select data-testid="line-age" label={labelled('Catégorie d’âge', 'ageBandCode')} required data={ageBandChoices(form, ctx)} value={form.ageBandCode} disabled={locked}
-                onChange={(ageBandCode) => set({ ageBandCode })} />
-              {hint('ageBandCode')}
-              {choice('ageBandCode')}
-              </Stack>
-              <Stack gap={4}>
-              {/* Obligatoire pour un combat (le kata n'a pas de catégorie de poids). */}
-              <Select data-testid="line-weight-class" label={labelled('Catégorie de poids', 'weightClassId')} required={hasCombat} disabled={!classes.length || combatFrozen}
-                placeholder={classes.length ? undefined : 'Sexe et âge d’abord'}
-                data={classes.map((w) => ({ value: w.id, label: `${w.label} kg` }))} value={form.weightClassId} onChange={(weightClassId) => set({ weightClassId })} />
-              {hint('weightClassId')}
-              {choice('weightClassId')}
-              </Stack>
-              <Stack gap={4}>
-              <TextInput data-testid="line-weight" label="Poids actuel (facultatif)" rightSection={<Text size="xs">kg</Text>} inputMode="decimal" value={weight} disabled={combatFrozen}
-                onChange={(e) => {
-                  const raw = e.currentTarget.value;
-                  setWeight(raw);
-                  const kg = Number(raw.replace(',', '.'));
-                  set({ weightKg: raw.trim() && kg > 0 ? kg : null });
-                }} />
-              {choice('weightKg')}
-              </Stack>
-            </SimpleGrid>
-            {warning && <Text size="sm" c="var(--sk-warn-text)" data-testid="line-weight-warning">{warning}</Text>}
-            {/* Au moins une discipline : un combat, le kata, ou les deux (le poids et le règlement ne sont demandés que pour un combat). */}
-            <Input.Wrapper label={labelled('Disciplines', 'discipline')} required labelElement="div" description={kata.shown ? 'Un combat, le kata, ou les deux.' : undefined}>
-              <Stack gap="sm" mt={4}>
-                <div role="group" aria-label="Discipline de combat">
-                  <Group gap={4} wrap="wrap">
-                    {combats.map(([d, label]) => (
-                      <Chip key={d} size="xs" checked={form.combats.includes(d)} disabled={frozen || started.has(d)} onChange={() => set({ combats: toggleCombat(form, d, ctx) })}>{label}</Chip>
-                    ))}
-                  </Group>
-                </div>
-                {kata.shown && (
-                  <Checkbox data-testid="line-kata" label={kata.label} checked={form.kata} disabled={frozen || started.has('kata')} onChange={(e) => set({ kata: e.currentTarget.checked })} />
-                )}
-              </Stack>
-            </Input.Wrapper>
-            {choice('disciplines')}
-            {ffk?.switchHint && !(form.combats as DisciplineId[]).includes(ffk.switchHint.discipline) && (
-              <Text size="xs" c="dimmed" data-testid="ffk-hint-switch">{ffk.switchHint.text}</Text>
-            )}
-            {hint('discipline')}
-            {nothingOpen && <Text size="sm" c="var(--sk-warn-text)" data-testid="line-nothing-open">Aucune catégorie ouverte pour cette tranche d’âge à cette compétition.</Text>}
-            {mode === 'organiser' && !multipleCombats && form.combats.length > 1 && (
-              <Text size="sm" c="var(--sk-warn-text)" data-testid="line-multiple-off">Plusieurs combats : le réglage de la compétition n’en prévoit qu’un par jour. L’inscription est enregistrée quand même.</Text>
-            )}
-            <Part disabled={combatFrozen}>
-            {hasCombat && (
-              <Input.Wrapper label={labelled('Règlement', 'ruleset')} required labelElement="div" role="group" aria-label="Règlement">
-                {rulesets.length ? <OneOf value={form.ruleset} options={rulesets} onChange={(ruleset) => set({ ruleset })} />
-                  : <Text size="sm" c="var(--sk-warn-text)" data-testid="line-no-ruleset">Aucun règlement commun à ces disciplines : décochez-en une.</Text>}
-                {choice('ruleset')}
-              </Input.Wrapper>
-            )}
-            </Part>
-            <Part disabled={frozen}>
-            {form.kata && <TextInput data-testid="line-grade" label="Grade (pour le kata)" value={form.grade ?? ''} onChange={(e) => set({ grade: e.currentTarget.value || null })} />}
-            {form.kata && choice('grade')}
-            <Checkbox data-testid="line-name-hidden" label="Masquer le nom sur la page publique" description="Le public voit « Combattant masqué » ; le club reste affiché."
-              checked={nameHidden} onChange={(e) => setNameHidden(e.currentTarget.checked)} />
-            </Part>
-            <Part disabled={combatFrozen}>
-            {hasCombat && otherChoices.length > 0 && (
-              <Paper withBorder p="md" radius="md" data-testid="line-reclass" style={{ background: 'var(--sk-bg)' }}>
-                <Stack gap="sm">
-                  <div>
-                    <Text fw={600} size="sm">Reclassement : si {form.firstName.trim() || 'ce combattant'} se retrouve sans adversaire</Text>
-                    <Text size="sm" c="dimmed" mt={2}>Le jour de la compétition, un combattant peut se retrouver seul dans sa catégorie. L’organisation cherche alors à lui trouver un adversaire. Peut-on lui proposer une autre discipline ?</Text>
-                  </div>
-                  <SimpleGrid cols={{ base: 1, xs: shownRanks.length > 1 ? 2 : 1 }}>
-                    {shownRanks.map((rank) => (
-                      <NativeSelect key={rank} label={rank === 1 ? '1er choix' : `${rank}e choix`} value={chosen[rank - 1] ?? ''}
-                        data={[
-                          { value: '', label: rank === 1 ? `Non, rester en ${ownLabel}` : `Pas de ${rank}e choix` },
-                          // Les rangs précédents ne sont plus proposés ; le 1er choix peut reprendre une discipline choisie plus loin.
-                          ...otherChoices.filter(([d]) => !chosen.slice(0, rank - 1).includes(d)).map(([value, label]) => ({ value, label })),
-                        ]}
-                        onChange={(e) => set({ prefs: choosePref(form.prefs, rank, (e.currentTarget.value || null) as PrefDiscipline | null) })} />
-                    ))}
-                  </SimpleGrid>
-                  {choice('prefs')}
-                  {form.ruleset === 'shobu' && (chosen.length > 0 ? (
-                    <Radio.Group label="Que lui proposer d’abord ?" value={form.shobuKeep} onChange={(v) => set({ shobuKeep: v as 'ruleset' | 'discipline' })}>
-                      <Stack gap={6} mt={6}>
-                        <Radio value="ruleset" label="Changer de discipline, rester en shobu" />
-                        <Radio value="discipline" label={`Rester en ${ownLabel}, passer en jiyu`} />
-                      </Stack>
-                    </Radio.Group>
-                  ) : <Text size="xs" c="dimmed">Sans autre discipline, on pourra seulement lui proposer de passer en jiyu.</Text>)}
-                  {form.ruleset === 'shobu' && choice('shobuKeep')}
-                </Stack>
-              </Paper>
-            )}
-            </Part>
-            {/* Différences dont le champ n'est pas affiché en ce moment : chaque conflit reste visible. */}
-            {elsewhere.length > 0 && (
-              <Paper withBorder p="md" radius="md" data-testid="import-hidden-conflicts" style={{ background: 'var(--sk-bg)' }}>
-                <Stack gap="sm">
-                  <Text fw={600} size="sm">Autres différences avec la fiche</Text>
-                  {elsewhere.map((field) => (
-                    <Stack key={field} gap={2}>
-                      <Text size="sm">{FIELD_LABELS[field]}</Text>
-                      {choice(field)}
-                    </Stack>
-                  ))}
-                </Stack>
-              </Paper>
-            )}
-        </Stack>
+        <ClubLineFields value={value} onChange={setValue} ctx={ctx} diffs={ffk?.diffs ?? []} showLicenceHint={!!line?.line.licence} oneCombatPerDay={!multipleCombats}
+          disabled={locked ? { locked, partly, started: line!.startedDisciplines } : undefined} step={ffk} lastNameRef={lastNameRef} autoFocus={!line && !ffk} />
         <ApiErrorAlert error={tried ? ops.error : null} />
         {ffk ? (
           <Group justify="space-between">
@@ -329,16 +145,4 @@ function BannerText({ text }: { text: string }) {
   const end = text.indexOf('. ');
   if (end < 0) return <>{text}</>;
   return <><b>{text.slice(0, end + 1)}</b>{text.slice(end + 1)}</>;
-}
-
-/** Morceau de la fenêtre qu'une ligne verrouillée désactive (un `fieldset` désactivé ne se réactive pas plus bas : d'où plusieurs morceaux). */
-function Part({ disabled, children }: { disabled: boolean; children: ReactNode }) {
-  // Vide (pas de reclassement à proposer…) : rien, pour ne pas ajouter d'espace.
-  if (Children.toArray(children).length === 0) return null;
-  return (
-    // Estompé : les pastilles (Chip) ne montrent pas d'elles-mêmes qu'un `fieldset` désactivé les bloque.
-    <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, opacity: disabled ? 0.55 : 1 }}>
-      <Stack>{children}</Stack>
-    </fieldset>
-  );
 }

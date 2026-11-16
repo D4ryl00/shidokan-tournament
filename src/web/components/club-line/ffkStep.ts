@@ -35,7 +35,7 @@ export interface FfkFormStep {
 }
 
 /** Quelle case est sélectionnée : la valeur FFK, celle de la fiche, ou aucune (autre valeur tapée). */
-export function ffkChoiceState(value: string | null, diff: ImportDiff): 'ffk' | 'fiche' | null {
+export function ffkChoiceState(value: string | null, diff: Pick<ImportDiff, 'ffk' | 'fiche'>): 'ffk' | 'fiche' | null {
   if (value === diff.ffk) return 'ffk';
   if (value === diff.fiche) return 'fiche';
   return null;

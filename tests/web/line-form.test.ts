@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import type { ClubFormLine } from '../../src/domain/club-form.js';
 import { entryKey } from '../../src/domain/closed-categories.js';
+import { pendingDecisions } from '../../src/web/components/club-line/decisions.js';
 import { ageBandChoices, applyChange, combatChoices, deriveAfterAgeChange, kataChoice, reclassChoices, rulesetChoices, toggleCombat, type LineFormContext } from '../../src/web/components/club-line/lineForm.js';
 
 const bands = [
@@ -113,4 +114,27 @@ test('fiche renvoyée : tranche choisie → catégorie de poids déduite du poid
   expect(deriveAfterAgeChange({ ...line, ageBandCode: 'cadet', ruleset: 'shobu' }, patch, c).ruleset).toBe('shobu');
   const other = { grade: 'x' };
   expect(deriveAfterAgeChange({ ...line, ageBandCode: 'cadet' }, other, c).weightClassId).toBeNull();
+});
+
+test('pendingDecisions : un écart encore vide compte, un écart rempli non ; le poids à problème vide compte une fois', () => {
+  const value = { line: { ...blank, ageBandCode: null }, clubId: 'c1', publicNameHidden: false };
+  const diffs = [
+    { field: 'ageBandCode' as const, ffk: 'cadet', fiche: 'senior' },
+    { field: 'weightClassId' as const, ffk: 'c-54', fiche: 's-60' },
+  ];
+  expect(pendingDecisions(diffs, value)).toBe(1);
+  expect(pendingDecisions(diffs, { ...value, line: { ...value.line, ageBandCode: 'senior' } })).toBe(0);
+  // Club : l'écart se lit sur `clubId`.
+  expect(pendingDecisions([{ field: 'clubId', ffk: 'c1', fiche: 'c2' }], { ...value, clubId: null })).toBe(1);
+  // Poids illisible : la catégorie vide est un choix à faire, même sans écart…
+  const noWeight = { ...value, line: { ...value.line, ageBandCode: 'senior', weightClassId: null } };
+  expect(pendingDecisions([], noWeight, '« 70 » n’est pas dans la grille.')).toBe(1);
+  expect(pendingDecisions([], value, '« 70 » n’est pas dans la grille.')).toBe(0);
+  // … compté une seule fois quand la catégorie de poids est aussi un écart.
+  expect(pendingDecisions(diffs, noWeight, '« 70 » n’est pas dans la grille.')).toBe(1);
+  expect(pendingDecisions([], noWeight)).toBe(0);
+  // Règlement en écart sans combat coché : ni affiché ni demandé.
+  const ruleset = [{ field: 'ruleset' as const, ffk: 'jiyu', fiche: 'shobu' }];
+  expect(pendingDecisions(ruleset, value)).toBe(0);
+  expect(pendingDecisions(ruleset, { ...value, line: { ...value.line, combats: ['karate'] } })).toBe(1);
 });
