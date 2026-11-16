@@ -105,6 +105,15 @@ describe('propositions', () => {
     expect(mk(true)).toEqual([['G', 'jiyu'], ['H', 'shido-mix'], ['H', 'shido-boxing']]);
     expect(mk(false)).toEqual([['H', 'shido-mix'], ['H', 'shido-boxing'], ['G', 'jiyu']]);
   });
+  test('déplacement libre : une règle désactivée dans la liste est nommée', () => {
+    const karate = member({ weightClassId: 'cadet:F:-54', otherDisciplines: ['shido-mix'] });
+    const mix = member({ weightClassId: 'cadet:F:-54', discipline: 'shido-mix' });
+    const s = makeState([karate, mix], { settings: { ...defaultSettings(), replacementRules: { ...defaultSettings().replacementRules, off: ['discipline'] } } });
+    const target = s.categories.find((c) => c.id === mix.categoryId)!;
+    expect(moveViolations(s, karate, target)).toContain('Règle « Autre discipline (préférences) » désactivée (réglages de réaffectation).');
+    const on = { ...s, settings: defaultSettings() };
+    expect(moveViolations(on, karate, target)).toEqual([]);
+  });
   test('G seulement si le passage shobu → jiyu est autorisé dans les réglages', () => {
     const shobu = member({ ageBandCode: 'senior', sex: 'M', ruleset: 'shobu', weightClassId: 'senior:M:-75', approxWeightKg: 74, acceptsJiyuFirst: true });
     const jiyu = member({ ageBandCode: 'senior', sex: 'M', ruleset: 'jiyu', weightClassId: 'senior:M:-75', approxWeightKg: 74 });

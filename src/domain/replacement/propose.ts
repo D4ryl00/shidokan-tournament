@@ -5,7 +5,7 @@ import { DISCIPLINES } from '../disciplines.js';
 import { neighborWeightClasses } from '../weights.js';
 import { categoryForKey, isClosedMember, isClosedTarget, isLocked, isLockedForManual, originalCategory } from './detect.js';
 import type { Case, CategoryState, Member, Proposal, ProposalType, State } from './types.js';
-import { isRuleOn, NO_VALIDATION_RULES, PRE_APPROVAL_RULES, ruleRank } from './rules.js';
+import { isRuleOn, NO_VALIDATION_RULES, PRE_APPROVAL_RULES, RULE_LABELS, ruleRank } from './rules.js';
 import { waveEffects } from './waves.js';
 import { applyProposal } from './move.js';
 import { activeMembers, categoryWeightGap, effectiveWeight, gapThreshold, weighInClass } from './weights.js';
@@ -158,14 +158,21 @@ export function ruleProfile(state: State, p: ProfileInput): { rules: RuleId[]; f
 export function rulesForMove(state: State, registrationId: string, categoryId: string): RuleId[] | null {
   const m = state.members.find((x) => x.registrationId === registrationId);
   const t = state.categories.find((c) => c.id === categoryId);
-  if (!m || !t) return null;
+  return m && t ? manualRules(state, m, t) : null;
+}
+
+/** Règles d'un déplacement de `m` vers la catégorie `t`, comme une proposition ; `null` si interdit. */
+function manualRules(state: State, m: Member, t: CategoryState): RuleId[] | null {
   const ev = evaluate(state, m, t);
   if (!ev) return null;
   return ruleProfile(state, {
-    id: `M:${registrationId}>${categoryId}`, caseId: 'manual', type: ev.type, registrationId, target: { categoryId },
+    id: `M:${m.registrationId}>${t.id}`, caseId: 'manual', type: ev.type, registrationId: m.registrationId, target: { categoryId: t.id },
     changes: ev.changes, checks: ev.checks, waveChange: null, waveShifts: [], reason: '',
   }).rules;
 }
+
+/** Règles de la liste de réaffectation qu'un déplacement libre peut enfreindre en étant désactivées (l'écart de poids a son propre message). */
+const LISTED_RULES: ReadonlySet<RuleId> = new Set<RuleId>(['weight', 'split', 'ageUp', 'ageDown', 'discipline']);
 
 /** Drapeaux dérivés des règles d'une proposition ; `null` si une règle utilisée est désactivée (sauf si elle s'impose). */
 function withRules<T extends ProfileInput>(state: State, movers: Member[], p: T): (T & Pick<Proposal, 'rules' | 'manual' | 'preApproved'>) | null {
@@ -441,6 +448,10 @@ export function moveViolations(state: State, m: Member, t: CategoryState): strin
     const gap = categoryWeightGap(merged, grid);
     const threshold = gapThreshold(merged, state);
     if (gap > threshold + 1e-9) v.push(`Écart de poids de ${gap.toFixed(1).replace('.', ',')} kg (maximum ${threshold} kg).`);
+  }
+  // Une règle désactivée dans la liste des règles de réaffectation (étape 49 : la galaxie y mène à la main).
+  for (const r of manualRules(state, m, t) ?? []) {
+    if (LISTED_RULES.has(r) && !isRuleOn(settings, r)) v.push(`Règle « ${RULE_LABELS[r]} » désactivée (réglages de réaffectation).`);
   }
   return v;
 }
