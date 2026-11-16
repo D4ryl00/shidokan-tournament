@@ -1,5 +1,5 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import { closedEntryWarning, lineToRows, WEIGHT_MISSING, type ClubFormLine, type CombatDiscipline } from '../../domain/club-form.js';
+import { closedEntryWarning, lineToRows, normalizeLicence, WEIGHT_MISSING, type ClubFormLine, type CombatDiscipline } from '../../domain/club-form.js';
 import { closedSummary, columnLabel, entryKey, isEntryClosed, offeredAgeBands } from '../../domain/closed-categories.js';
 import { DISCIPLINES } from '../../domain/disciplines.js';
 import { enteredValues, registrationsToLine } from '../../domain/club-line.js';
@@ -338,6 +338,7 @@ export async function saveClubLine(
     const fields = {
       lastName: line.lastName.trim(), firstName: line.firstName.trim(), nameKey: normalizeName(`${line.lastName} ${line.firstName}`),
       sex: line.sex!, ageBandCode: line.ageBandCode!, clubId: club.id,
+      ...(normalizeLicence(line.licence) ? { licence: normalizeLicence(line.licence) } : {}),
       ...(line.kata ? { grade: line.grade?.trim() || null } : {}),
       ...(opts.publicNameHidden === undefined ? {} : { publicNameHidden: opts.publicNameHidden }),
     };

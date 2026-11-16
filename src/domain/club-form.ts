@@ -38,6 +38,9 @@ export const CLUB_FORM_COLUMNS = [
 ] as const;
 /** Colonne ajoutée à la fin quand la compétition autorise plusieurs combats par jour ; reconnue à son libellé. */
 export const CLUB_FORM_SECOND_COMBAT_COLUMN = '2e discipline de combat';
+/** Colonne facultative juste après Prénom, repérée à son titre (les fiches envoyées avant n'en ont pas). */
+export const CLUB_FORM_LICENCE_COLUMN = 'N° de licence (facultatif)';
+export const CLUB_FORM_LICENCE_INDEX = 2;
 export const CLUB_FORM_RECLASS_HEADER = 'Si seul : autre discipline ? 1, 2, 3, vide = non';
 /** Valeurs de la dernière colonne : ce qu'on propose d'abord à un combattant shobu qui a accepté une autre discipline. */
 export const SHOBU_KEEP_LABELS = { ruleset: 'Autre discipline', discipline: 'Passer en jiyu' } as const;
@@ -88,6 +91,13 @@ export type CombatDiscipline = 'karate' | 'shido-boxing' | 'shido-mix' | 'triath
 export type PrefDiscipline = 'karate' | 'shido-boxing' | 'shido-mix' | 'triathlon';
 export type PrefRank = 1 | 2 | 3;
 export const PREF_DISCIPLINES: readonly PrefDiscipline[] = ['karate', 'shido-boxing', 'shido-mix', 'triathlon'];
+/** Numéro de licence FFK : texte sans espaces, en majuscules ; vide = rien. */
+export function normalizeLicence(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  const s = String(v).replace(/\s+/g, '').toUpperCase();
+  // Sans chiffre ni lettre (« - », « / », « ? ») : une case laissée vide à la main, pas une licence.
+  return /[\p{L}\p{N}]/u.test(s) ? s : null;
+}
 /** Une ligne de fiche telle que remplie (papier, .ods ou saisie) : un combattant. */
 export interface ClubFormLine {
   lastName: string;
@@ -104,6 +114,8 @@ export interface ClubFormLine {
   ruleset: Ruleset | null;
   prefs: ClubFormPrefs;
   shobuKeep: 'ruleset' | 'discipline' | null;
+  /** Numéro de licence FFK (facultatif) ; absent ou vide : la licence déjà enregistrée est gardée. */
+  licence?: string | null;
 }
 export type ClubFormPrefs = Partial<Record<PrefDiscipline, PrefRank>>;
 /** Réglages de la compétition qui changent la lecture d'une ligne. */
@@ -217,7 +229,7 @@ export function lineToRows(line: ClubFormLine, lineNumber: number, grid: Categor
   if (line.combats.length > 1 && !opts.multipleCombats) common.push(ONE_COMBAT_ONLY);
   if (common.length || !line.sex || !line.ageBandCode) return [{ line: lineNumber, label, input: null, errors: common, warnings: [] }];
   const base = {
-    clubId: null, lastName: line.lastName.trim(), firstName: line.firstName.trim(), sex: line.sex, ageBandCode: line.ageBandCode,
+    clubId: null, lastName: line.lastName.trim(), firstName: line.firstName.trim(), sex: line.sex, ageBandCode: line.ageBandCode, licence: normalizeLicence(line.licence),
     source: 'club_form' as const,
   };
   const rows: ClubFormRow[] = [];
@@ -356,6 +368,33 @@ export function locate(cells: unknown[][]): { headerRows: Map<string, number>; c
   return { headerRows, columnsRow };
 }
 
+/** Au-delà (espaces retirés), le texte de la case licence n'est pas un numéro (« Licence en cours de renouvellement ») : ignoré. */
+export const LICENCE_MAX_LENGTH = 20;
+export const licenceIgnoredWarning = (raw: string): string => `N° de licence ignoré (trop long) : « ${raw} ».`;
+
+/**
+ * Retire la colonne licence (repérée à son titre sur la ligne des colonnes) des lignes du tableau : la lecture par position reste
+ * celle d'avant. Renvoie les licences normalisées par ligne (0-based) ; cellules inchangées si la fiche n'a pas la colonne.
+ * Un texte trop long n'est pas gardé (licence nulle) : son avertissement est dans `ignored`, la ligne se lit quand même.
+ */
+export function splitLicenceColumn(cells: unknown[][], columnsRow: number): { cells: unknown[][]; licences: Map<number, string | null>; ignored: Map<number, string> } {
+  const title = normalizeName(CLUB_FORM_LICENCE_COLUMN);
+  const index = (cells[columnsRow] ?? []).findIndex((c) => normalizeName(text(c)) === title);
+  const licences = new Map<number, string | null>();
+  const ignored = new Map<number, string>();
+  if (index < 0) return { cells, licences, ignored };
+  const out = cells.map((row, r) => {
+    if (r < columnsRow || !row) return row;
+    const licence = normalizeLicence(row[index]);
+    if (licence !== null && licence.length > LICENCE_MAX_LENGTH) {
+      licences.set(r, null);
+      if (r > columnsRow) ignored.set(r, licenceIgnoredWarning(text(row[index])));
+    } else licences.set(r, licence);
+    return [...row.slice(0, index), ...row.slice(index + 1)];
+  });
+  return { cells: out, licences, ignored };
+}
+
 export function parseHeader(cells: unknown[][], headerRows: Map<string, number>): ClubFormHeader {
   const value = (i: number) => {
     const row = headerRows.get(CLUB_FORM_HEADER_FIELDS[i]!);
@@ -433,8 +472,9 @@ function parseRow(row: unknown[], line: number, grid: CategoryGrid): ClubFormRow
 }
 
 /** Lit une fiche club à partir des cellules du tableur (cells[ligne 0-based][colonne 0-based]). */
-export function parseClubForm(cells: unknown[][], grid: CategoryGrid, tolerance: WeighInTolerance = { M: 0, F: 0 }, closed: ReadonlySet<string> = new Set(), opts: LineOptions = {}): ClubFormParse {
-  const { headerRows, columnsRow } = locate(cells);
+export function parseClubForm(sheetCells: unknown[][], grid: CategoryGrid, tolerance: WeighInTolerance = { M: 0, F: 0 }, closed: ReadonlySet<string> = new Set(), opts: LineOptions = {}): ClubFormParse {
+  const { headerRows, columnsRow } = locate(sheetCells);
+  const { cells, licences, ignored } = splitLicenceColumn(sheetCells, columnsRow);
   const header = parseHeader(cells, headerRows);
   // Nouveau format reconnu à sa 5e colonne (« Poids actuel ») ; sinon, ancien format.
   const isNew = normalizeName(text(cells[columnsRow]?.[4])).startsWith('POIDS ACTUEL');
@@ -447,10 +487,12 @@ export function parseClubForm(cells: unknown[][], grid: CategoryGrid, tolerance:
   const combatByFighter = new Map<string, Set<DisciplineId>>();
   for (let r = columnsRow + 1; r < cells.length; r++) {
     const row = cells[r] ?? [];
-    if (row.slice(0, width).every((c) => text(c) === '')) continue;
+    const licence = licences.get(r) ?? null;
+    if (licence === null && row.slice(0, width).every((c) => text(c) === '')) continue;
     const parsedRows = isNew
       ? (() => {
           const { line, warnings, errors } = cellsToLine(row, grid, triathlonColumn, secondCombatColumn);
+          line.licence = licence;
           // Une valeur illisible prime sur « manquant » (même ligne, un seul message par case).
           if (errors.length) return [{ line: r + 1, label: `${line.lastName} ${line.firstName}`.trim(), input: null, errors, warnings }];
           const out = lineToRows(line, r + 1, grid, tolerance, closed, opts);
@@ -466,6 +508,8 @@ export function parseClubForm(cells: unknown[][], grid: CategoryGrid, tolerance:
       : warnClosed([parseRow(row, r + 1, grid)], closed);
     const who = normalizeName(`${text(row[0])} ${text(row[1])}`);
     if (/^VETERANS?$/.test(normalizeName(text(row[3])))) parsedRows[0]!.warnings.push('« Vétéran » sans numéro : placé en V1 (à corriger si besoin).');
+    const licenceIgnored = ignored.get(r);
+    if (licenceIgnored) parsedRows[0]!.warnings.push(licenceIgnored);
     rows.push(...checkRows(parsedRows, who, r + 1, seen, combatByFighter, opts));
   }
   return { header, rows };

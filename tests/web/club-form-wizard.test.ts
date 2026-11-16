@@ -98,6 +98,17 @@ describe('clubFormStepView, fiche existante', () => {
     expect(v).toMatchObject({ kind: 'form', line: { version: 'v2' }, ffk: { diffs: [], initial: { weightKg: 38 } } });
   });
 
+  test('seule nouveauté une licence : la fiche avec la licence remplie, sans écart', () => {
+    const [step] = planClubFormImport([item({ licence: '11462640R' })], [clubLine('f1')]).steps;
+    expect(step).toMatchObject({ kind: 'existing', diffs: [] });
+    const v = clubFormStepView(at([step!]), ctx([clubLine('f1')]));
+    expect(v).toMatchObject({ kind: 'form', ffk: { diffs: [], initial: { licence: '11462640R', weightKg: 38 }, skipLabel: 'Laisser la fiche telle quelle' } });
+    // Aucune différence à choisir : l'encadré dit ce que la fiche apporte.
+    const banner = v.kind === 'form' ? v.ffk.banner ?? '' : '';
+    expect(banner).not.toContain('Sous chaque différence');
+    expect(banner).toContain('La fiche renvoyée ajoute seulement son N° de licence (11462640R).');
+  });
+
   test('verrouillée : la fiche telle qu’elle est, la fiche renvoyée seulement dans les cases, « Suivant » seul', () => {
     const fresh = clubLine('f1', { weightKg: 55 }, { editable: false, partlyEditable: false, reason: 'Combats commencés.' });
     const v = clubFormStepView(at([existing('f1', item())]), ctx([fresh]));

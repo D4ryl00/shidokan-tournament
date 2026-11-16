@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { lineToRows, type ClubFormLine } from '../../src/domain/club-form.js';
+import { lineToRows, normalizeLicence, type ClubFormLine } from '../../src/domain/club-form.js';
 import { registrationsToLine, type LineRegistration } from '../../src/domain/club-line.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 
@@ -16,12 +16,12 @@ function roundTrip(line: ClubFormLine): ClubFormLine {
     otherDisciplines: i.otherDisciplines ?? [], acceptsJiyuFirst: i.acceptsJiyuFirst ?? null, originalJson: null,
   }));
   const grade = inputs.find((i) => i.discipline === 'kata')?.grade ?? null;
-  return registrationsToLine({ lastName: line.lastName, firstName: line.firstName, sex: line.sex!, ageBandCode: line.ageBandCode!, grade }, regs).line;
+  return registrationsToLine({ lastName: line.lastName, firstName: line.firstName, sex: line.sex!, ageBandCode: line.ageBandCode!, grade, licence: normalizeLicence(line.licence) }, regs).line;
 }
 
 const BASE: ClubFormLine = {
   lastName: 'MARTIN', firstName: 'Léa', sex: 'F', ageBandCode: 'senior', weightClassId: null, weightKg: 53.5, combats: [], kata: false, grade: null,
-  ruleset: null, prefs: {}, shobuKeep: null,
+  ruleset: null, prefs: {}, shobuKeep: null, licence: null,
 };
 
 test('aller-retour : une ligne combat + kata (prefs, shobu, catégorie et poids, grade) redonne la même ligne', () => {
@@ -45,7 +45,7 @@ test('combat seul, kata seul : idem', () => {
 
 test('inscription réaffectée (originalJson) → discipline, règlement et catégorie de poids d’origine', () => {
   const { line } = registrationsToLine(
-    { lastName: 'DURAND', firstName: 'Hugo', sex: 'M', ageBandCode: 'senior', grade: null },
+    { lastName: 'DURAND', firstName: 'Hugo', sex: 'M', ageBandCode: 'senior', grade: null, licence: null },
     [{ discipline: 'shido-mix', ruleset: 'jiyu', weightClassId: 'senior:M:-84', approxWeightKg: 75, otherDisciplines: [], acceptsJiyuFirst: null, originalJson: JSON.stringify({ discipline: 'karate', ruleset: 'shobu', weightClassId: 'senior:M:-75' }) }],
   );
   expect(line).toMatchObject({ combats: ['karate'], ruleset: 'shobu', weightClassId: 'senior:M:-75', weightKg: 75 });
@@ -57,21 +57,21 @@ test('deux inscriptions de combat → une ligne éditable à deux combats, valeu
     originalJson: JSON.stringify({ discipline: 'shido-boxing', ruleset: 'shobu', weightClassId: 'senior:M:-75' }),
   };
   const mixJiyu: LineRegistration = { discipline: 'shido-mix', ruleset: 'jiyu', weightClassId: 'senior:M:-75', approxWeightKg: 70, otherDisciplines: [], acceptsJiyuFirst: null, originalJson: null };
-  const out = registrationsToLine({ lastName: 'X', firstName: 'Y', sex: 'M', ageBandCode: 'senior', grade: null }, [boxingShobu, mixJiyu]);
+  const out = registrationsToLine({ lastName: 'X', firstName: 'Y', sex: 'M', ageBandCode: 'senior', grade: null, licence: null }, [boxingShobu, mixJiyu]);
   expect(out).toMatchObject({ editable: true, reason: null });
   expect(out.line).toMatchObject({ combats: ['shido-boxing', 'shido-mix'], ruleset: 'shobu', prefs: { 'shido-mix': 1 }, shobuKeep: 'discipline' });
 });
 
 test('deux inscriptions qui partagent une discipline saisie → une seule entrée dans combats', () => {
   const reg = (originalJson: string | null): LineRegistration => ({ discipline: 'karate', ruleset: 'jiyu', weightClassId: 'senior:M:-75', approxWeightKg: 70, otherDisciplines: [], acceptsJiyuFirst: null, originalJson });
-  const { line } = registrationsToLine({ lastName: 'X', firstName: 'Y', sex: 'M', ageBandCode: 'senior', grade: null }, [reg(null), reg(JSON.stringify({ discipline: 'karate', ruleset: 'jiyu', weightClassId: 'senior:M:-75' }))]);
+  const { line } = registrationsToLine({ lastName: 'X', firstName: 'Y', sex: 'M', ageBandCode: 'senior', grade: null, licence: null }, [reg(null), reg(JSON.stringify({ discipline: 'karate', ruleset: 'jiyu', weightClassId: 'senior:M:-75' }))]);
   expect(line.combats).toEqual(['karate']);
 });
 
 const reg = (discipline: LineRegistration['discipline'], ruleset: LineRegistration['ruleset'], weightClassId: string | null): LineRegistration => ({
   discipline, ruleset, weightClassId, approxWeightKg: null, otherDisciplines: [], acceptsJiyuFirst: null, originalJson: null,
 });
-const FIGHTER = { lastName: 'MARTIN', firstName: 'Léa', sex: 'F' as const, ageBandCode: 'senior', grade: null };
+const FIGHTER = { lastName: 'MARTIN', firstName: 'Léa', sex: 'F' as const, ageBandCode: 'senior', grade: null, licence: null };
 
 test('inscriptions qui ne tiennent pas sur une ligne : avertissement avant l’enregistrement', () => {
   expect(registrationsToLine(FIGHTER, [reg('karate', 'jiyu', 'senior:F:-55'), reg('kata', null, null)]).warnings).toEqual([]);
@@ -82,4 +82,8 @@ test('inscriptions qui ne tiennent pas sur une ligne : avertissement avant l’e
     'Règlements différents selon les combats : à l’enregistrement, tous ses combats prennent le règlement choisi ici.',
     'Catégories de poids différentes selon les combats : à l’enregistrement, tous ses combats prennent celle choisie ici.',
   ]);
+});
+
+test('registrationsToLine reprend la licence du combattant', () => {
+  expect(registrationsToLine({ ...FIGHTER, licence: '11462640R' }, []).line.licence).toBe('11462640R');
 });

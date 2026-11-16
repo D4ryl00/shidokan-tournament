@@ -16,7 +16,7 @@ const ROWS = 10;
 const BLACK = rgb(0, 0, 0);
 const GREY_LINE = rgb(0.47, 0.47, 0.47);
 const GREY_FILL = rgb(0.95, 0.95, 0.95);
-const COLUMNS = [10.5, 9, 4.5, 18.5, 5.5, 15.5, 6, 6.5, 10.5, 13.5];
+const COLUMNS = [8.5, 7.5, 8, 4.5, 17, 5.5, 15.5, 6, 6.5, 10, 11];
 const NOTE: [string, string][] = [
   ['Reclassement : à quoi ça sert ? ', 'Si un combattant se retrouve seul dans sa catégorie, l’organisation cherche à lui trouver un adversaire. Vos réponses disent ce qu’on peut lui proposer.'],
   ['Pré-accord : ', PRE_APPROVAL_TEXT],
@@ -164,10 +164,10 @@ export async function buildClubFormPdf(competition: Competition, grid: CategoryG
   const cw = (i: number) => xs[i + 1]! - xs[i]!;
   const h1 = 9 * MM;
   const h2 = 6.5 * MM;
-  const both = new Set([0, 1, 2, 4, 6]);
-  const head1 = ['Nom', 'Prénom', 'Sexe', 'Catégorie d’âge', 'Poids actuel (kg)', 'Disciplines', 'Grade (si kata)', 'Règlement', 'Si seul : autre discipline ?', 'Shobu : si seul, d’abord…'];
+  const both = new Set([0, 1, 3, 5, 7]);
+  const head1 = ['Nom', 'Prénom', 'N° de licence', 'Sexe', 'Catégorie d’âge', 'Poids actuel (kg)', 'Disciplines', 'Grade (si kata)', 'Règlement', 'Si seul : autre discipline ?', 'Shobu : si seul, d’abord…'];
   const head2: Record<number, string> = {
-    3: 'une seule case', 5: competition.settings.multipleCombatDisciplinesPerDay ? 'kata et/ou une ou plusieurs disciplines de combat' : 'kata et/ou une discipline de combat', 7: 'combat', 8: '1, 2, 3 · vide = non', 9: 'une seule case',
+    2: 'facultatif', 4: 'une seule case', 6: competition.settings.multipleCombatDisciplinesPerDay ? 'kata et/ou une ou plusieurs disciplines de combat' : 'kata et/ou une discipline de combat', 8: 'combat', 9: '1, 2, 3 · vide = non', 10: 'une seule case',
   };
   for (let i = 0; i < COLUMNS.length; i++) {
     const h = both.has(i) ? h1 + h2 : h1;
@@ -207,8 +207,8 @@ export async function buildClubFormPdf(competition: Competition, grid: CategoryG
     const line1 = y + rowH / 2 + 1.2 * MM;
     const line2 = y + rowH / 2 - 3.2 * MM;
     const pad = 1.2 * MM;
-    checks(page, f, xs[2]! + pad, line1, ['F']);
-    checks(page, f, xs[2]! + pad, line2, ['M']);
+    checks(page, f, xs[3]! + pad, line1, ['F']);
+    checks(page, f, xs[3]! + pad, line2, ['M']);
     // Catégories d'âge : une grille de cases
     const ageSize = ageRows > 2 ? 7 : 8;
     const ageBox = ageRows > 2 ? 2.4 * MM : 2.8 * MM;
@@ -216,18 +216,18 @@ export async function buildClubFormPdf(competition: Competition, grid: CategoryG
     bands.forEach((b, k) => {
       const col = k % ageCols;
       const row = Math.floor(k / ageCols);
-      const ax = xs[3]! + pad + (col * (cw(3) - 2 * pad)) / ageCols;
+      const ax = xs[4]! + pad + (col * (cw(4) - 2 * pad)) / ageCols;
       const ay = y + rowH - 0.75 * MM - (row + 1) * ageStep + (ageStep - ageSize) / 2 + 0.6;
       checks(page, f, ax, ay, [abbreviations.get(b.code)!], ageSize, ageBox);
     });
-    checks(page, f, xs[5]! + pad, line1, ['Karaté', 'Boxing', 'Mix']);
-    checks(page, f, xs[5]! + pad, line2, ['Triathlon', 'Kata']);
-    checks(page, f, xs[7]! + pad, line1, ['Jiyu']);
-    checks(page, f, xs[7]! + pad, line2, ['Shobu']);
-    checks(page, f, xs[8]! + pad, line1, ['Karaté', 'Box.'], 8.5, 3.6 * MM);
-    checks(page, f, xs[8]! + pad, line2, ['Mix', 'Tri.'], 8.5, 3.6 * MM);
-    checks(page, f, xs[9]! + pad, line1, ['autre discipline']);
-    checks(page, f, xs[9]! + pad, line2, ['passer en jiyu']);
+    checks(page, f, xs[6]! + pad, line1, ['Karaté', 'Boxing', 'Mix']);
+    checks(page, f, xs[6]! + pad, line2, ['Triathlon', 'Kata']);
+    checks(page, f, xs[8]! + pad, line1, ['Jiyu']);
+    checks(page, f, xs[8]! + pad, line2, ['Shobu']);
+    checks(page, f, xs[9]! + pad, line1, ['Karaté', 'Box.'], 8.5, 3.6 * MM);
+    checks(page, f, xs[9]! + pad, line2, ['Mix', 'Tri.'], 8.5, 3.6 * MM);
+    checks(page, f, xs[10]! + pad, line1, ['autre discipline']);
+    checks(page, f, xs[10]! + pad, line2, ['passer en jiyu']);
     top = y;
   }
 

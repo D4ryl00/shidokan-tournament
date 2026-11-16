@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest';
-import { planFfkImport, planFingerprint, type ExistingData, type FfkRow } from '../../src/domain/ffk-import.js';
+import { guessColumnMapping, parseFfkRows, planFfkImport, planFingerprint, type ExistingData, type FfkRow } from '../../src/domain/ffk-import.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 import type { Club, Fighter, Registration } from '../../src/domain/registration.js';
+import { FFK_HEADER } from '../helpers/ffk-fixture.js';
 
 const grid = ffkDefaultGrid();
 
@@ -179,6 +180,26 @@ describe('corrections de la relecture', () => {
     const plan = planFfkImport([row({ licence: 'L1' }), row({ licence: 'L9' })], grid, base());
     expect(plan.items[0]).toMatchObject({ kind: 'update', fighterId: 'f1' });
     expect(plan.items[1]!.kind).toBe('doubtful');
+  });
+  test('même club, même nom, autre licence enregistrée : douteux, jamais un nouveau en silence', () => {
+    const ex = base();
+    ex.fighters[0]!.licence = '11000001A';
+    const plan = planFfkImport([row({ licence: '11462640R' })], grid, ex);
+    expect(plan.items[0]).toMatchObject({ kind: 'doubtful', candidates: [{ fighterId: 'f1', reason: 'même nom, autre licence' }] });
+    const reversed = planFfkImport([row({ licence: '11462640R', lastName: 'LEA', firstName: 'MARTIN' })], grid, ex);
+    expect(reversed.items[0]).toMatchObject({ kind: 'doubtful', candidates: [{ fighterId: 'f1', reason: 'même nom, autre licence' }] });
+  });
+  test('autre licence et autre nom : toujours écarté ; même licence : toujours rapproché', () => {
+    const ex = base();
+    ex.fighters[0]!.licence = '11000001A';
+    expect(planFfkImport([row({ licence: '11462640R', lastName: 'NOUVEAU', firstName: 'X' })], grid, ex).items[0]).toMatchObject({ kind: 'create', fighterId: 'new' });
+    expect(planFfkImport([row({ licence: '11000001A' })], grid, ex).items[0]).toMatchObject({ kind: 'update', fighterId: 'f1' });
+  });
+  test('licence de l’export « 1146 2640 r » ↔ licence enregistrée 11462640R : rapprochés', () => {
+    const ex = base();
+    ex.fighters[0] = fighter('f1', 'c1', 'AUTRE', 'Nom', { licence: '11462640R' });
+    const [r] = parseFfkRows([FFK_HEADER, ['MARTIN LEA', null, '1146 2640 r', '0060893 TANI DOJO', 'Feminine', 'Karate', 'Cadet', -54, null]], 0, guessColumnMapping(FFK_HEADER), 'Karate', grid);
+    expect(planFfkImport([r!], grid, ex).items[0]).toMatchObject({ kind: 'update', fighterId: 'f1' });
   });
   test('empreinte du plan : identique pour un même plan, différente sinon', () => {
     const r = row({ licence: 'X1' });

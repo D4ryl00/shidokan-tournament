@@ -70,6 +70,24 @@ describe('clubFormDiffs', () => {
   });
 });
 
+describe('licence', () => {
+  test('licence différente des deux côtés : écart', () => {
+    expect(clubFormDiffs(line({ licence: '11462640R' }), line({ licence: '11000001A' }))).toContainEqual({ field: 'licence', ffk: '11462640R', fiche: '11000001A' });
+  });
+  test('licence vide d’un côté : pas d’écart, la licence existante est gardée ou complétée', () => {
+    expect(clubFormDiffs(line({ licence: null }), line({ licence: '11000001A' })).map((d) => d.field)).not.toContain('licence');
+    expect(clubFormDiffs(line({ licence: '11462640R' }), line({ licence: null })).map((d) => d.field)).not.toContain('licence');
+    expect(prefillExistingFromFile(line({ licence: null }), [], [], line({ licence: '11462640R' })).licence).toBe('11462640R');
+    expect(prefillExistingFromFile(line({ licence: '11000001A' }), [], [], line({ licence: null })).licence).toBe('11000001A');
+  });
+  test('l’écart choisi remplace la licence', () => {
+    const diffs = clubFormDiffs(line({ licence: '11462640R' }), line({ licence: '11000001A' }));
+    expect(prefillExistingFromFile(line({ licence: '11000001A' }), diffs, [], line({ licence: '11462640R' })).licence).toBe('11462640R');
+    expect(fieldPatch('licence', '11462640R')).toEqual({ licence: '11462640R' });
+    expect(fieldValue(line({ licence: ' 11462 640r ' }), 'licence')).toBe('11462640R');
+  });
+});
+
 describe('planClubFormImport', () => {
   test('nouveau, existant, homonyme, à jour, absents', () => {
     const items = [
@@ -109,6 +127,18 @@ describe('planClubFormImport', () => {
     const plan = planClubFormImport([{ order: 0, rows: [11], line: file, notes: [] }], [saved('a', filled)]);
     expect(plan.upToDate).toBe(1);
     expect(plan.steps).toEqual([]);
+  });
+  test('seule nouveauté une licence (aucune enregistrée) : étape « existant » sans écart, la licence pré-remplie', () => {
+    const plan = planClubFormImport([item(0, { licence: '1146 2640 r' })], [saved('a', { licence: null })]);
+    expect(plan.upToDate).toBe(0);
+    expect(plan.steps).toEqual([{ kind: 'existing', ffk: item(0, { licence: '1146 2640 r' }), fighterId: 'a', diffs: [] }]);
+    expect(prefillExistingFromFile(line({ licence: null }), [], [], line({ licence: '1146 2640 r' })).licence).toBe('11462640R');
+  });
+  test('licence déjà enregistrée, identique ou absente de la fiche : à jour ; fiche verrouillée : à jour', () => {
+    expect(planClubFormImport([item(0, { licence: '11462640R' })], [saved('a', { licence: '11462640R' })]).upToDate).toBe(1);
+    expect(planClubFormImport([item(0, { licence: null })], [saved('a', { licence: null })]).upToDate).toBe(1);
+    const locked: PlanLine = { ...saved('a'), editable: false, partlyEditable: false };
+    expect(planClubFormImport([item(0, { licence: '11462640R' })], [locked]).upToDate).toBe(1);
   });
 });
 

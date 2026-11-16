@@ -19,6 +19,7 @@ export interface LineFighter {
   sex: Sex;
   ageBandCode: string;
   grade: string | null;
+  licence: string | null;
 }
 
 type Entered = { discipline: DisciplineId; ruleset: Ruleset | null; weightClassId: string | null };
@@ -54,6 +55,7 @@ export function registrationsToLine(fighter: LineFighter, regs: LineRegistration
     ruleset: entered?.ruleset ?? null,
     prefs,
     shobuKeep,
+    licence: fighter.licence,
   };
   return { line, editable: true, reason: null, warnings: lineWarnings(regs) };
 }

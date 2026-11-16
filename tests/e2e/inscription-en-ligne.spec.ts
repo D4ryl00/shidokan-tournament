@@ -74,6 +74,7 @@ test('inscription en ligne : annuaire → invitation → le coach inscrit, modif
   // Tranche d'âge avec ses âges ; catégorie de poids choisie, poids actuel laissé vide (facultatif).
   await fillFighter(coach, { last: 'MARTIN', first: 'Léa', sex: 'Féminin', age: 'Cadets (14 à 15 ans)', weightClass: '-54 kg', combat: 'Karaté', ruleset: 'Jiyu', kata: true, grade: '1er kyu' });
   await shot(coach, '3-formulaire');
+  await coach.getByTestId('line-licence').fill('1146 2640 r');
   await coach.getByTestId('line-save').click();
   await coach.reload();
   // Rangée par catégorie par défaut : discipline et règlement en titre de section, une carte par tranche d'âge ;
@@ -87,6 +88,7 @@ test('inscription en ligne : annuaire → invitation → le coach inscrit, modif
 
   // 4. Modifier (Boxing), ajouter puis supprimer un second combattant.
   await coach.getByTestId('club-line').first().getByRole('button', { name: 'Modifier' }).click();
+  await expect(coach.getByTestId('line-licence')).toHaveValue('11462640R');
   await coach.getByTestId('club-line-form').getByRole('group', { name: 'Discipline de combat' }).getByText('Boxing', { exact: true }).click();
   // Poids actuel hors de la catégorie choisie : avertissement, l'enregistrement passe quand même.
   await coach.getByTestId('line-weight').fill('58');

@@ -68,7 +68,8 @@ export function importValueText(field: ImportField, value: string | null, ctx: {
     case 'ruleset': return value === 'shobu' ? 'Shobu' : 'Jiyu';
     case 'prefs': return value.split(',').map((d, i) => `${i + 1} ${COMBAT_LABELS.find(([c]) => c === d)?.[1] ?? d}`).join(' · ');
     case 'shobuKeep': return value === 'ruleset' ? 'Changer de discipline' : 'Passer en jiyu';
-    case 'grade': return value;
+    case 'grade':
+    case 'licence': return value;
   }
 }
 

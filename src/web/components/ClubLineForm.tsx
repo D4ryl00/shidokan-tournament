@@ -114,10 +114,10 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
   const hint = (key: keyof FfkFormStep['hints']) => (ffk?.hints[key] ? <Text size="xs" c="dimmed" style={{ whiteSpace: 'pre-line' }} data-testid={`ffk-hint-${key}`}>{ffk.hints[key]}</Text> : null);
   const FIELD_LABELS: Record<ImportField, string> = {
     ageBandCode: 'Catégorie d’âge', weightClassId: 'Catégorie de poids', weightKg: 'Poids actuel', disciplines: 'Disciplines',
-    ruleset: 'Règlement', grade: 'Grade', prefs: 'Reclassement', shobuKeep: 'Priorité en shobu',
+    ruleset: 'Règlement', grade: 'Grade', prefs: 'Reclassement', shobuKeep: 'Priorité en shobu', licence: 'N° de licence',
   };
   const DISABLED: Record<ImportField, boolean> = {
-    ageBandCode: locked, disciplines: frozen, grade: frozen, weightClassId: combatFrozen, weightKg: combatFrozen, ruleset: combatFrozen, prefs: combatFrozen, shobuKeep: combatFrozen,
+    ageBandCode: locked, disciplines: frozen, grade: frozen, weightClassId: combatFrozen, weightKg: combatFrozen, ruleset: combatFrozen, prefs: combatFrozen, shobuKeep: combatFrozen, licence: false,
   };
   const choice = (field: ImportField) => {
     const diff = ffk?.diffs.find((d) => d.field === field);
@@ -169,6 +169,8 @@ export function ClubLineForm({ ops, mode, multipleCombats, line, ageBands, weigh
               <TextInput data-testid="line-first-name" label={labelled('Prénom', 'name')} required value={form.firstName} onChange={(e) => set({ firstName: e.currentTarget.value })} />
             </SimpleGrid>
             {hint('name')}
+            <TextInput data-testid="line-licence" label="N° de licence (facultatif)" description={line?.line.licence ? 'Laissée vide, la licence déjà enregistrée est gardée.' : undefined} value={form.licence ?? ''} onChange={(e) => set({ licence: e.currentTarget.value || null })} />
+            {choice('licence')}
             </Part>
             <Part disabled={locked}>
             <Input.Wrapper label={labelled('Sexe', 'sex')} required labelElement="div" role="group" aria-label="Sexe">

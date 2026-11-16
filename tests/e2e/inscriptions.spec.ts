@@ -510,3 +510,49 @@ test('liste des inscriptions : la catégorie, puis le poids saisi par le club, r
   await expect(weight('PESEE').getByTitle('Poids relevé à la pesée')).toBeVisible();
   await expect(weight('SANSPOIDS')).toHaveText('-54');
 });
+
+test('licence : saisie dans la fenêtre, relue normalisée ; vide, elle ne l\'efface pas', async ({ page }) => {
+  const id = await createCompetition(page, 'Fenêtre licence');
+  await addClub(page, id, 'Tani Dojo');
+  await page.goto(`/competitions/${id}/inscriptions`);
+  await page.getByTestId('registration-add').click();
+  await chooseClub(page, 'Tani Dojo');
+  await fillFighter(page, { ...MARTIN });
+  // Nouveau combattant : rien d'enregistré, donc pas de rappel sous le champ.
+  await expect(page.getByTestId('club-line-form').getByText('Laissée vide, la licence déjà enregistrée est gardée.')).toHaveCount(0);
+  await page.getByTestId('line-licence').fill('1146 2640 r');
+  await page.getByTestId('line-save').click();
+  await expect(page.getByTestId('club-line-form')).toHaveCount(0);
+  const edit = () => page.getByTestId('registration-row').first().getByRole('button', { name: 'Modifier' }).click();
+  await edit();
+  await expect(page.getByTestId('line-licence')).toHaveValue('11462640R');
+  // Vider le champ ne retire pas la licence : la fenêtre le dit sous le champ.
+  await expect(page.getByTestId('club-line-form').getByText('Laissée vide, la licence déjà enregistrée est gardée.')).toBeVisible();
+  await page.getByTestId('line-licence').fill('');
+  await page.getByTestId('line-save').click();
+  await expect(page.getByTestId('club-line-form')).toHaveCount(0);
+  await edit();
+  await expect(page.getByTestId('line-licence')).toHaveValue('11462640R');
+});
+
+test('licence : saisie papier, la fenêtre du combattant la montre', async ({ page }) => {
+  const id = await createCompetition(page, 'Papier licence');
+  await page.request.post(`/api/competitions/${id}/clubs`, { data: { name: 'Tani Dojo', coachName: 'Jean Coach' } });
+  await page.goto(`/competitions/${id}/fiche-club`);
+  await choosePaperClub(page, 'Tani Dojo');
+  const row = page.getByTestId('paper-entry-row').first();
+  await row.getByLabel('Nom', { exact: true }).fill('MARTIN');
+  await row.getByLabel('Prénom').fill('Léa');
+  await row.getByLabel('N° de licence').fill('1146 2640 r');
+  await row.getByText('F', { exact: true }).click();
+  await row.getByText('C', { exact: true }).click();
+  await row.getByLabel('Poids actuel').fill('53,5');
+  await row.getByText('Karaté', { exact: true }).click();
+  await row.getByText('Jiyu', { exact: true }).click();
+  await page.getByTestId('paper-entry-check').click();
+  await page.getByTestId('paper-entry-save').click();
+  await expect(page.getByText('Tani Dojo : 1 inscription')).toBeVisible();
+  await page.goto(`/competitions/${id}/inscriptions`);
+  await page.getByTestId('registration-row').first().getByRole('button', { name: 'Modifier' }).click();
+  await expect(page.getByTestId('line-licence')).toHaveValue('11462640R');
+});

@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { describe, expect, test } from 'vitest';
-import { CLUB_FORM_COLUMNS, CLUB_FORM_COLUMNS_ROW, CLUB_FORM_FIRST_ROW, CLUB_FORM_HEADER_FIELDS, CLUB_FORM_TITLE, PRE_APPROVAL_TEXT, parseClubForm } from '../../src/domain/club-form.js';
+import { CLUB_FORM_COLUMNS, CLUB_FORM_COLUMNS_ROW, CLUB_FORM_FIRST_ROW, CLUB_FORM_HEADER_FIELDS, CLUB_FORM_LICENCE_COLUMN, CLUB_FORM_TITLE, PRE_APPROVAL_TEXT, parseClubForm } from '../../src/domain/club-form.js';
 import type { Competition } from '../../src/domain/competition.js';
 import { entryCells, entryKey } from '../../src/domain/closed-categories.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
@@ -26,7 +26,7 @@ describe('modèle de fiche club', () => {
     expect(String(fiche.cells[1]![1])).toContain("Coupe Shidokan – Côte d'Azur");
     expect(String(fiche.cells[1]![1])).toContain('22/11/2026');
     CLUB_FORM_HEADER_FIELDS.forEach((label, i) => expect(fiche.cells[3 + i]![0]).toBe(label));
-    expect(fiche.cells[CLUB_FORM_COLUMNS_ROW - 1]!.slice(0, CLUB_FORM_COLUMNS.length)).toEqual([...CLUB_FORM_COLUMNS]);
+    expect(fiche.cells[CLUB_FORM_COLUMNS_ROW - 1]!.slice(0, CLUB_FORM_COLUMNS.length + 1)).toEqual([...CLUB_FORM_COLUMNS.slice(0, 2), CLUB_FORM_LICENCE_COLUMN, ...CLUB_FORM_COLUMNS.slice(2)]);
   });
 
   test('ni la feuille ni l’aide ne parlent des catégories non ouvertes', async () => {
@@ -146,8 +146,8 @@ test('poids, grade et téléphone en format texte dans le modèle', async () => 
   // ligne 6 (téléphone), colonne B : cellule au format texte
   const rows = content.split(/<table:table-row[ >]/);
   expect(rows[6]).toMatch(/table:style-name="ce_input_txt"/);
-  // 1re ligne de combattant : poids actuel (E) et grade (H) au format texte
-  expect((rows[CLUB_FORM_FIRST_ROW]!.match(/table:style-name="ce_input_txt"/g) ?? []).length).toBe(2);
+  // 1re ligne de combattant : licence (C), poids actuel (F) et grade (I) au format texte
+  expect((rows[CLUB_FORM_FIRST_ROW]!.match(/table:style-name="ce_input_txt"/g) ?? []).length).toBe(3);
 });
 
 test('relecture (mineurs) : logo trouvé quel que soit le dossier courant', () => {
@@ -162,6 +162,6 @@ test('relecture (mineurs) : logo trouvé quel que soit le dossier courant', () =
 
 test('relecture : en-têtes de reclassement simples, sous un en-tête commun', async () => {
   const fiche = readWorkbook(await template()).sheets.find((s) => s.name === 'Fiche club')!;
-  expect(fiche.cells[CLUB_FORM_COLUMNS_ROW - 1]!.slice(9, 13)).toEqual(['Karaté', 'Boxing', 'Mix', 'Triathlon']);
-  expect(String(fiche.cells[CLUB_FORM_COLUMNS_ROW - 2]![9])).toBe('Si seul : autre discipline ? 1, 2, 3, vide = non');
+  expect(fiche.cells[CLUB_FORM_COLUMNS_ROW - 1]!.slice(10, 14)).toEqual(['Karaté', 'Boxing', 'Mix', 'Triathlon']);
+  expect(String(fiche.cells[CLUB_FORM_COLUMNS_ROW - 2]![10])).toBe('Si seul : autre discipline ? 1, 2, 3, vide = non');
 });

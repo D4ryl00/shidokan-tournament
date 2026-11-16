@@ -1,4 +1,4 @@
-import { ageBandFromLabel, closedEntryWarning, rulesetFromLabel } from './club-form.js';
+import { ageBandFromLabel, closedEntryWarning, normalizeLicence, rulesetFromLabel } from './club-form.js';
 import { DISCIPLINES, disciplineFromLabel } from './disciplines.js';
 import { normalizeName, parseSex, splitFullName } from './names.js';
 import { weightClassesFor } from './grid.js';
@@ -118,7 +118,8 @@ export function parseFfkRows(
 
     const { lastName, firstName } = splitFullName(text(get(row, 'lastName')), text(get(row, 'firstName')) || null);
     if (!lastName) errors.push('Nom manquant.');
-    const licence = text(get(row, 'licence')) || null;
+    // Même forme que les licences saisies dans l'appli : sans espaces, en majuscules.
+    const licence = normalizeLicence(text(get(row, 'licence')));
     if (!licence) warnings.push('Pas de numéro de licence.');
     const clubEntity = text(get(row, 'club')) || null;
     const clubName = clubEntity ? clubEntity.replace(/^\d+\s*/, '').replace(/\s+/g, ' ').trim() || clubEntity : null;
@@ -386,6 +387,14 @@ export function planFfkImport(rows: FfkRow[], grid: CategoryGrid, existing: Exis
             if (keyOf(f) === fullKey || keyOf(f) === reversedKey) {
               const reason = clubId === null ? 'même nom, club non renseigné' : 'même nom, autre club';
               candidates.push({ fighterId: f.id, label: fighterLabel(f, existing.clubs), reason });
+            }
+          }
+          // Même club, même nom mais une autre licence enregistrée : à l'organisateur de trancher (jamais un doublon en silence),
+          // sauf si ce combattant est déjà rapproché d'une autre licence dans cet import (homonyme avéré).
+          for (const f of existing.fighters) {
+            const otherLicence = row.licence && f.licence && f.licence !== row.licence;
+            if (otherLicence && f.sex === row.sex && clubId && f.clubId === clubId && (keyOf(f) === fullKey || keyOf(f) === reversedKey) && !claimedByOther(f)) {
+              candidates.push({ fighterId: f.id, label: fighterLabel(f, existing.clubs), reason: 'même nom, autre licence' });
             }
           }
           if (candidates.length === 0) fighterId = 'new';

@@ -38,12 +38,14 @@ function newView(item: ClubFormItem, c: ClubFormStepContext): StepView<ClubFormI
 function existingView(item: ClubFormItem, fresh: ClubLine, c: ClubFormStepContext): StepView<ClubFormItem> {
   // Nom, prénom et sexe ne sont jamais comparés : la fiche a pu être renommée, seuls les autres champs comptent.
   const diffs = clubFormDiffs(item.line, fresh.line);
-  const initial = fitWeightClass(lockedKept(fresh, prefillExistingFromFile(fresh.line, diffs, fresh.startedDisciplines)), c.weightClasses);
+  const initial = fitWeightClass(lockedKept(fresh, prefillExistingFromFile(fresh.line, diffs, fresh.startedDisciplines, item.line)), c.weightClasses);
   const locked = !fresh.editable && !fresh.partlyEditable;
   const current = disciplinesOf(fresh.line);
   // Verrouillée : rien à choisir, l'encadré s'arrête aux disciplines.
   const base = current.length ? ffkBanner(fresh.line.firstName, current.map(disciplineLabel), { locked: true }) : null;
-  const banner = base === null ? (locked ? LOCKED_NO_DISCIPLINE_BANNER : NO_DISCIPLINE_BANNER) : locked ? base : `${base} Sous chaque différence, choisissez la valeur à garder.`;
+  // Seule nouveauté une licence (aucune différence) : l'encadré dit ce que la fiche apporte.
+  const licenceOnly = diffs.length === 0 && !fresh.line.licence && item.line.licence ? ` La fiche renvoyée ajoute seulement son N° de licence (${item.line.licence}).` : null;
+  const banner = base === null ? (locked ? LOCKED_NO_DISCIPLINE_BANNER : NO_DISCIPLINE_BANNER) : locked ? base : `${base}${licenceOnly ?? ' Sous chaque différence, choisissez la valeur à garder.'}`;
   // Combattant confirmé par l'export FFK : la case de droite dit ce qu'on remplace.
   const confirmed = (field: string) => fresh.ffkConfirmed === true && (field === 'ageBandCode' || field === 'weightClassId');
   return {

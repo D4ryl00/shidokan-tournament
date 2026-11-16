@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
+  normalizeLicence,
+  CLUB_FORM_LICENCE_COLUMN,
   CLUB_FORM_COLUMNS,
   CLUB_FORM_SECOND_COMBAT_COLUMN,
   CLUB_FORM_LEGACY_COLUMNS,
@@ -465,5 +467,40 @@ describe('plusieurs combats', () => {
   });
   test('tidyReclass retire tous ses combats des choix', () => {
     expect(tidyReclass(two).prefs).toEqual({ 'shido-mix': 1 });
+  });
+});
+
+test.each([['1146 2640 r', '11462640R'], ['  ', null], [null, null], [11462640, '11462640'], ['-', null], ['/', null], ['—', null], [' ? ', null], ['n/a', 'N/A']])('normalizeLicence(%j)', (v, out) => expect(normalizeLicence(v)).toBe(out));
+
+describe('colonne licence de la fiche', () => {
+  const withLicence = (lines: Line[]): unknown[][] => {
+    const cells = sheetNew([]);
+    cells[CLUB_FORM_COLUMNS_ROW_INDEX] = [CLUB_FORM_COLUMNS[0], CLUB_FORM_COLUMNS[1], CLUB_FORM_LICENCE_COLUMN, ...CLUB_FORM_COLUMNS.slice(2)];
+    lines.forEach((l, i) => (cells[CLUB_FORM_FIRST_ROW - 1 + i] = l));
+    return cells;
+  };
+  const moreau: Line = ['MOREAU', 'Lina', 'F', 'Poussins', 22, 'Karaté', 'Non', null, 'Jiyu'];
+  test('fiche avec la colonne licence : licence lue, autres colonnes inchangées', () => {
+    const line: Line = [moreau[0]!, moreau[1]!, '1146 2640 r', ...moreau.slice(2)];
+    expect(parseClubForm(withLicence([line]), grid).rows[0]!.input).toMatchObject({ lastName: 'MOREAU', licence: '11462640R', discipline: 'karate', ageBandCode: 'poussin' });
+  });
+  test('texte trop long dans la case licence : inscription lue, licence ignorée, avertissement', () => {
+    const line: Line = [moreau[0]!, moreau[1]!, 'Licence en cours de renouvellement', ...moreau.slice(2)];
+    const [row] = parseClubForm(withLicence([line]), grid).rows;
+    expect(row!.input).toMatchObject({ lastName: 'MOREAU', licence: null, discipline: 'karate' });
+    expect(row!.errors).toEqual([]);
+    expect(row!.warnings).toContain('N° de licence ignoré (trop long) : « Licence en cours de renouvellement ».');
+  });
+  test('fiche sans la colonne (envoyée avant) : lue comme avant, licence nulle', () => {
+    expect(parseClubForm(sheetNew([moreau]), grid).rows[0]!.input).toMatchObject({ lastName: 'MOREAU', licence: null, discipline: 'karate' });
+  });
+  test('ligne avec seulement une licence : lue (pas ignorée), erreurs signalées', () => {
+    const r = parseClubForm(withLicence([[null, null, '11462640R']]), grid);
+    expect(r.rows).toHaveLength(1);
+    expect(r.rows[0]!.errors.length).toBeGreaterThan(0);
+  });
+  test('licence et le reste mais sans nom : nom obligatoire signalé', () => {
+    const r = parseClubForm(withLicence([[null, null, '11462640R', ...moreau.slice(2)]]), grid);
+    expect(r.rows[0]!.errors.join(' ')).toMatch(/nom est obligatoire/);
   });
 });

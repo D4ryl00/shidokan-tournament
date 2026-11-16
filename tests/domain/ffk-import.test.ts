@@ -42,6 +42,11 @@ describe('parseFfkRows', () => {
       discipline: 'karate', ruleset: null, weightLabel: '-20', errors: [],
     });
   });
+  test('licence normalisée comme dans l’appli (sans espaces, en majuscules)', () => {
+    const [r] = parse([['MOREAU LINA', null, '1146 2640 r', '0060808 ISSA KYOKUSHIN SCHOOL', 'Feminine', 'Karate', 'Poussin', -20, null]]);
+    expect(r!.licence).toBe('11462640R');
+    expect(r!.warnings).not.toContain('Pas de numéro de licence.');
+  });
   test('catégorie fermée : avertissement', () => {
     const [r] = parseFfkRows(cells([['MOREAU LINA', null, '99999999Z', '0060808 ISSA', 'Feminine', 'Karate', 'Poussin', -20, null]]), 0, STD, 'Coupe Shidokan Karate', grid, new Set(['poussin|F|karate|jiyu']));
     expect(r!.errors).toEqual([]);
