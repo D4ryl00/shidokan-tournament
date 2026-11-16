@@ -1,10 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { FFK_FIELDS, planFingerprint } from '../../domain/ffk-import.js';
+import { FFK_FIELDS } from '../../domain/ffk-import.js';
+import { planFingerprint } from '../../domain/ffk-plan/plan.js';
 import type { AppDb } from '../db/client.js';
 import { getCompetition } from '../repositories/competitions.js';
 import { analyzeUpload, applyFfkPlan, buildFfkPlan, deleteUpload, loadUpload, saveUpload } from '../repositories/ffk-import.js';
 import { UnreadableFileError } from '../spreadsheet/read.js';
+import { clubFormLineSchema } from './registrations.js';
 
 const mappingSchema = z.object(Object.fromEntries(FFK_FIELDS.map((f) => [f, z.number().int().min(0).nullable()])) as Record<(typeof FFK_FIELDS)[number], z.ZodNullable<z.ZodNumber>>);
 const bodySchema = z.object({
@@ -12,7 +14,25 @@ const bodySchema = z.object({
     z.object({ name: z.string(), headerRow: z.number().int().min(0), headers: z.array(z.string()).optional(), mapping: mappingSchema, include: z.boolean() }),
   ),
   choices: z
-    .object({ clubLinks: z.record(z.string(), z.string()).optional(), decisions: z.record(z.string(), z.string()).optional() })
+    .object({
+      acceptedWeightClasses: z.array(z.string()).optional(),
+      clubLinks: z.record(z.string(), z.string()).optional(),
+      cards: z
+        .record(
+          z.string(),
+          z.discriminatedUnion('kind', [
+            z.object({ kind: z.literal('none') }),
+            z.object({ kind: z.literal('skip') }),
+            z.object({
+              kind: z.literal('validated'),
+              fighterId: z.string().min(1),
+              value: z.object({ line: clubFormLineSchema, clubId: z.string().nullable(), publicNameHidden: z.boolean() }),
+            }),
+          ]),
+        )
+        .optional(),
+      orphans: z.record(z.string(), z.enum(['keep', 'delete'])).optional(),
+    })
     .optional(),
   /** Empreinte de l'aperçu affiché : la validation est refusée si le plan a changé entre-temps. */
   fingerprint: z.string().optional(),

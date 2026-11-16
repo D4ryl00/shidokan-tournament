@@ -1,27 +1,15 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
-import {
-  findHeaderRow,
-  guessColumnMapping,
-  headerSignature,
-  parseFfkRows,
-  planFfkImport,
-  type ColumnMapping,
-  type ExistingClub,
-  type ExistingData,
-  type FfkChoices,
-  type FfkImportPlan,
-  type FfkRow,
-} from '../../domain/ffk-import.js';
-import { mergeWeightClasses, validateGrid } from '../../domain/grid.js';
-import { normalizeName } from '../../domain/names.js';
-import type { ProposalType } from '../../domain/replacement/types.js';
+import { findHeaderRow, guessColumnMapping, headerSignature, parseFfkRows, type ColumnMapping, type FfkRow } from '../../domain/ffk-import.js';
+import type { ExistingFighter } from '../../domain/ffk-plan/cards.js';
+import type { ExistingClub } from '../../domain/ffk-plan/clubs.js';
+import { planFfkCards, type ExistingData, type FfkCardsPlan, type FfkChoices } from '../../domain/ffk-plan/plan.js';
 import type { AppDb } from '../db/client.js';
-import { linkClub } from '../db/club-directory.js';
-import { clubAliases, clubDirectory, clubs, fighters, importMappings, registrations, uploads, weightClasses } from '../db/schema.js';
+import { clubAliases, clubDirectory, clubs, fighters, importMappings, registrations, uploads } from '../db/schema.js';
 import { readWorkbook } from '../spreadsheet/read.js';
 import { closedSet } from './closed-categories.js';
-import { GridValidationError, getGrid } from './competitions.js';
-import { NotFoundError, RegistrationValidationError } from './registrations.js';
+import { fighterLine } from './club-entry.js';
+import { getGrid } from './competitions.js';
+import { NotFoundError } from './registrations.js';
 
 export interface SheetSetup {
   name: string;
@@ -96,22 +84,26 @@ function loadExistingClubs(db: AppDb, competitionId: string): ExistingClub[] {
 }
 
 export async function loadExisting(db: AppDb, competitionId: string): Promise<ExistingData> {
-  const regs = db.select().from(registrations).where(eq(registrations.competitionId, competitionId)).all();
+  const ffkFighters = new Set(
+    db.select({ fighterId: registrations.fighterId }).from(registrations)
+      .where(and(eq(registrations.competitionId, competitionId), eq(registrations.source, 'ffk'))).all().map((r) => r.fighterId),
+  );
   return {
     clubs: loadExistingClubs(db, competitionId),
     fighters: db
       .select()
       .from(fighters)
       .where(eq(fighters.competitionId, competitionId))
+      .orderBy(fighters.nameKey)
       .all()
-      .map(({ nameKey: _k, ...f }) => f),
-    registrations: regs.map(({ otherDisciplinesJson, originalJson, withdrawnReason, ...r }) => ({
-      ...r,
-      withdrawn: withdrawnReason !== null,
-      recasementType: r.recasementType as ProposalType | null,
-      otherDisciplines: JSON.parse(otherDisciplinesJson),
-      original: originalJson ? JSON.parse(originalJson) : null,
-    })),
+      .map((f): ExistingFighter => {
+        // La ligne vue par l'organisateur (formulaire combattant), avec sa version et ses verrous.
+        const l = fighterLine(db, competitionId, f.id);
+        return {
+          fighterId: f.id, clubId: f.clubId, licence: f.licence, line: l.line, publicNameHidden: l.publicNameHidden, version: l.version,
+          editable: l.editable, partlyEditable: l.partlyEditable, startedDisciplines: l.startedDisciplines, fromFfk: ffkFighters.has(f.id),
+        };
+      }),
     aliases: Object.fromEntries(db.select().from(clubAliases).all().map((a) => [a.nameKey, a.clubEntity])),
   };
 }
@@ -123,7 +115,7 @@ export async function buildFfkPlan(
   uploadId: string,
   sheets: Pick<SheetSetup, 'name' | 'headerRow' | 'mapping' | 'include'>[],
   choices: FfkChoices = {},
-): Promise<{ plan: FfkImportPlan; rows: FfkRow[] }> {
+): Promise<{ plan: FfkCardsPlan; rows: FfkRow[] }> {
   const data = await loadUpload(db, competitionId, uploadId);
   const grid = await getGrid(db, competitionId);
   const book = readWorkbook(data);
@@ -132,153 +124,26 @@ export async function buildFfkPlan(
     const sheet = book.sheets.find((x) => x.name === s.name);
     if (sheet) rows.push(...parseFfkRows(sheet.cells, s.headerRow, s.mapping, s.name, grid, closedSet(db, competitionId)));
   }
-  return { plan: planFfkImport(rows, grid, await loadExisting(db, competitionId), choices), rows };
+  return { plan: planFfkCards(rows, grid, await loadExisting(db, competitionId), choices), rows };
 }
 
-/** Applique le plan dans une transaction. Refuse s'il reste des rapprochements douteux. */
+/** Import refusé tant que l'écriture par cartes n'est pas branchée. */
+export class FfkImportUnavailableError extends Error {
+  readonly statusCode = 503;
+  constructor() {
+    super('Import FFK en cours de refonte : l’import n’est pas encore disponible (aperçu seulement).');
+  }
+}
+
+/**
+ * Applique le plan. Temporaire (étape 51, Task 4) : l'écriture par cartes (cartes validées et sans problème, catégories
+ * acceptées, liens de club, fiches à supprimer) est réécrite à la Task 6 ; d'ici là, l'import est refusé sans rien écrire.
+ */
 export async function applyFfkPlan(
-  db: AppDb,
-  competitionId: string,
-  plan: FfkImportPlan,
-  mappings: { headers: string[]; mapping: ColumnMapping }[],
-): Promise<{ created: number; updated: number; removed: number; weightClassesCreated: number }> {
-  if (plan.summary.doubtful > 0) throw new RegistrationValidationError(['Des rapprochements douteux restent à trancher.']);
-  const merged = mergeWeightClasses(await getGrid(db, competitionId), plan.newWeightClasses);
-  const gridErrors = validateGrid(merged);
-  if (gridErrors.length) throw new GridValidationError(gridErrors);
-  const touched = new Set(plan.newWeightClasses.map((w) => `${w.ageBandCode}|${w.sex}`));
-
-  return db.transaction((tx) => {
-    const t = tx as unknown as AppDb;
-
-    // 1. Catégories de poids manquantes ; ordre et catégorie ouverte recalculés dans les groupes touchés.
-    for (const w of plan.newWeightClasses) t.insert(weightClasses).values({ ...w, competitionId }).run();
-    for (const w of merged.weightClasses.filter((x) => touched.has(`${x.ageBandCode}|${x.sex}`))) {
-      t.update(weightClasses)
-        .set({ label: w.label, sortOrder: w.sortOrder })
-        .where(and(eq(weightClasses.competitionId, competitionId), eq(weightClasses.id, w.id)))
-        .run();
-    }
-
-    // 2. Clubs : relier ou créer, mémoriser les alias.
-    const clubIdByEntity = new Map<string, string>();
-    for (const link of plan.clubs) {
-      if (link.target.kind === 'existing') {
-        const club = t.select().from(clubs).where(eq(clubs.id, link.target.clubId)).get()!;
-        // Seuls les liens sûrs (ou confirmés par l'organisateur) sont mémorisés : un lien « à vérifier » le reste au réimport
-        // (pas d'entité FFK sur le club) comme dans les compétitions suivantes (pas d'alias).
-        if (link.certainty === 'sure') {
-          t.update(clubs).set({ ffkEntity: link.clubEntity }).where(eq(clubs.id, club.id)).run();
-          t.insert(clubAliases)
-            .values({ nameKey: club.nameKey, clubEntity: link.clubEntity })
-            .onConflictDoUpdate({ target: clubAliases.nameKey, set: { clubEntity: link.clubEntity } })
-            .run();
-        }
-        clubIdByEntity.set(link.clubEntity, club.id);
-        linkClub(t, club.id);
-      } else {
-        const id = crypto.randomUUID();
-        t.insert(clubs)
-          .values({ id, competitionId, name: link.clubName, nameKey: normalizeName(link.clubName), ffkEntity: link.clubEntity, preApproval: false })
-          .run();
-        clubIdByEntity.set(link.clubEntity, id);
-        linkClub(t, id);
-      }
-    }
-
-    // 3-4. Combattants et inscriptions.
-    // Nouveaux combattants regroupés par licence, ou à défaut par nom + sexe + club.
-    const newFighterByKey = new Map<string, string>();
-    const groupKey = (row: FfkRow) =>
-      row.licence ? `L:${row.licence}` : `N:${normalizeName(`${row.lastName} ${row.firstName}`)}|${row.sex}|${row.clubEntity ?? ''}`;
-    let created = 0;
-    let updated = 0;
-    const fighterData = (row: FfkRow) => ({
-      ageBandCode: row.ageBandCode!,
-      sex: row.sex!,
-      ...(row.licence ? { licence: row.licence } : {}),
-      ...(row.clubEntity && clubIdByEntity.has(row.clubEntity) ? { clubId: clubIdByEntity.get(row.clubEntity)! } : {}),
-    });
-    for (const item of plan.items) {
-      if (item.kind === 'create') {
-        const row = item.row;
-        let fighterId = item.fighterId;
-        if (fighterId === 'new') {
-          fighterId = newFighterByKey.get(groupKey(row)) ?? '';
-          if (!fighterId) {
-            fighterId = crypto.randomUUID();
-            t.insert(fighters)
-              .values({
-                id: fighterId,
-                competitionId,
-                lastName: row.lastName,
-                firstName: row.firstName,
-                nameKey: normalizeName(`${row.lastName} ${row.firstName}`),
-                clubId: null,
-                licence: null,
-                ...fighterData(row),
-              })
-              .run();
-            newFighterByKey.set(groupKey(row), fighterId);
-          }
-        } else {
-          t.update(fighters).set(fighterData(row)).where(eq(fighters.id, fighterId)).run();
-        }
-        const isKata = row.discipline === 'kata';
-        t.insert(registrations)
-          .values({
-            id: crypto.randomUUID(),
-            competitionId,
-            fighterId,
-            discipline: row.discipline!,
-            ruleset: isKata ? null : (row.ruleset ?? 'jiyu'),
-            weightClassId: isKata ? null : item.weightClassId,
-            source: 'ffk',
-            ffkConfirmed: true,
-          })
-          .run();
-        created++;
-      } else if (item.kind === 'update') {
-        t.update(fighters).set(fighterData(item.row)).where(eq(fighters.id, item.fighterId)).run();
-        const current = t.select().from(registrations).where(eq(registrations.id, item.registrationId)).get()!;
-        const fields = {
-          ...(item.row.discipline === 'kata' ? {} : { weightClassId: item.weightClassId }),
-          ...(item.row.ruleset ? { ruleset: item.row.ruleset } : {}),
-        };
-        if (current.originalJson) {
-          // Inscription recasée : l'export FFK met à jour les valeurs d'origine, pas le placement validé.
-          const original = { ...JSON.parse(current.originalJson), ...fields };
-          t.update(registrations).set({ originalJson: JSON.stringify(original), ffkConfirmed: true }).where(eq(registrations.id, item.registrationId)).run();
-        } else {
-          t.update(registrations).set({ ...fields, ffkConfirmed: true }).where(eq(registrations.id, item.registrationId)).run();
-        }
-        updated++;
-      }
-    }
-
-    // 5. Retraits et inscriptions non confirmées.
-    if (plan.removals.length) {
-      const ids = plan.removals.map((r) => r.registrationId);
-      const fighterIds = t.select().from(registrations).where(inArray(registrations.id, ids)).all().map((r) => r.fighterId);
-      t.delete(registrations).where(inArray(registrations.id, ids)).run();
-      for (const fid of new Set(fighterIds)) {
-        if (t.select().from(registrations).where(eq(registrations.fighterId, fid)).all().length === 0) {
-          t.delete(fighters).where(eq(fighters.id, fid)).run();
-        }
-      }
-    }
-    if (plan.unconfirmed.length) {
-      t.update(registrations).set({ ffkConfirmed: false }).where(inArray(registrations.id, plan.unconfirmed.map((u) => u.registrationId))).run();
-    }
-
-    // 6. Correspondances de colonnes.
-    for (const m of mappings) {
-      const signature = headerSignature(m.headers);
-      t.insert(importMappings)
-        .values({ signature, mappingJson: JSON.stringify(m.mapping) })
-        .onConflictDoUpdate({ target: importMappings.signature, set: { mappingJson: JSON.stringify(m.mapping) } })
-        .run();
-    }
-    return { created, updated, removed: plan.removals.length, weightClassesCreated: plan.newWeightClasses.length };
-  });
+  _db: AppDb,
+  _competitionId: string,
+  _plan: FfkCardsPlan,
+  _mappings: { headers: string[]; mapping: ColumnMapping }[],
+): Promise<{ created: number; updated: number; deleted: number; weightClassesCreated: number }> {
+  throw new FfkImportUnavailableError();
 }

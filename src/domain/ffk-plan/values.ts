@@ -32,7 +32,7 @@ export interface ChangeLabels {
   club: (id: string) => string;
 }
 
-const FIELD_LABELS: Record<FfkField, string> = {
+export const FIELD_LABELS: Record<FfkField, string> = {
   lastName: 'Nom', firstName: 'Prénom', sex: 'Sexe', ageBandCode: 'Catégorie d’âge', weightClassId: 'Catégorie de poids', weightKg: 'Poids actuel',
   disciplines: 'Disciplines', ruleset: 'Règlement', grade: 'Grade', prefs: 'Reclassement', shobuKeep: 'Priorité en shobu', licence: 'N° de licence', clubId: 'Club',
 };

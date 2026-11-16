@@ -80,7 +80,8 @@ test('renommer un club de compétition garde son entrée', async () => {
   expect(entries(d)).toHaveLength(1);
 });
 
-test('import FFK : club créé → relié avec son numéro ; lien sûr vers un club existant → son entrée reçoit le numéro', async () => {
+// Import FFK par cartes : réécrit à la Task 6 (étape 51).
+test.skip('import FFK : club créé → relié avec son numéro ; lien sûr vers un club existant → son entrée reçoit le numéro', async () => {
   const dbPath = tmpDbPath();
   app = await buildApp({ dbPath });
   const base = `/api/competitions/${(await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22' } })).json().id}`;

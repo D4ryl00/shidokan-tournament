@@ -45,7 +45,8 @@ test('upload : onglets reconnus, correspondance devinée', async () => {
   expect(up.sheets[0]!.mapping).toMatchObject({ lastName: 0, licence: 2, discipline: 5, ruleset: 8 });
 });
 
-test('aperçu sans effet, puis import, puis réimport sans doublon', async () => {
+// Import FFK par cartes : réécrit à la Task 6 (étape 51).
+test.skip('aperçu sans effet, puis import, puis réimport sans doublon', async () => {
   const up = await uploadAll();
   const body = { sheets: up.sheets };
   const preview = (await json('POST', `${base}/ffk-imports/${up.uploadId}/preview`, body)).json();
@@ -73,7 +74,8 @@ test('aperçu sans effet, puis import, puis réimport sans doublon', async () =>
   expect((await json('GET', `${base}/registrations`)).json()).toHaveLength(5);
 });
 
-test('fiche club importée avant : l’inscription de fiche est confirmée et garde son règlement', async () => {
+// Import FFK par cartes : réécrit à la Task 6 (étape 51).
+test.skip('fiche club importée avant : l’inscription de fiche est confirmée et garde son règlement', async () => {
   const tpl = (await app.inject({ method: 'GET', url: `${base}/club-form.ods` })).rawPayload;
   await app!.inject({ method: 'POST', url: `${base}/clubs`, payload: { name: 'Tani Dojo' } }); // le club de la fiche existe déjà
   const form = fillClubForm(tpl, ['Tani Dojo', 'Coach', null, null, 'Non'], [
@@ -100,7 +102,8 @@ test('fiche club importée avant : l’inscription de fiche est confirmée et ga
   expect(after[0]).toMatchObject({ weightClassId: 'cadet:F:-61', ffkConfirmed: true });
 });
 
-test('cas douteux : refus tant qu’il n’est pas tranché', async () => {
+// Import FFK par cartes : réécrit à la Task 6 (étape 51).
+test.skip('cas douteux : refus tant qu’il n’est pas tranché', async () => {
   await json('POST', `${base}/registrations`, {
     clubId: null, lastName: 'MARTIN', firstName: 'Léna', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu',
     weightClassId: 'cadet:F:-54', source: 'manual',
@@ -116,7 +119,8 @@ test('cas douteux : refus tant qu’il n’est pas tranché', async () => {
   expect(ok.json()).toMatchObject({ updated: 1, created: 0 });
 });
 
-test('correspondance de colonnes mémorisée', async () => {
+// Import FFK par cartes : réécrit à la Task 6 (étape 51).
+test.skip('correspondance de colonnes mémorisée', async () => {
   const up = await uploadAll();
   const sheets = up.sheets.map((s) => ({ ...s, mapping: { ...s.mapping, ruleset: null } }));
   await json('POST', `${base}/ffk-imports/${up.uploadId}/commit`, { sheets });
@@ -130,7 +134,8 @@ test('fichier illisible → 400', async () => {
   expect(res.json().error).toBe('Fichier illisible');
 });
 
-test('fiche club arrivée après l’import FFK : pas de doublon d’inscription', async () => {
+// Import FFK par cartes : réécrit à la Task 6 (étape 51).
+test.skip('fiche club arrivée après l’import FFK : pas de doublon d’inscription', async () => {
   const up = await uploadAll(buildFfkWorkbook({ 'Coupe Shidokan Karate': [karate[0]!] }));
   await json('POST', `${base}/ffk-imports/${up.uploadId}/commit`, { sheets: up.sheets });
   const tpl = (await app.inject({ method: 'GET', url: `${base}/club-form.ods` })).rawPayload;
@@ -141,7 +146,8 @@ test('fiche club arrivée après l’import FFK : pas de doublon d’inscription
   expect(rows[0]).toMatchObject({ weightClassId: 'cadet:F:-61', otherDisciplines: ['shido-boxing'] });
 });
 
-test('sans licence sur deux onglets : un seul combattant', async () => {
+// Import FFK par cartes : réécrit à la Task 6 (étape 51).
+test.skip('sans licence sur deux onglets : un seul combattant', async () => {
   const up = await uploadAll(buildFfkWorkbook({
     Karate: [['SANS LICENCE', null, null, TANI, 'Masculin', 'Karate', 'Senior', -75, null]],
     Boxe: [['SANS LICENCE', null, null, TANI, 'Masculin', 'Boxe', 'Senior', -75, null]],
@@ -152,7 +158,8 @@ test('sans licence sur deux onglets : un seul combattant', async () => {
   expect(new Set(rows.map((r) => r.fighterId)).size).toBe(1);
 });
 
-test('aperçu périmé : la validation est refusée (409)', async () => {
+// Import FFK par cartes : réécrit à la Task 6 (étape 51).
+test.skip('aperçu périmé : la validation est refusée (409)', async () => {
   const up = await uploadAll();
   const preview = (await json('POST', `${base}/ffk-imports/${up.uploadId}/preview`, { sheets: up.sheets })).json();
   await json('POST', `${base}/registrations`, {
@@ -165,7 +172,8 @@ test('aperçu périmé : la validation est refusée (409)', async () => {
   expect(ok.statusCode).toBe(200);
 });
 
-test('réimport FFK après une réaffectation H : pas de doublon, la discipline d’origine est reconnue', async () => {
+// Import FFK par cartes : réécrit à la Task 6 (étape 51).
+test.skip('réimport FFK après une réaffectation H : pas de doublon, la discipline d’origine est reconnue', async () => {
   const up = await uploadAll(buildFfkWorkbook({
     Karate: [['SEUL KARATE', null, 'K1', TANI, 'Masculin', 'Karate', 'Senior', -75, 'Shobu']],
     Boxe: [['AUTRE BOXE', null, 'B1', TANI, 'Masculin', 'Boxe', 'Senior', -75, 'Shobu']],
@@ -193,7 +201,8 @@ test('réimport FFK après une réaffectation H : pas de doublon, la discipline 
   expect(s2).toMatchObject({ discipline: 'shido-boxing', ffkConfirmed: true, weightClassId: 'senior:M:-75' });
 });
 
-test('lien de club « à vérifier » non confirmé : pas mémorisé ; fichier purgé après import', async () => {
+// Import FFK par cartes : réécrit à la Task 6 (étape 51).
+test.skip('lien de club « à vérifier » non confirmé : pas mémorisé ; fichier purgé après import', async () => {
   const file = buildFfkWorkbook({ Karate: [['NOUVEAU X', null, 'Z1', SHIN, 'Masculin', 'Karate', 'Senior', -75, null]] });
   await json('POST', `${base}/clubs`, { name: 'Shinsengumi' });
   const up = await uploadAll(file);
@@ -210,7 +219,8 @@ test('lien de club « à vérifier » non confirmé : pas mémorisé ; fichier p
   expect(p2.clubs[0].certainty).toBe('doubtful');
 });
 
-test('lien de club « à vérifier » non confirmé : reste à vérifier au réimport dans la même compétition', async () => {
+// Import FFK par cartes : réécrit à la Task 6 (étape 51).
+test.skip('lien de club « à vérifier » non confirmé : reste à vérifier au réimport dans la même compétition', async () => {
   const file = buildFfkWorkbook({ Karate: [['NOUVEAU X', null, 'Z1', SHIN, 'Masculin', 'Karate', 'Senior', -75, null]] });
   await json('POST', `${base}/clubs`, { name: 'Shinsengumi' });
   const up = await uploadAll(file);
@@ -263,4 +273,24 @@ test('réimport de fiche club après une réaffectation H : discipline d’origi
   // La correction du coach va dans les valeurs d'origine (utilisées par un retour).
   const original = JSON.parse((after.find((x) => x.id === seul.id) as unknown as { originalJson: string }).originalJson);
   expect(original).toMatchObject({ discipline: 'karate', weightClassId: 'senior:M:-84' });
+});
+
+test('aperçu par cartes : une fiche existante reconnue (sûre, sans écart) est sans problème, avec sa version', async () => {
+  const clubId = (await json('POST', `${base}/clubs`, { name: 'Tani Dojo' })).json().id as string;
+  const reg = await json('POST', `${base}/registrations`, {
+    clubId, lastName: 'MARTIN', firstName: 'Léa', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu',
+    weightClassId: 'cadet:F:-61', source: 'ffk',
+  });
+  expect(reg.statusCode).toBe(201);
+  const up = await uploadAll(buildFfkWorkbook({ Karate: [karate[0]!] }));
+  const preview = (await json('POST', `${base}/ffk-imports/${up.uploadId}/preview`, { sheets: up.sheets })).json();
+  expect(preview.clubs[0]).toMatchObject({ target: clubId });
+  expect(preview.cards).toHaveLength(1);
+  expect(preview.cards[0]).toMatchObject({ state: 'auto', fighterId: (await json('GET', `${base}/registrations`)).json()[0].fighterId, changes: ['N° de licence : — → L001'] });
+  expect(preview.cards[0].version).toEqual(expect.any(String));
+  expect(preview.orphans).toEqual([]);
+  expect(typeof preview.fingerprint).toBe('string');
+  // Import refusé tant que l'écriture par cartes n'est pas branchée (Task 6) : rien n'est écrit.
+  const commit = await json('POST', `${base}/ffk-imports/${up.uploadId}/commit`, { sheets: up.sheets });
+  expect(commit.statusCode).toBe(503);
 });

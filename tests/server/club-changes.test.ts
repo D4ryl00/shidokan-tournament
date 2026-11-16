@@ -214,7 +214,8 @@ test('import d’une fiche club après une saisie du coach : la fiche reste vide
   expect(changes().filter((c) => c.club_id === a.clubId)).toHaveLength(1);
 });
 
-test('import FFK après une saisie du coach : pas de ligne créée, la ligne existante reste, coordonnées de la fiche inchangées', async () => {
+// Import FFK par cartes : réécrit à la Task 6 (étape 51).
+test.skip('import FFK après une saisie du coach : pas de ligne créée, la ligne existante reste, coordonnées de la fiche inchangées', async () => {
   const a = await emptyFicheAccess();
   await a.save({ coachPhone: '0655555555' });
   const lines: FfkLine[] = [['MARTIN LEA', null, 'L001', '0060893 VIDE DOJO', 'Feminine', 'Karate', 'Cadet', -61, null], BLANK];
@@ -226,7 +227,8 @@ test('import FFK après une saisie du coach : pas de ligne créée, la ligne exi
   expect(changes().filter((c) => c.club_id === a.clubId)).toHaveLength(1);
 });
 
-test('import d’une fiche et import FFK d’un club neuf ne créent aucune ligne', async () => {
+// Import FFK par cartes : réécrit à la Task 6 (étape 51).
+test.skip('import d’une fiche et import FFK d’un club neuf ne créent aucune ligne', async () => {
   const repoDb = openDb(dbPath);
   const other = (await createCompetition(repoDb, { name: 'Autre', date: inDays(32) })).id;
   // Le club est créé avant l'import (choix du club), avec les coordonnées de la fiche : rien à examiner.

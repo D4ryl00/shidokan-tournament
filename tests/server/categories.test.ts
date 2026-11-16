@@ -102,7 +102,8 @@ test('réglage de compétition (repêchage) appliqué aux catégories sans valeu
   expect(c!.bracket!.matches!.some((m) => m.id.startsWith('rep'))).toBe(true);
 });
 
-test('import FFK → une catégorie par clé distincte', async () => {
+// Import FFK par cartes : réécrit à la Task 6 (étape 51).
+test.skip('import FFK → une catégorie par clé distincte', async () => {
   const file = buildFfkWorkbook({
     Karate: [
       ['A A', null, 'L1', '1 C', 'Feminine', 'Karate', 'Cadet', -54, null],
