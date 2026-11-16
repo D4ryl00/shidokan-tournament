@@ -18,10 +18,14 @@ export interface ExistingData {
 }
 
 /**
- * Décision de l’organisateur sur une carte : ne pas lier, écarter, ou valider (combattant + valeurs à enregistrer). `version` : celle de la
- * fiche dont la carte est partie (aucune pour un nouveau combattant) ; si la fiche a changé depuis, la carte n’est pas écrite.
+ * Décision de l’organisateur sur une carte : ne pas lier (`fighterId` : combattant choisi sur la carte, pas encore validée), écarter, ou
+ * valider (combattant + valeurs à enregistrer). `version` : celle de la fiche dont la carte est partie (aucune pour un nouveau
+ * combattant) ; si la fiche a changé depuis, la carte n’est pas écrite.
  */
-export type FfkCardChoice = { kind: 'none' } | { kind: 'skip' } | { kind: 'validated'; fighterId: string | 'new'; value: FfkCardValue; version?: string };
+export type FfkCardChoice =
+  | { kind: 'none'; fighterId?: string }
+  | { kind: 'skip' }
+  | { kind: 'validated'; fighterId: string | 'new'; value: FfkCardValue; version?: string };
 
 export interface FfkChoices {
   /** Catégories de poids absentes de la grille, cochées pour être créées. */
@@ -294,9 +298,11 @@ export function planFfkCards(rows: FfkRow[], grid: CategoryGrid, existing: Exist
   for (const c of cards) {
     if (c.state !== 'todo' && c.state !== 'skip') continue;
     for (const k of c.candidates) concerned.add(k.fighterId);
-    // Combattant choisi (par la recherche, hors candidats) d’une carte validée retombée à trancher : laissé de côté avec elle.
+    // Combattant choisi (par la recherche, hors candidats) d’une carte pas encore validée, ou validée et retombée à trancher : laissé de
+    // côté avec elle, ses inscriptions ne changent pas.
     const choice = choices.cards?.[c.key];
     if (choice?.kind === 'validated' && choice.fighterId !== 'new') concerned.add(choice.fighterId);
+    if (choice?.kind === 'none' && choice.fighterId) concerned.add(choice.fighterId);
   }
   const orphans = existing.fighters
     .filter((f) => !concerned.has(f.fighterId))

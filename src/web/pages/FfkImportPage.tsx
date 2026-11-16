@@ -6,7 +6,7 @@ import type { FfkCardsPlan } from '../../domain/ffk-plan/plan.js';
 import { plural } from '../../domain/plural.js';
 import { type FfkSheetSetup, useGrid, useUploadFfk } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
-import { pageState, type CardDraft } from '../components/ffk-import/cardState.js';
+import { chosenFighter, pageState, type CardDraft } from '../components/ffk-import/cardState.js';
 import { ClubCards } from '../components/ffk-import/ClubCards.js';
 import { FighterCards } from '../components/ffk-import/FighterCards.js';
 import { ImportBar } from '../components/ffk-import/ImportBar.js';
@@ -60,6 +60,9 @@ export function FfkImportPage() {
     () => Object.fromEntries((plan?.cards ?? []).map((c) => [c.key, pageState(c, drafts[c.key], choices.cards?.[c.key])])),
     [plan, drafts, choices.cards],
   );
+  // « Rapproché de la ligne FFK … » tant que la carte a encore ce combattant (pas après « Annuler », « Ne pas lier » ou un autre choix).
+  const matchedCard = matchRequest && plan?.cards.find((c) => c.key === matchRequest.cardKey);
+  const matched = matchedCard && chosenFighter(matchedCard, drafts[matchedCard.key], choices.cards?.[matchedCard.key]) === matchRequest.fighterId ? matchRequest : null;
 
   /** Nouveau fichier, ou import fait : la page repart de zéro. */
   const clear = () => {
@@ -144,7 +147,7 @@ export function FfkImportPage() {
           </SectionCard>
 
           <SectionCard title={step(4, 'Fiches club sans inscription FFK')} data-testid="ffk-orphans" help="import-ffk.sans-ffk">
-            <OrphansSection orphans={plan.orphans} cards={plan.cards} grid={grid} actions={choices.orphans} matched={matchRequest}
+            <OrphansSection orphans={plan.orphans} cards={plan.cards} grid={grid} actions={choices.orphans} matched={matched}
               onAction={setOrphan} onMatch={(cardKey, fighterId) => setMatchRequest({ cardKey, fighterId })} />
           </SectionCard>
 

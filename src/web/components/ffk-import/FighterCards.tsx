@@ -43,7 +43,7 @@ export function FighterCards({ competitionId, plan, grid, choices, updateChoices
   /** Cartes vues dans « À trancher » : elles y restent une fois validées (on voit ce qu’on vient de faire). */
   const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
   const [openKey, setOpenKey] = useState<string | null>(null);
-  const [scrollTarget, setScrollTarget] = useState<{ key: string } | null>(null);
+  const [scrollTarget, setScrollTarget] = useState<{ key: string; ifHidden?: boolean } | null>(null);
   const [showUnchanged, setShowUnchanged] = useState(false);
   const { cards } = plan;
 
@@ -68,15 +68,31 @@ export function FighterCards({ competitionId, plan, grid, choices, updateChoices
     if (fresh.length) setSeen((s) => new Set([...s, ...fresh]));
   }, [filter, cards, states, seen]);
 
+  // Défilement vers l’en-tête d’une carte, sous le résumé collé (`scroll-margin-top`) ; `ifHidden` : seulement s’il est passé au-dessus.
   useEffect(() => {
     if (!scrollTarget) return;
-    const el = document.querySelector(`[data-card-key="${CSS.escape(scrollTarget.key)}"]`);
-    el?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    const el = document.querySelector<HTMLElement>(`[data-card-key="${CSS.escape(scrollTarget.key)}"]`);
+    if (!el) return;
+    if (scrollTarget.ifHidden && el.getBoundingClientRect().top >= (parseFloat(getComputedStyle(el).scrollMarginTop) || 0)) return;
+    el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
   }, [scrollTarget]);
 
-  /** Une décision sur la carte la laisse de côté jusqu’à sa validation (sans relancer l’aperçu si c’est déjà le cas). */
-  const unsettle = (key: string) => updateChoices((c) => (c.cards?.[key]?.kind === 'none' ? c : { ...c, cards: { ...c.cards, [key]: { kind: 'none' } } }));
-  const setChoice = (key: string, choice: FfkCardChoice) => updateChoices((c) => ({ ...c, cards: { ...c.cards, [key]: choice } }));
+  /**
+   * Une décision sur la carte la laisse de côté jusqu’à sa validation (sans relancer l’aperçu si rien ne change). `fighterId` : le
+   * combattant choisi sur la carte, envoyé pour que ses inscriptions ne changent pas tant que la carte n’est pas validée.
+   */
+  const unsettle = (key: string, chosen: string | 'new' | null = null) => updateChoices((c) => {
+    const fighterId = chosen && chosen !== 'new' ? chosen : undefined;
+    const before = c.cards?.[key];
+    if (before?.kind === 'none' && before.fighterId === fighterId) return c;
+    // Un combattant pris par une carte n’est plus une fiche sans inscription FFK : son action (« Supprimer ») est oubliée.
+    const orphans = fighterId && c.orphans?.[fighterId] ? without(c.orphans, fighterId) : c.orphans;
+    return { ...c, cards: { ...c.cards, [key]: fighterId ? { kind: 'none', fighterId } : { kind: 'none' } }, orphans };
+  });
+  const setChoice = (key: string, choice: FfkCardChoice) => updateChoices((c) => {
+    const taken = choice.kind === 'validated' && c.orphans?.[choice.fighterId] ? choice.fighterId : null;
+    return { ...c, cards: { ...c.cards, [key]: choice }, orphans: taken ? without(c.orphans, taken) : c.orphans };
+  });
   const dropDraft = (key: string) => setDrafts((d) => without(d, key));
 
   /** Choisir le combattant ouvre la carte ; un autre choix repart des valeurs de ce combattant ; le même replie (`toggle`) ou laisse ouverte. */
@@ -95,7 +111,7 @@ export function FighterCards({ competitionId, plan, grid, choices, updateChoices
     }
     const saved = target === 'new' ? null : env.fighter(target);
     setDrafts((d) => ({ ...d, [key]: { fighterId: target, value: initialValue(card, saved), dirty: true, version: saved?.version ?? null } }));
-    unsettle(key);
+    unsettle(key, target);
     setOpenKey(key);
   };
 
@@ -109,7 +125,7 @@ export function FighterCards({ competitionId, plan, grid, choices, updateChoices
           const base = d[key] ?? workingDraft(card, undefined, choices.cards?.[key], env.fighter);
           return base ? { ...d, [key]: { ...base, value, dirty: true } } : d;
         });
-        unsettle(key);
+        unsettle(key, chosenFighter(card, drafts[key], choices.cards?.[key]));
       },
       validate: () => {
         const working = workingDraft(card, drafts[key], choices.cards?.[key], env.fighter);
@@ -132,7 +148,11 @@ export function FighterCards({ competitionId, plan, grid, choices, updateChoices
         updateChoices((c) => (c.cards?.[key] ? { ...c, cards: without(c.cards, key) } : c));
         if (openKey === key) setOpenKey(null);
       },
-      close: () => setOpenKey(null),
+      close: () => {
+        setOpenKey(null);
+        // La carte refermée se replie : si son en-tête est passé au-dessus de l’écran, la page y revient (on garde sa place).
+        setScrollTarget({ key, ifHidden: true });
+      },
       reopen: () => setOpenKey(key),
     };
   };

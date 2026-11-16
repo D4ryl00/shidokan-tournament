@@ -21,7 +21,8 @@ const bodySchema = z.object({
         .record(
           z.string(),
           z.discriminatedUnion('kind', [
-            z.object({ kind: z.literal('none') }),
+            // `fighterId` : combattant choisi sur la carte, pas encore validée (il n’est pas une fiche sans inscription FFK).
+            z.object({ kind: z.literal('none'), fighterId: z.string().min(1).optional() }),
             z.object({ kind: z.literal('skip') }),
             z.object({
               kind: z.literal('validated'),

@@ -145,17 +145,21 @@ export function FighterCard({ card, state, draft, choice, open, env, actions }: 
               </Stack>
               <TextInput type="search" autoComplete="off" size="sm" placeholder="Pas dans la liste ? Chercher un inscrit par son nom…"
                 aria-label={`Chercher un inscrit pour ${name}`} value={query} onChange={(e) => setQuery(e.currentTarget.value)} style={{ maxWidth: 420 }} />
-              {searchReady(query) && <SearchResults query={query} chosen={chosen} env={env} onPick={pickAndClear} />}
+              {searchReady(query) && (
+                <SearchResults query={query} chosen={chosen} env={env} onPick={pickAndClear}
+                  shown={new Set([...card.candidates.map((c) => c.fighterId), ...(fighter ? [fighter.fighterId] : [])])} />
+              )}
             </Stack>
 
             {formShown ? (
-              <OpenForm card={card} working={working} fighter={fighter} env={env} actions={actions} revertable={revertable} />
+              <OpenForm card={card} working={working} fighter={fighter} env={env} actions={actions} revertable={revertable}
+                validated={choice?.kind === 'validated'} />
             ) : (
               <Group justify="space-between" gap="xs">
                 <Text size="sm" c={state === 'todo' || state === 'pending' ? 'var(--sk-warn-text)' : 'dimmed'} data-testid="ffk-card-hint">
                   {hint(card, state, chosen, working, choice, env.stale)}
                 </Text>
-                {revertable && <Button variant="subtle" size="compact-sm" onClick={actions.revert}>Annuler mes modifications</Button>}
+                {revertable && <RevertButton validated={choice?.kind === 'validated'} onClick={actions.revert} />}
               </Group>
             )}
           </>
@@ -168,9 +172,18 @@ export function FighterCard({ card, state, draft, choice, open, env, actions }: 
 /** « Benjamins · Club X · Karaté, Kata » : de quoi reconnaître un inscrit. */
 const fighterDetails = (f: FfkSearchFighter) => `${f.clubName} · ${f.ageLabel} · ${f.disciplines}`;
 
-function SearchResults({ query, chosen, env, onPick }: { query: string; chosen: string | 'new' | null; env: CardEnv; onPick: (id: string) => void }) {
-  const results = searchByName(env.fighters, query, (f) => f.label);
-  if (!results.length) return <Text size="xs" c="dimmed">Aucun inscrit ne contient « {query.trim()} ».</Text>;
+/** Résultats de « Pas dans la liste ? » : les inscrits dont le nom contient la recherche, sauf ceux déjà proposés au-dessus (`shown`). */
+function SearchResults({ query, chosen, env, shown, onPick }: {
+  query: string;
+  chosen: string | 'new' | null;
+  env: CardEnv;
+  shown: ReadonlySet<string>;
+  onPick: (id: string) => void;
+}) {
+  const found = searchByName(env.fighters, query, (f) => f.label);
+  const results = found.filter((f) => !shown.has(f.fighterId));
+  if (!found.length) return <Text size="xs" c="dimmed">Aucun inscrit ne contient « {query.trim()} ».</Text>;
+  if (!results.length) return <Text size="xs" c="dimmed">Déjà proposé au-dessus.</Text>;
   return (
     <Stack gap={4}>
       {results.map((f) => (
@@ -185,7 +198,7 @@ function SearchResults({ query, chosen, env, onPick }: { query: string; chosen: 
 /** Ce qu’on lit sous une carte non ouverte : ce qui arrivera à l’import, et comment la régler. */
 function hint(card: FfkCard, state: PageCardState, chosen: string | 'new' | null, working: CardDraft | null, choice: FfkCardChoice | undefined, stale: boolean): string {
   if (state === 'skip') return 'Ligne écartée. Choisissez un combattant pour la réintégrer.';
-  if (state === 'pending') return 'Modifiée mais pas validée : ouvrez-la et validez, sinon elle est laissée de côté.';
+  if (state === 'pending') return 'Choisie, pas encore validée : ouvrez-la et validez, sinon elle est laissée de côté.';
   if (state === 'auto') return 'Sera importée telle quelle. Cliquez sur le combattant pour voir ou modifier les champs ; un second clic les replie.';
   if (state === 'done') return 'Validée. Cliquez sur le combattant pour voir ou modifier les champs.';
   if (chosen === null) {
@@ -212,13 +225,15 @@ function FoldedSummary({ card, chosen, working, env }: { card: FfkCard; chosen: 
 }
 
 /** Carte ouverte : le formulaire du combattant de l’app, puis « Écarter », « Annuler mes modifications », « Fermer », « Valider la carte ». */
-function OpenForm({ card, working, fighter, env, actions, revertable }: {
+function OpenForm({ card, working, fighter, env, actions, revertable, validated }: {
   card: FfkCard;
   working: CardDraft;
   fighter: FfkSearchFighter | null;
   env: CardEnv;
   actions: CardActions;
   revertable: boolean;
+  /** Carte validée, rouverte : « Annuler mes modifications » annule aussi la validation. */
+  validated: boolean;
 }) {
   const ctx: LineFormContext = {
     mode: 'organiser', multipleCombats: true, closed: env.closed, ageBands: env.ageBands, weightClasses: env.weightClasses, saved: fighter?.line ?? null,
@@ -235,7 +250,7 @@ function OpenForm({ card, working, fighter, env, actions, revertable }: {
       <Group justify="space-between" gap="xs" wrap="wrap">
         <Group gap="xs">
           <Button variant="subtle" color="red" size="compact-sm" onClick={actions.skip}>Écarter cette ligne</Button>
-          {revertable && <Button variant="subtle" size="compact-sm" onClick={actions.revert}>Annuler mes modifications</Button>}
+          {revertable && <RevertButton validated={validated} onClick={actions.revert} />}
         </Group>
         <Group gap="xs" justify="flex-end" style={{ marginLeft: 'auto' }}>
           {missing.length > 0 && (
@@ -245,6 +260,22 @@ function OpenForm({ card, working, fighter, env, actions, revertable }: {
           <Button data-testid="ffk-card-validate" disabled={missing.length > 0} onClick={actions.validate}>Valider la carte</Button>
         </Group>
       </Group>
+      {validated && revertable && (
+        <Text size="xs" c="dimmed">Carte validée : « Annuler mes modifications » la ramène à son état de départ, validation comprise.</Text>
+      )}
     </Stack>
+  );
+}
+
+/**
+ * « Annuler mes modifications » : la carte revient à son état de départ (spec : toute décision se défait). Sur une carte validée, la
+ * validation est annulée aussi (dit dans le titre du bouton et sous le formulaire ouvert).
+ */
+function RevertButton({ validated, onClick }: { validated: boolean; onClick: () => void }) {
+  return (
+    <Button variant="subtle" size="compact-sm" onClick={onClick}
+      title={validated ? 'Revient à l’état de départ de la carte : la validation est annulée aussi.' : 'Revient à l’état de départ de la carte.'}>
+      Annuler mes modifications
+    </Button>
   );
 }

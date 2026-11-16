@@ -274,6 +274,17 @@ describe('orphelins et récapitulatif', () => {
     expect(plan.summary.deletes).toBe(0);
   });
 
+  test('combattant choisi sur une carte pas encore validée (« Rapprocher… », recherche) : jamais orphelin, ses inscriptions ne changent pas', () => {
+    const ex = base();
+    ex.fighters.push(fighter('f9', 'c2', 'LOIN', 'Paula'));
+    const r = row({ lastName: 'PETIT', firstName: 'P' });
+    expect(planFfkCards([r], grid, ex).orphans.map((o) => o.fighterId)).toEqual(['f1', 'f9']);
+    const plan = planFfkCards([r], grid, ex, { cards: { [`L:${r.licence}`]: { kind: 'none', fighterId: 'f9' } }, orphans: { f9: 'delete' } });
+    expect(plan.cards[0]).toMatchObject({ state: 'todo', reason: 'combattant pas choisi' });
+    expect(plan.orphans.map((o) => o.fighterId)).toEqual(['f1']);
+    expect(plan.summary.deletes).toBe(0);
+  });
+
   test('orphelin dont un combat a commencé : pas supprimable, un choix « delete » est ignoré (gardé)', () => {
     const ex = base();
     ex.fighters.push(
