@@ -3,6 +3,8 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import type { ClubFormLine } from '../../src/domain/club-form.js';
 import { buildApp } from '../../src/server/app.js';
+import { closeDb, openDb } from '../../src/server/db/client.js';
+import { writeClubLineInTx } from '../../src/server/repositories/club-entry.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
@@ -371,4 +373,26 @@ test('licence : enregistrée normalisée ; vide ou absente = conservée', async 
   const last = await put(saved.fighterId, absent as ClubFormLine, again.version);
   expect(last.json().line.licence).toBe('11462640R');
   expect((await view()).lines[0]!.line.licence).toBe('11462640R');
+});
+
+test('writeClubLineInTx : deux lignes dans une même transaction, la seconde invalide annule tout', async () => {
+  const competitionId = base.split('/').pop()!;
+  const db = openDb(dbPath);
+  try {
+    const args = { fighterId: null, clubId, expectedVersion: null, writer: { kind: 'organiser' as const }, source: 'ffk' as const };
+    expect(() =>
+      db.transaction((tx) => {
+        const t = tx as unknown as typeof db;
+        writeClubLineInTx(t, competitionId, { ...args, line: LINE });
+        writeClubLineInTx(t, competitionId, { ...args, line: { ...LINE, lastName: 'DURAND', sex: null } });
+      }),
+    ).toThrow();
+    expect(await registrations()).toEqual([]);
+    // Une seule ligne : mêmes inscriptions que par la page, source demandée, licence passée en argument.
+    const id = db.transaction((tx) => writeClubLineInTx(tx as unknown as typeof db, competitionId, { ...args, line: LINE, licence: 'A123' }));
+    const regs = await registrations();
+    expect(regs.map((r) => [r.discipline, r.source, r.fighter.id]).sort()).toEqual([['karate', 'ffk', id], ['kata', 'ffk', id]]);
+  } finally {
+    closeDb(db);
+  }
 });

@@ -132,6 +132,11 @@ export async function deleteCompetition(db: AppDb, id: string): Promise<void> {
 }
 
 export async function getGrid(db: AppDb, competitionId: string): Promise<CategoryGrid> {
+  return getGridSync(db, competitionId);
+}
+
+/** Grille lue sans attente (dans une écriture ou une vue synchrone). */
+export function getGridSync(db: AppDb, competitionId: string): CategoryGrid {
   const bands = db.select().from(ageBands).where(eq(ageBands.competitionId, competitionId)).orderBy(asc(ageBands.sortOrder)).all();
   const classes = db
     .select()
