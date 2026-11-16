@@ -11,8 +11,6 @@ import { FfkChoice } from './club-line/FfkChoice.js';
 import { choiceValues, ffkChoiceState, ffkValueAvailable, hiddenConflicts, importValueText, type FfkFormStep } from './club-line/ffkStep.js';
 import { OneOf } from './PaperEntryTable.js';
 
-export { pendingDecisions, type FieldDiff };
-
 const ZONE_STYLE: Record<'decide' | 'decided', CSSProperties> = {
   decide: { border: '1px solid var(--mantine-color-orange-6)', background: 'var(--mantine-color-orange-light)', borderRadius: 10, padding: '10px 12px' },
   decided: { border: '1px solid var(--mantine-color-blue-6)', borderRadius: 10, padding: '10px 12px' },

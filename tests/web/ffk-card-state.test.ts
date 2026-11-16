@@ -17,7 +17,7 @@ const card = (key: string, state: FfkCardState, reason: string | null = state ==
   diffs: [], missing: [], changes: [], reason, version: null, rejected,
 });
 
-const draft = (patch: Partial<CardDraft> = {}): CardDraft => ({ fighterId: 'f-1', value, dirty: true, version: 'v1', ...patch });
+const draft = (patch: Partial<CardDraft> = {}): CardDraft => ({ fighterId: 'f-1', value, version: 'v1', ...patch });
 
 describe('pageState', () => {
   test('carte non touchée : l’état de l’aperçu', () => {
@@ -34,9 +34,6 @@ describe('pageState', () => {
     expect(pageState(card('a', 'todo'), draft({ value: { ...value, line: { ...line, ageBandCode: null } } }), { kind: 'none' })).toBe('todo');
   });
 
-  test('carte seulement ouverte (brouillon non modifié) : l’état de l’aperçu', () => {
-    expect(pageState(card('a', 'auto'), draft({ dirty: false }), undefined)).toBe('auto');
-  });
 
   test('choix validé → « Validée », sans attendre l’aperçu', () => {
     expect(pageState(card('a', 'todo'), undefined, { kind: 'validated', fighterId: 'f-1', value })).toBe('done');
@@ -67,7 +64,7 @@ describe('workingDraft : version de la fiche', () => {
   });
   test('choix validé : ses valeurs et sa version ; fiche modifiée depuis : repart de la fiche actuelle', () => {
     const choice = { kind: 'validated' as const, fighterId: 'f-1', value, version: 'v1' };
-    expect(workingDraft(card('a', 'done'), undefined, choice, () => saved('v1'))).toEqual({ fighterId: 'f-1', value, dirty: false, version: 'v1' });
+    expect(workingDraft(card('a', 'done'), undefined, choice, () => saved('v1'))).toEqual({ fighterId: 'f-1', value, version: 'v1' });
     const fresh = workingDraft(card('a', 'todo', 'fiche modifiée', true), undefined, choice, () => saved('v2'))!;
     expect(fresh).toMatchObject({ fighterId: 'f-1', version: 'v2', value: { publicNameHidden: true, line: { weightKg: 31 } } });
   });

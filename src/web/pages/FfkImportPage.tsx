@@ -107,7 +107,7 @@ export function FfkImportPage() {
 
       {sheets.length > 0 && (
         <SectionCard title="Onglets et colonnes" description="Les onglets à importer, et la colonne de l’export qui correspond à chaque information."
-          actions={<Button variant="default" onClick={() => ffk.recalc(sheets)} loading={ffk.loading}>Recalculer l’aperçu</Button>}>
+          actions={<Button variant="default" onClick={() => ffk.recalc(sheets)} loading={ffk.recalculating}>Recalculer l’aperçu</Button>}>
           <SimpleGrid cols={{ base: 1, md: Math.min(sheets.length, 3) }}>
             {sheets.map((s, i) => (
               <Card key={s.name} withBorder data-testid="ffk-sheet" style={{ backgroundColor: 'var(--sk-bg)' }}>

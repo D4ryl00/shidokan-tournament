@@ -6,11 +6,12 @@ import { disciplineLabel } from '../../labels.js';
 
 /**
  * Ce que l’organisateur a en cours sur une carte, avant « Valider la carte » : le combattant choisi (`'new'` : nouveau) et les
- * valeurs du formulaire. `dirty` : choisi ou modifié ici (la carte est alors laissée de côté à l’import tant qu’elle n’est pas validée).
+ * valeurs du formulaire. Un brouillon n’existe que choisi ou modifié ici : la carte est alors laissée de côté à l’import tant qu’elle
+ * n’est pas validée.
  * `version` : celle de la fiche dont les valeurs sont parties (`null` : nouveau combattant) ; validée, la carte n’écrase pas une
  * fiche modifiée depuis.
  */
-export interface CardDraft { fighterId: string | 'new' | null; value: FfkCardValue; dirty: boolean; version: string | null }
+export interface CardDraft { fighterId: string | 'new' | null; value: FfkCardValue; version: string | null }
 
 /** État d’une carte sur la page : celui de l’aperçu, plus « À valider » (`pending` : modifiée, pas validée). */
 export type PageCardState = 'todo' | 'pending' | 'done' | 'auto' | 'skip';
@@ -24,7 +25,7 @@ export type CardFilter = 'todo' | 'done' | 'auto' | 'all';
  */
 export function pageState(card: FfkCard, draft: CardDraft | undefined, choice: FfkCardChoice | undefined): PageCardState {
   if (choice?.kind === 'skip') return 'skip';
-  if (draft?.dirty) return draft.fighterId !== null && missingFields(draft.value).length === 0 ? 'pending' : 'todo';
+  if (draft) return draft.fighterId !== null && missingFields(draft.value).length === 0 ? 'pending' : 'todo';
   if (choice?.kind === 'validated') return card.rejected ? 'todo' : 'done';
   if (choice?.kind === 'none') return 'todo';
   return card.state;
@@ -64,13 +65,13 @@ export function workingDraft(card: FfkCard, draft: CardDraft | undefined, choice
   if (draft) return draft;
   if (choice?.kind === 'validated') {
     const saved = choice.fighterId === 'new' ? null : fighter(choice.fighterId);
-    if (!saved || saved.version === choice.version) return { fighterId: choice.fighterId, value: choice.value, dirty: false, version: choice.version ?? null };
-    return { fighterId: choice.fighterId, value: initialValue(card, saved), dirty: false, version: saved.version };
+    if (!saved || saved.version === choice.version) return { fighterId: choice.fighterId, value: choice.value, version: choice.version ?? null };
+    return { fighterId: choice.fighterId, value: initialValue(card, saved), version: saved.version };
   }
   const fighterId = chosenFighter(card, draft, choice);
   if (fighterId === null) return null;
   const saved = fighterId === 'new' ? null : fighter(fighterId);
-  return { fighterId, value: initialValue(card, saved), dirty: false, version: saved?.version ?? null };
+  return { fighterId, value: initialValue(card, saved), version: saved?.version ?? null };
 }
 
 /** « Karaté, Kata » : les disciplines d’une ligne ; « — » sans discipline. */

@@ -383,8 +383,8 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Déposez l’export FFK, tranchez ce que vous pouvez sur une seule page, puis importez : le reste est laissé tel quel jusqu’au prochain import.',
     details: [
       'Rien n’est enregistré avant « Importer… », et rien ne change sur une fiche sans votre accord. Les fichiers .xlsx, .xlsm, .ods et .csv sont acceptés.',
+      'Choisissez les onglets à importer et vérifiez la correspondance des colonnes (elle est mémorisée). Puis, dans l’ordre de la page :',
       [
-        'Choisissez les onglets à importer et vérifiez la correspondance des colonnes (elle est mémorisée).',
         '1. Catégories de poids absentes de la grille : cochez celles à créer.',
         '2. Clubs : reliez chaque club de l’export à un club de la compétition, ou créez-le.',
         '3. Combattants de l’export : une carte par combattant ; liez-le à un inscrit ou créez-le, choisissez les valeurs à garder, validez la carte.',
@@ -423,8 +423,9 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         '« Ne pas lier pour l’instant » : la ligne est laissée de côté.',
       ],
       'Carte ouverte : le formulaire du combattant. Les champs où l’export et la fiche diffèrent démarrent vides, encadrés en orange : cliquez sur « FFK » ou « Fiche club », ou saisissez une autre valeur.',
-      '« Valider la carte » (grisé tant qu’un champ obligatoire manque) la replie et ouvre la suivante. « Annuler mes modifications » revient à l’état de départ ; « Écarter cette ligne » la laisse de côté.',
-      'États : « À trancher », « À valider » (modifiée mais pas validée : laissée de côté à l’import), « Validée », « Sans problème » (importée telle quelle), « Écartée ». Les confirmées sans changement sont repliées ensemble.',
+      '« Valider la carte » (grisé tant qu’un champ obligatoire manque) la replie et ouvre la suivante. « Annuler mes modifications » revient à l’état de départ de la carte (sur une carte validée, la validation est annulée aussi) ; « Écarter cette ligne » la laisse de côté.',
+      'États : « À trancher » ; « À valider » (combattant choisi et champs obligatoires remplis, pas encore validée : laissée de côté à l’import ; tant qu’un champ obligatoire manque, elle reste « À trancher ») ; « Validée » ; « Sans problème » (importée telle quelle) ; « Écartée ». Les confirmées sans changement sont repliées ensemble.',
+      'Une carte validée dont la fiche a été modifiée depuis (autre poste, coach) revient « À trancher » : rouvrez-la, elle repart de la fiche actuelle, et revalidez-la.',
     ],
   },
   'import-ffk.sans-ffk': {
@@ -437,6 +438,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         '« Rapprocher… » : cherchez la ligne de l’export qui est ce combattant ; sa carte se lie à lui et s’ouvre plus haut.',
         '« Supprimer » : ses inscriptions sont supprimées à l’import (impossible si ses combats ont commencé).',
       ],
+      'Un inscrit choisi sur une carte de l’export, même pas encore validée, n’apparaît pas ici : ses inscriptions ne changent pas tant que la carte n’est pas validée.',
     ],
   },
   sessions: {

@@ -21,6 +21,8 @@ export function useFfkPreview(competitionId: string) {
   const [planFor, setPlanFor] = useState<{ source: FfkSource; choices: FfkChoices } | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
+  /** « Recalculer l’aperçu » demandé : son bouton tourne jusqu’à la réponse (pas à chaque choix). */
+  const [recalculating, setRecalculating] = useState(false);
   const latest = useRef(0);
 
   useEffect(() => {
@@ -34,17 +36,19 @@ export function useFfkPreview(competitionId: string) {
         setPlanFor({ source, choices });
         setError(null);
         setLoading(false);
+        setRecalculating(false);
       },
       (e: unknown) => {
         if (request !== latest.current) return;
         setError(e);
         setLoading(false);
+        setRecalculating(false);
       },
     );
   }, [source, choices, mutateAsync]);
 
   return {
-    source, choices, plan, error, loading,
+    source, choices, plan, error, loading, recalculating,
     /**
      * L’aperçu affiché ne correspond pas (encore) au fichier et aux choix en cours : calcul en route, ou dernier calcul en erreur.
      * « Importer… » attend : l’import n’envoie jamais un plan périmé.
@@ -58,7 +62,10 @@ export function useFfkPreview(competitionId: string) {
       setSource({ uploadId, sheets });
     },
     /** « Recalculer l’aperçu » : onglets et colonnes modifiés, décisions gardées. */
-    recalc: (sheets: FfkSheetSetup[]) => setSource((s) => s && { ...s, sheets }),
+    recalc: (sheets: FfkSheetSetup[]) => {
+      setRecalculating(true);
+      setSource((s) => s && { ...s, sheets });
+    },
     /** Nouvel aperçu, mêmes onglets et mêmes choix (import refusé parce que les inscriptions ont changé). */
     refresh: () => setSource((s) => s && { ...s }),
     /** Nouveau fichier choisi : tout repart de zéro (une réponse encore en route est ignorée). */
@@ -70,6 +77,7 @@ export function useFfkPreview(competitionId: string) {
       setChoices({});
       setError(null);
       setLoading(false);
+      setRecalculating(false);
     },
     /** Une décision change : l’aperçu est recalculé. */
     updateChoices: (patch: (c: FfkChoices) => FfkChoices) => setChoices(patch),

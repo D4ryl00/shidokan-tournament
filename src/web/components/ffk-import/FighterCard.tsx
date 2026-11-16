@@ -87,7 +87,7 @@ export function FighterCard({ card, state, draft, choice, open, env, actions }: 
   // Validée ou écartée, et pas rouverte : repliée en une ligne de résumé.
   const folded = !open && (state === 'done' || state === 'skip');
   const formShown = open && working !== null && state !== 'skip';
-  const revertable = !!draft?.dirty || choice !== undefined;
+  const revertable = draft !== undefined || choice !== undefined;
   const pickAndClear = (target: string | 'new' | 'none') => {
     actions.pick(target);
     setQuery('');

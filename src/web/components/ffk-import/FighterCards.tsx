@@ -110,7 +110,7 @@ export function FighterCards({ competitionId, plan, grid, choices, updateChoices
       return;
     }
     const saved = target === 'new' ? null : env.fighter(target);
-    setDrafts((d) => ({ ...d, [key]: { fighterId: target, value: initialValue(card, saved), dirty: true, version: saved?.version ?? null } }));
+    setDrafts((d) => ({ ...d, [key]: { fighterId: target, value: initialValue(card, saved), version: saved?.version ?? null } }));
     unsettle(key, target);
     setOpenKey(key);
   };
@@ -123,7 +123,7 @@ export function FighterCards({ competitionId, plan, grid, choices, updateChoices
         // Mise à jour fonctionnelle : le brouillon de départ (non enregistré) est relu au moment de la mise à jour.
         setDrafts((d) => {
           const base = d[key] ?? workingDraft(card, undefined, choices.cards?.[key], env.fighter);
-          return base ? { ...d, [key]: { ...base, value, dirty: true } } : d;
+          return base ? { ...d, [key]: { ...base, value } } : d;
         });
         unsettle(key, chosenFighter(card, drafts[key], choices.cards?.[key]));
       },

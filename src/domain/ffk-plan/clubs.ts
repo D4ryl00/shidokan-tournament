@@ -9,8 +9,6 @@ export interface ExistingClub {
   affiliationNumber: string | null;
 }
 
-export type ClubCertainty = 'sure' | 'doubtful' | 'new';
-
 export interface ClubLink {
   clubEntity: string;
   clubName: string;

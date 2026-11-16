@@ -80,6 +80,19 @@ describe('candidats', () => {
     const [c] = build([row({ licence: 'NEW' })], [fighter('f1', 'c1', 'Martin', 'Lea', { licence: 'OLD' })]).cards;
     expect(c).toMatchObject({ sure: null, candidates: [{ fighterId: 'f1', reason: 'même nom, autre licence' }] });
   });
+  test('homonymes dans le même club : les deux proposés, aucun sûr', () => {
+    const [c] = build([lea()], [fighter('f1', 'c1', 'Martin', 'Léa'), fighter('f2', 'c1', 'MARTIN', 'Lea')]).cards;
+    expect(c).toMatchObject({
+      sure: null,
+      candidates: [{ fighterId: 'f1', reason: 'homonymes dans le même club' }, { fighterId: 'f2', reason: 'homonymes dans le même club' }],
+    });
+  });
+  test('déjà rapproché d’une autre licence dans cet import : proposé, pas sûr', () => {
+    // La première ligne (licence L1) prend la fiche sans licence par son nom ; la seconde (même nom, licence L9) ne peut plus la prendre d’office.
+    const [first, second] = build([row({ licence: 'L1' }), row({ licence: 'L9' })], [fighter('f1', 'c1', 'Martin', 'Léa')]).cards;
+    expect(first).toMatchObject({ sure: 'f1', candidates: [{ fighterId: 'f1', reason: 'même nom, même club' }] });
+    expect(second).toMatchObject({ sure: null, candidates: [{ fighterId: 'f1', reason: 'déjà rapproché d’une autre licence dans cet import' }] });
+  });
   test('sexe différent : jamais candidat', () => {
     const [c] = build([lea()], [fighter('f1', 'c1', 'Martin', 'Lea', { line: { ...fighter('x', null, 'Martin', 'Lea').line, sex: 'M' } })]).cards;
     expect(c).toMatchObject({ sure: null, candidates: [] });
