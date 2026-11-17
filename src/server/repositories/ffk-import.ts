@@ -5,10 +5,15 @@ import type { ExistingFighter } from '../../domain/ffk-plan/cards.js';
 import type { ExistingClub } from '../../domain/ffk-plan/clubs.js';
 import { planFfkCards, type ExistingData, type FfkCardsPlan, type FfkChoices, type FfkImportResult } from '../../domain/ffk-plan/plan.js';
 import { mergeWeightClasses, validateGrid } from '../../domain/grid.js';
+import { ffkImportDetail } from '../../domain/journal/text.js';
+import { subjectOf } from '../../domain/journal/fighter-diff.js';
 import type { CategoryGrid, WeightClass } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
 import { linkClub } from '../db/club-directory.js';
 import { clubAliases, clubDirectory, clubs, fighters, importMappings, registrations, uploads, weightClasses } from '../db/schema.js';
+import { markJournalHandled } from '../journal/context.js';
+import { fighterSnapshot, recordFighterChange, snapshotSex } from '../journal/fighters.js';
+import { recordJournal, withJournalGroup } from '../journal/write.js';
 import { readWorkbook } from '../spreadsheet/read.js';
 import { closedSet } from './closed-categories.js';
 import { fighterLine, fighterLines, LineReadOnlyError, StaleLineError, writeClubLineInTx } from './club-entry.js';
@@ -44,6 +49,13 @@ export async function saveUpload(db: AppDb, competitionId: string, fileName: str
 
 export async function deleteUpload(db: AppDb, uploadId: string): Promise<void> {
   db.delete(uploads).where(eq(uploads.id, uploadId)).run();
+}
+
+/** Nom du fichier envoyé (titre de l'entrée du journal de l'import). */
+export async function uploadFileName(db: AppDb, competitionId: string, uploadId: string): Promise<string> {
+  const row = db.select({ fileName: uploads.fileName }).from(uploads).where(and(eq(uploads.id, uploadId), eq(uploads.competitionId, competitionId))).get();
+  if (!row) throw new NotFoundError('Fichier introuvable : renvoyez-le.');
+  return row.fileName;
 }
 
 export async function loadUpload(db: AppDb, competitionId: string, uploadId: string): Promise<Buffer> {
@@ -138,12 +150,17 @@ function withName(label: string, e: unknown): unknown {
  * Applique le plan, dans une transaction : catégories cochées ; liens de club (sûrs ou choisis, mémorisés) ; cartes `auto` et `done`
  * (valeurs de la carte, écrites comme une ligne du formulaire combattant) ; fiches sans inscription FFK supprimées ou gardées ; correspondances
  * de colonnes. Une carte laissée de côté (`todo`, `skip`) ne touche pas aux inscriptions de son combattant. Une ligne refusée annule tout.
+ *
+ * Journal : une entrée « Import FFK · <fichier> » (chiffres tirés du plan, écrite d'abord), dont chaque catégorie créée, club relié,
+ * combattant ajouté, modifié ou supprimé, fiche gardée qui perd sa confirmation FFK est une ligne de détail. Rien si aucune ligne ne
+ * s'écrirait (réimport identique). Les correspondances de colonnes (réglage global) ne sont pas notées.
  */
 export async function applyFfkCards(
   db: AppDb,
   competitionId: string,
   plan: FfkCardsPlan,
   mappings: { headers: string[]; mapping: ColumnMapping }[],
+  fileName: string,
 ): Promise<FfkImportResult> {
   const added: WeightClass[] = plan.weightClasses.filter((w) => w.accepted).map(({ rows: _r, accepted: _a, ...w }) => w);
   const merged = mergeWeightClasses(await getGrid(db, competitionId), added);
@@ -151,93 +168,142 @@ export async function applyFfkCards(
   if (gridErrors.length) throw new GridValidationError(gridErrors);
   const touched = new Set(added.map((w) => `${w.ageBandCode}|${w.sex}`));
 
-  return db.transaction((tx) => {
+  const result = db.transaction((tx) => {
     const t = tx as unknown as AppDb;
 
-    // 1. Catégories de poids cochées ; ordre et catégorie ouverte recalculés dans les groupes touchés.
-    for (const w of added) t.insert(weightClasses).values({ ...w, competitionId }).run();
-    for (const w of merged.weightClasses.filter((x) => touched.has(`${x.ageBandCode}|${x.sex}`))) {
-      t.update(weightClasses)
-        .set({ label: w.label, sortOrder: w.sortOrder })
-        .where(and(eq(weightClasses.competitionId, competitionId), eq(weightClasses.id, w.id)))
-        .run();
-    }
-
-    // 2. Clubs reliés (lien sûr ou choisi) : l'entité FFK et l'alias nom → entité sont mémorisés ; un lien « à vérifier » non choisi ne l'est pas.
-    for (const link of plan.clubs) {
-      if (!link.target) continue;
-      const club = t.select().from(clubs).where(and(eq(clubs.id, link.target), eq(clubs.competitionId, competitionId))).get();
+    // Lu avant toute écriture, pour les chiffres de l'entrée : clubs dont le lien change, fiches gardées encore confirmées.
+    // Un club change de lien s'il n'avait pas cette entité, ou si l'entité quitte un autre club (lien corrigé, choisi).
+    const linkState = (link: FfkCardsPlan['clubs'][number]) => {
+      const club = t.select().from(clubs).where(and(eq(clubs.id, link.target!), eq(clubs.competitionId, competitionId))).get();
       if (!club) throw new NotFoundError('Club introuvable');
-      if (link.chosen) {
+      const previous = link.chosen
+        ? t.select().from(clubs).where(and(eq(clubs.competitionId, competitionId), eq(clubs.ffkEntity, link.clubEntity), ne(clubs.id, club.id))).all()
+        : [];
+      return { club, previous, linked: club.ffkEntity !== link.clubEntity || previous.length > 0 };
+    };
+    const targeted = plan.clubs.filter((l) => l.target);
+    const linkedClubs = targeted.filter((l) => linkState(l).linked).length;
+    const stillConfirmed = new Set(
+      plan.orphans
+        .filter((o) => o.action === 'keep')
+        .filter((o) => t.select({ id: registrations.id }).from(registrations).where(and(eq(registrations.fighterId, o.fighterId), eq(registrations.ffkConfirmed, true))).get())
+        .map((o) => o.fighterId),
+    );
+    const retained = plan.cards.filter((c) => (c.state === 'auto' || c.state === 'done') && c.value && c.fighterId);
+    const count = {
+      added: retained.filter((c) => c.fighterId === 'new').length,
+      changed: retained.filter((c) => c.fighterId !== 'new' && c.changes.length > 0).length,
+      removed: plan.orphans.filter((o) => o.action === 'delete').length,
+      unconfirmed: stillConfirmed.size,
+      leftAside: plan.summary.todo + plan.summary.skip,
+      weightClasses: added.length,
+      clubs: linkedClubs,
+    };
+
+    const apply = (): FfkImportResult => {
+      // 1. Catégories de poids cochées ; ordre et catégorie ouverte recalculés dans les groupes touchés.
+      for (const w of added) {
+        t.insert(weightClasses).values({ ...w, competitionId }).run();
+        // Nommée comme l'écran Catégories (« Poussins F -20 kg »), avec son libellé une fois la catégorie ouverte recalculée.
+        const band = merged.ageBands.find((b) => b.code === w.ageBandCode)?.label ?? w.ageBandCode;
+        const label = merged.weightClasses.find((x) => x.id === w.id)?.label ?? w.label;
+        recordJournal(t, competitionId, { type: 'categorie', action: 'weight-class-added', via: 'import-ffk', data: { subject: `${band} ${w.sex} ${label} kg` } });
+      }
+      for (const w of merged.weightClasses.filter((x) => touched.has(`${x.ageBandCode}|${x.sex}`))) {
+        t.update(weightClasses)
+          .set({ label: w.label, sortOrder: w.sortOrder })
+          .where(and(eq(weightClasses.competitionId, competitionId), eq(weightClasses.id, w.id)))
+          .run();
+      }
+
+      // 2. Clubs reliés (lien sûr ou choisi) : l'entité FFK et l'alias nom → entité sont mémorisés ; un lien « à vérifier » non choisi ne l'est pas.
+      for (const link of targeted) {
+        // Relu ici : un lien corrigé plus haut a pu changer l'entité d'un club.
+        const { club, previous, linked } = linkState(link);
         // Lien corrigé : l'entité quitte l'ancien club (et son alias), le nouveau lien le remplace.
-        const previous = t.select().from(clubs)
-          .where(and(eq(clubs.competitionId, competitionId), eq(clubs.ffkEntity, link.clubEntity), ne(clubs.id, club.id))).all();
         for (const p of previous) {
           t.update(clubs).set({ ffkEntity: null }).where(eq(clubs.id, p.id)).run();
           if (p.nameKey !== club.nameKey) t.delete(clubAliases).where(and(eq(clubAliases.nameKey, p.nameKey), eq(clubAliases.clubEntity, link.clubEntity))).run();
         }
-      }
-      t.update(clubs).set({ ffkEntity: link.clubEntity }).where(eq(clubs.id, club.id)).run();
-      t.insert(clubAliases)
-        .values({ nameKey: club.nameKey, clubEntity: link.clubEntity })
-        .onConflictDoUpdate({ target: clubAliases.nameKey, set: { clubEntity: link.clubEntity } })
-        .run();
-      linkClub(t, club.id);
-    }
-
-    // 3. Cartes retenues : la valeur de la carte, écrite comme une ligne du formulaire combattant (verrous des combats commencés, recasements).
-    let created = 0;
-    let updated = 0;
-    for (const card of plan.cards) {
-      if ((card.state !== 'auto' && card.state !== 'done') || !card.value || !card.fighterId) continue;
-      const { line, clubId, publicNameHidden } = card.value;
-      const isNew = card.fighterId === 'new';
-      let fighterId: string;
-      try {
-        fighterId = writeClubLineInTx(t, competitionId, {
-          fighterId: isNew ? null : card.fighterId, line, clubId: clubId!, expectedVersion: card.version, writer: { kind: 'organiser' },
-          publicNameHidden, source: 'ffk', licence: line.licence,
-        });
-      } catch (e) {
-        throw withName(`${line.lastName} ${line.firstName}`.trim(), e);
-      }
-      if (isNew) created++;
-      else if (card.changes.length) updated++;
-      // Confirmées par l'export : les inscriptions de ses disciplines ; les autres (gardées de la fiche) ne le sont pas.
-      const exported = new Set(card.rows.map((r) => r.discipline).filter((d) => d !== null));
-      for (const r of t.select().from(registrations).where(eq(registrations.fighterId, fighterId)).all()) {
-        const ffkConfirmed = exported.has(enteredValues({ ...r, otherDisciplines: [] }).discipline);
-        if (r.ffkConfirmed !== ffkConfirmed) t.update(registrations).set({ ffkConfirmed }).where(eq(registrations.id, r.id)).run();
-      }
-    }
-
-    // 4. Fiches sans inscription FFK : supprimées sur demande, sinon gardées mais plus confirmées par l'export.
-    let deleted = 0;
-    for (const orphan of plan.orphans) {
-      if (orphan.action === 'delete') {
-        const current = fighterLine(t, competitionId, orphan.fighterId);
-        if (current.startedDisciplines.length) {
-          throw new RegistrationValidationError([`${orphan.label} : ses combats ont commencé, il ne peut pas être supprimé.`]);
+        t.update(clubs).set({ ffkEntity: link.clubEntity }).where(eq(clubs.id, club.id)).run();
+        t.insert(clubAliases)
+          .values({ nameKey: club.nameKey, clubEntity: link.clubEntity })
+          .onConflictDoUpdate({ target: clubAliases.nameKey, set: { clubEntity: link.clubEntity } })
+          .run();
+        linkClub(t, club.id);
+        if (linked) {
+          const detail = previous.length ? `au lieu de ${previous.map((p) => p.name).join(', ')}` : undefined;
+          recordJournal(t, competitionId, { type: 'club', action: 'club-linked', via: 'import-ffk', data: { subject: club.name, detail } });
         }
-        t.delete(registrations).where(eq(registrations.fighterId, orphan.fighterId)).run();
-        t.delete(fighters).where(eq(fighters.id, orphan.fighterId)).run();
-        deleted++;
-      } else {
-        t.update(registrations)
-          .set({ ffkConfirmed: false })
-          .where(and(eq(registrations.fighterId, orphan.fighterId), eq(registrations.ffkConfirmed, true)))
+      }
+
+      // 3. Cartes retenues : la valeur de la carte, écrite comme une ligne du formulaire combattant (verrous des combats commencés, recasements).
+      // `writeClubLineInTx` note le combattant ajouté ou modifié.
+      let created = 0;
+      let updated = 0;
+      for (const card of retained) {
+        const { line, clubId, publicNameHidden } = card.value!;
+        const isNew = card.fighterId === 'new';
+        let fighterId: string;
+        try {
+          fighterId = writeClubLineInTx(t, competitionId, {
+            fighterId: isNew ? null : card.fighterId, line, clubId: clubId!, expectedVersion: card.version, writer: { kind: 'organiser' },
+            publicNameHidden, source: 'ffk', licence: line.licence,
+          });
+        } catch (e) {
+          throw withName(`${line.lastName} ${line.firstName}`.trim(), e);
+        }
+        if (isNew) created++;
+        else if (card.changes.length) updated++;
+        // Confirmées par l'export : les inscriptions de ses disciplines ; les autres (gardées de la fiche) ne le sont pas.
+        const exported = new Set(card.rows.map((r) => r.discipline).filter((d) => d !== null));
+        for (const r of t.select().from(registrations).where(eq(registrations.fighterId, fighterId)).all()) {
+          const ffkConfirmed = exported.has(enteredValues({ ...r, otherDisciplines: [] }).discipline);
+          if (r.ffkConfirmed !== ffkConfirmed) t.update(registrations).set({ ffkConfirmed }).where(eq(registrations.id, r.id)).run();
+        }
+      }
+
+      // 4. Fiches sans inscription FFK : supprimées sur demande, sinon gardées mais plus confirmées par l'export.
+      let deleted = 0;
+      for (const orphan of plan.orphans) {
+        if (orphan.action === 'delete') {
+          const current = fighterLine(t, competitionId, orphan.fighterId);
+          if (current.startedDisciplines.length) {
+            throw new RegistrationValidationError([`${orphan.label} : ses combats ont commencé, il ne peut pas être supprimé.`]);
+          }
+          recordFighterChange(t, competitionId, fighterSnapshot(t, competitionId, orphan.fighterId), null, 'import-ffk', 'absent de l’export FFK');
+          t.delete(registrations).where(eq(registrations.fighterId, orphan.fighterId)).run();
+          t.delete(fighters).where(eq(fighters.id, orphan.fighterId)).run();
+          deleted++;
+        } else if (stillConfirmed.has(orphan.fighterId)) {
+          const snapshot = fighterSnapshot(t, competitionId, orphan.fighterId);
+          t.update(registrations)
+            .set({ ffkConfirmed: false })
+            .where(and(eq(registrations.fighterId, orphan.fighterId), eq(registrations.ffkConfirmed, true)))
+            .run();
+          if (snapshot) {
+            recordJournal(t, competitionId, { type: 'inscription', action: 'ffk-unconfirmed', via: 'import-ffk', data: { subject: subjectOf(snapshot), ...snapshotSex(snapshot) } });
+          }
+        }
+      }
+
+      // 5. Correspondances de colonnes (réglage global, pas noté).
+      for (const m of mappings) {
+        const signature = headerSignature(m.headers);
+        t.insert(importMappings)
+          .values({ signature, mappingJson: JSON.stringify(m.mapping) })
+          .onConflictDoUpdate({ target: importMappings.signature, set: { mappingJson: JSON.stringify(m.mapping) } })
           .run();
       }
-    }
+      return { created, updated, deleted, weightClassesCreated: added.length, leftAside: count.leftAside };
+    };
 
-    // 5. Correspondances de colonnes.
-    for (const m of mappings) {
-      const signature = headerSignature(m.headers);
-      t.insert(importMappings)
-        .values({ signature, mappingJson: JSON.stringify(m.mapping) })
-        .onConflictDoUpdate({ target: importMappings.signature, set: { mappingJson: JSON.stringify(m.mapping) } })
-        .run();
-    }
-    return { created, updated, deleted, weightClassesCreated: added.length, leftAside: plan.summary.todo + plan.summary.skip };
+    // Le parent ne se corrige pas après coup (ajout seul) : écrit seulement si au moins une ligne de détail le sera.
+    const lines = count.added + count.changed + count.removed + count.unconfirmed + count.weightClasses + count.clubs;
+    if (!lines) return apply();
+    return withJournalGroup(t, competitionId, { type: 'import', action: 'ffk-import', via: 'import-ffk', data: { subject: fileName, detail: ffkImportDetail(count) } }, apply);
   });
+  // Tout ce que l'import a changé est noté ci-dessus (même rien) : pas d'entrée brute.
+  markJournalHandled();
+  return result;
 }

@@ -4,7 +4,7 @@ import { FFK_FIELDS } from '../../domain/ffk-import.js';
 import { planFingerprint, searchableFighters } from '../../domain/ffk-plan/plan.js';
 import type { AppDb } from '../db/client.js';
 import { getCompetition } from '../repositories/competitions.js';
-import { analyzeUpload, applyFfkCards, buildFfkPlan, deleteUpload, loadUpload, saveUpload } from '../repositories/ffk-import.js';
+import { analyzeUpload, applyFfkCards, buildFfkPlan, deleteUpload, loadUpload, saveUpload, uploadFileName } from '../repositories/ffk-import.js';
 import { UnreadableFileError } from '../spreadsheet/read.js';
 import { clubFormLineSchema } from './registrations.js';
 
@@ -81,7 +81,9 @@ export async function ffkImportRoutes(app: FastifyInstance, { db }: { db: AppDb 
     const data = await loadUpload(db, req.params.id, req.params.uploadId);
     const analyzed = included.some((s) => !s.headers) ? await analyzeUpload(db, data) : [];
     const mappings = included.map((s) => ({ headers: s.headers ?? analyzed.find((a) => a.name === s.name)?.headers ?? [], mapping: s.mapping }));
-    const result = await applyFfkCards(db, req.params.id, plan, mappings);
+    // Titre de l'entrée du journal, relu avant que le fichier soit purgé.
+    const fileName = await uploadFileName(db, req.params.id, req.params.uploadId);
+    const result = await applyFfkCards(db, req.params.id, plan, mappings, fileName);
     await deleteUpload(db, req.params.uploadId);
     return result;
   });

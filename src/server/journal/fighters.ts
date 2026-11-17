@@ -62,17 +62,26 @@ export function fighterSnapshot(t: AppDb, competitionId: string, fighterId: stri
   };
 }
 
+/** Sexe d'une photo, recopié dans l'entrée pour accorder sa ligne de détail (« ajoutée »). */
+export function snapshotSex(s: FighterSnapshot): { sex?: 'F' | 'M' } {
+  const sex = s.fields.Sexe;
+  return sex === 'F' || sex === 'M' ? { sex } : {};
+}
+
 /**
  * Note le passage de `before` à `after` (dans la transaction de la modification) : ajout, suppression, ou modification champ par champ.
- * Rien d'écrit si rien n'a changé. Ne marque pas la requête notée (`markJournalHandled`) : c'est à la fonction d'entrée d'un seul combattant
- * de le faire, pas à un traitement d'ensemble (import FFK) qui fait aussi d'autres écritures encore non détaillées.
+ * Rien d'écrit si rien n'a changé. Le sexe du combattant est recopié (accord des lignes de détail) ; `detail` remplace le détail par
+ * défaut (les inscriptions d'un ajout). Ne marque pas la requête notée (`markJournalHandled`) : c'est à la fonction d'entrée de le faire.
  */
-export function recordFighterChange(t: AppDb, competitionId: string, before: FighterSnapshot | null, after: FighterSnapshot | null, via?: JournalVia): void {
+export function recordFighterChange(
+  t: AppDb, competitionId: string, before: FighterSnapshot | null, after: FighterSnapshot | null, via?: JournalVia, detail?: string,
+): void {
   const subject = after ?? before;
   if (!subject) return;
-  const data = { subject: subjectOf(subject) };
+  // Un détail absent (`undefined`) n'est pas écrit.
+  const data = { subject: subjectOf(subject), ...snapshotSex(subject), detail };
   if (!before) {
-    recordJournal(t, competitionId, { type: 'inscription', action: 'fighter-added', via, data: { ...data, detail: Object.keys(after!.registrations).join(' · ') || undefined } });
+    recordJournal(t, competitionId, { type: 'inscription', action: 'fighter-added', via, data: { ...data, detail: detail ?? (Object.keys(after!.registrations).join(' · ') || undefined) } });
   } else if (!after) {
     recordJournal(t, competitionId, { type: 'inscription', action: 'fighter-removed', via, data });
   } else {

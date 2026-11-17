@@ -24,6 +24,7 @@ export const JOURNAL_COVERED = keys(
   `PUT ${C}/fighters/:fighterId/public-name`,
   `PUT ${C}/weigh-in/:fighterId`,
   `POST ${C}/weigh-in/close`,
+  `POST ${C}/ffk-imports/:uploadId/commit`,
 );
 
 export const JOURNAL_EXEMPT = keys(
@@ -55,7 +56,6 @@ export const JOURNAL_PENDING = keys(
   // étape 53 : imports et clubs
   `POST ${C}/club-forms/import`,
   `POST ${C}/club-forms/entry/import`,
-  `POST ${C}/ffk-imports/:uploadId/commit`,
   `POST ${C}/clubs`,
   `POST ${C}/clubs/new`,
   `POST ${C}/clubs/from-directory`,

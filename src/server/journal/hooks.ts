@@ -56,7 +56,7 @@ export function registerJournalHooks(app: FastifyInstance, db: AppDb): void {
     if (!id) return;
     // Une route détaillée (COVERED) qui a noté elle-même (même « rien n'a changé ») n'a pas d'entrée brute.
     // Une route pas encore détaillée (PENDING) a toujours la sienne, en plus des entrées détaillées qu'elle a pu écrire
-    // (import FFK : les cartes sont détaillées, pas les orphelins supprimés ni les catégories créées).
+    // (une écriture d'ensemble dont seuls les combattants sont détaillés).
     if (JOURNAL_COVERED.has(key) && (ctx.written > 0 || ctx.handled)) return;
     // Supprimée pendant la requête, ou main passée ailleurs : une copie n'écrit pas dans le journal.
     if (!db.$client.prepare('select 1 from competitions where id = ?').get(id) || !getManagement(db, id).managedHere) return;
