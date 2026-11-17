@@ -431,6 +431,21 @@ test('journal : import sans écart sur les cartes mais avec un orphelin supprim�
   expect(added).toEqual([{ type: 'non-detaille', action: 'raw' }]);
 });
 
+test('journal : import avec une carte écrite et un orphelin supprimé → entrée du combattant puis entrée brute (le reste n’est pas encore détaillé)', async () => {
+  const tani = await newClub('Tani Dojo');
+  const ancien = await register(tani, 'ANCIEN', 'Un');
+  sqlRun('update registrations set ffk_confirmed = 1');
+  const up = await uploadAll(buildFfkWorkbook({ Karate: [['NOUVEAU NOE', null, 'L006', TANI, 'Masculin', 'Karate', 'Senior', -75, null]] }));
+  const choices = await withNew(up, { orphans: { [ancien.fighterId]: 'delete' } });
+  const p = await preview(up, choices);
+  const id = base.split('/').at(-1)!;
+  const before = sqlAll<{ seq: number }>('select seq from journal_entries where competition_id = ? order by seq desc limit 1', id)[0]!.seq;
+  const res = await commit(up, choices, p.fingerprint);
+  expect(res.json()).toMatchObject({ created: 1, deleted: 1 });
+  const added = sqlAll<{ type: string; action: string }>('select type, action from journal_entries where competition_id = ? and seq > ? order by seq', id, before);
+  expect(added).toEqual([{ type: 'inscription', action: 'fighter-added' }, { type: 'non-detaille', action: 'raw' }]);
+});
+
 test('réimport du même fichier après import partiel : seules les cartes non tranchées restent todo', async () => {
   const tani = await newClub('Tani Dojo');
   const durand = await register(tani, 'DURAND', 'Zoé', { ageBandCode: 'junior', weightClassId: 'junior:F:-59' });
