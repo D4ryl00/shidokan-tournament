@@ -16,6 +16,7 @@ import type { ProposalType } from '../../domain/replacement/types.js';
 import type { DisciplineId } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
 import { withoutRowMeta } from '../db/row-versions.js';
+import { markJournalHandled } from '../journal/context.js';
 import { fighterSnapshot, recordFighterChange, viaOfSource } from '../journal/fighters.js';
 import { rowRev } from '../revisions.js';
 import { linkClub, linkClubResult } from '../db/club-directory.js';
@@ -231,6 +232,7 @@ export async function createRegistration(
     recordFighterChange(t, competitionId, before, fighterSnapshot(t, competitionId, fighter.id), viaOfSource(input.source));
     return newId;
   });
+  markJournalHandled();
   return { row: rowById(db, id), warning };
 }
 
@@ -278,6 +280,8 @@ export async function updateRegistration(
     t.update(registrations).set(registrationValues(input)).where(eq(registrations.id, registrationId)).run();
     recordFighterChange(t, competitionId, snapshot, fighterSnapshot(t, competitionId, current.fighterId), 'saisie');
   });
+  // Enregistrée sans rien changer : ni entrée détaillée ni entrée brute.
+  markJournalHandled();
   return { ...rowById(db, registrationId), warning: closedEditWarning(db, competitionId, before, input) };
 }
 
@@ -304,6 +308,7 @@ export async function deleteRegistration(db: AppDb, competitionId: string, regis
     deleteOrphanFighters(t, [current.fighterId]);
     recordFighterChange(t, competitionId, before, fighterSnapshot(t, competitionId, current.fighterId), 'saisie');
   });
+  markJournalHandled();
 }
 
 /** Discipline d'inscription d'origine (avant un recasement qui en a changé, type H). */

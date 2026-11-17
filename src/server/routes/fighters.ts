@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
 import { fighters } from '../db/schema.js';
+import { markJournalHandled } from '../journal/context.js';
 import { fighterSnapshot, recordFighterChange } from '../journal/fighters.js';
 import { getCompetition } from '../repositories/competitions.js';
 import { NotFoundError } from '../repositories/errors.js';
@@ -22,6 +23,7 @@ export async function fighterRoutes(app: FastifyInstance, { db }: { db: AppDb })
       t.update(fighters).set({ publicNameHidden: hidden }).where(and(eq(fighters.id, fighterId), eq(fighters.competitionId, id))).run();
       recordFighterChange(t, id, before, fighterSnapshot(t, id, fighterId), 'saisie');
     });
+    markJournalHandled();
     return reply.status(204).send();
   });
 }

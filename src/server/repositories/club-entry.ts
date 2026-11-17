@@ -12,6 +12,7 @@ import type { DisciplineId, Sex } from '../../domain/types.js';
 import { assignAffiliationNumber, checkAffiliationNumber, linkClubResult } from '../db/club-directory.js';
 import type { AppDb } from '../db/client.js';
 import type { JournalVia } from '../../domain/journal/types.js';
+import { markJournalHandled } from '../journal/context.js';
 import { fighterSnapshot, recordFighterChange, viaOfSource } from '../journal/fighters.js';
 import { categories, clubDirectory, clubs, competitions, fighters, registrations } from '../db/schema.js';
 import { getCompetition, getCompetitionSync, getGrid, getGridSync } from './competitions.js';
@@ -346,6 +347,9 @@ export async function saveClubLine(
       fighterId, line: submitted, clubId: club.id, expectedVersion, writer: opts.writer, publicNameHidden: opts.publicNameHidden, source: opts.source,
     }),
   );
+  // Une seule ligne, notée par `writeClubLineInTx` (rien si elle est enregistrée telle quelle) : pas d'entrée brute. Pas dans
+  // `writeClubLineInTx`, que les imports appellent aussi en faisant d'autres écritures.
+  markJournalHandled();
   return lineOf(db, db.select().from(fighters).where(eq(fighters.id, savedId)).get()!, opts.writer.kind);
 }
 
@@ -480,4 +484,5 @@ export async function deleteClubLine(db: AppDb, access: ClubAccess, fighterId: s
     t.delete(fighters).where(eq(fighters.id, fighterId)).run();
     recordFighterChange(t, access.competitionId, before, null, opts.writer.kind === 'coach' ? 'en-ligne' : 'saisie');
   });
+  markJournalHandled();
 }

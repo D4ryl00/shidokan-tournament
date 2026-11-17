@@ -7,7 +7,6 @@ import type { RegistrationSource } from '../../domain/registration.js';
 import type { DisciplineId } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
 import { ageBands, clubs, fighters, registrations, weightClasses } from '../db/schema.js';
-import { markJournalHandled } from './context.js';
 import { recordJournal } from './write.js';
 
 /** Manière d'une inscription d'après son origine. */
@@ -65,10 +64,10 @@ export function fighterSnapshot(t: AppDb, competitionId: string, fighterId: stri
 
 /**
  * Note le passage de `before` à `after` (dans la transaction de la modification) : ajout, suppression, ou modification champ par champ.
- * Rien d'écrit si rien n'a changé, et la requête est marquée comme traitée : le filet de sécurité n'écrit pas d'entrée brute.
+ * Rien d'écrit si rien n'a changé. Ne marque pas la requête notée (`markJournalHandled`) : c'est à la fonction d'entrée d'un seul combattant
+ * de le faire, pas à un traitement d'ensemble (import FFK) qui fait aussi d'autres écritures encore non détaillées.
  */
 export function recordFighterChange(t: AppDb, competitionId: string, before: FighterSnapshot | null, after: FighterSnapshot | null, via?: JournalVia): void {
-  markJournalHandled();
   const subject = after ?? before;
   if (!subject) return;
   const data = { subject: subjectOf(subject) };

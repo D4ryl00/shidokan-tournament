@@ -414,6 +414,23 @@ test('orphelin « delete » supprimé (et le combattant sans inscription) ; « k
   expect(counts()).toEqual({ f: 2, r: 2 });
 });
 
+test('journal : import sans écart sur les cartes mais avec un orphelin supprimé → entrée brute (pas encore détaillé)', async () => {
+  const tani = await newClub('Tani Dojo');
+  await register(tani, 'MARTIN', 'Léa', { source: 'ffk', licence: 'L001' });
+  const ancien = await register(tani, 'ANCIEN', 'Un');
+  sqlRun('update registrations set ffk_confirmed = 1');
+  const up = await uploadAll(buildFfkWorkbook({ Karate: [karate[0]!] }));
+  const choices = { orphans: { [ancien.fighterId]: 'delete' } };
+  const p = await preview(up, choices);
+  expect(p.cards[0]).toMatchObject({ state: 'auto', changes: [] });
+  const id = base.split('/').at(-1)!;
+  const before = sqlAll<{ seq: number }>('select seq from journal_entries where competition_id = ? order by seq desc limit 1', id)[0]!.seq;
+  const res = await commit(up, choices, p.fingerprint);
+  expect(res.json()).toMatchObject({ deleted: 1 });
+  const added = sqlAll<{ type: string; action: string }>('select type, action from journal_entries where competition_id = ? and seq > ? order by seq', id, before);
+  expect(added).toEqual([{ type: 'non-detaille', action: 'raw' }]);
+});
+
 test('réimport du même fichier après import partiel : seules les cartes non tranchées restent todo', async () => {
   const tani = await newClub('Tani Dojo');
   const durand = await register(tani, 'DURAND', 'Zoé', { ageBandCode: 'junior', weightClassId: 'junior:F:-59' });
