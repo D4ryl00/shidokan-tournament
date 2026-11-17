@@ -45,7 +45,7 @@ import { ruleNumber, rulesView } from '../../domain/replacement/rules.js';
 import { MoveBlocks } from '../components/replacement/MoveBlocks.js';
 import { WaveChangeWarning } from '../components/replacement/WaveChangeWarning.js';
 import { clearPlanChoices, usePlanCardDecisions, usePlanChoices } from '../usePlanChoices.js';
-import { useSelectedWave } from '../useSelectedWave.js';
+import { useSelectedWave, withSession } from '../useSelectedWave.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import { plural } from '../../domain/plural.js';
 
@@ -320,7 +320,7 @@ export function ReplacementPage() {
               </Button>
             )}
             {c.categoryId && (
-              <Button component={Link} to={`/competitions/${id}/tableaux?vue=galaxie&categorie=${c.categoryId}`} size="compact-xs" variant="subtle" data-testid="case-see-galaxy">
+              <Button component={Link} to={withSession(`/competitions/${id}/tableaux?vue=galaxie&categorie=${c.categoryId}`, waveId)} size="compact-xs" variant="subtle" data-testid="case-see-galaxy">
                 Voir dans la galaxie
               </Button>
             )}
@@ -510,7 +510,7 @@ export function ReplacementPage() {
             {resetBlocked && <Text size="xs" c="dimmed" data-testid="replacement-reset-why">{resetBlocked}</Text>}
           </Group>
         )}>
-        <HistoryPanel competitionId={id} waveId={waveId} mode="inline" onSee={(ids) => navigate(`/competitions/${id}/tableaux?vue=planche&voir=${ids.join(',')}`)} />
+        <HistoryPanel competitionId={id} waveId={waveId} mode="inline" onSee={(ids) => navigate(withSession(`/competitions/${id}/tableaux?vue=planche&voir=${ids.join(',')}`, waveId))} />
       </SectionCard>
 
       <Modal opened={dialog?.kind === 'proposal' || dialog?.kind === 'move'} onClose={() => setDialog(null)} size="xl"

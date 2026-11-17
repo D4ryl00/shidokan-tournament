@@ -29,3 +29,8 @@ export function useSelectedWave(id: string, prefer: 'weighIn' | ((waves: Wave[])
   }, [waveId, asked, known]);
   return { waves, waveId, select, ready: isSuccess && known };
 }
+
+/** Un lien vers un onglet d'une session : la session suit (`?session=`), sinon l'onglet ouvrirait sa session par défaut. */
+export function withSession(path: string, waveId: string | null | undefined): string {
+  return waveId ? `${path}${path.includes('?') ? '&' : '?'}session=${encodeURIComponent(waveId)}` : path;
+}

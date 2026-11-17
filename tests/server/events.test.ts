@@ -121,10 +121,66 @@ test('le change porte l’identifiant du poste qui a écrit (en-tête X-Poste-Id
   await new Promise((r) => setTimeout(r, 300));
   controller.abort();
   await reading;
-  expect(text).toContain('data: {"origin":"onglet-42"}');
+  expect(text).toContain('"origin":"onglet-42"');
 });
 
 test('une restauration prévient toutes les compétitions', async () => {
   const snapshot = (await app.inject({ method: 'GET', url: '/api/backup.sqlite' })).rawPayload;
   expect(await changesDuring(id, () => app.inject({ method: 'POST', url: '/api/restore', payload: snapshot, headers: { 'content-type': 'application/octet-stream' } }))).toBeGreaterThanOrEqual(1);
+});
+
+/** Ouvre le flux, attend l'annonce `hello`, et rend la révision qu'elle porte. */
+async function helloRevision(competitionId: string): Promise<string> {
+  const controller = new AbortController();
+  const res = await fetch(`${url}/api/competitions/${competitionId}/events`, { signal: controller.signal });
+  const reader = res.body!.getReader();
+  let text = '';
+  while (!/event: hello\ndata: .*\n\n/.test(text)) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    text += new TextDecoder().decode(value);
+  }
+  controller.abort();
+  const m = /event: hello\ndata: (.*)\n\n/.exec(text);
+  return (JSON.parse(m![1]!) as { rev: string }).rev;
+}
+
+test('à l’ouverture, le flux annonce la révision : la même sans écriture, une autre après une écriture sur la compétition (pas sur une autre)', async () => {
+  const first = await helloRevision(id);
+  expect(first).toBeTruthy();
+  expect(await helloRevision(id)).toBe(first);
+  await app.inject({ method: 'PATCH', url: `/api/competitions/${other}`, payload: { location: 'Lyon' } });
+  expect(await helloRevision(id)).toBe(first);
+  await app.inject({ method: 'PATCH', url: `/api/competitions/${id}`, payload: { location: 'Nice' } });
+  const second = await helloRevision(id);
+  expect(second).not.toBe(first);
+  // Une restauration change toutes les compétitions.
+  const snapshot = (await app.inject({ method: 'GET', url: '/api/backup.sqlite' })).rawPayload;
+  await app.inject({ method: 'POST', url: '/api/restore', payload: snapshot, headers: { 'content-type': 'application/octet-stream' } });
+  expect(await helloRevision(id)).not.toBe(second);
+});
+
+test('chaque change porte la révision qu’annonce ensuite le flux', async () => {
+  const controller = new AbortController();
+  const res = await fetch(`${url}/api/competitions/${id}/events`, { signal: controller.signal });
+  const reader = res.body!.getReader();
+  let text = '';
+  const reading = (async () => {
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        text += new TextDecoder().decode(value);
+      }
+    } catch {
+      /* fermé */
+    }
+  })();
+  await new Promise((r) => setTimeout(r, 100));
+  await app.inject({ method: 'PATCH', url: `/api/competitions/${id}`, payload: { location: 'Nice' } });
+  await new Promise((r) => setTimeout(r, 300));
+  controller.abort();
+  await reading;
+  const m = /event: change\ndata: (.*)\n\n/.exec(text);
+  expect((JSON.parse(m![1]!) as { rev: string }).rev).toBe(await helloRevision(id));
 });

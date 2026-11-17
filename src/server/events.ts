@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
@@ -9,13 +10,27 @@ const EVERYTHING = Symbol('toutes les compétitions');
 /** N'importe quel changement, d'une compétition ou de toutes. */
 const ANY = Symbol('une compétition');
 
+/**
+ * Révision d'une compétition : change à chaque changement (le sien, ou de toutes) et à chaque démarrage du serveur. Annoncée à
+ * l'ouverture d'un flux : un onglet qui revient (flux fermé pendant qu'il était caché) ne relit ses données — et ne relance le
+ * calcul du plan — que si elle a changé entre-temps.
+ */
+const boot = randomUUID().slice(0, 8);
+let everythingRevision = 0;
+const revisions = new Map<string, number>();
+export function competitionRevision(competitionId: string): string {
+  return `${boot}.${everythingRevision}.${revisions.get(competitionId) ?? 0}`;
+}
+
 /** `origin` : identifiant de l'onglet qui a écrit (il ne se recharge pas pour sa propre écriture). */
 export function competitionChanged(competitionId: string, origin: string | null = null): void {
+  revisions.set(competitionId, (revisions.get(competitionId) ?? 0) + 1);
   bus.emit(competitionId, origin);
   bus.emit(ANY);
 }
 /** Toutes les compétitions ont pu changer (restauration d'une sauvegarde). */
 export function everythingChanged(): void {
+  everythingRevision++;
   bus.emit(EVERYTHING, null);
   bus.emit(ANY);
 }
@@ -74,11 +89,18 @@ export function eventStreams(app: FastifyInstance): OpenStream {
   };
 }
 
-/** Flux d'événements d'une compétition (Server-Sent Events), et prévenir après chaque écriture réussie. */
+/**
+ * Flux d'événements d'une compétition (Server-Sent Events), et prévenir après chaque écriture réussie. À l'ouverture, `hello`
+ * annonce la révision ; chaque `change` porte la nouvelle.
+ */
 export function registerCompetitionEvents(app: FastifyInstance): void {
   const openStream = eventStreams(app);
   app.get<{ Params: { id: string } }>('/api/competitions/:id/events', (req, reply) =>
-    openStream(req, reply, (write) => onCompetitionChange(req.params.id, (origin) => write(`event: change\ndata: ${JSON.stringify({ origin })}\n\n`))),
+    openStream(req, reply, (write) => {
+      const id = req.params.id;
+      write(`event: hello\ndata: ${JSON.stringify({ rev: competitionRevision(id) })}\n\n`);
+      return onCompetitionChange(id, (origin) => write(`event: change\ndata: ${JSON.stringify({ origin, rev: competitionRevision(id) })}\n\n`));
+    }),
   );
   app.addHook('onResponse', async (req, reply) => {
     if (req.method === 'GET' || req.method === 'HEAD' || reply.statusCode >= 400) return;

@@ -1,6 +1,7 @@
 import { Badge, Button, Card, Group, Stack, Text, UnstyledButton } from '@mantine/core';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
+import { withSession } from '../../useSelectedWave.js';
 import { newSameClubSentences, sameClubFirstRound } from '../../../domain/brackets/same-club.js';
 import { activeEntrantCount, isFreeKey, type Category } from '../../../domain/categories.js';
 import { normalizeName } from '../../../domain/names.js';
@@ -124,7 +125,7 @@ export function CategoryCard(p: CardProps) {
           {/* Galaxie : jamais en rouge (le rouge y est aux liens éloignés) ; la carte porte l'anneau blanc qui pulse. */}
           {active === 1 && <StatusBadge tone={p.compact ? 'neutral' : 'danger'} size="sm" data-testid="card-alone">Sans adversaire</StatusBadge>}
           {p.cases > 0 && (
-            <Badge size="sm" variant="outline" color="orange" data-testid="card-cases" component={Link} to={`/competitions/${p.competitionId}/reaffectation`}
+            <Badge size="sm" variant="outline" color="orange" data-testid="card-cases" component={Link} to={withSession(`/competitions/${p.competitionId}/reaffectation`, c.waveId)}
               style={{ cursor: 'pointer' }} title="Ouvrir la réaffectation">
               {p.cases} cas à traiter{p.aside ? ` (dont ${p.aside} de côté)` : ''}
             </Badge>

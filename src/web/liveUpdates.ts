@@ -8,7 +8,8 @@ import { whenSaved } from './unsaved.js';
  * sont relues — regroupées, une seule relecture en attente à la fois, et seulement quand aucune saisie n'est en cours à l'écran.
  * - Les écritures de cet onglet sont ignorées (il relit déjà ses données après chaque écriture).
  * - Flux fermé (serveur redémarré, session expirée, proxy en erreur) : reconnexion après une attente croissante, puis relecture.
- * - Onglet caché : flux fermé (le navigateur n'ouvre que 6 connexions vers un même PC) ; rouvert, avec relecture, quand il revient.
+ * - Onglet caché : flux fermé (le navigateur n'ouvre que 6 connexions vers un même PC) ; rouvert quand il revient, avec relecture
+ *   seulement si la compétition a changé entre-temps (`revisionTracker`) : sinon le plan d'ensemble serait recalculé pour rien.
  * - Plan d'ensemble : un calcul en cours n'est pas relancé, un plan annulé non plus (voir `refreshPlansLive`).
  */
 export function useCompetitionEvents(competitionId: string): void {
@@ -21,6 +22,7 @@ export function useCompetitionEvents(competitionId: string): void {
     let waiting = false;
     let delay = 2000;
     let stopped = false;
+    const revision = revisionTracker();
     const refresh = () => {
       if (timer || waiting) return;
       timer = setTimeout(() => {
@@ -45,19 +47,19 @@ export function useCompetitionEvents(competitionId: string): void {
       if (stopped || document.visibilityState === 'hidden') return;
       const s = new EventSource(`/api/competitions/${competitionId}/events`);
       source = s;
+      s.addEventListener('hello', (e) => {
+        // Première ouverture : les données viennent d'être lues. Rouvert (onglet revenu, reconnexion) : relu seulement si des
+        // changements ont été manqués pendant la coupure.
+        if (revision.opened(eventData(e).rev ?? null) && reload) refresh();
+        reload = true;
+      });
       s.addEventListener('change', (e) => {
-        let origin: string | null = null;
-        try {
-          origin = (JSON.parse((e as MessageEvent<string>).data) as { origin?: string | null }).origin ?? null;
-        } catch {
-          origin = null;
-        }
+        const { origin = null, rev = null } = eventData(e);
+        revision.changed(rev);
         if (origin !== TAB_ID) refresh();
       });
       s.onopen = () => {
         delay = 2000;
-        if (reload) refresh();
-        reload = true;
       };
       s.onerror = () => {
         // Le navigateur réessaie de lui-même, sauf s'il a abandonné (réponse autre que 200) : on réessaie nous-mêmes.
@@ -78,4 +80,31 @@ export function useCompetitionEvents(competitionId: string): void {
       if (timer) clearTimeout(timer);
     };
   }, [competitionId, qc]);
+}
+
+function eventData(e: Event): { origin?: string | null; rev?: string | null } {
+  try {
+    return JSON.parse((e as MessageEvent<string>).data) as { origin?: string | null; rev?: string | null };
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Dernière révision de la compétition connue de ce flux. `opened(rev)` (annonce à l'ouverture) dit si des changements ont pu
+ * être manqués : non si la révision est celle déjà connue ; oui si aucune ne l'était encore ou sans révision (serveur d'une
+ * version précédente). `changed(rev)` suit chaque changement reçu, ceux de ce poste compris.
+ */
+export function revisionTracker() {
+  let known: string | null | undefined;
+  return {
+    opened(rev: string | null): boolean {
+      const stale = rev === null || rev !== known;
+      known = rev;
+      return stale;
+    },
+    changed(rev: string | null): void {
+      if (rev !== null) known = rev;
+    },
+  };
 }

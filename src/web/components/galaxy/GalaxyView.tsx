@@ -1,6 +1,7 @@
 import { Box, Button, Center, Group, Loader } from '@mantine/core';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
+import { withSession } from '../../useSelectedWave.js';
 import { activeEntrantCount, type Category } from '../../../domain/categories.js';
 import { cachedGalaxyLayout, placeCategories } from '../../../domain/galaxy/layout.js';
 import { forbiddenLinks, galaxyLinks, rulesFrom, type GalaxyLink } from '../../../domain/galaxy/links.js';
@@ -252,7 +253,7 @@ export function GalaxyView(p: {
           <Group gap={4}>
             <Button size="compact-xs" variant="subtle" data-testid="galaxy-see-planche" onClick={() => p.onSeeInPlanche(c.id)}>Voir dans la planche</Button>
             {isSel && n > 0 && (
-              <Button size="compact-xs" variant="subtle" component={Link} to={`/competitions/${competitionId}/reaffectation`} data-testid="galaxy-reaffectation">Réaffectation ↗</Button>
+              <Button size="compact-xs" variant="subtle" component={Link} to={withSession(`/competitions/${competitionId}/reaffectation`, c.waveId)} data-testid="galaxy-reaffectation">Réaffectation ↗</Button>
             )}
           </Group>
         )} />

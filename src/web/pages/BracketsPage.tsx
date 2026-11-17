@@ -11,7 +11,7 @@ import { normalizeName } from '../../domain/names.js';
 import { plural } from '../../domain/plural.js';
 import { useCategories, useHistory, usePassages, useRedraw, useRegenerate, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
 import { categoryPassages, kataPassageText, movedMatchZones } from '../passages.js';
-import { useSelectedWave } from '../useSelectedWave.js';
+import { useSelectedWave, withSession } from '../useSelectedWave.js';
 import { usePoste } from '../poste.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { useUndoToast } from '../components/history/undoToast.js';
@@ -241,7 +241,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
                         {activeCount(c) === 1 && <StatusBadge tone="danger" size="sm" data-testid="category-alone">Sans adversaire</StatusBadge>}
                         {allAbsent(c) && <StatusBadge tone="neutral" size="sm" data-testid="category-all-absent" title="Non imprimée">Tous absents</StatusBadge>}
                         {casesByCategory.get(c.id) && (
-                          <Badge size="sm" variant="outline" color="orange" data-testid="category-cases" component={Link} to={`/competitions/${id}/reaffectation`}
+                          <Badge size="sm" variant="outline" color="orange" data-testid="category-cases" component={Link} to={withSession(`/competitions/${id}/reaffectation`, c.waveId)}
                             onClick={(e: React.MouseEvent) => e.stopPropagation()} style={{ cursor: 'pointer' }} title="Ouvrir la réaffectation">
                             {casesByCategory.get(c.id)} cas à traiter{asideByCategory.get(c.id) ? ` (dont ${asideByCategory.get(c.id)} de côté)` : ''}
                           </Badge>
