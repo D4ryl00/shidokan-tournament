@@ -75,3 +75,25 @@ test('route : 404 compétition inconnue, types inconnus refusés (400)', async (
   expect(ok.json().total).toBe(1);
   await app.close();
 });
+
+test('recherche : la sous-requête des lignes de détail passe par l’index (pas de parcours de tout le journal par entrée)', () => {
+  add('DUPONT Léa');
+  const sqlite = db.$client;
+  const seen: { sql: string; args: unknown[] }[] = [];
+  const prepare = sqlite.prepare.bind(sqlite);
+  sqlite.prepare = ((sql: string) => {
+    const stmt = prepare(sql);
+    const all = stmt.all.bind(stmt);
+    stmt.all = ((...args: unknown[]) => (seen.push({ sql, args }), all(...args))) as typeof stmt.all;
+    return stmt;
+  }) as typeof sqlite.prepare;
+  try {
+    listJournal(db, id, { q: 'introuvable' });
+  } finally {
+    sqlite.prepare = prepare;
+  }
+  const search = seen.find((s) => s.sql.includes('exists'))!;
+  const plan = (sqlite.prepare(`explain query plan ${search.sql}`).all(...search.args) as { detail: string }[]).map((r) => r.detail);
+  expect(plan.some((d) => /^SCAN c\b/.test(d))).toBe(false);
+  expect(plan.some((d) => /SEARCH c USING (COVERING )?INDEX journal_entries_parent/.test(d))).toBe(true);
+});

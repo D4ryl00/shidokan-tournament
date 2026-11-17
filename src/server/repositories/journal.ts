@@ -63,8 +63,9 @@ export function listJournal(db: AppDb, competitionId: string, query: JournalQuer
     where.push(`p.type in (${query.types.map(() => '?').join(',')})`);
     args.push(...query.types);
   }
+  // `c.competition_id` : la sous-requête passe par l'index (competition_id, parent_id), sans parcourir tout le journal par entrée.
   for (const w of words) {
-    where.push(`(p.search_text like ? escape '\\' or exists (select 1 from journal_entries c where c.parent_id = p.id and c.search_text like ? escape '\\'))`);
+    where.push(`(p.search_text like ? escape '\\' or exists (select 1 from journal_entries c where c.competition_id = p.competition_id and c.parent_id = p.id and c.search_text like ? escape '\\'))`);
     args.push(likeWord(w), likeWord(w));
   }
   const parents = sqlite.prepare(`select p.* from journal_entries p where ${where.join(' and ')} order by p.seq desc limit ?`).all(...args, limit) as Row[];
@@ -74,7 +75,11 @@ export function listJournal(db: AppDb, competitionId: string, query: JournalQuer
     const rows = sqlite
       .prepare(`select * from journal_entries where competition_id = ? and parent_id in (${parents.map(() => '?').join(',')}) order by seq asc`)
       .all(competitionId, ...parents.map((p) => p.id)) as Row[];
-    for (const r of rows) children.set(r.parent_id!, [...(children.get(r.parent_id!) ?? []), r]);
+    for (const r of rows) {
+      const list = children.get(r.parent_id!);
+      if (list) list.push(r);
+      else children.set(r.parent_id!, [r]);
+    }
   }
   const entries = parents.map((p) => {
     const kids = children.get(p.id) ?? [];
