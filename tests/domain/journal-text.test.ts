@@ -88,3 +88,19 @@ test('catégorie créée, club relié', () => {
     .toMatchObject({ title: 'Dojo Marseille · relié à la FFK', detail: 'au lieu de Dojo Marseille Nord' });
   expect(journalDetailLine({ action: 'club-linked', data: { subject: 'Dojo Marseille' } }).lead).toBe('Dojo Marseille · relié à la FFK');
 });
+
+test('titres des combattants accordés au genre recopié, et cherchables tels qu’affichés', () => {
+  const S = 'ROUX Chloé (Tani Dojo)';
+  const actor = { kind: 'poste', poste: 'table' } as const;
+  expect(journalText({ action: 'fighter-added', data: { subject: S, sex: 'F' } }).title).toBe(`${S} · ajoutée`);
+  expect(journalText({ action: 'fighter-removed', data: { subject: S, sex: 'F' } }).title).toBe(`${S} · supprimée`);
+  expect(journalText({ action: 'fighter-changed', data: { subject: S, sex: 'F' } }).title).toBe(`${S} · modifiée`);
+  expect(journalText({ action: 'fighter-added', data: { subject: S, sex: 'M' } }).title).toBe(`${S} · ajouté`);
+  // Entrées écrites avant le genre recopié : masculin.
+  expect(journalText({ action: 'fighter-changed', data: { subject: S } }).title).toBe(`${S} · modifié`);
+  expect(journalSearchText({ action: 'fighter-added', data: { subject: S, sex: 'F' }, actor, via: 'sur-place' })).toContain('AJOUTEE');
+  expect(journalSearchText({ action: 'fighter-removed', data: { subject: S, sex: 'F' }, actor, via: 'sur-place' })).toContain('SUPPRIMEE');
+  expect(journalSearchText({ action: 'ffk-unconfirmed', data: { subject: S, sex: 'F' }, actor, via: 'import-ffk' })).toContain('ABSENTE DE L EXPORT FFK');
+  expect(journalText({ action: 'ffk-unconfirmed', data: { subject: S, sex: 'F' } }).title).toBe(`${S} · gardée, absente de l’export FFK`);
+  expect(journalText({ action: 'ffk-unconfirmed', data: { subject: S } }).title).toBe(`${S} · gardé, absent de l’export FFK`);
+});

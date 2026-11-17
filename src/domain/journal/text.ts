@@ -8,6 +8,7 @@ export function journalText(e: Pick<JournalEntryView, 'action' | 'data'>): { tit
   const subject = d.subject ?? '';
   const changes = d.changes ?? [];
   let detail: string | null = d.detail ?? null;
+  const f = d.sex === 'F';
   let title: string;
   switch (e.action) {
     case 'competition-created':
@@ -21,13 +22,13 @@ export function journalText(e: Pick<JournalEntryView, 'action' | 'data'>): { tit
       title = subject ? `Pesée close · ${subject}` : 'Pesée close';
       break;
     case 'fighter-added':
-      title = `${subject} · ajouté`;
+      title = `${subject} · ${f ? 'ajoutée' : 'ajouté'}`;
       break;
     case 'fighter-removed':
-      title = `${subject} · supprimé`;
+      title = `${subject} · ${f ? 'supprimée' : 'supprimé'}`;
       break;
     case 'fighter-changed':
-      title = `${subject} · modifié`;
+      title = `${subject} · ${f ? 'modifiée' : 'modifié'}`;
       break;
     case 'presence':
       title = `${subject} · présence`;
@@ -47,7 +48,7 @@ export function journalText(e: Pick<JournalEntryView, 'action' | 'data'>): { tit
       title = `${subject} · relié à la FFK`;
       break;
     case 'ffk-unconfirmed':
-      title = `${subject} · ${d.sex === 'F' ? 'gardée' : 'gardé'} hors export FFK`;
+      title = `${subject} · ${f ? 'gardée, absente' : 'gardé, absent'} de l’export FFK`;
       break;
     case 'raw':
       title = `Opération non détaillée : ${[d.method, d.route].filter(Boolean).join(' ')}`;

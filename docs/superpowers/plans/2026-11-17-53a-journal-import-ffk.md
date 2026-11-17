@@ -124,11 +124,17 @@ test('catégorie créée, club relié', () => {
 
 ## Bilan
 
-Plan fait le 2026-11-17 sur la branche `journal-import-ffk` (commits `a20f78c..` jusqu'à celui de la tâche 3).
+Plan fait le 2026-11-17 sur la branche `journal-import-ffk` (commits de `a20f78c` (inclus) à celui de la tâche 3, soit `643b362..2ae5a86`).
 
 - Livré : un import FFK validé écrit une seule entrée « Import FFK · fichier » avec ses lignes de détail (combattants ajoutés, mis à jour, retirés, catégories créées, clubs reliés, genre accordé), sans entrée brute ; un réimport identique n'écrit rien ; un long groupe est replié après 5 lignes (« … N autres », les lignes qui correspondent à la recherche restent montrées) ; onglet Journal rangé dans Préparer après Réglages, comptes dits avec leur rôle.
 - Vérifié (avant le commit de la tâche 3) :
   - `npm run typecheck` : sans erreur.
   - `npx vitest run` : 212 fichiers, 2452 tests réussis.
-  - `npx playwright test` : 243 tests réussis (12,2 min), sans reprise.
+  - `npx playwright test` : 243 tests réussis (12,2 min), sans reprise (242 existants + 1 nouveau test e2e de l'import FFK).
 - Mesure de durée : la durée de l'import n'a pas été remesurée pour ce plan (le travail en plus est une entrée parent et des lignes déjà écrites à l'étape 52).
+- Corrigé après la revue finale : titres `ajoutée` / `supprimée` / `modifiée` accordés au genre recopié (le texte de recherche, figé à l'écriture, les contient) ; titre `ffk-unconfirmed` aligné sur sa ligne (« gardée, absente de l’export FFK ») ; une ligne de détail touche la recherche selon la règle du serveur (un mot peut venir de l'entrée) ; aide du journal complétée.
+- Limites connues (acceptées à la revue, à reprendre à l'étape 53) :
+  - Les nombres de l'entrée parent viennent du plan et peuvent différer des lignes écrites dans une chaîne de liens de clubs croisés (« 2 clubs reliés », une seule ligne) ; un `fighter-changed` isolé reste possible quand le plan en prévoyait 0.
+  - Le drapeau `ffkConfirmed` des autres inscriptions d'un combattant d'une fiche n'est pas tracé ligne à ligne : l'entrée groupée en est la trace.
+  - `POST clubs/new` reste une entrée brute ; `syncCategories` aussi.
+  - Les entrées écrites avant ce correctif gardent leur texte de recherche d'origine (journal en ajout seul).

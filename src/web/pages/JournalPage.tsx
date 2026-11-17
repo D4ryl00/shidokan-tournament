@@ -4,13 +4,13 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useParams } from 'react-router';
 import { normalizeName } from '../../domain/names.js';
 import { plural } from '../../domain/plural.js';
-import { journalDetailLine, journalText } from '../../domain/journal/text.js';
+import { journalDetailLine, journalSearchText, journalText } from '../../domain/journal/text.js';
 import { actorLabel, JOURNAL_TYPE_LABELS, JOURNAL_TYPES, JOURNAL_VIA_LABELS, type JournalChange, type JournalEntryView, type JournalType } from '../../domain/journal/types.js';
 import { useJournal } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { IconSearch } from '../components/ui/icons.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
-import { groupByDay, highlight, hhmm, receivedNote, toggleType, visibleDetails } from '../journal.js';
+import { detailMatches, groupByDay, highlight, hhmm, receivedNote, toggleType, visibleDetails } from '../journal.js';
 
 /** Texte avec les mots de la recherche surlignés. */
 function Hl({ text, q }: { text: string; q: string }) {
@@ -54,11 +54,9 @@ const detailText = (c: JournalEntryView): string => {
 function Entry({ e, q, open, onToggle }: { e: JournalEntryView; q: string; open: boolean; onToggle: () => void }) {
   const [showAll, setShowAll] = useState(false);
   const words = normalizeName(q).split(' ').filter(Boolean);
-  const { shown, hidden } = visibleDetails(e.children, showAll, (c) => {
-    const t = normalizeName(detailText(c));
-    return words.length > 0 && words.every((w) => t.includes(w));
-  });
   const t = journalText(e);
+  const parentText = open ? normalizeName(journalSearchText(e)) : '';
+  const { shown, hidden } = visibleDetails(e.children, showAll, (c) => detailMatches(words, normalizeName(detailText(c)), parentText));
   const note = receivedNote(e);
   return (
     <div className="sk-journal-ev" data-testid="journal-entry" data-entry-id={e.id} data-raw={e.type === 'non-detaille' || undefined}>

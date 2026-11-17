@@ -85,3 +85,11 @@ export function visibleDetails<T>(children: T[], showAll: boolean, matches: (c: 
   const shown = children.filter((_, i) => hit[i] || room-- > 0);
   return { shown, hidden: children.length - shown.length };
 }
+
+/**
+ * Une ligne de détail touche la recherche quand elle porte au moins un des mots et que tous les mots se trouvent dans la ligne
+ * ou dans son entrée (même règle que le serveur : un mot peut venir de l'entrée, un autre de la ligne). Textes déjà normalisés.
+ */
+export function detailMatches(words: string[], lineText: string, parentText: string): boolean {
+  return words.length > 0 && words.some((w) => lineText.includes(w)) && words.every((w) => lineText.includes(w) || parentText.includes(w));
+}

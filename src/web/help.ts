@@ -668,9 +668,9 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     details: [
       'Chaque modification de la compétition y est notée au moment où elle est enregistrée : ce qui a changé (l’ancienne valeur barrée, puis la nouvelle), quand, par qui et comment (l’étiquette : Saisie, Inscription sur place, Pesée…).',
       [
-        'Qui : l’adresse du compte connecté ; sans comptes, le poste déclaré par le navigateur (« poste Organisation », « poste Table centrale », « poste Zone 2 ») ; un club qui inscrit par son lien personnel : son nom, avec « lien du club ».',
+        'Qui : l’adresse du compte connecté, avec son rôle (« compte Table ») ; sans comptes, le poste déclaré par le navigateur (« poste Organisation », « poste Table centrale », « poste Zone 2 ») ; un club qui inscrit par son lien personnel : son nom, avec « lien du club ».',
         'Une saisie faite sur un portable de zone indique aussi son heure sur le portable (« saisi 15:12 sur le portable, reçu 15:14 »).',
-        'Une opération qui touche beaucoup de combattants (clôture de la pesée…) tient sur une ligne : « ▸ Voir le détail » la déplie.',
+        'Une opération qui touche beaucoup de combattants (clôture de la pesée, « Import FFK · fichier »…) tient sur une ligne : « ▸ Voir le détail » la déplie. Un long détail est replié après 5 lignes : « … N autres » montre le reste, et les lignes qui correspondent à la recherche restent toujours montrées.',
         'Une ligne « Opération non détaillée », sur fond orangé, note une modification que le journal ne sait pas encore décrire en détail.',
       ],
       'La recherche trouve tous les mots tapés, sans tenir compte des accents ni des majuscules : noms, clubs, catégories, valeurs, comptes, étiquettes. Les pastilles de type limitent le fil à certains types ; « Tous » les remet tous.',

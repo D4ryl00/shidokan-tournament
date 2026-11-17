@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import type { JournalEntryView, JournalType } from '../../src/domain/journal/types.js';
-import { groupByDay, highlight, hhmm, receivedNote, toggleType, visibleDetails } from '../../src/web/journal.js';
+import { groupByDay, highlight, detailMatches, hhmm, receivedNote, toggleType, visibleDetails } from '../../src/web/journal.js';
 
 let seq = 0;
 const e = (at: string, extra: Partial<JournalEntryView> = {}): JournalEntryView => ({
@@ -77,4 +77,15 @@ test('visibleDetails : « tout montrer » et petits groupes', () => {
   const kids = Array.from({ length: 300 }, (_, i) => i);
   expect(visibleDetails(kids, true, () => false)).toEqual({ shown: kids, hidden: 0 });
   expect(visibleDetails([1, 2, 3, 4], false, () => false)).toEqual({ shown: [1, 2, 3, 4], hidden: 0 });
+});
+
+test('detailMatches : un mot peut venir de l’entrée, un autre de la ligne (comme le serveur)', () => {
+  const parent = 'IMPORT FFK : INSCRIPTIONS.CSV';
+  expect(detailMatches(['import', 'roux'].map((w) => w.toUpperCase()), 'ROUX CHLOE AJOUTEE', parent)).toBe(true);
+  expect(detailMatches(['ROUX'], 'ROUX CHLOE', parent)).toBe(true);
+  // Aucun mot dans la ligne : elle n’est pas surlignée.
+  expect(detailMatches(['IMPORT'], 'ROUX CHLOE', parent)).toBe(false);
+  // Un mot absent partout.
+  expect(detailMatches(['ROUX', 'ZZZ'], 'ROUX CHLOE', parent)).toBe(false);
+  expect(detailMatches([], 'ROUX', parent)).toBe(false);
 });

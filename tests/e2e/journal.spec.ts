@@ -46,7 +46,7 @@ test('ajout sur place, puis Journal : entrée, recherche, filtre', async ({ page
   await expect(page.getByTestId('journal-live')).toHaveText('en direct');
   const lea = page.getByTestId('journal-entry').filter({ hasText: 'DUPONT Léa' });
   await expect(lea).toHaveCount(1);
-  await expect(lea.getByTestId('journal-title')).toHaveText(/^DUPONT Léa .*· ajouté$/);
+  await expect(lea.getByTestId('journal-title')).toHaveText(/^DUPONT Léa .*· ajoutée$/);
   await expect(lea.getByTestId('journal-via')).toHaveText('Inscription sur place');
   await expect(lea.getByTestId('journal-who')).toHaveText('poste Organisation');
   await expect(page.getByTestId('journal-day').first()).toHaveText(/^\w+ \d+ \w+$/u);
