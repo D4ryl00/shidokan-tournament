@@ -11,6 +11,8 @@ import type { RegistrationSource } from '../../domain/registration.js';
 import type { DisciplineId, Sex } from '../../domain/types.js';
 import { assignAffiliationNumber, checkAffiliationNumber, linkClubResult } from '../db/club-directory.js';
 import type { AppDb } from '../db/client.js';
+import type { JournalVia } from '../../domain/journal/types.js';
+import { fighterSnapshot, recordFighterChange, viaOfSource } from '../journal/fighters.js';
 import { categories, clubDirectory, clubs, competitions, fighters, registrations } from '../db/schema.js';
 import { getCompetition, getCompetitionSync, getGrid, getGridSync } from './competitions.js';
 import { closedSet } from './closed-categories.js';
@@ -372,6 +374,8 @@ export function writeClubLineInTx(
   const existing = fighterId
     ? t.select().from(fighters).where(and(eq(fighters.id, fighterId), eq(fighters.competitionId, competitionId), ...(coach ? [eq(fighters.clubId, clubId)] : []))).get()
     : undefined;
+  // Journal : photo d'avant, lue avant toute écriture.
+  const before = existing ? fighterSnapshot(t, competitionId, existing.id) : null;
   // Combats commencés (organisateur) : ce qui a commencé reste tel quel, le reste de la ligne se corrige.
   let partly: { startedIds: Set<string> } | null = null;
   if (existing && !coach) {
@@ -433,7 +437,18 @@ export function writeClubLineInTx(
   }
   const dropped = t.select().from(registrations).where(eq(registrations.fighterId, id)).all().filter((r) => !kept.has(r.id));
   if (dropped.length) t.delete(registrations).where(inArray(registrations.id, dropped.map((r) => r.id))).run();
+  recordFighterChange(t, competitionId, before, fighterSnapshot(t, competitionId, id), lineVia(writer, args.source, !existing));
   return id;
+}
+
+/**
+ * Manière d'une ligne écrite : le coach, en ligne ; l'organisateur, d'après l'origine annoncée (fiche renvoyée, import FFK),
+ * sinon inscription sur place pour une création et saisie pour une modification.
+ */
+function lineVia(writer: LineWriter, source: RegistrationSource | undefined, created: boolean): JournalVia {
+  if (writer.kind === 'coach') return 'en-ligne';
+  if (source === 'club_form' || source === 'ffk') return viaOfSource(source);
+  return created ? 'sur-place' : 'saisie';
 }
 
 /**
@@ -460,7 +475,9 @@ export async function deleteClubLine(db: AppDb, access: ClubAccess, fighterId: s
     const t = tx as unknown as AppDb;
     // L'organisateur supprime un combattant de n'importe quel club de la compétition (la fenêtre peut avoir changé son club).
     checkedLine(t, access.competitionId, opts.writer.kind === 'coach' ? club.id : null, fighterId, expectedVersion, opts.writer.kind);
+    const before = fighterSnapshot(t, access.competitionId, fighterId);
     t.delete(registrations).where(eq(registrations.fighterId, fighterId)).run();
     t.delete(fighters).where(eq(fighters.id, fighterId)).run();
+    recordFighterChange(t, access.competitionId, before, null, opts.writer.kind === 'coach' ? 'en-ligne' : 'saisie');
   });
 }

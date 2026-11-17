@@ -10,6 +10,11 @@ export interface JournalContext {
   parentId: string | null;
   /** Nombre d'entrées écrites pendant la requête. */
   written: number;
+  /**
+   * La requête a noté elle-même ce qu'elle a fait, même sans rien écrire (enregistrer sans rien changer) : le filet de sécurité
+   * n'écrit pas d'entrée brute pour elle.
+   */
+  handled: boolean;
 }
 
 export const journalStore = new AsyncLocalStorage<JournalContext>();
@@ -21,6 +26,12 @@ export function setJournalVia(via: JournalVia): void {
   if (ctx) ctx.via = via;
 }
 
+/** Marque la requête en cours comme notée (voir `JournalContext.handled`). */
+export function markJournalHandled(): void {
+  const ctx = currentJournal();
+  if (ctx) ctx.handled = true;
+}
+
 export function setJournalActor(actor: JournalActor, competitionId?: string): void {
   const ctx = currentJournal();
   if (!ctx) return;
@@ -30,5 +41,5 @@ export function setJournalActor(actor: JournalActor, competitionId?: string): vo
 
 /** Exécute `fn` dans un contexte de journal, hors requête : tests, ligne de commande, tâches. */
 export function runJournal<T>(ctx: Partial<JournalContext>, fn: () => T): T {
-  return journalStore.run({ actor: { kind: 'app' }, via: 'autre', competitionId: null, parentId: null, written: 0, ...ctx }, fn);
+  return journalStore.run({ actor: { kind: 'app' }, via: 'autre', competitionId: null, parentId: null, written: 0, handled: false, ...ctx }, fn);
 }

@@ -16,6 +16,7 @@ import type { ProposalType } from '../../domain/replacement/types.js';
 import type { DisciplineId } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
 import { withoutRowMeta } from '../db/row-versions.js';
+import { fighterSnapshot, recordFighterChange, viaOfSource } from '../journal/fighters.js';
 import { rowRev } from '../revisions.js';
 import { linkClub, linkClubResult } from '../db/club-directory.js';
 import { cleanEmails } from '../../domain/emails.js';
@@ -135,14 +136,10 @@ export async function listRegistrations(db: AppDb, competitionId: string): Promi
     .map(({ _sort, ...row }) => row);
 }
 
-function findOrCreateFighter(
-  db: AppDb,
-  competitionId: string,
-  input: RegistrationInput,
-  opts: { keepAge?: (fighterId: string) => boolean } = {},
-): typeof fighters.$inferSelect {
+/** Combattant de la saisie déjà inscrit (même nom, sexe et club), s'il existe. */
+function existingFighter(db: AppDb, competitionId: string, input: RegistrationInput): typeof fighters.$inferSelect | undefined {
   const nameKey = fighterKey(input.lastName, input.firstName);
-  const existing = db
+  return db
     .select()
     .from(fighters)
     .where(
@@ -155,6 +152,15 @@ function findOrCreateFighter(
     )
     .all()
     .find((f) => f.clubId === input.clubId);
+}
+
+function findOrCreateFighter(
+  db: AppDb,
+  competitionId: string,
+  input: RegistrationInput,
+  opts: { keepAge?: (fighterId: string) => boolean } = {},
+): typeof fighters.$inferSelect {
+  const existing = existingFighter(db, competitionId, input);
   if (existing) {
     const ageBandCode = opts.keepAge?.(existing.id) ? existing.ageBandCode : input.ageBandCode;
     db.update(fighters)
@@ -169,7 +175,7 @@ function findOrCreateFighter(
     clubId: input.clubId,
     lastName: input.lastName.trim(),
     firstName: input.firstName.trim(),
-    nameKey,
+    nameKey: fighterKey(input.lastName, input.firstName),
     sex: input.sex,
     ageBandCode: input.ageBandCode,
     licence: input.licence ?? null,
@@ -214,12 +220,15 @@ export async function createRegistration(
   let warning: string | null = null;
   const id = db.transaction((tx) => {
     const t = tx as unknown as AppDb;
+    const known = existingFighter(t, competitionId, input);
+    const before = known ? fighterSnapshot(t, competitionId, known.id) : null;
     const fighter = findOrCreateFighter(t, competitionId, input);
     const existing = t.select().from(registrations).where(eq(registrations.fighterId, fighter.id)).all();
     const closedWarning = isEntryClosed(closedSet(t, competitionId), input) ? CLOSED_REGISTRATION : null;
     warning = [combatConflictWarning(existing, input, competition.settings.multipleCombatDisciplinesPerDay), closedWarning].filter(Boolean).join(' ') || null;
     const newId = crypto.randomUUID();
     t.insert(registrations).values({ id: newId, competitionId, fighterId: fighter.id, ...registrationValues(input) }).run();
+    recordFighterChange(t, competitionId, before, fighterSnapshot(t, competitionId, fighter.id), viaOfSource(input.source));
     return newId;
   });
   return { row: rowById(db, id), warning };
@@ -250,6 +259,7 @@ export async function updateRegistration(
   const before = entryKey({ ageBandCode: fighter.ageBandCode, sex: fighter.sex, discipline: current.discipline, ruleset: current.ruleset });
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
+    const snapshot = fighterSnapshot(t, competitionId, current.fighterId);
     // Les données du combattant (nom, sexe, âge, club) suivent la saisie.
     t.update(fighters)
       .set({
@@ -266,6 +276,7 @@ export async function updateRegistration(
       .where(eq(fighters.id, current.fighterId))
       .run();
     t.update(registrations).set(registrationValues(input)).where(eq(registrations.id, registrationId)).run();
+    recordFighterChange(t, competitionId, snapshot, fighterSnapshot(t, competitionId, current.fighterId), 'saisie');
   });
   return { ...rowById(db, registrationId), warning: closedEditWarning(db, competitionId, before, input) };
 }
@@ -288,8 +299,10 @@ export async function deleteRegistration(db: AppDb, competitionId: string, regis
   if (inLockedCategory(db, current.categoryId)) throw new RegistrationLockedError();
   db.transaction((tx) => {
     const t = tx as unknown as AppDb;
+    const before = fighterSnapshot(t, competitionId, current.fighterId);
     t.delete(registrations).where(eq(registrations.id, registrationId)).run();
     deleteOrphanFighters(t, [current.fighterId]);
+    recordFighterChange(t, competitionId, before, fighterSnapshot(t, competitionId, current.fighterId), 'saisie');
   });
 }
 

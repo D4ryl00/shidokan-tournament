@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
 import { fighters } from '../db/schema.js';
+import { fighterSnapshot, recordFighterChange } from '../journal/fighters.js';
 import { getCompetition } from '../repositories/competitions.js';
 import { NotFoundError } from '../repositories/errors.js';
 
@@ -14,8 +15,13 @@ export async function fighterRoutes(app: FastifyInstance, { db }: { db: AppDb })
     const { hidden } = bodySchema.parse(req.body);
     const { id, fighterId } = req.params;
     if (!(await getCompetition(db, id))) throw new NotFoundError('Compétition introuvable');
-    const found = db.update(fighters).set({ publicNameHidden: hidden }).where(and(eq(fighters.id, fighterId), eq(fighters.competitionId, id))).returning({ id: fighters.id }).all();
-    if (!found.length) throw new NotFoundError('Combattant introuvable');
+    db.transaction((tx) => {
+      const t = tx as unknown as AppDb;
+      const before = fighterSnapshot(t, id, fighterId);
+      if (!before) throw new NotFoundError('Combattant introuvable');
+      t.update(fighters).set({ publicNameHidden: hidden }).where(and(eq(fighters.id, fighterId), eq(fighters.competitionId, id))).run();
+      recordFighterChange(t, id, before, fighterSnapshot(t, id, fighterId), 'saisie');
+    });
     return reply.status(204).send();
   });
 }

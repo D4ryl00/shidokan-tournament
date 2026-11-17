@@ -33,7 +33,8 @@ const isCompetitionWrite = (method: string, route: string) =>
 
 /**
  * Qui et comment pour chaque requête (contexte du journal), et filet de sécurité : une écriture réussie d'une compétition
- * qui n'a écrit aucune entrée laisse une entrée brute « Opération non détaillée » (méthode, route, paramètres sans jeton).
+ * qui n'a écrit aucune entrée (et ne s'est pas marquée notée, `markJournalHandled`) laisse une entrée brute
+ * « Opération non détaillée » (méthode, route, paramètres sans jeton).
  * À enregistrer après `registerGuard` (qui pose `req.user`).
  */
 export function registerJournalHooks(app: FastifyInstance, db: AppDb): void {
@@ -41,7 +42,7 @@ export function registerJournalHooks(app: FastifyInstance, db: AppDb): void {
   // Forme à rappel : le gestionnaire (et ce qu'il attend) s'exécute dans `journalStore.run`, donc voit le contexte.
   app.addHook('preHandler', (req, _reply, done) => {
     const id = (req.params as { id?: unknown } | undefined)?.id;
-    const ctx: JournalContext = { actor: requestActor(db, req), via: 'autre', competitionId: typeof id === 'string' ? id : null, parentId: null, written: 0 };
+    const ctx: JournalContext = { actor: requestActor(db, req), via: 'autre', competitionId: typeof id === 'string' ? id : null, parentId: null, written: 0, handled: false };
     req.journal = ctx;
     journalStore.run(ctx, done);
   });
@@ -51,7 +52,8 @@ export function registerJournalHooks(app: FastifyInstance, db: AppDb): void {
     const route = req.routeOptions.url ?? '';
     if (!isCompetitionWrite(req.method, route) || JOURNAL_EXEMPT.has(`${req.method} ${route}`)) return;
     const id = ctx.competitionId;
-    if (ctx.written > 0 || !id) return;
+    // Une route qui a noté elle-même (même « rien n'a changé ») n'a pas d'entrée brute.
+    if (ctx.written > 0 || ctx.handled || !id) return;
     // Supprimée pendant la requête, ou main passée ailleurs : une copie n'écrit pas dans le journal.
     if (!db.$client.prepare('select 1 from competitions where id = ?').get(id) || !getManagement(db, id).managedHere) return;
     const params = Object.fromEntries(Object.entries((req.params ?? {}) as Record<string, string>).filter(([k]) => k !== 'token'));

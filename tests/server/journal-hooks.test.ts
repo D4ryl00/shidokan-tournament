@@ -88,7 +88,7 @@ test('rôle serveur : le compte connecté', async () => {
   expect(entries(id).at(-1)!.actor).toEqual({ kind: 'account', email: 'orga@exemple.fr', role: 'organisateur' });
 });
 
-test('lien du club : acteur et manière posés à l’accès, jamais le jeton', async () => {
+test('lien du club : le club, « Inscription en ligne », jamais le jeton', async () => {
   const { a, base, last } = await local({ clubServices: true });
   const EMPTY = { affiliationNumber: null, coachName: null, coachPhone: null, coachEmails: [], notes: null };
   const entryId = (await a.inject({ method: 'POST', url: '/api/club-directory', payload: { ...EMPTY, name: 'Tani Dojo' } })).json().id;
@@ -101,12 +101,10 @@ test('lien du club : acteur et manière posés à l’accès, jamais le jeton', 
     ruleset: 'jiyu', prefs: { 'shido-mix': 1 }, shobuKeep: null, licence: null,
   };
   expect((await a.inject({ method: 'POST', url: `/api/inscription/${token}/lines`, payload: { line } })).statusCode).toBe(201);
-  expect(last()).toMatchObject({ actor: { kind: 'club', clubName: 'Tani Dojo' }, via: 'en-ligne' });
+  expect(last()).toMatchObject({ action: 'fighter-added', actor: { kind: 'club', clubName: 'Tani Dojo' }, via: 'en-ligne', data: { subject: 'MARTIN Léa (Tani Dojo)' } });
   expect(token.length).toBeGreaterThan(8);
   expect(allColumns()).not.toContain(token);
 });
-
-test.todo('lien du club : le club, « Inscription en ligne », jamais le jeton');
 
 test('filet : écriture réussie sans entrée → entrée brute', async () => {
   const { a, base, last } = await local();
@@ -155,4 +153,10 @@ test('filet : rien quand la main est partie ou la compétition supprimée pendan
   expect(count()).toBe(0);
 });
 
-test.todo('filet : rien de plus quand la route a déjà noté');
+test('filet : rien de plus quand la route a déjà noté', async () => {
+  const { a, base, id } = await local();
+  const before = entries(id).length;
+  expect((await a.inject({ method: 'POST', url: `${base}/registrations`, payload: REG })).statusCode).toBe(201);
+  const added = entries(id).slice(before);
+  expect(added.map((e) => e.action)).toEqual(['fighter-added']);
+});
