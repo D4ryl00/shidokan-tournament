@@ -14,7 +14,7 @@ const value: FfkCardValue = { line, clubId: 'club-1', publicNameHidden: false };
 const card = (key: string, state: FfkCardState, reason: string | null = state === 'todo' ? 'combattant pas choisi' : null, rejected = false): FfkCard => ({
   key, rows: [], exportLine: line, clubEntity: '0060690 ETOILE', clubId: 'club-1', weightIssue: null, notes: [], candidates: [], sure: null,
   state, fighterId: state === 'auto' || state === 'done' ? 'f-1' : null, value: state === 'auto' || state === 'done' ? value : null,
-  diffs: [], missing: [], changes: [], reason, version: null, rejected,
+  diffs: [], missing: [], changes: [], reason, version: null, rejected, newFighter: false,
 });
 
 const draft = (patch: Partial<CardDraft> = {}): CardDraft => ({ fighterId: 'f-1', value, version: 'v1', ...patch });

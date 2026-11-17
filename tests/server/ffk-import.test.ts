@@ -5,7 +5,10 @@ import { buildApp } from '../../src/server/app.js';
 import { openDb } from '../../src/server/db/client.js';
 import { applyFfkCards, buildFfkPlan, loadExisting } from '../../src/server/repositories/ffk-import.js';
 import { RegistrationValidationError } from '../../src/server/repositories/registrations.js';
+import type { ClubFormLine } from '../../src/domain/club-form.js';
+import type { FfkChoices } from '../../src/domain/ffk-plan/plan.js';
 import { fillClubForm } from '../helpers/club-form-fill.js';
+import { newFighterChoices } from '../helpers/ffk-commit.js';
 import { BLANK, buildFfkWorkbook, type FfkLine } from '../helpers/ffk-fixture.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
@@ -108,7 +111,10 @@ type Reg = {
   club: { id: string; name: string; ffkEntity: string | null } | null;
 };
 type Line = Record<string, unknown> & { lastName: string; weightClassId: string | null; ruleset: string | null };
-type Card = { key: string; state: string; fighterId: string | null; reason: string | null; changes: string[]; diffs: { field: string }[]; candidates: { fighterId: string; reason: string }[]; exportLine: Line };
+type Card = {
+  key: string; state: string; fighterId: string | null; reason: string | null; changes: string[]; diffs: { field: string }[]; candidates: { fighterId: string; reason: string }[];
+  exportLine: Line & ClubFormLine; newFighter: boolean; clubId: string | null; weightIssue: string | null;
+};
 type Preview = {
   cards: Card[]; clubs: { clubEntity: string; target: string | null; proposal: { clubId: string; certainty: string } | null }[];
   orphans: { fighterId: string; label: string; action: string; deletable: boolean }[]; weightClasses: { id: string; accepted: boolean }[];
@@ -138,6 +144,9 @@ async function commit(up: Upload, choices: object = {}, fingerprint?: string, sh
   return json('POST', `${base}/ffk-imports/${up.uploadId}/commit`, { sheets, choices, fingerprint });
 }
 const cardOf = (p: Preview, lastName: string) => p.cards.find((c) => c.exportLine.lastName === lastName)!;
+const NEW_FIGHTER = 'nouveau combattant : vérifiez qu’il n’est pas déjà inscrit sous un autre nom';
+/** Les choix, plus « ➕ Nouveau combattant » validé pour chaque nouveau combattant sans choix (comme l’organisateur sur la page). */
+const withNew = async (up: Upload, choices: object = {}) => newFighterChoices((await preview(up, choices)).cards, choices as FfkChoices);
 /** Lecture directe de la base de test (jamais la base vivante). */
 function sqlAll<T>(query: string, ...params: unknown[]): T[] {
   const r = new Database(dbPath, { readonly: true });
@@ -203,18 +212,18 @@ test('import sans aucun choix : seules les cartes auto sont écrites ; les todo 
   expect(p.cards.map((c) => [c.exportLine.lastName, c.state, c.reason])).toEqual([
     ['MARTIN', 'auto', null],
     ['DURAND', 'todo', 'reste à remplir : Catégorie d’âge, Catégorie de poids'],
-    ['NOUVEAU', 'auto', null],
+    ['NOUVEAU', 'todo', NEW_FIGHTER], // jamais créé d’office
     ['INCONNU', 'todo', 'club pas relié'],
   ]);
 
   const res = await commit(up);
   expect(res.statusCode).toBe(200);
-  expect(res.json()).toEqual({ created: 1, updated: 1, deleted: 0, weightClassesCreated: 0, leftAside: 2 });
+  expect(res.json()).toEqual({ created: 0, updated: 1, deleted: 0, weightClassesCreated: 0, leftAside: 3 });
   expect(snapshot(await regsOf('DURAND'))).toEqual(before);
   expect((await regsOf('MARTIN'))[0]).toMatchObject({ source: 'manual', ffkConfirmed: true, fighter: { licence: 'L001' } });
-  expect(await regsOf('NOUVEAU')).toEqual([expect.objectContaining({ source: 'ffk', ffkConfirmed: true, ruleset: 'jiyu', weightClassId: 'senior:M:-75', fighter: expect.objectContaining({ licence: 'L006', clubId: tani }) })]);
+  expect(await regsOf('NOUVEAU')).toEqual([]);
   expect(await regsOf('INCONNU')).toEqual([]);
-  expect(counts()).toEqual({ f: 3, r: 3 });
+  expect(counts()).toEqual({ f: 2, r: 2 });
 });
 
 test('carte validée : valeurs de la carte écrites (âge, poids, licence, club), inscriptions de l’export ffkConfirmed, source ffk pour les nouvelles', async () => {
@@ -251,7 +260,7 @@ test('inscription recasée : la carte validée écrit les valeurs d’origine, l
     Karate: [['SEUL KARATE', null, 'K1', TANI, 'Masculin', 'Karate', 'Senior', -75, 'Shobu']],
     Boxe: [['AUTRE BOXE', null, 'B1', TANI, 'Masculin', 'Boxe', 'Senior', -75, 'Shobu']],
   }));
-  expect((await commit(up)).json()).toMatchObject({ created: 2 });
+  expect((await commit(up, await withNew(up))).json()).toMatchObject({ created: 2 });
   const seul = (await regsOf('SEUL'))[0]!;
   // Préférence : boxe, puis recasement H vers la boxe.
   await app.inject({ method: 'PUT', url: `${base}/registrations/${seul.id}`, payload: {
@@ -343,7 +352,8 @@ test('catégorie acceptée créée ; non acceptée jamais créée', async () => 
   }));
   const p = await preview(up);
   expect(p.weightClasses.map((w) => [w.id, w.accepted])).toEqual([['poussin:F:-20', false], ['poussin:M:-20', false]]);
-  const choices = { acceptedWeightClasses: ['poussin:F:-20'] };
+  // Les deux cartes de nouveaux combattants validées : LEO, sans catégorie de poids, reste à trancher.
+  const choices = await withNew(up, { acceptedWeightClasses: ['poussin:F:-20'] });
   const res = await commit(up, choices, (await preview(up, choices)).fingerprint);
   expect(res.json()).toEqual({ created: 1, updated: 0, deleted: 0, weightClassesCreated: 1, leftAside: 1 });
   const grid = (await json('GET', `${base}/grid`)).json() as { weightClasses: { id: string }[] };
@@ -359,7 +369,7 @@ test('lien choisi mémorisé (ffkEntity + alias) ; « none » ne mémorise rien 
   const up = await uploadAll(file);
   const p = await preview(up);
   expect(p.clubs.map((c) => [c.clubEntity, c.target, c.proposal?.certainty])).toEqual([[TANI, tani, 'sure'], [SHIN, null, 'doubtful']]);
-  const choices = { clubLinks: { [TANI]: 'none', [SHIN]: shin } };
+  const choices = await withNew(up, { clubLinks: { [TANI]: 'none', [SHIN]: shin } });
   const res = await commit(up, choices, (await preview(up, choices)).fingerprint);
   expect(res.json()).toEqual({ created: 1, updated: 0, deleted: 0, weightClassesCreated: 0, leftAside: 1 });
   expect(sqlAll('select name, ffk_entity as e from clubs order by name')).toEqual([{ name: 'Shinsengumi', e: SHIN }, { name: 'Tani Dojo', e: null }]);
@@ -393,7 +403,7 @@ test('orphelin « delete » supprimé (et le combattant sans inscription) ; « k
   const up = await uploadAll(buildFfkWorkbook({ Karate: [['NOUVEAU NOE', null, 'L006', TANI, 'Masculin', 'Karate', 'Senior', -75, null]] }));
   const p = await preview(up);
   expect(p.orphans.map((o) => [o.label, o.action])).toEqual([['ANCIEN Un', 'keep'], ['GARDE Deux', 'keep']]);
-  const choices = { orphans: { [ancien.fighterId]: 'delete' } };
+  const choices = await withNew(up, { orphans: { [ancien.fighterId]: 'delete' } });
   const p2 = await preview(up, choices);
   expect(p2.summary.deletes).toBe(1);
   const res = await commit(up, choices, p2.fingerprint);
@@ -419,8 +429,8 @@ test('réimport du même fichier après import partiel : seules les cartes non t
   const p0 = await preview(up);
   const card = cardOf(p0, 'DURAND');
   expect(card.state).toBe('todo');
-  // Validée avec les valeurs FFK.
-  const choices = { cards: { [card.key]: validated(durand.fighterId, { ...card.exportLine, ruleset: 'jiyu' }, tani, versionOf(p0, durand.fighterId)) } };
+  // Validée avec les valeurs FFK ; le nouveau combattant aussi.
+  const choices = await withNew(up, { cards: { [card.key]: validated(durand.fighterId, { ...card.exportLine, ruleset: 'jiyu' }, tani, versionOf(p0, durand.fighterId)) } });
   expect((await commit(up, choices, (await preview(up, choices)).fingerprint)).json()).toEqual({ created: 1, updated: 1, deleted: 0, weightClassesCreated: 0, leftAside: 1 });
 
   const again = await uploadAll(file);
@@ -458,8 +468,9 @@ test('fiche modifiée entre aperçu et import : 409 « Les inscriptions ont chan
   expect((await commit(up, {}, p2.fingerprint)).statusCode).toBe(409);
   expect(counts()).toEqual({ f: 2, r: 2 });
 
-  // Aperçu relancé : l'import passe.
-  const ok = await commit(up, {}, (await preview(up)).fingerprint);
+  // Aperçu relancé : l'import passe (le nouveau combattant validé).
+  const okChoices = await withNew(up);
+  const ok = await commit(up, okChoices, (await preview(up, okChoices)).fingerprint);
   expect(ok.statusCode).toBe(200);
   expect(ok.json()).toMatchObject({ created: 1, leftAside: 1 });
 });
@@ -480,7 +491,7 @@ test('carte validée que l’enregistrement refuserait : laissée de côté par 
   }));
   const card = cardOf(await preview(up), 'VALIDE');
   // Catégorie de poids d'une autre tranche d'âge : la ligne ne s'enregistrerait pas.
-  const choices = { cards: { [card.key]: validated('new', { ...card.exportLine, ruleset: 'jiyu', weightClassId: 'cadet:F:-54' }, tani, null) } };
+  const choices = await withNew(up, { cards: { [card.key]: validated('new', { ...card.exportLine, ruleset: 'jiyu', weightClassId: 'cadet:F:-54' }, tani, null) } });
   const p = await preview(up, choices);
   expect(cardOf(p, 'VALIDE')).toMatchObject({ state: 'todo', rejected: true, reason: 'la catégorie de poids « -54 » ne correspond pas à l\'âge et au sexe du combattant' });
   const res = await commit(up, choices, p.fingerprint);
@@ -497,8 +508,8 @@ test('dernier filet : une carte retenue que l’enregistrement refuse annule tou
   const repoDb = openDb(dbPath);
   try {
     const competitionId = base.split('/').pop()!;
-    const { plan } = await buildFfkPlan(repoDb, competitionId, up.uploadId, up.sheets as unknown as Parameters<typeof buildFfkPlan>[3]);
-    expect(plan.cards.map((c) => c.state)).toEqual(['auto', 'auto']);
+    const { plan } = await buildFfkPlan(repoDb, competitionId, up.uploadId, up.sheets as unknown as Parameters<typeof buildFfkPlan>[3], await withNew(up));
+    expect(plan.cards.map((c) => c.state)).toEqual(['done', 'done']);
     // Plan forgé (ce que le plan ne laisse plus passer) : une catégorie de poids d'une autre tranche d'âge.
     const card = plan.cards[1]!;
     card.value = { ...card.value!, line: { ...card.value!.line, weightClassId: 'cadet:F:-54' } };
@@ -515,9 +526,17 @@ test('aperçu sans effet, puis import, puis réimport sans doublon', async () =>
   await newClub('Tani Dojo');
   await newClub('Shinsengumi Dojo Vesubie');
   const up = await uploadAll();
-  const choices = { acceptedWeightClasses: ['poussin:F:-20'] };
+  // Premier import des clubs : que des nouveaux combattants, tous à trancher (DURAND, karaté et boxe, déroge au réglage d’un seul combat).
+  expect((await preview(up, { acceptedWeightClasses: ['poussin:F:-20'] })).cards.map((c) => [c.exportLine.lastName, c.state, c.reason])).toEqual([
+    ['MARTIN', 'todo', NEW_FIGHTER],
+    ['MOREAU', 'todo', NEW_FIGHTER],
+    ['DURAND', 'todo', 'déroge aux règles : Une seule discipline de combat par combattant à cette compétition.'],
+    ['SANS', 'todo', expect.stringMatching(/^ligne à vérifier : /)],
+    ['PETIT', 'todo', NEW_FIGHTER],
+  ]);
+  const choices = await withNew(up, { acceptedWeightClasses: ['poussin:F:-20'] });
   const p = await preview(up, choices);
-  expect(p.summary).toMatchObject({ auto: 4, todo: 1, creates: 4 });
+  expect(p.summary).toMatchObject({ done: 4, todo: 1, creates: 4 });
   expect(cardOf(p, 'SANS')).toMatchObject({ state: 'todo' });
   expect(counts()).toEqual({ f: 0, r: 0 });
 
@@ -594,7 +613,7 @@ test('correspondance de colonnes mémorisée', async () => {
 test('fiche club arrivée après l’import FFK : pas de doublon d’inscription', async () => {
   await newClub('Tani Dojo');
   const up = await uploadAll(buildFfkWorkbook({ 'Coupe Shidokan Karate': [karate[0]!] }));
-  expect((await commit(up)).json()).toMatchObject({ created: 1 });
+  expect((await commit(up, await withNew(up))).json()).toMatchObject({ created: 1 });
   const tpl = (await app.inject({ method: 'GET', url: `${base}/club-form.ods` })).rawPayload;
   const form = fillClubForm(tpl, ['Tani Dojo', 'Coach', null, null, 'Non'], [['MARTIN', 'Lea', 'Féminin', 'Cadets', '-54', 'Karaté', 'Jiyu', '2', null, null]]);
   await send(`${base}/club-forms/import`, form);
@@ -609,7 +628,7 @@ test('sans licence sur deux onglets : un seul combattant', async () => {
     Karate: [['SANS LICENCE', null, null, TANI, 'Masculin', 'Karate', 'Senior', -75, null]],
     Boxe: [['SANS LICENCE', null, null, TANI, 'Masculin', 'Boxe', 'Senior', -75, null]],
   }));
-  expect((await commit(up)).json()).toMatchObject({ created: 1 });
+  expect((await commit(up, await withNew(up))).json()).toMatchObject({ created: 1 });
   const rows = await regs();
   expect(rows).toHaveLength(2);
   expect(new Set(rows.map((r) => r.fighterId)).size).toBe(1);
@@ -665,16 +684,18 @@ test('homonymes à créer dans le même club : laissés de côté, l’import pa
       ['NOUVEAU NOE', null, 'L006', TANI, 'Masculin', 'Karate', 'Senior', -75, null],
     ],
   }));
-  const p = await preview(up);
+  // Toutes les cartes de nouveaux combattants validées : les deux HOMO ne peuvent coexister dans le club.
+  const choices = await withNew(up);
+  const p = await preview(up, choices);
   const reason = 'même nom qu’un autre combattant du club : changez le nom ou liez-le';
   expect(p.cards.map((c) => [c.exportLine.lastName, c.state, c.reason])).toEqual([
     ['MARTIN', 'auto', null],
     ['MARTIN', 'todo', expect.any(String)],
     ['HOMO', 'todo', reason],
     ['HOMO', 'todo', reason],
-    ['NOUVEAU', 'auto', null],
+    ['NOUVEAU', 'done', null],
   ]);
-  const res = await commit(up, {}, p.fingerprint);
+  const res = await commit(up, choices, p.fingerprint);
   expect(res.statusCode).toBe(200);
   expect(res.json()).toEqual({ created: 1, updated: 0, deleted: 0, weightClassesCreated: 0, leftAside: 3 });
   expect(await regsOf('HOMO')).toEqual([]);
@@ -689,7 +710,7 @@ test('fiche sans inscription FFK dont un combat a commencé : pas supprimable, g
   const [cat] = (await json('GET', `${base}/categories`)).json() as { id: string }[];
   expect((await app.inject({ method: 'PATCH', url: `${base}/categories/${cat!.id}`, payload: { status: 'started' } })).statusCode).toBe(200);
   const up = await uploadAll(buildFfkWorkbook({ Karate: [['NOUVEAU NOE', null, 'L006', TANI, 'Masculin', 'Karate', 'Senior', -75, null]] }));
-  const choices = { orphans: { [commence.fighterId]: 'delete' } };
+  const choices = await withNew(up, { orphans: { [commence.fighterId]: 'delete' } });
   const p = await preview(up, choices);
   expect(p.orphans.find((o) => o.fighterId === commence.fighterId)).toMatchObject({ deletable: false, action: 'keep' });
   expect(p.summary.deletes).toBe(0);
@@ -697,4 +718,75 @@ test('fiche sans inscription FFK dont un combat a commencé : pas supprimable, g
   expect(res.statusCode).toBe(200);
   expect(res.json()).toMatchObject({ created: 1, deleted: 0 });
   expect(await regsOf('COMMENCE')).toEqual([expect.objectContaining({ id: commence.id, ffkConfirmed: false })]);
+});
+
+// --- Nouveaux combattants et dérogations aux règles : « À trancher » (étape 51, suite) ---
+
+test('nouveau combattant : à trancher par défaut, laissé de côté à l’import ; créé une fois sa carte validée', async () => {
+  const tani = await newClub('Tani Dojo');
+  const up = await uploadAll(buildFfkWorkbook({ Karate: [['NOUVEAU NOE', null, 'L006', TANI, 'Masculin', 'Karate', 'Senior', -75, null]] }));
+  const p = await preview(up);
+  expect(cardOf(p, 'NOUVEAU')).toMatchObject({ state: 'todo', fighterId: null, newFighter: true, reason: NEW_FIGHTER, candidates: [] });
+  expect(p.summary).toMatchObject({ todo: 1, auto: 0, creates: 0 });
+  const res = await commit(up, {}, p.fingerprint);
+  expect(res.json()).toEqual({ created: 0, updated: 0, deleted: 0, weightClassesCreated: 0, leftAside: 1 });
+  expect(counts()).toEqual({ f: 0, r: 0 });
+
+  // L’import purge le fichier envoyé : on le renvoie, comme la page.
+  const again = await uploadAll(buildFfkWorkbook({ Karate: [['NOUVEAU NOE', null, 'L006', TANI, 'Masculin', 'Karate', 'Senior', -75, null]] }));
+  const choices = await withNew(again);
+  const p2 = await preview(again, choices);
+  expect(cardOf(p2, 'NOUVEAU')).toMatchObject({ state: 'done', fighterId: 'new', reason: null });
+  expect((await commit(again, choices, p2.fingerprint)).json()).toEqual({ created: 1, updated: 0, deleted: 0, weightClassesCreated: 0, leftAside: 0 });
+  expect(await regsOf('NOUVEAU')).toEqual([expect.objectContaining({ source: 'ffk', ffkConfirmed: true, ruleset: 'jiyu', weightClassId: 'senior:M:-75', fighter: expect.objectContaining({ licence: 'L006', clubId: tani }) })]);
+  // Réimport : il est maintenant reconnu à sa licence, sans problème.
+  expect(cardOf(await preview(await uploadAll(buildFfkWorkbook({ Karate: [['NOUVEAU NOE', null, 'L006', TANI, 'Masculin', 'Karate', 'Senior', -75, null]] }))), 'NOUVEAU'))
+    .toMatchObject({ state: 'auto', newFighter: false });
+});
+
+test('plusieurs disciplines de combat sans le réglage : à trancher « déroge aux règles » ; validée telle quelle, les deux inscriptions sont écrites', async () => {
+  await newClub('Tani Dojo');
+  const up = await uploadAll(buildFfkWorkbook({
+    Karate: [['DOUBLE NOE', null, 'L010', TANI, 'Masculin', 'Karate', 'Senior', -75, null]],
+    Boxe: [['DOUBLE NOE', null, 'L010', TANI, 'Masculin', 'Boxe', 'Senior', -75, null]],
+  }));
+  const p = await preview(up);
+  expect(cardOf(p, 'DOUBLE')).toMatchObject({
+    state: 'todo', fighterId: null, newFighter: true, reason: 'déroge aux règles : Une seule discipline de combat par combattant à cette compétition.',
+  });
+  expect(cardOf(p, 'DOUBLE').exportLine.combats).toEqual(['karate', 'shido-boxing']);
+  const choices = await withNew(up);
+  const res = await commit(up, choices, (await preview(up, choices)).fingerprint);
+  expect(res.json()).toMatchObject({ created: 1, leftAside: 0 });
+  expect((await regsOf('DOUBLE')).map((r) => r.discipline).sort()).toEqual(['karate', 'shido-boxing']);
+
+  // Réglage activé : plus une dérogation (la carte n’est à trancher que comme nouveau combattant).
+  expect((await app.inject({ method: 'PATCH', url: base, payload: { settings: { multipleCombatDisciplinesPerDay: true } } })).statusCode).toBe(200);
+  const other = await uploadAll(buildFfkWorkbook({
+    Karate: [['AUTRE NOE', null, 'L011', TANI, 'Masculin', 'Karate', 'Senior', -75, null]],
+    Boxe: [['AUTRE NOE', null, 'L011', TANI, 'Masculin', 'Boxe', 'Senior', -75, null]],
+  }));
+  expect(cardOf(await preview(other), 'AUTRE')).toMatchObject({ state: 'todo', reason: NEW_FIGHTER });
+});
+
+test('catégorie non ouverte : un nouveau combattant qui y entrerait est signalé ; une fiche déjà inscrite dans cette catégorie ne l’est pas à chaque import', async () => {
+  const tani = await newClub('Tani Dojo');
+  await register(tani, 'MARTIN', 'Léa', { licence: 'L001' });
+  const close = await app.inject({ method: 'PUT', url: `${base}/closed-categories`, payload: { cells: [{ ageBandCode: 'cadet', sex: 'F', discipline: 'karate', ruleset: 'jiyu' }], closed: true } });
+  expect(close.statusCode).toBe(204);
+  const up = await uploadAll(buildFfkWorkbook({
+    Karate: [
+      ['MARTIN LEA', null, 'L001', TANI, 'Feminine', 'Karate', 'Cadet', -61, null],
+      ['NOUVELLE ANA', null, 'L020', TANI, 'Feminine', 'Karate', 'Cadet', -61, null],
+    ],
+  }));
+  const p = await preview(up);
+  expect(cardOf(p, 'MARTIN')).toMatchObject({ state: 'auto', reason: null });
+  expect(cardOf(p, 'NOUVELLE')).toMatchObject({
+    state: 'todo', newFighter: true, reason: 'déroge aux règles : Catégorie non ouverte à cette compétition (Karaté jiyu).',
+  });
+  // Validée : l’organisateur peut y inscrire (la ligne ira en Réaffectation, comme depuis la fenêtre combattant).
+  const choices = await withNew(up);
+  expect((await commit(up, choices, (await preview(up, choices)).fingerprint)).json()).toMatchObject({ created: 1, updated: 0, leftAside: 0 });
+  expect(await regsOf('NOUVELLE')).toEqual([expect.objectContaining({ discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-61' })]);
 });

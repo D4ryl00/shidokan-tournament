@@ -87,9 +87,19 @@ test('import ffk : relier un club, créer un club, valider une carte avec écart
   await expect(fighterCard(page, 'DUPONT Paul')).toContainText('(pas relié)');
   await esvlCard.getByRole('radio', { name: /^Relier à ESVL/ }).click();
   await expect(esvlCard.getByTestId('ffk-club-status')).toHaveText('Relié');
+  await expect(summary(page)).toContainText('6 à trancher : 1 club · 5 combattants');
+  // Club relié : son nouveau combattant, sans candidat, n’est jamais créé d’office (peut-être inscrit sous un autre nom).
+  const dupontCard = fighterCard(page, 'DUPONT Paul');
+  await expect(dupontCard.getByTestId('ffk-card-state')).toHaveText('À trancher');
+  await expect(dupontCard.getByRole('radio', { name: /^Ne pas lier pour l’instant/ })).toBeChecked();
+  await expect(dupontCard.getByTestId('ffk-card-new')).toContainText('Vérifiez qu’il n’est pas déjà inscrit sous un autre nom');
+  // Vérifié : « ➕ Nouveau combattant », puis « Valider la carte ».
+  await dupontCard.getByRole('radio', { name: /^➕ Nouveau combattant/ }).click();
+  await expect(dupontCard.getByTestId('ffk-card-state')).toHaveText('À valider');
+  await dupontCard.getByTestId('ffk-card-validate').click();
+  await expect(dupontCard.getByTestId('ffk-card-state')).toHaveText('Validée');
+  await expect(dupontCard.getByTestId('ffk-card-summary')).toHaveText('Nouveau combattant : DUPONT Paul.');
   await expect(summary(page)).toContainText('5 à trancher : 1 club · 4 combattants');
-  // Club relié : son nouveau combattant, sans candidat, est importé tel quel.
-  await expect(fighterCard(page, 'DUPONT Paul').getByTestId('ffk-card-state')).toHaveText('Sans problème');
 
   // Club inconnu : « ➕ Créer un club… » ouvre la fenêtre de l'annuaire, pré-remplie.
   const nouveau = clubCard(page, 'KARATE CLUB NOUVEAU');
@@ -101,8 +111,13 @@ test('import ffk : relier un club, créer un club, valider une carte avec écart
   await dialog.getByTestId('directory-save').click();
   await expect(dialog).toBeHidden();
   await expect(nouveau.getByTestId('ffk-club-status')).toHaveText('Créé');
+  await expect(summary(page)).toContainText('4 à trancher : 0 club · 4 combattants');
+  const rossiCard = fighterCard(page, 'ROSSI Nina');
+  await expect(rossiCard.getByTestId('ffk-card-state')).toHaveText('À trancher');
+  await rossiCard.getByRole('radio', { name: /^➕ Nouveau combattant/ }).click();
+  await rossiCard.getByTestId('ffk-card-validate').click();
+  await expect(rossiCard.getByTestId('ffk-card-state')).toHaveText('Validée');
   await expect(summary(page)).toContainText('3 à trancher : 0 club · 3 combattants');
-  await expect(fighterCard(page, 'ROSSI Nina').getByTestId('ffk-card-state')).toHaveText('Sans problème');
 
   // 3. Une carte avec un écart : le champ démarre vide, « À choisir » ; FFK le remplit, puis on valide.
   const martin = fighterCard(page, 'MARTIN Léa');
@@ -123,7 +138,7 @@ test('import ffk : relier un club, créer un club, valider une carte avec écart
   await expect(martin.getByTestId('ffk-card-state')).toHaveText('Validée');
   await expect(martin.getByTestId('ffk-card-summary')).toContainText('Liée à MARTIN Léa · Catégorie de poids : -54 kg → -61 kg');
   await expect(summary(page)).toContainText('2 à trancher : 0 club · 2 combattants');
-  await expect(summary(page)).toContainText('1 validée · 3 sans problème');
+  await expect(summary(page)).toContainText('3 validées · 1 sans problème');
 
   // Écarter une ligne : la carte suivante (ouverte par la validation) est liée au candidat, puis écartée.
   const martinni = fighterCard(page, 'MARTINNI Jules');
@@ -188,18 +203,21 @@ test('import ffk : catégorie cochée puis décochée', async ({ page }) => {
   await expect(category.getByRole('checkbox')).not.toBeChecked();
   const leroy = fighterCard(page, 'LEROY Marc');
   await expect(leroy.getByTestId('ffk-card-state')).toHaveText('À trancher');
+  await expect(leroy.getByTestId('ffk-card-hint')).toContainText('reste à remplir : Catégorie de poids');
   await expect(summary(page)).toContainText('1 à trancher : 0 club · 1 combattant');
 
-  // Cochée : la catégorie sera créée, la carte devient sans problème.
+  // Cochée : la catégorie sera créée, le poids n’est plus à choisir ; reste un nouveau combattant à vérifier et valider.
   await category.getByRole('checkbox').check();
   await expect(category).toContainText('1 combattant · sera créée');
-  await expect(leroy.getByTestId('ffk-card-state')).toHaveText('Sans problème');
-  await expect(summary(page)).toContainText('Tout est tranché');
+  await expect(leroy.getByTestId('ffk-card-hint')).not.toContainText('reste à remplir');
+  await expect(leroy.getByTestId('ffk-card-state')).toHaveText('À trancher');
+  await expect(leroy.getByTestId('ffk-card-new')).toBeVisible();
+  await expect(summary(page)).toContainText('1 à trancher : 0 club · 1 combattant');
 
   // Décochée : retour à l'état de départ.
   await category.getByRole('checkbox').uncheck();
   await expect(category).toContainText('1 combattant · pas créée');
-  await expect(leroy.getByTestId('ffk-card-state')).toHaveText('À trancher');
+  await expect(leroy.getByTestId('ffk-card-hint')).toContainText('reste à remplir : Catégorie de poids');
   await expect(summary(page)).toContainText('1 à trancher : 0 club · 1 combattant');
 
   // Import : aucune catégorie créée, la ligne est laissée de côté.
@@ -212,6 +230,42 @@ test('import ffk : catégorie cochée puis décochée', async ({ page }) => {
   const grid = (await (await page.request.get(`/api/competitions/${id}/grid`)).json()) as { weightClasses: { id: string }[] };
   expect(grid.weightClasses.map((w) => w.id)).not.toContain('senior:M:-90');
   expect(await registrations(page, id)).toEqual([]);
+});
+
+test('import ffk : plusieurs disciplines de combat alors que le réglage n’en prévoit qu’une : à trancher, corrigeable, ou validée telle quelle', async ({ page }) => {
+  const id = await createCompetition(page, 'Coupe FFK disciplines');
+  await newClub(page, id, 'Tani Dojo');
+  // Réglage par défaut : une seule discipline de combat par combattant.
+  await uploadFfk(page, id, exportFile([
+    ['Eva', 'DOUBLE', 'L40', TANI, 'Féminin', 'Karate', 'Cadette', -54, null],
+    ['Eva', 'DOUBLE', 'L40', TANI, 'Féminin', 'Boxe', 'Cadette', -54, null],
+  ]));
+  const double = fighterCard(page, 'DOUBLE Eva');
+  await expect(double).toContainText('Karaté, Shido-boxing');
+  await expect(double.getByTestId('ffk-card-state')).toHaveText('À trancher');
+  await expect(double.getByTestId('ffk-card-hint')).toContainText('Déroge aux règles de la compétition : Une seule discipline de combat par combattant à cette compétition.');
+  await expect(double.getByTestId('ffk-card-new')).toBeVisible();
+  await expect(summary(page)).toContainText('1 à trancher : 0 club · 1 combattant');
+
+  // Ouverte : la règle est rappelée ; décocher une discipline la respecte, la recocher y déroge de nouveau.
+  await double.getByRole('radio', { name: /^➕ Nouveau combattant/ }).click();
+  const notice = double.getByTestId('line-multiple-off');
+  await expect(notice).toContainText('le réglage de la compétition n’en prévoit qu’un par jour');
+  await double.getByText('Boxing', { exact: true }).click();
+  await expect(notice).toHaveCount(0);
+  await double.getByText('Boxing', { exact: true }).click();
+  await expect(notice).toBeVisible();
+  // Validée telle quelle : l’organisateur peut y déroger, les deux inscriptions sont écrites.
+  await double.getByTestId('ffk-card-validate').click();
+  await expect(double.getByTestId('ffk-card-state')).toHaveText('Validée');
+  await expect(summary(page)).toContainText('Tout est tranché');
+  await page.getByTestId('ffk-commit').click();
+  await expect(page.getByTestId('ffk-recap')).toContainText('Combattants créés (1)');
+  await confirmImport(page);
+  await expect(page.getByText('Import FFK : 1 combattant créé, 0 mis à jour, 0 supprimé, 0 catégorie créée.')).toBeVisible();
+  expect((await regOf(page, id, 'DOUBLE')).map((r) => r.fighter.firstName)).toEqual(['Eva', 'Eva']);
+  const disciplines = ((await registrations(page, id)) as (Reg & { discipline: string })[]).map((r) => r.discipline).sort();
+  expect(disciplines).toEqual(['karate', 'shido-boxing']);
 });
 
 test('import ffk : fiche sans inscription FFK supprimée', async ({ page }) => {

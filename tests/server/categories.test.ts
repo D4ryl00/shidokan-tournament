@@ -113,7 +113,7 @@ test('import FFK → une catégorie par clé distincte', async () => {
     ],
   });
   const up = (await app.inject({ method: 'POST', url: `${base}/ffk-imports`, payload: file, headers: { 'content-type': 'application/octet-stream' } })).json();
-  expect((await ffkCommit(app, base, up)).json()).toMatchObject({ created: 3, leftAside: 0 });
+  expect((await ffkCommit(app, base, up, {}, { createNew: true })).json()).toMatchObject({ created: 3, leftAside: 0 });
   expect((await categories()).map((c) => c.registrationIds.length)).toEqual([2, 1]);
 });
 

@@ -7,6 +7,7 @@ import { normalizeName } from '../names.js';
 import type { CategoryGrid, WeightClass } from '../types.js';
 import { buildCards, type ExistingFighter, type FfkCardDraft, type NewWeightClass } from './cards.js';
 import { linkClubs, type ClubLink, type ExistingClub } from './clubs.js';
+import { RULES_BROKEN, ruleBreaks, type CompetitionRules } from './rules.js';
 import { cardChanges, ffkCardDiffs, FIELD_LABELS, initialValue, missingFields, type ChangeLabels, type FfkCardDiff, type FfkCardValue } from './values.js';
 
 /** Ce que le plan connaît de la compétition. */
@@ -15,6 +16,8 @@ export interface ExistingData {
   fighters: ExistingFighter[];
   /** nameKey d’un club → entité FFK, mémorisé d’une compétition à l’autre. */
   aliases: Record<string, string>;
+  /** Règles de la compétition : une carte qui y déroge n’est pas importée d’office (validée, elle l’est). */
+  rules: CompetitionRules;
 }
 
 /**
@@ -56,6 +59,11 @@ export interface FfkCard extends FfkCardDraft {
   version: string | null;
   /** Choix validé refusé par le plan : la carte est à trancher malgré sa validation (`reason` dit pourquoi). */
   rejected: boolean;
+  /**
+   * Aucune fiche trouvée (pas de candidat, club relié) : « ➕ Nouveau combattant » est la seule proposition. Jamais créé d’office : il
+   * est peut-être déjà inscrit sous un autre nom (faute de frappe), à vérifier avant de valider la carte.
+   */
+  newFighter: boolean;
 }
 
 export interface FfkOrphan {
@@ -125,6 +133,7 @@ export const WEIGHT_CLASS_GONE = 'catégorie de poids absente de la grille';
 export const CLUB_GONE = 'club introuvable';
 export const FICHE_CHANGED = 'fiche modifiée depuis la validation : revalidez la carte';
 export const STARTED_CLUB = 'combats commencés : le club ne change plus';
+export const NEW_FIGHTER = 'nouveau combattant : vérifiez qu’il n’est pas déjà inscrit sous un autre nom';
 
 /** Carte retenue remise à trancher : rien n’est écrit ; refusée si c’était un choix validé. */
 const demoted = (c: FfkCard, reason: string): FfkCard =>
@@ -213,18 +222,29 @@ interface Known {
   clubIds: ReadonlySet<string>;
   /** Grille telle que l’import l’écrira (catégories cochées ajoutées), pour vérifier l’enregistrement. */
   grid: CategoryGrid;
+  rules: CompetitionRules;
 }
 
 function planCard(draft: FfkCardDraft, choice: FfkCardChoice | undefined, fighters: Map<string, ExistingFighter>, labels: ChangeLabels, known: Known): FfkCard {
   const fighter = (id: string | null) => (id && id !== 'new' ? (fighters.get(id) ?? null) : null);
+  // Par défaut : lié d’office seulement si le rapprochement est sûr (ou sans candidat, club relié : nouveau combattant).
+  const target = draft.sure ?? (draft.candidates.length === 0 && draft.clubId ? 'new' : null);
   const base: FfkCard = {
     ...draft, state: 'todo', fighterId: null, value: null, diffs: ffkCardDiffs(draft, fighter(draft.sure)), missing: [], changes: [], reason: null, version: null, rejected: false,
+    newFighter: target === 'new',
   };
-  /** Retenue si l’enregistrement l’accepte ; sinon à trancher, avec la première erreur (refusée si c’était un choix validé). */
+  /**
+   * Retenue si l’enregistrement l’accepte ; sinon à trancher, avec la première erreur (refusée si c’était un choix validé). D’office, une
+   * dérogation aux règles de la compétition que la fiche n’avait pas déjà se tranche aussi ; validée, l’organisateur l’a acceptée.
+   */
   const retained = (fighterId: string | 'new', value: FfkCardValue, saved: ExistingFighter | null, state: 'auto' | 'done'): FfkCard => {
     const diffs = ffkCardDiffs(draft, saved);
     const error = writeError(value, saved, known.grid);
     if (error) return { ...base, diffs, reason: error, rejected: state === 'done' };
+    if (state === 'auto') {
+      const breaks = ruleBreaks(value.line, saved?.line ?? null, known.grid, known.rules);
+      if (breaks.length) return { ...base, diffs, reason: `${RULES_BROKEN}${breaks.join(' ')}` };
+    }
     return { ...base, state, fighterId, value, diffs, changes: cardChanges(saved, value, labels), version: saved?.version ?? null };
   };
 
@@ -245,8 +265,7 @@ function planCard(draft: FfkCardDraft, choice: FfkCardChoice | undefined, fighte
     return retained(choice.fighterId, choice.value, saved, 'done');
   }
 
-  // Par défaut : lié d’office seulement si le rapprochement est sûr (ou sans candidat, club relié) et qu’il ne reste rien à choisir.
-  const target = draft.sure ?? (draft.candidates.length === 0 && draft.clubId ? 'new' : null);
+  // Par défaut : lié d’office seulement si le rapprochement est sûr et qu’il ne reste rien à choisir ; un nouveau combattant jamais.
   if (target === null) return { ...base, reason: draft.candidates.length ? 'combattant pas choisi' : 'club pas relié' };
   const saved = fighter(target);
   const value = initialValue(draft, saved);
@@ -256,7 +275,9 @@ function planCard(draft: FfkCardDraft, choice: FfkCardChoice | undefined, fighte
   if (errors.length) return { ...base, diffs, missing, reason: `ligne à vérifier : ${errors.join(' ')}` };
   const toFill = unique([...missing, ...diffs.map((d) => FIELD_LABELS[d.field])]);
   if (toFill.length || draft.weightIssue) return { ...base, diffs, missing, reason: `reste à remplir : ${toFill.length ? toFill.join(', ') : FIELD_LABELS.weightClassId}` };
-  return retained(target, value, saved, 'auto');
+  const card = retained(target, value, saved, 'auto');
+  // Aucune fiche trouvée : il est peut-être déjà inscrit sous un autre nom ; créé seulement une fois la carte validée.
+  return target === 'new' && card.state === 'auto' ? { ...base, reason: NEW_FIGHTER } : card;
 }
 
 /** Plan de l’import FFK par cartes : un combattant de l’export par carte, son état, les fiches sans inscription FFK. */
@@ -279,6 +300,7 @@ export function planFfkCards(rows: FfkRow[], grid: CategoryGrid, existing: Exist
     weightClassIds: new Set([...grid.weightClasses, ...added].map((w) => w.id)),
     clubIds: new Set(existing.clubs.map((c) => c.id)),
     grid: mergeWeightClasses(grid, added),
+    rules: existing.rules,
   };
   const cards = drafts.map((d) => planCard(d, choices.cards?.[d.key], byId, labels, known));
   // Un combattant n’est écrit que par une carte : un choix validé passe avant un rapprochement d’office, puis l’ordre de l’export.

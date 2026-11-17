@@ -3,7 +3,9 @@ import type { ClubFormLine } from '../../src/domain/club-form.js';
 import { guessColumnMapping, parseFfkRows, type FfkRow } from '../../src/domain/ffk-import.js';
 import type { ExistingFighter } from '../../src/domain/ffk-plan/cards.js';
 import type { ExistingClub } from '../../src/domain/ffk-plan/clubs.js';
-import { HOMONYM, planFfkCards, planFingerprint, type ExistingData, type FfkCardChoice } from '../../src/domain/ffk-plan/plan.js';
+import { HOMONYM, NEW_FIGHTER, planFfkCards, planFingerprint, type ExistingData, type FfkCardChoice } from '../../src/domain/ffk-plan/plan.js';
+import type { CompetitionRules } from '../../src/domain/ffk-plan/rules.js';
+import { initialValue } from '../../src/domain/ffk-plan/values.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 import { FFK_HEADER } from '../helpers/ffk-fixture.js';
 
@@ -35,11 +37,13 @@ const base = (): ExistingData => ({
   clubs: [club('c1', 'Tani Dojo'), club('c2', 'Shinsengumi')],
   fighters: [fighter('f1', 'c1', 'MARTIN', 'Léa')],
   aliases: {},
+  // Règles permissives : seuls les tests des dérogations les resserrent.
+  rules: { multipleCombats: true, closed: new Set() },
 });
 const cardOf = (plan: ReturnType<typeof planFfkCards>, r: FfkRow) => plan.cards.find((c) => c.rows.some((x) => x.key === r.key))!;
 
 describe('états des cartes', () => {
-  test('défaut : sûr sans écart = auto ; sûr avec écart = todo (fighterId null) ; sans candidat = auto « new »', () => {
+  test('défaut : sûr sans écart = auto ; sûr avec écart = todo (fighterId null) ; sans candidat = todo « nouveau combattant »', () => {
     const ex = base();
     ex.fighters.push(fighter('f2', 'c1', 'DURAND', 'Zoé', { line: { ageBandCode: 'junior', weightClassId: 'junior:F:-59' } }));
     const sure = row();
@@ -56,8 +60,8 @@ describe('états des cartes', () => {
     expect(todo.diffs.map((d) => d.field)).toEqual(['ageBandCode', 'weightClassId']);
     expect(todo.reason).toBe('reste à remplir : Catégorie d’âge, Catégorie de poids');
 
-    expect(cardOf(plan, fresh)).toMatchObject({ state: 'auto', fighterId: 'new', changes: [], missing: [] });
-    expect(cardOf(plan, fresh).value).toMatchObject({ clubId: 'c1', line: { lastName: 'NOUVEAU', ruleset: 'jiyu', weightClassId: 'cadet:F:-54' } });
+    // Nouveau combattant : jamais créé d’office (« Ne pas lier pour l’instant »), créé une fois la carte validée.
+    expect(cardOf(plan, fresh)).toMatchObject({ state: 'todo', fighterId: null, value: null, changes: [], missing: [], newFighter: true, reason: NEW_FIGHTER });
   });
 
   test('choix validé : done, value et changes du choix ; un fighterId choisi sans écart reste done', () => {
@@ -117,12 +121,17 @@ describe('états des cartes', () => {
     const a = row({ licence: 'A1', lastName: 'HOMO', firstName: 'NYME' });
     const b = row({ licence: 'A2', lastName: 'HOMO', firstName: 'NYME' });
     const other = row({ licence: 'A3', lastName: 'HOMO', firstName: 'NYME', sex: 'M', weightLabel: '-52' }); // autre sexe : pas un doublon
-    const plan = planFfkCards([a, b, other], grid, base());
     const reason = 'même nom qu’un autre combattant du club : changez le nom ou liez-le';
-    expect(cardOf(plan, a)).toMatchObject({ state: 'todo', fighterId: null, value: null, reason, rejected: false });
-    expect(cardOf(plan, b)).toMatchObject({ state: 'todo', fighterId: null, value: null, reason, rejected: false });
-    expect(cardOf(plan, other)).toMatchObject({ state: 'auto', fighterId: 'new' });
-    expect(plan.summary).toMatchObject({ todo: 2, auto: 1, creates: 1 });
+    // Nouveaux combattants : jamais créés d’office ; validés tous les deux, ils ne peuvent coexister dans le club.
+    expect(planFfkCards([a, b, other], grid, base()).cards.map((c) => c.reason)).toEqual([NEW_FIGHTER, NEW_FIGHTER, NEW_FIGHTER]);
+    const created = (r: FfkRow) => ({ kind: 'validated', fighterId: 'new', value: { line: line(r.lastName, r.firstName, { sex: r.sex, licence: r.licence, ...(r.sex === 'M' ? { weightClassId: 'cadet:M:-52' } : {}) }), clubId: 'c1', publicNameHidden: false } }) as FfkCardChoice;
+    const plan = planFfkCards([a, b, other], grid, base(), { cards: { 'L:A1': created(a), 'L:A2': created(b), 'L:A3': created(other) } });
+    expect(cardOf(plan, a)).toMatchObject({ state: 'todo', fighterId: null, value: null, reason, rejected: true });
+    expect(cardOf(plan, b)).toMatchObject({ state: 'todo', fighterId: null, value: null, reason, rejected: true });
+    expect(cardOf(plan, other)).toMatchObject({ state: 'done', fighterId: 'new' });
+    expect(plan.summary).toMatchObject({ todo: 2, done: 1, creates: 1 });
+    // Un seul des deux validé : l’autre n’est pas écrit, pas de doublon, la carte validée passe.
+    expect(planFfkCards([a, b], grid, base(), { cards: { 'L:A1': created(a) } }).cards.map((c) => [c.state, c.reason])).toEqual([['done', null], ['todo', NEW_FIGHTER]]);
 
     // Nouveau combattant validé au nom d’une fiche existante du club (non retenue par une carte) : à trancher, la fiche reste orpheline.
     const c = row({ lastName: 'NOUVEAU', firstName: 'X' });
@@ -145,14 +154,15 @@ describe('états des cartes', () => {
     expect(plan.summary).toMatchObject({ todo: 1, skip: 1, auto: 0, done: 0, creates: 0, updates: 0 });
   });
 
-  test('catégorie acceptée : la carte au poids -20 passe de todo à auto', () => {
+  test('catégorie acceptée : la carte au poids -20 n’a plus de poids à choisir (reste un nouveau combattant à valider)', () => {
     const r = row({ lastName: 'PETIT', firstName: 'P', ageBandCode: 'poussin', weightLabel: '-20' });
     const before = planFfkCards([r], grid, base());
     expect(before.weightClasses).toEqual([{ id: 'poussin:F:-20', ageBandCode: 'poussin', sex: 'F', label: '-20', maxKg: 20, sortOrder: 0, rows: 1, fighters: 1, accepted: false }]);
     expect(before.cards[0]).toMatchObject({ state: 'todo', fighterId: null, missing: ['Catégorie de poids'] });
     const after = planFfkCards([r], grid, base(), { acceptedWeightClasses: ['poussin:F:-20'] });
     expect(after.weightClasses[0]!.accepted).toBe(true);
-    expect(after.cards[0]).toMatchObject({ state: 'auto', fighterId: 'new', value: { line: { weightClassId: 'poussin:F:-20' } } });
+    expect(after.cards[0]).toMatchObject({ state: 'todo', fighterId: null, missing: [], reason: NEW_FIGHTER });
+    expect(initialValue(after.cards[0]!, null).line.weightClassId).toBe('poussin:F:-20');
   });
 
   test('club « none » : un nouveau combattant de ce club est todo « club pas relié » ; un existant sûr par licence reste auto (garde son club)', () => {
@@ -303,12 +313,13 @@ describe('orphelins et récapitulatif', () => {
       [
         row(), // f1 : licence complétée → mise à jour
         row({ licence: 'LZ', lastName: 'DURAND', firstName: 'ZOE' }), // f2 : rien ne change
-        row({ lastName: 'NOUVEAU', firstName: 'X' }), // création
+        row({ lastName: 'NOUVEAU', firstName: 'X', licence: 'LX' }), // création (carte validée)
         row({ lastName: 'AUTRE', firstName: 'Y', clubEntity: '0060999 NOUVEAU CLUB', clubName: 'NOUVEAU CLUB' }), // club pas relié
+        row({ lastName: 'ENCORE', firstName: 'Z' }), // nouveau combattant pas validé
       ],
-      grid, ex, { orphans: { f9: 'delete' } },
+      grid, ex, { orphans: { f9: 'delete' }, cards: { 'L:LX': { kind: 'validated', fighterId: 'new', value: { line: line('NOUVEAU', 'X', { licence: 'LX' }), clubId: 'c1', publicNameHidden: false } } } },
     );
-    expect(plan.summary).toEqual({ todo: 1, auto: 3, done: 0, skip: 0, clubsTodo: 1, creates: 1, updates: 1, deletes: 1 });
+    expect(plan.summary).toEqual({ todo: 2, auto: 2, done: 1, skip: 0, clubsTodo: 1, creates: 1, updates: 1, deletes: 1 });
   });
 
   test('empreinte stable pour le même plan, différente si une fiche change de version', () => {
@@ -394,8 +405,11 @@ describe('rapprochements (repris de l’ancien plan)', () => {
     const ex = base();
     ex.fighters[0] = fighter('f1', 'c1', 'MARTIN', 'Léa', { licence: 'L1' });
     const plan = planFfkCards([row({ licence: 'L1' }), row({ licence: 'L9' })], grid, ex);
-    // Le second ne peut pas être créé dans le même club sous le même nom (l’enregistrement le refuserait) : laissé de côté.
-    expect(plan.cards.map((c) => [c.state, c.fighterId, c.reason])).toEqual([['auto', 'f1', null], ['todo', null, HOMONYM]]);
+    // Le second est un nouveau combattant : jamais créé d’office ; validé, il ne peut pas l’être dans le même club sous le même nom.
+    expect(plan.cards.map((c) => [c.state, c.fighterId, c.reason])).toEqual([['auto', 'f1', null], ['todo', null, NEW_FIGHTER]]);
+    const value = { line: line('MARTIN', 'Lea', { licence: 'L9' }), clubId: 'c1', publicNameHidden: false };
+    const validated = planFfkCards([row({ licence: 'L1' }), row({ licence: 'L9' })], grid, ex, { cards: { 'L:L9': { kind: 'validated', fighterId: 'new', value } } });
+    expect(validated.cards.map((c) => [c.state, c.fighterId, c.reason])).toEqual([['auto', 'f1', null], ['todo', null, HOMONYM]]);
   });
 
   test('même nom, deux licences dans l’import, combattant sans licence : la seconde est à trancher', () => {
@@ -407,7 +421,7 @@ describe('rapprochements (repris de l’ancien plan)', () => {
     const ex = base();
     ex.fighters[0] = fighter('f1', 'c1', 'MARTIN', 'Léa', { licence: '11000001A' });
     expect(planFfkCards([row({ licence: '11462640R' })], grid, ex).cards[0]).toMatchObject({ state: 'todo', candidates: [{ fighterId: 'f1', reason: 'même nom, autre licence' }] });
-    expect(planFfkCards([row({ licence: '11462640R', lastName: 'NOUVEAU', firstName: 'X' })], grid, ex).cards[0]).toMatchObject({ state: 'auto', fighterId: 'new' });
+    expect(planFfkCards([row({ licence: '11462640R', lastName: 'NOUVEAU', firstName: 'X' })], grid, ex).cards[0]).toMatchObject({ state: 'todo', newFighter: true, reason: NEW_FIGHTER });
   });
 
   test('licence de l’export « 1146 2640 r » ↔ licence enregistrée 11462640R : rapprochés', () => {
@@ -430,5 +444,91 @@ describe('nombre de combattants par club', () => {
     const other = row({ licence: 'Y2', lastName: 'AUTRE', firstName: 'B' });
     expect(planFfkCards([karate, kata], grid, base()).clubs[0]).toMatchObject({ clubEntity: TANI, rows: 2, fighters: 1 });
     expect(planFfkCards([karate, kata, other], grid, base()).clubs[0]).toMatchObject({ rows: 3, fighters: 2 });
+  });
+});
+
+describe('nouveaux combattants et dérogations aux règles : « À trancher »', () => {
+  const ruled = (over: Partial<CompetitionRules>, ex = base()): ExistingData => ({ ...ex, rules: { multipleCombats: false, closed: new Set(), ...over } });
+  const validatedNew = (r: FfkRow, value: ReturnType<typeof initialValue>) => ({ cards: { [`L:${r.licence}`]: { kind: 'validated', fighterId: 'new', value } as FfkCardChoice } });
+
+  test('nouveau combattant (aucune fiche trouvée) : à trancher, « Ne pas lier » par défaut, avec la raison ; validé « ➕ Nouveau combattant » → créé', () => {
+    const fresh = row({ lastName: 'NOUVEAU', firstName: 'X' });
+    const plan = planFfkCards([fresh], grid, base());
+    expect(NEW_FIGHTER).toBe('nouveau combattant : vérifiez qu’il n’est pas déjà inscrit sous un autre nom');
+    expect(plan.cards[0]).toMatchObject({ state: 'todo', fighterId: null, value: null, changes: [], newFighter: true, rejected: false, reason: NEW_FIGHTER });
+    expect(plan.summary).toMatchObject({ todo: 1, auto: 0, creates: 0 });
+
+    const validated = planFfkCards([fresh], grid, base(), validatedNew(fresh, initialValue(plan.cards[0]!, null)));
+    expect(validated.cards[0]).toMatchObject({ state: 'done', fighterId: 'new', newFighter: true, reason: null, rejected: false });
+    expect(validated.cards[0]!.value).toMatchObject({ clubId: 'c1', line: { lastName: 'NOUVEAU', ruleset: 'jiyu', weightClassId: 'cadet:F:-54' } });
+    expect(validated.summary).toMatchObject({ todo: 0, done: 1, creates: 1 });
+
+    // Un combattant reconnu n’est pas « nouveau » ; un club pas relié non plus (rien ne peut être créé).
+    expect(planFfkCards([row()], grid, base()).cards[0]).toMatchObject({ state: 'auto', fighterId: 'f1', newFighter: false });
+    const unlinked = row({ lastName: 'AUTRE', firstName: 'Y', clubEntity: '0060999 NOUVEAU CLUB', clubName: 'NOUVEAU CLUB' });
+    expect(planFfkCards([unlinked], grid, base()).cards[0]).toMatchObject({ state: 'todo', reason: 'club pas relié', newFighter: false });
+  });
+
+  test('premier import d’un club entier : une carte à trancher par combattant, rien créé d’office', () => {
+    const ex = { ...base(), fighters: [] };
+    const rows = [row({ lastName: 'UN', firstName: 'A' }), row({ lastName: 'DEUX', firstName: 'B' }), row({ lastName: 'TROIS', firstName: 'C', discipline: 'kata', weightLabel: null })];
+    const plan = planFfkCards(rows, grid, ex);
+    expect(plan.cards.map((c) => [c.state, c.fighterId, c.reason, c.newFighter])).toEqual(rows.map(() => ['todo', null, NEW_FIGHTER, true]));
+    expect(plan.summary).toMatchObject({ todo: 3, auto: 0, creates: 0 });
+  });
+
+  test('plusieurs disciplines de combat alors que le réglage ne le permet pas : à trancher, la raison nomme la règle ; validée telle quelle → écrite', () => {
+    const k = row({ lastName: 'NOUVEAU', firstName: 'X' });
+    const b = row({ licence: k.licence, lastName: 'NOUVEAU', firstName: 'X', sheet: 'Boxe', discipline: 'shido-boxing' });
+    const plan = planFfkCards([k, b], grid, ruled({ multipleCombats: false }));
+    const reason = 'déroge aux règles : Une seule discipline de combat par combattant à cette compétition.';
+    expect(plan.cards[0]).toMatchObject({ state: 'todo', fighterId: null, value: null, newFighter: true, rejected: false, reason });
+
+    const value = initialValue(plan.cards[0]!, null);
+    expect(value.line.combats).toEqual(['karate', 'shido-boxing']);
+    // L’organisateur peut y déroger : la carte validée est acceptée, avec ses deux combats.
+    const validated = planFfkCards([k, b], grid, ruled({ multipleCombats: false }), validatedNew(k, value));
+    expect(validated.cards[0]).toMatchObject({ state: 'done', fighterId: 'new', reason: null, rejected: false });
+    expect(validated.cards[0]!.value!.line.combats).toEqual(['karate', 'shido-boxing']);
+    // Ou la corriger (une discipline décochée).
+    const fixed = planFfkCards([k, b], grid, ruled({ multipleCombats: false }), validatedNew(k, { ...value, line: { ...value.line, combats: ['karate'] } }));
+    expect(fixed.cards[0]).toMatchObject({ state: 'done', fighterId: 'new' });
+    // Réglage activé : la dérogation n’en est pas une, la carte n’est à trancher que comme nouveau combattant.
+    expect(planFfkCards([k, b], grid, ruled({ multipleCombats: true })).cards[0]).toMatchObject({ state: 'todo', reason: NEW_FIGHTER });
+  });
+
+  test('catégorie non ouverte : un rapprochement d’office qui y inscrirait le combattant est à trancher ; validé → écrit', () => {
+    // Fiche sans règlement : l’export le complète (jiyu), ce qui l’inscrirait en Karaté jiyu, fermé chez les cadettes.
+    const ex = base();
+    ex.fighters[0] = fighter('f1', 'c1', 'MARTIN', 'Léa', { line: { ruleset: null } });
+    const r = row({ ruleset: 'jiyu' });
+    const closed = new Set(['cadet|F|karate|jiyu']);
+    const plan = planFfkCards([r], grid, ruled({ multipleCombats: true, closed }, ex));
+    expect(cardOf(plan, r)).toMatchObject({
+      state: 'todo', fighterId: null, value: null, sure: 'f1', newFighter: false, rejected: false,
+      reason: 'déroge aux règles : Catégorie non ouverte à cette compétition (Karaté jiyu).',
+    });
+    expect(plan.orphans).toEqual([]);
+    const value = initialValue(cardOf(plan, r), ex.fighters[0]!);
+    const validated = planFfkCards([r], grid, ruled({ multipleCombats: true, closed }, ex), { cards: { [`L:${r.licence}`]: { kind: 'validated', fighterId: 'f1', value, version: 'f1:1' } } });
+    expect(cardOf(validated, r)).toMatchObject({ state: 'done', fighterId: 'f1', rejected: false, reason: null });
+    // Sans case fermée : sans problème.
+    expect(cardOf(planFfkCards([r], grid, ruled({ multipleCombats: true }, ex)), r)).toMatchObject({ state: 'auto', fighterId: 'f1' });
+  });
+
+  test('fiche qui déroge déjà de la même façon (exception acceptée) : pas signalée à chaque import ; une dérogation nouvelle l’est', () => {
+    const ex = base();
+    ex.fighters[0] = fighter('f1', 'c1', 'MARTIN', 'Léa', { licence: 'LM', line: { combats: ['karate', 'shido-boxing'] } });
+    const k = row({ licence: 'LM' });
+    const b = row({ licence: 'LM', sheet: 'Boxe', discipline: 'shido-boxing' });
+    // Déjà inscrite en karaté et en boxing, dans une catégorie fermée : rien de nouveau, sans problème.
+    const closed = new Set(['cadet|F|karate|jiyu', 'cadet|F|shido-boxing|jiyu']);
+    expect(cardOf(planFfkCards([k, b], grid, ruled({ closed }, ex)), k)).toMatchObject({ state: 'auto', fighterId: 'f1', reason: null });
+
+    // Un nouveau combattant aux mêmes valeurs, lui, est signalé (aucune fiche n’avait cette exception).
+    const fresh = row({ lastName: 'NOUVEAU', firstName: 'X', licence: 'LN' });
+    const freshB = row({ lastName: 'NOUVEAU', firstName: 'X', licence: 'LN', sheet: 'Boxe', discipline: 'shido-boxing' });
+    const reasons = cardOf(planFfkCards([fresh, freshB], grid, ruled({ closed }, ex)), fresh).reason;
+    expect(reasons).toBe('déroge aux règles : Une seule discipline de combat par combattant à cette compétition. Catégorie non ouverte à cette compétition (Karaté jiyu). Catégorie non ouverte à cette compétition (Shido-boxing jiyu).');
   });
 });

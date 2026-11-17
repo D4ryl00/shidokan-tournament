@@ -1,6 +1,7 @@
 import { Button, Group, Paper, Stack, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
-import type { FfkCard, FfkCardChoice, FfkSearchFighter } from '../../../domain/ffk-plan/plan.js';
+import { NEW_FIGHTER, type FfkCard, type FfkCardChoice, type FfkSearchFighter } from '../../../domain/ffk-plan/plan.js';
+import { closedBreaks, RULES_BROKEN } from '../../../domain/ffk-plan/rules.js';
 import { ffkCardDiffs, missingFields, type FfkCardValue } from '../../../domain/ffk-plan/values.js';
 import type { CategoryGrid } from '../../../domain/types.js';
 import { ageBandLabel, SEX_LABELS } from '../../labels.js';
@@ -149,6 +150,13 @@ export function FighterCard({ card, state, draft, choice, open, env, actions }: 
                 <SearchResults query={query} chosen={chosen} env={env} onPick={pickAndClear}
                   shown={new Set([...card.candidates.map((c) => c.fighterId), ...(fighter ? [fighter.fighterId] : [])])} />
               )}
+              {/* Aucune fiche trouvée : c’est peut-être un inscrit dont le nom ou le prénom a été mal saisi. */}
+              {card.newFighter && (chosen === null || chosen === 'new') && (state === 'todo' || state === 'pending') && (
+                <Text size="sm" c="var(--sk-warn-text)" data-testid="ffk-card-new">
+                  Vérifiez qu’il n’est pas déjà inscrit sous un autre nom (faute dans le nom ou le prénom) : « Pas dans la liste ? » cherche parmi les inscrits.
+                  Sinon, « ➕ Nouveau combattant » puis « Valider la carte » le crée.
+                </Text>
+              )}
             </Stack>
 
             {formShown ? (
@@ -202,7 +210,12 @@ function hint(card: FfkCard, state: PageCardState, chosen: string | 'new' | null
   if (state === 'auto') return 'Sera importée telle quelle. Cliquez sur le combattant pour voir ou modifier les champs ; un second clic les replie.';
   if (state === 'done') return 'Validée. Cliquez sur le combattant pour voir ou modifier les champs.';
   if (chosen === null) {
-    const why = !stale && card.reason && card.reason !== 'combattant pas choisi' ? ` (${card.reason})` : '';
+    // Dérogation aux règles de la compétition : l’organisateur peut corriger la carte ou la valider telle quelle.
+    if (!stale && card.reason?.startsWith(RULES_BROKEN)) {
+      return `Déroge aux règles de la compétition : ${card.reason.slice(RULES_BROKEN.length)} Choisissez le combattant pour ouvrir la carte, puis corrigez-la ou validez-la telle quelle ; sinon cette ligne n’est pas importée.`;
+    }
+    // Nouveau combattant : dit au-dessus (« Vérifiez qu’il n’est pas déjà inscrit… »).
+    const why = !stale && card.reason && card.reason !== 'combattant pas choisi' && card.reason !== NEW_FIGHTER ? ` (${card.reason.replace(/\.$/, '')})` : '';
     return `Choisissez le combattant pour ouvrir la carte. Sinon cette ligne n’est pas importée${why}.`;
   }
   // Validée, mais refusée par l’aperçu (fiche modifiée depuis, combattant déjà retenu, club ou catégorie disparus, enregistrement refusé…).
@@ -239,6 +252,8 @@ function OpenForm({ card, working, fighter, env, actions, revertable, validated 
     mode: 'organiser', multipleCombats: true, closed: env.closed, ageBands: env.ageBands, weightClasses: env.weightClasses, saved: fighter?.line ?? null,
   };
   const missing = missingFields(working.value);
+  // Catégories non ouvertes où la carte l’inscrirait (et où sa fiche ne l’était pas déjà) ; plusieurs combats : dit par le formulaire.
+  const closed = closedBreaks(working.value.line, fighter?.line ?? null, env.closed);
   // Verrous du combattant choisi (combats commencés). Sans club et sans combat commencé, il n’est pas verrouillé : la carte lui en donne un.
   const locked = fighter && !fighter.editable && (fighter.clubId !== null || fighter.startedDisciplines.length > 0);
   return (
@@ -247,6 +262,11 @@ function OpenForm({ card, working, fighter, env, actions, revertable, validated 
         diffs={ffkCardDiffs(card, fighter)} clubs={env.clubs} weightIssue={card.weightIssue} showLicenceHint={!!fighter?.licence}
         oneCombatPerDay={!env.multipleCombats}
         disabled={locked ? { locked: true, partly: fighter.partlyEditable, started: fighter.startedDisciplines } : undefined} />
+      {closed.length > 0 && (
+        <Text size="sm" c="var(--sk-warn-text)" data-testid="ffk-card-closed">
+          {closed.join(' ')} « Valider la carte » l’inscrit quand même : la ligne ira en Réaffectation.
+        </Text>
+      )}
       <Group justify="space-between" gap="xs" wrap="wrap">
         <Group gap="xs">
           <Button variant="subtle" color="red" size="compact-sm" onClick={actions.skip}>Écarter cette ligne</Button>

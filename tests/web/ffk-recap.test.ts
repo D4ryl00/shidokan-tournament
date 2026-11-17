@@ -27,6 +27,7 @@ const existing = (): ExistingData => ({
   clubs: [{ id: 'c1', name: 'Tani Dojo', ffkEntity: null, affiliationNumber: null }],
   fighters: [fighter('f1', 'MARTIN', 'Léa'), fighter('f2', 'DURAND', 'Zoé')],
   aliases: {},
+  rules: { multipleCombats: true, closed: new Set() },
 });
 function preview(rows: FfkRow[], choices: FfkChoices = {}): FfkPreview {
   const ex = existing();
@@ -42,17 +43,19 @@ describe('récapitulatif de l’import', () => {
     const skipped = row({ lastName: 'DURAND', firstName: 'ZOE' });
     const pending = row({ lastName: 'PETIT', firstName: 'PAUL' });
     const unlinked = row({ lastName: 'ROSSI', firstName: 'NINA', clubEntity: NOUVEAU, clubName: 'NOUVEAU CLUB' });
-    const p = preview([sure, skipped, pending, unlinked], {
+    const fresh = row({ lastName: 'NEUF', firstName: 'ANA' });
+    const p = preview([sure, skipped, pending, unlinked, fresh], {
       cards: { [`L:${skipped.licence}`]: { kind: 'skip' }, [`L:${pending.licence}`]: { kind: 'none' } },
     });
     const blocks = recap(p, { [`L:${pending.licence}`]: 'pending' }, grid, [{ id: 'c1', name: 'Tani Dojo', ffkEntity: TANI }]);
     const aside = blocks.find((b) => b.aside)!;
-    expect(aside.title).toBe('Laissé de côté : 1 club · 3 combattants');
+    expect(aside.title).toBe('Laissé de côté : 1 club · 4 combattants');
     expect(texts(aside)).toEqual([
       'Club NOUVEAU CLUB : pas relié, ses nouveaux combattants ne sont pas créés',
       'DURAND ZOE — Karaté : écartée',
       'PETIT PAUL — Karaté : carte modifiée mais pas validée',
       'ROSSI NINA — Karaté : club pas relié',
+      'NEUF ANA — Karaté : nouveau combattant : vérifiez qu’il n’est pas déjà inscrit sous un autre nom',
     ]);
     // Le nombre de combattants laissés de côté est celui que l’import renvoie (`leftAside` = à trancher + écartées).
     expect(cardsLeftAside(p)).toHaveLength(p.summary.todo + p.summary.skip);
@@ -80,9 +83,10 @@ describe('récapitulatif de l’import', () => {
     const small = row({ lastName: 'PETIT', firstName: 'P', ageBandCode: 'poussin', weightLabel: '-20' });
     const durand = row({ lastName: 'DURAND', firstName: 'ZOE', weightLabel: '-61' });
     const value = { line: { ...existing().fighters[1]!.line, weightClassId: 'cadet:F:-61', licence: durand.licence }, clubId: 'c1', publicNameHidden: false };
+    const created = { line: { ...value.line, lastName: 'PETIT', firstName: 'P', ageBandCode: 'poussin', weightClassId: 'poussin:F:-20', licence: small.licence }, clubId: 'c1', publicNameHidden: false };
     const p = preview([small, durand], {
       acceptedWeightClasses: ['poussin:F:-20'],
-      cards: { [`L:${durand.licence}`]: { kind: 'validated', fighterId: 'f2', value, version: 'f2:1' } },
+      cards: { [`L:${durand.licence}`]: { kind: 'validated', fighterId: 'f2', value, version: 'f2:1' }, [`L:${small.licence}`]: { kind: 'validated', fighterId: 'new', value: created } },
     });
     const blocks = recap(p, {}, grid, [{ id: 'c1', name: 'Tani Dojo', ffkEntity: TANI }]);
     expect(texts(blocks.find((b) => b.title === 'Catégories de poids créées'))).toEqual(['Poussins · Féminin · -20 kg']);

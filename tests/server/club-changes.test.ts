@@ -221,7 +221,7 @@ test('import FFK après une saisie du coach : pas de ligne créée, la ligne exi
   const lines: FfkLine[] = [['MARTIN LEA', null, 'L001', '0060893 VIDE DOJO', 'Feminine', 'Karate', 'Cadet', -61, null], BLANK];
   const file = buildFfkWorkbook({ 'Coupe Shidokan Karate': lines });
   const up = (await app.inject({ method: 'POST', url: `/api/competitions/${a.other}/ffk-imports`, payload: file, headers: { 'content-type': 'application/octet-stream', 'x-file-name': 'export.xlsx' } })).json();
-  const commit = await ffkCommit(app, `/api/competitions/${a.other}`, up);
+  const commit = await ffkCommit(app, `/api/competitions/${a.other}`, up, {}, { createNew: true });
   expect(commit.statusCode).toBe(200);
   expect(commit.json()).toMatchObject({ created: 1 }); // club relié d'office (même nom)
   expect(await a.fiche()).toMatchObject({ coachPhone: null });
@@ -238,7 +238,7 @@ test('import d’une fiche et import FFK d’un club neuf (relié à la main) ne
   expect(changes()).toHaveLength(0);
   const file = buildFfkWorkbook({ 'Coupe Shidokan Karate': [['MARTIN LEA', null, 'L001', '0060999 AUTRE DOJO', 'Feminine', 'Karate', 'Cadet', -61, null], BLANK] });
   const up = (await app.inject({ method: 'POST', url: `/api/competitions/${other}/ffk-imports`, payload: file, headers: { 'content-type': 'application/octet-stream', 'x-file-name': 'export.xlsx' } })).json();
-  const commit = await ffkCommit(app, `/api/competitions/${other}`, up, { clubLinks: { '0060999 AUTRE DOJO': neuf.id } });
+  const commit = await ffkCommit(app, `/api/competitions/${other}`, up, { clubLinks: { '0060999 AUTRE DOJO': neuf.id } }, { createNew: true });
   expect(commit.statusCode).toBe(200);
   expect(commit.json()).toMatchObject({ created: 1 });
   expect(changes()).toHaveLength(0);

@@ -12,7 +12,7 @@ import { clubAliases, clubDirectory, clubs, fighters, importMappings, registrati
 import { readWorkbook } from '../spreadsheet/read.js';
 import { closedSet } from './closed-categories.js';
 import { fighterLine, fighterLines, LineReadOnlyError, StaleLineError, writeClubLineInTx } from './club-entry.js';
-import { GridValidationError, getGrid } from './competitions.js';
+import { GridValidationError, getCompetitionSync, getGrid } from './competitions.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
 
 export interface SheetSetup {
@@ -100,6 +100,8 @@ export async function loadExisting(db: AppDb, competitionId: string): Promise<Ex
       editable: l.editable, partlyEditable: l.partlyEditable, startedDisciplines: l.startedDisciplines, fromFfk: ffkFighters.has(l.fighterId),
     })),
     aliases: Object.fromEntries(db.select().from(clubAliases).all().map((a) => [a.nameKey, a.clubEntity])),
+    // Les vraies règles de la compétition : une carte qui y déroge n'est pas importée d'office.
+    rules: { multipleCombats: !!getCompetitionSync(db, competitionId)?.settings.multipleCombatDisciplinesPerDay, closed: closedSet(db, competitionId) },
   };
 }
 
