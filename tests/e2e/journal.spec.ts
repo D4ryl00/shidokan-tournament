@@ -107,3 +107,17 @@ test('poste Table : pas d’onglet Journal', async ({ page }) => {
   await expect(page.getByRole('tab')).toHaveCount(0);
   await expect(page.getByRole('tab', { name: 'Journal', exact: true })).toHaveCount(0);
 });
+
+test('clôture de la pesée : lignes de détail comme la maquette (« NOM Prénom (Club) : absente »)', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe journal pesée');
+  const clubId = await addClub(request, id, 'Tani Dojo');
+  await register(request, id, clubId, 'LEROY');
+  expect((await request.post(`/api/competitions/${id}/registrations`, {
+    data: { clubId, lastName: 'NGUYEN', firstName: 'Paul', sex: 'M', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:M:-57', source: 'manual' },
+  })).ok()).toBe(true);
+  expect((await request.post(`/api/competitions/${id}/weigh-in/close`, { data: {} })).ok()).toBe(true);
+  await page.goto(`/competitions/${id}/journal`);
+  const closed = page.getByTestId('journal-entry').filter({ hasText: 'Pesée close' });
+  await closed.getByTestId('journal-toggle').click();
+  await expect(closed.getByTestId('journal-detail-line')).toHaveText(['LEROY Zoé (Tani Dojo) : absente', 'NGUYEN Paul (Tani Dojo) : absent']);
+});

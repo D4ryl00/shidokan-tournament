@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { journalSearchText, journalText } from '../../src/domain/journal/text.js';
+import { journalDetailLine, journalSearchText, journalText } from '../../src/domain/journal/text.js';
 import { actorLabel } from '../../src/domain/journal/types.js';
 
 test('combattant modifié : titre, changements', () => {
@@ -36,4 +36,25 @@ test('qui', () => {
 test('texte de recherche : sans accents, majuscules, qui et comment compris', () => {
   const s = journalSearchText({ action: 'fighter-added', data: { subject: 'DUPONT Léa (Shidokan Lyon)' }, actor: { kind: 'poste', poste: 'table' }, via: 'sur-place' });
   expect(s).toContain('LEA'); expect(s).toContain('LYON'); expect(s).toContain('TABLE CENTRALE'); expect(s).toContain('INSCRIPTION SUR PLACE');
+});
+
+// Lignes de détail d'un groupe, comme la maquette : le combattant, puis ce qui lui arrive (sans répéter le libellé).
+const S = 'LEROY Emma (Dojo Marseille)';
+test('ligne de détail : présence → « NOM Prénom (Club) : absente »', () => {
+  expect(journalDetailLine({ action: 'presence', data: { subject: S, changes: [{ label: 'Présence', before: 'inconnue', after: 'absente' }] } }))
+    .toEqual({ lead: S, outcome: 'absente', changes: [], detail: null });
+  expect(journalDetailLine({ action: 'presence', data: { subject: 'NGUYEN Paul (Karaté Club Nice)', changes: [{ label: 'Présence', before: 'inconnue', after: 'absent' }] } }).outcome).toBe('absent');
+});
+test('ligne de détail : poids → « NOM Prénom (Club) : poids 52,4 kg → 53,1 kg »', () => {
+  expect(journalDetailLine({ action: 'weigh-in', data: { subject: S, changes: [{ label: 'Poids', before: '52,4 kg', after: '53,1 kg' }] } }))
+    .toEqual({ lead: S, outcome: null, changes: [{ label: 'poids', before: '52,4 kg', after: '53,1 kg' }], detail: null });
+});
+test('ligne de détail : combattant ajouté, supprimé, modifié', () => {
+  expect(journalDetailLine({ action: 'fighter-added', data: { subject: S, detail: 'Kata Minimes F' } })).toEqual({ lead: S, outcome: 'ajouté', changes: [], detail: 'Kata Minimes F' });
+  expect(journalDetailLine({ action: 'fighter-removed', data: { subject: S } }).outcome).toBe('supprimé');
+  const grade = [{ label: 'Grade', before: '2e kyu', after: '1er kyu' }];
+  expect(journalDetailLine({ action: 'fighter-changed', data: { subject: S, changes: grade } })).toEqual({ lead: S, outcome: null, changes: grade, detail: null });
+});
+test('ligne de détail sans combattant : le titre de l’entrée', () => {
+  expect(journalDetailLine({ action: 'raw', data: { method: 'PUT', route: '/x' } })).toEqual({ lead: 'Opération non détaillée : PUT /x', outcome: null, changes: [], detail: null });
 });

@@ -3,7 +3,7 @@ import { useDebouncedValue } from '@mantine/hooks';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useParams } from 'react-router';
 import { plural } from '../../domain/plural.js';
-import { journalText } from '../../domain/journal/text.js';
+import { journalDetailLine, journalText } from '../../domain/journal/text.js';
 import { actorLabel, JOURNAL_TYPE_LABELS, JOURNAL_TYPES, JOURNAL_VIA_LABELS, type JournalChange, type JournalEntryView, type JournalType } from '../../domain/journal/types.js';
 import { useJournal } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
@@ -16,25 +16,30 @@ function Hl({ text, q }: { text: string; q: string }) {
   return <>{highlight(text, q).map((p, i) => (p.hit ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>))}</>;
 }
 
-/** « Poids : 52,4 kg → 53,1 kg », l'ancienne valeur barrée (rien avant : la nouvelle seule ; rien après : « — »). */
-function Change({ c, q }: { c: JournalChange; q: string }) {
+/** « Poids : 52,4 kg → 53,1 kg », l'ancienne valeur barrée (rien avant : la nouvelle seule ; rien après : « — »). `sep` : entre libellé et valeurs. */
+function Change({ c, q, sep = ' : ' }: { c: JournalChange; q: string; sep?: string }) {
   return (
     <>
-      <Hl text={`${c.label} : `} q={q} />
+      <Hl text={`${c.label}${sep}`} q={q} />
       {c.before !== null && <><span className="sk-journal-old"><Hl text={c.before} q={q} /></span><span className="sk-journal-arrow">→</span></>}
       <Hl text={c.after ?? '—'} q={q} />
     </>
   );
 }
 
-/** Ligne de détail d'une entrée regroupée (un combattant marqué absent à la clôture de la pesée…). */
+/** Ligne de détail d'une entrée regroupée, comme la maquette : « LEROY Emma (Dojo Marseille) : absente ». */
 function DetailLine({ e, q }: { e: JournalEntryView; q: string }) {
-  const t = journalText(e);
+  const l = journalDetailLine(e);
+  const ofSubject = !!e.data.subject && l.lead === e.data.subject;
+  const parts = [
+    ...(l.outcome ? [<Hl key="o" text={l.outcome} q={q} />] : []),
+    ...l.changes.map((c, i) => <Change key={`c${i}`} c={c} q={q} sep={ofSubject ? ' ' : ' : '} />),
+    ...(l.detail ? [<Hl key="d" text={l.detail} q={q} />] : []),
+  ];
   return (
     <div data-testid="journal-detail-line">
-      <Hl text={t.title} q={q} />
-      {t.changes.map((c, i) => <span key={i}> · <Change c={c} q={q} /></span>)}
-      {t.detail && <> · <Hl text={t.detail} q={q} /></>}
+      <Hl text={l.lead} q={q} />
+      {parts.map((p, i) => <span key={i}>{i === 0 && ofSubject ? ' : ' : ' · '}{p}</span>)}
     </div>
   );
 }

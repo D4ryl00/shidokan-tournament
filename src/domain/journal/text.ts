@@ -43,6 +43,37 @@ export function journalText(e: Pick<JournalEntryView, 'action' | 'data'>): { tit
   return { title, detail, changes };
 }
 
+/**
+ * Ligne de détail d'une entrée regroupée, comme la maquette : le combattant, puis ce qui lui arrive, sans répéter le libellé
+ * (« LEROY Emma (Dojo Marseille) : absente », « … : poids 52,4 kg → 53,1 kg », « … : ajouté · Kata Minimes F »).
+ * Le genre est déjà dans la valeur recopiée (« absente » / « absent », écrite d'après le sexe du combattant).
+ * Sans combattant : le titre de l'entrée, ses changements et son détail.
+ */
+export function journalDetailLine(e: Pick<JournalEntryView, 'action' | 'data'>): { lead: string; outcome: string | null; changes: JournalChange[]; detail: string | null } {
+  const d = e.data;
+  const changes = d.changes ?? [];
+  const detail = d.detail ?? null;
+  if (d.subject) {
+    switch (e.action) {
+      case 'presence': {
+        const p = changes.find((c) => c.label === 'Présence');
+        if (p) return { lead: d.subject, outcome: p.after ?? '—', changes: changes.filter((c) => c !== p), detail };
+        break;
+      }
+      case 'weigh-in':
+        return { lead: d.subject, outcome: null, changes: changes.map((c) => (c.label === 'Poids' ? { ...c, label: 'poids' } : c)), detail };
+      case 'fighter-added':
+        return { lead: d.subject, outcome: 'ajouté', changes, detail };
+      case 'fighter-removed':
+        return { lead: d.subject, outcome: 'supprimé', changes, detail };
+      case 'fighter-changed':
+        return { lead: d.subject, outcome: null, changes, detail };
+    }
+  }
+  const t = journalText(e);
+  return { lead: t.title, outcome: null, changes: t.changes, detail: t.detail };
+}
+
 /** Texte de recherche : titre, détail, changements, qui et comment, sans accents ni casse. */
 export function journalSearchText(e: Pick<JournalEntryView, 'action' | 'data' | 'actor' | 'via'>): string {
   const t = journalText(e);
