@@ -18,6 +18,9 @@ export async function rebaseOnto(db: AppDb, dbPath: string, raw: unknown): Promi
     throw new PackageError((raw as Partial<SyncPackage> | null)?.format === 'shidokan-competition' ? 'Ce fichier est celui d’une autre compétition.' : 'Ce fichier n’est pas une compétition exportée par l’application.');
   }
   const pkg = validatePackage(db, raw);
+  // Jamais de journal sur un portable de zone : un fichier exporté du PC principal (clé USB) le contient ; sans lui, l'import vide
+  // aussi le journal de cette compétition ici.
+  delete pkg.tables.journal_entries;
   if (link.mainInstanceId && pkg.from.instanceId !== link.mainInstanceId) throw new PackageError('Cette copie ne vient pas du PC principal relié à ce portable.');
   if (link.copyExportedAt && pkg.exportedAt < link.copyExportedAt) throw new ZoneLinkError(409, 'Cette copie est plus ancienne que celle de ce portable : rien n’a changé.');
   await importPackage(db, dbPath, pkg, { id: pkg.from.instanceId, name: MAIN_NAME });

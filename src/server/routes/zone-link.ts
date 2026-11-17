@@ -116,7 +116,7 @@ export async function zoneLinkRoutes(app: FastifyInstance, { db, dbPath }: { db:
       const body = req.body as { format?: unknown } | null | undefined;
       const pkg = body && typeof body === 'object' && 'format' in body
         ? body
-        : await fromMain<SyncPackage>(link.mainUrl, `/api/competitions/${encodeURIComponent(link.competitionId)}/export.json`);
+        : await fromMain<SyncPackage>(link.mainUrl, `/api/competitions/${encodeURIComponent(link.competitionId)}/export.json?zone=1`);
       return rebaseOnto(db, dbPath, pkg);
     });
   });

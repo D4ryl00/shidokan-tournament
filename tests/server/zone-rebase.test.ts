@@ -89,3 +89,21 @@ test('fichier d’une autre compétition → 400 ; hors zone autonome → 409', 
   await f.onLaptop('POST', '/api/zone-link/online');
   expect((await refresh()).statusCode).toBe(409);
 });
+
+const laptopJournal = () => (f.laptopDb.$client.prepare('select count(*) as n from journal_entries').get() as { n: number }).n;
+const mainJournal = async () => ((await f.onMain('GET', `${f.base}/journal`)).json() as { total: number }).total;
+
+test('jamais de journal sur le portable : copie du lien, puis copie plus récente par le réseau et par fichier', async () => {
+  expect(await mainJournal()).toBeGreaterThan(0);
+  // Copie du lien (faite par mainAndLaptop).
+  expect(laptopJournal()).toBe(0);
+  await f.onMain('PUT', `${f.base}/categories/${f.a54.id}/results/w1-0`, RESULT);
+  expect((await refresh()).statusCode).toBe(200);
+  expect(laptopJournal()).toBe(0);
+  // Le fichier exporté du PC principal (clé USB) contient le journal : il n'entre pas sur le portable.
+  await f.onMain('PUT', `${f.base}/categories/${f.a54.id}/results/w1-1`, RESULT);
+  const pkg = (await f.onMain('GET', `${f.base}/export.json`)).json() as { tables: Record<string, unknown[]> };
+  expect(pkg.tables.journal_entries!.length).toBeGreaterThan(0);
+  expect((await refresh(pkg)).statusCode).toBe(200);
+  expect(laptopJournal()).toBe(0);
+});
