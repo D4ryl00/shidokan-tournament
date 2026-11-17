@@ -297,3 +297,9 @@ test('finales : lecture permise à la Table centrale, écriture réservée à l�
   expect((await orga('POST', `${base}/launch/reopen`, { waveId: null })).statusCode).toBe(204);
   expect((await orga('PUT', `${base}/finals/zone`, put)).statusCode).toBe(200);
 });
+
+test('GET journal : organisateur oui, Table et Zone non', () => {
+  expect(routeAccess(user('table'), 'GET', '/api/competitions/:id/journal')).toBe('deny');
+  expect(routeAccess(user('zone'), 'GET', '/api/competitions/:id/journal')).toBe('deny');
+  expect(routeAccess(user('organisateur'), 'GET', '/api/competitions/:id/journal')).toBe('allow');
+});

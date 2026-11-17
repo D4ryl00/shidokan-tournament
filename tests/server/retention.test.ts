@@ -136,3 +136,13 @@ test('archivage RGPD efface le lien Google', () => {
   expect(one(db, "select archived, google_contact_id from club_directory where id = 'ancien'")).toEqual({ archived: 1, google_contact_id: null });
   expect(one(db, "select archived, google_contact_id from club_directory where id = 'deja'")).toEqual({ archived: 1, google_contact_id: null });
 });
+
+test('la purge efface le journal de la compétition expirée, pas celui des autres', () => {
+  db = openDb(tmpDbPath());
+  seedCompetition(db, 'old', '2026-11-22');
+  seedCompetition(db, 'kept', '2027-06-01');
+  for (const id of ['old', 'kept']) db.$client.prepare("insert into journal_entries (id, competition_id, seq, type, action, via, at, actor_json, data_json, search_text) values (?, ?, 1, 'competition', 'competition-created', 'autre', '2027-01-01T00:00:00.000Z', '{}', '{}', '')").run(`j-${id}`, id);
+  purgeExpiredData(db, tmpDbPath(), NOW);
+  expect(count(db, 'journal_entries', 'old')).toBe(0);
+  expect(count(db, 'journal_entries', 'kept')).toBe(1);
+});

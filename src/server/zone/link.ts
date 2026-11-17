@@ -109,7 +109,7 @@ async function copyNow(db: AppDb, dbPath: string, fetchImpl: typeof fetch): Prom
   if (before) return fail(before, !getZoneLink(db)?.autonomous);
   let pkg: SyncPackage;
   try {
-    pkg = await fromMain<SyncPackage>(link.mainUrl, `/api/competitions/${encodeURIComponent(link.competitionId)}/export.json`, {}, fetchImpl);
+    pkg = await fromMain<SyncPackage>(link.mainUrl, `/api/competitions/${encodeURIComponent(link.competitionId)}/export.json?zone=1`, {}, fetchImpl);
   } catch (e) {
     if ((e as { statusCode?: number }).statusCode === 404) return fail('La compétition a été supprimée sur le PC principal : cette copie n’est plus mise à jour ; vous pouvez la supprimer.');
     return fail((e as Error).message);

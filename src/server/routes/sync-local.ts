@@ -127,10 +127,10 @@ export async function syncLocalRoutes(app: FastifyInstance, { db, dbPath }: { db
 
 /** Les deux rôles : échange d'une compétition par fichier (sans internet). */
 export async function syncFileRoutes(app: FastifyInstance, { db, dbPath, role }: { db: AppDb; dbPath: string; role: InstanceRole }) {
-  app.get<{ Params: { id: string } }>('/api/competitions/:id/export.json', async (req, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { zone?: string } }>('/api/competitions/:id/export.json', async (req, reply) => {
     if (!exists(db, req.params.id)) throw new NotFoundError('Compétition introuvable');
     // L'empreinte permet à un portable de zone de ne pas réimporter une copie inchangée.
-    const pkg = { ...buildPackage(db, req.params.id, { handOver: false, role }), fingerprint: competitionFingerprint(db, req.params.id) };
+    const pkg = { ...buildPackage(db, req.params.id, { handOver: false, role, withJournal: req.query.zone !== '1' }), fingerprint: competitionFingerprint(db, req.params.id) };
     const name = String(pkg.tables.competitions![0]!.name).normalize('NFD').replace(/[^\w-]+/g, '-').replace(/-+/g, '-').slice(0, 60);
     return reply.header('Content-Disposition', `attachment; filename="competition-${name}.json"`).send(pkg);
   });

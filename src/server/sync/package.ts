@@ -86,12 +86,14 @@ const columnsOf = (db: AppDb, table: string) => (db.$client.prepare('select name
 const pkOf = (db: AppDb, table: string) => columnsOf(db, table).filter((c) => c.pk > 0).sort((a, b) => a.pk - b.pk).map((c) => c.name);
 const competitionColumn = (table: string) => (table === 'competitions' ? 'id' : 'competition_id');
 
-export function buildPackage(db: AppDb, competitionId: string, opts: { handOver: boolean; role: InstanceRole }): SyncPackage {
+export function buildPackage(db: AppDb, competitionId: string, opts: { handOver: boolean; role: InstanceRole; withJournal?: boolean }): SyncPackage {
   const me = getInstance(db);
   const tables: SyncPackage['tables'] = {};
   // Ordre d'insertion explicite : l'import réinsère les lignes dans cet ordre, et l'historique (cascade) comme les réaffectations
   // (la plus récente d'un combattant) se lisent dans l'ordre du `rowid`.
   for (const t of PACKAGE_TABLES) {
+    // Un portable de zone ne reçoit jamais le journal.
+    if (t === 'journal_entries' && opts.withJournal === false) continue;
     tables[t] = db.$client.prepare(`select * from "${t}" where ${competitionColumn(t)} = ? order by rowid`).all(competitionId) as Record<string, unknown>[];
   }
   tables.competitions = tables.competitions!.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => !OWNER_COLUMNS.includes(k))));
@@ -112,9 +114,9 @@ export function buildPackage(db: AppDb, competitionId: string, opts: { handOver:
  * et retour, calculée après le changement : le PC garde celle de la dernière version qu'il connaît.
  */
 export function competitionFingerprint(db: AppDb, competitionId: string): string {
-  const { tables } = buildPackage(db, competitionId, { handOver: false, role: 'local' });
+  const { tables } = buildPackage(db, competitionId, { handOver: false, role: 'local', withJournal: false });
   const ignored = new Set(['version', 'updated_at']);
-  const canonical = PACKAGE_TABLES.map((t) => {
+  const canonical = PACKAGE_TABLES.filter((t) => t !== 'journal_entries').map((t) => {
     // age_links est renumérotée à chaque réception : son numéro de ligne ne compte pas, seul son contenu.
     const pk = t === 'age_links' ? [] : pkOf(db, t);
     const rows = (tables[t] ?? []).map((r) => Object.keys(r).filter((k) => !ignored.has(k) && !(t === 'age_links' && k === 'id')).sort().map((k) => [k, r[k] ?? null]));

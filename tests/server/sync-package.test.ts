@@ -5,7 +5,7 @@ import { buildApp } from '../../src/server/app.js';
 import { closeDb, openDb, type AppDb } from '../../src/server/db/client.js';
 import { backupDir } from '../../src/server/repositories/backups.js';
 import { syncCategories } from '../../src/server/repositories/categories.js';
-import { buildPackage, importPackage, PACKAGE_TABLES } from '../../src/server/sync/package.js';
+import { buildPackage, competitionFingerprint, importPackage, PACKAGE_TABLES } from '../../src/server/sync/package.js';
 import { runJournal } from '../../src/server/journal/context.js';
 import { recordJournal } from '../../src/server/journal/write.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
@@ -358,4 +358,26 @@ test('référence vers une zone d’une autre compétition refusée', async () =
   await expect(importPackage(b.db, b.dbPath, { ...pkg, tables: { ...pkg.tables, wave_finals: [row] } }, null)).rejects.toThrow('autre compétition');
   const foreignWave = { ...row, finals_zone_id: null, wave_key: `wave-${b.id}` };
   await expect(importPackage(b.db, b.dbPath, { ...pkg, tables: { ...pkg.tables, wave_finals: [foreignWave] } }, null)).rejects.toThrow('autre compétition');
+});
+
+test('journal : dans le paquet et la reprise ; pas pour un portable de zone ; hors empreinte', async () => {
+  const { db, id } = await seeded();
+  const base = (db.$client.prepare('select count(*) as n from journal_entries where competition_id = ?').get(id) as { n: number }).n;
+  recordJournal(db, id, { type: 'inscription', action: 'fighter-added', data: { subject: 'A' } });
+  expect(buildPackage(db, id, { handOver: true, role: 'local' }).tables.journal_entries).toHaveLength(base + 1);
+  expect(buildPackage(db, id, { handOver: false, role: 'local', withJournal: false }).tables.journal_entries).toBeUndefined();
+  const before = competitionFingerprint(db, id);
+  recordJournal(db, id, { type: 'mail', action: 'raw', data: {} });
+  expect(competitionFingerprint(db, id)).toBe(before);
+});
+
+test('export.json?zone=1 : sans journal ; sans ?zone, avec', async () => {
+  const dbPath = tmpDbPath();
+  const app = await buildApp({ dbPath });
+  const { competitionId: id } = await seedDev(app, { seed: 3 });
+  const full = (await app.inject({ method: 'GET', url: `/api/competitions/${id}/export.json` })).json();
+  const zone = (await app.inject({ method: 'GET', url: `/api/competitions/${id}/export.json?zone=1` })).json();
+  await app.close();
+  expect(full.tables.journal_entries.length).toBeGreaterThan(0);
+  expect(zone.tables.journal_entries).toBeUndefined();
 });

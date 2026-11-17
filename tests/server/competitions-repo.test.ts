@@ -122,3 +122,10 @@ test('changer les règles par défaut ne touche pas les compétitions déjà cr�
   expect(after.settings).toEqual(before.settings);
   expect(rulesView(after.settings)).toEqual(def);
 });
+
+test('création : première entrée « Compétition créée »', async () => {
+  const db = openDb(tmpDbPath());
+  const c = await createCompetition(db, { name: NAME, date: '2026-11-22' });
+  const rows = db.$client.prepare('select seq, type, action from journal_entries where competition_id = ?').all(c.id);
+  expect(rows).toEqual([{ seq: 1, type: 'competition', action: 'competition-created' }]);
+});
