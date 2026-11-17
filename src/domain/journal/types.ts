@@ -87,10 +87,13 @@ export interface JournalChange {
 /** Les étapes suivantes en ajoutent. */
 export type JournalAction =
   | 'competition-created' | 'journal-opened' | 'fighter-added' | 'fighter-removed'
-  | 'fighter-changed' | 'weigh-in' | 'presence' | 'weigh-in-closed' | 'raw';
+  | 'fighter-changed' | 'weigh-in' | 'presence' | 'weigh-in-closed' | 'raw'
+  | 'ffk-import' | 'weight-class-added' | 'club-linked' | 'ffk-unconfirmed';
 
 export interface JournalData {
   subject?: string;
+  /** Sexe du combattant, recopié pour accorder les lignes de détail. */
+  sex?: 'F' | 'M';
   detail?: string;
   changes?: JournalChange[];
   route?: string;

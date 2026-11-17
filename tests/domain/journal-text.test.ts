@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { journalDetailLine, journalSearchText, journalText } from '../../src/domain/journal/text.js';
+import { ffkImportDetail, journalDetailLine, journalSearchText, journalText } from '../../src/domain/journal/text.js';
 import { actorLabel } from '../../src/domain/journal/types.js';
 
 test('combattant modifié : titre, changements', () => {
@@ -59,4 +59,32 @@ test('ligne de détail : combattant ajouté, supprimé, modifié', () => {
 });
 test('ligne de détail sans combattant : le titre de l’entrée', () => {
   expect(journalDetailLine({ action: 'raw', data: { method: 'PUT', route: '/x' } })).toEqual({ lead: 'Opération non détaillée : PUT /x', outcome: null, changes: [], detail: null });
+});
+
+test('import FFK : titre et détail', () => {
+  const t = journalText({ action: 'ffk-import', data: { subject: 'inscriptions-ffk.xlsx', detail: '2 ajoutés · 1 club relié' } });
+  expect(t.title).toBe('Import FFK · inscriptions-ffk.xlsx');
+  expect(t.detail).toBe('2 ajoutés · 1 club relié');
+  expect(ffkImportDetail({ added: 212, changed: 9, removed: 3, unconfirmed: 2, leftAside: 4, weightClasses: 2, clubs: 3 }))
+    .toBe('212 ajoutés, 9 modifiés, 3 supprimés · 2 gardés hors export · 4 laissés de côté · 2 catégories de poids créées · 3 clubs reliés');
+  expect(ffkImportDetail({ added: 1, changed: 0, removed: 0, unconfirmed: 0, leftAside: 0, weightClasses: 1, clubs: 0 })).toBe('1 ajouté · 1 catégorie de poids créée');
+  expect(ffkImportDetail({ added: 0, changed: 0, removed: 0, unconfirmed: 0, leftAside: 0, weightClasses: 0, clubs: 0 })).toBe('aucun changement');
+});
+
+test('lignes de détail accordées au genre recopié', () => {
+  expect(journalDetailLine({ action: 'fighter-added', data: { subject: 'ROUX Chloé (Dojo Marseille)', sex: 'F', detail: 'Karaté Jiyu' } }))
+    .toEqual({ lead: 'ROUX Chloé (Dojo Marseille)', outcome: 'ajoutée', changes: [], detail: 'Karaté Jiyu' });
+  expect(journalDetailLine({ action: 'fighter-removed', data: { subject: 'PETIT Nathan (Dojo Marseille)', sex: 'M', detail: 'absent de l’export FFK' } }).outcome).toBe('supprimé');
+  expect(journalDetailLine({ action: 'fighter-removed', data: { subject: 'LEROY Emma', sex: 'F' } }).outcome).toBe('supprimée');
+  // Entrée écrite avant le genre recopié : masculin.
+  expect(journalDetailLine({ action: 'fighter-added', data: { subject: 'MOREAU Lucas' } }).outcome).toBe('ajouté');
+  expect(journalDetailLine({ action: 'ffk-unconfirmed', data: { subject: 'SIMON Jade (Shidokan Lyon)', sex: 'F' } }))
+    .toEqual({ lead: 'SIMON Jade (Shidokan Lyon)', outcome: 'gardée, absente de l’export FFK', changes: [], detail: null });
+});
+
+test('catégorie créée, club relié', () => {
+  expect(journalText({ action: 'weight-class-added', data: { subject: 'Benjamins F -30 kg' } }).title).toBe('Catégorie de poids créée · Benjamins F -30 kg');
+  expect(journalText({ action: 'club-linked', data: { subject: 'Dojo Marseille', detail: 'au lieu de Dojo Marseille Nord' } }))
+    .toMatchObject({ title: 'Dojo Marseille · relié à la FFK', detail: 'au lieu de Dojo Marseille Nord' });
+  expect(journalDetailLine({ action: 'club-linked', data: { subject: 'Dojo Marseille' } }).lead).toBe('Dojo Marseille · relié à la FFK');
 });
