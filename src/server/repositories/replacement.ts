@@ -30,6 +30,11 @@ import type { AppDb } from '../db/client.js';
 import { withoutRowMeta } from '../db/row-versions.js';
 import { categories, clubs, competitions, fighters, historyEntries, recasements, refusals, registrations, setAsideCases, waves } from '../db/schema.js';
 import { listWaves } from './waves.js';
+import { kgText } from '../../domain/club-form.js';
+import { subjectOf } from '../../domain/journal/fighter-diff.js';
+import { markJournalHandled } from '../journal/context.js';
+import { fighterSnapshot } from '../journal/fighters.js';
+import { recordJournal, withJournalGroup } from '../journal/write.js';
 import { launchedCategoryIds, launchedWaveKeys } from './launch-state.js';
 import type { Wave } from '../../domain/waves.js';
 import { CategoryLockedError, listCategories, markArranged, syncCategories } from './categories.js';
@@ -818,17 +823,53 @@ export async function setWeighIn(db: AppDb, competitionId: string, fighterId: st
   await requireWave(db, competitionId, data.waveId);
   // Vague vérifiée avant toute écriture (une vague inconnue n'enregistre pas le poids).
   const scope = data.waveId ? [...(await registrationsOfWave(db, competitionId, data.waveId))] : null;
-  if (data.weighInKg !== undefined) db.update(fighters).set({ weighInKg: data.weighInKg }).where(eq(fighters.id, fighterId)).run();
   // Un poids relevé vaut présence ; la présence se note sur les inscriptions du combattant.
   const presence = data.presence ?? (data.weighInKg !== undefined && data.weighInKg !== null ? 'present' : undefined);
-  if (presence) {
-    db.update(registrations)
-      .set({ presence })
-      .where(and(eq(registrations.fighterId, fighterId), scope ? inArray(registrations.id, scope) : undefined))
-      .run();
-  }
+  const changed = db.transaction((tx) => {
+    const t = tx as unknown as AppDb;
+    const own = () => t.select().from(registrations).where(and(eq(registrations.fighterId, fighterId), scope ? inArray(registrations.id, scope) : undefined)).all();
+    const presenceBefore = journalPresence(own());
+    if (data.weighInKg !== undefined) t.update(fighters).set({ weighInKg: data.weighInKg }).where(eq(fighters.id, fighterId)).run();
+    if (presence) {
+      t.update(registrations)
+        .set({ presence })
+        .where(and(eq(registrations.fighterId, fighterId), scope ? inArray(registrations.id, scope) : undefined))
+        .run();
+    }
+    const presenceAfter = journalPresence(own());
+    const weightChanged = data.weighInKg !== undefined && data.weighInKg !== f.weighInKg;
+    if (!weightChanged && presenceBefore === presenceAfter) return false;
+    const snapshot = fighterSnapshot(t, competitionId, fighterId);
+    const subject = snapshot ? subjectOf(snapshot) : `${f.lastName} ${f.firstName}`.trim();
+    if (weightChanged) {
+      recordJournal(t, competitionId, {
+        type: 'pesee', action: 'weigh-in', via: 'pesee',
+        data: { subject, changes: [{ label: 'Poids', before: weightText(f.weighInKg), after: weightText(data.weighInKg!) }] },
+      });
+    }
+    if (presenceBefore !== presenceAfter) {
+      recordJournal(t, competitionId, {
+        type: 'pesee', action: 'presence', via: 'pesee',
+        data: { subject, changes: [{ label: 'Présence', before: presenceText(presenceBefore, f.sex), after: presenceText(presenceAfter, f.sex) }] },
+      });
+    }
+    return true;
+  });
+  // Rien n'a changé : la requête est notée comme traitée (pas d'entrée brute).
+  if (!changed) markJournalHandled();
   await recomputeKeys(db, competitionId, mergedCategoryIds);
 }
+
+/** Présence d'un combattant sur les inscriptions concernées (hors « ne combat pas », sauf s'il n'en a pas d'autre). */
+function journalPresence(regs: { presence: Presence; withdrawnReason: string | null }[]): Presence {
+  const active = regs.filter((r) => !r.withdrawnReason);
+  return fighterPresence(active.length ? active : regs);
+}
+
+/** « 52,4 kg », « 53 kg » ; null si effacé. */
+const weightText = (kg: number | null): string | null => (kg === null ? null : `${kgText(kg)} kg`);
+
+const presenceText = (p: Presence, sex: string): string => (p === 'unknown' ? 'inconnue' : p === 'present' ? (sex === 'F' ? 'présente' : 'présent') : sex === 'F' ? 'absente' : 'absent');
 
 /**
  * Clôture de la pesée (avec une vague : seulement celle-ci). Un combattant déjà présent (inscription ajoutée après sa pesée,
@@ -843,11 +884,33 @@ export async function closeWeighIn(db: AppDb, competitionId: string, waveId?: st
   const unknown = regs.filter((r) => r.presence === 'unknown');
   const promote = unknown.filter((r) => present.has(r.fighterId)).map((r) => r.id);
   const absent = unknown.filter((r) => !present.has(r.fighterId));
-  if (promote.length) db.update(registrations).set({ presence: 'present' }).where(inArray(registrations.id, promote)).run();
-  if (absent.length) db.update(registrations).set({ presence: 'absent' }).where(inArray(registrations.id, absent.map((r) => r.id))).run();
   const markedAbsent = new Set(absent.map((r) => r.fighterId));
-  if (waveId) db.update(waves).set({ weighInClosed: true }).where(eq(waves.id, waveId)).run();
-  else db.update(competitions).set({ weighInClosed: true }).where(eq(competitions.id, competitionId)).run();
+  db.transaction((tx) => {
+    const t = tx as unknown as AppDb;
+    // Noms et sexes lus avant l'écriture (ils sont recopiés dans les lignes).
+    const waveName = waveId ? t.select({ name: waves.name }).from(waves).where(eq(waves.id, waveId)).get()?.name : undefined;
+    const lines = [...markedAbsent].map((fid) => {
+      const fighter = t.select().from(fighters).where(eq(fighters.id, fid)).get()!;
+      const snapshot = fighterSnapshot(t, competitionId, fid);
+      return { fighter, subject: snapshot ? subjectOf(snapshot) : `${fighter.lastName} ${fighter.firstName}`.trim() };
+    });
+    if (promote.length) t.update(registrations).set({ presence: 'present' }).where(inArray(registrations.id, promote)).run();
+    if (absent.length) t.update(registrations).set({ presence: 'absent' }).where(inArray(registrations.id, absent.map((r) => r.id))).run();
+    if (waveId) t.update(waves).set({ weighInClosed: true }).where(eq(waves.id, waveId)).run();
+    else t.update(competitions).set({ weighInClosed: true }).where(eq(competitions.id, competitionId)).run();
+    withJournalGroup(
+      t, competitionId,
+      { type: 'pesee', action: 'weigh-in-closed', via: 'pesee', data: { subject: waveName, detail: `${markedAbsent.size} marqué${markedAbsent.size > 1 ? 's' : ''} absent${markedAbsent.size > 1 ? 's' : ''}` } },
+      () => {
+        for (const { fighter, subject } of lines) {
+          recordJournal(t, competitionId, {
+            type: 'pesee', action: 'presence', via: 'pesee',
+            data: { subject, changes: [{ label: 'Présence', before: 'inconnue', after: presenceText('absent', fighter.sex) }] },
+          });
+        }
+      },
+    );
+  });
   await recomputeKeys(db, competitionId, mergedCategoryIds);
   return { markedAbsent: markedAbsent.size };
 }
