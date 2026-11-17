@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import type { JournalActor, JournalAction, JournalData, JournalType, JournalVia } from '../../domain/journal/types.js';
 import { journalSearchText } from '../../domain/journal/text.js';
 import type { AppDb } from '../db/client.js';
@@ -13,18 +14,19 @@ export interface NewJournalEntry {
   actor?: JournalActor;
 }
 
-/** Écrit une entrée (synchrone, dans la transaction en cours). Renvoie son identifiant. */
+/** Écrit une entrée (synchrone, dans la transaction en cours : `db` peut être l'objet transaction). Renvoie son identifiant. */
 export function recordJournal(db: AppDb, competitionId: string, e: NewJournalEntry): string {
   const ctx = currentJournal();
   const actor = e.actor ?? ctx?.actor ?? { kind: 'app' };
   const via = e.via ?? ctx?.via ?? 'autre';
   const id = crypto.randomUUID();
-  db.$client
-    .prepare(
-      `insert into journal_entries (id, competition_id, seq, parent_id, type, action, via, at, client_at, actor_json, data_json, search_text)
-       values (?, ?, (select coalesce(max(seq), 0) + 1 from journal_entries where competition_id = ?), ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?, ?)`,
-    )
-    .run(id, competitionId, competitionId, ctx?.parentId ?? null, e.type, e.action, via, e.clientAt ?? null, JSON.stringify(actor), JSON.stringify(e.data), journalSearchText({ action: e.action, data: e.data, actor, via }));
+  // Gabarit `sql` de drizzle : marche avec la base comme avec l'objet transaction (qui n'a pas de `$client`).
+  db.run(
+    sql`insert into journal_entries (id, competition_id, seq, parent_id, type, action, via, at, client_at, actor_json, data_json, search_text)
+        values (${id}, ${competitionId}, (select coalesce(max(seq), 0) + 1 from journal_entries where competition_id = ${competitionId}), ${ctx?.parentId ?? null},
+                ${e.type}, ${e.action}, ${via}, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ${e.clientAt ?? null}, ${JSON.stringify(actor)}, ${JSON.stringify(e.data)},
+                ${journalSearchText({ action: e.action, data: e.data, actor, via })})`,
+  );
   if (ctx) ctx.written += 1;
   return id;
 }

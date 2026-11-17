@@ -66,7 +66,7 @@ export async function createCompetition(db: AppDb, input: CompetitionInput): Pro
         settingsJson: JSON.stringify(settings),
       })
       .run();
-    recordJournal(db, id, { type: 'competition', action: 'competition-created', data: { subject: input.name } });
+    recordJournal(tx as unknown as AppDb, id, { type: 'competition', action: 'competition-created', data: { subject: input.name } });
     writeGrid(tx as unknown as AppDb, id, ffkDefaultGrid());
     defaultZoneNames(input.zoneCount ?? 2).forEach((name, order) =>
       tx.insert(zones).values({ id: crypto.randomUUID(), competitionId: id, name, sortOrder: order }).run(),

@@ -61,3 +61,18 @@ test('supprimée avec la compétition', async () => {
   await deleteCompetition(db, c1);
   expect(raw('select count(*) n from journal_entries where competition_id = ?', c1)[0]!.n).toBe(0);
 });
+
+test('écrit aussi avec l’objet transaction de drizzle (sans $client)', () => {
+  db.transaction((tx) => {
+    const t = tx as unknown as AppDb;
+    runJournal({}, () =>
+      withJournalGroup(t, c1, { type: 'pesee', action: 'weigh-in-closed', data: {} }, () => {
+        recordJournal(t, c1, { type: 'pesee', action: 'presence', data: { subject: 'X' } });
+      }),
+    );
+  });
+  const rows = raw('select seq, action, parent_id from journal_entries where competition_id = ? order by seq', c1);
+  expect(rows.slice(-2).map((r) => r.action)).toEqual(['weigh-in-closed', 'presence']);
+  expect(rows.at(-1)!.parent_id).not.toBeNull();
+  expect(rows.at(-1)!.seq).toBe(rows.at(-2)!.seq + 1);
+});
