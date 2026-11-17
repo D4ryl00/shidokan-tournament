@@ -1,3 +1,4 @@
+import { fieldPatch } from '../club-form-plan.js';
 import { lineToRows, WEIGHT_MISSING, type ClubFormLine } from '../club-form.js';
 import { startedLine, startedRemovedError } from '../club-line.js';
 import { DISCIPLINES } from '../disciplines.js';
@@ -200,6 +201,10 @@ function demoteHomonyms(cards: FfkCard[], fighters: ExistingFighter[]): void {
   }
 }
 
+/** La ligne de départ avec la valeur FFK de chaque champ en écart (le club, hors de la ligne, ne compte pas pour les règles). */
+const ffkSide = (line: ClubFormLine, diffs: FfkCardDiff[]): ClubFormLine =>
+  diffs.reduce((l, d) => (d.field === 'clubId' ? l : { ...l, ...fieldPatch(d.field, d.ffk) }), line);
+
 /** Libellés de « Ce qui change », tirés de la grille (et des catégories nouvelles) et des clubs. */
 function changeLabels(grid: CategoryGrid, added: WeightClass[], clubs: ExistingClub[]): ChangeLabels {
   return {
@@ -243,7 +248,8 @@ function planCard(draft: FfkCardDraft, choice: FfkCardChoice | undefined, fighte
     if (error) return { ...base, diffs, reason: error, rejected: state === 'done' };
     if (state === 'auto') {
       const breaks = ruleBreaks(value.line, saved?.line ?? null, known.grid, known.rules);
-      if (breaks.length) return { ...base, diffs, reason: `${RULES_BROKEN}${breaks.join(' ')}` };
+      // Nouveau combattant qui déroge : les deux raisons, le rappel « nouveau combattant » n’est pas perdu (récapitulatif).
+      if (breaks.length) return { ...base, diffs, reason: `${fighterId === 'new' ? `${NEW_FIGHTER} ; ` : ''}${RULES_BROKEN}${breaks.join(' ')}` };
     }
     return { ...base, state, fighterId, value, diffs, changes: cardChanges(saved, value, labels), version: saved?.version ?? null };
   };
@@ -274,7 +280,12 @@ function planCard(draft: FfkCardDraft, choice: FfkCardChoice | undefined, fighte
   const errors = unique(draft.rows.flatMap((r) => r.errors));
   if (errors.length) return { ...base, diffs, missing, reason: `ligne à vérifier : ${errors.join(' ')}` };
   const toFill = unique([...missing, ...diffs.map((d) => FIELD_LABELS[d.field])]);
-  if (toFill.length || draft.weightIssue) return { ...base, diffs, missing, reason: `reste à remplir : ${toFill.length ? toFill.join(', ') : FIELD_LABELS.weightClassId}` };
+  if (toFill.length || draft.weightIssue) {
+    // Un écart dont la valeur FFK dérogerait aux règles (discipline de combat ajoutée…) : la règle est dite dès l’aperçu, sans ouvrir la carte.
+    const ffkBreaks = saved && diffs.length ? ruleBreaks(ffkSide(value.line, diffs), saved.line, known.grid, known.rules) : [];
+    const also = ffkBreaks.length ? ` ; la valeur FFK ${RULES_BROKEN}${ffkBreaks.join(' ')}` : '';
+    return { ...base, diffs, missing, reason: `reste à remplir : ${toFill.length ? toFill.join(', ') : FIELD_LABELS.weightClassId}${also}` };
+  }
   const card = retained(target, value, saved, 'auto');
   // Aucune fiche trouvée : il est peut-être déjà inscrit sous un autre nom ; créé seulement une fois la carte validée.
   return target === 'new' && card.state === 'auto' ? { ...base, reason: NEW_FIGHTER } : card;

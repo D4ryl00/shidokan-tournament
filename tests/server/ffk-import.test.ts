@@ -530,7 +530,7 @@ test('aperçu sans effet, puis import, puis réimport sans doublon', async () =>
   expect((await preview(up, { acceptedWeightClasses: ['poussin:F:-20'] })).cards.map((c) => [c.exportLine.lastName, c.state, c.reason])).toEqual([
     ['MARTIN', 'todo', NEW_FIGHTER],
     ['MOREAU', 'todo', NEW_FIGHTER],
-    ['DURAND', 'todo', 'déroge aux règles : Une seule discipline de combat par combattant à cette compétition.'],
+    ['DURAND', 'todo', `${NEW_FIGHTER} ; déroge aux règles : Une seule discipline de combat par combattant à cette compétition.`],
     ['SANS', 'todo', expect.stringMatching(/^ligne à vérifier : /)],
     ['PETIT', 'todo', NEW_FIGHTER],
   ]);
@@ -752,7 +752,7 @@ test('plusieurs disciplines de combat sans le réglage : à trancher « déroge 
   }));
   const p = await preview(up);
   expect(cardOf(p, 'DOUBLE')).toMatchObject({
-    state: 'todo', fighterId: null, newFighter: true, reason: 'déroge aux règles : Une seule discipline de combat par combattant à cette compétition.',
+    state: 'todo', fighterId: null, newFighter: true, reason: `${NEW_FIGHTER} ; déroge aux règles : Une seule discipline de combat par combattant à cette compétition.`,
   });
   expect(cardOf(p, 'DOUBLE').exportLine.combats).toEqual(['karate', 'shido-boxing']);
   const choices = await withNew(up);
@@ -783,7 +783,7 @@ test('catégorie non ouverte : un nouveau combattant qui y entrerait est signal�
   const p = await preview(up);
   expect(cardOf(p, 'MARTIN')).toMatchObject({ state: 'auto', reason: null });
   expect(cardOf(p, 'NOUVELLE')).toMatchObject({
-    state: 'todo', newFighter: true, reason: 'déroge aux règles : Catégorie non ouverte à cette compétition (Karaté jiyu).',
+    state: 'todo', newFighter: true, reason: `${NEW_FIGHTER} ; déroge aux règles : Catégorie non ouverte à cette compétition (Karaté jiyu).`,
   });
   // Validée : l’organisateur peut y inscrire (la ligne ira en Réaffectation, comme depuis la fenêtre combattant).
   const choices = await withNew(up);

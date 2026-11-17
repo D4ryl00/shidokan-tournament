@@ -211,8 +211,10 @@ function hint(card: FfkCard, state: PageCardState, chosen: string | 'new' | null
   if (state === 'done') return 'Validée. Cliquez sur le combattant pour voir ou modifier les champs.';
   if (chosen === null) {
     // Dérogation aux règles de la compétition : l’organisateur peut corriger la carte ou la valider telle quelle.
-    if (!stale && card.reason?.startsWith(RULES_BROKEN)) {
-      return `Déroge aux règles de la compétition : ${card.reason.slice(RULES_BROKEN.length)} Choisissez le combattant pour ouvrir la carte, puis corrigez-la ou validez-la telle quelle ; sinon cette ligne n’est pas importée.`;
+    // (Nouveau combattant qui déroge : « nouveau combattant : … ; déroge aux règles : … », le rappel est dit au-dessus.)
+    const rules = !stale && card.reason ? card.reason.replace(`${NEW_FIGHTER} ; `, '') : null;
+    if (rules?.startsWith(RULES_BROKEN)) {
+      return `Déroge aux règles de la compétition : ${rules.slice(RULES_BROKEN.length)} Choisissez le combattant pour ouvrir la carte, puis corrigez-la ou validez-la telle quelle ; sinon cette ligne n’est pas importée.`;
     }
     // Nouveau combattant : dit au-dessus (« Vérifiez qu’il n’est pas déjà inscrit… »).
     const why = !stale && card.reason && card.reason !== 'combattant pas choisi' && card.reason !== NEW_FIGHTER ? ` (${card.reason.replace(/\.$/, '')})` : '';

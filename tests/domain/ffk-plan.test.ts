@@ -481,7 +481,8 @@ describe('nouveaux combattants et dérogations aux règles : « À trancher »',
     const k = row({ lastName: 'NOUVEAU', firstName: 'X' });
     const b = row({ licence: k.licence, lastName: 'NOUVEAU', firstName: 'X', sheet: 'Boxe', discipline: 'shido-boxing' });
     const plan = planFfkCards([k, b], grid, ruled({ multipleCombats: false }));
-    const reason = 'déroge aux règles : Une seule discipline de combat par combattant à cette compétition.';
+    // Nouveau combattant qui déroge : les deux raisons (le rappel « nouveau combattant » n’est pas perdu dans le récapitulatif).
+    const reason = `${NEW_FIGHTER} ; déroge aux règles : Une seule discipline de combat par combattant à cette compétition.`;
     expect(plan.cards[0]).toMatchObject({ state: 'todo', fighterId: null, value: null, newFighter: true, rejected: false, reason });
 
     const value = initialValue(plan.cards[0]!, null);
@@ -529,6 +530,30 @@ describe('nouveaux combattants et dérogations aux règles : « À trancher »',
     const fresh = row({ lastName: 'NOUVEAU', firstName: 'X', licence: 'LN' });
     const freshB = row({ lastName: 'NOUVEAU', firstName: 'X', licence: 'LN', sheet: 'Boxe', discipline: 'shido-boxing' });
     const reasons = cardOf(planFfkCards([fresh, freshB], grid, ruled({ closed }, ex)), fresh).reason;
-    expect(reasons).toBe('déroge aux règles : Une seule discipline de combat par combattant à cette compétition. Catégorie non ouverte à cette compétition (Karaté jiyu). Catégorie non ouverte à cette compétition (Shido-boxing jiyu).');
+    expect(reasons).toBe(`${NEW_FIGHTER} ; déroge aux règles : Une seule discipline de combat par combattant à cette compétition. Catégorie non ouverte à cette compétition (Karaté jiyu). Catégorie non ouverte à cette compétition (Shido-boxing jiyu).`);
+  });
+
+  test('écart dont la valeur FFK dérogerait aux règles (discipline de combat ajoutée par l’export) : la raison nomme la règle dès l’aperçu', () => {
+    const k = row();
+    const b = row({ licence: k.licence, sheet: 'Boxe', discipline: 'shido-boxing' });
+    // Fiche : karaté seul ; l’export ajoute la boxe dans une compétition à un seul combat.
+    const plan = planFfkCards([k, b], grid, ruled({ multipleCombats: false }));
+    expect(cardOf(plan, k)).toMatchObject({
+      state: 'todo', fighterId: null, sure: 'f1',
+      reason: 'reste à remplir : Disciplines ; la valeur FFK déroge aux règles : Une seule discipline de combat par combattant à cette compétition.',
+    });
+    // Réglage activé : un simple écart.
+    expect(cardOf(planFfkCards([k, b], grid, ruled({ multipleCombats: true })), k).reason).toBe('reste à remplir : Disciplines');
+
+    // R11 : la fiche avait déjà karaté et boxe (plus le kata, absent de l’export) : la valeur FFK n’introduit rien de nouveau.
+    const ex = base();
+    ex.fighters[0] = fighter('f1', 'c1', 'MARTIN', 'Léa', { line: { combats: ['karate', 'shido-boxing'], kata: true } });
+    expect(cardOf(planFfkCards([k, b], grid, ruled({ multipleCombats: false }, ex)), k).reason).toBe('reste à remplir : Disciplines');
+    // Une catégorie non ouverte que la valeur FFK ferait rejoindre (autre tranche d’âge) est nommée aussi.
+    const junior = row({ licence: 'LJ', ageBandCode: 'junior', weightLabel: '-59' });
+    const exJ = base();
+    exJ.fighters[0] = fighter('f1', 'c1', 'MARTIN', 'Léa', { licence: 'LJ' });
+    expect(cardOf(planFfkCards([junior], grid, ruled({ multipleCombats: false, closed: new Set(['junior|F|karate|jiyu']) }, exJ)), junior).reason)
+      .toBe('reste à remplir : Catégorie d’âge, Catégorie de poids ; la valeur FFK déroge aux règles : Catégorie non ouverte à cette compétition (Karaté jiyu).');
   });
 });

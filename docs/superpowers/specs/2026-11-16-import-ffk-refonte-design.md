@@ -71,8 +71,9 @@ qui n'a pas été tranché.**
 
 - Une case par catégorie que l'export utilise et que la grille n'a pas (`newWeightClasses` d'aujourd'hui), avec le
   nombre de combattants concernés. **Décochées par défaut.**
-- Cochée : la catégorie sera créée à l'import et ses combattants y sont placés (leur carte devient « sans problème » si
-  rien d'autre ne manque).
+- Cochée : la catégorie sera créée à l'import et ses combattants y sont placés (leur poids n'est plus à choisir ; la
+  carte d'une fiche reconnue devient « sans problème » si rien d'autre ne manque, celle d'un nouveau combattant reste à
+  valider, §3).
 - Décochée : le poids de ces combattants est « à choisir » dans leur carte, parmi les catégories de la grille.
 - Le plan dépend des cases cochées (nouvelle entrée de `choices`, p. ex. `acceptedWeightClasses: string[]`).
 
@@ -140,6 +141,10 @@ qui n'a pas été tranché.**
   enregistrée avec la même exception (déjà inscrite dans ces disciplines de combat, déjà dans cette catégorie fermée)
   n'est pas signalée à chaque import : seule une dérogation que la fiche n'avait pas compte. Distinct de la vérification
   d'enregistrement (shobu d'un mineur, combats commencés…), que même une carte validée ne passe pas.
+  Un nouveau combattant qui déroge garde les deux raisons (« nouveau combattant : vérifiez … ; déroge aux règles : … »).
+  Une fiche reconnue dont un écart, pris côté FFK, dérogerait (l'export ajoute une discipline de combat dans une
+  compétition à un seul combat) le dit dès l'aperçu : « reste à remplir : Disciplines ; la valeur FFK déroge aux
+  règles : … » (même règle : une exception que la fiche avait déjà ne compte pas).
 - **Cliquer** sur le combattant choisi (ou sur « Nouveau combattant », ou sur un résultat) **ouvre** la carte ; un second
   clic la **replie** (les modifications restent en attente).
 - **Carte ouverte = le formulaire combattant de l'app**, en ligne dans la carte (mêmes champs que « Ajouter / Modifier

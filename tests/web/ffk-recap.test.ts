@@ -29,8 +29,8 @@ const existing = (): ExistingData => ({
   aliases: {},
   rules: { multipleCombats: true, closed: new Set() },
 });
-function preview(rows: FfkRow[], choices: FfkChoices = {}): FfkPreview {
-  const ex = existing();
+function preview(rows: FfkRow[], choices: FfkChoices = {}, rules?: ExistingData['rules']): FfkPreview {
+  const ex = { ...existing(), ...(rules ? { rules } : {}) };
   const plan = planFfkCards(rows, grid, ex, choices);
   return { ...plan, fingerprint: planFingerprint(plan), fighters: searchableFighters(ex, grid) };
 }
@@ -63,6 +63,19 @@ describe('récapitulatif de l’import', () => {
       .toBe('Import FFK : 0 combattant créé, 1 mis à jour, 0 supprimé, 0 catégorie créée, 3 combattants laissés de côté.');
     expect(resultMessage({ created: 2, updated: 0, deleted: 0, weightClassesCreated: 1, leftAside: 0 }))
       .toBe('Import FFK : 2 combattants créés, 0 mis à jour, 0 supprimé, 1 catégorie créée.');
+  });
+
+  test('laissé de côté, règles de la compétition : nouveau combattant qui déroge (les deux raisons), écart dont la valeur FFK dérogerait', () => {
+    const fresh = row({ lastName: 'NEUF', firstName: 'ANA' });
+    const freshBoxe = row({ lastName: 'NEUF', firstName: 'ANA', licence: fresh.licence, sheet: 'Boxe', discipline: 'shido-boxing' });
+    const martin = row();
+    const martinBoxe = row({ licence: martin.licence, sheet: 'Boxe', discipline: 'shido-boxing' });
+    const p = preview([fresh, freshBoxe, martin, martinBoxe], {}, { multipleCombats: false, closed: new Set() });
+    const rule = 'Une seule discipline de combat par combattant à cette compétition.';
+    expect(texts(recap(p, {}, grid, []).find((b) => b.aside))).toEqual([
+      `NEUF ANA — Karaté, Shido-boxing : nouveau combattant : vérifiez qu’il n’est pas déjà inscrit sous un autre nom ; déroge aux règles : ${rule}`,
+      `MARTIN LEA — Karaté, Shido-boxing : reste à remplir : Disciplines ; la valeur FFK déroge aux règles : ${rule}`,
+    ]);
   });
 
   test('sans rien de côté : pas de rubrique « Laissé de côté » ; seuls des clubs : « Laissé de côté : 1 club »', () => {
