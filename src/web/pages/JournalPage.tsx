@@ -2,6 +2,7 @@ import { Button, Group, Loader, Stack, Text, TextInput } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useParams } from 'react-router';
+import { normalizeName } from '../../domain/names.js';
 import { plural } from '../../domain/plural.js';
 import { journalDetailLine, journalText } from '../../domain/journal/text.js';
 import { actorLabel, JOURNAL_TYPE_LABELS, JOURNAL_TYPES, JOURNAL_VIA_LABELS, type JournalChange, type JournalEntryView, type JournalType } from '../../domain/journal/types.js';
@@ -9,7 +10,7 @@ import { useJournal } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { IconSearch } from '../components/ui/icons.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
-import { groupByDay, highlight, hhmm, receivedNote, toggleType } from '../journal.js';
+import { groupByDay, highlight, hhmm, receivedNote, toggleType, visibleDetails } from '../journal.js';
 
 /** Texte avec les mots de la recherche surlignés. */
 function Hl({ text, q }: { text: string; q: string }) {
@@ -44,7 +45,19 @@ function DetailLine({ e, q }: { e: JournalEntryView; q: string }) {
   );
 }
 
+/** Texte d'une ligne de détail tel qu'affiché, pour savoir si la recherche la touche. */
+const detailText = (c: JournalEntryView): string => {
+  const l = journalDetailLine(c);
+  return [l.lead, l.outcome, ...l.changes.map((x) => `${x.label} ${x.before ?? ''} ${x.after ?? ''}`), l.detail].filter(Boolean).join(' ');
+};
+
 function Entry({ e, q, open, onToggle }: { e: JournalEntryView; q: string; open: boolean; onToggle: () => void }) {
+  const [showAll, setShowAll] = useState(false);
+  const words = normalizeName(q).split(' ').filter(Boolean);
+  const { shown, hidden } = visibleDetails(e.children, showAll, (c) => {
+    const t = normalizeName(detailText(c));
+    return words.length > 0 && words.every((w) => t.includes(w));
+  });
   const t = journalText(e);
   const note = receivedNote(e);
   return (
@@ -61,10 +74,19 @@ function Entry({ e, q, open, onToggle }: { e: JournalEntryView; q: string; open:
         {note && <div className="sk-journal-det sk-journal-note">{note}</div>}
         {e.children.length > 0 && (
           <>
-            <button type="button" className="sk-journal-toggle" aria-expanded={open} onClick={onToggle} data-testid="journal-toggle">
+            <button type="button" className="sk-journal-toggle" aria-expanded={open} onClick={() => { setShowAll(false); onToggle(); }} data-testid="journal-toggle">
               {open ? '▾ Masquer le détail' : '▸ Voir le détail'}
             </button>
-            {open && <div className="sk-journal-sub">{e.children.map((c) => <DetailLine key={c.id} e={c} q={q} />)}</div>}
+            {open && (
+              <div className="sk-journal-sub">
+                {shown.map((c) => <DetailLine key={c.id} e={c} q={q} />)}
+                {hidden > 0 && (
+                  <button type="button" className="sk-journal-toggle" onClick={() => setShowAll(true)} data-testid="journal-more">
+                    … {plural(hidden, 'autre')}
+                  </button>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>

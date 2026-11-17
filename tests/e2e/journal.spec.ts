@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { buildFfkWorkbook, FFK_HEADER_2026 } from '../helpers/ffk-fixture.js';
 import { createCompetition, openTab } from './helpers.js';
 
 async function pick(page: Page, testId: string, option: string) {
@@ -120,4 +121,45 @@ test('clôture de la pesée : lignes de détail comme la maquette (« NOM Préno
   const closed = page.getByTestId('journal-entry').filter({ hasText: 'Pesée close' });
   await closed.getByTestId('journal-toggle').click();
   await expect(closed.getByTestId('journal-detail-line')).toHaveText(['LEROY Zoé (Tani Dojo) : absente', 'NGUYEN Paul (Tani Dojo) : absent']);
+});
+
+test('import FFK : une entrée, lignes accordées, « … N autres »', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe journal FFK');
+  await addClub(request, id, 'Tani Dojo');
+  const names: [string, string][] = [['Chloé', 'ROUX'], ['Emma', 'LEROY'], ['Lina', 'MOREAU'], ['Zoé', 'BLANC'], ['Anna', 'NOIR'], ['Sara', 'GRIS'], ['Mia', 'VERT']];
+  const file = buildFfkWorkbook(
+    { 'Coupe Shidokan Karate': names.map(([f, l], i): (string | number | null)[] => [f, l, `L${i + 1}`, '0060893 TANI DOJO', 'Féminin', 'Karate', 'Séniors jiyu ippon kumite', -55, null]) },
+    { header: FFK_HEADER_2026 },
+  );
+  await page.goto(`/competitions/${id}/import-ffk`);
+  await page.getByTestId('ffk-file').setInputFiles({ name: 'export.xlsx', mimeType: 'application/octet-stream', buffer: file });
+  await expect(page.getByTestId('ffk-summary')).toBeVisible();
+  for (const [f, l] of names) {
+    const card = page.getByTestId('ffk-card').filter({ hasText: `${l} ${f}` });
+    await card.getByRole('radio', { name: /^➕ Nouveau combattant/ }).click();
+    await card.getByTestId('ffk-card-validate').click();
+    await expect(card.getByTestId('ffk-card-state')).toHaveText('Validée');
+  }
+  await page.getByTestId('ffk-commit').click();
+  const done = page.waitForResponse((r) => r.url().includes('/ffk-imports/') && r.url().endsWith('/commit'));
+  await page.getByTestId('ffk-commit-confirm').click();
+  expect((await done).status()).toBe(200);
+
+  await page.goto(`/competitions/${id}/journal`);
+  const entry = page.getByTestId('journal-entry').filter({ hasText: 'Import FFK · ' });
+  await expect(entry).toHaveCount(1);
+  await expect(page.getByTestId('journal-entry').filter({ hasText: /Opération non détaillée.*ffk-imports/ })).toHaveCount(0); // seule la création du club, faite par l'adresse du serveur, reste brute
+  await entry.getByTestId('journal-toggle').click();
+  const lines = entry.getByTestId('journal-detail-line');
+  await expect(lines).toHaveCount(5);
+  await expect(entry.getByTestId('journal-detail-line').filter({ hasText: ': ajoutée' }).first()).toBeVisible();
+  const more = entry.getByTestId('journal-more');
+  await expect(more).toHaveText('… 3 autres');
+  await more.click();
+  await expect(lines).toHaveCount(8); // 7 combattantes et le club relié
+  await expect(more).toHaveCount(0);
+  // Le groupe refermé puis rouvert est de nouveau replié.
+  await entry.getByTestId('journal-toggle').click();
+  await entry.getByTestId('journal-toggle').click();
+  await expect(lines).toHaveCount(5);
 });

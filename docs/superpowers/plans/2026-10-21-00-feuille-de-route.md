@@ -112,6 +112,8 @@ Faite le 2026-11-17 sur la branche `etape-52-journal` : voir la section « Bilan
 ## Étape 53 : journal, imports et clubs
 Plan à écrire. Détailler dans le journal les imports (FFK : un groupe par import avec une ligne par combattant ajouté, retiré ou modifié, au lieu d'une entrée par combattant plus une entrée brute ; fiches club, ODS, PDF) et les clubs (annuaire, liens, fiches). Reprend les limites de l'étape 52 : sexe du combattant copié avec les données pour accorder les lignes de détail.
 
+Le journal de l'import FFK est fait d'avance (plan `docs/superpowers/plans/2026-11-17-53a-journal-import-ffk.md`, branche `journal-import-ffk`) : un import validé écrit une entrée « Import FFK · fichier » avec ses lignes de détail (combattants ajoutés, mis à jour, retirés, catégories créées, clubs reliés), sans entrée brute ; un long groupe est replié après 5 lignes (« … N autres »). Onglet Journal rangé dans Préparer après Réglages ; comptes dits avec leur rôle. Restent à cette étape les fiches club, l'ODS, le PDF et les clubs (annuaire, liens).
+
 ## Étape 54 : journal, réaffectation et tableaux
 Plan à écrire. Détailler dans le journal la réaffectation des combattants, les catégories, les zones et les tableaux (placements, tirages, finales).
 

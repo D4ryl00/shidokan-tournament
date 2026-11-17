@@ -121,3 +121,14 @@ test('catégorie créée, club relié', () => {
 - [ ] **Step 3: Implement** : `JournalPage` garde un état « tout montrer » par entrée (remis à zéro quand le groupe se referme) ; le bouton dit `… ${hidden} autre(s)` avec `plural` (« … 1 autre », « … 295 autres »). Feuille de route et bilan : nombres des suites, temps de l'import (même script de mesure que le bilan de l'étape 52 si disponible, sinon dire ce qui est mesuré).
 - [ ] **Step 4: Run** `npm run typecheck && npx vitest run && npx playwright test` — Expected: tout vert (noter les nombres).
 - [ ] **Step 5: Commit** `git commit -m "feat(journal): long groupe replié après 5 lignes ; import FFK vérifié de bout en bout ; feuille de route"`
+
+## Bilan
+
+Plan fait le 2026-11-17 sur la branche `journal-import-ffk` (commits `a20f78c..` jusqu'à celui de la tâche 3).
+
+- Livré : un import FFK validé écrit une seule entrée « Import FFK · fichier » avec ses lignes de détail (combattants ajoutés, mis à jour, retirés, catégories créées, clubs reliés, genre accordé), sans entrée brute ; un réimport identique n'écrit rien ; un long groupe est replié après 5 lignes (« … N autres », les lignes qui correspondent à la recherche restent montrées) ; onglet Journal rangé dans Préparer après Réglages, comptes dits avec leur rôle.
+- Vérifié (avant le commit de la tâche 3) :
+  - `npm run typecheck` : sans erreur.
+  - `npx vitest run` : 212 fichiers, 2452 tests réussis.
+  - `npx playwright test` : 243 tests réussis (12,2 min), sans reprise.
+- Mesure de durée : la durée de l'import n'a pas été remesurée pour ce plan (le travail en plus est une entrée parent et des lignes déjà écrites à l'étape 52).

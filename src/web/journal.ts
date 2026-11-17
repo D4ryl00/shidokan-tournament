@@ -73,3 +73,15 @@ export const toggleType = (selected: JournalType[], t: JournalType): JournalType
   else next.add(t);
   return JOURNAL_TYPES.filter((x) => next.has(x));
 };
+
+/**
+ * Lignes de détail montrées d'un long groupe : tout si `showAll` ; sinon celles qui correspondent à la recherche (toutes), complétées
+ * jusqu'à `limit` par les premières autres, dans l'ordre d'origine. `hidden` : le reste.
+ */
+export function visibleDetails<T>(children: T[], showAll: boolean, matches: (c: T) => boolean, limit = 5): { shown: T[]; hidden: number } {
+  if (showAll) return { shown: children, hidden: 0 };
+  const hit = children.map(matches);
+  let room = limit - hit.filter(Boolean).length;
+  const shown = children.filter((_, i) => hit[i] || room-- > 0);
+  return { shown, hidden: children.length - shown.length };
+}

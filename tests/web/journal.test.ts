@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import type { JournalEntryView, JournalType } from '../../src/domain/journal/types.js';
-import { groupByDay, highlight, hhmm, receivedNote, toggleType } from '../../src/web/journal.js';
+import { groupByDay, highlight, hhmm, receivedNote, toggleType, visibleDetails } from '../../src/web/journal.js';
 
 let seq = 0;
 const e = (at: string, extra: Partial<JournalEntryView> = {}): JournalEntryView => ({
@@ -53,4 +53,28 @@ test('toggleType : ajoute ou retire, dans l’ordre du filtre', () => {
   expect(toggleType(t, 'pesee')).toEqual(['pesee']);
   expect(toggleType(['pesee'], 'inscription')).toEqual(['inscription', 'pesee']);
   expect(toggleType(['inscription', 'pesee'], 'inscription')).toEqual(['pesee']);
+});
+
+test('visibleDetails : 300 lignes sans recherche → 5 montrées, 295 cachées', () => {
+  const kids = Array.from({ length: 300 }, (_, i) => i);
+  expect(visibleDetails(kids, false, () => false)).toEqual({ shown: [0, 1, 2, 3, 4], hidden: 295 });
+});
+
+test('visibleDetails : une ligne qui correspond à la recherche est montrée même loin (le 200e), dans l’ordre', () => {
+  const kids = Array.from({ length: 300 }, (_, i) => i);
+  const r = visibleDetails(kids, false, (c) => c === 199);
+  expect(r.shown).toContain(199);
+  expect(r.shown).toEqual([0, 1, 2, 3, 199]);
+  expect(r.hidden).toBe(295);
+});
+
+test('visibleDetails : toutes les lignes qui correspondent sont montrées, même au-delà de la limite', () => {
+  const kids = Array.from({ length: 20 }, (_, i) => i);
+  expect(visibleDetails(kids, false, (c) => c >= 10).shown).toEqual([10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+});
+
+test('visibleDetails : « tout montrer » et petits groupes', () => {
+  const kids = Array.from({ length: 300 }, (_, i) => i);
+  expect(visibleDetails(kids, true, () => false)).toEqual({ shown: kids, hidden: 0 });
+  expect(visibleDetails([1, 2, 3, 4], false, () => false)).toEqual({ shown: [1, 2, 3, 4], hidden: 0 });
 });
