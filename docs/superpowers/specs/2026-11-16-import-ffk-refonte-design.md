@@ -30,7 +30,8 @@ qui n'a pas été tranché.**
 - **Par défaut, rien ne change** : aucune catégorie créée, aucun club relié ou créé s'il n'est pas sûr, aucune fiche
   supprimée, aucune ligne douteuse liée, **aucune différence avec la fiche appliquée sans validation**. Ce qui est « sans
   problème » est importé : rapprochement sûr et aucune différence avec la fiche (seulement des champs vides de la fiche
-  à compléter), ou nouveau combattant sans candidat.
+  à compléter), sans dérogation aux règles de la compétition. Un nouveau combattant n'est jamais créé sans validation
+  (décidé le 2026-11-17, voir §3).
 - **« Importer… » n'est jamais bloqué.** Il ouvre une fenêtre de confirmation qui récapitule tout ce qui va être fait,
   puis applique ce qui est tranché ou sans problème ; le reste est laissé tel quel et revient au prochain import.
 - Toute décision se défait (relier / délier, lier / ne pas lier, annuler mes modifications).
@@ -116,9 +117,29 @@ qui n'a pas été tranché.**
   - « Ne pas lier pour l'instant » (la ligne est laissée de côté) ;
   - « Pas dans la liste ? Chercher un inscrit par son nom… » (tous les combattants de la compétition, résultats à
     cocher).
-- **Défaut** : lié d'office seulement si le rapprochement est sûr *et* qu'il ne reste rien à choisir ; sinon « Ne pas
-  lier pour l'instant », même quand un candidat est reconnu à sa licence. Une décision ailleurs (case de catégorie,
-  lien de club) peut faire passer une carte non touchée en « sans problème », et inversement.
+- **Défaut** : lié d'office seulement si le rapprochement est sûr *et* qu'il ne reste rien à choisir *et* que la valeur
+  ne déroge pas aux règles de la compétition ; sinon « Ne pas lier pour l'instant », même quand un candidat est reconnu
+  à sa licence. Une décision ailleurs (case de catégorie, lien de club) peut faire passer une carte non touchée en
+  « sans problème », et inversement.
+- **Nouveau combattant** (décidé le 2026-11-17, à la demande de l'organisateur : « c'est peut-être que le combattant
+  existant n'a pas été trouvé, erreur de saisie dans le nom ou prénom ») : une carte sans candidat dont le club est
+  relié n'est jamais créée d'office. Elle est « À trancher », sur « Ne pas lier pour l'instant », raison « nouveau
+  combattant : vérifiez qu'il n'est pas déjà inscrit sous un autre nom » ; la carte dit « Vérifiez qu'il n'est pas déjà
+  inscrit sous un autre nom » et renvoie à « Pas dans la liste ? » pour trouver une fiche mal orthographiée. Le
+  combattant n'est créé qu'une fois la carte validée (« ➕ Nouveau combattant » puis « Valider la carte »). Vaut aussi au
+  premier import d'un club entier : une carte à valider par combattant.
+- **Dérogations aux règles de la compétition** (décidé le 2026-11-17) : une carte dont la valeur retenue d'office
+  enfreint les règles de la compétition est « À trancher », la raison nomme la règle (« déroge aux règles : Une seule
+  discipline de combat par combattant à cette compétition. », « … Catégorie non ouverte à cette compétition (Karaté
+  jiyu). »). Règles : celles d'une inscription par un club (réglage « plusieurs disciplines de combat le même jour »,
+  catégories ouvertes, et toute autre erreur que la lecture d'une ligne donne avec les vrais réglages mais pas en mode
+  organisateur), passées au plan par le serveur. L'organisateur corrige la carte (décocher une discipline) ou la valide
+  telle quelle : une carte validée qui déroge est enregistrée, comme depuis la fenêtre combattant (« L'inscription est
+  enregistrée quand même »). La carte ouverte rappelle la règle (plusieurs combats : l'avis du formulaire ; catégorie
+  non ouverte : « … « Valider la carte » l'inscrit quand même : la ligne ira en Réaffectation. »). Une fiche déjà
+  enregistrée avec la même exception (déjà inscrite dans ces disciplines de combat, déjà dans cette catégorie fermée)
+  n'est pas signalée à chaque import : seule une dérogation que la fiche n'avait pas compte. Distinct de la vérification
+  d'enregistrement (shobu d'un mineur, combats commencés…), que même une carte validée ne passe pas.
 - **Cliquer** sur le combattant choisi (ou sur « Nouveau combattant », ou sur un résultat) **ouvre** la carte ; un second
   clic la **replie** (les modifications restent en attente).
 - **Carte ouverte = le formulaire combattant de l'app**, en ligne dans la carte (mêmes champs que « Ajouter / Modifier
@@ -146,8 +167,9 @@ qui n'a pas été tranché.**
   (grisé tant qu'un champ requis manque, avec « Reste à remplir : … »). Valider replie la carte en une ligne de résumé
   (« Liée à X · Âge : Pupilles → Benjamins ») avec « Modifier », puis ouvre la carte suivante à trancher et y fait
   défiler la page.
-- États d'une carte : « À trancher » ; « À valider » (modifiée, pas validée : laissée de côté à l'import) ; « Validée » ;
-  « Sans problème » (importée telle quelle) ; « Écartée ».
+- États d'une carte : « À trancher » (dont tout nouveau combattant et toute dérogation aux règles) ; « À valider »
+  (modifiée, pas validée : laissée de côté à l'import) ; « Validée » ; « Sans problème » (fiche reconnue à coup sûr,
+  rien à choisir, aucune dérogation : importée telle quelle) ; « Écartée ».
 
 ### 4. Fiches club sans inscription FFK
 

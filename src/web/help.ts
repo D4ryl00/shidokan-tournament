@@ -387,7 +387,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       [
         '1. Catégories de poids absentes de la grille : cochez celles à créer.',
         '2. Clubs : reliez chaque club de l’export à un club de la compétition, ou créez-le.',
-        '3. Combattants de l’export : une carte par combattant ; liez-le à un inscrit ou créez-le, choisissez les valeurs à garder, validez la carte. Un nouveau combattant ou une inscription qui déroge aux règles de la compétition est toujours « À trancher ».',
+        '3. Combattants de l’export : une carte par combattant ; liez-le à un inscrit ou créez-le, choisissez les valeurs à garder, validez la carte. Un nouveau combattant, ou une inscription qui déroge aux règles de la compétition, reste « À trancher » tant que sa carte n’est pas validée.',
         '4. Fiches club sans inscription FFK : gardez-les, rapprochez-les d’une ligne de l’export ou supprimez-les.',
       ],
       'Le résumé en haut compte ce qui reste à trancher. « Importer… » n’est jamais bloqué : la fenêtre « Confirmer l’import FFK » récapitule ce qui sera fait et ce qui est laissé de côté.',
