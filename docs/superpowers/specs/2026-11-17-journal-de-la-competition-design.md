@@ -104,6 +104,12 @@ l'écriture et gardé avec l'entrée 💡.
   partagés : le journal dit « compte Table », pas le nom du bénévole.
 - **Un club par son lien personnel** : le nom du club (recopié), avec la mention « lien du club ». Jamais le jeton.
 - **Une zone** : le compte Zone qui a saisi (y compris quand la saisie arrive plus tard par le journal de zone rejoué).
+- **Sur le PC local (jour J), sans comptes** : l'installation locale n'a pas de connexion ; chaque navigateur choisit son
+  **poste** (Organisation, Table centrale, Zone n — `src/web/poste.ts`). 💡 Le navigateur l'annonce au serveur avec
+  chaque écriture (en-tête, comme `X-Poste-Id`), et le journal note « poste Table centrale », « poste Zone 2 »,
+  « poste Organisation ». C'est **déclaratif** (comme le poste lui-même, qui « ne protège rien ») ; sans en-tête : « poste
+  inconnu ». De même, en local, l'onglet Journal n'est caché qu'aux postes Table et Zone : le serveur local ne peut pas
+  refuser la lecture (il ne refuse rien aujourd'hui).
 - **L'appli elle-même** : pour ce qui n'a pas d'auteur humain (ligne de commande, tâche planifiée). 💡 Une suite
   automatique d'une action humaine (catégories recalculées après une inscription, §5.4) garde l'**auteur de l'action**.
 
