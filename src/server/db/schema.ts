@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { blob, index, integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { blob, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 /** Version (compteur unique de la base, jamais répété) et date de modification, tenues par des déclencheurs (`row-versions.ts`). */
 const rowMeta = () => ({ version: integer('version'), updatedAt: text('updated_at') });
@@ -550,6 +550,32 @@ export const historyEntries = sqliteTable('history_entries', {
   createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
   ...rowMeta(),
 });
+
+/** Journal de la compétition : ajout seul, une entrée par opération (`src/server/journal`). `seq` croît par compétition. */
+export const journalEntries = sqliteTable(
+  'journal_entries',
+  {
+    id: text('id').primaryKey(),
+    competitionId: text('competition_id')
+      .notNull()
+      .references(() => competitions.id, { onDelete: 'cascade' }),
+    seq: integer('seq').notNull(),
+    /** Entrée « groupe » dont celle-ci est une ligne de détail. */
+    parentId: text('parent_id'),
+    type: text('type').notNull(),
+    action: text('action').notNull(),
+    via: text('via').notNull(),
+    /** Heure du serveur (ISO). */
+    at: text('at').notNull(),
+    /** Heure du poste qui a fait la saisie, si différente. */
+    clientAt: text('client_at'),
+    actorJson: text('actor_json').notNull(),
+    dataJson: text('data_json').notNull(),
+    searchText: text('search_text').notNull(),
+    ...rowMeta(),
+  },
+  (t) => [uniqueIndex('journal_entries_seq').on(t.competitionId, t.seq), index('journal_entries_parent').on(t.competitionId, t.parentId)],
+);
 
 export const refusals = sqliteTable(
   'refusals',

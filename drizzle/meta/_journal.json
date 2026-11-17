@@ -267,6 +267,13 @@
       "when": 1794695089231,
       "tag": "0037_zone_reservee_finales",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1794903708321,
+      "tag": "0038_journal",
+      "breakpoints": true
     }
   ]
 }
