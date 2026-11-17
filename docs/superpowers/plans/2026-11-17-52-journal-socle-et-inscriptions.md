@@ -416,3 +416,25 @@ test('poste Table : pas d’onglet Journal', async ({ page }) => {});
 - [ ] **Step 1: Run** `npm run typecheck && npx vitest run && npx playwright test` — Expected: tout vert (noter les nombres).
 - [ ] **Step 2: Mesure** : import FFK de la plus grosse donnée de test et application du plan, avant / après cette étape (`npm run test:perf` si couvert) — écart négligeable attendu ; noter les chiffres.
 - [ ] **Step 3: Commit** `git commit -m "docs(journal): bilan de l'étape 52 et feuille de route"`
+
+
+## Bilan
+
+Étape faite le 2026-11-17 sur la branche `etape-52-journal` (commits `1e6fbc0..b903a65` avant ce bilan).
+
+- Exécution : tâches 1 à 8 faites avec des sous-agents (un par tâche, chacune relue), commits `1e6fbc0..90693e6`. Relecture de toute la branche : 0 critique, 3 importants, 3 mineurs. Une vague de corrections `90693e6..b903a65` les a tous traités ; nouvelle relecture ciblée sans remarque.
+  - Importants : (1) l'entrée brute était omise sur une route pas encore détaillée dès qu'une entrée détaillée avait été écrite ; (2) la recherche du journal (`exists` sur les lignes de détail) n'était pas bornée à la compétition : 2,6 s sur 10 000 lignes, 9,5 s avec 40 000 lignes en base, 5 ms après correction (index de la compétition) ; (3) un portable de zone recevait encore le journal par « Recevoir une copie plus récente » (réseau et fichier USB).
+  - Mineurs : texte des lignes de détail d'un groupe (« NOM Prénom (Club) : absente »), test de l'ajout seul (seuls la purge de conservation et le paquet synchronisé modifient ou suppriment), test de bout en bout d'une zone.
+- Vérifié (HEAD `b903a65`) :
+  - `npm run typecheck` : sans erreur.
+  - `npx vitest run` : 212 fichiers, 2442 tests réussis.
+  - `npx playwright test` : 242 tests réussis (13,3 min), sans reprise.
+  - Chrome (copie de démonstration) : fil par jour en thème sombre et clair, recherche surlignée, filtre par type, entrée brute, groupe déplié / replié, poste déclaré, onglet Journal masqué pour le poste Table, lignes de détail « NOM Prénom (Club) : absente ». Largeur de téléphone : pas encore vérifiée, à faire dans le simulateur iPhone (idb) après cette tâche.
+- Mesure de durée : `npm run test:perf` ne couvre pas l'import FFK (galaxie et échelle seulement). Mesure ad hoc (script jetable, supprimé ensuite) : import FFK par l'API (aperçu puis import, 600 lignes de 20 clubs, 300 combattants créés par import), base neuve, médiane de 3 exécutions, `main` à `1e6fbc0` contre `b903a65`, deux copies de travail séparées. Premier import 580 → 695 ms ; réimport identique (rien à écrire) 760 → 950 ms ; import suivant (300 créations) 1 190 → 1 470 ms. Soit environ +20 à +25 %, un peu plus de 1 ms par combattant écrit ; en absolu, moins d'une demi-seconde pour 300 combattants. Ce n'est pas « négligeable » en proportion, mais sans conséquence pour l'organisateur ; pas de piste d'optimisation retenue. Le réimport identique est plus lent aussi parce que l'aperçu, pas l'écriture, domine (non isolé). Mesure faite sur un portable, un seul jeu de données : à prendre comme un ordre de grandeur.
+- Limites connues, reportées aux étapes suivantes :
+  - Un import FFK écrit une entrée par combattant changé plus une entrée brute, sans groupe, jusqu'à l'étape 53 qui le groupe.
+  - Les lignes de détail d'un combattant ajouté, retiré ou modifié sont au masculin tant que les données copiées ne portent pas le sexe du combattant (étape 53).
+  - Le texte de recherche stocké d'une ligne de présence contient encore « Présence inconnue » : chercher « inconnue » ouvre le groupe sans surlignage visible.
+  - L'onglet Journal est placé dans l'étape « Après » ; l'organisateur peut le déplacer.
+  - Mineurs reportés : `fighters.ts` lit toutes les catégories de poids à chaque écriture (instantané) ; `registrations.ts`, `existingFighter` interrogé deux fois ; clés d'inscription de libellé en double « (2) » dépendantes de l'ordre ; `replacement.ts` lit `f` avant les `await` (valeur « avant » possiblement périmée) ; `JournalPage` : total périmé pendant le rechargement, gras en ligne sur « Tous », clé du libellé de jour, groupes dépliés conservés quand le type change ; `hooks.ts` cherche la zone à chaque requête.
+- Suite : étapes 53 (imports et clubs), 54 (réaffectation et tableaux), 55 (jour J et le reste), plans à écrire (voir la feuille de route).
