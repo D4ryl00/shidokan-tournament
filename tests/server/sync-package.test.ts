@@ -6,6 +6,8 @@ import { closeDb, openDb, type AppDb } from '../../src/server/db/client.js';
 import { backupDir } from '../../src/server/repositories/backups.js';
 import { syncCategories } from '../../src/server/repositories/categories.js';
 import { buildPackage, importPackage, PACKAGE_TABLES } from '../../src/server/sync/package.js';
+import { runJournal } from '../../src/server/journal/context.js';
+import { recordJournal } from '../../src/server/journal/write.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 const opened: AppDb[] = [];
@@ -77,6 +79,18 @@ test('recevoir de nouveau après des changements en A → B identique ; une autr
   expect(snapshot(b.db, a.id)).toEqual(snapshot(a.db, a.id));
   expect(snapshot(b.db, b.id)).toEqual(otherBefore);
   expect(b.db.$client.prepare('select id from age_links where competition_id = ? order by id').all(b.id)).toEqual(otherLinks);
+});
+
+test('journaux divergents (mêmes numéros des deux côtés) : le journal du paquet remplace celui de la copie', async () => {
+  const a = await seeded();
+  const b = await seeded();
+  await importPackage(b.db, b.dbPath, buildPackage(a.db, a.id, { handOver: false, role: 'local' }), null);
+  // Chaque côté écrit ses propres entrées ensuite (secours) : mêmes numéros, identifiants différents.
+  runJournal({}, () => recordJournal(a.db, a.id, { type: 'non-detaille', action: 'raw', data: { route: 'A' } }));
+  runJournal({}, () => recordJournal(b.db, a.id, { type: 'non-detaille', action: 'raw', data: { route: 'B' } }));
+  await importPackage(b.db, b.dbPath, buildPackage(a.db, a.id, { handOver: false, role: 'local' }), null);
+  const journal = (d: AppDb) => d.$client.prepare('select id, seq, data_json from journal_entries where competition_id = ? order by seq').all(a.id);
+  expect(journal(b.db)).toEqual(journal(a.db));
 });
 
 test('retour sur une installation qui a des liens et des mails : ils restent ; un club absent mais avec un lien reste', async () => {

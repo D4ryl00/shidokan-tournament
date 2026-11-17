@@ -232,6 +232,8 @@ export async function importPackage(
           for (const r of rows) insert.run(...cols.map((c) => r[c] ?? null));
           continue;
         }
+        // Le journal du paquet remplace celui d'ici en entier : après un secours, les deux côtés ont pu écrire les mêmes numéros.
+        if (t === 'journal_entries') client.prepare('delete from journal_entries where competition_id = ?').run(id);
         const local = new Set(columnsOf(db, t).map((c) => c.name).filter((c) => t !== 'competitions' || !OWNER_COLUMNS.includes(c)));
         const pk = pkOf(db, t);
         for (const r of rows) {

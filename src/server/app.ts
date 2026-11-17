@@ -46,6 +46,7 @@ import { registerPermissions } from './auth/permissions.js';
 import { getManagement, registerReadOnlyGuard } from './sync/ownership.js';
 import { registerCategoryRevGuard } from './revisions.js';
 import { registerCompetitionEvents } from './events.js';
+import { registerJournalHooks } from './journal/hooks.js';
 import { PlanAbortedError, stopAllPlanJobs } from './plan/runner.js';
 import { syncRemoteRoutes } from './routes/sync-remote.js';
 import { syncFileRoutes, syncLocalRoutes } from './routes/sync-local.js';
@@ -131,6 +132,8 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     if (isNoIndexPath(req.url, role)) reply.raw.setHeader('X-Robots-Tag', 'noindex, nofollow');
   });
   registerGuard(app, db, role);
+  // Qui et comment pour le journal (après la garde, qui pose le compte), et filet de sécurité des écritures non détaillées.
+  registerJournalHooks(app, db);
   registerPermissions(app, db, role);
   registerReadOnlyGuard(app, db, role);
   registerZoneJournal(app, db);

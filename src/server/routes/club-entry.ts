@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { emailList } from './fields.js';
 import type { AppDb } from '../db/client.js';
 import { competitionChanged } from '../events.js';
+import { setJournalActor, setJournalVia } from '../journal/context.js';
 import { syncCategories } from '../repositories/categories.js';
 import { assertWritable, deleteClubLine, getClubEntry, reloadLine, saveClubLine, updateClubEntryHeader, type ClubAccess } from '../repositories/club-entry.js';
 import { invitationStatus, resolveInvitation } from '../repositories/invitations.js';
@@ -44,7 +45,13 @@ export async function clubEntryRoutes(app: FastifyInstance, { db }: { db: AppDb 
   };
   const access = (token: string): ClubAccess => {
     const found = resolveInvitation(db, token);
-    if (found) return found;
+    if (found) {
+      // Journal : le club par son lien (son nom recopié, jamais le jeton).
+      const club = db.$client.prepare('select name from clubs where id = ?').get(found.clubId) as { name: string } | undefined;
+      setJournalActor({ kind: 'club', clubName: club?.name ?? '' }, found.competitionId);
+      setJournalVia('en-ligne');
+      return found;
+    }
     if (invitationStatus(db, token) === 'revoked') throw new ReplacedLinkError();
     throw new NotFoundError('Lien inconnu ou expiré.');
   };
