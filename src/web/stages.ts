@@ -9,9 +9,9 @@ export interface Stage {
 }
 
 export const STAGES: Stage[] = [
-  { id: 'preparer', label: 'Préparer', tabs: ['inscriptions', 'clubs', 'fiche-club', 'import-ffk', 'sessions', 'finales', 'categories', 'reglages'] },
+  { id: 'preparer', label: 'Préparer', tabs: ['inscriptions', 'clubs', 'fiche-club', 'import-ffk', 'sessions', 'finales', 'categories', 'reglages', 'journal'] },
   { id: 'jour-j', label: 'Jour J', tabs: ['pesee', 'reaffectation', 'tableaux', 'combats'] },
-  { id: 'apres', label: 'Après', tabs: ['podiums', 'journal'] },
+  { id: 'apres', label: 'Après', tabs: ['podiums'] },
 ];
 
 export const stageOf = (tab: string): StageId => STAGES.find((s) => s.tabs.includes(tab))?.id ?? 'preparer';

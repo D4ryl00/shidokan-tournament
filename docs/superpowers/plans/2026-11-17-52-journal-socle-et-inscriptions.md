@@ -434,6 +434,6 @@ test('poste Table : pas d’onglet Journal', async ({ page }) => {});
   - Un import FFK écrit une entrée par combattant changé plus une entrée brute, sans groupe, jusqu'à l'étape 53 qui le groupe.
   - Les lignes de détail d'un combattant ajouté, retiré ou modifié sont au masculin tant que les données copiées ne portent pas le sexe du combattant (étape 53).
   - Le texte de recherche stocké d'une ligne de présence contient encore « Présence inconnue » : chercher « inconnue » ouvre le groupe sans surlignage visible.
-  - L'onglet Journal est placé dans l'étape « Après » ; l'organisateur peut le déplacer.
+  - L'onglet Journal, d'abord placé dans l'étape « Après », a été rangé dans « Préparer », après Réglages (demande de l'organisateur, 2026-11-17). Les comptes sont dits avec leur rôle : « orga@… · compte Organisateur », « … · compte Table », « … · compte Zone ».
   - Mineurs reportés : `fighters.ts` lit toutes les catégories de poids à chaque écriture (instantané) ; `registrations.ts`, `existingFighter` interrogé deux fois ; clés d'inscription de libellé en double « (2) » dépendantes de l'ordre ; `replacement.ts` lit `f` avant les `await` (valeur « avant » possiblement périmée) ; `JournalPage` : total périmé pendant le rechargement, gras en ligne sur « Tous », clé du libellé de jour, groupes dépliés conservés quand le type change ; `hooks.ts` cherche la zone à chaque requête.
 - Suite : étapes 53 (imports et clubs), 54 (réaffectation et tableaux), 55 (jour J et le reste), plans à écrire (voir la feuille de route).

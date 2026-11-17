@@ -30,7 +30,9 @@ test('qui', () => {
   expect(actorLabel({ kind: 'poste', poste: 'organisation' })).toBe('poste Organisation');
   expect(actorLabel({ kind: 'poste', poste: 'inconnu' })).toBe('poste inconnu');
   expect(actorLabel({ kind: 'club', clubName: 'Shidokan Lyon' })).toBe('Shidokan Lyon · lien du club');
-  expect(actorLabel({ kind: 'account', email: 'orga@exemple.fr', role: 'organisateur' })).toBe('orga@exemple.fr');
+  expect(actorLabel({ kind: 'account', email: 'orga@exemple.fr', role: 'organisateur' })).toBe('orga@exemple.fr · compte Organisateur');
+  expect(actorLabel({ kind: 'account', email: 'table@exemple.fr', role: 'table' })).toBe('table@exemple.fr · compte Table');
+  expect(actorLabel({ kind: 'account', email: 'zone@exemple.fr', role: 'zone' })).toBe('zone@exemple.fr · compte Zone');
   expect(actorLabel({ kind: 'app' })).toBe('l’appli');
 });
 test('texte de recherche : sans accents, majuscules, qui et comment compris', () => {

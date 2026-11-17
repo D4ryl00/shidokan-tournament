@@ -59,10 +59,13 @@ export type JournalActor =
   | { kind: 'app' };
 
 /** « Qui » d'une entrée, tel qu'affiché. */
+/** Rôle d'un compte, dit dans le journal (« compte Table ») : un compte Table est souvent partagé entre bénévoles. */
+const ACCOUNT_ROLE_LABELS = { organisateur: 'Organisateur', table: 'Table', zone: 'Zone' } as const;
+
 export function actorLabel(a: JournalActor): string {
   switch (a.kind) {
     case 'account':
-      return a.email;
+      return `${a.email} · compte ${ACCOUNT_ROLE_LABELS[a.role]}`;
     case 'poste':
       if (a.poste === 'organisation') return 'poste Organisation';
       if (a.poste === 'table') return 'poste Table centrale';
