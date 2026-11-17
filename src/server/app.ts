@@ -27,6 +27,7 @@ import { freeTableauRoutes } from './routes/free-tableaux.js';
 import { closedCategoryRoutes } from './routes/closed-categories.js';
 import { replacementRoutes } from './routes/replacement.js';
 import { historyRoutes } from './routes/history.js';
+import { journalRoutes } from './routes/journal.js';
 import { resultRoutes } from './routes/results.js';
 import { waveRoutes } from './routes/waves.js';
 import { waveScheduleRoutes } from './routes/wave-schedules.js';
@@ -271,6 +272,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(closedCategoryRoutes, { db });
   await app.register(replacementRoutes, { db });
   await app.register(historyRoutes, { db });
+  await app.register(journalRoutes, { db });
   await app.register(resultRoutes, { db });
   await app.register(zoneRoutes, { db });
   await app.register(waveRoutes, { db });
