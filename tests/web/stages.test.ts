@@ -9,7 +9,8 @@ test('chaque onglet a une étape, dans l’ordre des étapes', () => {
   expect(STAGES.flatMap((s) => s.tabs).sort()).toEqual(COMPETITION_TABS.map((t) => t.path).sort());
   expect(STAGES[0]!.tabs).toEqual(['inscriptions', 'clubs', 'fiche-club', 'import-ffk', 'sessions', 'finales', 'categories', 'reglages']);
   expect(STAGES[1]!.tabs).toEqual(['pesee', 'reaffectation', 'tableaux', 'combats']);
-  expect(STAGES[2]!.tabs).toEqual(['podiums']);
+  expect(STAGES[2]!.tabs).toEqual(['podiums', 'journal']);
+  expect(stageOf('journal')).toBe('apres');
   expect(stageOf('combats')).toBe('jour-j');
   expect(stageOf('reglages')).toBe('preparer');
   expect(stageOf('podiums')).toBe('apres');
@@ -52,7 +53,9 @@ test('cliquer une étape : rien si l’onglet ouvert en fait partie ; sinon son 
 });
 
 test('une étape à un seul onglet n’affiche pas de barre d’onglets', () => {
-  expect(showsTabBar(STAGES[2]!)).toBe(false);
+  // Après, au poste Table : Podiums seul (le Journal est réservé à l'organisateur).
+  expect(showsTabBar(visibleStages({ kind: 'table' })[2]!)).toBe(false);
+  expect(showsTabBar(STAGES[2]!)).toBe(true);
   expect(showsTabBar(STAGES[1]!)).toBe(true);
   expect(showsTabBar(visibleStages({ kind: 'zone', zoneId: 'z1' })[0]!)).toBe(true);
 });

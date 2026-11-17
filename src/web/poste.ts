@@ -60,6 +60,17 @@ const read = (competitionId: string) => {
 };
 
 /**
+ * Poste déclaré au serveur avec une écriture sur la compétition de l'adresse (en-tête `X-Poste`, noté au journal) : celui que ce
+ * navigateur a choisi pour elle, comme `usePoste` le lit. Null hors d'une compétition. Un compte connecté l'emporte côté serveur.
+ */
+export function posteHeader(url: string): string | null {
+  const m = /^\/api\/competitions\/([^/?#]+)/.exec(url);
+  if (!m) return null;
+  const p = read(decodeURIComponent(m[1]!));
+  return p.kind === 'zone' ? `zone:${p.zoneId}` : p.kind;
+}
+
+/**
  * Poste de ce navigateur pour la compétition, et son changement (partagé entre les onglets du navigateur) ; le troisième élément
  * est vrai quand le poste est imposé par le compte connecté ou par la zone autonome (il ne se change pas).
  */

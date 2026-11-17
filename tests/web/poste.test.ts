@@ -1,7 +1,9 @@
-import { expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import type { AuthMe } from '../../src/web/api.js';
-import { accountPoste, defaultTab, parsePoste, posteTabs, tabFor, zoneLinkPoste } from '../../src/web/poste.js';
+import { accountPoste, defaultTab, parsePoste, posteHeader, posteTabs, tabFor, zoneLinkPoste } from '../../src/web/poste.js';
 import { COMPETITION_TABS } from '../../src/web/tabs.js';
+
+afterEach(() => vi.unstubAllGlobals());
 
 test('onglets de chaque poste, dans l’ordre des onglets', () => {
   expect(posteTabs({ kind: 'organisation' })).toEqual(COMPETITION_TABS.map((t) => t.path));
@@ -57,4 +59,37 @@ test('portable en zone autonome : sa zone est imposée sur la compétition qu’
   expect(zoneLinkPoste(link, 'c2')).toBeNull();
   expect(zoneLinkPoste({ ...link, autonomous: null }, 'c1')).toBeNull();
   expect(zoneLinkPoste(null, 'c1')).toBeNull();
+});
+
+/** Stockage du navigateur simulé (les tests tournent sous Node). */
+function stubStorage(): Map<string, string> {
+  const store = new Map<string, string>();
+  vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v) });
+  return store;
+}
+
+test('posteHeader : poste de la compétition de l’adresse', () => {
+  stubStorage();
+  localStorage.setItem('poste:c1', JSON.stringify({ kind: 'zone', zoneId: 'z2' }));
+  expect(posteHeader('/api/competitions/c1/registrations')).toBe('zone:z2');
+  expect(posteHeader('/api/competitions')).toBeNull();
+});
+
+test('posteHeader : Table, Organisation par défaut, adresse de la compétition elle-même, autre compétition, stockage bloqué', () => {
+  stubStorage();
+  localStorage.setItem('poste:c1', JSON.stringify({ kind: 'table' }));
+  expect(posteHeader('/api/competitions/c1/weigh-in/f1')).toBe('table');
+  expect(posteHeader('/api/competitions/c1')).toBe('table');
+  expect(posteHeader('/api/competitions/c1?x=1')).toBe('table');
+  expect(posteHeader('/api/competitions/c2/registrations')).toBe('organisation');
+  expect(posteHeader('/api/inscription/jeton/lines')).toBeNull();
+  vi.stubGlobal('localStorage', { getItem: () => { throw new Error('bloqué'); } });
+  expect(posteHeader('/api/competitions/c1/registrations')).toBe('organisation');
+});
+
+test('le Journal n’est ouvert qu’au poste Organisation', () => {
+  expect(posteTabs({ kind: 'organisation' })).toContain('journal');
+  expect(posteTabs({ kind: 'table' })).not.toContain('journal');
+  expect(posteTabs({ kind: 'zone', zoneId: 'z1' })).not.toContain('journal');
+  expect(tabFor({ kind: 'table' }, 'journal')).toBe('inscriptions');
 });

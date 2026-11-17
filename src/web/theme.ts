@@ -29,6 +29,11 @@ export const TOKENS = {
     alone: '#3d1a1d', aloneAlt: '#2c1518', aloneText: '#ff9a8f',
     // Ligne de départ du diagramme des règles : fond légèrement grisé, distinct des lignes de règles (`row`).
     startRow: '#211f24',
+    // Journal : texte surligné par la recherche, et pastille de couleur de chaque type (clés = types du journal).
+    mark: '#5a4a12',
+    typeInscription: '#6ea2f7', typeImport: '#9a82e0', typePesee: '#4cbf7a', typeCategorie: '#e0a040', typeReaffectation: '#e05aa8',
+    typePlan: '#c26ad6', typeTableau: '#e07a4c', typeSession: '#3cb5b5', typeResultat: '#6b9bd6', typeClub: '#a8a84a', typeMail: '#9a9ab0',
+    typeMain: '#8a8a8a', typeCompetition: '#b89a66', typeNonDetaille: '#f0b766',
   },
   light: {
     bg: '#f7f5f9', bar: '#ffffff', line: '#ebe6ef', card: '#ffffff', cardLine: '#e7e1ec', row: '#faf8fb',
@@ -38,6 +43,10 @@ export const TOKENS = {
     cost0: '#1f7a45', cost1: '#4d7f1a', cost2: '#8a6a00', cost3: '#b04e00', cost4: '#b42318', onCost: '#ffffff',
     alone: '#f8d7d3', aloneAlt: '#fdeceb', aloneText: '#9b1c14',
     startRow: '#eeedf0',
+    mark: '#ffec99',
+    typeInscription: '#4c8bf5', typeImport: '#7b5cd6', typePesee: '#2f9e5b', typeCategorie: '#c07a10', typeReaffectation: '#c43a8a',
+    typePlan: '#a23bb8', typeTableau: '#c4572a', typeSession: '#1f8f8f', typeResultat: '#3b6fb0', typeClub: '#7a7a2a', typeMail: '#6b6b80',
+    typeMain: '#555555', typeCompetition: '#8a6d3b', typeNonDetaille: '#b07a00',
   },
 } as const;
 export type TokenName = keyof (typeof TOKENS)['dark'];

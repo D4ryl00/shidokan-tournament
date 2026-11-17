@@ -13,4 +13,6 @@ export const COMPETITION_TABS = [
   { path: 'podiums', label: 'Podiums' },
   { path: 'reglages', label: 'Réglages' },
   { path: 'categories', label: 'Catégories' },
+  // Réservé à l'organisateur : absent des onglets des postes Table et Zone (`poste.ts`).
+  { path: 'journal', label: 'Journal' },
 ] as const;

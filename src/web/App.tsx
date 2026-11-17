@@ -22,6 +22,7 @@ import { MatchesPage } from './pages/MatchesPage.js';
 import { PublicCompetitionPage } from './pages/public/PublicCompetitionPage.js';
 import { PublicHomePage } from './pages/public/PublicHomePage.js';
 import { PodiumsPage } from './pages/PodiumsPage.js';
+import { JournalPage } from './pages/JournalPage.js';
 import { PodiumsPrintPage, PrintPage } from './pages/PrintPage.js';
 import { RegistrationsPage } from './pages/RegistrationsPage.js';
 import { ReplacementPage } from './pages/ReplacementPage.js';
@@ -102,6 +103,7 @@ function MainShell() {
               <Route path="reglages" element={<CompetitionSettingsPage />} />
               <Route path="categories" element={<GridEditorPage />} />
               <Route path="grille" element={<RenamedTab to="categories" />} />
+              <Route path="journal" element={<JournalPage />} />
             </Route>
           </Routes>
         </AppShell.Main>

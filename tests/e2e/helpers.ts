@@ -23,16 +23,18 @@ export async function createCompetition(page: Page, name: string): Promise<strin
 /** Étape de chaque onglet d'une compétition (barre du haut : Préparer, Jour J, Après). */
 const STAGE_OF: Record<string, string> = {
   Inscriptions: 'preparer', Clubs: 'preparer', 'Fiche club': 'preparer', 'Import FFK': 'preparer', Sessions: 'preparer', Finales: 'preparer', Catégories: 'preparer', Réglages: 'preparer',
-  Pesée: 'jour-j', Réaffectation: 'jour-j', Tableaux: 'jour-j', Combats: 'jour-j', Podiums: 'apres',
+  Pesée: 'jour-j', Réaffectation: 'jour-j', Tableaux: 'jour-j', Combats: 'jour-j', Podiums: 'apres', Journal: 'apres',
 };
 
 /** Ouvre un onglet d'une compétition, en passant par son étape s'il n'est pas affiché. */
 export async function openTab(page: Page, label: string): Promise<void> {
   const tab = page.getByRole('tab', { name: label, exact: true });
   if (!(await tab.isVisible())) {
-    await page.getByTestId(`stage-${STAGE_OF[label]}`).click();
-    // Étape à un seul onglet (Après → Podiums) : pas de barre d'onglets, l'étape ouvre directement l'onglet.
-    if (label === 'Podiums') return;
+    const stage = page.getByTestId(`stage-${STAGE_OF[label]}`);
+    await stage.click();
+    await expect(stage).toHaveAttribute('aria-current', 'page');
+    // Étape à un seul onglet pour ce poste (Après → Podiums au poste Table) : pas de barre d'onglets, l'étape ouvre directement l'onglet.
+    if ((await page.getByRole('tab').count()) === 0) return;
   }
   await tab.click();
 }

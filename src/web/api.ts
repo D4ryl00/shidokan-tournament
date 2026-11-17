@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { hashKey, keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
+import { hashKey, keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import type { Competition, CompetitionInput } from '../domain/competition.js';
 import type { BracketFormat, KataScores, MatchMethod, Podium } from '../domain/brackets/index.js';
 import type { CategoryProgress, MedalRow, ResultRecord } from '../domain/results.js';
@@ -24,12 +24,22 @@ import type { AppSettingsPatch, PublicAppSettings } from '../domain/app-settings
 import type { GoogleContactsView, SyncApply } from '../domain/google-contacts.js';
 import type { Zone, ZoneInput } from '../domain/zones.js';
 import type { HistoryEntryView } from '../domain/history/types.js';
+import type { JournalEntryView, JournalType } from '../domain/journal/types.js';
 import type { PassagePlan } from '../domain/passages/index.js';
 import type { WaveSchedule } from '../domain/schedule/types.js';
 import type { CategoryDurations } from '../domain/schedule/durations.js';
 
 import { ApiError, TAB_ID } from './apiError.js';
+import { posteHeader } from './poste.js';
 export { ApiError, TAB_ID };
+
+/** Poste déclaré pour la compétition de l'adresse, noté au journal (rien hors d'une compétition). */
+function posteHeaders(url: string): Record<string, string> {
+  const poste = posteHeader(url);
+  return poste ? { 'X-Poste': poste } : {};
+}
+/** En-têtes d'une écriture : l'onglet qui écrit (mises à jour en direct) et le poste déclaré. */
+const writeHeaders = (url: string): Record<string, string> => ({ 'X-Poste-Id': TAB_ID, ...posteHeaders(url) });
 
 /** `rev` : révision de la donnée telle que l'écran l'a lue (null : elle n'existait pas) ; envoyée en If-Match. */
 export async function api<T>(method: string, url: string, body?: unknown, opts: { rev?: string | null } = {}): Promise<T> {
@@ -38,7 +48,7 @@ export async function api<T>(method: string, url: string, body?: unknown, opts: 
     headers: {
       ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
       ...(opts.rev === undefined ? {} : { 'If-Match': opts.rev ?? 'none' }),
-      ...(method === 'GET' ? {} : { 'X-Poste-Id': TAB_ID }),
+      ...(method === 'GET' ? {} : writeHeaders(url)),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -185,7 +195,7 @@ export function useDeleteRegistration(id: string) {
 }
 
 async function upload<T>(url: string, file: File): Promise<T> {
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: await file.arrayBuffer() });
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', ...posteHeaders(url) }, body: await file.arrayBuffer() });
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string; issues?: string[] };
     throw new ApiError(res.status, data.error ?? `Erreur ${res.status}`, data.issues ?? []);
@@ -246,7 +256,7 @@ export function useUploadFfk(id: string) {
     mutationFn: async (file: File) => {
       const res = await fetch(`/api/competitions/${id}/ffk-imports`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name) },
+        headers: { 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name), ...posteHeaders(`/api/competitions/${id}/ffk-imports`) },
         body: await file.arrayBuffer(),
       });
       if (!res.ok) {
@@ -503,6 +513,34 @@ export const useWithdrawRegistration = (id: string) => useReplacementAction<{ re
 export const useResetReplacement = (id: string) => useReplacementAction<{ waveId?: string; expect: string[] }>(id, 'reset');
 
 export type { HistoryEntryView };
+
+/** Une page du journal de la compétition ; `nextBefore` : où reprendre pour la suivante (null : plus rien). */
+export interface JournalPage {
+  entries: JournalEntryView[];
+  nextBefore: number | null;
+  total: number;
+}
+/**
+ * Journal de la compétition, par pages (les plus récentes d'abord), recherche et filtre faits par le serveur. Relu en direct comme
+ * les autres données : toutes les pages chargées sont relues, chacune reprenant après la précédente.
+ */
+export function useJournal(id: string, { q, types }: { q: string; types: JournalType[] }) {
+  return useInfiniteQuery({
+    queryKey: ['journal', id, q, types],
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams();
+      if (pageParam !== null) params.set('before', String(pageParam));
+      if (q.trim()) params.set('q', q.trim());
+      if (types.length) params.set('types', types.join(','));
+      const query = params.toString();
+      return api<JournalPage>('GET', `/api/competitions/${id}/journal${query ? `?${query}` : ''}`);
+    },
+    initialPageParam: null as number | null,
+    getNextPageParam: (last) => last.nextBefore,
+    // Une autre recherche garde le fil affiché jusqu'à la réponse (pas d'écran vide à chaque lettre).
+    placeholderData: keepPreviousData,
+  });
+}
 /**
  * Historique annulable de la session affichée (rechargé avec les données du jour). `enabled: false` : seulement ce qui est déjà
  * en cache (chargé par un panneau ou une fenêtre ouverts), sans le charger ni le recharger.
@@ -1436,7 +1474,7 @@ export const useAddMailAttachment = (id: string) =>
   useMailAttachmentMutation(id, async (file: File) => {
     const res = await fetch(`/api/competitions/${id}/mail-attachments`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name), 'X-Poste-Id': TAB_ID },
+      headers: { 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name), ...writeHeaders(`/api/competitions/${id}/mail-attachments`) },
       body: await file.arrayBuffer(),
     });
     if (!res.ok) {

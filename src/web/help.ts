@@ -26,6 +26,7 @@ export type HelpTopicId =
   | 'podiums'
   | 'reglages'
   | 'categories'
+  | 'journal'
   | 'fiche-club.en-ligne'
   | 'fiche-club.envoyer'
   | 'fiche-club.importer'
@@ -659,6 +660,23 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         '« Feuilles de résultats » : les tableaux remplis, à archiver.',
         'Exports .ods ou .xlsx des podiums et de tous les résultats.',
       ],
+    ],
+  },
+  journal: {
+    title: 'Journal',
+    short: 'Tout ce qui a modifié la compétition, du plus récent au plus ancien.',
+    details: [
+      'Chaque modification de la compétition y est notée au moment où elle est enregistrée : ce qui a changé (l’ancienne valeur barrée, puis la nouvelle), quand, par qui et comment (l’étiquette : Saisie, Inscription sur place, Pesée…).',
+      [
+        'Qui : l’adresse du compte connecté ; sans comptes, le poste déclaré par le navigateur (« poste Organisation », « poste Table centrale », « poste Zone 2 ») ; un club qui inscrit par son lien personnel : son nom, avec « lien du club ».',
+        'Une saisie faite sur un portable de zone indique aussi son heure sur le portable (« saisi 15:12 sur le portable, reçu 15:14 »).',
+        'Une opération qui touche beaucoup de combattants (clôture de la pesée…) tient sur une ligne : « ▸ Voir le détail » la déplie.',
+        'Une ligne « Opération non détaillée », sur fond orangé, note une modification que le journal ne sait pas encore décrire en détail.',
+      ],
+      'La recherche trouve tous les mots tapés, sans tenir compte des accents ni des majuscules : noms, clubs, catégories, valeurs, comptes, étiquettes. Les pastilles de type limitent le fil à certains types ; « Tous » les remet tous.',
+      'Le fil se met à jour tout seul quand un autre poste modifie la compétition ; la suite se charge en descendant.',
+      'Rien ne s’efface du journal : il part avec les données de la compétition, à la fin de la durée de conservation.',
+      'Réservé à l’organisateur : l’onglet n’apparaît pas aux postes et aux comptes Table centrale et Zone, et les liens des clubs n’y donnent pas accès.',
     ],
   },
   'podiums.clubs': {
