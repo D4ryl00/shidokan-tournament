@@ -29,13 +29,13 @@ export function FighterSheet({ competitionId, registrationId }: { competitionId:
   return (
     <Box
       data-testid="fighter-sheet"
-      style={{ borderLeft: '3px solid var(--mantine-color-blue-6)', background: 'var(--mantine-color-gray-0)', padding: '6px 10px', fontSize: 12 }}
+      style={{ borderLeft: '3px solid var(--sk-accent)', background: 'var(--sk-row)', padding: '6px 10px', fontSize: 12 }}
     >
       <dl style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '2px 8px', margin: 0 }}>
         {lines.map((l) => (
           <div key={l.label} style={{ display: 'contents' }}>
-            <dt style={{ color: 'var(--mantine-color-dimmed)' }}>{l.label}</dt>
-            <dd style={{ margin: 0 }}>{l.value}</dd>
+            <dt style={{ color: 'var(--sk-muted)' }}>{l.label}</dt>
+            <dd style={{ margin: 0, minWidth: 0, overflowWrap: 'anywhere' }}>{l.value}</dd>
           </div>
         ))}
       </dl>
