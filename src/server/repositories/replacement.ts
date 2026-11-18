@@ -27,6 +27,7 @@ import {
 import { manualProposal as domainManualProposal } from '../../domain/replacement/manual.js';
 import { atomically, dryRun } from '../db/atomic.js';
 import type { AppDb } from '../db/client.js';
+import { categorySeed } from './category-seed.js';
 import { withoutRowMeta } from '../db/row-versions.js';
 import { categories, clubs, competitions, fighters, historyEntries, recasements, refusals, registrations, setAsideCases, waves } from '../db/schema.js';
 import { listWaves } from './waves.js';
@@ -190,7 +191,7 @@ function persist(db: AppDb, competitionId: string, before: State, after: State, 
       if (!row) {
         const id = crypto.randomUUID();
         idMap.set(c.id, id);
-        t.insert(categories).values({ id, competitionId, status: 'provisional', seed: crypto.getRandomValues(new Uint32Array(1))[0]!, ...values }).run();
+        t.insert(categories).values({ id, competitionId, status: 'provisional', seed: categorySeed(competitionId, ks), ...values }).run();
       } else if (row.keyString !== ks || row.aliasKeys !== values.aliasKeys) {
         snapshotCategories.push({ id: row.id, keyString: row.keyString, keyJson: row.keyJson, aliasKeys: row.aliasKeys, label: row.label });
         t.update(categories).set(values).where(eq(categories.id, c.id)).run();

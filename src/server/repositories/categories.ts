@@ -28,6 +28,7 @@ import { WAVE_NONE, waveOfCategory, type Wave } from '../../domain/waves.js';
 import type { AppDb } from '../db/client.js';
 import { rowRev } from '../revisions.js';
 import { categories, fighters, registrations, tieBreaks, zones } from '../db/schema.js';
+import { categorySeed } from './category-seed.js';
 import { getCompetition, getGrid } from './competitions.js';
 import { recorded } from './history.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
@@ -198,7 +199,7 @@ export async function syncCategories(db: AppDb, competitionId: string, opts: { r
           format: null,
           repechage: null,
           thirdPlace: null,
-          seed: newSeed(),
+          seed: categorySeed(competitionId, ks),
           bracketJson: null,
           aliasKeys: '[]',
           stale: false,
