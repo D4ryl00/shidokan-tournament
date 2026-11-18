@@ -1,7 +1,7 @@
 import { categoryLabel, type CategoryKey } from '../categories.js';
 import { DISCIPLINES } from '../disciplines.js';
 import type { RuleId } from '../settings.js';
-import { applyAll } from './move.js';
+import { applyAll, proposalMoves } from './move.js';
 import { ruleProfile } from './propose.js';
 import { ruleRank } from './rules.js';
 import type { CaseKind, Proposal, State } from './types.js';
@@ -33,6 +33,8 @@ export interface MoveView {
   /** Écart de poids de la catégorie d'arrivée et son maximum ; `null` : discipline sans poids. */
   gap: { kg: number; max: number } | null;
   details: { rule: RuleId; detail: string }[];
+  /** Détail des règles pour chaque combattant déplacé (dans l'ordre de `proposalMoves`) : le détail d'âge part de sa propre tranche. */
+  movers: { registrationId: string; details: MoveView['details'] }[];
   /** Correction qui s'impose (retour, pesée vers la catégorie de son poids réel) : pastille neutre « imposée ». */
   forced: boolean;
   /** Règle la plus coûteuse (pour le combattant qui bouge, comme le plan) : sa pastille en gras. */
@@ -97,6 +99,7 @@ export function moveView(before: State, p: Proposal, after: State = applyAll(bef
     opponents: merged.filter((x) => !movers.has(x.registrationId)).map((x) => x.label),
     gap: DISCIPLINES[to.discipline].hasWeight ? { kg: gapKg, max } : null,
     details: detailsOf(before, p, p.rules, gapKg, max),
+    movers: proposalMoves(p).map((mv) => ({ registrationId: mv.registrationId, details: detailsOf(before, mv, p.rules, gapKg, max) })),
     forced: p.type !== 'M' && ruleProfile(before, p).forced,
     costRule: p.rules.reduce<RuleId | null>((best, r) => {
       const who = m ?? { ruleset: null, acceptsJiyuFirst: null };

@@ -65,3 +65,20 @@ test('kata : pas d’écart de poids', () => {
   if ('error' in r) throw new Error(r.error);
   expect(moveView(s, r.p).gap).toBeNull();
 });
+
+test('movers : un détail par combattant déplacé, chacun depuis sa propre tranche', () => {
+  const rousseau = member({ label: 'ROUSSEAU Tom', sex: 'M', ageBandCode: 'minime', weightClassId: 'minime:M:-50', weighInKg: 45, presence: 'present' });
+  const boys = [40, 39, 39].map((kg) => member({ sex: 'M', ageBandCode: 'benjamin', weightClassId: 'benjamin:M:-40', weighInKg: kg, presence: 'present' }));
+  const minime = member({ sex: 'M', ageBandCode: 'minime', weightClassId: 'minime:M:-50', weighInKg: 44, presence: 'present' });
+  const alone = makeState([rousseau, ...boys]);
+  const p = caseProps(alone, `alone:${rousseau.registrationId}`).find((x) => x.registrationId === boys[0]!.registrationId)!;
+  const s = makeState([rousseau, ...boys, minime], { categories: alone.categories });
+  const single = moveView(s, p);
+  expect(single.movers).toEqual([{ registrationId: p.registrationId, details: single.details }]);
+
+  const two: Proposal = { ...p, alsoMoved: [minime.registrationId], rules: ['ageUp'] };
+  const v = moveView(s, two);
+  expect(v.movers.map((x) => x.registrationId)).toEqual([boys[0]!.registrationId, minime.registrationId]);
+  expect(v.movers[0]!.details[0]!.detail).toMatch(/^Benjamins → /);
+  expect(v.movers[1]!.details[0]!.detail).toMatch(/^Minimes → /);
+});
