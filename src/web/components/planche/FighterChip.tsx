@@ -35,7 +35,7 @@ export function FighterChip({ id, info, badge, badgeDetail, sameClub = false, ma
         style={{
           border: `1px solid ${selected ? 'var(--sk-accent)' : 'var(--sk-card-line)'}`,
           outline: selected ? '2px solid var(--sk-accent)' : undefined,
-          borderRadius: 6, padding: compact ? '2px 8px' : '3px 8px', paddingRight: withInfo ? 26 : undefined, minWidth: 0,
+          borderRadius: 6, padding: compact ? '2px 8px' : '3px 8px', paddingRight: withInfo ? 26 : undefined, minHeight: withInfo && compact ? 26 : undefined, minWidth: 0,
           backgroundColor: matched ? 'var(--sk-chip)' : 'var(--sk-card)',
           cursor: locked ? 'default' : 'grab', ...extra?.style,
         }}>
@@ -47,7 +47,7 @@ export function FighterChip({ id, info, badge, badgeDetail, sameClub = false, ma
           {info?.club ?? ''}
         </Text>}
       </Box>
-      {withInfo && <FighterInfoButton competitionId={competitionId!} registrationId={id} name={info!.name} club={info!.club} size={compact ? 20 : 24} style={{ position: 'absolute', top: compact ? 2 : 1, right: 1 }} />}
+      {withInfo && <FighterInfoButton competitionId={competitionId!} registrationId={id} name={info!.name} club={info!.club} style={{ position: 'absolute', top: 1, right: 1 }} />}
     </Box>
   );
 }
