@@ -135,7 +135,7 @@ La présence de n'importe quel combattant (pas seulement ceux des cas) vient de 
 
 ## 7. De et Vers calculés par le serveur
 
-Nouvelle route en lecture : `POST /api/competitions/:id/replacement/move-details`. Elle répond, pour un déplacement, la
+Nouvelle route en lecture : `POST /api/competitions/:id/replacement/details/preview` (le suffixe `/preview` l'exclut de l'événement « change », comme les autres aperçus). Elle répond, pour un déplacement, la
 catégorie de départ **juste avant** lui et la catégorie d'arrivée **juste après** lui, chacune avec ce qu'il faut pour
 l'écran : id (absent pour une catégorie qui n'existe pas encore en base), libellé, session, zone, format effectif, état,
 membres (inscriptions, absents compris et marqués), tableau (`bracket`, pour `BracketView`), et les inscriptions qui bougent.
