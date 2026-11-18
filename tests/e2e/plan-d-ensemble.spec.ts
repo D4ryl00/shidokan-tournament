@@ -895,6 +895,24 @@ test('plan : changé ailleurs pendant l’absence, recalculé au retour (autre o
   expect(posts()).toBeGreaterThan(before);
 });
 
+test('plan : changé depuis ce même onglet sur une autre page, recalculé au retour', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan retour même onglet');
+  await seedPlan(request, id);
+  const { view, moveOf } = await openPlan(page, id);
+  await expect(view).toContainText('(au lieu de 3)');
+  await expect(moveOf('SEULE Léa')).toBeVisible();
+  const posts = countPlanPosts(page);
+  // Sur Inscriptions, ce poste supprime SEULE (une écriture qui ne passe pas par la Réaffectation).
+  await openTab(page, 'Inscriptions');
+  await page.getByTestId('registration-row').filter({ hasText: 'SEULE' }).getByRole('button', { name: 'Supprimer' }).click();
+  await page.getByRole('dialog', { name: 'Supprimer l’inscription ?' }).getByRole('button', { name: 'Supprimer' }).click();
+  await expect(page.getByTestId('registration-row').filter({ hasText: 'SEULE' })).toHaveCount(0);
+  await openTab(page, 'Réaffectation');
+  await expect(view).toContainText('(au lieu de 2)');
+  await expect(moveOf('SEULE Léa')).toHaveCount(0);
+  expect(posts()).toBeGreaterThanOrEqual(1);
+});
+
 test('plan : calcul annulé puis départ, recalculé au retour', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe plan retour annulé');
   await seedPlan(request, id);

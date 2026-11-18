@@ -1,12 +1,13 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { MOVE_DETAILS_KEY, PLAN_KEY, refreshPlansLive, TAB_ID } from './api.js';
+import { forgetHiddenPlans, MOVE_DETAILS_KEY, PLAN_KEY, refreshPlansLive, TAB_ID } from './api.js';
 import { whenSaved } from './unsaved.js';
 
 /**
  * Écrans mis à jour tout seuls : le serveur prévient quand la compétition change (un autre poste a écrit), et les données affichées
  * sont relues — regroupées, une seule relecture en attente à la fois, et seulement quand aucune saisie n'est en cours à l'écran.
- * - Les écritures de cet onglet sont ignorées (il relit déjà ses données après chaque écriture).
+ * - Les écritures de cet onglet ne relisent rien (il relit déjà ses données après chaque écriture) ; seuls ses plans gardés
+ *   hors de la page sont oubliés.
  * - Flux fermé (serveur redémarré, session expirée, proxy en erreur) : reconnexion après une attente croissante, puis relecture.
  * - Onglet caché : flux fermé (le navigateur n'ouvre que 6 connexions vers un même PC) ; rouvert quand il revient, avec relecture
  *   seulement si la compétition a changé entre-temps (`revisionTracker`) : sinon le plan d'ensemble serait recalculé pour rien.
@@ -57,7 +58,10 @@ export function useCompetitionEvents(competitionId: string): void {
       s.addEventListener('change', (e) => {
         const { origin = null, rev = null } = eventData(e);
         revision.changed(rev);
-        if (origin !== TAB_ID) refresh();
+        // Écriture de cet onglet : il a déjà relu ce qu'elle touche, mais pas forcément les plans gardés (une écriture faite sur
+        // une autre page que la Réaffectation) : ils sont oubliés, recalculés au retour sur la page.
+        if (origin === TAB_ID) forgetHiddenPlans(qc, competitionId);
+        else refresh();
       });
       s.onopen = () => {
         delay = 2000;

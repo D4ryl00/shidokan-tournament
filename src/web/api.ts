@@ -387,7 +387,7 @@ export const PLAN_KEY = 'replacement-plan';
  * l'état d'avant, ils ressortiraient le temps du recalcul quand l'organisateur revient à ces choix (même « Valider » qu'avant
  * « Appliquer le plan » puis « Repartir de zéro ») : choix dit impossible et retiré, faux changements signalés.
  */
-function forgetHiddenPlans(qc: QueryClient, id?: string): void {
+export function forgetHiddenPlans(qc: QueryClient, id?: string): void {
   qc.removeQueries({ queryKey: id === undefined ? [PLAN_KEY] : [PLAN_KEY, id], type: 'inactive' });
 }
 
