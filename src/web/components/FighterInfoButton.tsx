@@ -4,12 +4,15 @@ import { FighterSheet } from './replacement/FighterSheet.js';
 
 const stop = (e: SyntheticEvent) => e.stopPropagation();
 
+// Une seule bulle à la fois, au clavier aussi (le clic dehors ne ferme pas la précédente quand on ouvre par Entrée).
+let closeCurrent: (() => void) | null = null;
+
 /**
  * Icône ⓘ à côté d'un nom : ouvre la fiche du combattant dans une bulle. Ni le clic, ni le clavier, ni le glisser n'en
  * remontent à la pastille ou à la case (choix clic-clic, échange, déplacement). La bulle est dans un portail, mais les
  * événements React la traversent : elle les arrête aussi.
  */
-export function FighterInfoButton({ competitionId, registrationId, name, club, style }: { competitionId: string; registrationId: string; name: string; club: string; style?: CSSProperties }) {
+export function FighterInfoButton({ competitionId, registrationId, name, club, style, size = 24 }: { competitionId: string; registrationId: string; name: string; club: string; style?: CSSProperties; size?: number }) {
   // Popover monté au premier clic seulement (une page peut avoir des centaines de ⓘ) ; ensuite il reste monté.
   const [mounted, setMounted] = useState(false);
   const [opened, setOpened] = useState(false);
@@ -25,14 +28,17 @@ export function FighterInfoButton({ competitionId, registrationId, name, club, s
   // de la page (planche) ne la ferme pas.
   useEffect(() => {
     if (!opened) return;
+    const close = () => setOpened(false);
+    if (closeCurrent && closeCurrent !== close) closeCurrent();
+    closeCurrent = close;
     const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') setOpened(false); };
     const onWheel = (e: WheelEvent) => { if (e.target instanceof Element && e.target.closest('[data-testid="galaxy"]')) setOpened(false); };
     window.addEventListener('keydown', onKey);
     window.addEventListener('wheel', onWheel, { capture: true, passive: true });
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('wheel', onWheel, { capture: true }); };
+    return () => { if (closeCurrent === close) closeCurrent = null; window.removeEventListener('keydown', onKey); window.removeEventListener('wheel', onWheel, { capture: true }); };
   }, [opened]);
   const icon = (onClick: () => void) => (
-    <ActionIcon ref={iconRef} data-testid="fighter-info" size={24} variant="subtle" aria-label={`Fiche de ${name}`} title="Fiche du combattant"
+    <ActionIcon ref={iconRef} data-testid="fighter-info" size={size} aria-haspopup="dialog" aria-expanded={opened} variant="subtle" aria-label={`Fiche de ${name}`} title="Fiche du combattant"
       draggable={false} onClick={onClick}
       onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') setOpened(false); }}
       // mousedown annulé : pas de focus ni de sélection de texte au clic sur ⓘ.

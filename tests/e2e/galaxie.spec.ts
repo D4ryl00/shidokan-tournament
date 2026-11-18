@@ -424,6 +424,13 @@ test('galaxie : ⓘ d’une pastille ouvre la fiche', async ({ page, request }) 
   await expect(page.getByTestId('fighter-info-sheet').getByTestId('fighter-sheet')).toContainText('Licence');
   await expect(c61.getByTestId('planche-chip').first()).toHaveAttribute('aria-pressed', 'false');
   await expect(page.getByTestId('galaxy-canvas')).toHaveAttribute('data-selected', ids.c61);
+  // ⓘ reste dans la pastille compacte (pas de débordement sous la bordure).
+  const box = async (l: ReturnType<typeof page.locator>) => (await l.boundingBox())!;
+  const ib = await box(c61.getByTestId('fighter-info').first());
+  const cb = await box(c61.getByTestId('planche-chip').first());
+  expect(ib.y).toBeGreaterThanOrEqual(cb.y);
+  expect(ib.y + ib.height).toBeLessThanOrEqual(cb.y + cb.height);
+  await expect(c61.getByTestId('fighter-info').first()).toHaveAttribute('aria-expanded', 'true');
   // Molette sur la galaxie : la bulle, qui ne suivrait pas la carte, se ferme.
   await page.getByTestId('galaxy-canvas').hover({ position: { x: 5, y: 5 } });
   await page.mouse.wheel(0, 100);

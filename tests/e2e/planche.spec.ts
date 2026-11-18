@@ -255,6 +255,18 @@ test('planche : ⓘ ouvre la fiche sans choisir la pastille ; clic-clic intact',
   const tray = page.getByTestId('planche-tray');
   await info(tray, 'SOLO').dragTo(chip(page, c54, 'ALBA'));
   await expect(page.getByTestId('drop-dialog')).toHaveCount(0);
+  // Au clavier aussi, une seule bulle : Entrée sur ⓘ, puis sur un autre ⓘ.
+  await info(c54, 'ALBA').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('fighter-info-sheet')).toContainText('ALBA x');
+  await info(c54, 'BRUN').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('fighter-info-sheet')).toHaveCount(1);
+  await expect(page.getByTestId('fighter-info-sheet')).toContainText('BRUN x');
+  await expect(info(c54, 'BRUN')).toHaveAttribute('aria-expanded', 'true');
+  await expect(info(c54, 'ALBA')).toHaveAttribute('aria-expanded', 'false');
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('fighter-info-sheet')).toHaveCount(0);
   // Espace sur ⓘ ouvre la fiche sans choisir la pastille.
   await info(tray, 'SOLO').focus();
   await page.keyboard.press('Space');

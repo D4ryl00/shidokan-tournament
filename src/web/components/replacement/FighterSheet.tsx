@@ -7,8 +7,8 @@ import { sheetLines } from './sheetLines.js';
 
 /** Fiche d'un combattant (sans le club), sous son nom dans les détails d'une réaffectation. */
 export function FighterSheet({ competitionId, registrationId }: { competitionId: string; registrationId: string }) {
-  const { data: regs } = useRegistrations(competitionId);
-  const { data: grid } = useGrid(competitionId);
+  const { data: regs, isPending: regsPending } = useRegistrations(competitionId);
+  const { data: grid, isPending: gridPending } = useGrid(competitionId);
   const { data: weighIn } = useWeighIn(competitionId);
   const { data: categories } = useCategories(competitionId);
   const { data: waves } = useWaves(competitionId);
@@ -25,7 +25,8 @@ export function FighterSheet({ competitionId, registrationId }: { competitionId:
     return sheetLines(row, { grid, presence, others, recasement: recasements.get(row.id) });
   }, [row, grid, weighIn, regs, categories, waves, recasements]);
 
-  if (!lines) return <Text size="xs" c="dimmed">Chargement…</Text>;
+  // Chargement en cours seulement ; ligne absente ou requête en échec : rien (la fiche reste muette, comme avant).
+  if (!lines) return regsPending || gridPending ? <Text size="xs" c="dimmed">Chargement…</Text> : null;
   return (
     <Box
       data-testid="fighter-sheet"

@@ -47,7 +47,7 @@ export function FighterChip({ id, info, badge, badgeDetail, sameClub = false, ma
           {info?.club ?? ''}
         </Text>}
       </Box>
-      {withInfo && <FighterInfoButton competitionId={competitionId!} registrationId={id} name={info!.name} club={info!.club} style={{ position: 'absolute', top: 1, right: 1 }} />}
+      {withInfo && <FighterInfoButton competitionId={competitionId!} registrationId={id} name={info!.name} club={info!.club} size={compact ? 20 : 24} style={{ position: 'absolute', top: compact ? 2 : 1, right: 1 }} />}
     </Box>
   );
 }
