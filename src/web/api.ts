@@ -629,6 +629,8 @@ const planBody = (waveId: string | null, choices: PlanChoice[], cardDecisions: b
  * Le plan calculé reste gardé tant que rien ne change : ni périmé au retour sur la page, ni oublié au bout de 5 minutes. Ce qui le
  * rend faux le fait déjà oublier ou relire : gestes de ce poste (`useInvalidateDay`), autres postes et onglet revenu après des
  * changements manqués (`refreshPlansLive`), compétition quittée (`useCompetitionEvents`), calcul annulé (`cancelPlan`).
+ * Mémoire : un plan est gardé par jeu de choix essayé (chaque « Valider », « Modifier » ou refus en fait un nouveau) ; ceux qui ne
+ * sont plus affichés sont oubliés à la première écriture (`forgetHiddenPlans`) ou en quittant la compétition.
  */
 export const PLAN_CACHE = { staleTime: Infinity, gcTime: Infinity, refetchOnWindowFocus: false } as const;
 

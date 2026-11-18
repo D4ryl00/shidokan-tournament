@@ -83,10 +83,18 @@ export function useCompetitionEvents(competitionId: string): void {
       document.removeEventListener('visibilitychange', onVisibility);
       close();
       if (timer) clearTimeout(timer);
-      // Compétition quittée : plus d'événements pour tenir ses plans gardés à jour, ils sont oubliés (recalculés au retour).
-      qc.removeQueries({ queryKey: [PLAN_KEY, competitionId] });
+      forgetPlansOfLeftCompetition(qc, competitionId);
     };
   }, [competitionId, qc]);
+}
+
+/**
+ * Compétition quittée : plus d'événements pour tenir ses plans gardés à jour, ils sont oubliés (recalculés au retour). Au tour
+ * suivant et seulement ceux qui ne sont plus affichés : le nettoyage de ce flux passe avant le démontage de la page (et React,
+ * en mode développement, simule un démontage aussitôt suivi d'un remontage) ; un plan encore affiché, ou en plein calcul, reste.
+ */
+export function forgetPlansOfLeftCompetition(qc: QueryClient, competitionId: string): void {
+  setTimeout(() => qc.removeQueries({ queryKey: [PLAN_KEY, competitionId], type: 'inactive' }), 0);
 }
 
 function eventData(e: Event): { origin?: string | null; rev?: string | null } {

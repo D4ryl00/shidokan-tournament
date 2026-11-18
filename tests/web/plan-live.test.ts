@@ -1,6 +1,7 @@
 import { QueryClient, QueryObserver, type QueryKey } from '@tanstack/react-query';
 import { afterEach, expect, test } from 'vitest';
 import { cancelPlan, PLAN_CACHE, PLAN_KEY, refreshPlansLive, trackPlanFetch } from '../../src/web/api.js';
+import { forgetPlansOfLeftCompetition } from '../../src/web/liveUpdates.js';
 
 const clients: QueryClient[] = [];
 afterEach(() => clients.splice(0).forEach((qc) => qc.clear()));
@@ -124,4 +125,38 @@ test('plan annulé puis quitté : recalculé au retour', async () => {
   const back = p.observe();
   expect(p.counts.starts).toBe(3);
   back();
+});
+
+test('plan relancé (« Relancer le calcul ») puis annulé et quitté : recalculé au retour', async () => {
+  const p = planQuery();
+  await p.release();
+  // « Relancer le calcul » : un nouveau calcul sur un plan à jour (rien ne l'a marqué périmé).
+  void p.query().fetch();
+  expect(p.counts.starts).toBe(2);
+  await cancelPlan(p.qc, p.queryKey);
+  expect(p.query().state.data).toBe(1);
+  p.unsubscribe();
+  const back = p.observe();
+  expect(p.counts.starts).toBe(3);
+  back();
+});
+
+test('compétition quittée : ses plans sans observateur sont oubliés, au tour suivant', async () => {
+  const p = planQuery();
+  await p.release();
+  p.unsubscribe();
+  forgetPlansOfLeftCompetition(p.qc, 'c1');
+  await new Promise((r) => setTimeout(r, 5));
+  expect(p.qc.getQueryCache().find({ queryKey: p.queryKey, exact: true })).toBeUndefined();
+});
+
+test('démontage simulé (StrictMode) : le plan encore observé n’est ni oublié ni arrêté', async () => {
+  const p = planQuery();
+  expect(p.counts.starts).toBe(1);
+  forgetPlansOfLeftCompetition(p.qc, 'c1');
+  await new Promise((r) => setTimeout(r, 5));
+  expect(p.counts).toEqual({ starts: 1, aborts: 0 });
+  await p.release();
+  expect(p.query().state.data).toBe(1);
+  p.unsubscribe();
 });
