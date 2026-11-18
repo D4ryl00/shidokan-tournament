@@ -290,7 +290,8 @@ test('modifier puis annuler le choix : le plan revient', async ({ page, request 
   await expect(changes).toContainText('SEULE Léa n’est plus déplacé.');
   // Le choix est gardé sur le poste.
   await page.reload();
-  await page.getByTestId('plan-show').click();
+  // Le plan déplié l’est encore après le rechargement (gardé sur le poste, comme les choix).
+  await expect(page.getByTestId('plan-show')).toHaveAttribute('aria-expanded', 'true');
   await expect(mini).toContainText('hors règles');
   await mini.getByTestId('plan-move-unchoose').click();
   await expect(view.getByTestId('plan-move')).toHaveCount(3);
@@ -313,7 +314,8 @@ test('refuser puis annuler le refus', async ({ page, request }) => {
   await expect(card.getByTestId('replacement-proposal').first()).toBeVisible();
   // Gardé sur le poste.
   await page.reload();
-  await page.getByTestId('plan-show').click();
+  // Le plan déplié l’est encore après le rechargement (gardé sur le poste, comme les choix).
+  await expect(page.getByTestId('plan-show')).toHaveAttribute('aria-expanded', 'true');
   await expect(view.getByTestId('plan-refused')).toContainText('VETE Paul');
   // La raison ne répète pas le nom, comme dans les lignes du plan.
   await expect(view.getByTestId('plan-refused')).not.toContainText('VETE Paul :');
@@ -825,6 +827,111 @@ test('plan : un choix devenu impossible est retiré et nommé, dans sa session s
   await expect(view.getByTestId('plan-dropped')).toHaveCount(0);
   await session('Matin');
   await expect(view.getByTestId('plan-move-unvalidate')).toHaveCount(0);
+});
+
+/** Compte les calculs du plan demandés par la page à partir de maintenant. */
+function countPlanPosts(page: Page) {
+  let n = 0;
+  page.on('request', (r) => { if (isPlanPost(r)) n++; });
+  return () => n;
+}
+const lateRegistration = (request: APIRequestContext, id: string, data: object) =>
+  request.post(`/api/competitions/${id}/registrations`, {
+    data: { clubId: null, sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', source: 'onsite', ...data },
+  });
+
+test('plan : retour depuis Tableaux, déplié, choix gardés, sans nouveau calcul ; replié, il le reste', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan retour');
+  await seedPlan(request, id);
+  const { view, moveOf } = await openPlan(page, id);
+  await moveOf('MINI Léa').getByTestId('plan-move-validate').click();
+  await expect(view).toContainText('Validés 1 /');
+  await expect(page.getByTestId('plan-progress')).toHaveCount(0);
+  const posts = countPlanPosts(page);
+  await openTab(page, 'Tableaux');
+  await expect(page).toHaveURL(/\/tableaux/);
+  await openTab(page, 'Réaffectation');
+  const show = page.getByTestId('plan-show');
+  await expect(show).toHaveAttribute('aria-expanded', 'true');
+  await expect(view).toBeVisible();
+  await expect(moveOf('MINI Léa').getByTestId('plan-move-unvalidate')).toBeVisible();
+  await expect(view).toContainText('Validés 1 /');
+  await page.waitForTimeout(1000);
+  await expect(page.getByTestId('plan-progress')).toHaveCount(0);
+  expect(posts()).toBe(0);
+  // Replié avant de partir : replié au retour.
+  await show.click();
+  await expect(view).toHaveCount(0);
+  await openTab(page, 'Tableaux');
+  await expect(page).toHaveURL(/\/tableaux/);
+  await openTab(page, 'Réaffectation');
+  await expect(show).toHaveAttribute('aria-expanded', 'false');
+  await expect(view).toHaveCount(0);
+});
+
+test('plan : changé ailleurs pendant l’absence, recalculé au retour (autre onglet ou hors de la compétition)', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan retour changé');
+  await seedPlan(request, id);
+  const { view } = await openPlan(page, id);
+  await expect(view).toContainText('(au lieu de 3)');
+  const posts = countPlanPosts(page);
+  await openTab(page, 'Tableaux');
+  await expect(page).toHaveURL(/\/tableaux/);
+  // Un autre poste inscrit une combattante seule dans sa catégorie pendant qu’on est sur les Tableaux.
+  await lateRegistration(request, id, { lastName: 'TARDIVE', firstName: 'Léa', weightClassId: 'cadet:F:-54', approxWeightKg: 50 });
+  await page.waitForTimeout(500);
+  await openTab(page, 'Réaffectation');
+  await expect(view).toContainText('(au lieu de 4)');
+  expect(posts()).toBeGreaterThanOrEqual(1);
+  // Hors de la compétition (liste des compétitions, sans recharger la page), un autre poste écrit : recalculé au retour.
+  const before = posts();
+  await page.getByRole('link', { name: 'Shidokan France — compétitions' }).click();
+  await expect(page.getByTestId('competition-row').filter({ hasText: 'Coupe plan retour changé' })).toBeVisible();
+  await lateRegistration(request, id, { lastName: 'TARDIF', firstName: 'Paul', sex: 'M', weightClassId: 'cadet:M:-63', approxWeightKg: 60 });
+  await page.getByTestId('competition-row').filter({ hasText: 'Coupe plan retour changé' }).getByRole('link', { name: 'Coupe plan retour changé' }).click();
+  await openTab(page, 'Réaffectation');
+  await expect(page.getByTestId('plan-show')).toHaveAttribute('aria-expanded', 'true');
+  await expect(view).toContainText('(au lieu de 5)');
+  expect(posts()).toBeGreaterThan(before);
+});
+
+test('plan : calcul annulé puis départ, recalculé au retour', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan retour annulé');
+  await seedPlan(request, id);
+  const { view } = await openPlan(page, id);
+  const apply = view.getByTestId('plan-apply');
+  await expect(apply).toBeEnabled();
+  const slow = slowPlan(5000);
+  await page.route('**/replacement/plan', slow);
+  const mix = page.getByTestId('rule-ladder').locator('[data-testid="ladder-row"][data-rule="mixSexes"]').getByTestId('ladder-switch');
+  await mix.click({ force: true });
+  await expect(page.getByTestId('plan-progress')).toBeVisible();
+  await page.getByRole('button', { name: 'Annuler le calcul' }).click();
+  const message = page.getByText('Calcul annulé : le plan affiché ne tient pas compte de votre dernier changement.');
+  await expect(message).toBeVisible();
+  await page.unroute('**/replacement/plan', slow);
+  const posts = countPlanPosts(page);
+  await openTab(page, 'Tableaux');
+  await expect(page).toHaveURL(/\/tableaux/);
+  await openTab(page, 'Réaffectation');
+  await expect.poll(posts).toBeGreaterThanOrEqual(1);
+  await expect(apply).toBeEnabled();
+  await expect(message).toHaveCount(0);
+});
+
+test('plan : déplié dans une session, replié dans l’autre', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan déplié par session');
+  await seedSessions(request, id);
+  await page.goto(`/competitions/${id}/reaffectation`);
+  await openSession(page, 'Matin');
+  const show = page.getByTestId('plan-show');
+  await expect(show).toHaveAttribute('aria-expanded', 'true');
+  await page.getByTestId('replacement-wave').getByText('Après-midi', { exact: true }).click();
+  await expect(page.getByRole('radio', { name: 'Après-midi', exact: true })).toBeChecked();
+  await expect(show).toHaveAttribute('aria-expanded', 'false');
+  await page.getByTestId('replacement-wave').getByText('Matin', { exact: true }).click();
+  await expect(page.getByRole('radio', { name: 'Matin', exact: true })).toBeChecked();
+  await expect(show).toHaveAttribute('aria-expanded', 'true');
 });
 
 test('réglages : une relecture pendant une saisie ne l’efface pas, et l’enregistrement garde ce qu’un autre poste a changé', async ({ page, request }) => {

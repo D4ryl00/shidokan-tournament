@@ -35,11 +35,17 @@ function write(key: string, choices: PlanChoice[]): void {
   }
 }
 
-/** Oublie les choix du plan et la coche d'une session (`null` : sans sessions) sur ce poste, après « Repartir de zéro ». */
+const openKeyOf = (competitionId: string, waveId: string | null) => `plan-open:${competitionId}:${waveId ?? ''}`;
+
+/**
+ * Oublie les choix du plan, la coche et l'état déplié d'une session (`null` : sans sessions) sur ce poste, après « Repartir de
+ * zéro ».
+ */
 export function clearPlanChoices(competitionId: string, waveId: string | null): void {
   try {
     sessionStorage.removeItem(keyOf(competitionId, waveId));
     sessionStorage.removeItem(`plan-card-decisions:${competitionId}:${waveId ?? ''}`);
+    sessionStorage.removeItem(openKeyOf(competitionId, waveId));
   } catch {
     // Stockage indisponible : rien à oublier.
   }
@@ -74,6 +80,37 @@ export function usePlanCardDecisions(competitionId: string, waveId: string | nul
     setStore({ key, on });
   }, [key]);
   return [current.on, set];
+}
+
+/**
+ * Plan de la session déplié (« Voir le plan… »), gardé sur le poste : on le retrouve en revenant sur la page. Replié par défaut,
+ * et si le stockage est absent ou bloqué.
+ */
+export function usePlanOpen(competitionId: string, waveId: string | null): [boolean, (open: boolean) => void] {
+  const key = openKeyOf(competitionId, waveId);
+  const readOpen = () => {
+    try {
+      return sessionStorage.getItem(key) === 'true';
+    } catch {
+      return false;
+    }
+  };
+  const [store, setStore] = useState(() => ({ key, open: readOpen() }));
+  let current = store;
+  if (store.key !== key) {
+    current = { key, open: readOpen() };
+    setStore(current);
+  }
+  const set = useCallback((open: boolean) => {
+    try {
+      if (open) sessionStorage.setItem(key, 'true');
+      else sessionStorage.removeItem(key);
+    } catch {
+      // Stockage indisponible : l'état vit seulement dans la page.
+    }
+    setStore({ key, open });
+  }, [key]);
+  return [current.open, set];
 }
 
 /**

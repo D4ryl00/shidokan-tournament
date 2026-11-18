@@ -46,7 +46,7 @@ import { MoveBlocks } from '../components/replacement/MoveBlocks.js';
 import { DetailsToggle, MoveDetails } from '../components/replacement/MoveDetails.js';
 import { CopyForClub } from '../components/replacement/CopyForClub.js';
 import { WaveChangeWarning } from '../components/replacement/WaveChangeWarning.js';
-import { clearPlanChoices, usePlanCardDecisions, usePlanChoices } from '../usePlanChoices.js';
+import { clearPlanChoices, usePlanCardDecisions, usePlanChoices, usePlanOpen } from '../usePlanChoices.js';
 import { useSelectedWave, withSession } from '../useSelectedWave.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import { plural } from '../../domain/plural.js';
@@ -120,7 +120,7 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
   const [cardDecisions, setCardDecisions] = usePlanCardDecisions(id, waveId);
   // Choix retirés (noms), pour la session où ils l'ont été seulement.
   const [dropped, setDropped] = useState<{ waveId: string | null; names: string[] }>({ waveId, names: [] });
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = usePlanOpen(id, waveId);
   // Avec des sessions, le plan n'existe que pour la session choisie.
   const { data: shownPlan, error, isFetching, isPlaceholderData, progress, cancelled, cancel, restart } = usePlan(id, waveId, choices, cardDecisions, ready);
   // Le plan gardé pendant un recalcul est celui de la même session seulement (pas celui de la session d'avant).
@@ -178,7 +178,7 @@ function RulesPanel({ id, waveId, ready, fighter, targets }: {
       </Group>
       {plan && (
         <Group>
-          <Button data-testid="plan-show" variant={open ? 'default' : 'filled'} aria-expanded={open} onClick={() => setOpen((o) => !o)} style={{ maxWidth: '100%', height: 'auto', minHeight: 36, whiteSpace: 'normal' }}>
+          <Button data-testid="plan-show" variant={open ? 'default' : 'filled'} aria-expanded={open} onClick={() => setOpen(!open)} style={{ maxWidth: '100%', height: 'auto', minHeight: 36, whiteSpace: 'normal' }}>
             {k === null ? 'Voir le plan des corrections imposées' : `Voir le plan jusqu’à la règle ${k}`} ({plural(plan.plan.moves.length, 'déplacement', 'déplacements')}, {plural(plan.plan.alone.length, 'seul', 'seuls')})
           </Button>
           {/* Efface les validations, « Modifier » et refus du plan de la session ; rien d'enregistré n'est touché. */}
