@@ -240,6 +240,9 @@ test('planche : ⓘ ouvre la fiche sans choisir la pastille ; clic-clic intact',
   await page.keyboard.press('Enter');
   await expect(page.getByTestId('fighter-info-sheet')).toContainText('DIDI x');
   await expect(chip(page, c54, 'DIDI')).toHaveAttribute('aria-pressed', 'false');
+  // Échap avec le focus resté sur ⓘ ferme la fiche.
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('fighter-info-sheet')).toHaveCount(0);
   // Le bac aussi ; glisser depuis ⓘ ne déplace rien.
   const solo = page.getByTestId('planche-tray').getByTestId('planche-chip').filter({ hasText: 'SOLO' });
   await solo.getByTestId('fighter-info').dragTo(chip(page, c54, 'ALBA'));

@@ -36,8 +36,11 @@ export function FighterChip({ id, info, badge, badgeDetail, sameClub = false, ma
       }}>
       <Group gap={2} wrap="wrap" justify="space-between" align="flex-start">
         <Text size="sm" fw={matched ? 700 : 500} lh={1.25} style={{ overflowWrap: 'anywhere', minWidth: 0 }}>{info?.name ?? '?'}</Text>
-        {competitionId && info && <FighterInfoButton competitionId={competitionId} registrationId={id} name={info.name} club={info.club} />}
-        {badge && <ReplacementBadge type={badge} size="xs" detail={badgeDetail} />}
+        {/* ⓘ et badge ensemble, à droite, même quand la ligne se replie. */}
+        <Group gap={2} wrap="nowrap" ml="auto" style={{ flexShrink: 0 }}>
+          {competitionId && info && <FighterInfoButton competitionId={competitionId} registrationId={id} name={info.name} club={info.club} />}
+          {badge && <ReplacementBadge type={badge} size="xs" detail={badgeDetail} />}
+        </Group>
       </Group>
       {!compact && <Text size="xs" lh={1.2} c={sameClub ? 'orange' : 'dimmed'} fw={sameClub ? 600 : undefined} data-testid={sameClub ? 'same-club' : undefined} className="sk-ellipsis">
         {info?.club ?? ''}

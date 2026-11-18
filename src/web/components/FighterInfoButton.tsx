@@ -11,7 +11,8 @@ const stop = (e: SyntheticEvent) => e.stopPropagation();
  */
 export function FighterInfoButton({ competitionId, registrationId, name, club }: { competitionId: string; registrationId: string; name: string; club: string }) {
   const [opened, setOpened] = useState(false);
-  // Mantine ne ferme sur Échap que si le focus est dans la bulle : ici il reste sur ⓘ (ou ailleurs), d'où l'écoute de la fenêtre.
+  // Mantine ne ferme sur Échap que si le focus est dans la bulle. Focus ailleurs : écoute de la fenêtre ci-dessous. Focus resté
+  // sur ⓘ (Tab puis Entrée) : l'arrêt de propagation de ⓘ la coupe, donc Échap est traité dans le onKeyDown de ⓘ.
   useEffect(() => {
     if (!opened) return;
     const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') setOpened(false); };
@@ -27,7 +28,8 @@ export function FighterInfoButton({ competitionId, registrationId, name, club }:
     <Popover opened={opened} onChange={setOpened} withArrow shadow="md" position="bottom-start" width="min(340px, calc(100vw - 32px))" transitionProps={{ duration: 0 }}>
       <Popover.Target>
         <ActionIcon data-testid="fighter-info" size="sm" variant="subtle" aria-label={`Fiche de ${name}`} title="Fiche du combattant"
-          draggable={false} onClick={(e) => { e.stopPropagation(); setOpened((o) => !o); }} onKeyDown={stop}
+          draggable={false} onClick={(e) => { e.stopPropagation(); setOpened((o) => !o); }}
+          onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') setOpened(false); }}
           // mousedown annulé : sinon la pastille, qui est déplaçable, démarre un glisser depuis ⓘ.
           onMouseDown={(e) => e.preventDefault()}
           onDragStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
