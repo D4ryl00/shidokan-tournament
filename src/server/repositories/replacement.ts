@@ -14,6 +14,7 @@ import {
   overweightInCategory,
   recompute,
   type PlanChoice,
+  type PlanMove,
   type Member,
   type Presence,
   type Proposal,
@@ -46,9 +47,13 @@ import { getCompetition, getGrid } from './competitions.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
 import type { PlanInput, PlanResponse } from '../plan/compute.js';
 import { runPlanJob } from '../plan/runner.js';
+import { rememberDisplayedPlan } from '../plan/displayed.js';
 
 // Parties pures, déplacées pour le fil de calcul (qui n'importe pas la base) : gardées ici pour les autres modules.
 export { displayedProposals, previewTransition, type PlanResponse } from '../plan/compute.js';
+
+/** Plan affiché périmé (hash, ligne ou catégorie créée en route introuvable) : à relire. */
+export const PLAN_CHANGED = 'Le plan a changé depuis l’affichage : relisez-le avant de l’appliquer.';
 
 export class StaleProposalError extends Error {
   constructor(message = "La situation a changé depuis l'affichage : rechargez les propositions.") {
@@ -322,7 +327,7 @@ export function actionWave(before: State, caseId: string, registrationId: string
 }
 
 /** Écrit chaque déplacement d'une proposition (plusieurs pour un « split »), un recasement par inscription ; rend leurs ids. */
-function persistAll(db: AppDb, competitionId: string, state: State, p: Proposal, opts: { bulk: boolean; waveId: string | null }): string[] {
+export function persistAll(db: AppDb, competitionId: string, state: State, p: Proposal, opts: { bulk: boolean; waveId: string | null }): string[] {
   let current = state;
   const ids: string[] = [];
   for (const step of proposalMoves(p)) {
@@ -369,7 +374,9 @@ export async function planResponse(
   opts: { signal?: AbortSignal } = {},
 ): Promise<PlanResponse> {
   const { state, input } = await planInput(db, competitionId, body);
-  return runPlanJob(state, input, opts);
+  const r = await runPlanJob(state, input, opts);
+  if (!input.forApply) rememberDisplayedPlan(competitionId, r);
+  return r;
 }
 
 /**
@@ -382,12 +389,12 @@ export async function applyPlan(
   body: { waveId?: string; choices: PlanChoice[]; cardDecisions?: boolean; fingerprint: string; hash: string },
 ): Promise<{ applied: number }> {
   const waveId = await planWave(db, competitionId, body.waveId);
-  let state = await loadState(db, competitionId);
+  const state = await loadState(db, competitionId);
   if (stateFingerprint(state) !== body.fingerprint) throw new StaleProposalError();
   // Recalcul dans le fil, comme pour l'affichage : rien n'est écrit avant son résultat. Sans signal d'abandon : une écriture,
   // une fois demandée, va jusqu'au bout (même si le client part), sauf si l'état a changé entre-temps.
   const { plan } = await runPlanJob(state, { waveId, choices: body.choices, forApply: true, cardDecisions: body.cardDecisions !== false });
-  if (plan.hash !== body.hash) throw new StaleProposalError('Le plan a changé depuis l’affichage : relisez-le avant de l’appliquer.');
+  if (plan.hash !== body.hash) throw new StaleProposalError(PLAN_CHANGED);
   // Pendant le calcul, un autre poste a pu écrire (pesée, déplacement, même plan appliqué) : on revérifie l'empreinte,
   // puis on écrit sans plus rendre la main (base synchrone, aucune attente d'entrée-sortie dans la boucle).
   if (stateFingerprint(await loadState(db, competitionId)) !== body.fingerprint) throw new StaleProposalError();
@@ -400,29 +407,38 @@ export async function applyPlan(
   let applied = 0;
   await atomically(db, async () => {
     for (const move of plan.moves) {
-      state = await loadState(db, competitionId);
-      // Le combattant doit encore être là où le plan l'a pris (une catégorie créée en route, `new:…`, n'existe pas encore en base).
-      if (move.fromCategoryId !== null && !move.fromCategoryId.startsWith('new:')) {
-        if (state.members.find((m) => m.registrationId === move.registrationId)?.categoryId !== move.fromCategoryId) throw new StaleProposalError();
-      }
-      let p: Proposal = move;
-      if ('categoryId' in move.target && move.target.categoryId.startsWith('new:')) {
-        // Sans ancre, la catégorie créée en route ne se retrouve pas : le plan est à relire, rien n'est écrit.
-        const categoryId = move.anchor === null ? undefined : state.members.find((m) => m.registrationId === move.anchor)?.categoryId;
-        if (!categoryId) throw new StaleProposalError('Le plan a changé depuis l’affichage : relisez-le avant de l’appliquer.');
-        p = { ...move, target: { categoryId } };
-      }
-      const before = state;
-      await recorded(
-        db,
-        competitionId,
-        (ids: string[]) => proposalEntry(db, { kind: 'plan', groupId, waveId }, p, ids),
-        async () => persistAll(db, competitionId, before, p, { bulk: true, waveId }),
-      );
+      await writePlanMove(db, competitionId, move, { groupId, waveId });
       applied++;
     }
   });
   return { applied };
+}
+
+/**
+ * Écrit un déplacement du plan (dans la transaction de l'appelant) : l'état est rechargé, le combattant doit encore être là où
+ * le plan l'a pris, une catégorie créée en route (`new:…`) se retrouve par son ancre ; une entrée `plan` du groupe `groupId`.
+ * Partagé par `applyPlan` et les « Détails » d'une ligne du plan (rejeu à blanc) : l'aperçu est l'écriture même.
+ */
+export async function writePlanMove(db: AppDb, competitionId: string, move: PlanMove, opts: { groupId: string; waveId: string | null }): Promise<void> {
+  const { groupId, waveId } = opts;
+  const state = await loadState(db, competitionId);
+  // Le combattant doit encore être là où le plan l'a pris (une catégorie créée en route, `new:…`, n'existe pas encore en base).
+  if (move.fromCategoryId !== null && !move.fromCategoryId.startsWith('new:')) {
+    if (state.members.find((m) => m.registrationId === move.registrationId)?.categoryId !== move.fromCategoryId) throw new StaleProposalError();
+  }
+  let p: Proposal = move;
+  if ('categoryId' in move.target && move.target.categoryId.startsWith('new:')) {
+    // Sans ancre, la catégorie créée en route ne se retrouve pas : le plan est à relire, rien n'est écrit.
+    const categoryId = move.anchor === null ? undefined : state.members.find((m) => m.registrationId === move.anchor)?.categoryId;
+    if (!categoryId) throw new StaleProposalError(PLAN_CHANGED);
+    p = { ...move, target: { categoryId } };
+  }
+  await recorded(
+    db,
+    competitionId,
+    (ids: string[]) => proposalEntry(db, { kind: 'plan', groupId, waveId }, p, ids),
+    async () => persistAll(db, competitionId, state, p, { bulk: true, waveId }),
+  );
 }
 
 export async function refuseProposal(db: AppDb, competitionId: string, proposalId: string): Promise<void> {

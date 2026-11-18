@@ -33,6 +33,8 @@ import {
   setAsideNotes,
   weighInList, fighterPresence } from '../repositories/replacement.js';
 import { PlanAbortedError, runPlanJob } from '../plan/runner.js';
+import { rememberDisplayedPlan } from '../plan/displayed.js';
+import { moveDetails } from '../repositories/move-details.js';
 import { exchangeEntrants, exchangePreview, sameClubPreview } from '../repositories/exchange.js';
 import { NotFoundError } from '../repositories/registrations.js';
 
@@ -183,7 +185,10 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
     };
     runPlanJob(state, input, { signal: gone.signal, onProgress: (p) => send({ type: 'progress', ...p }) })
       .then(
-        (data) => send({ type: 'result', data }),
+        (data) => {
+          if (!input.forApply) rememberDisplayedPlan(req.params.id, data);
+          send({ type: 'result', data });
+        },
         (e: unknown) => {
           if (gone.signal.aborted) return;
           const status = (e as { statusCode?: number }).statusCode ?? 500;
@@ -197,6 +202,20 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
     // Mêmes en-têtes que le flux SSE : Caddy (encode gzip) ne doit pas retenir les lignes de progression.
     reply.header('Content-Encoding', 'identity').header('Cache-Control', 'no-cache, no-transform').header('X-Accel-Buffering', 'no');
     return reply.type(NDJSON).send(out);
+  });
+
+  /** De et Vers d'un déplacement (proposition d'une carte, ou ligne du plan affiché rejoué jusqu'à elle), calculés à blanc. */
+  app.post<P>('/api/competitions/:id/replacement/details/preview', async (req) => {
+    const body = z
+      .union([
+        z.object({ proposalId: z.string() }).strict(),
+        z.object({
+          plan: z.object({ waveId: z.string().optional(), choices, cardDecisions: z.boolean().optional(), fingerprint: z.string(), hash: z.string() }).strict(),
+          moveId: z.string(),
+        }).strict(),
+      ])
+      .parse(req.body);
+    return moveDetails(db, req.params.id, body);
   });
 
   app.post<P>('/api/competitions/:id/replacement/plan/apply', async (req) => {

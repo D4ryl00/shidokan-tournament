@@ -36,6 +36,7 @@ export const JOURNAL_EXEMPT = keys(
   `POST ${C}/ffk-imports/:uploadId/preview`,
   `POST ${C}/replacement/preview`,
   `POST ${C}/replacement/exchange/preview`,
+  `POST ${C}/replacement/details/preview`,
   `POST ${C}/categories/:cid/move/preview`,
   `POST ${C}/launch/number/preview`,
   // Plan d'ensemble calculé, pas appliqué (l'application est `plan/apply`).
