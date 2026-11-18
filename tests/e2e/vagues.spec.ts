@@ -169,7 +169,10 @@ test('réaffectation par session : cas de la session, changement de session sign
   const proposal = cases.getByTestId('replacement-proposal');
   await expect(proposal.getByTestId('wave-change')).toHaveText('↪ Change de session : Matin → Après-midi');
   await expect(page.getByText('Les changements de session se valident un par un.')).toBeVisible();
-  // Le plan d'ensemble ne la prend pas : elle reste seule, rien à valider ni à appliquer.
+  // Le plan d'ensemble ne la prend pas : elle reste seule, rien à valider ni à appliquer. (Déplié par session : celui du matin
+  // ne l'est pas encore.)
+  await expect(page.getByTestId('plan-show')).toHaveAttribute('aria-expanded', 'false');
+  await page.getByTestId('plan-show').click();
   const plan = page.getByTestId('plan-view');
   await expect(plan.getByTestId('plan-alone')).toContainText('MINI');
   await expect(plan.getByTestId('plan-move')).toHaveCount(0);
