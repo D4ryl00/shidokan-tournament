@@ -73,6 +73,7 @@ test('carte : détails De et Vers, fiches, tableau, galaxie et copie pour le clu
   await expect(to.getByTestId('fighter-sheet')).toHaveCount(0);
   await to.getByTestId('bracket-entrant').filter({ hasText: 'CADB' }).first().click();
   await expect(to.getByTestId('fighter-sheet')).toHaveCount(1);
+  await expect(to.getByTestId('details-chosen-name')).toHaveText('CADB Léa · Dojo Détails');
   await expect(to.getByTestId('fighter-sheet')).toContainText('Licence');
   // De reste sur « Combattants ».
   await expect(from.getByTestId('details-fighter')).toHaveCount(1);
@@ -123,4 +124,14 @@ test('écran étroit : De et Vers l’un sous l’autre, sans défilement horizo
   const b = (await to.boundingBox())!;
   expect(b.y).toBeGreaterThanOrEqual(a.y + a.height - 1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test('copie pour le club : presse-papiers refusé, le texte est montré pour être copié à la main', async ({ page, request }) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true }));
+  const id = await createCompetition(page, 'Coupe détails copie refusée');
+  await seed(request, id);
+  const proposal = await ageUpProposal(page, id);
+  await proposal.getByTestId('move-copy').click();
+  await expect(page.getByText('Copie impossible : sélectionnez le texte ci-dessous et copiez-le.')).toBeVisible();
+  await expect(page.getByTestId('copy-fallback')).toContainText('Léa MINI - Dojo Détails - Karaté · Jiyu · Minimes F · -45 kg : Tranche d’âge au-dessus');
 });

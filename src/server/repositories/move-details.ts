@@ -5,7 +5,7 @@ import { stateFingerprint, type PlanMove, type Proposal } from '../../domain/rep
 import { dryRun } from '../db/atomic.js';
 import type { AppDb } from '../db/client.js';
 import { categories } from '../db/schema.js';
-import { recallDisplayedPlan } from '../plan/displayed.js';
+import { recallDisplayedPlan, rememberDisplayedPlan } from '../plan/displayed.js';
 import { runPlanJob } from '../plan/runner.js';
 import { listCategories } from './categories.js';
 import { actionWave, findProposal, loadState, persistAll, PLAN_CHANGED, planWave, StaleProposalError, writePlanMove } from './replacement.js';
@@ -38,6 +38,7 @@ export async function moveDetails(db: AppDb, competitionId: string, body: MoveDe
     const r = await runPlanJob(state, { waveId, choices: plan.choices, forApply: false, cardDecisions: plan.cardDecisions !== false });
     if (r.plan.hash !== plan.hash) throw new StaleProposalError(PLAN_CHANGED);
     moves = r.plan.moves;
+    rememberDisplayedPlan(competitionId, r);
   }
   const k = moves.findIndex((m) => m.id === moveId);
   if (k < 0) throw new StaleProposalError(PLAN_CHANGED);

@@ -148,6 +148,9 @@ test('plan : sans le plan en mémoire (redémarrage), il est recalculé', async 
   expect(res.statusCode).toBe(200);
   expect(jobs.count).toBe(count + 1);
   expect((res.json() as Details).to.registrationIds).toContain(y.id);
+  // Le plan recalculé est gardé : l'appel suivant ne recalcule plus.
+  expect((await details({ plan: { choices, fingerprint: shown.fingerprint, hash: shown.plan.hash }, moveId: shown.plan.moves[0]!.id })).statusCode).toBe(200);
+  expect(jobs.count).toBe(count + 1);
 });
 
 test('plan affiché (réponse JSON ou flux) : gardé en mémoire, pas recalculé pour les détails', async () => {

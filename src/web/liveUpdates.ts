@@ -1,6 +1,6 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { PLAN_KEY, refreshPlansLive, TAB_ID } from './api.js';
+import { MOVE_DETAILS_KEY, PLAN_KEY, refreshPlansLive, TAB_ID } from './api.js';
 import { whenSaved } from './unsaved.js';
 
 /**
@@ -31,7 +31,7 @@ export function useCompetitionEvents(competitionId: string): void {
         whenSaved(() => {
           waiting = false;
           if (stopped) return;
-          void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== PLAN_KEY });
+          refreshDataLive(qc);
           refreshPlansLive(qc);
         });
       }, 300);
@@ -107,4 +107,14 @@ export function revisionTracker() {
       if (rev !== null) known = rev;
     },
   };
+}
+
+/**
+ * Relecture des données après un changement venu d'un autre poste : tout sauf le plan d'ensemble (voir `refreshPlansLive`).
+ * Les « Détails » d'un déplacement sont seulement marqués périmés, sans relecture : chacun relancerait un essai à blanc côté
+ * serveur (qui bloque le fil), et leur clé porte déjà l'empreinte des données ; rouvrir un panneau les relit.
+ */
+export function refreshDataLive(qc: QueryClient): void {
+  void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== PLAN_KEY && q.queryKey[0] !== MOVE_DETAILS_KEY });
+  void qc.invalidateQueries({ queryKey: [MOVE_DETAILS_KEY], refetchType: 'none' });
 }

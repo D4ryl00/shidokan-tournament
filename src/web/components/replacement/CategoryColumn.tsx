@@ -133,7 +133,14 @@ export function CategoryColumn({ side, category, movers, competitionId, waveId, 
           {/* Ceux qui bougent en orange, comme dans la liste ; le nom choisi garde son contour. Sans `onClick`, `entrantProps` laisse le clic à `onSelect`. */}
           <BracketView category={category} entrants={entrants} selected={chosen} onSelect={(rid) => setChosen((c) => (c === rid ? null : rid))}
             entrantProps={(rid) => ({ style: { cursor: 'pointer', ...(moving.has(rid) ? { background: 'var(--sk-warn)' } : {}) } })} />
-          {chosen && <Box mt={6}><FighterSheet competitionId={competitionId} registrationId={chosen} /></Box>}
+          {chosen && (
+            <Box mt={6}>
+              <Text size="sm" mb={4} style={{ overflowWrap: 'anywhere' }} data-testid="details-chosen-name">
+                {(() => { const r = regs.find((x) => x.id === chosen); return r ? <><b>{r.fighter.lastName} {r.fighter.firstName}</b> · {r.club?.name ?? 'sans club'}</> : null; })()}
+              </Text>
+              <FighterSheet competitionId={competitionId} registrationId={chosen} />
+            </Box>
+          )}
         </Box>
       )}
     </ColumnFrame>

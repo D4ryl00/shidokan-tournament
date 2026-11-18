@@ -493,9 +493,10 @@ export function usePreviewReplacement(id: string) {
  * « Détails » d'un déplacement (carte ou ligne du plan), calculés à blanc par le serveur. La clé porte l'empreinte des données
  * du jour : un changement les recalcule (et `useInvalidateDay` les relit avec le reste, `[1]` étant la compétition).
  */
+export const MOVE_DETAILS_KEY = 'move-details';
 export function useMoveDetails(id: string, body: MoveDetailsBody, fingerprint: string, enabled: boolean) {
   return useQuery({
-    queryKey: ['move-details', id, fingerprint, body],
+    queryKey: [MOVE_DETAILS_KEY, id, fingerprint, body],
     queryFn: () => api<MoveDetails>('POST', `/api/competitions/${id}/replacement/details/preview`, body),
     enabled,
     // Le calcul tient le verrou d'écriture : pas de nouveau calcul au retour sur l'onglet tant que les données n'ont pas changé.

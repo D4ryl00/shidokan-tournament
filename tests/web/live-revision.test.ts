@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
-import { revisionTracker } from '../../src/web/liveUpdates.js';
+import { QueryClient } from '@tanstack/react-query';
+import { refreshDataLive, revisionTracker } from '../../src/web/liveUpdates.js';
 
 test('aucune révision connue encore : des changements ont pu être manqués (le flux ne relit pas à sa toute première ouverture)', () => {
   const t = revisionTracker();
@@ -31,4 +32,24 @@ test('serveur sans révision (ancienne version) : relecture à chaque réouvertu
   const t = revisionTracker();
   t.opened(null);
   expect(t.opened(null)).toBe(true);
+});
+
+test('relecture après un changement : les détails de déplacement sont marqués périmés, sans relecture', async () => {
+  const qc = new QueryClient();
+  const fetches = { zone: 0, details: 0 };
+  await qc.fetchQuery({ queryKey: ['zone', 'c1'], queryFn: async () => ++fetches.zone });
+  await qc.fetchQuery({ queryKey: ['move-details', 'c1', 'fp', { proposalId: 'p' }], queryFn: async () => ++fetches.details });
+  // Requêtes montées (observées), comme les panneaux ouverts.
+  const unsubs = [
+    new (await import('@tanstack/react-query')).QueryObserver(qc, { queryKey: ['zone', 'c1'], queryFn: async () => ++fetches.zone }).subscribe(() => {}),
+    new (await import('@tanstack/react-query')).QueryObserver(qc, { queryKey: ['move-details', 'c1', 'fp', { proposalId: 'p' }], queryFn: async () => ++fetches.details }).subscribe(() => {}),
+  ];
+  await new Promise((r) => setTimeout(r, 50)); // les relectures à l'abonnement sont terminées
+  const before = { ...fetches };
+  refreshDataLive(qc);
+  await new Promise((r) => setTimeout(r, 50));
+  expect(fetches.zone).toBeGreaterThan(before.zone);
+  expect(fetches.details).toBe(before.details);
+  expect(qc.getQueryState(['move-details', 'c1', 'fp', { proposalId: 'p' }])?.isInvalidated).toBe(true);
+  unsubs.forEach((u) => u());
 });

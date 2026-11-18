@@ -31,7 +31,7 @@ export function FighterSheet({ competitionId, registrationId }: { competitionId:
       data-testid="fighter-sheet"
       style={{ borderLeft: '3px solid var(--sk-accent)', background: 'var(--sk-row)', padding: '6px 10px', fontSize: 12 }}
     >
-      <dl style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '2px 8px', margin: 0 }}>
+      <dl style={{ display: 'grid', gridTemplateColumns: 'minmax(80px, max-content) 1fr', gap: '2px 8px', margin: 0 }}>
         {lines.map((l) => (
           <div key={l.label} style={{ display: 'contents' }}>
             <dt style={{ color: 'var(--sk-muted)' }}>{l.label}</dt>
