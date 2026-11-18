@@ -228,7 +228,7 @@ test('liste : ⓘ d’une case ouvre la fiche sans choisir l’inscrit ; l’éc
   await showList(page);
   await page.getByTestId('category-row').filter({ hasText: '-54' }).click();
   const entrant = page.getByTestId('bracket-entrant').filter({ hasText: 'ALBA' });
-  await entrant.getByTestId('fighter-info').click();
+  await page.getByTestId('bracket-entrant-wrap').filter({ hasText: 'ALBA' }).getByTestId('fighter-info').click();
   await expect(page.getByTestId('fighter-info-sheet').getByTestId('fighter-sheet')).toContainText('Licence');
   await expect(page.getByTestId('swap-select')).toHaveText('Échange manuel : cliquez sur deux inscrits.');
   await page.getByTestId('fighter-info-sheet').click();
@@ -245,7 +245,7 @@ test('liste : 360 px, bulle ouverte sans débordement', async ({ page, request }
   await page.goto(`/competitions/${id}/tableaux`);
   await showList(page);
   await page.getByTestId('category-row').filter({ hasText: '-54' }).click();
-  await page.getByTestId('bracket-entrant').first().getByTestId('fighter-info').click();
+  await page.getByTestId('bracket-entrant-wrap').first().getByTestId('fighter-info').click();
   await expect(page.getByTestId('fighter-info-sheet')).toBeVisible();
   expect(await clipped(page)).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);

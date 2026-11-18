@@ -125,9 +125,10 @@ function EntrantLine({ id, fallback, info, props, winner, inline }: { id: string
     padding: '2px 4px',
     fontWeight: winner ? 700 : undefined,
   };
-  return (
+  const withInfo = !!(props.fighterInfo && !props.printable && id && info && !inline);
+  const cell = (
     <Box data-testid="bracket-entrant" data-entrant={id ?? ''} onClick={() => id && props.onSelect?.(id)} {...extra}
-      style={{ ...style, ...(extra ? { cursor: 'grab' } : undefined), ...extra?.style }}>
+      style={{ ...style, ...(withInfo ? { paddingRight: 28 } : undefined), ...(extra ? { cursor: 'grab' } : undefined), ...extra?.style }}>
       {id && info && inline ? (
         <Text size="sm" lh={1.3} className="bracket-entrant-inline" fw={winner ? 800 : 400} td={winner ? 'underline' : undefined}>
           {info.name} <Text span size="xs">{info.club}</Text>
@@ -137,13 +138,20 @@ function EntrantLine({ id, fallback, info, props, winner, inline }: { id: string
           <Text size={props.printable ? 'md' : 'sm'} fw={winner ? 800 : props.printable ? 400 : 500} td={winner && props.printable ? 'underline' : undefined} lh={1.2}>
             {info.name}
             {!props.printable && id && props.badges?.get(id) && <> <ReplacementBadge type={props.badges.get(id)!} size="xs" detail={props.badgeDetails?.get(id)} /></>}
-            {props.fighterInfo && !props.printable && id && info && <> <FighterInfoButton competitionId={props.fighterInfo} registrationId={id} name={info.name} club={info.club} /></>}
           </Text>
           <Text size="xs" c={props.printable ? undefined : sameClub ? 'orange' : 'dimmed'} fw={sameClub ? 600 : undefined} lh={1.2} data-testid={sameClub ? 'same-club' : undefined}>{info.club}</Text>
         </>
       ) : (
         <Text size="sm" c="dimmed" fs="italic">{fallback}</Text>
       )}
+    </Box>
+  );
+  if (!withInfo) return cell;
+  // ⓘ est le frère de la case (qui peut avoir role="button"), posé en haut à droite : la hauteur de la case ne change pas.
+  return (
+    <Box data-testid="bracket-entrant-wrap" style={{ position: 'relative' }}>
+      {cell}
+      <FighterInfoButton competitionId={props.fighterInfo!} registrationId={id!} name={info!.name} club={info!.club} style={{ position: 'absolute', top: 0, right: 1 }} />
     </Box>
   );
 }

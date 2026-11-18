@@ -1,4 +1,4 @@
-import { Box } from '@mantine/core';
+import { Box, Text } from '@mantine/core';
 import { useMemo } from 'react';
 import { useCategories, useGrid, useRegistrations, useWaves, useWeighIn } from '../../api.js';
 import { disciplineLabel } from '../../labels.js';
@@ -25,7 +25,7 @@ export function FighterSheet({ competitionId, registrationId }: { competitionId:
     return sheetLines(row, { grid, presence, others, recasement: recasements.get(row.id) });
   }, [row, grid, weighIn, regs, categories, waves, recasements]);
 
-  if (!lines) return null;
+  if (!lines) return <Text size="xs" c="dimmed">Chargement…</Text>;
   return (
     <Box
       data-testid="fighter-sheet"

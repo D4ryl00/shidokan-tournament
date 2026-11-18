@@ -25,6 +25,8 @@ async function seed(request: APIRequestContext, id: string): Promise<Record<'c54
 /** Carte d'une catégorie (par son id : le libellé change quand un combattant d'un autre poids arrive). */
 const card = (page: Page, categoryId: string) => page.locator(`[data-testid="planche-card"][data-category="${categoryId}"]`);
 const freeCard = (page: Page, name: string) => page.getByTestId('planche-card').filter({ hasText: name });
+/** ⓘ d'une pastille : frère de la pastille, dans son enveloppe. */
+const info = (where: ReturnType<typeof card> | Page, name: string) => where.getByTestId('planche-chip-wrap').filter({ hasText: name }).getByTestId('fighter-info');
 const chip = (_page: Page, where: ReturnType<typeof card>, name: string) => where.getByTestId('planche-chip').filter({ hasText: name });
 
 test('planche : glisser pour échanger, déplacer vers un tableau libre, carte lancée refusée', async ({ page, request }) => {
@@ -195,16 +197,22 @@ test('planche : carte agrandie et poste de zone, ⓘ ouvre la fiche', async ({ p
   await page.goto(`/competitions/${id}/tableaux`);
   const sheet = page.getByTestId('fighter-info-sheet');
   // Bac : ⓘ d'une pastille.
-  await page.getByTestId('planche-tray').getByTestId('planche-chip').filter({ hasText: 'SOLO' }).getByTestId('fighter-info').click();
+  await info(page.getByTestId('planche-tray'), 'SOLO').click();
   await expect(sheet.getByTestId('fighter-sheet')).toContainText('Licence');
   await page.keyboard.press('Escape');
   await expect(sheet).toHaveCount(0);
   // Carte agrandie : ⓘ d'une case du tableau.
   const c54 = card(page, ids.c54);
   await c54.getByTestId('card-grow').click();
-  await c54.getByTestId('bracket-entrant').filter({ hasText: 'ALBA' }).getByTestId('fighter-info').click();
+  await c54.getByTestId('bracket-entrant-wrap').filter({ hasText: 'ALBA' }).getByTestId('fighter-info').click();
   await expect(sheet).toContainText('ALBA x');
   await expect(sheet.getByTestId('fighter-sheet')).toContainText('Licence');
+  await page.keyboard.press('Escape');
+  // Un clic sur le nom (pastille du bac, puis case du tableau) n'ouvre pas la fiche.
+  await page.getByTestId('planche-tray').getByTestId('planche-chip').filter({ hasText: 'SOLO' }).click();
+  await expect(sheet).toHaveCount(0);
+  await c54.getByTestId('bracket-entrant').filter({ hasText: 'ALBA' }).click();
+  await expect(sheet).toHaveCount(0);
 });
 
 test('planche : ⓘ ouvre la fiche sans choisir la pastille ; clic-clic intact', async ({ page, request }) => {
@@ -213,7 +221,7 @@ test('planche : ⓘ ouvre la fiche sans choisir la pastille ; clic-clic intact',
   await page.goto(`/competitions/${id}/tableaux`);
   const c54 = card(page, ids.c54);
   const alba = chip(page, c54, 'ALBA');
-  await alba.getByTestId('fighter-info').click();
+  await info(c54, 'ALBA').click();
   const sheet = page.getByTestId('fighter-info-sheet');
   await expect(sheet).toBeVisible();
   await expect(sheet).toContainText('ALBA x');
@@ -222,7 +230,7 @@ test('planche : ⓘ ouvre la fiche sans choisir la pastille ; clic-clic intact',
   // Clic ailleurs : fermée (la bulle recouvre les pastilles voisines, on clique hors de la carte) ; une seule bulle à la fois.
   await page.mouse.click(2, 2);
   await expect(page.getByTestId('fighter-info-sheet')).toHaveCount(0);
-  await chip(page, c54, 'BRUN').getByTestId('fighter-info').click();
+  await info(c54, 'BRUN').click();
   await expect(page.getByTestId('fighter-info-sheet')).toHaveCount(1);
   await expect(page.getByTestId('fighter-info-sheet')).toContainText('BRUN x');
   await page.keyboard.press('Escape');
@@ -230,13 +238,13 @@ test('planche : ⓘ ouvre la fiche sans choisir la pastille ; clic-clic intact',
   // Pastille choisie, puis fiche d'une autre et clic dedans : rien ne bouge, la première reste choisie.
   await alba.click();
   await expect(alba).toHaveAttribute('aria-pressed', 'true');
-  await chip(page, c54, 'CARO').getByTestId('fighter-info').click();
+  await info(c54, 'CARO').click();
   await page.getByTestId('fighter-info-sheet').getByTestId('fighter-sheet').click();
   await expect(page.getByTestId('drop-dialog')).toHaveCount(0);
   await expect(alba).toHaveAttribute('aria-pressed', 'true');
   // Clavier : Entrée sur ⓘ ouvre la fiche sans choisir la pastille.
   await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
-  await chip(page, c54, 'DIDI').getByTestId('fighter-info').focus();
+  await info(c54, 'DIDI').focus();
   await page.keyboard.press('Enter');
   await expect(page.getByTestId('fighter-info-sheet')).toContainText('DIDI x');
   await expect(chip(page, c54, 'DIDI')).toHaveAttribute('aria-pressed', 'false');
@@ -244,9 +252,16 @@ test('planche : ⓘ ouvre la fiche sans choisir la pastille ; clic-clic intact',
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('fighter-info-sheet')).toHaveCount(0);
   // Le bac aussi ; glisser depuis ⓘ ne déplace rien.
-  const solo = page.getByTestId('planche-tray').getByTestId('planche-chip').filter({ hasText: 'SOLO' });
-  await solo.getByTestId('fighter-info').dragTo(chip(page, c54, 'ALBA'));
+  const tray = page.getByTestId('planche-tray');
+  await info(tray, 'SOLO').dragTo(chip(page, c54, 'ALBA'));
   await expect(page.getByTestId('drop-dialog')).toHaveCount(0);
-  await solo.getByTestId('fighter-info').click();
+  // Espace sur ⓘ ouvre la fiche sans choisir la pastille.
+  await info(tray, 'SOLO').focus();
+  await page.keyboard.press('Space');
+  await expect(page.getByTestId('fighter-info-sheet')).toContainText('SOLO x');
+  await expect(tray.getByTestId('planche-chip').filter({ hasText: 'SOLO' })).toHaveAttribute('aria-pressed', 'false');
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('fighter-info-sheet')).toHaveCount(0);
+  await info(tray, 'SOLO').click();
   await expect(page.getByTestId('fighter-info-sheet')).toContainText('SOLO x');
 });

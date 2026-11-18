@@ -26,25 +26,28 @@ export function FighterChip({ id, info, badge, badgeDetail, sameClub = false, ma
   competitionId?: string;
   extra?: HTMLAttributes<HTMLDivElement>;
 }) {
+  const withInfo = !!(competitionId && info);
   return (
-    <Box data-testid="planche-chip" data-entrant={id} data-locked={locked || undefined} title={compact ? info?.club : undefined} {...extra}
-      style={{
-        border: `1px solid ${selected ? 'var(--sk-accent)' : 'var(--sk-card-line)'}`,
-        outline: selected ? '2px solid var(--sk-accent)' : undefined,
-        borderRadius: 6, padding: compact ? '2px 8px' : '3px 8px', minWidth: 0, backgroundColor: matched ? 'var(--sk-chip)' : 'var(--sk-card)',
-        cursor: locked ? 'default' : 'grab', ...extra?.style,
-      }}>
-      <Group gap={2} wrap="wrap" justify="space-between" align="flex-start">
-        <Text size="sm" fw={matched ? 700 : 500} lh={1.25} style={{ overflowWrap: 'anywhere', minWidth: 0 }}>{info?.name ?? '?'}</Text>
-        {/* ⓘ et badge ensemble, à droite, même quand la ligne se replie. */}
-        <Group gap={2} wrap="nowrap" ml="auto" style={{ flexShrink: 0 }}>
-          {competitionId && info && <FighterInfoButton competitionId={competitionId} registrationId={id} name={info.name} club={info.club} />}
+    // Enveloppe non interactive : ⓘ est le frère de la pastille (qui a role="button"), pas son descendant. Hauteur inchangée :
+    // ⓘ est posé en haut à droite, dans la bordure.
+    <Box data-testid="planche-chip-wrap" style={{ position: 'relative', minWidth: 0 }}>
+      <Box data-testid="planche-chip" data-entrant={id} data-locked={locked || undefined} title={compact ? info?.club : undefined} {...extra}
+        style={{
+          border: `1px solid ${selected ? 'var(--sk-accent)' : 'var(--sk-card-line)'}`,
+          outline: selected ? '2px solid var(--sk-accent)' : undefined,
+          borderRadius: 6, padding: compact ? '2px 8px' : '3px 8px', paddingRight: withInfo ? 26 : undefined, minWidth: 0,
+          backgroundColor: matched ? 'var(--sk-chip)' : 'var(--sk-card)',
+          cursor: locked ? 'default' : 'grab', ...extra?.style,
+        }}>
+        <Group gap={2} wrap="wrap" justify="space-between" align="flex-start">
+          <Text size="sm" fw={matched ? 700 : 500} lh={1.25} style={{ overflowWrap: 'anywhere', minWidth: 0 }}>{info?.name ?? '?'}</Text>
           {badge && <ReplacementBadge type={badge} size="xs" detail={badgeDetail} />}
         </Group>
-      </Group>
-      {!compact && <Text size="xs" lh={1.2} c={sameClub ? 'orange' : 'dimmed'} fw={sameClub ? 600 : undefined} data-testid={sameClub ? 'same-club' : undefined} className="sk-ellipsis">
-        {info?.club ?? ''}
-      </Text>}
+        {!compact && <Text size="xs" lh={1.2} c={sameClub ? 'orange' : 'dimmed'} fw={sameClub ? 600 : undefined} data-testid={sameClub ? 'same-club' : undefined} className="sk-ellipsis">
+          {info?.club ?? ''}
+        </Text>}
+      </Box>
+      {withInfo && <FighterInfoButton competitionId={competitionId!} registrationId={id} name={info!.name} club={info!.club} style={{ position: 'absolute', top: 1, right: 1 }} />}
     </Box>
   );
 }

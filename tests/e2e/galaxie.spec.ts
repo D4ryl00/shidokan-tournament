@@ -420,7 +420,12 @@ test('galaxie : ⓘ d’une pastille ouvre la fiche', async ({ page, request }) 
   await page.getByTestId('planche-search').fill('-61 Karaté');
   const c61 = card(page, ids.c61);
   await expect(c61).toBeVisible();
-  await c61.getByTestId('planche-chip').first().getByTestId('fighter-info').click();
+  await c61.getByTestId('planche-chip-wrap').first().getByTestId('fighter-info').click();
   await expect(page.getByTestId('fighter-info-sheet').getByTestId('fighter-sheet')).toContainText('Licence');
+  await expect(c61.getByTestId('planche-chip').first()).toHaveAttribute('aria-pressed', 'false');
   await expect(page.getByTestId('galaxy-canvas')).toHaveAttribute('data-selected', ids.c61);
+  // Molette sur la galaxie : la bulle, qui ne suivrait pas la carte, se ferme.
+  await page.getByTestId('galaxy-canvas').hover({ position: { x: 5, y: 5 } });
+  await page.mouse.wheel(0, 100);
+  await expect(page.getByTestId('fighter-info-sheet')).toHaveCount(0);
 });
