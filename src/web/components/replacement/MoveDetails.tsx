@@ -16,7 +16,9 @@ export function MoveDetails({ competitionId, waveId, body, fingerprint, sex }: {
   sex: 'F' | 'M';
 }) {
   const { data, error, refetch, isFetching } = useMoveDetails(competitionId, body, fingerprint, true);
-  if (error) {
+  // Un nouveau calcul en arrière-plan qui échoue (données changées par un autre poste, plan pas encore recalculé) ne cache pas
+  // les détails déjà affichés : l'erreur ne s'affiche que s'il n'y a rien à montrer.
+  if (error && !data) {
     return (
       <Stack gap={6} align="flex-start" data-testid="move-details">
         <ApiErrorAlert error={error} />

@@ -64,7 +64,13 @@ test('carte : détails De et Vers, fiches, tableau, galaxie et copie pour le clu
   await expect(to.getByTestId('fighter-sheet')).toHaveCount(0);
   // Poule à trois : chaque nom figure dans plusieurs combats.
   const mini = to.getByTestId('bracket-entrant').filter({ hasText: 'MINI Léa' }).first();
-  await expect(mini).toHaveAttribute('style', /color-mix/);
+  await expect(mini).toHaveAttribute('style', /background: var\(--sk-warn\)/);
+  // Un clic sur celle qui arrive la choisit aussi (contour), et donne sa fiche ; un second clic la referme.
+  await mini.click();
+  await expect(mini).toHaveAttribute('style', /outline/);
+  await expect(to.getByTestId('fighter-sheet')).toHaveCount(1);
+  await mini.click();
+  await expect(to.getByTestId('fighter-sheet')).toHaveCount(0);
   await to.getByTestId('bracket-entrant').filter({ hasText: 'CADB' }).first().click();
   await expect(to.getByTestId('fighter-sheet')).toHaveCount(1);
   await expect(to.getByTestId('fighter-sheet')).toContainText('Licence');

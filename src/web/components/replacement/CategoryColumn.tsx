@@ -130,8 +130,9 @@ export function CategoryColumn({ side, category, movers, competitionId, waveId, 
         <Text size="sm" c="dimmed" px={8} pb={8} style={{ borderTop: '1px solid var(--sk-line)', paddingTop: 6 }}>Pas de tableau pour cette catégorie</Text>
       ) : (
         <Box style={{ borderTop: '1px solid var(--sk-line)', padding: 8, overflowX: 'auto' }}>
-          <BracketView category={category} entrants={entrants} highlighted={moving}
-            selected={chosen} onSelect={(rid) => setChosen((c) => (c === rid ? null : rid))} />
+          {/* Ceux qui bougent en orange, comme dans la liste ; le nom choisi garde son contour. Sans `onClick`, `entrantProps` laisse le clic à `onSelect`. */}
+          <BracketView category={category} entrants={entrants} selected={chosen} onSelect={(rid) => setChosen((c) => (c === rid ? null : rid))}
+            entrantProps={(rid) => ({ style: { cursor: 'pointer', ...(moving.has(rid) ? { background: 'var(--sk-warn)' } : {}) } })} />
           {chosen && <Box mt={6}><FighterSheet competitionId={competitionId} registrationId={chosen} /></Box>}
         </Box>
       )}
