@@ -109,7 +109,7 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
       <Grid gutter="md">
         <Grid.Col span={{ base: 12, md: 3 }}>
           <Box style={{ position: 'sticky', top: 8 }}>
-            <LoneTray items={loneItems} entrants={entrants} badges={badges} badgeDetails={badgeDetails} chipProps={readOnly ? undefined : chipProps} selectedChip={drag.selected} />
+            <LoneTray competitionId={competitionId} items={loneItems} entrants={entrants} badges={badges} badgeDetails={badgeDetails} chipProps={readOnly ? undefined : chipProps} selectedChip={drag.selected} />
           </Box>
         </Grid.Col>
         <Grid.Col span={{ base: 12, md: 9 }}>

@@ -186,3 +186,44 @@ test('planche : un poste de zone voit le bac sans la consigne de glisser', async
   await expect(tray).toContainText('Sans adversaire');
   await expect(tray).not.toContainText('À glisser');
 });
+
+test('planche : ⓘ ouvre la fiche sans choisir la pastille ; clic-clic intact', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe fiche planche');
+  const ids = await seed(request, id);
+  await page.goto(`/competitions/${id}/tableaux`);
+  const c54 = card(page, ids.c54);
+  const alba = chip(page, c54, 'ALBA');
+  await alba.getByTestId('fighter-info').click();
+  const sheet = page.getByTestId('fighter-info-sheet');
+  await expect(sheet).toBeVisible();
+  await expect(sheet).toContainText('ALBA x');
+  await expect(sheet.getByTestId('fighter-sheet')).toContainText('Licence');
+  await expect(alba).toHaveAttribute('aria-pressed', 'false');
+  // Clic ailleurs : fermée (la bulle recouvre les pastilles voisines, on clique hors de la carte) ; une seule bulle à la fois.
+  await page.mouse.click(2, 2);
+  await expect(page.getByTestId('fighter-info-sheet')).toHaveCount(0);
+  await chip(page, c54, 'BRUN').getByTestId('fighter-info').click();
+  await expect(page.getByTestId('fighter-info-sheet')).toHaveCount(1);
+  await expect(page.getByTestId('fighter-info-sheet')).toContainText('BRUN x');
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('fighter-info-sheet')).toHaveCount(0);
+  // Pastille choisie, puis fiche d'une autre et clic dedans : rien ne bouge, la première reste choisie.
+  await alba.click();
+  await expect(alba).toHaveAttribute('aria-pressed', 'true');
+  await chip(page, c54, 'CARO').getByTestId('fighter-info').click();
+  await page.getByTestId('fighter-info-sheet').getByTestId('fighter-sheet').click();
+  await expect(page.getByTestId('drop-dialog')).toHaveCount(0);
+  await expect(alba).toHaveAttribute('aria-pressed', 'true');
+  // Clavier : Entrée sur ⓘ ouvre la fiche sans choisir la pastille.
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  await chip(page, c54, 'DIDI').getByTestId('fighter-info').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('fighter-info-sheet')).toContainText('DIDI x');
+  await expect(chip(page, c54, 'DIDI')).toHaveAttribute('aria-pressed', 'false');
+  // Le bac aussi ; glisser depuis ⓘ ne déplace rien.
+  const solo = page.getByTestId('planche-tray').getByTestId('planche-chip').filter({ hasText: 'SOLO' });
+  await solo.getByTestId('fighter-info').dragTo(chip(page, c54, 'ALBA'));
+  await expect(page.getByTestId('drop-dialog')).toHaveCount(0);
+  await solo.getByTestId('fighter-info').click();
+  await expect(page.getByTestId('fighter-info-sheet')).toContainText('SOLO x');
+});

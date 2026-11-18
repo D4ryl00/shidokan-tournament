@@ -95,7 +95,7 @@ export function CategoryCard(p: CardProps) {
   const chip = (id: string) => (
     <FighterChip key={id} id={id} info={p.entrants.get(id)} badge={p.badges.get(id)} badgeDetail={p.badgeDetails.get(id)}
       sameClub={sameIds.has(id)} matched={matched(id)} locked={locked || p.readOnly} selected={p.selectedChip === id}
-      extra={p.chipProps?.(id, c)} compact={p.compact} />
+      extra={p.chipProps?.(id, c)} compact={p.compact} competitionId={p.competitionId} />
   );
   // Carte compacte : les combattants à la suite, sans les intitulés des combats.
   const compactIds = p.compact ? sections.flatMap((s) => s.ids) : [];

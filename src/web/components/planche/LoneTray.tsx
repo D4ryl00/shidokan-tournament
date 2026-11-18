@@ -10,7 +10,8 @@ import { isLockedCategory } from './model.js';
 export interface LoneItem { category: Category; registrationId: string; /** Session de la catégorie quand ce n'est pas celle affichée. */ sessionName: string | null }
 
 /** Bac « Sans adversaire » : le seul présent de chaque catégorie qui n'en a qu'un. */
-export function LoneTray({ items, entrants, badges, badgeDetails, chipProps, selectedChip = null }: {
+export function LoneTray({ competitionId, items, entrants, badges, badgeDetails, chipProps, selectedChip = null }: {
+  competitionId: string;
   items: LoneItem[];
   entrants: Map<string, EntrantInfo>;
   badges: Map<string, ProposalType>;
@@ -28,7 +29,7 @@ export function LoneTray({ items, entrants, badges, badgeDetails, chipProps, sel
         {items.map((it) => (
           <Stack key={it.category.id} gap={2} data-category-of={it.category.id}>
             <Text size="xs" c="dimmed" lh={1.25}>{it.category.label}{it.sessionName ? ` · ${it.sessionName}` : ''}</Text>
-            <FighterChip id={it.registrationId} info={entrants.get(it.registrationId)} badge={badges.get(it.registrationId)} badgeDetail={badgeDetails.get(it.registrationId)}
+            <FighterChip competitionId={competitionId} id={it.registrationId} info={entrants.get(it.registrationId)} badge={badges.get(it.registrationId)} badgeDetail={badgeDetails.get(it.registrationId)}
               locked={!chipProps || isLockedCategory(it.category)} selected={selectedChip === it.registrationId} extra={chipProps?.(it.registrationId, it.category)} />
           </Stack>
         ))}

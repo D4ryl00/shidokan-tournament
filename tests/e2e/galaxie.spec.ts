@@ -411,3 +411,16 @@ test('galaxie : « Voir dans la galaxie » depuis un cas de la Réaffectation', 
   await expect(card(page, ids.c61)).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('galaxie : ⓘ d’une pastille ouvre la fiche', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Galaxie fiche');
+  const ids = await seed(request, id);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await openGalaxy(page, id);
+  await page.getByTestId('planche-search').fill('-61 Karaté');
+  const c61 = card(page, ids.c61);
+  await expect(c61).toBeVisible();
+  await c61.getByTestId('planche-chip').first().getByTestId('fighter-info').click();
+  await expect(page.getByTestId('fighter-info-sheet').getByTestId('fighter-sheet')).toContainText('Licence');
+  await expect(page.getByTestId('galaxy-canvas')).toHaveAttribute('data-selected', ids.c61);
+});
