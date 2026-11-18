@@ -187,6 +187,26 @@ test('planche : un poste de zone voit le bac sans la consigne de glisser', async
   await expect(tray).not.toContainText('À glisser');
 });
 
+test('planche : carte agrandie et poste de zone, ⓘ ouvre la fiche', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe fiche zone');
+  const ids = await seed(request, id);
+  const [zone] = (await (await request.get(`/api/competitions/${id}/zones`)).json()) as { id: string }[];
+  await page.addInitScript(([k, v]) => localStorage.setItem(k!, v!), [`poste:${id}`, JSON.stringify({ kind: 'zone', zoneId: zone!.id })]);
+  await page.goto(`/competitions/${id}/tableaux`);
+  const sheet = page.getByTestId('fighter-info-sheet');
+  // Bac : ⓘ d'une pastille.
+  await page.getByTestId('planche-tray').getByTestId('planche-chip').filter({ hasText: 'SOLO' }).getByTestId('fighter-info').click();
+  await expect(sheet.getByTestId('fighter-sheet')).toContainText('Licence');
+  await page.keyboard.press('Escape');
+  await expect(sheet).toHaveCount(0);
+  // Carte agrandie : ⓘ d'une case du tableau.
+  const c54 = card(page, ids.c54);
+  await c54.getByTestId('card-grow').click();
+  await c54.getByTestId('bracket-entrant').filter({ hasText: 'ALBA' }).getByTestId('fighter-info').click();
+  await expect(sheet).toContainText('ALBA x');
+  await expect(sheet.getByTestId('fighter-sheet')).toContainText('Licence');
+});
+
 test('planche : ⓘ ouvre la fiche sans choisir la pastille ; clic-clic intact', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe fiche planche');
   const ids = await seed(request, id);

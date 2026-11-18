@@ -156,7 +156,7 @@ export function CategoryCard(p: CardProps) {
         )}
         {p.expanded && (
           <BracketView category={c} entrants={p.entrants} numbers={p.passages.numbers} noRest={p.passages.noRest}
-            matchZones={movedMatchZones(p.passages, p.zones, c.bracket)} badges={p.badges} badgeDetails={p.badgeDetails}
+            matchZones={movedMatchZones(p.passages, p.zones, c.bracket)} badges={p.badges} badgeDetails={p.badgeDetails} fighterInfo={p.competitionId}
             selected={p.selectedChip} entrantProps={locked ? undefined : p.chipProps && ((id) => p.chipProps!(id, c))} />
         )}
         {drop === 'ok' && (

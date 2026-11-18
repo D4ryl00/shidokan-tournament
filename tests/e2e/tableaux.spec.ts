@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { createCompetition, showList } from './helpers.js';
+import { clipped, createCompetition, showList } from './helpers.js';
 
 async function seed(request: APIRequestContext, id: string) {
   const club = async (name: string) => (await (await request.post(`/api/competitions/${id}/clubs`, { data: { name } })).json()).id as string;
@@ -111,6 +111,7 @@ test('impression : poule en grille croisée, kata sans badge', async ({ page, re
   await page.goto(`/competitions/${id}/impression`);
   await expect(page.getByTestId('print-section')).toHaveCount(2);
   await expect(page.getByTestId('pool-grid')).toHaveCount(1);
+  await expect(page.getByTestId('fighter-info')).toHaveCount(0);
   await expect(page.getByTestId('print-section').filter({ hasText: 'Kata' }).locator('.mantine-Badge-root')).toHaveCount(0);
 });
 
@@ -213,4 +214,39 @@ test('planche : lien « voir » entoure la carte, lisible à 360 px', async ({ p
   await page.getByTestId('brackets-view').getByText('Planche', { exact: true }).click();
   await expect(page.getByTestId('planche-card').first()).toBeVisible();
   await expect(page.locator('[data-ring="see"]')).toHaveCount(0);
+});
+
+async function seedFour(request: APIRequestContext, id: string) {
+  for (const n of ['ALBA', 'BRUN', 'CARO', 'DIDI'])
+    await request.post(`/api/competitions/${id}/registrations`, { data: { clubId: null, lastName: n, firstName: 'x', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54', source: 'manual' } });
+}
+
+test('liste : ⓘ d’une case ouvre la fiche sans choisir l’inscrit ; l’échange au clic reste', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe fiche liste');
+  await seedFour(request, id);
+  await page.goto(`/competitions/${id}/tableaux`);
+  await showList(page);
+  await page.getByTestId('category-row').filter({ hasText: '-54' }).click();
+  const entrant = page.getByTestId('bracket-entrant').filter({ hasText: 'ALBA' });
+  await entrant.getByTestId('fighter-info').click();
+  await expect(page.getByTestId('fighter-info-sheet').getByTestId('fighter-sheet')).toContainText('Licence');
+  await expect(page.getByTestId('swap-select')).toHaveText('Échange manuel : cliquez sur deux inscrits.');
+  await page.getByTestId('fighter-info-sheet').click();
+  await expect(page.getByTestId('swap-select')).toHaveText('Échange manuel : cliquez sur deux inscrits.');
+  await page.keyboard.press('Escape');
+  await entrant.click();
+  await expect(page.getByTestId('swap-select')).toContainText('Cliquez sur l’inscrit à échanger avec ALBA');
+});
+
+test('liste : 360 px, bulle ouverte sans débordement', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe fiche 360');
+  await seedFour(request, id);
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.goto(`/competitions/${id}/tableaux`);
+  await showList(page);
+  await page.getByTestId('category-row').filter({ hasText: '-54' }).click();
+  await page.getByTestId('bracket-entrant').first().getByTestId('fighter-info').click();
+  await expect(page.getByTestId('fighter-info-sheet')).toBeVisible();
+  expect(await clipped(page)).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
 });

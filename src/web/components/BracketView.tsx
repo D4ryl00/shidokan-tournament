@@ -16,6 +16,7 @@ import type { Category } from '../../domain/categories.js';
 import type { ProposalType } from '../../domain/replacement/index.js';
 import type { RecasementEntry } from '../api.js';
 import { ReplacementBadge } from './ReplacementBadge.js';
+import { FighterInfoButton } from './FighterInfoButton.js';
 import '../bracket.css';
 
 export interface EntrantInfo {
@@ -69,6 +70,8 @@ interface Props {
   onSelect?: (registrationId: string) => void;
   /** Attributs ajoutés à la case de chaque inscrit (glisser-déposer de la planche) ; son clic remplace `onSelect`. */
   entrantProps?: (registrationId: string) => HTMLAttributes<HTMLDivElement>;
+  /** Id de la compétition : affiche ⓘ (fiche du combattant) après chaque nom, à l'écran seulement. */
+  fighterInfo?: string;
   /** Badges de recasement (écran seulement). */
   badges?: Map<string, ProposalType>;
   /** Détail des recasements validés (clic sur un badge). */
@@ -134,6 +137,7 @@ function EntrantLine({ id, fallback, info, props, winner, inline }: { id: string
           <Text size={props.printable ? 'md' : 'sm'} fw={winner ? 800 : props.printable ? 400 : 500} td={winner && props.printable ? 'underline' : undefined} lh={1.2}>
             {info.name}
             {!props.printable && id && props.badges?.get(id) && <> <ReplacementBadge type={props.badges.get(id)!} size="xs" detail={props.badgeDetails?.get(id)} /></>}
+            {props.fighterInfo && !props.printable && id && info && <> <FighterInfoButton competitionId={props.fighterInfo} registrationId={id} name={info.name} club={info.club} /></>}
           </Text>
           <Text size="xs" c={props.printable ? undefined : sameClub ? 'orange' : 'dimmed'} fw={sameClub ? 600 : undefined} lh={1.2} data-testid={sameClub ? 'same-club' : undefined}>{info.club}</Text>
         </>
