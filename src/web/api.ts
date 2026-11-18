@@ -625,6 +625,22 @@ export interface PlanResponse {
 }
 const planBody = (waveId: string | null, choices: PlanChoice[], cardDecisions: boolean) => ({ ...(waveId ? { waveId } : {}), choices, cardDecisions });
 
+/**
+ * Le plan calculé reste gardé tant que rien ne change : ni périmé au retour sur la page, ni oublié au bout de 5 minutes. Ce qui le
+ * rend faux le fait déjà oublier ou relire : gestes de ce poste (`useInvalidateDay`), autres postes et onglet revenu après des
+ * changements manqués (`refreshPlansLive`), compétition quittée (`useCompetitionEvents`), calcul annulé (`cancelPlan`).
+ */
+export const PLAN_CACHE = { staleTime: Infinity, gcTime: Infinity, refetchOnWindowFocus: false } as const;
+
+/**
+ * « Annuler le calcul » : arrête le calcul et marque le plan affiché périmé sans le relancer ; de retour sur la page (l'état
+ * « annulé » ne survit pas à son départ), il est recalculé au lieu d'être présenté comme à jour.
+ */
+export async function cancelPlan(qc: QueryClient, queryKey: QueryKey): Promise<void> {
+  await qc.cancelQueries({ queryKey });
+  qc.getQueryCache().find({ queryKey, exact: true })?.invalidate();
+}
+
 /** Plans (clé hachée) qu'une mise à jour en direct a trouvés en plein calcul : un seul nouveau calcul part à la fin de celui-ci. */
 const refreshAfterPlan = new Set<string>();
 /** Calcul en cours par plan (clé hachée) : un calcul arrêté, qui finit après celui qui le remplace, ne touche plus à la marque. */
@@ -688,8 +704,9 @@ export function usePlan(id: string, waveId: string | null, choices: PlanChoice[]
     },
     enabled,
     placeholderData: keepPreviousData,
-    // Les événements des autres postes et les gestes le tiennent à jour : un calcul au retour sur l'onglet serait du travail perdu.
-    refetchOnWindowFocus: false,
+    // Les événements des autres postes et les gestes le tiennent à jour : un calcul au retour sur l'onglet ou sur la page serait
+    // du travail perdu.
+    ...PLAN_CACHE,
     // Lu par `refreshPlansLive` : le plan affiché date de cette annulation.
     meta: { cancelledAt: cancelledAt?.key === keyText ? cancelledAt.updatedAt : null },
   });
@@ -699,7 +716,7 @@ export function usePlan(id: string, waveId: string | null, choices: PlanChoice[]
     ...query,
     progress: query.isFetching && progress?.key === keyText ? progress.p : null,
     cancelled,
-    cancel: () => { setCancelledAt({ key: keyText, updatedAt: query.dataUpdatedAt }); void qc.cancelQueries({ queryKey }); },
+    cancel: () => { setCancelledAt({ key: keyText, updatedAt: query.dataUpdatedAt }); void cancelPlan(qc, queryKey); },
     restart: () => { setCancelledAt(null); void query.refetch(); },
   };
 }

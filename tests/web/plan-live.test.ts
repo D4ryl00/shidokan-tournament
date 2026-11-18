@@ -1,6 +1,6 @@
 import { QueryClient, QueryObserver, type QueryKey } from '@tanstack/react-query';
 import { afterEach, expect, test } from 'vitest';
-import { PLAN_KEY, refreshPlansLive, trackPlanFetch } from '../../src/web/api.js';
+import { cancelPlan, PLAN_CACHE, PLAN_KEY, refreshPlansLive, trackPlanFetch } from '../../src/web/api.js';
 
 const clients: QueryClient[] = [];
 afterEach(() => clients.splice(0).forEach((qc) => qc.clear()));
@@ -12,22 +12,25 @@ function planQuery(meta: Record<string, unknown> = {}) {
   const queryKey: QueryKey = [PLAN_KEY, 'c1', null, []];
   const pending: (() => void)[] = [];
   const counts = { starts: 0, aborts: 0 };
-  const observer = new QueryObserver(qc, {
+  const options = {
+    ...PLAN_CACHE,
     queryKey,
     meta,
-    queryFn: ({ signal }) => {
+    queryFn: ({ signal }: { signal: AbortSignal }) => {
       counts.starts++;
       signal.addEventListener('abort', () => counts.aborts++);
       return trackPlanFetch(qc, queryKey, signal, () => new Promise<number>((resolve) => pending.push(() => resolve(counts.starts))));
     },
-  });
-  const unsubscribe = observer.subscribe(() => {});
+  };
+  const unsubscribe = new QueryObserver(qc, options).subscribe(() => {});
   const release = async () => {
     pending.shift()?.();
     // Le résultat est rangé, puis le recalcul éventuel part (setTimeout 0).
     await new Promise((r) => setTimeout(r, 5));
   };
-  return { qc, queryKey, counts, release, unsubscribe, query: () => qc.getQueryCache().find({ queryKey, exact: true })! };
+  // Retour sur la page : un nouvel observateur de la même clé.
+  const observe = () => new QueryObserver(qc, options).subscribe(() => {});
+  return { qc, queryKey, counts, release, unsubscribe, observe, query: () => qc.getQueryCache().find({ queryKey, exact: true })! };
 }
 
 test('mise à jour en direct pendant un calcul : il continue, un seul nouveau calcul part à la fin', async () => {
@@ -86,4 +89,39 @@ test('calcul arrêté qui finit après celui qui le remplace : la mise à jour e
   await p.release();
   expect(p.counts.starts).toBe(4);
   p.unsubscribe();
+});
+
+test('plan quitté puis revenu sans changement : pas de nouveau calcul', async () => {
+  const p = planQuery();
+  await p.release();
+  p.unsubscribe();
+  const back = p.observe();
+  await new Promise((r) => setTimeout(r, 5));
+  expect(p.counts.starts).toBe(1);
+  expect(p.query().state.data).toBe(1);
+  back();
+});
+
+test('plan quitté, mise à jour en direct pendant l’absence : recalculé au retour', async () => {
+  const p = planQuery();
+  await p.release();
+  p.unsubscribe();
+  refreshPlansLive(p.qc);
+  const back = p.observe();
+  expect(p.counts.starts).toBe(2);
+  back();
+});
+
+test('plan annulé puis quitté : recalculé au retour', async () => {
+  const p = planQuery();
+  await p.release();
+  void p.qc.invalidateQueries({ queryKey: p.queryKey });
+  expect(p.counts.starts).toBe(2);
+  await cancelPlan(p.qc, p.queryKey);
+  expect(p.query().state.data).toBe(1);
+  expect(p.counts.starts).toBe(2);
+  p.unsubscribe();
+  const back = p.observe();
+  expect(p.counts.starts).toBe(3);
+  back();
 });

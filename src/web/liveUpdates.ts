@@ -10,7 +10,8 @@ import { whenSaved } from './unsaved.js';
  * - Flux fermé (serveur redémarré, session expirée, proxy en erreur) : reconnexion après une attente croissante, puis relecture.
  * - Onglet caché : flux fermé (le navigateur n'ouvre que 6 connexions vers un même PC) ; rouvert quand il revient, avec relecture
  *   seulement si la compétition a changé entre-temps (`revisionTracker`) : sinon le plan d'ensemble serait recalculé pour rien.
- * - Plan d'ensemble : un calcul en cours n'est pas relancé, un plan annulé non plus (voir `refreshPlansLive`).
+ * - Plan d'ensemble : un calcul en cours n'est pas relancé, un plan annulé non plus (voir `refreshPlansLive`) ; compétition
+ *   quittée : ses plans gardés sont oubliés.
  */
 export function useCompetitionEvents(competitionId: string): void {
   const qc = useQueryClient();
@@ -78,6 +79,8 @@ export function useCompetitionEvents(competitionId: string): void {
       document.removeEventListener('visibilitychange', onVisibility);
       close();
       if (timer) clearTimeout(timer);
+      // Compétition quittée : plus d'événements pour tenir ses plans gardés à jour, ils sont oubliés (recalculés au retour).
+      qc.removeQueries({ queryKey: [PLAN_KEY, competitionId] });
     };
   }, [competitionId, qc]);
 }
