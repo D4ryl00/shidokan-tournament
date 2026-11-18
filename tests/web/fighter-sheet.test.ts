@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 import type { RegistrationRow } from '../../src/domain/registration.js';
 import type { RecasementEntry } from '../../src/web/api.js';
-import { sheetLines } from '../../src/web/components/replacement/fighterSheet.js';
+import { sheetLines } from '../../src/web/components/replacement/sheetLines.js';
 
 const grid = ffkDefaultGrid();
 const row = (over: Partial<RegistrationRow> = {}, fighter: Partial<RegistrationRow['fighter']> = {}): RegistrationRow => ({

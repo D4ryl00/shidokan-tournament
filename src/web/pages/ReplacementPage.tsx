@@ -43,6 +43,8 @@ import { PlanView, WARN_ALERT, type PlanFighter } from '../components/replacemen
 import type { RuleId } from '../../domain/settings.js';
 import { ruleNumber, rulesView } from '../../domain/replacement/rules.js';
 import { MoveBlocks } from '../components/replacement/MoveBlocks.js';
+import { DetailsToggle, MoveDetails } from '../components/replacement/MoveDetails.js';
+import { CopyForClub } from '../components/replacement/CopyForClub.js';
 import { WaveChangeWarning } from '../components/replacement/WaveChangeWarning.js';
 import { clearPlanChoices, usePlanCardDecisions, usePlanChoices } from '../usePlanChoices.js';
 import { useSelectedWave, withSession } from '../useSelectedWave.js';
@@ -217,6 +219,8 @@ export function ReplacementPage() {
   const [note, setNote] = useState('');
   const [asideOpen, setAsideOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  // Dépliants « Détails » ouverts, par proposition (état d'écran, perdu au rechargement).
+  const [details, setDetails] = useState<Record<string, boolean>>({});
   const [dialog, setDialog] = useState<Dialog>(null);
   const [moveTarget, setMoveTarget] = useState<Record<string, string | null>>({});
   const [allTargets, setAllTargets] = useState<Record<string, boolean>>({});
@@ -375,11 +379,18 @@ export function ReplacementPage() {
                 ) : (
                   <Text size="sm">{p.reason}</Text>
                 )}
-                <Group gap={4} wrap="nowrap">
+                <Group gap={4} wrap="wrap">
+                  <DetailsToggle open={!!details[p.id]} onToggle={() => setDetails({ ...details, [p.id]: !details[p.id] })} />
+                  {grid && <CopyForClub competitionId={id} view={p.view} grid={grid} />}
                   <Button size="xs" variant="default" data-testid="proposal-preview" onClick={() => openProposal(p, false)}>Aperçu</Button>
                   <Button size="xs" data-testid="proposal-apply" onClick={() => openProposal(p, true)}>Valider</Button>
                   <Button size="xs" variant="subtle" color="red" data-testid="proposal-refuse" onClick={() => refuse.mutate({ proposalId: p.id })}>Refuser</Button>
                 </Group>
+                {details[p.id] && (
+                  <Box style={{ flex: '1 1 100%', minWidth: 0 }}>
+                    <MoveDetails competitionId={id} waveId={waveId} body={{ proposalId: p.id }} fingerprint={data.fingerprint} sex={p.view.sex} />
+                  </Box>
+                )}
               </Group>
             );
           })}

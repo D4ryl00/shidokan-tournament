@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { useCategories, useGrid, useRegistrations, useWaves, useWeighIn } from '../../api.js';
 import { disciplineLabel } from '../../labels.js';
 import { useRecasementDetails } from '../ReplacementBadge.js';
-import { sheetLines } from './fighterSheet.js';
+import { sheetLines } from './sheetLines.js';
 
 /** Fiche d'un combattant (sans le club), sous son nom dans les détails d'une réaffectation. */
 export function FighterSheet({ competitionId, registrationId }: { competitionId: string; registrationId: string }) {

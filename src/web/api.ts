@@ -13,6 +13,7 @@ import type { Club, DirectoryEntry, DirectoryInput, RegistrationRow } from '../d
 import type { Case, MoveView, Presence, Proposal, ProposalType } from '../domain/replacement/index.js';
 import type { CategoryGrid, DisciplineId, Ruleset, Sex } from '../domain/types.js';
 import type { LadderProgress, LadderRow, PlanChoice, PlanMove } from '../domain/replacement/plan.js';
+import type { MoveDetails, MoveDetailsBody } from '../domain/replacement/move-details.js';
 import type { ClubChoice } from './components/club-picker/choice.js';
 import type { FfkPdfRead } from '../domain/ffk-pdf-plan.js';
 import type { ClubFormRead } from '../domain/club-form-read.js';
@@ -486,6 +487,19 @@ export function usePreviewReplacement(id: string) {
   return useMutation({
     mutationFn: (body: { proposalId: string } | { move: { registrationId: string; categoryId: string } }) =>
       api<PreviewData>('POST', `/api/competitions/${id}/replacement/preview`, body),
+  });
+}
+/**
+ * « Détails » d'un déplacement (carte ou ligne du plan), calculés à blanc par le serveur. La clé porte l'empreinte des données
+ * du jour : un changement les recalcule (et `useInvalidateDay` les relit avec le reste, `[1]` étant la compétition).
+ */
+export function useMoveDetails(id: string, body: MoveDetailsBody, fingerprint: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['move-details', id, fingerprint, body],
+    queryFn: () => api<MoveDetails>('POST', `/api/competitions/${id}/replacement/details/preview`, body),
+    enabled,
+    // Le calcul tient le verrou d'écriture : pas de nouveau calcul au retour sur l'onglet tant que les données n'ont pas changé.
+    staleTime: Infinity,
   });
 }
 function useReplacementAction<T>(id: string, path: string) {

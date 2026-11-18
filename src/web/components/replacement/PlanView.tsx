@@ -10,6 +10,8 @@ import { FighterHighlight, FighterName } from '../FighterHighlight.js';
 import { ProposalPreview } from '../ProposalPreview.js';
 import { BAND_COLOR } from './RuleLadder.js';
 import { MoveBlocks } from './MoveBlocks.js';
+import { DetailsToggle, MoveDetails } from './MoveDetails.js';
+import { CopyForClub } from './CopyForClub.js';
 import type { CategoryGrid } from '../../../domain/types.js';
 
 export interface PlanFighter {
@@ -89,6 +91,13 @@ export function PlanView({
   const apply = useApplyPlan(id);
   const [confirming, setConfirming] = useState(false);
   const [modifying, setModifying] = useState<string | null>(null);
+  // Dépliants « Détails » ouverts, par ligne du plan (état d'écran).
+  const [details, setDetails] = useState<ReadonlySet<string>>(new Set());
+  const toggleDetails = (moveId: string) => setDetails((d) => {
+    const next = new Set(d);
+    if (next.has(moveId)) next.delete(moveId); else next.add(moveId);
+    return next;
+  });
   const name = (rid: string) => fighter(rid).name;
 
   // Message du recalcul : on compare le plan affiché au précédent.
@@ -181,6 +190,8 @@ export function PlanView({
           {m.outside && <Text span size="xs" fw={600} c="var(--sk-warn-text)">{OUTSIDE[m.outside]}</Text>}
         </MoveBlocks>
         <Group gap={4} style={{ flex: '0 1 auto', maxWidth: '100%' }}>
+          <DetailsToggle size="compact-xs" open={details.has(m.id)} onToggle={() => toggleDetails(m.id)} />
+          <CopyForClub size="compact-xs" competitionId={id} view={m.view} grid={grid} />
           {pinned ? (
             <Button size="compact-xs" variant="default" data-testid="plan-move-unvalidate" onClick={() => choose(without((c) => c === pinned))}>
               Annuler la validation
@@ -208,6 +219,13 @@ export function PlanView({
             </Button>
           ) : null}
         </Group>
+        {details.has(m.id) && (
+          <Box style={{ flex: '1 1 100%', minWidth: 0 }}>
+            {/* La ligne telle qu'affichée : le plan de ces choix, rejoué par le serveur jusqu'à elle. */}
+            <MoveDetails competitionId={id} waveId={waveId} sex={m.view.sex} fingerprint={data.fingerprint}
+              body={{ plan: { ...(waveId ? { waveId } : {}), choices, cardDecisions, fingerprint: data.fingerprint, hash: plan.hash }, moveId: m.id }} />
+          </Box>
+        )}
         {modifying === m.id && options && (
           <Box style={{ flex: '1 1 100%', minWidth: 0 }}>
             <Select size="xs" maw={420} placeholder="Choisir la catégorie…" searchable data-testid="plan-move-target" data={options}
