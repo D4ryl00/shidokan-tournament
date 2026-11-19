@@ -369,7 +369,7 @@ export interface WeighInFighter {
   ageBandCode: string;
   presence: Presence;
   weighInKg: number | null;
-  registrations: { id: string; discipline: DisciplineId; hasWeight: boolean; weightClassLabel: string | null; weighInClassLabel: string | null; outOfClass: boolean; recased: boolean; categoryLabel: string | null; categoryOrder: number | null }[];
+  registrations: { id: string; discipline: DisciplineId; hasWeight: boolean; ruleset: Ruleset | null; approxWeightKg: number | null; weightClassLabel: string | null; weighInClassLabel: string | null; outOfClass: boolean; recased: boolean; categoryLabel: string | null; categoryOrder: number | null }[];
 }
 
 /** Liste de pesée ; `waveId` : celle d'une vague (sans vague : toute la compétition). */

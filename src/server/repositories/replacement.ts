@@ -1001,6 +1001,8 @@ export async function weighInList(db: AppDb, competitionId: string, waveId?: str
               id: m.registrationId,
               discipline: m.discipline,
               hasWeight: DISCIPLINES[m.discipline].hasWeight,
+              ruleset: m.ruleset,
+              approxWeightKg: m.approxWeightKg,
               weightClassLabel: label(m.weightClassId),
               weighInClassLabel: wic?.label ?? (m.weighInKg !== null && m.weightClassId ? label(m.weightClassId) : null),
               outOfClass: wic !== null,

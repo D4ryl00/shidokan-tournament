@@ -490,10 +490,12 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     details: [
       [
         'Cherchez le combattant par son nom ou son club.',
+        '« Ordre : Club | Nom » : par club (un en-tête par club, pratique pour peser les élèves d’un même dojo ensemble) ou par nom ; le choix est gardé sur ce poste. La touche Entrée passe au combattant suivant dans l’ordre affiché.',
         'Tapez le poids (virgule acceptée, par exemple 54,3) puis Entrée.',
         'Un combattant qui ne vient pas : cliquez « Absent ».',
         'Le kata n’a pas de pesée : pointez seulement la présence.',
       ],
+      'Chaque inscription de combat indique son règlement (Jiyu ou Shobu) et, s’il a été donné à l’inscription, le poids déclaré : « déclaré 38,5 kg ». Le poids déclaré n’est qu’une indication, la balance fait foi.',
       'Le badge « ⚖ hors catégorie → … » signale un combattant trop lourd pour sa catégorie (au-delà de la tolérance) et indique celle de son poids ; la réaffectation s’en occupera. La limite fait partie de la catégorie : 40,0 kg reste en -40 kg.',
       'La mention « réaffecté » indique un combattant déjà déplacé dans une autre catégorie.',
       '« Clôturer la pesée » marque absents tous les combattants non pesés. À faire une fois la pesée terminée.',

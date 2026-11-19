@@ -57,6 +57,14 @@ const replacement = async () => (await call('GET', '/replacement')).json() as Re
 type Cat = { id: string; label: string; registrationIds: string[]; bracket: { entrants: { registrationId: string }[] } | null };
 const categories = async () => (await call('GET', '/categories')).json() as Cat[];
 
+test('pesée : chaque inscription porte son règlement et son poids déclaré', async () => {
+  const a = await reg({ approxWeightKg: 38.5 });
+  const k = await reg({ discipline: 'kata', ruleset: null, weightClassId: null });
+  const w = (await call('GET', '/weigh-in')).json() as { fighters: { fighterId: string; registrations: { ruleset: string | null; approxWeightKg: number | null }[] }[] };
+  expect(w.fighters.find((f) => f.fighterId === a.fighterId)!.registrations[0]).toMatchObject({ ruleset: 'jiyu', approxWeightKg: 38.5 });
+  expect(w.fighters.find((f) => f.fighterId === k.fighterId)!.registrations[0]).toMatchObject({ ruleset: null, approxWeightKg: null });
+});
+
 test('pesée : hors catégorie, clôture, absent sorti du tableau', async () => {
   const a = await reg();
   const b = await reg();

@@ -1,7 +1,7 @@
 import '../print.css';
 import { Button, Group, Loader, Modal, NumberInput, SegmentedControl, Stack, Table, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { normalizeName } from '../../domain/names.js';
 import { plural } from '../../domain/plural.js';
@@ -12,7 +12,7 @@ import { HelpText } from '../components/Help.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { IconSearch } from '../components/ui/icons.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
-import { ageBandLabel, disciplineLabel } from '../labels.js';
+import { ageBandLabel, disciplineLabel, kgLabel, rulesetShort } from '../labels.js';
 import { useSelectedWave } from '../useSelectedWave.js';
 import { TableCard } from '../components/ui/TableCard.js';
 
@@ -47,6 +47,22 @@ function WeightCell({ fighter, index, onSave }: { fighter: WeighInFighter; index
   );
 }
 
+type Order = 'club' | 'nom';
+const ORDER_KEY = 'pesee-ordre';
+/** Ordre mémorisé sur ce poste (Club par défaut) ; le stockage peut être absent ou refusé. */
+function readOrder(): Order {
+  try { return localStorage.getItem(ORDER_KEY) === 'nom' ? 'nom' : 'club'; } catch { return 'club'; }
+}
+function writeOrder(o: Order): void {
+  try { localStorage.setItem(ORDER_KEY, o); } catch { /* sans mémoire : l'ordre reste celui de l'écran */ }
+}
+
+/** « Karaté Jiyu -40 · déclaré 38 kg » : le règlement et le poids déclaré ne se disent que pour un combat. */
+function registrationLabel(r: WeighInFighter['registrations'][number]): string {
+  const base = `${disciplineLabel(r.discipline)}${r.hasWeight && r.ruleset ? ` ${rulesetShort(r.ruleset)}` : ''}${r.weightClassLabel ? ` ${r.weightClassLabel}` : ''}`;
+  return r.hasWeight && r.approxWeightKg !== null ? `${base} · déclaré ${kgLabel(r.approxWeightKg)}` : base;
+}
+
 /** Présence en contrôle segmenté : présent en vert, absent en orangé, « ? » neutre. */
 const presenceStyles = (p: Presence) => ({
   indicator: { backgroundColor: p === 'present' ? 'var(--sk-ok)' : p === 'absent' ? 'var(--sk-warn)' : 'var(--sk-chip)' },
@@ -63,7 +79,14 @@ export function WeighInPage() {
   const close = useCloseWeighIn(id);
   const [search, setSearch] = useState('');
   const [confirm, setConfirm] = useState(false);
-  const fighters = (data?.fighters ?? []).filter((f) => !search || normalizeName(`${f.label} ${f.club}`).includes(normalizeName(search)));
+  const [order, setOrder] = useState<Order>(readOrder);
+  const matching = (data?.fighters ?? []).filter((f) => !search || normalizeName(`${f.label} ${f.club}`).includes(normalizeName(search)));
+  // Le serveur trie par club puis nom ; l'ordre Nom trie par nom seul. La navigation Entrée suit cet ordre affiché.
+  const fighters = order === 'nom' ? [...matching].sort((a, b) => a.label.localeCompare(b.label) || a.club.localeCompare(b.club)) : matching;
+  // Rang du champ de poids dans l'ordre affiché : un combattant de kata seul n'a pas de champ et ne compte pas.
+  const weightRank = new Map<string, number>();
+  for (const f of fighters) if (f.registrations.some((r) => r.hasWeight)) weightRank.set(f.fighterId, weightRank.size);
+  const clubSize = (club: string) => fighters.filter((f) => f.club === club).length;
   const all = data?.fighters ?? [];
   const count = (p: Presence) => all.filter((f) => f.presence === p).length;
 
@@ -85,6 +108,11 @@ export function WeighInPage() {
             <StatusBadge tone="ok" size="lg" className="num">{plural(count('present'), 'présent')}</StatusBadge>
             <StatusBadge tone="neutral" size="lg" className="num">{plural(count('absent'), 'absent')}</StatusBadge>
             <StatusBadge tone={count('unknown') > 0 ? 'warn' : 'neutral'} size="lg" className="num">{plural(count('unknown'), 'non pesé', 'non pesés')}</StatusBadge>
+          </Group>
+          <Group gap="xs">
+            <Text size="sm" fw={600}>Ordre :</Text>
+            <SegmentedControl data-testid="weighin-order" value={order} onChange={(v) => { setOrder(v as Order); writeOrder(v as Order); }}
+              data={[{ value: 'club', label: 'Club' }, { value: 'nom', label: 'Nom' }]} />
           </Group>
           {data?.closed && <StatusBadge tone="accent" size="lg">Pesée clôturée</StatusBadge>}
         </Group>
@@ -113,15 +141,22 @@ export function WeighInPage() {
           {fighters.map((f, i) => {
             const combat = f.registrations.filter((r) => r.hasWeight);
             const out = combat.find((r) => r.outOfClass);
+            const header = order === 'club' && (i === 0 || fighters[i - 1]!.club !== f.club);
             return (
-              <Table.Tr key={f.fighterId} data-testid="weighin-row">
+              <Fragment key={f.fighterId}>
+              {header && (
+                <Table.Tr data-testid="weighin-club-header" bg="var(--sk-chip)">
+                  <Table.Td colSpan={7} fw={700}>{f.club || 'Sans club'} <Text span size="sm" c="dimmed" fw={400}>· {plural(clubSize(f.club), 'combattant')}</Text></Table.Td>
+                </Table.Tr>
+              )}
+              <Table.Tr data-testid="weighin-row">
                 <Table.Td fw={600} style={{ whiteSpace: 'nowrap' }}>{f.label}</Table.Td>
                 <Table.Td><Text size="sm" miw={120} maw={220}>{f.club || '—'}</Text></Table.Td>
                 <Table.Td style={{ whiteSpace: 'nowrap' }}>{ageBandLabel(grid, f.ageBandCode)} {f.sex}</Table.Td>
                 <Table.Td>
                   {f.registrations.map((r) => (
                     <Group key={r.id} gap={4} wrap="nowrap">
-                      <Text size="sm" style={{ whiteSpace: 'nowrap' }}>{disciplineLabel(r.discipline)}{r.weightClassLabel ? ` ${r.weightClassLabel}` : ''}</Text>
+                      <Text size="sm" style={{ whiteSpace: 'nowrap' }}>{registrationLabel(r)}</Text>
                       {r.recased && <StatusBadge tone="neutral" size="sm" data-testid="weighin-recased" title={r.categoryLabel ?? undefined}>Réaffecté</StatusBadge>}
                     </Group>
                   ))}
@@ -133,7 +168,7 @@ export function WeighInPage() {
                 </Table.Td>
                 <Table.Td>
                   {combat.length > 0 ? (
-                    <WeightCell key={`${f.fighterId}-${f.weighInKg ?? ''}`} fighter={f} index={i} onSave={(kg) => set.mutate({ fighterId: f.fighterId, weighInKg: kg, ...(waveId ? { waveId } : {}) })} />
+                    <WeightCell key={`${f.fighterId}-${f.weighInKg ?? ''}`} fighter={f} index={weightRank.get(f.fighterId)!} onSave={(kg) => set.mutate({ fighterId: f.fighterId, weighInKg: kg, ...(waveId ? { waveId } : {}) })} />
                   ) : (
                     <Text size="sm" c="dimmed">Kata : pas de pesée</Text>
                   )}
@@ -146,6 +181,7 @@ export function WeighInPage() {
                   ) : null}
                 </Table.Td>
               </Table.Tr>
+              </Fragment>
             );
           })}
         </Table.Tbody>
