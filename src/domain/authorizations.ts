@@ -1,9 +1,9 @@
-import { categoryLabel, keyString, naturalKey } from './categories.js';
+import { keyString, naturalKey, type CategoryKey, type CategorySex } from './categories.js';
 import { DISCIPLINES } from './disciplines.js';
 import { activeMembers, effectiveWeight, weighInClass } from './replacement/weights.js';
 import { memberWave } from './replacement/waves.js';
 import type { Member, State } from './replacement/types.js';
-import type { AgeBand, CategoryGrid, DisciplineId, Ruleset, Sex, WeightClass } from './types.js';
+import type { AgeBand, CategoryGrid, DisciplineId, Ruleset, WeightClass } from './types.js';
 import { waveOfCategory } from './waves.js';
 
 /** Demandes à faire aux coachs (spec étape 45 §7.1) : calcul pur depuis l'état de la réaffectation. */
@@ -100,7 +100,7 @@ const hasWeight = (m: Member) => m.weighInKg !== null || m.approxWeightKg !== nu
 // --- Libellés ----------------------------------------------------------------------------------------------------
 
 /** « Benjamins » → « Benjamines », « Cadets » → « Cadettes » pour les filles. */
-function bandLabel(grid: CategoryGrid, code: string, sex: Sex | 'X'): string {
+function bandLabel(grid: CategoryGrid, code: string, sex: CategorySex): string {
   const label = grid.ageBands.find((b) => b.code === code)?.label ?? code;
   return sex === 'F' ? label.replace(/ins\b/g, 'ines').replace(/ets\b/g, 'ettes') : label;
 }
@@ -111,6 +111,7 @@ const bandOrder = (grid: CategoryGrid, code: string) => {
   const i = grid.ageBands.findIndex((b) => b.code === code);
   return i < 0 ? Number.MAX_SAFE_INTEGER : i;
 };
+const byUnique = (xs: string[]) => [...new Set(xs)];
 const byGridOrder = (grid: CategoryGrid, codes: Iterable<string>) =>
   [...new Set(codes)].sort((a, b) => bandOrder(grid, a) - bandOrder(grid, b) || a.localeCompare(b));
 
@@ -121,13 +122,27 @@ const originOf = (m: Member) => ({
   weightClassId: m.original ? m.original.weightClassId : m.weightClassId,
 });
 
-/** « Benjamines −40 » : tranche et catégorie de poids d'origine. */
+/**
+ * « Benjamines–Minimes −45 / −50 » : tranches dans l'ordre de la grille (au féminin pour un groupe de filles, « mixte » pour un
+ * groupe mixte), puis limites de poids de la plus légère à la plus lourde, une limite commune à deux tranches écrite une fois.
+ */
+function bandsAndWeights(grid: CategoryGrid, bandCodes: string[], sex: CategorySex, classes: WeightClass[]): string {
+  const bands = byGridOrder(grid, bandCodes).map((c) => bandLabel(grid, c, sex)).join('–');
+  const limits = byUnique([...classes].sort((a, b) => compareRank(weightRank(grid, a), weightRank(grid, b))).map(weightLabel));
+  return [bands, ...(sex === 'X' ? ['mixte'] : []), ...(limits.length ? [limits.join(' / ')] : [])].join(' ');
+}
+/** « Benjamines −40 » : tranche et catégorie de poids d'un combattant. */
 function bandAndWeight(state: State, m: Member, wc: WeightClass | undefined): string {
-  return [bandLabel(state.grid, m.ageBandCode, m.sex), ...(wc ? [weightLabel(wc)] : [])].join(' ');
+  return bandsAndWeights(state.grid, [m.ageBandCode], m.sex, wc ? [wc] : []);
+}
+/** « Karaté Jiyu · Benjamines–Minimes −50 » : le groupe actuel, écrit comme l'inscription d'origine ; un tableau libre, son nom. */
+function groupLabel(grid: CategoryGrid, key: CategoryKey): string {
+  if (key.free !== undefined) return key.free;
+  const classes = key.weightClassIds.map((id) => grid.weightClasses.find((w) => w.id === id)).filter((w): w is WeightClass => w !== undefined);
+  return `${disciplineText(key)} · ${bandsAndWeights(grid, key.ageBandCodes, key.sex, classes)}`;
 }
 const originClass = (state: State, m: Member) => state.grid.weightClasses.find((w) => w.id === originOf(m).weightClassId);
 
-const byUnique = (xs: string[]) => [...new Set(xs)];
 /** Le nom du club n'est pas dans l'état : regroupement par identifiant, sans club en dernier (le serveur trie par nom). */
 const compareClub = (a: string | null, b: string | null) => (a === b ? 0 : a === null ? 1 : b === null ? -1 : a.localeCompare(b));
 
@@ -253,7 +268,7 @@ export function authorizationRequests(state: State, moves: BlameMove[]): Authori
   for (const cat of state.categories) {
     const group = activeMembers(state, cat.id);
     if (group.length < 2) continue;
-    const proposedLabel = categoryLabel(cat.key, state.grid);
+    const proposedLabel = groupLabel(state.grid, cat.key);
     for (const m of group) {
       for (const d of requestsFor(state, m, group)) {
         const kind = d.situation.kind;

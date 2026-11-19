@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { answerCovers, authorizationRequests, gapText, roundGap, withStatus, type AuthorizationRequest, type AuthorizationSituation, type BlameMove, type StoredAnswer } from '../../src/domain/authorizations.js';
 import type { DisciplineId } from '../../src/domain/types.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
-import { keyString, naturalKey } from '../../src/domain/categories.js';
+import { freeKey, keyString, naturalKey } from '../../src/domain/categories.js';
 import { recompute } from '../../src/domain/replacement/move.js';
 import type { CategoryState, Member, State } from '../../src/domain/replacement/types.js';
 import type { Wave } from '../../src/domain/waves.js';
@@ -62,7 +62,8 @@ describe('fixture de la skill (Worked decision fixture)', () => {
     expect(age.situation).toEqual({ kind: 'age', ownBand: 'benjamin', strongerBands: ['minime'] });
     expect(age.bullet).toBe('Passage des benjamines à un groupe commun Benjamines–Minimes en karaté.');
     expect(age.current).toBe('Karaté Jiyu · Benjamines −50');
-    expect(age.proposed).toBe('Karaté · Jiyu · Benjamins / Minimes F · -50 / -50 kg');
+    // Même écriture que « current » : formes féminines, signe moins (U+2212), limite commune écrite une fois.
+    expect(age.proposed).toBe('Karaté Jiyu · Benjamines–Minimes −50');
     expect(age.clubId).toBe(eva.clubId);
     expect(age.categoryId).toBe('g0');
   });
@@ -215,6 +216,8 @@ describe('mixité, présence, session', () => {
     expect(one(rs, f, 'mixite').bullet).toBe('Groupe mixte filles et garçons.');
     expect(one(rs, f, 'mixite').blame).toEqual(['e1']);
     expect(one(rs, m, 'mixite').blame).toEqual(['e1']);
+    // Groupe mixte : tranche au masculin, « mixte », limites différentes de la plus légère à la plus lourde.
+    expect(one(rs, m, 'mixite').proposed).toBe('Karaté Jiyu · Seniors mixte −67 / −68');
   });
 
   test('adversaire absent : ignoré', () => {
@@ -377,5 +380,22 @@ describe('answerCovers et withStatus', () => {
       ['age:r3', 'pending', null],
       ['missingWeight:r1', 'info', null],
     ]);
+  });
+});
+
+describe('libellé du groupe proposé', () => {
+  test('catégorie ouverte après les limites, chaque limite une fois', () => {
+    const minime = member({ ageBandCode: 'minime', weightClassId: 'minime:F:-50' });
+    const benjamine = moved({ ageBandCode: 'benjamin', weightClassId: 'benjamin:F:+50' });
+    const rs = authorizationRequests(groups([[minime, benjamine]]), []);
+    expect(one(rs, benjamine, 'age').proposed).toBe('Karaté Jiyu · Benjamines–Minimes −50 / +50');
+  });
+
+  test('tableau libre : son nom', () => {
+    const a = moved({ ageBandCode: 'benjamin', weightClassId: 'benjamin:F:-50', approxWeightKg: 49 });
+    const b = member({ ageBandCode: 'minime', weightClassId: 'minime:F:-50', approxWeightKg: 48 });
+    const s = groups([[a, b]]);
+    s.categories[0]!.key = freeKey('Gala 1', 'karate', 'jiyu');
+    expect(one(authorizationRequests(s, []), a, 'age').proposed).toBe('Gala 1');
   });
 });
