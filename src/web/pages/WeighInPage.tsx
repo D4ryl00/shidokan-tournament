@@ -82,7 +82,7 @@ export function WeighInPage() {
   const [order, setOrder] = useState<Order>(readOrder);
   const matching = (data?.fighters ?? []).filter((f) => !search || normalizeName(`${f.label} ${f.club}`).includes(normalizeName(search)));
   // Le serveur trie par club puis nom ; l'ordre Nom trie par nom seul. La navigation Entrée suit cet ordre affiché.
-  const fighters = order === 'nom' ? [...matching].sort((a, b) => a.label.localeCompare(b.label) || a.club.localeCompare(b.club)) : matching;
+  const fighters = order === 'nom' ? [...matching].sort((a, b) => a.label.localeCompare(b.label, 'fr') || a.club.localeCompare(b.club, 'fr')) : matching;
   // Rang du champ de poids dans l'ordre affiché : un combattant de kata seul n'a pas de champ et ne compte pas.
   const weightRank = new Map<string, number>();
   for (const f of fighters) if (f.registrations.some((r) => r.hasWeight)) weightRank.set(f.fighterId, weightRank.size);

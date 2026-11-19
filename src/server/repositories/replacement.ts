@@ -1012,7 +1012,7 @@ export async function weighInList(db: AppDb, competitionId: string, waveId?: str
             };
           }),
       }))
-      .sort((a, b) => a.club.localeCompare(b.club) || a.label.localeCompare(b.label)),
+      .sort((a, b) => a.club.localeCompare(b.club, 'fr') || a.label.localeCompare(b.label, 'fr')),
   };
 }
 
