@@ -152,3 +152,9 @@ test('autorisations à demander : seuil, pré-accord, réponses, copie', () => {
   expect(text).toContain('« Seulement en attente »');
   expect(all('reaffectation')).toContain('③ les autorisations à demander');
 });
+
+test('appliquer le plan : la case des déplacements à valider', () => {
+  const text = all('reaffectation');
+  expect(text).toContain('« Appliquer aussi les déplacements à valider »');
+  expect(text).toContain('attendront l’autorisation des clubs');
+});

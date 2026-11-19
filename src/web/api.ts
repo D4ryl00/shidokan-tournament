@@ -759,7 +759,9 @@ export function usePlanForApply(id: string) {
       fetchPlanStream(`/api/competitions/${id}/replacement/plan`, { ...planBody(waveId ?? null, choices, cardDecisions), forApply: true }, { signal }),
   });
 }
-export const useApplyPlan = (id: string) => useReplacementAction<{ waveId?: string; choices: PlanChoice[]; cardDecisions: boolean; fingerprint: string; hash: string }>(id, 'plan/apply');
+/** Appliquer le plan : le plan à appliquer (`hash` du calcul `forApply`), ou avec `withToValidate` le plan affiché tout entier. */
+export const useApplyPlan = (id: string) =>
+  useReplacementAction<{ waveId?: string; choices: PlanChoice[]; cardDecisions: boolean; fingerprint: string; hash: string; withToValidate?: boolean }>(id, 'plan/apply');
 /**
  * La liste des règles enregistrée (réponse du serveur) est mise tout de suite dans la compétition, et le recalcul n'est pas attendu :
  * l'écran montre le nouvel état aussitôt, le geste suivant part de la liste enregistrée (aucune écriture perdue) et relance le

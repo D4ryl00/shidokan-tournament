@@ -222,7 +222,10 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
   });
 
   app.post<P>('/api/competitions/:id/replacement/plan/apply', async (req) => {
-    const body = z.object({ waveId: z.string().optional(), choices, cardDecisions: z.boolean().optional(), fingerprint: z.string(), hash: z.string() }).strict().parse(req.body);
+    const body = z
+      .object({ waveId: z.string().optional(), choices, cardDecisions: z.boolean().optional(), fingerprint: z.string(), hash: z.string(), withToValidate: z.boolean().optional() })
+      .strict()
+      .parse(req.body);
     return applyPlan(db, req.params.id, body);
   });
 

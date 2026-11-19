@@ -212,6 +212,56 @@ test('valider un déplacement à valider, appliquer : seuls lui et les cas simpl
   await expect(view).toContainText('Validés 0 / 1');
 });
 
+test('appliquer aussi les déplacements à valider : tout le plan affiché, les demandes en ③', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe plan tout appliquer');
+  await seedPlan(request, id);
+  const { view, moveOf } = await openPlan(page, id);
+  const authorizations = page.getByTestId('replacement-step-authorizations');
+  await expect(authorizations.getByTestId('auth-request')).toHaveCount(0);
+  // MINI validée à la main, VETE non : toutes deux attendront l'autorisation de leur club.
+  await moveOf('MINI Léa').getByTestId('plan-move-validate').click();
+  await expect(view).toContainText('Validés 1 / 2');
+  await view.getByTestId('plan-apply').click();
+  const dialog = page.getByRole('dialog');
+  const confirm = page.getByTestId('plan-apply-confirm');
+  const all = dialog.getByTestId('plan-apply-all');
+  await expect(all).not.toBeChecked();
+  await expect(dialog).toContainText('Appliquer aussi les déplacements à valider (ils attendront l’autorisation des clubs)');
+  await expect(confirm).toHaveText('Confirmer (2)');
+  await expect(dialog.getByTestId('plan-apply-pending')).toHaveCount(0);
+  await all.check();
+  await expect(confirm).toHaveText('Confirmer (3)');
+  await expect(dialog).toContainText('3 déplacements seront appliqués :');
+  const moves = dialog.getByTestId('plan-apply-move');
+  await expect(moves).toHaveCount(3);
+  await expect(moves.filter({ hasText: 'VETE Paul' })).toContainText('· à valider');
+  await expect(moves.filter({ hasText: 'MINI Léa' })).toContainText('· validé à la main');
+  await expect(moves.filter({ hasText: 'SEULE Léa' })).toContainText('· sans validation');
+  const pending = dialog.getByTestId('plan-apply-pending');
+  await expect(pending).toContainText('Attendront l’autorisation des clubs :');
+  await expect(pending).toContainText('VETE Paul');
+  await expect(pending).toContainText('MINI Léa');
+  await expect(pending).not.toContainText('SEULE Léa');
+  await expect(dialog.getByTestId('plan-apply-skipped')).toHaveCount(0);
+  // La fenêtre tient dans un écran de téléphone, case et listes comprises.
+  await page.setViewportSize({ width: 390, height: 800 });
+  const wide = await dialog.evaluate((root) => Array.from(root.querySelectorAll('*')).filter((e) => e.getBoundingClientRect().right > window.innerWidth + 1).map((e) => `${e.tagName} ${(e.textContent ?? '').slice(0, 30)}`));
+  expect(wide).toEqual([]);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await confirm.click();
+  await expect(page.getByText('3 réaffectations appliquées.')).toBeVisible();
+  await expect(page.getByTestId('history-plan')).toContainText('Plan d’ensemble appliqué · 3 déplacements');
+  // Plus personne de seul : le plan recalculé est vide, et rien n'est signalé comme « n’est plus déplacé ».
+  await expect(view).toContainText('Restent seuls 0 (au lieu de 0)');
+  await expect(view.getByTestId('plan-move')).toHaveCount(0);
+  await expect(view.getByText(/n’est plus déplacé/)).toHaveCount(0);
+  // ③ : les demandes d'âge de MINI et de VETE, en attente.
+  const requests = authorizations.getByTestId('auth-request');
+  await expect(requests.filter({ hasText: '⏳ Âge' })).toHaveCount(2);
+  await expect(authorizations.getByTestId('auth-fighter').filter({ hasText: 'MINI Léa' }).getByTestId('auth-request')).toHaveAttribute('data-status', 'pending');
+  await expect(authorizations.getByTestId('auth-fighter').filter({ hasText: 'VETE Paul' }).getByTestId('auth-request')).toHaveAttribute('data-status', 'pending');
+});
+
 test('appliquer le plan : un nom survolé ou cliqué est mis en valeur partout dans la fenêtre', async ({ page, request }) => {
   const id = await createCompetition(page, 'Coupe plan surligner');
   await seedPlan(request, id);

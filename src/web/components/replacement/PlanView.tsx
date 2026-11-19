@@ -1,4 +1,4 @@
-import { Alert, Box, Button, Group, Modal, Select, Stack, Text, type ComboboxData } from '@mantine/core';
+import { Alert, Box, Button, Checkbox, Group, Modal, Select, Stack, Text, type ComboboxData } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { plural } from '../../../domain/plural.js';
@@ -90,6 +90,8 @@ export function PlanView({
   const forApply = usePlanForApply(id);
   const apply = useApplyPlan(id);
   const [confirming, setConfirming] = useState(false);
+  // Case « Appliquer aussi les déplacements à valider » de la confirmation : décochée à chaque ouverture.
+  const [withToValidate, setWithToValidate] = useState(false);
   const [modifying, setModifying] = useState<string | null>(null);
   // Dépliants « Détails » ouverts, par ligne du plan (état d'écran).
   const [details, setDetails] = useState<ReadonlySet<string>>(new Set());
@@ -132,6 +134,7 @@ export function PlanView({
   useEffect(() => () => applyAbort.current?.abort(), []);
   const openApply = () => {
     apply.reset();
+    setWithToValidate(false);
     setConfirming(true);
     applyAbort.current?.abort();
     applyAbort.current = new AbortController();
@@ -146,18 +149,25 @@ export function PlanView({
   // À l'écran sans validation (ou validés), mais absents du plan à appliquer : ils dépendaient d'un déplacement à valider.
   const applied = new Set((toApply?.plan.moves ?? []).map((m) => m.registrationId));
   const skipped = toApply ? plan.moves.filter((m) => (m.band === 0 || m.validated) && !applied.has(m.registrationId)) : [];
+  // Case cochée : le plan affiché tout entier (les lignes refusées n'y sont déjà plus), sans attendre le plan à appliquer.
+  const sending = withToValidate
+    ? { moves: plan.moves, fingerprint: data.fingerprint, hash: plan.hash, waiting: [] }
+    : toApply && { moves: toApply.plan.moves, fingerprint: toApply.fingerprint, hash: toApply.plan.hash, waiting: toApply.plan.waiting };
+  // Case cochée, le plan affiché doit être à jour : ni pendant un recalcul, ni après un calcul annulé.
+  const ready = withToValidate ? !computing && !cancelled : toApply !== undefined && !forApply.isPending;
+  const count = !withToValidate && forApply.isPending ? 0 : (sending?.moves.length ?? 0);
   const confirm = () => {
-    if (!toApply) return;
+    if (!sending) return;
     // Posé avant l'envoi : le plan recalculé arrive avant la fin de la mutation (les données sont relues d'abord).
-    setJustApplied(new Set(toApply.plan.moves.map((m) => m.registrationId)));
+    setJustApplied(new Set(sending.moves.map((m) => m.registrationId)));
     apply.mutate(
-      { ...(waveId ? { waveId } : {}), choices, cardDecisions, fingerprint: toApply.fingerprint, hash: toApply.plan.hash },
+      { ...(waveId ? { waveId } : {}), choices, cardDecisions, fingerprint: sending.fingerprint, hash: sending.hash, ...(withToValidate ? { withToValidate: true } : {}) },
       {
         onSuccess: (r) => {
           setConfirming(false);
           // Les choix appliqués disparaissent ; ceux qui attendent un déplacement à valider restent épinglés, et les refus du plan
           // restent (ils ne partent qu'avec « Recommencer le plan », « Annuler le refus », ou quand le combattant n'est plus là).
-          onChoices([...toApply.plan.waiting, ...refusals]);
+          onChoices([...sending.waiting, ...refusals]);
           notifications.show({ color: 'green', message: `${plural(r.applied ?? 0, 'réaffectation appliquée', 'réaffectations appliquées')}.` });
         },
         // Plan périmé ou changé : les choix restent, le plan est recalculé (rechargement des données) et l'erreur affichée.
@@ -321,9 +331,42 @@ export function PlanView({
 
       <Modal opened={confirming} onClose={closeApply} size="xl" title="Appliquer le plan">
         <Stack>
-          {forApply.isPending && <Text size="sm">Calcul du plan à appliquer…</Text>}
-          <ApiErrorAlert error={forApply.error ?? apply.error} />
-          {toApply && !forApply.isPending && (
+          <Checkbox data-testid="plan-apply-all" checked={withToValidate} onChange={(e) => setWithToValidate(e.currentTarget.checked)}
+            label="Appliquer aussi les déplacements à valider (ils attendront l’autorisation des clubs)" />
+          {!withToValidate && forApply.isPending && <Text size="sm">Calcul du plan à appliquer…</Text>}
+          <ApiErrorAlert error={(withToValidate ? null : forApply.error) ?? apply.error} />
+          {withToValidate && (
+            // Tout le plan affiché, dans son ordre ; à part, ceux dont les règles demandent l'accord d'un club.
+            <FighterHighlight>
+              <Text size="sm">
+                {plan.moves.length === 0
+                  ? 'Aucun déplacement à appliquer.'
+                  : `${plural(plan.moves.length, 'déplacement sera appliqué', 'déplacements seront appliqués')} :`}
+              </Text>
+              {plan.moves.length > 0 && (
+                <Stack gap={4} data-testid="plan-apply-moves">
+                  {plan.moves.map((m) => (
+                    <Text key={m.id} size="sm" data-testid="plan-apply-move" style={{ overflowWrap: 'anywhere' }}>
+                      <FighterName name={name(m.registrationId)} bold /> → {m.toLabel}
+                      {m.validated ? ' · validé à la main' : m.band !== 0 ? ' · à valider' : ' · sans validation'}
+                    </Text>
+                  ))}
+                </Stack>
+              )}
+              {manualMoves.length > 0 && (
+                <Stack gap={4} data-testid="plan-apply-pending">
+                  <Text size="sm">Attendront l’autorisation des clubs :</Text>
+                  {manualMoves.map((m) => (
+                    <Text key={m.id} size="sm" c="var(--sk-warn-text)" style={{ overflowWrap: 'anywhere' }}>
+                      <FighterName name={name(m.registrationId)} bold /> → {m.toLabel}
+                      {m.validated && ' · validé à la main'}
+                    </Text>
+                  ))}
+                </Stack>
+              )}
+            </FighterHighlight>
+          )}
+          {!withToValidate && toApply && !forApply.isPending && (
             // Un nom survolé ou cliqué s'allume dans la liste et dans les tableaux : d'où il vient, où il va.
             <FighterHighlight>
               <Text size="sm">
@@ -367,8 +410,8 @@ export function PlanView({
           )}
           <Group justify="flex-end">
             <Button variant="default" onClick={() => closeApply()}>Annuler</Button>
-            <Button data-testid="plan-apply-confirm" loading={apply.isPending} disabled={!toApply || forApply.isPending || toApply.plan.moves.length === 0} onClick={confirm}>
-              Confirmer ({forApply.isPending ? 0 : (toApply?.plan.moves.length ?? 0)})
+            <Button data-testid="plan-apply-confirm" loading={apply.isPending} disabled={!ready || count === 0} onClick={confirm}>
+              Confirmer ({count})
             </Button>
           </Group>
         </Stack>

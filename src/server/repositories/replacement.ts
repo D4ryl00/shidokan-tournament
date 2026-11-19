@@ -48,7 +48,7 @@ import { getCompetition, getGrid } from './competitions.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
 import type { PlanInput, PlanResponse } from '../plan/compute.js';
 import { runPlanJob } from '../plan/runner.js';
-import { rememberDisplayedPlan } from '../plan/displayed.js';
+import { recallDisplayedPlan, rememberDisplayedPlan } from '../plan/displayed.js';
 
 // Parties pures, déplacées pour le fil de calcul (qui n'importe pas la base) : gardées ici pour les autres modules.
 export { displayedProposals, previewTransition, type PlanResponse } from '../plan/compute.js';
@@ -382,20 +382,28 @@ export async function planResponse(
 
 /**
  * Applique le plan à appliquer (sans validation, plus les choix) : l'empreinte et le hash doivent être ceux de l'affichage.
+ * `withToValidate` (« Appliquer aussi les déplacements à valider ») : le plan affiché tout entier (ligne de coupure, lignes
+ * refusées exclues), comme si ses lignes à valider l'étaient à la main ; elles attendront l'autorisation des clubs.
  * Chaque déplacement part de l'état rechargé ; une catégorie créée par un déplacement précédent (`new:…`) se retrouve par son ancre.
  */
 export async function applyPlan(
   db: AppDb,
   competitionId: string,
-  body: { waveId?: string; choices: PlanChoice[]; cardDecisions?: boolean; fingerprint: string; hash: string },
+  body: { waveId?: string; choices: PlanChoice[]; cardDecisions?: boolean; fingerprint: string; hash: string; withToValidate?: boolean },
 ): Promise<{ applied: number }> {
   const waveId = await planWave(db, competitionId, body.waveId);
   const state = await loadState(db, competitionId);
   if (stateFingerprint(state) !== body.fingerprint) throw new StaleProposalError();
-  // Recalcul dans le fil, comme pour l'affichage : rien n'est écrit avant son résultat. Sans signal d'abandon : une écriture,
+  const all = body.withToValidate === true;
+  // Le plan affiché, gardé à la fin de son calcul (comme pour les « Détails ») ; sinon, et pour le plan à appliquer, recalcul
+  // dans le fil, comme pour l'affichage : rien n'est écrit avant son résultat. Sans signal d'abandon : une écriture,
   // une fois demandée, va jusqu'au bout (même si le client part), sauf si l'état a changé entre-temps.
-  const { plan } = await runPlanJob(state, { waveId, choices: body.choices, forApply: true, cardDecisions: body.cardDecisions !== false });
-  if (plan.hash !== body.hash) throw new StaleProposalError(PLAN_CHANGED);
+  let moves = all ? recallDisplayedPlan(competitionId, body.fingerprint, body.hash) : undefined;
+  if (!moves) {
+    const { plan } = await runPlanJob(state, { waveId, choices: body.choices, forApply: !all, cardDecisions: body.cardDecisions !== false });
+    if (plan.hash !== body.hash) throw new StaleProposalError(PLAN_CHANGED);
+    moves = plan.moves;
+  }
   // Pendant le calcul, un autre poste a pu écrire (pesée, déplacement, même plan appliqué) : on revérifie l'empreinte,
   // puis on écrit sans plus rendre la main (base synchrone, aucune attente d'entrée-sortie dans la boucle).
   if (stateFingerprint(await loadState(db, competitionId)) !== body.fingerprint) throw new StaleProposalError();
@@ -407,7 +415,7 @@ export async function applyPlan(
   const groupId = crypto.randomUUID();
   let applied = 0;
   await atomically(db, async () => {
-    for (const move of plan.moves) {
+    for (const move of moves) {
       await writePlanMove(db, competitionId, move, { groupId, waveId });
       applied++;
     }
