@@ -18,6 +18,8 @@ import {
   type Member,
   type Presence,
   type Proposal,
+  type MoveView,
+  moveView,
   type State,
   categoryWave,
   categoryWaves,
@@ -294,10 +296,12 @@ export async function applyProposalById(db: AppDb, competitionId: string, propos
   if (opts.fingerprint !== undefined && stateFingerprint(state) !== opts.fingerprint) throw new StaleProposalError();
   const p = findProposal(state, proposalId);
   const waveId = actionWave(state, p.caseId, p.registrationId);
+  // La vue d'avant l'action : l'historique la garde telle quelle (jamais recalculée).
+  const view = moveView(state, p);
   await recorded(
     db,
     competitionId,
-    (ids: string[]) => proposalEntry(db, { kind: 'reaffectation', groupId: null, waveId }, p, ids),
+    (ids: string[]) => proposalEntry(db, { kind: 'reaffectation', groupId: null, waveId }, p, ids, view),
     async () => persistAll(db, competitionId, state, p, { bulk: opts.bulk ?? false, waveId }),
   );
 }
@@ -306,11 +310,11 @@ export async function applyProposalById(db: AppDb, competitionId: string, propos
  * Entrée d'historique d'une proposition écrite par `persistAll` (`ids` : ses recasements) : ses inscriptions, « de ➜ vers »
  * du journal (premier déplacement) et sa raison.
  */
-function proposalEntry(db: AppDb, head: Pick<EntrySpec, 'kind' | 'groupId' | 'waveId'>, p: Proposal, ids: string[]): EntrySpec {
+function proposalEntry(db: AppDb, head: Pick<EntrySpec, 'kind' | 'groupId' | 'waveId'>, p: Proposal, ids: string[], view: MoveView): EntrySpec {
   const row = db.select({ fromLabel: recasements.fromLabel, toLabel: recasements.toLabel }).from(recasements).where(eq(recasements.id, ids[0]!)).get();
   return {
     ...head,
-    summary: { registrationIds: proposalMoves(p).map((m) => m.registrationId), fromLabel: row?.fromLabel, toLabel: row?.toLabel, reason: p.reason },
+    summary: { registrationIds: proposalMoves(p).map((m) => m.registrationId), fromLabel: row?.fromLabel, toLabel: row?.toLabel, reason: p.reason, view },
     recasementIds: ids,
   };
 }
@@ -445,7 +449,7 @@ export async function writePlanMove(db: AppDb, competitionId: string, move: Plan
   await recorded(
     db,
     competitionId,
-    (ids: string[]) => proposalEntry(db, { kind: 'plan', groupId, waveId }, p, ids),
+    (ids: string[]) => proposalEntry(db, { kind: 'plan', groupId, waveId }, p, ids, move.view),
     async () => persistAll(db, competitionId, state, p, { bulk: true, waveId }),
   );
 }
@@ -499,6 +503,7 @@ export function persistManualMove(
 /** Déplacement manuel depuis « Déplacer vers… » ou la planche : places gardées, journalisé dans l'historique (`manual`). */
 export async function manualMove(db: AppDb, competitionId: string, registrationId: string, categoryId: string): Promise<{ warnings: string[]; historyId: string | null }> {
   const state = await loadState(db, competitionId);
+  const view = moveView(state, manualProposal(state, registrationId, categoryId).p);
   const { result, historyId } = await recorded(
     db,
     competitionId,
@@ -507,7 +512,7 @@ export async function manualMove(db: AppDb, competitionId: string, registrationI
       return {
         kind: 'manual',
         waveId: actionWave(state, 'manual', registrationId),
-        summary: { registrationIds: [registrationId], fromLabel: row.fromLabel, toLabel: row.toLabel, reason: 'Placé à la main' },
+        summary: { registrationIds: [registrationId], fromLabel: row.fromLabel, toLabel: row.toLabel, reason: 'Placé à la main', view },
         recasementIds: [r.recasementId],
       };
     },

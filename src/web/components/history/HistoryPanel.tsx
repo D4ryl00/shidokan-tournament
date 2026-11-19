@@ -17,7 +17,7 @@ const FILTERS: { value: HistoryFilter; label: string }[] = [
 export const HISTORY_DRAWER_WIDTH = 400;
 
 /** Un plan d'ensemble appliqué : ses déplacements dedans, et « Annuler tout le plan… ». */
-function PlanBlock({ items, all, onSee }: { items: HistoryEntryView[]; all: HistoryEntryView[]; onSee?: (categoryIds: string[]) => void }) {
+function PlanBlock({ competitionId, items, all, onSee }: { competitionId: string; items: HistoryEntryView[]; all: HistoryEntryView[]; onSee?: (categoryIds: string[]) => void }) {
   const { requestUndoDialog } = useUndoDialog();
   const live = items.filter((e) => e.status === 'active');
   const undoable = live.filter((e) => !e.blocked);
@@ -47,7 +47,7 @@ function PlanBlock({ items, all, onSee }: { items: HistoryEntryView[]; all: Hist
         </Group>
       )}
       <Stack gap={6} mt="xs" pl="xs">
-        {items.map((e) => <HistoryEntryCard key={e.id} entry={e} all={all} nested onSee={onSee} />)}
+        {items.map((e) => <HistoryEntryCard key={e.id} competitionId={competitionId} entry={e} all={all} nested onSee={onSee} />)}
       </Stack>
     </Box>
   );
@@ -80,9 +80,9 @@ function HistoryList({ competitionId, waveId, onSee }: { competitionId: string; 
         if (e.kind === 'plan' && e.groupId) {
           if (seen.has(e.groupId)) return null;
           seen.add(e.groupId);
-          return <PlanBlock key={e.groupId} items={shown.filter((x) => x.groupId === e.groupId)} all={all} onSee={onSee} />;
+          return <PlanBlock key={e.groupId} competitionId={competitionId} items={shown.filter((x) => x.groupId === e.groupId)} all={all} onSee={onSee} />;
         }
-        return <HistoryEntryCard key={e.id} entry={e} all={all} onSee={onSee} />;
+        return <HistoryEntryCard key={e.id} competitionId={competitionId} entry={e} all={all} onSee={onSee} />;
       })}
     </Stack>
   );

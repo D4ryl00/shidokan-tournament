@@ -40,7 +40,7 @@ type Cat = {
 };
 type Entry = {
   id: string; seq: number; kind: string; groupId: string | null; status: 'active' | 'undone'; undoneAt: string | null; waveId: string | null; names: string[];
-  summary: { registrationIds: string[]; fromLabel?: string; toLabel?: string; reason?: string }; categoryIds: string[]; blocked: string | null; cascade: string[];
+  summary: { registrationIds: string[]; fromLabel?: string; toLabel?: string; reason?: string; view?: { why: { kind: string }; from: object | null; to: object } }; categoryIds: string[]; blocked: string | null; cascade: string[];
 };
 const categories = async () => (await call('GET', '/categories')).json() as Cat[];
 const catOf = async (registrationId: string) => (await categories()).find((c) => c.registrationIds.includes(registrationId));
@@ -120,6 +120,24 @@ test('déplacement manuel journalisé', async () => {
     summary: { registrationIds: [a.id], fromLabel: fromA.label, toLabel, reason: 'Placé à la main' },
   });
   expect(e!.categoryIds).toEqual(expect.arrayContaining([fromA.id, x.id]));
+  // La vue du déplacement est gardée : de la catégorie d'avant vers l'arrivée.
+  expect(e!.summary.view).toMatchObject({ why: { kind: expect.any(String) }, from: expect.any(Object), to: expect.any(Object), sex: 'F' });
+});
+
+test('une entrée sans vue (ancienne) se lit toujours', async () => {
+  const { a, x } = await threeGroups();
+  const h = await move(a.id, x.id);
+  const db = openDb(dbPath);
+  try {
+    const row = db.select().from(historyEntries).where(eq(historyEntries.id, h)).get()!;
+    const { view: _view, ...old } = JSON.parse(row.summaryJson) as { view?: unknown };
+    db.update(historyEntries).set({ summaryJson: JSON.stringify(old) }).where(eq(historyEntries.id, h)).run();
+  } finally {
+    closeDb(db);
+  }
+  const e = await entry(h);
+  expect(e.summary.view).toBeUndefined();
+  expect(e.summary.reason).toBe('Placé à la main');
 });
 
 test('places gardées : les combats d’avant ne bougent pas, les deux tableaux sont arrangés', async () => {
@@ -304,6 +322,7 @@ test('plan groupé : une entrée « plan » par déplacement, même groupe, rais
   expect(second!.groupId).toBe(first!.groupId);
   expect([first, second].map((e) => e!.summary.registrationIds)).toEqual(shown.moves.map((m) => [m.registrationId]));
   expect([first, second].map((e) => e!.summary.reason)).toEqual(shown.moves.map((m) => m.reason));
+  expect([first, second].map((e) => e!.summary.view)).toEqual(shown.moves.map((m) => JSON.parse(JSON.stringify((m as unknown as { view: object }).view))));
   const journal = (await replacement()).recasements;
   for (const e of list) {
     expect(e.summary.fromLabel).toEqual(expect.any(String));
@@ -421,7 +440,7 @@ test('réaffectation à l’unité journalisée ; annuler une réaffectation anc
   const prop = r.proposals[r.cases.find((x) => x.registrationId === a.id)!.id]![0]! as unknown as { id: string; reason: string };
   expect((await call('POST', '/replacement/apply', { proposalId: prop.id })).statusCode).toBe(200);
   const [hApply] = await history();
-  expect(hApply).toMatchObject({ kind: 'reaffectation', groupId: null, names: ['ALPHA x'], summary: { registrationIds: [a.id], reason: prop.reason } });
+  expect(hApply).toMatchObject({ kind: 'reaffectation', groupId: null, names: ['ALPHA x'], summary: { registrationIds: [a.id], reason: prop.reason, view: { why: { kind: expect.any(String) }, to: expect.any(Object) } } });
   const senior = await reg({ ageBandCode: 'senior', weightClassId: 'senior:F:-50' });
   const other = (await catOf(senior.id))!;
   const hMove = await move(a.id, other.id);

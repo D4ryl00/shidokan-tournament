@@ -1,6 +1,13 @@
 import { Box, Button, Group, Text } from '@mantine/core';
+import { useState } from 'react';
 import { entryHeadline } from '../../../domain/history/text.js';
 import { HISTORY_KIND_LABELS, type HistoryEntryView } from '../../../domain/history/types.js';
+import { plural } from '../../../domain/plural.js';
+import { rulesView } from '../../../domain/replacement/rules.js';
+import type { MoveView } from '../../../domain/replacement/view.js';
+import { useCompetition, useGrid } from '../../api.js';
+import { DetailsToggle } from '../replacement/MoveDetails.js';
+import { MoveBlocks } from '../replacement/MoveBlocks.js';
 import { StatusBadge } from '../ui/StatusBadge.js';
 import { useUndoHighlight } from './highlight.js';
 import { hhmm } from './lot.js';
@@ -19,11 +26,36 @@ export function useHoverTargets(targets: string[]) {
   return { onMouseEnter: () => h.show(targets), onMouseLeave: h.clear, onFocus: () => h.show(targets), onBlur: h.clear };
 }
 
+const kg = (x: number) => String(Math.round(x * 100) / 100).replace('.', ',');
+
+/** Situation enregistrée au moment de l'action (jamais recalculée) : adversaires, écart, restants au départ. */
+function RecordedDetails({ view }: { view: MoveView }) {
+  return (
+    <Box data-testid="history-details" mt={4} style={{ fontSize: 'var(--mantine-font-size-sm)' }}>
+      <Text size="sm">
+        {view.opponents.length === 0 ? 'Aucun adversaire dans la catégorie d’arrivée' : `Adversaires : ${view.opponents.join(', ')}`}
+        {view.gap ? ` · écart ${kg(view.gap.kg)} kg (max ${kg(view.gap.max)})` : ''}
+      </Text>
+      {view.from && (
+        <Text size="sm" c="dimmed">
+          Au départ : {plural(view.fromCount, 'combattant', 'combattants')}, {view.fromRemaining === 0 ? 'il n’en est resté aucun' : `il en est resté ${view.fromRemaining}`}
+        </Text>
+      )}
+    </Box>
+  );
+}
+
 /** Une action de l'historique : heure, type, ce qui a changé, détail, raison, puis Voir et Annuler… (ou le motif du blocage). */
-export function HistoryEntryCard({ entry, all, nested = false, onSee }: { entry: HistoryEntryView; all: HistoryEntryView[]; nested?: boolean; onSee?: (categoryIds: string[]) => void }) {
+export function HistoryEntryCard({ competitionId, entry, all, nested = false, onSee }: { competitionId: string; entry: HistoryEntryView; all: HistoryEntryView[]; nested?: boolean; onSee?: (categoryIds: string[]) => void }) {
   const h = useUndoHighlight();
   const { requestUndoDialog } = useUndoDialog();
   const hover = useHoverTargets([entry.id]);
+  const [open, setOpen] = useState(false);
+  const { data: grid } = useGrid(competitionId);
+  const { data: competition } = useCompetition(competitionId);
+  const view = entry.summary.view;
+  const rules = competition ? rulesView(competition.settings) : null;
+  const cards = !!view && !!grid && !!rules;
   const undone = entry.status === 'undone';
   const { what, detail } = entryHeadline(entry);
   const mark = h.main.has(entry.id) ? 'main' : h.also.has(entry.id) ? 'also' : undefined;
@@ -50,8 +82,18 @@ export function HistoryEntryCard({ entry, all, nested = false, onSee }: { entry:
       )}
       <Box style={undone ? { opacity: 0.6, textDecoration: 'line-through' } : undefined}>
         <Text size="sm" fw={600} style={{ overflowWrap: 'anywhere' }}>{what}</Text>
-        {detail && <Text size="sm" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{detail}</Text>}
-        {entry.summary.reason && entry.kind !== 'withdraw' && <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{entry.summary.reason}</Text>}
+        {cards ? (
+          <Box mt={4}>
+            <MoveBlocks view={view} grid={grid} rules={rules} costRule={view.costRule} />
+            <Group gap={4} mt={4}><DetailsToggle size="compact-xs" open={open} onToggle={() => setOpen(!open)} /></Group>
+            {open && <RecordedDetails view={view} />}
+          </Box>
+        ) : (
+          <>
+            {detail && <Text size="sm" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{detail}</Text>}
+            {entry.summary.reason && entry.kind !== 'withdraw' && <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{entry.summary.reason}</Text>}
+          </>
+        )}
       </Box>
       {!undone && (
         <Group gap="xs" mt={6} wrap="wrap" align="center">

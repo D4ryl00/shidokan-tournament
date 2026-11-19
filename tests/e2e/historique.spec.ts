@@ -34,6 +34,13 @@ test('historique de la Réaffectation : cascade, mise en évidence, annulation',
   // Le texte « Annule aussi » de la plus ancienne cite l'autre : on repère chaque ligne par son titre exact.
   const oldest = entries.filter({ has: page.getByText('CADA Léa', { exact: true }) });
   const newest = entries.filter({ has: page.getByText('CADB Léa', { exact: true }) });
+  // Carte de déplacement comme une proposition : Pourquoi, De ➜ Vers, puis « Détails » (situation enregistrée).
+  await expect(oldest).toContainText('Pourquoi');
+  await expect(oldest).toContainText('➜');
+  await expect(oldest.getByTestId('move-from')).toBeVisible();
+  await oldest.getByTestId('move-details-toggle').click();
+  await expect(oldest.getByTestId('history-details')).toBeVisible();
+  expect(await clipped(page)).toEqual([]);
   await expect(oldest).toContainText('Annule aussi :');
   await expect(oldest).toContainText('CADB');
   await expect(newest).not.toContainText('Annule aussi');

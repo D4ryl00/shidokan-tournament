@@ -1,3 +1,5 @@
+import type { MoveView } from '../replacement/view.js';
+
 /** Types d'actions du journal d'historique de la planche. */
 export type HistoryKind = 'plan' | 'reaffectation' | 'manual' | 'exchange' | 'withdraw' | 'places' | 'redraw' | 'format' | 'free';
 
@@ -42,6 +44,8 @@ export interface HistorySummary {
   toLabel?: string;
   detail?: string;
   reason?: string;
+  /** Vue du déplacement au moment de l'action (cartes de l'historique) ; absente des anciennes entrées. */
+  view?: MoveView;
 }
 
 export interface HistoryEntryView {
