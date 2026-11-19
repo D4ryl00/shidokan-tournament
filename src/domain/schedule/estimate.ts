@@ -38,7 +38,10 @@ export interface DayEstimate {
     finalsStart: number | null;
     /** Zones jouées par la session, dans l'ordre des zones. */
     zones: { zoneId: string; start: number; end: number; passages: number }[];
-    /** Zones où la session commence avant la fin estimée de la précédente (+ changement), en minutes arrondies au-dessus. */
+    /**
+     * Zones où la session est prévue avant la fin estimée de la précédente ; minutes (arrondies au-dessus) jusqu'à cette fin
+     * + le changement, soit le décalage.
+     */
     overlap: { zoneId: string; minutes: number }[];
   }[];
   end: number;
@@ -63,12 +66,14 @@ export function estimateDay(input: EstimateInput): DayEstimate {
     const zones = input.zones
       .map((z) => ({ zoneId: z.zoneId, items: z.items.filter((i) => i.waveKey === w.key).map((i) => ({ ...i, endedAt: null })) }))
       .filter((z) => z.items.length > 0);
-    // Chevauchement mesuré dans les deux cas ; décalé, il devient le plancher de la zone.
+    // Chevauchement mesuré dans les deux cas ; décalé, la fin + changement devient le plancher de la zone.
     const floors = zones.flatMap((z) => {
       const e = zoneEnd.get(z.zoneId);
-      return e === undefined ? [] : [{ zoneId: z.zoneId, at: e + changeoverSec }];
+      return e === undefined ? [] : [{ zoneId: z.zoneId, end: e, at: e + changeoverSec }];
     });
-    const overlap = floors.filter((f) => f.at > start).map((f) => ({ zoneId: f.zoneId, minutes: Math.ceil((f.at - start) / 60) }));
+    // Alerte seulement si la session est prévue avant la fin de la précédente (pas pour le seul changement) ; les minutes
+    // comptent le changement, comme le décalage.
+    const overlap = floors.filter((f) => start < f.end).map((f) => ({ zoneId: f.zoneId, minutes: Math.ceil((f.at - start) / 60) }));
     const timeline = buildTimeline({
       now: null,
       changeoverSec,

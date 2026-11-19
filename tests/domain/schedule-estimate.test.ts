@@ -31,9 +31,20 @@ test('a session planned before the end of the previous one on a zone: overlap of
   expect(shifted.end - plain.end).toBe(25 * 60);
 });
 
-test('overlap minutes are rounded up', () => {
-  const e = estimateDay({ ...overlapping(false), waves: [wave('s1', h(9, 0)), wave('s2', h(10, 2) + 30)] });
-  expect(e.waves[1]!.overlap).toEqual([{ zoneId: 'z', minutes: 1 }]);
+test('overlap minutes are rounded up and count the changeover', () => {
+  // Prévue à 10:01:30, fin de la précédente 10:02 + 1 min de changement : 1 min 30 → 2 min (le décalage).
+  const e = estimateDay({ ...overlapping(false), waves: [wave('s1', h(9, 0)), wave('s2', h(10, 1) + 30)] });
+  expect(e.waves[1]!.overlap).toEqual([{ zoneId: 'z', minutes: 2 }]);
+});
+
+test('a session planned exactly at (or after) the end of the previous one: no overlap alert, shift still adds the changeover', () => {
+  for (const at of [h(10, 2), h(10, 2) + 30]) {
+    const plain = estimateDay({ ...overlapping(false), waves: [wave('s1', h(9, 0)), wave('s2', at)] });
+    expect(plain.waves[1]!.overlap).toEqual([]);
+    const shifted = estimateDay({ ...overlapping(true), waves: [wave('s1', h(9, 0)), wave('s2', at)] });
+    expect(shifted.waves[1]!.overlap).toEqual([]);
+    expect(shifted.waves[1]!.zones[0]!.start).toBe(h(10, 3));
+  }
 });
 
 test('the busiest zone decides the end of a session and of the day; a session without a start follows the previous one', () => {
