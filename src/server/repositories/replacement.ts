@@ -42,6 +42,7 @@ import type { Wave } from '../../domain/waves.js';
 import { CategoryLockedError, listCategories, markArranged, syncCategories } from './categories.js';
 import { HISTORY_STALE, loadEntries, recorded, undoEntries, type EntrySpec, type Loaded } from './history.js';
 import { closedSet } from './closed-categories.js';
+import { removeAnswersOf } from './authorizations.js';
 import { getManagement } from '../sync/ownership.js';
 import { getCompetition, getGrid } from './competitions.js';
 import { NotFoundError, RegistrationValidationError } from './registrations.js';
@@ -695,11 +696,18 @@ async function resetSorting(db: AppDb, competitionId: string, waveId: string | n
   const asideRows = scoped(db.select().from(setAsideCases).where(eq(setAsideCases.competitionId, competitionId)).all(), (x) => x.caseId.slice(x.caseId.indexOf(':') + 1));
   // Réaffectations annulées : celles du lot encore validées dont l'inscription existe encore.
   const undone = lot.flatMap(recasementsOf).filter((r) => r.status === 'validated' && current.has(r.registrationId));
+  // Réponses des coachs effacées : celles des inscriptions de la session (actuelle, ou déplacées par une ligne effacée), sauf
+  // dans une catégorie fermée (lancée, commencée) : leur situation ne bougera plus, la réponse reste utile.
+  const moved = new Set(erase.flatMap((e) => e.summary.registrationIds));
+  const answerRegs = state.members
+    .filter((m) => state.waves.length === 0 || waveId === null || memberWave(state, m) === waveId || moved.has(m.registrationId))
+    .filter((m) => !m.categoryId || !(isFrozen(m.categoryId) || isStarted(m.categoryId)))
+    .map((m) => m.registrationId);
   const preview: ResetPreview = {
     undo: undone.length, manual: undone.filter((r) => r.type === 'M').length, kept, blockedBy, clears: refusalRows.length + asideRows.length,
     history: erase.length, refusal: null, locked, cascade: lot.filter((e) => !isResetKind(e)).map((e) => e.id), lot: lot.map((e) => e.id),
   };
-  const sorting = { preview, lot, erase, refusalRows, asideRows, restored: [...new Set(undone.map((r) => r.registrationId))], isFrozen };
+  const sorting = { preview, lot, erase, refusalRows, asideRows, answerRegs, restored: [...new Set(undone.map((r) => r.registrationId))], isFrozen };
   // Essai à blanc (écritures annulées) : un combattant qui retournerait dans une catégorie commencée ou d'une session lancée.
   if (opts.trial && !locked && !blockedBy && lot.length > 0) {
     try {
@@ -716,11 +724,11 @@ type ResetSorting = Awaited<ReturnType<typeof resetSorting>>;
 
 /**
  * Les écritures de « Repartir de zéro » (dans une transaction de l'appelant) : le lot annulé comme `undoHistory`, puis ses lignes
- * effacées avec leurs recasements, et les refus et cartes mises de côté de la session ; lève `CategoryLockedError` si un
- * combattant retournerait dans une catégorie fermée.
+ * effacées avec leurs recasements, et les refus, cartes mises de côté et réponses des coachs de la session ; lève
+ * `CategoryLockedError` si un combattant retournerait dans une catégorie fermée.
  */
-async function applyReset(db: AppDb, competitionId: string, sorting: Pick<ResetSorting, 'lot' | 'erase' | 'refusalRows' | 'asideRows' | 'restored' | 'isFrozen'>): Promise<void> {
-  const { lot, erase, refusalRows, asideRows, restored, isFrozen } = sorting;
+async function applyReset(db: AppDb, competitionId: string, sorting: Pick<ResetSorting, 'lot' | 'erase' | 'refusalRows' | 'asideRows' | 'answerRegs' | 'restored' | 'isFrozen'>): Promise<void> {
+  const { lot, erase, refusalRows, asideRows, answerRegs, restored, isFrozen } = sorting;
   const existing = new Set(db.select({ id: categories.id }).from(categories).where(eq(categories.competitionId, competitionId)).all().map((c) => c.id));
   await undoEntries(db, competitionId, lot);
   // Un combattant dont la catégorie d'avant a disparu (ou a été recréée par l'annulation) va d'après sa clé (même choix que
@@ -745,6 +753,7 @@ async function applyReset(db: AppDb, competitionId: string, sorting: Pick<ResetS
   if (recIds.length) db.delete(recasements).where(inArray(recasements.id, recIds)).run();
   for (const r of refusalRows) db.delete(refusals).where(and(eq(refusals.competitionId, competitionId), eq(refusals.proposalId, r.proposalId))).run();
   for (const r of asideRows) db.delete(setAsideCases).where(and(eq(setAsideCases.competitionId, competitionId), eq(setAsideCases.caseId, r.caseId))).run();
+  removeAnswersOf(db, competitionId, answerRegs);
 }
 
 /** Ce que « Repartir de zéro » ferait dans la session `waveId` (`null` : toutes). */
@@ -756,10 +765,10 @@ export async function resetPreview(db: AppDb, competitionId: string, waveId: str
  * « Repartir de zéro » dans la session `waveId` (`null` : toutes, ou compétition sans sessions) : annule en cascade les actions
  * de `RESET_KINDS` décidées depuis cette session, sauf celles laissées en place (session lancée, catégorie commencée, et ce
  * qui en dépend), avec les Places / Tirage / Format plus récents qui touchent les mêmes catégories ; puis efface leurs lignes
- * d'historique, les refus et les cartes mises de côté de la session. Tout ou rien : refusé si la session est lancée, si un
- * combattant a été réaffecté ensuite depuis une autre session, ou si un combattant retournerait dans une catégorie commencée
- * ou d'une session lancée. `expect` : le lot affiché (`ResetPreview.lot`) ; s'il diffère (un autre poste a agi entre-temps),
- * rien n'est fait.
+ * d'historique, les refus, les cartes mises de côté et les réponses des coachs de la session. Tout ou rien : refusé si la
+ * session est lancée, si un combattant a été réaffecté ensuite depuis une autre session, ou si un combattant retournerait dans
+ * une catégorie commencée ou d'une session lancée. `expect` : le lot affiché (`ResetPreview.lot`) ; s'il diffère (un autre
+ * poste a agi entre-temps), rien n'est fait.
  */
 export async function resetReplacement(
   db: AppDb,

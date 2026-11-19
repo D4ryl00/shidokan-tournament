@@ -7,6 +7,7 @@ import { categories, fighters, historyEntries, recasements, registrations, zones
 import { CategoryLockedError, syncCategories } from './categories.js';
 import { launchedCategoryIds } from './launch-state.js';
 import { NotFoundError } from './registrations.js';
+import type { State } from '../../domain/replacement/index.js';
 import { loadState, recomputeKeys, restoreSnapshot, snapshotTouches, StaleProposalError, type RecasementSnapshot } from './replacement.js';
 
 /** Ce qu'une action écrit dans l'historique (le reste — catégories touchées, état d'avant — est calculé par `recorded`). */
@@ -164,10 +165,10 @@ interface BlockContext {
 /**
  * Catégories fermées à l'annulation, même règle qu'aujourd'hui : lancées ou terminées, à numéros figés d'une session lancée,
  * ou d'une session lancée (`frozen` de l'état du recasement, y compris sans combat ni passage). Synchronise les catégories
- * (via `loadState`) : à appeler avant de lire les entrées.
+ * (via `loadState`) : à appeler avant de lire les entrées ; `state` : état déjà chargé (et synchronisé) par l'appelant.
  */
-async function blockContext(db: AppDb, competitionId: string): Promise<BlockContext> {
-  const frozen = new Set((await loadState(db, competitionId)).categories.filter((c) => c.frozen).map((c) => c.id));
+async function blockContext(db: AppDb, competitionId: string, state?: State): Promise<BlockContext> {
+  const frozen = new Set((state ?? (await loadState(db, competitionId))).categories.filter((c) => c.frozen).map((c) => c.id));
   const cats = db.select({ id: categories.id, label: categories.label, status: categories.status }).from(categories).where(eq(categories.competitionId, competitionId)).all();
   const launched = launchedCategoryIds(db, competitionId);
   return {
@@ -181,6 +182,25 @@ async function blockContext(db: AppDb, competitionId: string): Promise<BlockCont
 function blockReason(set: Loaded[], ctx: BlockContext): string | null {
   for (const e of set) for (const c of e.lockCategories) if (ctx.locked.has(c)) return lockedReason(ctx.labels.get(c) ?? '');
   return compositionChanged(set, ctx.members) ? CHANGED_REASON : null;
+}
+
+/**
+ * Entrées de la compétition et, pour une entrée encore en place, le motif qui empêche de l'annuler (même calcul que le
+ * `blocked` de `listHistory`), ou `null`. `state` : état déjà chargé (et synchronisé) par l'appelant.
+ */
+export async function entriesWithBlocks(db: AppDb, competitionId: string, state?: State): Promise<{ entries: Loaded[]; blocked: (entryId: string) => string | null }> {
+  const ctx = await blockContext(db, competitionId, state);
+  const entries = loadEntries(db, competitionId);
+  const byId = new Map(entries.map((e) => [e.id, e]));
+  const memo = new Map<string, string | null>();
+  const blocked = (entryId: string) => {
+    if (!memo.has(entryId)) {
+      const e = byId.get(entryId);
+      memo.set(entryId, e?.active ? blockReason(undoSet(entries, [e.id]), ctx) : null);
+    }
+    return memo.get(entryId)!;
+  };
+  return { entries, blocked };
 }
 
 /** Entrée de l'historique qui porte une réaffectation (journal des recasements), ou `undefined`. */

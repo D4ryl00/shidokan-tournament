@@ -24,6 +24,11 @@ test('autres actions', () => {
   expect(journalText({ action: 'weigh-in-closed', data: {} }).title).toBe('Pesée close');
   expect(journalText({ action: 'weigh-in-closed', data: { subject: 'Zone 1', detail: 'x' } })).toEqual({ title: 'Pesée close · Zone 1', detail: 'x', changes: [] });
 });
+test('autorisation d’un coach : accordée, retirée', () => {
+  const data = { subject: 'DUPONT Léa (Shidokan Lyon)', detail: 'Poids · Écart de poids estimé avec ses adversaires : 7 kg maximum.' };
+  expect(journalText({ action: 'accordee', data })).toEqual({ title: 'DUPONT Léa (Shidokan Lyon) · autorisation accordée', detail: data.detail, changes: [] });
+  expect(journalText({ action: 'retiree', data }).title).toBe('DUPONT Léa (Shidokan Lyon) · autorisation retirée');
+});
 test('qui', () => {
   expect(actorLabel({ kind: 'poste', poste: 'zone', zoneName: 'Zone 2' })).toBe('poste Zone 2');
   expect(actorLabel({ kind: 'poste', poste: 'table' })).toBe('poste Table centrale');

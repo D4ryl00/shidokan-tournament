@@ -1,12 +1,12 @@
 /** Types du journal de la compétition : ce qui a été fait, par qui, comment. */
 
 export type JournalType =
-  | 'inscription' | 'import' | 'pesee' | 'categorie' | 'reaffectation' | 'plan' | 'tableau'
+  | 'inscription' | 'import' | 'pesee' | 'categorie' | 'reaffectation' | 'plan' | 'autorisation' | 'tableau'
   | 'session' | 'resultat' | 'club' | 'mail' | 'main' | 'competition' | 'non-detaille';
 
 /** Ordre d'affichage du filtre. */
 export const JOURNAL_TYPES: JournalType[] = [
-  'inscription', 'import', 'pesee', 'categorie', 'reaffectation', 'plan', 'tableau',
+  'inscription', 'import', 'pesee', 'categorie', 'reaffectation', 'plan', 'autorisation', 'tableau',
   'session', 'resultat', 'club', 'mail', 'main', 'competition', 'non-detaille',
 ];
 
@@ -17,6 +17,7 @@ export const JOURNAL_TYPE_LABELS: Record<JournalType, string> = {
   categorie: 'Catégorie',
   reaffectation: 'Réaffectation',
   plan: 'Plan',
+  autorisation: 'Autorisation',
   tableau: 'Tableau',
   session: 'Session · zone',
   resultat: 'Résultat',
@@ -88,7 +89,9 @@ export interface JournalChange {
 export type JournalAction =
   | 'competition-created' | 'journal-opened' | 'fighter-added' | 'fighter-removed'
   | 'fighter-changed' | 'weigh-in' | 'presence' | 'weigh-in-closed' | 'raw'
-  | 'ffk-import' | 'weight-class-added' | 'club-linked' | 'ffk-unconfirmed';
+  | 'ffk-import' | 'weight-class-added' | 'club-linked' | 'ffk-unconfirmed'
+  // Autorisation d'un coach (réaffectation) : « Accordée » enregistrée, puis retirée.
+  | 'accordee' | 'retiree';
 
 export interface JournalData {
   subject?: string;

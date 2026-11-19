@@ -29,11 +29,14 @@ const TABLE_WRITES = new Set([
     'POST /launch', 'POST /launch/reopen', 'POST /launch/number', 'POST /launch/number/preview',
     'PUT /fighters/:fighterId/public-name', 'PUT /wave-schedules',
     'POST /clubs/:clubId/lines', 'PUT /clubs/:clubId/lines/:fighterId', 'DELETE /clubs/:clubId/lines/:fighterId', 'POST /ffk-pdf',
+    'POST /authorizations/grant', 'POST /authorizations/ungrant',
   ].map((r) => r.replace(' ', ` ${C}`)),
   ...ZONE_WRITES,
 ]);
 /** Lectures d'une compétition réservées à l'organisateur (liens des clubs, pièces jointes des mails, copies reçues, export entier). */
 const ORGANISER_GETS = new Set(['/invitations', '/invitations/send', '/invitations/preview', '/invitations/:clubId/links', '/mail-attachments', '/mail-attachments/:attachmentId', '/received-copies', '/export.json', '/journal'].map((p) => `${C}${p}`));
+/** Lectures de la Table centrale qu'un compte Zone ne voit pas : demandes aux coachs et leurs réponses. */
+const ZONE_DENIED_GETS = new Set([`${C}/authorizations`]);
 /** Hors d'une compétition : sa liste, la déconnexion et son mot de passe. */
 const COMMON = new Set(['GET /api/competitions', 'POST /api/auth/logout', 'PUT /api/users/me/password']);
 
@@ -46,7 +49,7 @@ export function routeAccess(user: SessionUser, method: string, route: string): '
   const verb = method === 'HEAD' ? 'GET' : method;
   const key = `${verb} ${route}`;
   if (COMMON.has(key)) return 'allow';
-  if (verb === 'GET' && isCompetitionRoute(route)) return ORGANISER_GETS.has(route) ? 'deny' : 'allow';
+  if (verb === 'GET' && isCompetitionRoute(route)) return ORGANISER_GETS.has(route) || (user.role === 'zone' && ZONE_DENIED_GETS.has(route)) ? 'deny' : 'allow';
   if (user.role === 'table') return TABLE_WRITES.has(key) ? 'allow' : 'deny';
   return ZONE_WRITES.has(key) ? 'zone-check' : 'deny';
 }

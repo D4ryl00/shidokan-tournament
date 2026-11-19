@@ -37,6 +37,7 @@ import { rememberDisplayedPlan } from '../plan/displayed.js';
 import { moveDetails } from '../repositories/move-details.js';
 import { exchangeEntrants, exchangePreview, sameClubPreview } from '../repositories/exchange.js';
 import { NotFoundError } from '../repositories/registrations.js';
+import { authorizationList, grantAuthorization, ungrantAuthorization } from '../repositories/authorizations.js';
 
 type P = { Params: { id: string } };
 /** Plan d'ensemble en flux : une ligne JSON par événement (progression, puis résultat ou erreur). */
@@ -47,6 +48,8 @@ const planChoice = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('refuse'), proposalId: z.string(), registrationId: z.string(), reason: z.string().max(500), fromCategoryId: z.string().nullable().optional() }).strict(),
 ]);
 const choices = z.array(planChoice).max(500);
+/** Réponse d'un coach : la situation acceptée est recalculée par le serveur, jamais reçue du client. */
+const answerBody = z.object({ registrationId: z.string(), kind: z.enum(['age', 'weight', 'discipline', 'mixite', 'session']) }).strict();
 
 export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppDb }) {
   app.addHook('preHandler', async (req, reply) => {
@@ -274,6 +277,23 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
   app.post<P>('/api/competitions/:id/replacement/move', async (req) => {
     const { registrationId, categoryId } = z.object({ registrationId: z.string(), categoryId: z.string() }).parse(req.body);
     return manualMove(db, req.params.id, registrationId, categoryId);
+  });
+
+  /** Autorisations à demander aux coachs (session du combattant), par club, avec leur réponse et leurs déplacements en cause. */
+  app.get<P & { Querystring: { vague?: string } }>('/api/competitions/:id/authorizations', async (req) => authorizationList(db, req.params.id, req.query.vague || undefined));
+
+  /** « Accordée » : enregistre la situation actuelle de la demande (409 si elle n'existe plus). */
+  app.post<P>('/api/competitions/:id/authorizations/grant', async (req) => {
+    const { registrationId, kind } = answerBody.parse(req.body);
+    await grantAuthorization(db, req.params.id, registrationId, kind);
+    return { ok: true };
+  });
+
+  /** Retire la réponse « Accordée » : la demande revient en attente. */
+  app.post<P>('/api/competitions/:id/authorizations/ungrant', async (req) => {
+    const { registrationId, kind } = answerBody.parse(req.body);
+    await ungrantAuthorization(db, req.params.id, registrationId, kind);
+    return { ok: true };
   });
 
   const exchangeBody = z.object({ a: z.string(), b: z.string() }).strict();

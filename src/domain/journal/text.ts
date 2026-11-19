@@ -50,6 +50,12 @@ export function journalText(e: Pick<JournalEntryView, 'action' | 'data'>): { tit
     case 'ffk-unconfirmed':
       title = `${subject} · ${f ? 'gardée, absente' : 'gardé, absent'} de l’export FFK`;
       break;
+    case 'accordee':
+      title = `${subject} · autorisation accordée`;
+      break;
+    case 'retiree':
+      title = `${subject} · autorisation retirée`;
+      break;
     case 'raw':
       title = `Opération non détaillée : ${[d.method, d.route].filter(Boolean).join(' ')}`;
       break;

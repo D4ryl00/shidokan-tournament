@@ -25,6 +25,8 @@ export const JOURNAL_COVERED = keys(
   `PUT ${C}/weigh-in/:fighterId`,
   `POST ${C}/weigh-in/close`,
   `POST ${C}/ffk-imports/:uploadId/commit`,
+  `POST ${C}/authorizations/grant`,
+  `POST ${C}/authorizations/ungrant`,
 );
 
 export const JOURNAL_EXEMPT = keys(

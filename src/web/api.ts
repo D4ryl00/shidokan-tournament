@@ -25,6 +25,7 @@ import type { AppSettingsPatch, PublicAppSettings } from '../domain/app-settings
 import type { GoogleContactsView, SyncApply } from '../domain/google-contacts.js';
 import type { Zone, ZoneInput } from '../domain/zones.js';
 import type { HistoryEntryView } from '../domain/history/types.js';
+import type { AnswerableKind, AuthorizationClub } from '../domain/authorizations.js';
 import type { JournalEntryView, JournalType } from '../domain/journal/types.js';
 import type { PassagePlan } from '../domain/passages/index.js';
 import type { WaveSchedule } from '../domain/schedule/types.js';
@@ -526,6 +527,35 @@ export const useResumeCase = (id: string) => useReplacementAction<{ caseId: stri
 export const useWithdrawRegistration = (id: string) => useReplacementAction<{ registrationId: string; fingerprint: string }>(id, 'withdraw');
 /** « Repartir de zéro » ; `expect` : le lot de l'aperçu (`reset.lot`), refusé s'il a changé (données rechargées). */
 export const useResetReplacement = (id: string) => useReplacementAction<{ waveId?: string; expect: string[] }>(id, 'reset');
+
+/** Autorisations à demander aux coachs (session affichée), par club ; `pending` : demandes en attente de réponse. */
+export interface AuthorizationsData {
+  clubs: AuthorizationClub[];
+  pending: number;
+}
+/**
+ * Autorisations à demander dans la session `waveId` (null : toutes). Calculées depuis les groupes actuels : la clé `[…, id, …]`
+ * est relue avec les données du jour (`useInvalidateDay`) après chaque réaffectation, annulation par l'historique ou pesée, et
+ * par les changements des autres postes (`refreshDataLive`).
+ */
+export function useAuthorizations(id: string, waveId?: string | null) {
+  return useQuery({
+    queryKey: ['authorizations', id, waveId ?? null],
+    queryFn: () => api<AuthorizationsData>('GET', `/api/competitions/${id}/authorizations${waveId ? `?vague=${encodeURIComponent(waveId)}` : ''}`),
+  });
+}
+/** « Accordée » ou son retrait : seules les listes d'autorisations (et le journal) changent ; relues aussi en cas d'erreur (demande disparue). */
+function useAuthorizationAnswer(id: string, path: 'grant' | 'ungrant') {
+  const qc = useQueryClient();
+  const invalidate = () => Promise.all([qc.invalidateQueries({ queryKey: ['authorizations', id] }), qc.invalidateQueries({ queryKey: ['journal', id] })]);
+  return useMutation({
+    mutationFn: (body: { registrationId: string; kind: AnswerableKind }) => api<{ ok: true }>('POST', `/api/competitions/${id}/authorizations/${path}`, body),
+    onSuccess: invalidate,
+    onError: invalidate,
+  });
+}
+export const useGrantAuthorization = (id: string) => useAuthorizationAnswer(id, 'grant');
+export const useUngrantAuthorization = (id: string) => useAuthorizationAnswer(id, 'ungrant');
 
 export type { HistoryEntryView };
 

@@ -43,6 +43,16 @@ export interface AuthorizationRequest {
   blame: string[];
 }
 
+/** Nom de chaque type de demande, tel qu'affiché (liste, journal). */
+export const AUTHORIZATION_KIND_LABELS: Record<AuthorizationKind, string> = {
+  age: 'Âge',
+  weight: 'Poids',
+  missingWeight: 'Poids manquant',
+  discipline: 'Discipline',
+  mixite: 'Mixité',
+  session: 'Session',
+};
+
 /** Seuil inclusif de l'organisateur : au-delà (après arrondi), un accord est nécessaire. */
 const GAP_LIMIT_KG = 5;
 const KIND_ORDER: AuthorizationKind[] = ['session', 'discipline', 'age', 'mixite', 'weight', 'missingWeight'];
@@ -333,4 +343,23 @@ export function withStatus(
       ? { ...r, status: 'granted' as const, answeredAt: answer.answeredAt }
       : { ...r, status: 'pending' as const, answeredAt: null };
   });
+}
+
+/** Ligne de la liste « Autorisations à demander » (GET /authorizations). */
+export type AuthorizationRow = AuthorizationRequest & {
+  status: RequestStatus;
+  answeredAt: string | null;
+  /** « NOM Prénom ». */
+  label: string;
+  /** Motif pour lequel les déplacements en cause ne peuvent pas être annulés (celui de l'historique), ou `null`. */
+  blocked: string | null;
+};
+
+/** Demandes d'un club : clubs par nom, « Sans club » en dernier. */
+export interface AuthorizationClub {
+  clubId: string | null;
+  name: string;
+  /** Pré-accord coché sur la fiche : pour information, il ne dispense d'aucune demande. */
+  preApproval: boolean;
+  requests: AuthorizationRow[];
 }

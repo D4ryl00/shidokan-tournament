@@ -30,6 +30,7 @@ const TABLE_WRITES = [
   'POST /launch', 'POST /launch/reopen', 'POST /launch/number', 'POST /launch/number/preview',
   'PUT /fighters/:fighterId/public-name', 'PUT /wave-schedules',
   'POST /clubs/:clubId/lines', 'PUT /clubs/:clubId/lines/:fighterId', 'DELETE /clubs/:clubId/lines/:fighterId', 'POST /ffk-pdf',
+  'POST /authorizations/grant', 'POST /authorizations/ungrant',
   'PUT /categories/:cid/results/:matchId', 'DELETE /categories/:cid/results/:matchId', 'PUT /categories/:cid/kata/:rid/:round', 'PUT /categories/:cid/tie-break',
 ].map((r) => r.replace(' ', ' /api/competitions/:id'));
 /** Écritures d'un compte Zone, sur sa zone. */
@@ -37,6 +38,8 @@ const ZONE_WRITES = [
   'PUT /categories/:cid/results/:matchId', 'DELETE /categories/:cid/results/:matchId', 'PUT /categories/:cid/kata/:rid/:round', 'PUT /categories/:cid/tie-break',
 ].map((r) => r.replace(' ', ' /api/competitions/:id'));
 const DENIED_GETS = ['/invitations', '/invitations/send', '/invitations/preview', '/invitations/:clubId/links', '/mail-attachments', '/mail-attachments/:attachmentId', '/received-copies', '/export.json', '/journal'].map((p) => `/api/competitions/:id${p}`);
+/** Lectures de la Table centrale refusées à un compte Zone (autorisations des coachs). */
+const ZONE_DENIED_GETS = ['/authorizations'].map((p) => `/api/competitions/:id${p}`);
 const COMMON = ['GET /api/competitions', 'POST /api/auth/logout', 'PUT /api/users/me/password'];
 const PUBLIC = [/^\/api\/health$/, /^\/api\/auth\/me$/, /^\/api\/auth\/login$/, /^\/api\/inscription(\/|$)/, /^\/api\/sync\/remote\//, /^\/api\/public\//];
 
@@ -94,13 +97,14 @@ test('routeAccess : chaque route enregistrée a la décision attendue pour la Ta
     const isPublic = PUBLIC.some((p) => p.test(pattern));
     const readable = method === 'GET' || method === 'HEAD' ? (pattern === '/api/competitions/:id' || pattern.startsWith('/api/competitions/:id/')) && !DENIED_GETS.includes(pattern) : false;
     const common = isPublic || readable || COMMON.includes(key);
+    const zoneReadable = common && !ZONE_DENIED_GETS.includes(pattern);
     expect(routeAccess(user('table'), method, pattern), `table ${key}`).toBe(common || TABLE_WRITES.includes(key) ? 'allow' : 'deny');
-    expect(routeAccess(user('zone'), method, pattern), `zone ${key}`).toBe(common ? 'allow' : ZONE_WRITES.includes(key) ? 'zone-check' : 'deny');
+    expect(routeAccess(user('zone'), method, pattern), `zone ${key}`).toBe(zoneReadable ? 'allow' : ZONE_WRITES.includes(key) ? 'zone-check' : 'deny');
     expect(routeAccess(user('organisateur'), method, pattern), `organisateur ${key}`).toBe('allow');
   }
   // Chaque motif listé existe vraiment (une route renommée ne passe pas inaperçue).
   const keys = new Set(routes.map((r) => `${r.method} ${r.pattern}`));
-  for (const k of [...TABLE_WRITES, ...COMMON]) expect(keys.has(k), k).toBe(true);
+  for (const k of [...TABLE_WRITES, ...COMMON, ...ZONE_DENIED_GETS.map((p) => `GET ${p}`)]) expect(keys.has(k), k).toBe(true);
 });
 
 const PDF = { 'content-type': 'application/octet-stream' };
@@ -114,6 +118,24 @@ test('ffk-pdf : refusé à un compte Zone ; la lecture des fiches d’un club su
   const fighterId = ((await orga('GET', `${base}/registrations`)).json() as { fighter: { id: string } }[])[0]!.fighter.id;
   const reference = (await zone1('GET', `${base}/fighters/${fighterId}/line`)).statusCode;
   expect((await zone1('GET', `${base}/clubs/${clubId}/lines`)).statusCode).toBe(reference);
+});
+
+test('autorisations des coachs : Table centrale lit et répond, un compte Zone ne voit ni demandes ni réponses', async () => {
+  const { table, zone1, base } = await setup();
+  const registrationId = ((await table('GET', `${base}/registrations`)).json() as { id: string }[])[0]!.id;
+  expect((await table('GET', `${base}/authorizations`)).statusCode).toBe(200);
+  // Pas de demande pour cette inscription : refusée par le serveur (409), pas par les droits.
+  expect((await table('POST', `${base}/authorizations/grant`, { registrationId, kind: 'weight' })).statusCode).toBe(409);
+  expect((await table('POST', `${base}/authorizations/ungrant`, { registrationId, kind: 'weight' })).statusCode).toBe(200);
+  for (const [method, url, payload] of [
+    ['GET', `${base}/authorizations`, undefined],
+    ['POST', `${base}/authorizations/grant`, { registrationId, kind: 'weight' }],
+    ['POST', `${base}/authorizations/ungrant`, { registrationId, kind: 'weight' }],
+  ] as const) {
+    const denied = await zone1(method, url, payload);
+    expect(denied.statusCode, `${method} ${url}`).toBe(403);
+    expect(denied.json().error).toBe(FORBIDDEN);
+  }
 });
 
 test('PUT wave-schedules : permis à la Table centrale, refusé à un compte Zone', async () => {

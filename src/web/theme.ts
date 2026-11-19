@@ -32,7 +32,7 @@ export const TOKENS = {
     // Journal : texte surligné par la recherche, et pastille de couleur de chaque type (clés = types du journal).
     mark: '#5a4a12',
     typeInscription: '#6ea2f7', typeImport: '#9a82e0', typePesee: '#4cbf7a', typeCategorie: '#e0a040', typeReaffectation: '#e05aa8',
-    typePlan: '#c26ad6', typeTableau: '#e07a4c', typeSession: '#3cb5b5', typeResultat: '#6b9bd6', typeClub: '#a8a84a', typeMail: '#9a9ab0',
+    typePlan: '#c26ad6', typeAutorisation: '#8f8ff0', typeTableau: '#e07a4c', typeSession: '#3cb5b5', typeResultat: '#6b9bd6', typeClub: '#a8a84a', typeMail: '#9a9ab0',
     typeMain: '#8a8a8a', typeCompetition: '#b89a66', typeNonDetaille: '#f0b766',
   },
   light: {
@@ -45,7 +45,7 @@ export const TOKENS = {
     startRow: '#eeedf0',
     mark: '#ffec99',
     typeInscription: '#4c8bf5', typeImport: '#7b5cd6', typePesee: '#2f9e5b', typeCategorie: '#c07a10', typeReaffectation: '#c43a8a',
-    typePlan: '#a23bb8', typeTableau: '#c4572a', typeSession: '#1f8f8f', typeResultat: '#3b6fb0', typeClub: '#7a7a2a', typeMail: '#6b6b80',
+    typePlan: '#a23bb8', typeAutorisation: '#4f4fc4', typeTableau: '#c4572a', typeSession: '#1f8f8f', typeResultat: '#3b6fb0', typeClub: '#7a7a2a', typeMail: '#6b6b80',
     typeMain: '#555555', typeCompetition: '#8a6d3b', typeNonDetaille: '#b07a00',
   },
 } as const;
