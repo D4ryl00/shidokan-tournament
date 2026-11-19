@@ -1,6 +1,6 @@
 import { ActionIcon, Button, Checkbox, Group, Modal, Select, Stack, Table, Text, TextInput } from '@mantine/core';
 import { useMemo, useState } from 'react';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { normalizeName } from '../../domain/names.js';
 import { plural } from '../../domain/plural.js';
 import { SOURCE_LABELS, type RegistrationRow } from '../../domain/registration.js';
@@ -12,6 +12,7 @@ import { IconEdit, IconSearch, IconTrash } from '../components/ui/icons.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { DISCIPLINE_OPTIONS, ageBandLabel, disciplineLabel, kgLabel, prefsLabel, rulesetShort, weightLabel } from '../labels.js';
+import { withSession } from '../useSelectedWave.js';
 import { TableCard } from '../components/ui/TableCard.js';
 
 export function RegistrationsPage() {
@@ -28,6 +29,12 @@ export function RegistrationsPage() {
   const [discipline, setDiscipline] = useState<string | null>(null);
   const [age, setAge] = useState<string | null>(null);
   const [onlyUnconfirmed, setOnlyUnconfirmed] = useState(false);
+
+  const categoryOf = useMemo(() => {
+    const out = new Map<string, (typeof categories)[number]>();
+    for (const c of categories) for (const rid of c.registrationIds) out.set(rid, c);
+    return out;
+  }, [categories]);
 
   const clubOptions = useMemo(
     () => [...new Map(rows.filter((r) => r.club).map((r) => [r.club!.id, r.club!.name])).entries()].map(([value, label]) => ({ value, label })),
@@ -74,7 +81,7 @@ export function RegistrationsPage() {
             <Table.Tr>
               <Table.Th>Combattant</Table.Th><Table.Th>Club</Table.Th><Table.Th>Sexe</Table.Th>
               <Table.Th>Âge</Table.Th><Table.Th>Discipline</Table.Th><Table.Th>Règlement</Table.Th><Table.Th>Poids</Table.Th>
-              <Table.Th>Préférences</Table.Th><Table.Th>Origine</Table.Th><Table.Th />
+              <Table.Th>Préférences</Table.Th><Table.Th>Origine</Table.Th><Table.Th>Tableau</Table.Th><Table.Th />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -100,6 +107,17 @@ export function RegistrationsPage() {
                     {r.recasementType && <ReplacementBadge type={r.recasementType} size="xs" detail={recasements.get(r.id)} />}
                     {r.withdrawn && <StatusBadge tone="neutral" data-testid="registration-withdrawn" title="Catégorie non ouverte : décidé en Réaffectation">Ne combat pas</StatusBadge>}
                   </Group>
+                </Table.Td>
+                <Table.Td>
+                  {(() => {
+                    const cat = categoryOf.get(r.id);
+                    return cat ? (
+                      <Button size="compact-xs" variant="subtle" data-testid="registration-bracket" component={Link}
+                        to={withSession(`/competitions/${id}/tableaux?vue=liste&categorie=${cat.id}`, cat.waveId)}>Tableau</Button>
+                    ) : (
+                      <Button size="compact-xs" variant="subtle" data-testid="registration-bracket" disabled title="Pas encore de catégorie">Tableau</Button>
+                    );
+                  })()}
                 </Table.Td>
                 <Table.Td>
                   <Group gap={2} wrap="nowrap" justify="flex-end">

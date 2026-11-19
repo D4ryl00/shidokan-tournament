@@ -82,10 +82,10 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   // `?vue=planche|liste|galaxie`, `?voir=id1,id2` (lien « Voir » de la Réaffectation) et `?categorie=id` (« Voir dans la
   // galaxie ») ne sont lus qu'au chargement.
   const [, setParams] = useSearchParams();
-  const first = useRef<{ vue: string | null; voir: string[]; categorie: string | null } | null>(null);
+  const first = useRef<{ vue: string | null; voir: string[]; categorie: string | null; combattant: string | null } | null>(null);
   if (first.current === null) {
     const q = new URLSearchParams(window.location.search);
-    first.current = { vue: q.get('vue'), voir: (q.get('voir') ?? '').split(',').filter(Boolean), categorie: q.get('categorie') };
+    first.current = { vue: q.get('vue'), voir: (q.get('voir') ?? '').split(',').filter(Boolean), categorie: q.get('categorie'), combattant: q.get('combattant') };
   }
   const [view, setView] = useState<View>(() => (isView(first.current!.vue) ? first.current!.vue : first.current!.voir.length ? 'planche' : storedView()));
   const [scope, setScope] = useState<Scope>(first.current.voir.length ? 'all' : 'wave');
@@ -93,7 +93,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   // Catégorie du lien « Voir dans la galaxie » : valable pour la première ouverture de la galaxie seulement.
   const [galaxyStart, setGalaxyStart] = useState(first.current.categorie);
   useEffect(() => {
-    setParams((p) => { p.delete('vue'); p.delete('voir'); p.delete('categorie'); return p; }, { replace: true });
+    setParams((p) => { p.delete('vue'); p.delete('voir'); p.delete('categorie'); p.delete('combattant'); return p; }, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const chooseView = (v: string) => {
@@ -181,6 +181,22 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
     else { setScope('wave'); select(v); }
     setSelectedId(null);
   };
+  // `?vue=liste&categorie=…[&combattant=…]` : la catégorie choisie, et le combattant dont le panneau de déplacement s'ouvre
+  // (sauf catégorie lancée ou poste de Zone). Appliqué une fois, dès que les catégories sont chargées.
+  const linkApplied = useRef(false);
+  useEffect(() => {
+    const f = first.current!;
+    if (linkApplied.current || f.vue !== 'liste' || !f.categorie) return;
+    if (loadingCategories) return;
+    linkApplied.current = true;
+    const c = categories.find((x) => x.id === f.categorie);
+    if (!c) return;
+    if (!inScope(c)) setScope('all');
+    setSelectedId(c.id);
+    const started = c.status === 'started' || c.status === 'finished';
+    if (f.combattant && !started && !readOnlyPoste && c.registrationIds.includes(f.combattant)) setSwapFrom(f.combattant);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categories, loadingCategories, waves]);
   const openInList = (cid: string) => {
     const c = categories.find((x) => x.id === cid);
     if (c && !inScope(c)) setScope('all');

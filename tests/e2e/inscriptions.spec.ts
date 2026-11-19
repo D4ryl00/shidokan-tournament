@@ -556,3 +556,19 @@ test('licence : saisie papier, la fenêtre du combattant la montre', async ({ pa
   await page.getByTestId('registration-row').first().getByRole('button', { name: 'Modifier' }).click();
   await expect(page.getByTestId('line-licence')).toHaveValue('11462640R');
 });
+
+test('Tableau : ouvre la vue Liste sur la catégorie du combattant', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Inscriptions vers tableau');
+  const reg = async (lastName: string, extra: object) =>
+    request.post(`/api/competitions/${id}/registrations`, {
+      data: { clubId: null, lastName, firstName: 'Léa', sex: 'F', ageBandCode: 'minime', discipline: 'karate', ruleset: 'jiyu', weightClassId: 'minime:F:-50', approxWeightKg: 45, source: 'manual', ...extra },
+    });
+  await reg('TABLEAU', {});
+  await page.goto(`/competitions/${id}/inscriptions`);
+  const button = page.getByTestId('registration-row').filter({ hasText: 'TABLEAU' }).getByTestId('registration-bracket');
+  await expect(button).toHaveText('Tableau');
+  await button.click();
+  await expect(page).toHaveURL(/\/tableaux/);
+  await expect(page.locator('[data-testid="category-row"][aria-current="true"]')).toContainText('Minimes');
+  await expect(page.getByTestId('brackets-view').getByRole('radio', { name: 'Liste' })).toBeChecked();
+});

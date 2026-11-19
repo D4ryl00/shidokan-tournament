@@ -161,6 +161,11 @@ test('autorisations : sans déplacement à défaire, « Déplacer à la main ↗
   await expect(row.getByTestId('auth-refuse')).toHaveCount(0);
   await expect(row.getByTestId('auth-manual')).toHaveText('Déplacer à la main ↗');
   await expect(row.getByTestId('auth-manual')).toHaveAttribute('href', `/competitions/${id}/tableaux?vue=liste&categorie=${category.id}&combattant=${light.id}`);
+  // Le lien arrive sur la liste, la catégorie choisie et le panneau de déplacement du combattant ouvert.
+  await row.getByTestId('auth-manual').click();
+  await expect(page).toHaveURL(/\/tableaux/);
+  await expect(page.getByTestId('move-entrant-panel')).toBeVisible();
+  await page.goBack();
   // Sans club : le message ne nomme pas de club.
   await section(page).getByTestId('auth-copy').click();
   const text = await page.evaluate(() => navigator.clipboard.readText());

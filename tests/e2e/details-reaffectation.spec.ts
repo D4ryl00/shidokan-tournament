@@ -82,6 +82,16 @@ test('carte : détails De et Vers, fiches, tableau, galaxie et copie pour le clu
   const galaxy = from.getByTestId('details-galaxy');
   await expect(galaxy).toHaveAttribute('target', '_blank');
   await expect(galaxy).toHaveAttribute('href', /vue=galaxie&categorie=/);
+  // « Voir le tableau » : la vue Liste sur cette catégorie.
+  const bracketLink = from.getByTestId('details-bracket');
+  await expect(bracketLink).toHaveText('▦ Voir le tableau ↗');
+  await expect(bracketLink).toHaveAttribute('target', '_blank');
+  const href = (await bracketLink.getAttribute('href'))!;
+  expect(href).toMatch(/vue=liste&categorie=/);
+  const tab = await page.context().newPage();
+  await tab.goto(href);
+  await expect(tab.getByTestId('category-row').first()).toBeVisible();
+  await expect(tab.locator('[data-testid="category-row"][aria-current="true"]')).toContainText('Minimes F');
 
   // « Copier pour le club ».
   await proposal.getByTestId('move-copy').click();

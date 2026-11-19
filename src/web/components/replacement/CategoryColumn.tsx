@@ -96,6 +96,12 @@ export function CategoryColumn({ side, category, movers, competitionId, waveId, 
               ✦ Voir dans la galaxie ↗
             </Anchor>
           )}
+          {category.id && (
+            <Anchor size="xs" data-testid="details-bracket" target="_blank" rel="noopener"
+              href={withSession(`/competitions/${competitionId}/tableaux?vue=liste&categorie=${category.id}`, waveId)}>
+              ▦ Voir le tableau ↗
+            </Anchor>
+          )}
         </Box>
       </Box>
 
