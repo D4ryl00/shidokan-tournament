@@ -341,18 +341,34 @@ export const useCreateFreeTableau = (id: string) => {
     onSuccess: () => Promise.all(['categories', 'schedule'].map((k) => qc.invalidateQueries({ queryKey: [k, id] }))),
   });
 };
-export const useUpdateFreeTableau = (id: string) =>
-  useCategoryMutation(id, ({ cid, ...patch }: { cid: string; name?: string; discipline?: DisciplineId; ruleset?: Ruleset | null }, qc) =>
-    api<CategoryWrite>('PATCH', `/api/competitions/${id}/free-tableaux/${cid}`, patch, { rev: categoryRevOf(qc, id, cid) }),
-  // La discipline et le règlement passent aux combattants du tableau : inscriptions et réaffectation à recharger.
-  ['registrations', 'replacement']);
-/** Supprime un tableau libre ; `expect` : le lot d'actions annulées affiché (périmé : refusé). L'historique est rechargé. */
+/**
+ * Modifie un tableau libre. La discipline et le règlement passent aux combattants du tableau : comme pour une réaffectation,
+ * toutes les données du jour sont relues (inscriptions, réaffectation, autorisations…).
+ */
+export function useUpdateFreeTableau(id: string) {
+  const qc = useQueryClient();
+  const invalidate = useInvalidateDay(id);
+  return useMutation({
+    mutationFn: ({ cid, ...patch }: { cid: string; name?: string; discipline?: DisciplineId; ruleset?: Ruleset | null }) =>
+      api<CategoryWrite>('PATCH', `/api/competitions/${id}/free-tableaux/${cid}`, patch, { rev: categoryRevOf(qc, id, cid) }),
+    onSuccess: (updated) => {
+      // Nouvelle révision tout de suite en cache : un second clic rapide ne passe pas pour une écriture périmée.
+      qc.setQueryData<Category[]>(['categories', id], (list) => list?.map((c) => (c.id === updated.id ? updated : c)));
+      return invalidate();
+    },
+  });
+}
+/**
+ * Supprime un tableau libre ; `expect` : le lot d'actions annulées affiché (périmé : refusé). Ses combattants reviennent : toutes
+ * les données du jour sont relues (historique, autorisations…), aussi en cas d'erreur.
+ */
 export function useDeleteFreeTableau(id: string) {
   const qc = useQueryClient();
+  const invalidate = useInvalidateDay(id);
   return useMutation({
     mutationFn: ({ cid, expect }: { cid: string; expect: string[] }) =>
       api<{ returned: number }>('DELETE', `/api/competitions/${id}/free-tableaux/${cid}?expect=${encodeURIComponent(expect.join(','))}`, undefined, { rev: categoryRevOf(qc, id, cid) }),
-    onSettled: () => Promise.all(['categories', 'schedule', 'registrations', 'replacement', 'history', 'free-delete-preview'].map((k) => qc.invalidateQueries({ queryKey: [k, id] }))),
+    onSettled: invalidate,
   });
 }
 export const useRedraw = (id: string) =>
