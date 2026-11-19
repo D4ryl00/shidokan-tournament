@@ -125,7 +125,7 @@ function Authorizations({ competitionId, waveId }: { competitionId: string; wave
   const anyShown = clubs.some((c) => c.requests.some((r) => !onlyPending || r.status !== 'granted'));
   return (
     <SectionCard
-      title={<>③ Autorisations à demander <span data-testid="auth-pending" className="num">⏳ {pending}</span></>}
+      title={<>③ Autorisations à demander <span data-testid="auth-pending-total" className="num">⏳ {pending}</span></>}
       help="reaffectation.autorisations" borderColor="var(--sk-ok-text)" data-testid="replacement-step-authorizations"
       actions={(
         <Group gap="xs" wrap="wrap">

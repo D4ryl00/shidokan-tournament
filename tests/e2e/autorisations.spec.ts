@@ -50,7 +50,7 @@ test('autorisations : une benjamine chez les minimes, accordée puis refusée, d
   expect(order).toEqual(['replacement-step-plan', 'replacement-step-cards', 'replacement-step-authorizations']);
 
   const s = section(page);
-  await expect(s.getByTestId('auth-pending')).toHaveText('⏳ 2');
+  await expect(s.getByTestId('auth-pending-total')).toHaveText('⏳ 2');
   const club = s.getByTestId('auth-club');
   await expect(club).toHaveCount(1);
   await expect(club).toContainText('Dojo Accords');
@@ -81,7 +81,7 @@ test('autorisations : une benjamine chez les minimes, accordée puis refusée, d
   const granted = page.waitForResponse((r) => r.url().endsWith('/authorizations/grant') && r.request().method() === 'POST');
   await line(page, 'Karaté Jiyu').getByTestId('auth-grant').click();
   expect((await granted).ok()).toBeTruthy();
-  await expect(s.getByTestId('auth-pending')).toHaveText('⏳ 1');
+  await expect(s.getByTestId('auth-pending-total')).toHaveText('⏳ 1');
   await expect(line(page, 'Karaté Jiyu')).toHaveCount(0);
   await s.getByTestId('auth-only-pending').click();
   await expect(line(page, 'Karaté Jiyu')).toHaveAttribute('data-status', 'granted');
@@ -95,7 +95,7 @@ test('autorisations : une benjamine chez les minimes, accordée puis refusée, d
   // « annuler » : de nouveau en attente.
   await line(page, 'Karaté Jiyu').getByTestId('auth-ungrant').click();
   await expect(line(page, 'Karaté Jiyu')).toHaveAttribute('data-status', 'pending');
-  await expect(s.getByTestId('auth-pending')).toHaveText('⏳ 2');
+  await expect(s.getByTestId('auth-pending-total')).toHaveText('⏳ 2');
 
   // « Refusée… » : la fenêtre d'annulation de l'historique ; confirmé, la demande part et la combattante revient.
   await line(page, 'Shido-boxing Jiyu').getByTestId('auth-refuse').click();
@@ -106,7 +106,7 @@ test('autorisations : une benjamine chez les minimes, accordée puis refusée, d
   await dialog.getByTestId('undo-confirm').click();
   expect((await undone).ok()).toBeTruthy();
   await expect(line(page, 'Shido-boxing Jiyu')).toHaveCount(0);
-  await expect(s.getByTestId('auth-pending')).toHaveText('⏳ 1');
+  await expect(s.getByTestId('auth-pending-total')).toHaveText('⏳ 1');
   const back = (await categories(request, id)).find((c) => c.registrationIds.includes(boxing))!;
   expect(back.label).toBe('Shido-boxing · Jiyu · Benjamins F · -50 kg');
 });
