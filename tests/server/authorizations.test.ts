@@ -118,7 +118,7 @@ describe('routes des autorisations', () => {
     expect(all.clubs[0]).toMatchObject({ clubId: null, name: 'Sans club', preApproval: false });
     expect(all.clubs[0]!.requests).toEqual([
       expect.objectContaining({
-        id: `weight:${light.id}`, registrationId: light.id, status: 'pending', answeredAt: null, label: 'LEGERE x', blame: [moveId], blocked: null,
+        id: `weight:${light.id}`, registrationId: light.id, status: 'pending', answeredAt: null, label: 'LEGERE x', fighterId: light.fighterId, blame: [moveId], blocked: null,
         situation: { kind: 'weight', ownClassId: 'cadet:F:-47', heaviestClassId: 'cadet:F:-54', gapKg: 6 },
       }),
     ]);

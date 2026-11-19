@@ -53,6 +53,9 @@ export const AUTHORIZATION_KIND_LABELS: Record<AuthorizationKind, string> = {
   session: 'Session',
 };
 
+/** Phrase du poids manquant : une demande de poids, pas un accord (le texte à copier le distingue). */
+export const MISSING_WEIGHT_BULLET = "Merci d'indiquer son poids en kg pour vérifier que l'écart réel ne dépasse pas 5 kg.";
+
 /** Seuil inclusif de l'organisateur : au-delà (après arrondi), un accord est nécessaire. */
 const GAP_LIMIT_KG = 5;
 const KIND_ORDER: AuthorizationKind[] = ['session', 'discipline', 'age', 'mixite', 'weight', 'missingWeight'];
@@ -236,7 +239,7 @@ function requestsFor(state: State, m: Member, group: Member[]): Draft[] {
       if (!hasWeight(m)) {
         out.push({
           situation: { kind: 'missingWeight', ownClassId: own.id, heaviestClassId: heaviest.id },
-          bullet: "Merci d'indiquer son poids en kg pour vérifier que l'écart réel ne dépasse pas 5 kg.",
+          bullet: MISSING_WEIGHT_BULLET,
           causes: heavier.map((h) => h.x),
         });
       }
@@ -366,6 +369,8 @@ export type AuthorizationRow = AuthorizationRequest & {
   answeredAt: string | null;
   /** « NOM Prénom ». */
   label: string;
+  /** Le combattant : ses inscriptions dans plusieurs disciplines sont regroupées sous un seul numéro. */
+  fighterId: string;
   /** Motif pour lequel les déplacements en cause ne peuvent pas être annulés (celui de l'historique), ou `null`. */
   blocked: string | null;
 };

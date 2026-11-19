@@ -86,7 +86,8 @@ export async function authorizationList(db: AppDb, competitionId: string, wavePa
     const club = r.clubId ? clubRows.get(r.clubId) : undefined;
     const group = groups.get(r.clubId) ?? { clubId: r.clubId, name: r.clubId ? (club?.name ?? '—') : NO_CLUB, preApproval: club?.preApproval ?? false, requests: [] };
     groups.set(r.clubId, group);
-    group.requests.push({ ...r, label: members.get(r.registrationId)!.label, blocked: r.blame.map(blocked).find((b) => b !== null) ?? null });
+    const member = members.get(r.registrationId)!;
+    group.requests.push({ ...r, label: member.label, fighterId: member.fighterId, blocked: r.blame.map(blocked).find((b) => b !== null) ?? null });
   }
   const sorted = [...groups.values()].sort((a, b) => (a.clubId === null ? 1 : 0) - (b.clubId === null ? 1 : 0) || a.name.localeCompare(b.name, 'fr'));
   return { clubs: sorted, pending: rows.filter((r) => r.status === 'pending').length };

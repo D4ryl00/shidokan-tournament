@@ -26,6 +26,7 @@ import {
   type CaseFighter,
 } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { AuthorizationsSection } from '../components/authorizations/AuthorizationsSection.js';
 import { HistoryPanel } from '../components/history/HistoryPanel.js';
 import { useRequestMoveUndo } from '../components/history/useRequestMoveUndo.js';
 import { ResetCascade } from '../components/history/ResetCascade.js';
@@ -510,6 +511,8 @@ export function ReplacementPage() {
           </Card>
         )}
       </SectionCard>
+
+      <AuthorizationsSection competitionId={id} waveId={waveId} />
 
       <SectionCard title={HELP['recasement.valides'].title} help="recasement.valides"
         actions={(data.recasements.length > 0 || data.reset.undo + data.reset.manual + data.reset.clears + data.reset.history + data.reset.kept.length > 0) && (

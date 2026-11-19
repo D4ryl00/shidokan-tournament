@@ -37,6 +37,7 @@ export type HelpTopicId =
   | 'import-ffk.cartes'
   | 'import-ffk.sans-ffk'
   | 'recasement.valides'
+  | 'reaffectation.autorisations'
   | 'recasement.de-cote'
   | 'combats.categories'
   | 'combats.zone'
@@ -504,7 +505,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     title: 'Réaffectation',
     short: 'Trouvez une place à chaque combattant seul ou hors de sa catégorie : choisissez une proposition, regardez l’aperçu, validez.',
     details: [
-      'Deux étapes : ① le plan automatique, le cas général ; ② les cartes, une par combattant, pour ce que le plan ne règle pas. Les compteurs du haut montrent la situation actuelle.',
+      'Trois étapes : ① le plan automatique, le cas général ; ② les cartes, une par combattant, pour ce que le plan ne règle pas ; ③ les autorisations à demander aux clubs, avec leurs réponses. Les compteurs du haut montrent la situation actuelle.',
       [
         '① La liste des règles, de la plus acceptable à la moins acceptable, se lit comme un tableau. La première ligne, « Au départ, corrections imposées », compte les combattants à caser une fois faits les retours et les corrections de poids hors catégorie (et vos choix dans le plan). Chaque règle a sa barre : à gauche, en couleur, les combattants casés si on l’autorise avec toutes celles du dessus (la couleur est le coût de la règle qui les a casés) ; à droite, en rouge hachuré, ceux qui restent seuls. La barre pleine est le but.',
         'Rangez les règles, activez-les ou non, et placez la ligne « je m’arrête ici » (juste sous la première ligne : seulement les corrections imposées).',
@@ -529,6 +530,30 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Avec des sessions : choisissez la session en haut de l’écran (la même que pour la pesée). Les cas, les compteurs et le plan d’ensemble ne portent que sur ses catégories.',
       'Le badge « ↪ change de session : Matin → Dimanche » signale une proposition qui ferait passer le combattant dans une catégorie d’une autre session. Elle n’est jamais appliquée sans votre validation : validez-la une par une. Le combattant repasse alors « non pesé » dans sa nouvelle session, à pointer à sa pesée ; son poids déjà relevé est gardé.',
       'Le badge « ↪ Emmène N autres combattants dans une autre session » signale un déplacement qui fait changer de session une catégorie entière (ses derniers combattants d’origine la quittent, par exemple) : mêmes règles, validation une par une, les combattants emmenés repassent « non pesés ».',
+    ],
+  },
+  'reaffectation.autorisations': {
+    title: 'Autorisations à demander',
+    short: 'Les accords à demander aux clubs pour les combattants de la session, et les poids manquants : copiez le texte, puis notez chaque réponse.',
+    details: [
+      'La liste est recalculée à chaque changement (déplacement, pesée, absence) : elle montre ce qu’il faut demander aux clubs pour les groupes tels qu’ils sont maintenant, club par club, combattants numérotés. Un combattant inscrit dans deux disciplines a un seul numéro et une ligne par inscription.',
+      [
+        'Âge : il fait face à une tranche d’âge plus âgée que la sienne (ou, vétéran, à des seniors).',
+        'Poids : l’écart estimé avec un adversaire d’une catégorie plus lourde dépasse 5 kg (5 kg tout juste : rien à demander).',
+        'Poids manquant ⚖ : ni pesé ni poids déclaré, face à plus lourd ; ce n’est pas un accord, la ligne part quand son poids est saisi.',
+        'Discipline : discipline ou règlement changés, même si la fiche du club l’acceptait.',
+        'Mixité : groupe de filles et de garçons, pour chacun d’eux.',
+        'Session : il combat dans une autre session que celle de sa catégorie d’origine (son horaire change).',
+      ],
+      '« pré-accord coché sur la fiche » à côté d’un club est une information : il ne dispense d’aucune demande.',
+      '« 📋 Copier pour le club » copie le message à envoyer (bonjour, combattants numérotés, une puce par demande, demande des accords et des poids) ; « 📋 Copier tout » copie celui de chaque club, l’un après l’autre. Seules les demandes ⏳ en attente et les poids manquants y figurent.',
+      [
+        '⏳ en attente : « Accordée » note l’accord du club. L’accord ne vaut que pour la situation acceptée : si elle s’aggrave (pesée qui creuse l’écart, tranche plus âgée arrivée), la demande revient en attente.',
+        '✓ accordée à telle heure : « annuler » retire l’accord noté.',
+        '« Refusée… » ouvre la fenêtre d’annulation de l’historique sur les déplacements qui créent la demande, avec ce qui part avec eux ; confirmer les défait. Impossible quand une session est lancée ou une catégorie commencée : le motif est écrit sous la ligne.',
+        'Sans déplacement à défaire (le groupe existait déjà), « Déplacer à la main ↗ » ouvre le combattant dans les Tableaux.',
+      ],
+      '« Seulement en attente », cochée, cache les demandes accordées. Le compteur ⏳ du titre compte les demandes en attente de la session.',
     ],
   },
   'recasement.de-cote': {

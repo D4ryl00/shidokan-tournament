@@ -141,3 +141,14 @@ test('finales : une aide à part ; Ordre de passage et Horaires renvoient à l�
   expect(all('reglages.ordre')).not.toContain('« Finales sur la zone »');
   expect(all('combats.horaires')).toContain('« Fin de session »');
 });
+
+test('autorisations à demander : seuil, pré-accord, réponses, copie', () => {
+  const text = all('reaffectation.autorisations');
+  expect(text).toContain('5 kg tout juste : rien à demander');
+  expect(text).toContain('il ne dispense d’aucune demande');
+  expect(text).toContain('« Accordée »');
+  expect(text).toContain('« Refusée… »');
+  expect(text).toContain('« 📋 Copier pour le club »');
+  expect(text).toContain('« Seulement en attente »');
+  expect(all('reaffectation')).toContain('③ les autorisations à demander');
+});
