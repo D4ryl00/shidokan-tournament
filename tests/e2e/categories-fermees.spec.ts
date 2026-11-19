@@ -53,6 +53,10 @@ test('réaffectation : une catégorie fermée, « Ne combat pas », puis annuler
 
   await page.goto(`/competitions/${id}/inscriptions`);
   await expect(page.getByTestId('registration-withdrawn')).toHaveCount(1);
+  // Son bouton « Tableau » le dit aussi (pas « Pas encore de catégorie »).
+  const withdrawnRow = page.getByTestId('registration-row').filter({ has: page.getByTestId('registration-withdrawn') });
+  await expect(withdrawnRow.getByTestId('registration-bracket')).toBeDisabled();
+  await expect(withdrawnRow.getByTestId('registration-bracket')).toHaveAttribute('title', 'Ne combat pas');
 
   await page.goto(`/competitions/${id}/reaffectation`);
   await page.getByTestId('history-undo').first().click();

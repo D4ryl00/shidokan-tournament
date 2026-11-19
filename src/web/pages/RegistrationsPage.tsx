@@ -115,7 +115,7 @@ export function RegistrationsPage() {
                       <Button size="compact-xs" variant="subtle" data-testid="registration-bracket" component={Link}
                         to={withSession(`/competitions/${id}/tableaux?vue=liste&categorie=${cat.id}`, cat.waveId)}>Tableau</Button>
                     ) : (
-                      <Button size="compact-xs" variant="subtle" data-testid="registration-bracket" disabled title="Pas encore de catégorie">Tableau</Button>
+                      <Button size="compact-xs" variant="subtle" data-testid="registration-bracket" disabled title={r.withdrawn ? 'Ne combat pas' : 'Pas encore de catégorie'}>Tableau</Button>
                     );
                   })()}
                 </Table.Td>
