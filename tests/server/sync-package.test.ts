@@ -35,6 +35,7 @@ async function seeded(): Promise<{ db: AppDb; dbPath: string; id: string }> {
     INSERT INTO refusals (competition_id, proposal_id) VALUES ('${id}', 'p2');
     INSERT INTO closed_categories (competition_id, age_band_code, sex, discipline, ruleset) VALUES ('${id}', 'senior', 'F', 'kata', '');
     INSERT INTO set_aside_cases (competition_id, case_id, note) VALUES ('${id}', 'alone:x', 'on attend');
+    INSERT INTO authorization_answers (competition_id, registration_id, kind, situation_json, answered_at) VALUES ('${id}', '${reg.id}', 'mixite', '{"kind":"mixite"}', '2026-11-20T10:00:00.000Z');
   `);
   return { db, dbPath, id };
 }
@@ -358,6 +359,15 @@ test('référence vers une zone d’une autre compétition refusée', async () =
   await expect(importPackage(b.db, b.dbPath, { ...pkg, tables: { ...pkg.tables, wave_finals: [row] } }, null)).rejects.toThrow('autre compétition');
   const foreignWave = { ...row, finals_zone_id: null, wave_key: `wave-${b.id}` };
   await expect(importPackage(b.db, b.dbPath, { ...pkg, tables: { ...pkg.tables, wave_finals: [foreignWave] } }, null)).rejects.toThrow('autre compétition');
+});
+
+test('réponse d’autorisation sur une inscription d’une autre compétition refusée', async () => {
+  const a = await seeded();
+  const b = await seeded();
+  const foreignReg = (b.db.$client.prepare('select id from registrations where competition_id = ? limit 1').get(b.id) as { id: string }).id;
+  const pkg = buildPackage(a.db, a.id, { handOver: false, role: 'local' });
+  const row = { competition_id: a.id, registration_id: foreignReg, kind: 'mixite', situation_json: '{"kind":"mixite"}', answered_at: '2026-11-20T10:00:00.000Z' };
+  await expect(importPackage(b.db, b.dbPath, { ...pkg, tables: { ...pkg.tables, authorization_answers: [row] } }, null)).rejects.toThrow('autre compétition');
 });
 
 test('journal : dans le paquet et la reprise ; pas pour un portable de zone ; hors empreinte', async () => {
