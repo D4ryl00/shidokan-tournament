@@ -8,6 +8,7 @@ import type { DisciplineId } from '../../domain/types.js';
 import { validateWaves, WAVE_MAX, WAVE_NONE, waveConflicts, waveOfCategory, type Wave, type WaveRules } from '../../domain/waves.js';
 import { useCategories, useGrid, useSaveWaves, useUpdateCategory, useWaves } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
+import { DayEstimateCard } from '../components/DayEstimateCard.js';
 import { IconArrowDown, IconArrowUp, IconTrash } from '../components/ui/icons.js';
 import { SectionCard } from '../components/ui/SectionCard.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
@@ -213,6 +214,8 @@ export function WavesPage() {
           </Stack>
         )}
       </SectionCard>
+
+      <DayEstimateCard competitionId={id} />
 
       <Modal opened={deleting !== null} onClose={() => setDeleting(null)} title={`Supprimer la session « ${deletingDraft?.name ?? ''} » ?`}>
         <Stack data-testid="wave-delete-confirm">

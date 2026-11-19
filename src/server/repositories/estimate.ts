@@ -48,14 +48,15 @@ export async function estimateFor(db: AppDb, competitionId: string, shift: boole
     if (isFinalPassage(byId.get(p.categoryId)!.bracket, p.matchId)) finalKeys.add(keyOf(p));
     else nonFinals.set(p.categoryId, [...(nonFinals.get(p.categoryId) ?? []), keyOf(p)]);
   }
+  const estimateWaves = sessions.map((s) => {
+    const start = planned.get(s.key) ?? null;
+    const z = finalsZone.get(s.key) ?? null;
+    return { key: s.key, plannedStart: start !== null && isClock(start) ? clockToSeconds(start) : null, finalsZoneId: z !== null && knownZones.has(z) ? z : null };
+  });
   const estimate = estimateDay({
     changeoverSec,
     shift,
-    waves: sessions.map((s) => {
-      const start = planned.get(s.key) ?? null;
-      const z = finalsZone.get(s.key) ?? null;
-      return { key: s.key, plannedStart: start !== null && isClock(start) ? clockToSeconds(start) : null, finalsZoneId: z !== null && knownZones.has(z) ? z : null };
-    }),
+    waves: estimateWaves,
     zones: passages.map((z) => ({
       zoneId: z.zoneId,
       items: z.passages.map((p): EstimateItem => {
@@ -72,9 +73,10 @@ export async function estimateFor(db: AppDb, competitionId: string, shift: boole
     })),
   });
   const names = new Map(sessions.map((s) => [s.key, s.name]));
+  const finalsZoneOf = new Map(estimateWaves.map((w) => [w.key, w.finalsZoneId]));
   return {
     ...estimate,
     zones: zones.map((z) => ({ id: z.id, name: z.name })),
-    waves: estimate.waves.map((w) => ({ ...w, name: names.get(w.key) ?? '' })),
+    waves: estimate.waves.map((w) => ({ ...w, name: names.get(w.key) ?? '', finalsZoneId: finalsZoneOf.get(w.key) ?? null })),
   };
 }

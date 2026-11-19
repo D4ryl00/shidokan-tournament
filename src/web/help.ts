@@ -17,6 +17,7 @@ export type HelpTopicId =
   | 'fiche-club'
   | 'import-ffk'
   | 'sessions'
+  | 'sessions.horaires'
   | 'finales'
   | 'vagues.en-attente'
   | 'pesee'
@@ -459,6 +460,22 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         '« Enregistrer les sessions » enregistre les noms, l’ordre et les règles ; les retraits et ajouts à la main s’appliquent tout de suite.',
       ],
       'Sans session, toutes les catégories forment une seule session.',
+      'Plus bas, « Horaires estimés » donne l’heure de fin de chaque session et de la journée ; les durées des combats s’y modifient sur place.',
+    ],
+  },
+  'sessions.horaires': {
+    title: 'Horaires estimés',
+    short: 'Quand chaque session et la journée finiront, avec les durées de combat actuelles : raccourcissez-les ici pour finir plus tôt.',
+    details: [
+      'L’estimation compte toutes les sessions, lancées ou non, avec les inscrits du moment : elle suit la pesée, les réaffectations et les tableaux. Les résultats déjà saisis ne la changent pas.',
+      'Une session commence à son « Début prévu » (onglet Combats) ; sans début prévu, juste après la précédente. Sans début prévu pour la première session, les heures sont remplacées par des durées depuis le début (« + 2 h 30 ») et les débuts prévus des sessions suivantes ne comptent pas.',
+      [
+        'Par session : début, fin estimée et durée ; puis chaque zone avec ses heures, son nombre de passages et une barre (la zone la plus chargée de la session a la barre pleine).',
+        'Zone des finales choisie (onglet Finales) : l’heure vers laquelle commencent les finales « Fin de session ».',
+        '« Chevauche la session précédente de 25 min (Zone 2) » : la session est prévue avant la fin estimée de la précédente sur cette zone (changement compris).',
+        '« Décaler une session qui commence avant la fin de la précédente » (cochée par défaut, gardée sur ce poste) : sur chaque zone, la session attend la fin de la précédente et le changement. Décochée, elle commence à son heure prévue. Cette case ne change que l’estimation, pas les heures montrées aux spectateurs.',
+      ],
+      'Durées des combats : les mêmes que dans Réglages. « Enregistrer les durées » les enregistre pour toute la compétition et l’estimation se recalcule. Les catégories qui ont leur propre durée (onglet Tableaux) sont listées, avec un lien vers chacune.',
     ],
   },
   finales: {

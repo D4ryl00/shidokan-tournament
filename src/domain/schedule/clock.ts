@@ -14,6 +14,14 @@ export function secondsToClock(sec: number): string {
   return `${h}:${String(m).padStart(2, '0')}`;
 }
 
+/** Durée en secondes → « 45 min », « 2 h 30 », « 1 h » (arrondie à la minute la plus proche). */
+export function secondsToDuration(sec: number): string {
+  const total = Math.round(sec / 60);
+  if (total < 60) return `${total} min`;
+  const m = total % 60;
+  return m === 0 ? `${Math.floor(total / 60)} h` : `${Math.floor(total / 60)} h ${String(m).padStart(2, '0')}`;
+}
+
 /** Créé une seule fois : appelé pour chaque résultat à chaque calcul des heures. */
 const PARIS = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit',

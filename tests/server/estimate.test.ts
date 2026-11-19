@@ -56,9 +56,9 @@ describe('horaires estimés de la journée', () => {
     expect(e.relative).toBe(false);
     expect(e.zones).toEqual([{ id: zoneId, name: 'Tatami 1' }]);
     expect(e.waves).toEqual([
-      { key: matin, name: 'Matin', start: h(9, 0), end: h(9, 7) + 30, finalsStart: null, zones: [{ zoneId, start: h(9, 0), end: h(9, 7) + 30, passages: 1 }], overlap: [] },
+      { key: matin, name: 'Matin', start: h(9, 0), end: h(9, 7) + 30, finalsStart: null, finalsZoneId: null, zones: [{ zoneId, start: h(9, 0), end: h(9, 7) + 30, passages: 1 }], overlap: [] },
       // Non lancée : estimée quand même, après la session du matin et le changement (1 min).
-      { key: aprem, name: 'Après-midi', start: h(9, 8) + 30, end: h(9, 16), finalsStart: null, zones: [{ zoneId, start: h(9, 8) + 30, end: h(9, 16), passages: 1 }], overlap: [] },
+      { key: aprem, name: 'Après-midi', start: h(9, 8) + 30, end: h(9, 16), finalsStart: null, finalsZoneId: null, zones: [{ zoneId, start: h(9, 8) + 30, end: h(9, 16), passages: 1 }], overlap: [] },
     ]);
     expect(e.end).toBe(h(9, 16));
   });
@@ -76,6 +76,12 @@ describe('horaires estimés de la journée', () => {
     expect(plain.waves[1]!.zones[0]).toMatchObject({ start: h(9, 5), end: h(9, 12) + 30 });
     expect(plain.end).toBe(h(9, 12) + 30);
     expect((await estimate('?decaler=1')).end).toBe(h(9, 16));
+  });
+
+  test('la zone des finales de chaque session est donnée', async () => {
+    const { zoneId, matin } = await twoSessions();
+    expect((await call('PUT', '/finals/zone', { waveId: matin, finalsZoneId: zoneId })).statusCode).toBe(200);
+    expect((await estimate()).waves.map((w) => w.finalsZoneId)).toEqual([zoneId, null]);
   });
 
   test('sans session ni début prévu : relatif, depuis 0', async () => {

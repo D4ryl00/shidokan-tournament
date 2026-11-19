@@ -47,10 +47,10 @@ export interface DayEstimate {
   end: number;
 }
 
-/** Réponse de l'API : l'estimation, les noms des sessions et les zones de la compétition. */
+/** Réponse de l'API : l'estimation, les noms des sessions (et leur zone des finales) et les zones de la compétition. */
 export type DayEstimateView = Omit<DayEstimate, 'waves'> & {
   zones: { id: string; name: string }[];
-  waves: (DayEstimate['waves'][number] & { name: string })[];
+  waves: (DayEstimate['waves'][number] & { name: string; finalsZoneId: string | null })[];
 };
 
 export function estimateDay(input: EstimateInput): DayEstimate {
