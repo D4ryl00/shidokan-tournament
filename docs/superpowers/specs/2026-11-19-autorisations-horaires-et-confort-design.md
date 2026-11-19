@@ -1,6 +1,6 @@
 # Autorisations des coachs, horaires estimés et confort du jour J
 
-Date : 2026-11-19 · Compétition visée : 2026-11-22 · Statut : à approuver
+Date : 2026-11-19 · Compétition visée : 2026-11-22 · Statut : approuvé, réalisé le 2026-11-19 (étape 45 bis)
 
 ## 1. Pourquoi
 
