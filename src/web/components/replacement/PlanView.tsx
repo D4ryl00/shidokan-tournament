@@ -355,7 +355,7 @@ export function PlanView({
               )}
               {manualMoves.length > 0 && (
                 <Stack gap={4} data-testid="plan-apply-pending">
-                  <Text size="sm">Attendront l’autorisation des clubs :</Text>
+                  <Text size="sm">Déplacements à valider : ils attendront l’autorisation des clubs</Text>
                   {manualMoves.map((m) => (
                     <Text key={m.id} size="sm" c="var(--sk-warn-text)" style={{ overflowWrap: 'anywhere' }}>
                       <FighterName name={name(m.registrationId)} bold /> → {m.toLabel}
@@ -363,6 +363,10 @@ export function PlanView({
                     </Text>
                   ))}
                 </Stack>
+              )}
+              {/* D'autres déplacements (sans validation) peuvent aussi créer des demandes : la section ③ les liste toutes. */}
+              {plan.moves.length > 0 && (
+                <Text size="sm" c="dimmed" data-testid="plan-apply-requests-note">Après l’application, la section ③ liste toutes les autorisations à demander.</Text>
               )}
             </FighterHighlight>
           )}

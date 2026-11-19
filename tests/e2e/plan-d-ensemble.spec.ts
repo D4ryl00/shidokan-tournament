@@ -238,10 +238,11 @@ test('appliquer aussi les déplacements à valider : tout le plan affiché, les 
   await expect(moves.filter({ hasText: 'MINI Léa' })).toContainText('· validé à la main');
   await expect(moves.filter({ hasText: 'SEULE Léa' })).toContainText('· sans validation');
   const pending = dialog.getByTestId('plan-apply-pending');
-  await expect(pending).toContainText('Attendront l’autorisation des clubs :');
+  await expect(pending).toContainText('Déplacements à valider : ils attendront l’autorisation des clubs');
   await expect(pending).toContainText('VETE Paul');
   await expect(pending).toContainText('MINI Léa');
   await expect(pending).not.toContainText('SEULE Léa');
+  await expect(dialog.getByTestId('plan-apply-requests-note')).toHaveText('Après l’application, la section ③ liste toutes les autorisations à demander.');
   await expect(dialog.getByTestId('plan-apply-skipped')).toHaveCount(0);
   // La fenêtre tient dans un écran de téléphone, case et listes comprises.
   await page.setViewportSize({ width: 390, height: 800 });
