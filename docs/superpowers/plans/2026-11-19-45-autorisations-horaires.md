@@ -64,7 +64,8 @@ export interface AuthorizationRequest {
   blame: string[];            // ids d'entrées d'historique, plus récente d'abord
 }
 export function authorizationRequests(state: State, moves: BlameMove[]): AuthorizationRequest[];
-export function roundGap(gapKg: number): number;   // Math.round(gap*10)/10, utilisé pour comparer ET afficher
+export function roundGap(gapKg: number): number;   // au dixième, demi vers le haut, utilisé pour comparer ET afficher ;
+                                                   // calculer en centièmes entiers (poids saisis à 2 décimales) : Math.round(5.05*10) vaut 50 en flottant
 export function gapText(gapKg: number): string;    // « 5 kg », « 7,3 kg »
 ```
 
