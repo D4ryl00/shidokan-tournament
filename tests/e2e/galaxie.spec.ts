@@ -237,8 +237,9 @@ test('galaxie : la vue est retenue sur le poste, Échap désélectionne, portée
 
   await page.getByTestId('planche-search').fill('ALBA');
   await expect(canvas(page)).toHaveAttribute('data-selected', ids.c54);
-  // Échap dans le champ de recherche ne retire pas la sélection ; hors du champ, si.
+  // Échap dans le champ de recherche la vide sans retirer la sélection ; hors du champ, il retire la sélection.
   await page.getByTestId('planche-search').press('Escape');
+  await expect(page.getByTestId('planche-search')).toHaveValue('');
   await expect(canvas(page)).toHaveAttribute('data-selected', ids.c54);
   await page.getByTestId('planche-search').blur();
   await page.keyboard.press('Escape');
@@ -286,6 +287,46 @@ test('galaxie : la vue est retenue sur le poste, Échap désélectionne, portée
   await expect(canvas(page)).toHaveAttribute('data-selected', '');
   await expect(card(page, ids.mix)).toHaveCount(0);
   await expect.poll(async () => Number(await canvas(page).getAttribute('data-zoom'))).toBeLessThan(2);
+  expect(errors).toEqual([]);
+});
+
+test('galaxie : plusieurs résultats, ↑ / ↓ centre l’étoile suivante', async ({ page, request }) => {
+  const errors = consoleErrors(page);
+  const id = await createCompetition(page, 'Galaxie résultats');
+  await seed(request, id);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await openGalaxy(page, id);
+  await expect.poll(async () => Number(await canvas(page).getAttribute('data-stars'))).toBeGreaterThanOrEqual(2);
+  // « -61 » dans la session Matin : karaté, Shido-boxing et triathlon (le Shido-mix est dans « Soir »).
+  const search = page.getByTestId('planche-search');
+  const count = page.getByTestId('planche-search-count');
+  await search.fill('-61');
+  await expect(count).toHaveText('1 / 3');
+  await expect(canvas(page)).not.toHaveAttribute('data-selected', '');
+  const first = (await canvas(page).getAttribute('data-selected'))!;
+  await search.press('ArrowDown');
+  await expect(count).toHaveText('2 / 3');
+  await expect(canvas(page)).not.toHaveAttribute('data-selected', first);
+  const second = (await canvas(page).getAttribute('data-selected'))!;
+  await expect(card(page, second)).toBeVisible();
+  await search.press('Enter');
+  await expect(count).toHaveText('3 / 3');
+  const third = (await canvas(page).getAttribute('data-selected'))!;
+  expect(new Set([first, second, third]).size).toBe(3);
+  await search.press('Enter');
+  await expect(count).toHaveText('1 / 3');
+  await expect(canvas(page)).toHaveAttribute('data-selected', first);
+  await search.press('Shift+Enter');
+  await expect(canvas(page)).toHaveAttribute('data-selected', third);
+  await page.getByTestId('planche-search-prev').click();
+  await expect(canvas(page)).toHaveAttribute('data-selected', second);
+  await page.getByTestId('planche-search-next').click();
+  await expect(canvas(page)).toHaveAttribute('data-selected', third);
+  // Échap vide la recherche ; la sélection reste.
+  await search.press('Escape');
+  await expect(search).toHaveValue('');
+  await expect(count).toHaveCount(0);
+  await expect(canvas(page)).toHaveAttribute('data-selected', third);
   expect(errors).toEqual([]);
 });
 

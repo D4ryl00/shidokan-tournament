@@ -1,5 +1,5 @@
 import {
-  Badge, Button, Card, Checkbox, Grid, Group, Modal, ScrollArea, SegmentedControl, Select, Stack, Text, TextInput, Title, UnstyledButton,
+  Badge, Button, Card, Checkbox, Grid, Group, Modal, ScrollArea, SegmentedControl, Select, Stack, Text, Title, UnstyledButton,
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -7,7 +7,6 @@ import { Link, useParams, useSearchParams } from 'react-router';
 import { compatibleFormats, type BracketFormat } from '../../domain/brackets/index.js';
 import { activeEntrantCount, type Category, type CategoryStatus } from '../../domain/categories.js';
 import { newSameClubSentences } from '../../domain/brackets/same-club.js';
-import { normalizeName } from '../../domain/names.js';
 import { plural } from '../../domain/plural.js';
 import { useAuthorizations, useCategories, useHistory, usePassages, useRedraw, useRegenerate, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
 import { categoryPassages, kataPassageText, movedMatchZones } from '../passages.js';
@@ -18,13 +17,14 @@ import { useUndoToast } from '../components/history/undoToast.js';
 import { HistoryPanel, HISTORY_DRAWER_WIDTH } from '../components/history/HistoryPanel.js';
 import { GalaxyView } from '../components/galaxy/GalaxyView.js';
 import { Planche, type SeeRequest } from '../components/planche/Planche.js';
-import { inScope as inScopeOf, type Scope } from '../components/planche/model.js';
+import { inScope as inScopeOf, plancheMatches, type Scope } from '../components/planche/model.js';
+import { PlancheSearch } from '../components/planche/PlancheToolbar.js';
+import { useSearchCycle } from '../components/planche/searchCycle.js';
 import { CategoryDurations } from '../components/CategoryDurations.js';
 import { MoveEntrantPanel } from '../components/MoveEntrantPanel.js';
 import { BracketView, type EntrantInfo } from '../components/BracketView.js';
 import { useRecasementDetails } from '../components/ReplacementBadge.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
-import { IconSearch } from '../components/ui/icons.js';
 import { StatusBadge, type Tone } from '../components/ui/StatusBadge.js';
 import { ALL_FORMAT_LABELS } from '../../domain/brackets/format-labels.js';
 
@@ -136,9 +136,17 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   const allAbsent = (c: Category) => c.registrationIds.length > 0 && activeCount(c) === 0;
   const inScope = (c: Category) => inScopeOf(c, { waves, scope, waveId });
   const shown = categories.filter(inScope);
-  const filtered = shown.filter(
-    (c) => (!search || normalizeName(c.label).includes(normalizeName(search))) && (!onlyAlone || activeCount(c) === 1),
-  );
+  // « Seulement les catégories sans adversaire » filtre ; la recherche, non : elle choisit la catégorie trouvée (↑ / ↓ pour les autres).
+  const filtered = shown.filter((c) => !onlyAlone || activeCount(c) === 1);
+  const names = useMemo(() => new Map([...entrants].map(([rid, e]) => [rid, e.name])), [entrants]);
+  const listMatches = plancheMatches(filtered, { query: search, names });
+  // La catégorie courante est choisie (son tableau s'affiche) et la liste défile jusqu'à elle.
+  const cycle = useSearchCycle(search, listMatches, (cid) => {
+    setSelectedId(cid);
+    setSwapFrom(null);
+    document.querySelector(`[data-testid="category-row"][data-category="${cid}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  });
+  const listMatchSet = new Set(listMatches);
   const waiting = categories.filter((c) => c.waveId === null).length;
   const printUrl =
     waves.length === 0 || scope === 'all'
@@ -248,17 +256,21 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
               {waves.length === 0 || scope === 'all' ? 'Imprimer tout' : scope === 'waiting' ? 'Imprimer celles en attente' : 'Imprimer la session'}
             </Button>
           </Group>
-          <TextInput placeholder="Filtrer (ex. cadets, -54, kata)" leftSection={<IconSearch />} value={search} onChange={(e) => setSearch(e.currentTarget.value)} />
+          <PlancheSearch query={search} onQuery={setSearch} cycle={cycle} />
           <Checkbox size="sm" label="Seulement les catégories sans adversaire" checked={onlyAlone} onChange={(e) => setOnlyAlone(e.currentTarget.checked)} />
           <ScrollArea.Autosize mah="calc(100vh - 300px)" type="auto" offsetScrollbars>
             <Stack gap={6}>
               {filtered.length === 0 && <Text size="sm" c="dimmed" ta="center" py="md">{shown.length === 0 ? 'Aucune catégorie.' : 'Aucune catégorie ne correspond.'}</Text>}
               {filtered.map((c) => {
                 const active = selected?.id === c.id;
+                const match = listMatchSet.has(c.id) ? (c.id === cycle.current ? 'current' : 'other') : undefined;
                 return (
-                  <UnstyledButton key={c.id} data-testid="category-row" aria-current={active || undefined} onClick={() => { setSelectedId(c.id); setSwapFrom(null); }}>
+                  <UnstyledButton key={c.id} data-testid="category-row" data-category={c.id} data-match={match} aria-current={active || undefined} onClick={() => { setSelectedId(c.id); setSwapFrom(null); }}>
                     <Card withBorder padding="xs" px="sm"
-                      style={active ? { borderColor: 'var(--sk-accent)', backgroundColor: 'var(--sk-chip)', boxShadow: 'inset 3px 0 0 var(--sk-accent)' } : undefined}>
+                      style={{
+                        ...(active ? { borderColor: 'var(--sk-accent)', backgroundColor: 'var(--sk-chip)', boxShadow: 'inset 3px 0 0 var(--sk-accent)' } : {}),
+                        ...(match === 'other' ? { outline: '2px dashed var(--sk-accent)', outlineOffset: -2 } : {}),
+                      }}>
                       <Text size="sm" fw={600}>{c.label}</Text>
                       <Group gap={4} mt={4}>
                         <StatusBadge tone="neutral" size="sm" className="num">{plural(activeCount(c), 'inscrit')}{c.absentIds.length ? ` + ${plural(c.absentIds.length, 'absent')}` : ''}</StatusBadge>

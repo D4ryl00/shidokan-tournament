@@ -2,7 +2,7 @@ import { Box, Button, Center, Group, Loader } from '@mantine/core';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { withSession } from '../../useSelectedWave.js';
-import { activeEntrantCount, type Category } from '../../../domain/categories.js';
+import { activeEntrantCount, compareKeys, type Category } from '../../../domain/categories.js';
 import { cachedGalaxyLayout, placeCategories } from '../../../domain/galaxy/layout.js';
 import { forbiddenLinks, galaxyLinks, rulesFrom, type GalaxyLink } from '../../../domain/galaxy/links.js';
 import { normalizeName } from '../../../domain/names.js';
@@ -16,8 +16,9 @@ import { categoryPassages } from '../../passages.js';
 import type { EntrantInfo } from '../BracketView.js';
 import { useUndoHighlight } from '../history/highlight.js';
 import { CategoryCard } from '../planche/CategoryCard.js';
-import { cardTitle, inScope, plancheFilter, sessionLabel, shownOnPlanche } from '../planche/model.js';
+import { cardTitle, inScope, plancheMatches, sessionLabel, shownOnPlanche } from '../planche/model.js';
 import { PlancheToolbar, type Scope } from '../planche/PlancheToolbar.js';
+import { useSearchCycle } from '../planche/searchCycle.js';
 import { usePlancheDrop } from '../planche/usePlancheDrop.js';
 import { ApiErrorAlert } from '../ApiErrorAlert.js';
 import { EmptyState } from '../ui/EmptyState.js';
@@ -174,15 +175,14 @@ export function GalaxyView(p: {
   // Recherche et « Seulement les seuls » : les étoiles trouvées gardent leur nom, les autres pâlissent.
   const matched = useMemo(() => {
     if (!query.trim() && !onlyLone) return null;
-    const hits = plancheFilter(drawnCats, { query, names, onlyTodo: false, cases: p.cases }).filter((c) => !onlyLone || activeEntrantCount(c) === 1);
-    return new Set(hits.map((c) => c.id));
-  }, [drawnCats, query, names, onlyLone, p.cases]);
-  const onQuery = (v: string) => {
-    setQuery(v);
-    if (!v.trim()) return;
-    const hits = plancheFilter(scopeCats, { query: v, names, onlyTodo: false, cases: p.cases });
-    if (hits.length === 1) setSelectedId(hits[0]!.id);
-  };
+    const pool = onlyLone ? drawnCats.filter((c) => activeEntrantCount(c) === 1) : drawnCats;
+    return new Set(query.trim() ? plancheMatches(pool, { query, names }) : pool.map((c) => c.id));
+  }, [drawnCats, query, names, onlyLone]);
+  // Résultats de la session affichée, dans l'ordre des catégories : le premier est choisi, ↑ / ↓ centre le suivant.
+  const results = query.trim() && grid
+    ? plancheMatches(scopeCats.filter((c) => !onlyLone || activeEntrantCount(c) === 1).sort((a, b) => compareKeys(a.key, b.key, grid)), { query, names })
+    : [];
+  const cycle = useSearchCycle(query, results, setSelectedId);
   // « Seulement les seuls » recadre sur les catégories à un seul combattant.
   const loneIds = scopeCats.filter((c) => activeEntrantCount(c) === 1).map((c) => c.id);
   const fitIds = onlyLone && loneIds.length ? loneIds : scopeCats.map((c) => c.id);
@@ -271,7 +271,7 @@ export function GalaxyView(p: {
   };
 
   const toolbar = (
-    <PlancheToolbar waves={waves} waveId={waveId} scope={scope} waiting={waiting} onScope={onScope} query={query} onQuery={onQuery}
+    <PlancheToolbar waves={waves} waveId={waveId} scope={scope} waiting={waiting} onScope={onScope} query={query} onQuery={setQuery} cycle={cycle}
       historyCount={p.historyCount} onHistory={readOnly ? undefined : p.onHistory}>
       <Group gap={6} pb={4} data-pass-through>
         <Button size="compact-sm" radius="xl" variant={onlyLone ? 'filled' : 'default'} aria-pressed={onlyLone} data-testid="galaxy-only-lone"

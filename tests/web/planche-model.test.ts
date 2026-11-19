@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { categoryLabel, freeKey, type Category, type CategoryKey } from '../../src/domain/categories.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
-import { cardTitle, dropAction, groupTitle, loneFighters, plancheFilter, plancheGroups, sessionLabel, shownOnPlanche } from '../../src/web/components/planche/model.js';
+import { cardTitle, dropAction, groupTitle, loneFighters, plancheFilter, plancheGroups, plancheMatches, sessionLabel, shownOnPlanche } from '../../src/web/components/planche/model.js';
 
 const grid = ffkDefaultGrid();
 let n = 0;
@@ -43,13 +43,25 @@ test('classement par zone : ordre des zones, « Sans zone » en dernier', () => 
   expect(g[0]!.categories[0]!.label).toContain('Benjamins F');
 });
 
-test('recherche : tous les mots, libellé et membres', () => {
+test('recherche : tous les mots, libellé et membres, dans l’ordre d’affichage', () => {
   const names = new Map([['a', 'FONTAINE Léa'], ['b', 'DUBOIS Lucas']]);
-  const o = { query: '', names, onlyTodo: false, cases: new Map<string, number>() };
+  const o = { query: '', names };
+  expect(plancheMatches(cats, o)).toEqual([]);
+  expect(plancheMatches(cats, { ...o, query: '   ' })).toEqual([]);
+  // Par le libellé de la catégorie (tous les mots).
+  expect(plancheMatches(cats, { ...o, query: 'minimes -50' })).toEqual([cats[2]!.id]);
+  // Par le nom d'un combattant, sans accents ni majuscules ; le tableau libre vide n'a personne.
+  expect(plancheMatches(cats, { ...o, query: 'fontaine' })).toEqual([cats[1]!.id, cats[2]!.id, cats[3]!.id, cats[4]!.id]);
+  expect(plancheMatches(cats, { ...o, query: 'lea' })).toHaveLength(4);
+  expect(plancheMatches(cats, { ...o, query: 'zzz' })).toEqual([]);
+  // L'ordre est celui des catégories données (l'ordre d'affichage), pas celui des données.
+  const shown = plancheGroups(cats, noZone).flatMap((g) => g.categories);
+  expect(plancheMatches(shown, { ...o, query: 'dubois' })).toEqual([cats[4]!.id, cats[3]!.id, cats[2]!.id, cats[1]!.id]);
+});
+
+test('« Seulement à traiter » reste un filtre ; la recherche ne filtre plus', () => {
+  const o = { onlyTodo: false, cases: new Map<string, number>() };
   expect(plancheFilter(cats, o)).toHaveLength(5);
-  expect(plancheFilter(cats, { ...o, query: 'minimes -50' }).map((c) => c.id)).toEqual([cats[2]!.id]);
-  expect(plancheFilter(cats, { ...o, query: 'fontaine' })).toHaveLength(4);
-  expect(plancheFilter(cats, { ...o, query: 'zzz' })).toEqual([]);
   const lone = cat(k('karate', 'cadet', 'F', null), { registrationIds: ['a'] });
   expect(plancheFilter([...cats, lone], { ...o, onlyTodo: true })).toEqual([lone]);
   expect(plancheFilter(cats, { ...o, onlyTodo: true, cases: new Map([[cats[1]!.id, 2]]) })).toEqual([cats[1]]);

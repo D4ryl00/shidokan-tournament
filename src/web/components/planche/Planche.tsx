@@ -12,12 +12,34 @@ import { useUndoHighlight } from '../history/highlight.js';
 import { EmptyState } from '../ui/EmptyState.js';
 import { CategoryCard } from './CategoryCard.js';
 import { LoneTray } from './LoneTray.js';
-import { cardTitle, inScope, loneFighters, plancheFilter, plancheGroups, sessionLabel, shownOnPlanche, type PlancheSort } from './model.js';
+import { cardTitle, inScope, loneFighters, plancheFilter, plancheGroups, plancheMatches, sessionLabel, shownOnPlanche, UNDER_PLANCHE_BAR, type PlancheSort } from './model.js';
 import { PlancheToolbar, type Scope } from './PlancheToolbar.js';
+import { useSearchCycle } from './searchCycle.js';
 import { usePlancheDrop } from './usePlancheDrop.js';
 import { JumpLinks } from '../ui/JumpLinks.js';
 
 export interface SeeRequest { ids: string[]; n: number }
+
+/**
+ * Barre épinglée (outils et pastilles des groupes) : sa hauteur dans `--sk-planche-bar-h` (le défilement vers une carte
+ * en tient compte), et `data-stuck` une fois la page défilée sous elle (ombre). Ref de rappel, avec son nettoyage.
+ */
+function pinPlancheBar(el: HTMLElement | null) {
+  if (!el) return;
+  const root = document.documentElement;
+  const size = () => root.style.setProperty('--sk-planche-bar-h', `${el.getBoundingClientRect().height}px`);
+  const stuck = () => {
+    const on = window.scrollY > 0 && el.getBoundingClientRect().top <= (parseFloat(getComputedStyle(el).top) || 0) + 0.5;
+    if (on) el.dataset.stuck = 'true';
+    else delete el.dataset.stuck;
+  };
+  size();
+  stuck();
+  const ro = new ResizeObserver(() => { size(); stuck(); });
+  ro.observe(el);
+  window.addEventListener('scroll', stuck, { passive: true });
+  return () => { ro.disconnect(); window.removeEventListener('scroll', stuck); root.style.removeProperty('--sk-planche-bar-h'); };
+}
 
 /** La planche : toutes les catégories de la session en cartes, groupées, avec le bac « Sans adversaire ». */
 export function Planche({ competitionId, categories, waves, waveId, scope, onScope, readOnly, entrants, badges, badgeDetails, pendingAuth, cases, aside, historyCount, onHistory, seeRequest, onConsumed, onOpenList }: {
@@ -58,13 +80,22 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
   const waiting = categories.filter((c) => c.waveId === null).length;
   const names = useMemo(() => new Map([...entrants].map(([id, e]) => [id, e.name])), [entrants]);
   const inSession = categories.filter((c) => inScope(c, { waves, scope, waveId }) && shownOnPlanche(c));
-  const filtered = plancheFilter(inSession, { query, names, onlyTodo, cases });
+  // « Seulement à traiter » filtre ; la recherche, non : elle entoure les cartes trouvées et va de l'une à l'autre.
+  const filtered = plancheFilter(inSession, { onlyTodo, cases });
   const zoneOf = (c: Category) => {
     const z = zones.find((x) => x.id === categoryPassages(plan, c.id).zoneId);
     return z ? { id: z.id, name: z.name } : null;
   };
   const groups = grid ? plancheGroups(filtered, { sort, grid, zoneOf, zoneOrder: zones.map((z) => z.id) }) : [];
   const words = normalizeName(query).split(' ').filter(Boolean);
+  const matches = plancheMatches(groups.flatMap((g) => g.categories), { query, names });
+  // La carte courante défile sous la barre (une fois affichée : la grille peut arriver après la recherche).
+  const cycle = useSearchCycle(query, matches, (id) => {
+    const el = document.querySelector(`[data-testid="planche-card"][data-category="${id}"]`);
+    if (!el) return false;
+    el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, groups.length);
+  const matchSet = new Set(matches);
 
   const lone = loneFighters(scope === 'waiting' ? categories.filter((c) => c.waveId === null) : categories, { waveId: scope === 'wave' ? waveId : null, scopeAll: scope === 'all' });
   const loneItems = lone.flatMap((l) => {
@@ -100,16 +131,18 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
 
   return (
     <Stack gap="sm" data-testid="planche">
-      <PlancheToolbar waves={waves} waveId={waveId} scope={scope} waiting={waiting} onScope={onScope} query={query} onQuery={setQuery}
-        sort={sort} onSort={setSort} onlyTodo={onlyTodo} onOnlyTodo={setOnlyTodo} historyCount={historyCount} onHistory={readOnly ? undefined : onHistory} />
+      <div ref={pinPlancheBar} className="sk-planche-bar" data-testid="planche-bar">
+        <PlancheToolbar waves={waves} waveId={waveId} scope={scope} waiting={waiting} onScope={onScope} query={query} onQuery={setQuery} cycle={cycle}
+          sort={sort} onSort={setSort} onlyTodo={onlyTodo} onOnlyTodo={setOnlyTodo} historyCount={historyCount} onHistory={readOnly ? undefined : onHistory} />
+        {groups.length > 0 && (
+          <JumpLinks data-testid="planche-jumps" itemTestId="planche-jump" label="Aller au groupe"
+            items={groups.map((g, i) => ({ key: g.key, label: g.title, count: g.categories.length, onClick: () => jump(i) }))} />
+        )}
+      </div>
       {banner}
-      {groups.length > 0 && (
-        <JumpLinks data-testid="planche-jumps" itemTestId="planche-jump" label="Aller au groupe"
-          items={groups.map((g, i) => ({ key: g.key, label: g.title, count: g.categories.length, onClick: () => jump(i) }))} />
-      )}
       <Grid gutter="md">
         <Grid.Col span={{ base: 12, md: 3 }}>
-          <Box style={{ position: 'sticky', top: 8 }}>
+          <Box style={{ position: 'sticky', top: UNDER_PLANCHE_BAR }}>
             <LoneTray competitionId={competitionId} items={loneItems} entrants={entrants} badges={badges} badgeDetails={badgeDetails} pendingAuth={pendingAuth} chipProps={readOnly ? undefined : chipProps} selectedChip={drag.selected} />
           </Box>
         </Grid.Col>
@@ -119,7 +152,7 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
               <EmptyState title={inSession.length === 0 ? 'Aucune catégorie.' : 'Aucune catégorie ne correspond.'} />
             )}
             {groups.map((g, i) => (
-              <Stack key={g.key} gap="xs" id={`planche-group-${i}`} data-testid="planche-group" data-group={g.key} style={{ scrollMarginTop: 8 }}>
+              <Stack key={g.key} gap="xs" id={`planche-group-${i}`} data-testid="planche-group" data-group={g.key} style={{ scrollMarginTop: UNDER_PLANCHE_BAR }}>
                 <Text fw={700} size="sm" tt="uppercase" c="dimmed" style={{ letterSpacing: 0.4 }}>{g.title}</Text>
                 <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="sm">
                   {g.categories.map((c) => {
@@ -133,6 +166,7 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
                         zoneName={sort === 'categorie' ? zone?.name ?? null : null} passages={passages} zones={zones} entrants={entrants}
                         badges={badges} badgeDetails={badgeDetails} pendingAuth={pendingAuth} cases={cases.get(c.id) ?? 0} aside={aside.get(c.id) ?? 0} readOnly={readOnly}
                         expanded={open.has(c.id)} onToggle={() => toggle(c.id)} onOpenList={() => onOpenList(c.id)} words={words} ring={ring}
+                        match={matchSet.has(c.id) ? (c.id === cycle.current ? 'current' : 'other') : null}
                         cardProps={readOnly ? undefined : cardProps(c)} chipProps={readOnly ? undefined : chipProps} selectedChip={drag.selected} />
                     );
                   })}

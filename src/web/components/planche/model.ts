@@ -13,6 +13,12 @@ export function inScope(c: Pick<Category, 'waveId'>, o: { waves: readonly unknow
 }
 export interface PlancheGroup { key: string; title: string; categories: Category[] }
 
+/**
+ * Juste sous les deux barres collantes (celle de l'appli, puis la barre épinglée de la planche ; hauteurs publiées dans
+ * `--sk-bar-h` et `--sk-planche-bar-h`) : haut d'une carte ou d'un groupe après un défilement, bac et bandeau collés.
+ */
+export const UNDER_PLANCHE_BAR = 'calc(var(--sk-bar-h, 56px) + var(--sk-planche-bar-h, 0px) + 8px)';
+
 export const FREE_GROUP_TITLE = 'Tableaux libres';
 export const NO_ZONE_TITLE = 'Sans zone';
 
@@ -67,14 +73,22 @@ export function plancheGroups(cats: Category[], o: {
   return [...groups.values()].sort((a, b) => rank(a) - rank(b));
 }
 
-export function plancheFilter(cats: Category[], o: { query: string; names: Map<string, string>; onlyTodo: boolean; cases: Map<string, number> }): Category[] {
-  const words = normalizeName(o.query).split(' ').filter(Boolean);
-  return cats.filter((c) => {
-    if (o.onlyTodo && activeEntrantCount(c) !== 1 && !(o.cases.get(c.id) ?? 0)) return false;
-    if (words.length === 0) return true;
-    const hay = normalizeName([c.label, ...c.registrationIds.map((r) => o.names.get(r) ?? '')].join(' '));
+/** « Seulement à traiter » : les cartes sans adversaire ou avec un cas de réaffectation. La recherche ne filtre pas (`plancheMatches`). */
+export function plancheFilter(cats: Category[], o: { onlyTodo: boolean; cases: Map<string, number> }): Category[] {
+  return o.onlyTodo ? cats.filter((c) => activeEntrantCount(c) === 1 || !!o.cases.get(c.id)) : cats;
+}
+
+/**
+ * Recherche : les catégories dont le libellé ou un combattant contient tous les mots (sans accents ni majuscules), dans
+ * l'ordre des catégories données (l'ordre d'affichage). Rien pour une recherche vide.
+ */
+export function plancheMatches(categories: Category[], opts: { query: string; names: Map<string, string> }): string[] {
+  const words = normalizeName(opts.query).split(' ').filter(Boolean);
+  if (words.length === 0) return [];
+  return categories.filter((c) => {
+    const hay = normalizeName([c.label, ...c.registrationIds.map((r) => opts.names.get(r) ?? '')].join(' '));
     return words.every((w) => hay.includes(w));
-  });
+  }).map((c) => c.id);
 }
 
 /** Le seul présent de chaque catégorie qui n'en a qu'un (session affichée et catégories en attente ; toutes avec `scopeAll`). */

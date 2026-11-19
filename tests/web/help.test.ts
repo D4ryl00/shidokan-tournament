@@ -158,3 +158,13 @@ test('appliquer le plan : la case des déplacements à valider', () => {
   expect(text).toContain('« Appliquer aussi les déplacements à valider »');
   expect(text).toContain('attendront l’autorisation des clubs');
 });
+
+test('tableaux : barre épinglée, la recherche ne filtre pas, elle passe d’un résultat à l’autre', () => {
+  const text = all('tableaux');
+  expect(text).toContain('restent en haut de l’écran');
+  expect(text).toContain('La recherche ne cache rien');
+  expect(text).toContain('« 2 / 5 »');
+  expect(text).toContain('Maj+Entrée');
+  expect(text).toContain('Échap vide la recherche');
+  expect(text).not.toContain('Cherchez une catégorie ou un combattant ;');
+});

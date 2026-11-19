@@ -175,11 +175,15 @@ test('planche : groupes, recherche, bac, même club, agrandir, Liste retenue', a
   // Bac : le kata est seul.
   await expect(page.getByTestId('planche-tray')).toContainText('Sans adversaire (1)');
   await expect(page.getByTestId('planche-tray').getByTestId('planche-chip')).toHaveCount(1);
-  // Recherche.
+  // Recherche : elle ne cache rien, elle entoure la carte trouvée.
   await page.getByTestId('planche-search').fill('issa');
-  await expect(page.getByTestId('planche-card')).toHaveCount(1);
+  await expect(page.getByTestId('planche-search-count')).toHaveText('1 / 1');
+  await expect(page.getByTestId('planche-card')).toHaveCount(2);
+  await expect(card).toHaveAttribute('data-match', 'current');
+  await expect(page.locator('[data-match]')).toHaveCount(1);
   await page.getByTestId('planche-search').fill('zzz');
-  await expect(page.getByText('Aucune catégorie ne correspond.')).toBeVisible();
+  await expect(page.getByTestId('planche-search-count')).toHaveText('0 / 0');
+  await expect(page.getByTestId('planche-card')).toHaveCount(2);
   await page.getByTestId('planche-search').fill('');
   // Classer par zone : une zone automatique.
   await page.getByTestId('planche-sort').click();

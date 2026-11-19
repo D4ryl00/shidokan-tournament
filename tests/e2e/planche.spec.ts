@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { clipped, createCompetition } from './helpers.js';
+import { clipped, createCompetition, showList } from './helpers.js';
 
 /**
  * -54 kg : ALBA, BRUN, CARO, DIDI ; -61 kg : SOLO (seul, dans le bac) ; -47 kg : LANA, LISE (lancée) ; tableau libre « Gala vide ».
@@ -137,9 +137,11 @@ test('planche : échange de places annulé, clic-clic, historique en cascade, re
   await expect(gala).not.toHaveAttribute('data-ring', 'undo');
   await page.getByTestId('history-open').click();
 
-  // Recherche sans résultat.
+  // Recherche sans résultat : rien n'est caché.
+  const shownCards = await page.getByTestId('planche-card').count();
   await page.getByTestId('planche-search').fill('zzz');
-  await expect(page.getByText('Aucune catégorie ne correspond.')).toBeVisible();
+  await expect(page.getByTestId('planche-search-count')).toHaveText('0 / 0');
+  await expect(page.getByTestId('planche-card')).toHaveCount(shownCards);
   await page.getByTestId('planche-search').fill('');
 
   // 360 px : rien de coupé, bandeau compris.
@@ -276,4 +278,150 @@ test('planche : ⓘ ouvre la fiche sans choisir la pastille ; clic-clic intact',
   await expect(page.getByTestId('fighter-info-sheet')).toHaveCount(0);
   await info(tray, 'SOLO').click();
   await expect(page.getByTestId('fighter-info-sheet')).toContainText('SOLO x');
+});
+
+/**
+ * Assez de groupes pour faire défiler la page (benjamins, minimes, cadets, juniors, kata) ; deux DUPONT dans deux catégories
+ * (benjamines -35 et cadettes -54).
+ */
+async function seedMany(request: APIRequestContext, id: string): Promise<Record<'b35' | 'c54', string>> {
+  // « DUPONT Léa » : nom et prénom (deux combattantes différentes) ; sinon le prénom est « x ».
+  const reg = async (name: string, sex: 'F' | 'M', ageBandCode: string, weightClassId: string | null) => {
+    const kata = weightClassId === null;
+    const [lastName, firstName = 'x'] = name.split(' ');
+    const res = await request.post(`/api/competitions/${id}/registrations`, {
+      data: { clubId: null, firstName, lastName, sex, ageBandCode, discipline: kata ? 'kata' : 'karate', ruleset: kata ? null : 'jiyu', weightClassId, source: 'manual' },
+    });
+    expect(res.ok(), await res.text()).toBeTruthy();
+  };
+  const pairs: [string, string, 'F' | 'M', string, string | null][] = [
+    ['DUPONT Léa', 'ABEL', 'F', 'benjamin', 'benjamin:F:-35'], ['BRAS', 'CYR', 'M', 'benjamin', 'benjamin:M:-40'],
+    ['DORA', 'EMMA', 'F', 'minime', 'minime:F:-45'], ['FRED', 'GUS', 'M', 'minime', 'minime:M:-50'],
+    ['DUPONT Zoé', 'HANA', 'F', 'cadet', 'cadet:F:-54'], ['IVAN', 'JOEL', 'M', 'cadet', 'cadet:M:-63'],
+    ['KIM', 'LOU', 'F', 'junior', 'junior:F:-59'], ['MAX', 'NOE', 'M', 'junior', 'junior:M:-68'],
+    ['OPHE', 'PIA', 'F', 'cadet', null],
+  ];
+  for (const [a, b, sex, band, w] of pairs) { await reg(a, sex, band, w); await reg(b, sex, band, w); }
+  const cats = (await (await request.get(`/api/competitions/${id}/categories`)).json()) as { id: string; label: string }[];
+  const of = (w: string) => cats.find((c) => c.label.includes(w))!.id;
+  return { b35: of('-35'), c54: of('-54') };
+}
+
+test('planche : barre épinglée ; la recherche défile jusqu’aux cartes et passe de l’une à l’autre (planche, liste, 390 px)', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe recherche');
+  const ids = await seedMany(request, id);
+  const H = 600;
+  await page.setViewportSize({ width: 1280, height: H });
+  await page.goto(`/competitions/${id}/tableaux`);
+  const cards = page.getByTestId('planche-card');
+  await expect(cards).toHaveCount(9);
+  const pinned = page.getByTestId('planche-bar');
+  const search = page.getByTestId('planche-search');
+  const count = page.getByTestId('planche-search-count');
+  const appBar = () => page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sk-bar-h')) || 0);
+  /** En haut de l'élément : sous la barre épinglée (rien de masqué) et dans l'écran. */
+  const underBar = async (l: ReturnType<Page['locator']>) => {
+    const p = (await pinned.boundingBox())!;
+    const b = (await l.boundingBox())!;
+    return b.y >= p.y + p.height - 1 && b.y < H;
+  };
+
+  // En bas de la page : la barre et les pastilles des groupes restent en haut, sous la barre de l'appli, avec une ombre.
+  await expect(pinned).not.toHaveAttribute('data-stuck', 'true');
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(200);
+  const bar = await appBar();
+  for (const l of [search, page.getByTestId('planche-jumps')]) {
+    const b = (await l.boundingBox())!;
+    expect(b.y).toBeGreaterThanOrEqual(bar - 1);
+    expect(b.y + b.height).toBeLessThanOrEqual(H);
+  }
+  await expect(pinned).toHaveAttribute('data-stuck', 'true');
+  expect(await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sk-planche-bar-h')))).toBeGreaterThan(40);
+  // Une pastille de groupe : le groupe arrive sous la barre épinglée, pas dessous.
+  await page.getByTestId('planche-jump').nth(1).click();
+  await expect.poll(() => underBar(page.getByTestId('planche-group').nth(1))).toBe(true);
+
+  // Recherche : rien n'est caché ; les deux cartes de DUPONT sont entourées, la première est la courante et vient sous la barre.
+  await search.fill('dupont');
+  await expect(count).toHaveText('1 / 2');
+  await expect(cards).toHaveCount(9);
+  const b35 = card(page, ids.b35);
+  const c54 = card(page, ids.c54);
+  await expect(b35).toHaveAttribute('data-match', 'current');
+  await expect(c54).toHaveAttribute('data-match', 'other');
+  await expect(page.locator('[data-match]')).toHaveCount(2);
+  await expect.poll(() => underBar(b35)).toBe(true);
+  // ↓ : la seconde défile sous la barre, non masquée.
+  await search.press('ArrowDown');
+  await expect(count).toHaveText('2 / 2');
+  await expect(c54).toHaveAttribute('data-match', 'current');
+  await expect(b35).toHaveAttribute('data-match', 'other');
+  await expect.poll(() => underBar(c54)).toBe(true);
+  // Entrée : suivant, en boucle ; Maj+Entrée et ↑ : précédent ; les boutons font de même.
+  await search.press('Enter');
+  await expect(count).toHaveText('1 / 2');
+  await search.press('Shift+Enter');
+  await expect(count).toHaveText('2 / 2');
+  await search.press('ArrowUp');
+  await expect(count).toHaveText('1 / 2');
+  await page.getByTestId('planche-search-next').click();
+  await expect(count).toHaveText('2 / 2');
+  await page.getByTestId('planche-search-prev').click();
+  await expect(count).toHaveText('1 / 2');
+  await expect.poll(() => underBar(b35)).toBe(true);
+  // Sans résultat : rien n'est caché.
+  await search.fill('zzz');
+  await expect(count).toHaveText('0 / 0');
+  await expect(cards).toHaveCount(9);
+  await expect(page.locator('[data-match]')).toHaveCount(0);
+  // Échap vide la recherche.
+  await search.fill('dupont');
+  await search.press('Escape');
+  await expect(search).toHaveValue('');
+  await expect(count).toHaveCount(0);
+  await expect(page.locator('[data-match]')).toHaveCount(0);
+  // « Seulement à traiter » reste un filtre (ici, aucune carte sans adversaire ni cas).
+  await page.getByTestId('planche-todo').check();
+  await expect(cards).toHaveCount(0);
+  await expect(page.getByText('Aucune catégorie ne correspond.')).toBeVisible();
+  await page.getByTestId('planche-todo').uncheck();
+  await expect(cards).toHaveCount(9);
+
+  // Vue Liste : la recherche choisit la catégorie (son tableau s'affiche) et la liste défile jusqu'à elle.
+  await showList(page);
+  const rows = page.getByTestId('category-row');
+  await expect(rows).toHaveCount(9);
+  await search.fill('dupont');
+  await expect(count).toHaveText('1 / 2');
+  await expect(rows).toHaveCount(9);
+  const row = (cid: string) => page.locator(`[data-testid="category-row"][data-category="${cid}"]`);
+  await expect(row(ids.b35)).toHaveAttribute('aria-current', 'true');
+  await expect(row(ids.b35)).toHaveAttribute('data-match', 'current');
+  await expect(page.getByRole('heading', { level: 3, name: /-35/ })).toBeVisible();
+  await search.press('ArrowDown');
+  await expect(count).toHaveText('2 / 2');
+  await expect(row(ids.c54)).toHaveAttribute('aria-current', 'true');
+  await expect(row(ids.c54)).toBeInViewport();
+  await expect(page.getByRole('heading', { level: 3, name: /-54/ })).toBeVisible();
+  await search.press('Escape');
+  await expect(search).toHaveValue('');
+
+  // 390 px : le bloc épinglé reste compact (pastilles sur une ligne qui défile), rien de coupé ni de débordement.
+  await page.getByTestId('brackets-view').getByText('Planche', { exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(cards).toHaveCount(9);
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(200);
+  const jumps = (await page.getByTestId('planche-jumps').boundingBox())!;
+  expect(jumps.height).toBeLessThan(40);
+  const p = (await pinned.boundingBox())!;
+  expect(p.y).toBeGreaterThanOrEqual((await appBar()) - 1);
+  expect(p.y + p.height).toBeLessThan(844 / 2);
+  await search.fill('dupont');
+  await search.press('ArrowDown');
+  await expect(count).toHaveText('2 / 2');
+  await expect.poll(() => underBar(c54)).toBe(true);
+  expect(await clipped(page)).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

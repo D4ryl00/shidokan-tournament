@@ -8,7 +8,7 @@ import { useSwap } from '../../api.js';
 import type { EntrantInfo } from '../BracketView.js';
 import { useUndoToast } from '../history/undoToast.js';
 import { DropConfirmDialog, type PendingDrop } from './DropConfirmDialog.js';
-import { isLockedCategory, LOCKED_DROP } from './model.js';
+import { isLockedCategory, LOCKED_DROP, UNDER_PLANCHE_BAR } from './model.js';
 import { useDragMove, type DragAttrs, type PlancheAction } from './useDragMove.js';
 
 /** Une pastille est à la fois source (glisser, clic) et cible (dépôt). */
@@ -58,7 +58,7 @@ export function usePlancheDrop(o: { competitionId: string; categories: Category[
   const dialog = <DropConfirmDialog competitionId={competitionId} drop={drop} categories={categories} entrants={entrants} waves={waves} onClose={() => setDrop(null)} />;
   const banner = drag.selected && (
     <Paper data-testid="planche-banner" role="status" px="sm" py={6} radius="sm"
-      style={{ position: 'fixed', top: 'calc(var(--sk-bar-h, 56px) + 8px)', left: '50%', transform: 'translateX(-50%)', width: 'min(900px, calc(100vw - 32px))', zIndex: 90, pointerEvents: 'none', boxShadow: 'var(--mantine-shadow-md)', backgroundColor: 'var(--sk-chip)', color: 'var(--sk-chip-text)', border: '1px solid var(--sk-accent)' }}>
+      style={{ position: 'fixed', top: UNDER_PLANCHE_BAR, left: '50%', transform: 'translateX(-50%)', width: 'min(900px, calc(100vw - 32px))', zIndex: 90, pointerEvents: 'none', boxShadow: 'var(--mantine-shadow-md)', backgroundColor: 'var(--sk-chip)', color: 'var(--sk-chip-text)', border: '1px solid var(--sk-accent)' }}>
       <Text size="sm" fw={500}>Sélection : {nameOf(drag.selected)}. Cliquez sur un autre combattant pour échanger, ou sur une catégorie pour l’y déplacer. (Échap pour annuler)</Text>
     </Paper>
   );

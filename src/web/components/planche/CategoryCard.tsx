@@ -16,7 +16,7 @@ import { BracketView, type EntrantInfo } from '../BracketView.js';
 import { useUndoToast } from '../history/undoToast.js';
 import { StatusBadge } from '../ui/StatusBadge.js';
 import { FighterChip } from './FighterChip.js';
-import { cardSections, isLockedCategory, LOCKED_DROP } from './model.js';
+import { cardSections, isLockedCategory, LOCKED_DROP, UNDER_PLANCHE_BAR } from './model.js';
 import type { DragAttrs } from './useDragMove.js';
 
 type Passages = ReturnType<typeof categoryPassages>;
@@ -48,6 +48,8 @@ export interface CardProps {
   words: string[];
   /** Contour : `undo` = annulation en préparation (orange), `see` = « Voir » de l'historique. */
   ring?: 'undo' | 'see' | null;
+  /** Résultat de la recherche : `current` = celui où l'on est (contour plein), `other` = les autres (pointillés). */
+  match?: 'current' | 'other' | null;
   /** Attributs ajoutés à la carte et à chaque pastille (glisser-déposer). */
   cardProps?: DragAttrs;
   chipProps?: (registrationId: string, category: Category) => DragAttrs;
@@ -93,6 +95,7 @@ export function CategoryCard(p: CardProps) {
   const sections = cardSections(c);
   const pendingCount = c.registrationIds.filter((x) => p.pendingAuth.has(x)).length;
   const ringColor = p.ring === 'undo' ? 'var(--mantine-color-orange-6)' : p.ring === 'see' ? 'var(--sk-accent)' : undefined;
+  const outline = ringColor ? `3px solid ${ringColor}` : p.match === 'current' ? '3px solid var(--sk-accent)' : p.match === 'other' ? '2px dashed var(--sk-accent)' : undefined;
   const kata = kataPassageText(p.passages, p.zones);
   const matched = (id: string) => p.words.length > 0 && p.words.some((w) => normalizeName(p.entrants.get(id)?.name ?? '').includes(w));
   const chip = (id: string) => (
@@ -104,10 +107,11 @@ export function CategoryCard(p: CardProps) {
   const compactIds = p.compact ? sections.flatMap((s) => s.ids) : [];
   return (
     <Card withBorder padding={p.compact ? 'xs' : 'sm'} className={p.compact && active === 1 ? 'sk-lone-ring' : undefined} data-lone={(p.compact && active === 1) || undefined}
-      data-testid="planche-card" data-category={c.id} data-locked={locked || undefined} data-ring={p.ring ?? undefined} {...p.cardProps}
+      data-testid="planche-card" data-category={c.id} data-locked={locked || undefined} data-ring={p.ring ?? undefined} data-match={p.match ?? undefined} {...p.cardProps}
       style={{
         gridColumn: p.expanded ? '1 / -1' : undefined, opacity: locked ? 0.7 : undefined,
-        outline: ringColor ? `3px solid ${ringColor}` : undefined, outlineOffset: 1, scrollMarginTop: 80, ...p.cardProps?.style,
+        // Défilement (recherche, « Voir ») : la carte s'arrête sous la barre de l'appli et la barre épinglée de la planche.
+        outline, outlineOffset: 1, scrollMarginTop: UNDER_PLANCHE_BAR, ...p.cardProps?.style,
       }}>
       <Stack gap={p.compact ? 6 : 'xs'}>
         <Stack gap={p.compact ? 0 : 2}>
