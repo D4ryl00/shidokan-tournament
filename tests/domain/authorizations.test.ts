@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest';
-import { authorizationRequests, gapText, roundGap, type AuthorizationRequest, type BlameMove } from '../../src/domain/authorizations.js';
+import { answerCovers, authorizationRequests, gapText, roundGap, withStatus, type AuthorizationRequest, type AuthorizationSituation, type BlameMove, type StoredAnswer } from '../../src/domain/authorizations.js';
+import type { DisciplineId } from '../../src/domain/types.js';
+import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 import { keyString, naturalKey } from '../../src/domain/categories.js';
 import { recompute } from '../../src/domain/replacement/move.js';
 import type { CategoryState, Member, State } from '../../src/domain/replacement/types.js';
@@ -320,5 +322,60 @@ describe('blâme, libellés, inscriptions', () => {
     const m = member({ ageBandCode: 'minime', clubId: 'clubC', weightClassId: 'minime:F:-50', approxWeightKg: 48 });
     const rs = authorizationRequests(groups([[b, a, a2, m]]), []);
     expect(rs.map((r) => r.registrationId)).toEqual([a2.registrationId, a.registrationId, b.registrationId]);
+  });
+});
+
+describe('answerCovers et withStatus', () => {
+  const grid = ffkDefaultGrid();
+  const w = (gapKg: number, heaviestClassId = 'cadet:M:-63'): AuthorizationSituation => ({ kind: 'weight', ownClassId: 'cadet:M:-54', heaviestClassId, gapKg });
+  const age = (...strongerBands: string[]): AuthorizationSituation => ({ kind: 'age', ownBand: 'benjamin', strongerBands });
+
+  test('poids : un accord à 7 kg couvre 6 kg, pas 9 kg', () => {
+    expect(answerCovers(w(7), w(6), grid)).toBe(true);
+    expect(answerCovers(w(7), w(7), grid)).toBe(true);
+    expect(answerCovers(w(7), w(9), grid)).toBe(false);
+  });
+  test('poids : une catégorie adverse plus lourde que celle acceptée n\'est pas couverte', () => {
+    expect(answerCovers(w(7, 'cadet:M:-63'), w(6, 'cadet:M:-57'), grid)).toBe(true);
+    expect(answerCovers(w(7, 'cadet:M:-57'), w(6, 'cadet:M:-63'), grid)).toBe(false);
+  });
+  test('âge : les tranches plus fortes de la demande doivent être dans l\'accord', () => {
+    expect(answerCovers(age('minime'), age('minime'), grid)).toBe(true);
+    expect(answerCovers(age('minime', 'cadet'), age('minime'), grid)).toBe(true);
+    expect(answerCovers(age('minime'), age('minime', 'cadet'), grid)).toBe(false);
+  });
+  test('discipline et session : même arrivée ; mixité : toujours', () => {
+    const d = (to: DisciplineId): AuthorizationSituation => ({ kind: 'discipline', from: { discipline: 'karate', ruleset: 'jiyu' }, to: { discipline: to, ruleset: null } });
+    expect(answerCovers(d('kata'), d('kata'), grid)).toBe(true);
+    expect(answerCovers(d('kata'), d('karate'), grid)).toBe(false);
+    const s = (to: string | null): AuthorizationSituation => ({ kind: 'session', from: 'a', to });
+    expect(answerCovers(s('m'), s('m'), grid)).toBe(true);
+    expect(answerCovers(s('m'), s('p'), grid)).toBe(false);
+    expect(answerCovers({ kind: 'mixite' }, { kind: 'mixite' }, grid)).toBe(true);
+  });
+  test('types différents : jamais couvert', () => {
+    expect(answerCovers({ kind: 'mixite' }, age('minime'), grid)).toBe(false);
+  });
+
+  test('withStatus : en attente, accordée (avec date) ou info', () => {
+    const req = (id: string, registrationId: string, situation: AuthorizationSituation): AuthorizationRequest => ({
+      id, registrationId, clubId: null, categoryId: 'g0', situation, current: '', proposed: '', bullet: '', blame: [],
+    });
+    const reqs = [
+      req('weight:r1', 'r1', w(6)),
+      req('weight:r2', 'r2', w(9)),
+      req('age:r3', 'r3', age('minime')),
+      req('missingWeight:r1', 'r1', { kind: 'missingWeight', ownClassId: 'a', heaviestClassId: 'b' }),
+    ];
+    const answers: StoredAnswer[] = [
+      { registrationId: 'r1', kind: 'weight', situation: w(7), answeredAt: 't1' },
+      { registrationId: 'r2', kind: 'weight', situation: w(7), answeredAt: 't2' },
+    ];
+    expect(withStatus(reqs, answers, grid).map((r) => [r.id, r.status, r.answeredAt])).toEqual([
+      ['weight:r1', 'granted', 't1'],
+      ['weight:r2', 'pending', null],
+      ['age:r3', 'pending', null],
+      ['missingWeight:r1', 'info', null],
+    ]);
   });
 });

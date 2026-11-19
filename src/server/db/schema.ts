@@ -704,3 +704,22 @@ export const zoneEntries = sqliteTable('zone_entries', {
   decidedAt: text('decided_at'),
   ...rowMeta(),
 });
+
+/** Réponses « Accordée » des coachs aux demandes d'autorisation (étape 45) : la situation acceptée, pour juger si elle couvre encore. */
+export const authorizationAnswers = sqliteTable(
+  'authorization_answers',
+  {
+    competitionId: text('competition_id')
+      .notNull()
+      .references(() => competitions.id, { onDelete: 'cascade' }),
+    registrationId: text('registration_id')
+      .notNull()
+      .references(() => registrations.id, { onDelete: 'cascade' }),
+    kind: text('kind', { enum: ['age', 'weight', 'discipline', 'mixite', 'session'] }).notNull(),
+    /** Situation acceptée (JSON `AuthorizationSituation`). */
+    situationJson: text('situation_json').notNull(),
+    answeredAt: text('answered_at').notNull(),
+    ...rowMeta(),
+  },
+  (t) => [primaryKey({ columns: [t.competitionId, t.registrationId, t.kind] })],
+);

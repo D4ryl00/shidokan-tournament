@@ -275,3 +275,62 @@ export function authorizationRequests(state: State, moves: BlameMove[]): Authori
       KIND_ORDER.indexOf(a.situation.kind) - KIND_ORDER.indexOf(b.situation.kind),
   );
 }
+
+// --- Réponses enregistrées « Accordée » (spec §7.2) ----------------------------------------------------------------
+
+/** Réponse « Accordée » d'un coach, avec la situation exacte qu'il a acceptée. */
+export interface StoredAnswer {
+  registrationId: string;
+  kind: AnswerableKind;
+  situation: AuthorizationSituation;
+  answeredAt: string;
+}
+
+/** Rang d'une catégorie de poids par son identifiant (une ouverte au-dessus des bornées) ; `null` si inconnue. */
+function weightClassRank(grid: CategoryGrid, id: string): [number, number] | null {
+  const wc = grid.weightClasses.find((w) => w.id === id);
+  return wc ? weightRank(grid, wc) : null;
+}
+
+const sameDestination = (a: { discipline: DisciplineId; ruleset: Ruleset | null }, b: { discipline: DisciplineId; ruleset: Ruleset | null }) =>
+  a.discipline === b.discipline && a.ruleset === b.ruleset;
+
+/** La réponse enregistrée couvre-t-elle la demande actuelle ? Elle tombe quand la situation s'aggrave au-delà de l'accord. */
+export function answerCovers(answer: AuthorizationSituation, request: AuthorizationSituation, grid: CategoryGrid): boolean {
+  switch (answer.kind) {
+    case 'age':
+      return request.kind === 'age' && request.strongerBands.every((b) => answer.strongerBands.includes(b));
+    case 'weight': {
+      if (request.kind !== 'weight' || request.gapKg > answer.gapKg) return false;
+      if (request.heaviestClassId === answer.heaviestClassId) return true;
+      const asked = weightClassRank(grid, request.heaviestClassId);
+      const accepted = weightClassRank(grid, answer.heaviestClassId);
+      return asked !== null && accepted !== null && compareRank(asked, accepted) <= 0;
+    }
+    case 'discipline':
+      return request.kind === 'discipline' && sameDestination(answer.to, request.to);
+    case 'mixite':
+      return request.kind === 'mixite';
+    case 'session':
+      return request.kind === 'session' && answer.to === request.to;
+    case 'missingWeight':
+      return false;
+  }
+}
+
+/** `info` : poids manquant, qui n'a pas de réponse (il se règle en saisissant le poids). */
+export type RequestStatus = 'pending' | 'granted' | 'info';
+
+export function withStatus(
+  requests: AuthorizationRequest[],
+  answers: StoredAnswer[],
+  grid: CategoryGrid,
+): (AuthorizationRequest & { status: RequestStatus; answeredAt: string | null })[] {
+  return requests.map((r) => {
+    if (r.situation.kind === 'missingWeight') return { ...r, status: 'info' as const, answeredAt: null };
+    const answer = answers.find((a) => a.registrationId === r.registrationId && a.kind === r.situation.kind);
+    return answer && answerCovers(answer.situation, r.situation, grid)
+      ? { ...r, status: 'granted' as const, answeredAt: answer.answeredAt }
+      : { ...r, status: 'pending' as const, answeredAt: null };
+  });
+}
