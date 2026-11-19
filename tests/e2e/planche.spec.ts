@@ -425,3 +425,47 @@ test('planche : barre épinglée ; la recherche défile jusqu’aux cartes et pa
   expect(await clipped(page)).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+test('planche : bac des combattants seuls épinglé sans dépasser l’écran, il défile seul et le glisser en part toujours', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe bac défilant');
+  const grid = (await (await request.get(`/api/competitions/${id}/grid`)).json()) as { weightClasses: { id: string; ageBandCode: string; sex: 'M' | 'F'; maxKg: number | null }[] };
+  const reg = async (lastName: string, w: { id: string; ageBandCode: string; sex: 'M' | 'F' }) => {
+    const res = await request.post(`/api/competitions/${id}/registrations`, {
+      data: { clubId: null, firstName: 'x', lastName, sex: w.sex, ageBandCode: w.ageBandCode, discipline: 'karate', ruleset: 'jiyu', weightClassId: w.id, source: 'manual' },
+    });
+    expect(res.ok(), await res.text()).toBeTruthy();
+  };
+  const target = grid.weightClasses.find((w) => w.id === 'cadet:F:-54')!;
+  for (const n of ['ALBA', 'BRUN']) await reg(n, target);
+  // 30 combattants seuls, chacun dans sa catégorie : le bac est bien plus haut que l'écran.
+  const lone = grid.weightClasses.filter((w) => w.maxKg !== null && w.id !== target.id).slice(0, 30);
+  expect(lone).toHaveLength(30);
+  for (const [i, w] of lone.entries()) await reg(`SEUL${String(i).padStart(2, '0')}`, w);
+
+  await page.setViewportSize({ width: 1280, height: 700 });
+  await page.goto(`/competitions/${id}/tableaux`);
+  const column = page.getByTestId('planche-lone-column');
+  await expect(page.getByTestId('planche-tray').getByTestId('planche-chip')).toHaveCount(30);
+  // Page défilée : la colonne épinglée sous la barre s'arrête au bas de l'écran.
+  await page.evaluate(() => window.scrollTo(0, 600));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  const box = await column.evaluate((el) => ({ bottom: el.getBoundingClientRect().bottom, scroll: el.scrollHeight, client: el.clientHeight, overflow: getComputedStyle(el).overflowY }));
+  expect(box.overflow).toBe('auto');
+  expect(box.bottom).toBeLessThanOrEqual(700);
+  expect(box.scroll).toBeGreaterThan(box.client);
+
+  // Le dernier du bac, atteint en faisant défiler le bac, se glisse sur une carte.
+  const last = page.getByTestId('planche-tray').getByTestId('planche-chip').filter({ hasText: 'SEUL29' });
+  await last.scrollIntoViewIfNeeded();
+  expect(await column.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  const c54 = card(page, (await (await request.get(`/api/competitions/${id}/categories`)).json() as { id: string; registrationIds: string[]; label: string }[])
+    .find((c) => c.label.includes('-54') && c.label.includes('Cadet'))!.id);
+  await last.dragTo(chip(page, c54, 'ALBA'));
+  await expect(page.getByTestId('drop-dialog')).toBeVisible();
+  await expect(page.getByTestId('drop-dialog')).toContainText('SEUL29 x');
+
+  // Téléphone : pas de hauteur limitée, la colonne passe au-dessus des cartes.
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await column.evaluate((el) => getComputedStyle(el).overflowY)).toBe('visible');
+});

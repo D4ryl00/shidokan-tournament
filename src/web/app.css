@@ -104,6 +104,10 @@
    page défilée. Téléphone : chaque rangée sur une ligne qui défile de côté (la recherche en tête), pour rester compact. */
 .sk-planche-bar { position: sticky; top: var(--sk-bar-h, 56px); z-index: 50; display: flex; flex-direction: column; gap: 8px; padding: 6px 0 8px; background: var(--sk-bg); transition: box-shadow .15s; }
 .sk-planche-bar[data-stuck] { box-shadow: 0 8px 10px -8px rgba(0, 0, 0, 0.35); }
+/* Combattants seuls (colonne de gauche, bureau à partir du point « md » de Mantine) : épinglés sans dépasser l'écran. */
+@media (min-width: 62em) {
+  .sk-lone-column { max-height: var(--sk-lone-max-h); overflow-y: auto; }
+}
 @media (max-width: 47.99em) {
   .sk-planche-bar .sk-planche-toolbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .sk-planche-bar .sk-planche-toolbar > * { flex-shrink: 0; }

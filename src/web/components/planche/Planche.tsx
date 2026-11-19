@@ -1,5 +1,5 @@
 import { Box, Grid, SimpleGrid, Stack, Text } from '@mantine/core';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { type Category } from '../../../domain/categories.js';
 import { DISCIPLINES, RULESETS } from '../../../domain/disciplines.js';
 import { normalizeName } from '../../../domain/names.js';
@@ -142,7 +142,9 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
       {banner}
       <Grid gutter="md">
         <Grid.Col span={{ base: 12, md: 3 }}>
-          <Box style={{ position: 'sticky', top: UNDER_PLANCHE_BAR }}>
+          {/* Colonne de bureau : épinglée, jamais plus haute que l'écran sous la barre (elle défile seule, glisser compris). */}
+          <Box className="sk-lone-column" data-testid="planche-lone-column"
+            style={{ position: 'sticky', top: UNDER_PLANCHE_BAR, '--sk-lone-max-h': `calc(100vh - ${UNDER_PLANCHE_BAR} - 8px)` } as CSSProperties}>
             <LoneTray competitionId={competitionId} items={loneItems} entrants={entrants} badges={badges} badgeDetails={badgeDetails} pendingAuth={pendingAuth} chipProps={readOnly ? undefined : chipProps} selectedChip={drag.selected} />
           </Box>
         </Grid.Col>
