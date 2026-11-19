@@ -141,10 +141,29 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   const names = useMemo(() => new Map([...entrants].map(([rid, e]) => [rid, e.name])), [entrants]);
   const listMatches = plancheMatches(filtered, { query: search, names });
   // La catégorie courante est choisie (son tableau s'affiche) et la liste défile jusqu'à elle.
+  const scrollToRow = (cid: string) =>
+    document.querySelector(`[data-testid="category-row"][data-category="${cid}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   const cycle = useSearchCycle(search, listMatches, (cid) => {
     setSelectedId(cid);
     setSwapFrom(null);
-    document.querySelector(`[data-testid="category-row"][data-category="${cid}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    scrollToRow(cid);
+  });
+  // Lien « Voir le tableau » ou « Ouvrir dans la liste » : seule la liste de gauche défile jusqu'à la catégorie (centrée),
+  // une fois affichée ; la page ne bouge pas, le titre du tableau reste en vue.
+  const centerInList = (cid: string) => {
+    const row = document.querySelector<HTMLElement>(`[data-testid="category-row"][data-category="${cid}"]`);
+    const box = row?.closest<HTMLElement>('.mantine-ScrollArea-viewport');
+    if (!row || !box) return;
+    const r = row.getBoundingClientRect(), b = box.getBoundingClientRect();
+    box.scrollTop += r.top - b.top - (b.height - r.height) / 2;
+  };
+  const pendingScroll = useRef<string | null>(null);
+  useEffect(() => {
+    const cid = pendingScroll.current;
+    if (!cid || view !== 'liste' || cid !== selectedId) return;
+    if (!document.querySelector(`[data-testid="category-row"][data-category="${cid}"]`)) return;
+    pendingScroll.current = null;
+    centerInList(cid);
   });
   const listMatchSet = new Set(listMatches);
   const waiting = categories.filter((c) => c.waveId === null).length;
@@ -201,6 +220,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
     if (!c) return;
     if (!inScope(c)) setScope('all');
     setSelectedId(c.id);
+    pendingScroll.current = c.id;
     const started = c.status === 'started' || c.status === 'finished';
     if (f.combattant && !started && !readOnlyPoste && c.registrationIds.includes(f.combattant)) setSwapFrom(f.combattant);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -209,6 +229,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
     const c = categories.find((x) => x.id === cid);
     if (c && !inScope(c)) setScope('all');
     setSelectedId(cid); setSwapFrom(null); setView('liste');
+    pendingScroll.current = cid;
   };
 
   const viewSwitch = (

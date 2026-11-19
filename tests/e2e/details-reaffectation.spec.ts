@@ -89,9 +89,13 @@ test('carte : détails De et Vers, fiches, tableau, galaxie et copie pour le clu
   const href = (await bracketLink.getAttribute('href'))!;
   expect(href).toMatch(/vue=liste&categorie=/);
   const tab = await page.context().newPage();
+  await tab.setViewportSize({ width: 1280, height: 520 }); // liste courte : la catégorie doit y être amenée
   await tab.goto(href);
   await expect(tab.getByTestId('category-row').first()).toBeVisible();
-  await expect(tab.locator('[data-testid="category-row"][aria-current="true"]')).toContainText('Minimes F');
+  const chosen = tab.locator('[data-testid="category-row"][aria-current="true"]');
+  await expect(chosen).toContainText('Minimes F');
+  await expect(chosen).toBeInViewport();
+  await tab.close();
 
   // « Copier pour le club ».
   await proposal.getByTestId('move-copy').click();
