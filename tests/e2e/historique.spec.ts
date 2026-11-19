@@ -119,7 +119,7 @@ test('tiroir de la Liste utilisable, suppression d’un tableau libre avec sa ca
 });
 
 test('historique illisible : message d’erreur au lieu d’un chargement sans fin, « Réessayer » le recharge', async ({ page, request }) => {
-  const id = await createCompetition(page, 'Coupe journal illisible');
+  const id = await createCompetition(page, 'Historique illisible');
   await seed(request, id);
   let failing = true;
   await page.route(`**/api/competitions/${id}/history**`, (route) =>
