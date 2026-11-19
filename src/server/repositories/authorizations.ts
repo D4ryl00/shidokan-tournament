@@ -16,7 +16,7 @@ import { subjectOf } from '../../domain/journal/fighter-diff.js';
 import { memberWave, type State } from '../../domain/replacement/index.js';
 import { atomically } from '../db/atomic.js';
 import type { AppDb } from '../db/client.js';
-import { authorizationAnswers, clubs, registrations } from '../db/schema.js';
+import { authorizationAnswers, clubs, recasements, registrations } from '../db/schema.js';
 import { markJournalHandled } from '../journal/context.js';
 import { fighterSnapshot } from '../journal/fighters.js';
 import { recordJournal } from '../journal/write.js';
@@ -72,6 +72,19 @@ export function blameMoves(entries: Loaded[]): BlameMove[] {
 }
 
 /**
+ * Par entrée de l'historique : les propositions de ses réaffectations que « Refusée… » refuse après l'annulation, pour que le plan
+ * ne les propose plus. Un déplacement à la main (`M:`) ou « Ne combat pas » (`W:`) n'est jamais proposé : rien à refuser.
+ */
+function refusableProposals(db: AppDb, competitionId: string, entries: Loaded[]): Map<string, string[]> {
+  const proposalOf = new Map(
+    db.select({ id: recasements.id, proposalId: recasements.proposalId }).from(recasements).where(eq(recasements.competitionId, competitionId)).all()
+      .map((r) => [r.id, r.proposalId]),
+  );
+  const refusable = (p: string | undefined): p is string => p !== undefined && !p.startsWith('M:') && !p.startsWith('W:');
+  return new Map(entries.map((e) => [e.id, e.recasementIds.map((id) => proposalOf.get(id)).filter(refusable)]));
+}
+
+/**
  * Demandes aux coachs de la session `waveParam` (absente : toutes ; inconnue : 404), d'après la session actuelle du combattant,
  * avec leur réponse, regroupées par club (ordre alphabétique français, « Sans club » en dernier) ; `pending` : demandes en attente.
  */
@@ -83,6 +96,7 @@ export async function authorizationList(db: AppDb, competitionId: string, wavePa
   const inScope = (r: AuthorizationRequest) => waveId === null || memberWave(state, members.get(r.registrationId)!) === waveId;
   const rows = withStatus(authorizationRequests(state, blameMoves(entries)).filter(inScope), listAnswers(db, competitionId), state.grid);
   const clubRows = new Map(db.select().from(clubs).where(eq(clubs.competitionId, competitionId)).all().map((c) => [c.id, c]));
+  const proposalsOf = refusableProposals(db, competitionId, entries);
   const groups = new Map<string | null, AuthorizationClub>();
   // Les demandes arrivent triées par combattant dans chaque club : l'ordre est gardé.
   for (const r of rows) {
@@ -90,7 +104,10 @@ export async function authorizationList(db: AppDb, competitionId: string, wavePa
     const group = groups.get(r.clubId) ?? { clubId: r.clubId, name: r.clubId ? (club?.name ?? '—') : NO_CLUB, preApproval: club?.preApproval ?? false, requests: [] };
     groups.set(r.clubId, group);
     const member = members.get(r.registrationId)!;
-    group.requests.push({ ...r, label: member.label, fighterId: member.fighterId, blocked: r.blame.map(blocked).find((b) => b !== null) ?? null });
+    group.requests.push({
+      ...r, label: member.label, fighterId: member.fighterId, blocked: r.blame.map(blocked).find((b) => b !== null) ?? null,
+      blameProposalIds: [...new Set(r.blame.flatMap((id) => proposalsOf.get(id) ?? []))],
+    });
   }
   const sorted = [...groups.values()].sort((a, b) => (a.clubId === null ? 1 : 0) - (b.clubId === null ? 1 : 0) || a.name.localeCompare(b.name, 'fr'));
   return { clubs: sorted, pending: rows.filter((r) => r.status === 'pending').length };

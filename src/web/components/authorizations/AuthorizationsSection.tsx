@@ -4,7 +4,7 @@ import { Link } from 'react-router';
 import { AUTHORIZATION_KIND_LABELS, gapText, type AnswerableKind, type AuthorizationClub, type AuthorizationRow } from '../../../domain/authorizations.js';
 import { allClubsMessage, byFighter, clubMessage, messageRows } from '../../../domain/authorizations-text.js';
 import { plural } from '../../../domain/plural.js';
-import { useAuthorizations, useGrantAuthorization, useUngrantAuthorization } from '../../api.js';
+import { useAuthorizations, useGrantAuthorization, useRefuseProposal, useUngrantAuthorization } from '../../api.js';
 import { copyWithNotice } from '../../clipboard.js';
 import { usePoste } from '../../poste.js';
 import { withSession } from '../../useSelectedWave.js';
@@ -36,6 +36,12 @@ function Authorizations({ competitionId, waveId }: { competitionId: string; wave
   const grant = useGrantAuthorization(competitionId);
   const ungrant = useUngrantAuthorization(competitionId);
   const { requestUndoDialog } = useUndoDialog();
+  const refuse = useRefuseProposal(competitionId);
+  /** Après l'annulation, les propositions défaites sont refusées comme sur leur carte : le plan ne les repropose plus. */
+  const refuseMoves = (proposalIds: string[]) =>
+    void (async () => {
+      for (const proposalId of proposalIds) await refuse.mutateAsync({ proposalId });
+    })().catch(() => {}); // erreur affichée par `refuse.error`
   const [onlyPending, setOnlyPending] = useState(true);
   const clubs = data?.clubs ?? [];
   const toCopy = clubs.map((c) => ({ ...messageClub(c), rows: messageRows(c.requests) }));
@@ -62,7 +68,7 @@ function Authorizations({ competitionId, waveId }: { competitionId: string; wave
           </Button>
           {r.blame.length > 0 ? (
             <Button size="compact-sm" color="red" variant="subtle" data-testid="auth-refuse" disabled={r.blocked !== null} title={r.blocked ?? undefined}
-              onClick={() => requestUndoDialog(r.blame)}>
+              onClick={() => requestUndoDialog(r.blame, { onUndone: () => refuseMoves(r.blameProposalIds) })}>
               Refusée…
             </Button>
           ) : (
@@ -130,7 +136,7 @@ function Authorizations({ competitionId, waveId }: { competitionId: string; wave
           </Button>
         </Group>
       )}>
-      <ApiErrorAlert error={error ?? grant.error ?? ungrant.error} />
+      <ApiErrorAlert error={error ?? grant.error ?? ungrant.error ?? refuse.error} />
       {!data && !error && <Loader size="sm" />}
       {data && clubs.length === 0 && (
         <EmptyState icon="✓" title="Aucune autorisation à demander" text="Aucun combattant ne demande l’accord de son club ni son poids : rien à envoyer." />

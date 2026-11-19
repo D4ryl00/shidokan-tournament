@@ -373,6 +373,8 @@ export type AuthorizationRow = AuthorizationRequest & {
   fighterId: string;
   /** Motif pour lequel les déplacements en cause ne peuvent pas être annulés (celui de l'historique), ou `null`. */
   blocked: string | null;
+  /** Propositions des déplacements en cause (hors déplacements à la main et « Ne combat pas ») : refusées par « Refusée… ». */
+  blameProposalIds: string[];
 };
 
 /** Demandes d'un club : clubs par nom, « Sans club » en dernier. */

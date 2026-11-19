@@ -108,3 +108,25 @@ test('avec les déplacements à valider : état changé depuis l’affichage, 40
   expect((await applyAll([], shown)).statusCode).toBe(409);
   expect(await recasements()).toEqual([]);
 });
+
+test('« Refusée… » : déplacements en cause annulés puis leurs propositions refusées, le plan suivant ne les propose plus', async () => {
+  const mini = await seed();
+  const shown = await plan();
+  const m = shown.plan.moves.find((x) => x.registrationId === mini.id)!;
+  expect((await applyAll([], shown)).json()).toEqual({ applied: 2 });
+  type Row = { registrationId: string; situation: { kind: string }; blame: string[]; blameProposalIds: string[] };
+  const rows = (await (await call('GET', '/authorizations')).json() as { clubs: { requests: Row[] }[] }).clubs.flatMap((c) => c.requests);
+  const age = rows.find((r) => r.registrationId === mini.id && r.situation.kind === 'age')!;
+  expect(age.blameProposalIds).toContain(m.id);
+  expect(age.blameProposalIds.every((id) => !id.startsWith('M:') && !id.startsWith('W:'))).toBe(true);
+  // L'annulation seule ne suffit pas : le plan, déterministe, repropose le même déplacement.
+  const { entries } = (await call('GET', '/history')).json() as { entries: { id: string; cascade: string[] }[] };
+  const shownBatch = [...new Set(age.blame.flatMap((id) => [id, ...(entries.find((e) => e.id === id)?.cascade ?? [])]))];
+  expect((await call('POST', '/history/undo', { ids: age.blame, expect: shownBatch })).statusCode).toBe(200);
+  expect((await plan()).plan.moves.map((x) => x.id)).toContain(m.id);
+  // Les refus de « Refusée… » (POST /replacement/refuse, comme sur les cartes) : le déplacement ne revient plus.
+  for (const proposalId of age.blameProposalIds) expect((await call('POST', '/replacement/refuse', { proposalId })).statusCode).toBe(200);
+  const next = await plan();
+  expect(next.plan.moves.map((x) => x.id)).not.toContain(m.id);
+  expect(next.plan.moves.some((x) => x.registrationId === mini.id && x.id === m.id)).toBe(false);
+});

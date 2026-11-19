@@ -205,3 +205,34 @@ test('autorisations : ⏳ sur la puce du combattant (planche, galaxie, liste) ta
   await expect(chip(page, karate)).toHaveCount(0);
   await expect(card.getByTestId('auth-pending-count')).toHaveCount(0);
 });
+
+test('autorisations : « Refusée… » sur un déplacement du plan, refusé pour de bon : le plan suivant ne le repropose plus', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe autorisations refus du plan');
+  // Deux cadettes seules (−47, −54) et une minime seule : le plan les réunit, la minime monte chez les cadettes (à valider).
+  const reg = async (lastName: string, ageBandCode: string, weightClassId: string, approxWeightKg: number) =>
+    ((await (await request.post(`/api/competitions/${id}/registrations`, {
+      data: { clubId: null, lastName, firstName: 'Léa', sex: 'F', ageBandCode, discipline: 'karate', ruleset: 'jiyu', weightClassId, approxWeightKg, source: 'manual' },
+    })).json()) as { row: { id: string } }).row.id;
+  await reg('CADA', 'cadet', 'cadet:F:-47', 46);
+  await reg('CADB', 'cadet', 'cadet:F:-54', 49);
+  const mini = await reg('MINI', 'minime', 'minime:F:-45', 45);
+  type Plan = { plan: { moves: { id: string; registrationId: string }[]; hash: string }; fingerprint: string };
+  const plan = async () => (await (await request.post(`/api/competitions/${id}/replacement/plan`, { data: { choices: [] } })).json()) as Plan;
+  const shown = await plan();
+  const move = shown.plan.moves.find((m) => m.registrationId === mini)!;
+  expect(move).toBeDefined();
+  const applied = await request.post(`/api/competitions/${id}/replacement/plan/apply`, { data: { choices: [], withToValidate: true, fingerprint: shown.fingerprint, hash: shown.plan.hash } });
+  expect(applied.ok(), await applied.text()).toBeTruthy();
+
+  await page.goto(`/competitions/${id}/reaffectation`);
+  const age = section(page).getByTestId('auth-request').filter({ hasText: 'Âge' });
+  await expect(age).toHaveCount(1);
+  await age.getByTestId('auth-refuse').click();
+  const dialog = page.getByTestId('undo-dialog');
+  await expect(dialog).toContainText('MINI');
+  const refused = page.waitForResponse((r) => r.url().endsWith('/replacement/refuse') && r.request().method() === 'POST');
+  await dialog.getByTestId('undo-confirm').click();
+  expect((await refused).ok()).toBeTruthy();
+  await expect(section(page).getByTestId('auth-request')).toHaveCount(0);
+  await expect.poll(async () => (await plan()).plan.moves.map((m) => m.id)).not.toContain(move.id);
+});
