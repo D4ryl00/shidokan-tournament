@@ -300,3 +300,16 @@ test('finale avancée puis effacée', () => {
   const cleared = buildTimeline(input({ waves: [wave('s1', h(9, 0))], zones: zones(null) }));
   expect(['1', '2', '3', '4'].map((k) => cleared.starts.get(k))).toEqual([h(9, 6), h(9, 12), h(9, 18), h(9, 24)]);
 });
+
+test('zone floor: the zone cursor starts no earlier than its floor, other zones keep the session start', () => {
+  const t = buildTimeline(input({
+    waves: [{ ...wave('s1', h(9, 0)), zoneFloors: { z1: h(9, 30) } }],
+    zones: [{ zoneId: 'z1', items: [item('a', 's1', 300), item('b', 's1', 300)] }, { zoneId: 'z2', items: [item('c', 's1', 300)] }],
+  }));
+  expect(t.starts.get('a')).toBe(h(9, 30));
+  expect(t.starts.get('b')).toBe(h(9, 36));
+  expect(t.starts.get('c')).toBe(h(9, 0));
+  // Un plancher avant le début ne change rien.
+  const early = buildTimeline(input({ waves: [{ ...wave('s1', h(9, 0)), zoneFloors: { z1: h(8, 0) } }], zones: [{ zoneId: 'z1', items: [item('a', 's1', 300)] }] }));
+  expect(early.starts.get('a')).toBe(h(9, 0));
+});

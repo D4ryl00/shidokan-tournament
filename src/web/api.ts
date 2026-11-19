@@ -30,6 +30,7 @@ import type { JournalEntryView, JournalType } from '../domain/journal/types.js';
 import type { PassagePlan } from '../domain/passages/index.js';
 import type { WaveSchedule } from '../domain/schedule/types.js';
 import type { CategoryDurations } from '../domain/schedule/durations.js';
+import type { DayEstimateView } from '../domain/schedule/estimate.js';
 
 import { ApiError, TAB_ID } from './apiError.js';
 import { posteHeader } from './poste.js';
@@ -328,7 +329,8 @@ export function useSetWaveSchedule(id: string) {
   return useMutation({
     mutationFn: (body: { waveId: string | null; plannedStart?: string | null; actualStart?: string | null; finalsStart?: string | null }) =>
       api<WaveSchedule>('PUT', `/api/competitions/${id}/wave-schedules`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['wave-schedules', id] }),
+    // Le début prévu d'une session déplace aussi les horaires estimés (`useDayEstimate`).
+    onSuccess: () => Promise.all(['wave-schedules', 'schedule'].map((k) => qc.invalidateQueries({ queryKey: [k, id] }))),
   });
 }
 /** Tableaux libres (étape 37) : création sans révision, modification et suppression avec celle de la catégorie. */
@@ -854,6 +856,17 @@ export function useSchedule(id: string, waveId?: string | null, enabled = true) 
   });
 }
 
+/**
+ * Horaires estimés de la journée (toutes les sessions, lancées ou non) ; `shift` : « Décaler une session qui commence avant
+ * la fin de la précédente ». Sous « schedule » : relue avec les files (catégories, durées, sessions, pesée, autres postes).
+ */
+export function useDayEstimate(id: string, shift: boolean) {
+  return useQuery({
+    queryKey: ['schedule', id, 'estimate', shift],
+    queryFn: () => api<DayEstimateView>('GET', `/api/competitions/${id}/schedule/estimate?decaler=${shift ? 1 : 0}`),
+  });
+}
+
 // --- Zones autonomes : journaux reçus et cartes « À trancher » (étape 21) ---
 
 export interface JournalReport { received: number; applied: number; present: number; conflicts: number; waiting: number; alreadyReceived: number }
@@ -1012,6 +1025,7 @@ export function useSaveWaves(id: string) {
       void qc.invalidateQueries({ queryKey: ['waves', id] });
       void qc.invalidateQueries({ queryKey: ['categories', id] });
       void qc.invalidateQueries({ queryKey: ['weigh-in', id] });
+      void qc.invalidateQueries({ queryKey: ['schedule', id] });
     },
   });
 }

@@ -19,8 +19,18 @@ export interface TimelineItem {
 export interface TimelineInput {
   now: number | null;
   changeoverSec: number;
-  /** Sessions lancées, dans l'ordre ; `finalsZoneId` : zone des finales de la session (null : aucune). */
-  waves: { key: string; plannedStart: number | null; actualStart: number | null; finalsStart: number | null; finalsZoneId: string | null }[];
+  /**
+   * Sessions lancées, dans l'ordre ; `finalsZoneId` : zone des finales de la session (null : aucune) ; `zoneFloors` : heure
+   * avant laquelle le curseur d'une zone ne part pas (estimation de la journée : fin de la session précédente sur la zone).
+   */
+  waves: {
+    key: string;
+    plannedStart: number | null;
+    actualStart: number | null;
+    finalsStart: number | null;
+    finalsZoneId: string | null;
+    zoneFloors?: Record<string, number>;
+  }[];
   /** Passages de chaque zone dans l'ordre de la file, toutes sessions mêlées. */
   zones: { zoneId: string; items: TimelineItem[] }[];
 }
@@ -84,7 +94,7 @@ export function buildTimeline(input: TimelineInput): Timeline {
     const early = new Set<string>();
     const floor = new Map<string, number>();
     for (const l of lines) {
-      cursor.set(l.zoneId, begin);
+      cursor.set(l.zoneId, begin === null ? null : Math.max(begin, w.zoneFloors?.[l.zoneId] ?? -Infinity));
       lastEnd.set(l.zoneId, null);
       const order = playedOrder(l.items);
       order.early.forEach((k) => early.add(k));

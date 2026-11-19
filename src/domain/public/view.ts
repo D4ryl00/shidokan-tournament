@@ -1,6 +1,6 @@
 import { resolveBracket, type Bracket, type Entrant, type KataScores, type Match, type MatchResult, type Podium, type ResolvedMatch, type SlotSource } from '../brackets/index.js';
 import { activeEntrantCount, type Category } from '../categories.js';
-import { finalMatchIds, waveKey, type PassagePlan } from '../passages/index.js';
+import { finalMatchIds, isFinalPassage, waveKey, type PassagePlan } from '../passages/index.js';
 import { ageGroupOf, combatTiming, fightSeconds, kataPassages, type ScheduleSettings } from '../schedule/durations.js';
 import type { WaveSchedule } from '../schedule/types.js';
 import type { CategoryGrid } from '../types.js';
@@ -309,8 +309,7 @@ export function toPublicCompetition(src: PublicSource): PublicCompetition {
         const st = states.get(p.categoryId)!;
         const bracket = bracketOf.get(p.categoryId)!;
         // Passage de finale (un bloc de kata entier n'en est pas une à part) : quand se joue la finale de sa catégorie.
-        const isFinal = p.matchId === 'kata:finale' || (bracket.kind === 'combat' && p.matchId !== null && finalMatchIds(bracket).includes(p.matchId));
-        const finals = isFinal ? (src.plan.finals[p.categoryId]?.when ?? null) : null;
+        const finals = isFinalPassage(bracket, p.matchId) ? (src.plan.finals[p.categoryId]?.when ?? null) : null;
         const base = { number: p.number, categoryId: p.categoryId, waveId: p.waveId, finals };
         // Bloc de kata, comme dans la file de l'organisation : terminé avec la catégorie (ou le tour 1 noté).
         if (p.matchId === null || p.matchId.startsWith('kata:')) {

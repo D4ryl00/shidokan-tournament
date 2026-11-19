@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
 import { checkRev, kataRev, resultRev, tieBreakRev } from '../revisions.js';
 import { getCompetition } from '../repositories/competitions.js';
+import { estimateFor } from '../repositories/estimate.js';
 import { passagePlan } from '../repositories/passages.js';
 import { deleteResult, exportPodiums, exportResults, getResults, podiums, putKataNotes, putResult, putTieBreak, schedule } from '../repositories/results.js';
 
@@ -42,6 +43,10 @@ export async function resultRoutes(app: FastifyInstance, { db }: { db: AppDb }) 
     return reply.status(204).send();
   });
   app.get<{ Params: { id: string }; Querystring: { vague?: string } }>('/api/competitions/:id/schedule', async (req) => schedule(db, req.params.id, req.query.vague || undefined));
+  // Horaires estimés de la journée ; « decaler » (défaut 1) : une session ne commence pas avant la fin de la précédente.
+  app.get<{ Params: { id: string }; Querystring: { decaler?: string } }>('/api/competitions/:id/schedule/estimate', async (req) =>
+    estimateFor(db, req.params.id, z.enum(['0', '1']).default('1').parse(req.query.decaler) === '1'),
+  );
   app.get<{ Params: { id: string } }>('/api/competitions/:id/passages', async (req) => passagePlan(db, req.params.id));
   app.get<{ Params: { id: string } }>('/api/competitions/:id/podiums', async (req) => {
     const { categories, medals } = await podiums(db, req.params.id);
