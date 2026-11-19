@@ -14,7 +14,7 @@
 
 - Branche `etape-45-autorisations-horaires` depuis `main` ; commits conventionnels en français (`feat(reaffectation): …`).
 - Interface en français ; composants de `src/web/components/ui/` ; jetons `--sk-*` ; clair et sombre ; largeur téléphone sans défilement horizontal (helper e2e `clipped()`).
-- Seuil de poids de l'organisateur : **> 5 kg** demande un accord, **5 kg exactement : rien** (comparaison sur la valeur exacte ; affichage arrondi **au dixième supérieur**, `Math.ceil(gap * 10) / 10`, pour ne jamais afficher « 5,0 kg » pour 5,04).
+- Seuil de poids de l'organisateur : l'écart est d'abord **arrondi au dixième selon la règle mathématique** (`Math.round(gap * 10) / 10` : 5,04 → 5,0 ; 5,05 → 5,1), puis comparé : **> 5 kg** demande un accord, **5 kg (arrondi) : rien**. Affichage sans « ,0 » inutile : 5,0 → « 5 kg », 7,25 → « 7,3 kg » (décision de l'organisateur, 2026-11-19).
 - Le pré-accord du club et les choix de la fiche (autres disciplines, Shobu → Jiyu) **ne dispensent d'aucune demande**.
 - Toute nouvelle route d'écriture : `src/server/journal/coverage.ts` (COVERED avec `recordJournal`, ou EXEMPT si c'est un calcul), `src/server/auth/permissions.ts` (Organisation et Table centrale, pas Zone), test `tests/server/journal-coverage.test.ts` vert.
 - Nouvelle table : migration `drizzle/0039_*.sql` + snapshot/journal drizzle (`npm run db:generate`), `src/server/sync/package.ts` (liste des tables), sauvegardes (vérifier `tests/server/backups.test.ts`), versions de lignes automatiques (vérifier `tests/server/row-versions.test.ts`), test de migration `tests/server/migration-0039.test.ts`.
@@ -24,7 +24,7 @@
 
 ## Review Focus
 
-1. **Écart pile à 5 kg / 5,04 kg** : 5 → aucune demande ; 5,04 → demande affichée « 5,1 kg maximum ». Test dans la tâche 1.
+1. **Écart près de 5 kg** : 5 et 5,04 (arrondi 5) → aucune demande ; 5,05 (arrondi 5,1) → demande affichée « 5,1 kg maximum ». Test dans la tâche 1.
 2. **Combattant inscrit dans deux disciplines** : demandes par inscription, la discipline écrite dans chaque ligne ; pas de doublon par combattant. Test dans les tâches 1 et 4.
 3. **Adversaire marqué absent après coup** (pesée, clôture) : la demande qu'il créait disparaît ; une réponse ancienne ne réapparaît pas en ⏳. Test dans la tâche 3.
 4. **Accord donné puis pesée qui creuse l'écart** (7 kg accepté, 9 kg réel) : la demande redevient ⏳ avec 9 kg. Test dans la tâche 2.
@@ -64,14 +64,15 @@ export interface AuthorizationRequest {
   blame: string[];            // ids d'entrées d'historique, plus récente d'abord
 }
 export function authorizationRequests(state: State, moves: BlameMove[]): AuthorizationRequest[];
-export function displayGap(gapKg: number): number; // Math.ceil(gap*10)/10
+export function roundGap(gapKg: number): number;   // Math.round(gap*10)/10, utilisé pour comparer ET afficher
+export function gapText(gapKg: number): string;    // « 5 kg », « 7,3 kg »
 ```
 
 Règles (décidées ici, à appliquer telles quelles) :
 - Groupe = membres actifs (`activeMembers`) d'une catégorie ; catégorie à < 2 actifs : aucune demande.
 - **Rang d'âge** (« plus fort ») : mineurs par `minAge` croissant ; tout adulte au-dessus de tout mineur ; parmi les adultes, Espoirs et Seniors (minAge < 35) au même rang, le plus haut ; puis Vétérans 1 > Vétérans 2 > … (`minAge` décroissant). Demande `age` pour un combattant face à au moins un adversaire de rang strictement plus fort ; `strongerBands` = codes de ces tranches, triés.
 - **Catégorie de poids de référence** : `weighInClass(m, state)` si pesé, sinon `original?.weightClassId ?? weightClassId`. Rang : `maxKg` ; une catégorie ouverte (`maxKg === null`) est au-dessus de toute catégorie bornée ; deux ouvertes se comparent par leur seuil (le plus grand `maxKg` des catégories bornées de leur tranche et sexe). Même `maxKg` dans deux tranches = même rang.
-- Face à des adversaires de catégorie de poids strictement supérieure : `gapKg` = max(`effectiveWeight(adv)` − `effectiveWeight(m)`) sur ces adversaires. Si `m` n'a ni pesée ni poids déclaré → demande `missingWeight` ; en plus, `weight` si `gapKg > 5`. Sinon `weight` si `gapKg > 5`.
+- Face à des adversaires de catégorie de poids strictement supérieure : `gapKg` = `roundGap`(max(`effectiveWeight(adv)` − `effectiveWeight(m)`)) sur ces adversaires (valeur arrondie enregistrée et comparée). Si `m` n'a ni pesée ni poids déclaré → demande `missingWeight` ; en plus, `weight` si `gapKg > 5` (arrondi). Sinon `weight` si `gapKg > 5` (arrondi).
 - `discipline` : discipline ou règlement actuels ≠ `original` (si `original` non nul).
 - `mixite` : le groupe actif compte des F et des M → une demande pour **chaque** membre.
 - `session` (seulement si `state.waves.length > 0`) : `keyWave(state, naturalKey(<valeurs d'origine>))` ≠ `memberWave(state, m)`.
@@ -89,7 +90,9 @@ test('−60 déclaré 57 face à −67 déclaré 64 : poids 7 kg pour le plus l�
 test('Minime −50 sans poids reçoit une Benjamine +50 : missingWeight, pas d’âge', …)
 test('vétéran avec des seniors : âge pour le vétéran, rien pour les seniors', …)
 test('Espoir avec Seniors : pas de demande d’âge', …)
-test('écart 5,04 kg : demande, displayGap = 5.1', …)
+test('écart 5,04 kg : arrondi 5, aucune demande', …)
+test('écart 5,05 kg : arrondi 5,1, demande « 5,1 kg »', …)
+test('gapText : 5 → « 5 kg », 7,25 → « 7,3 kg »', …)
 test('groupe mixte : une demande mixite par membre', …)
 test('changement de session : session, du blâme du combattant seul', …)
 test('adversaire absent : ignoré', …)
@@ -98,7 +101,7 @@ test('deux inscriptions du même combattant : demandes par inscription', …)
 ```
 
 - [ ] **Step 2:** `npx vitest run tests/domain/authorizations.test.ts` → FAIL (module absent).
-- [ ] **Step 3:** Implémenter `authorizationRequests` et `displayGap` dans `src/domain/authorizations.ts` ; textes `current` / `proposed` / `bullet` en français dans l'esprit de la skill (« Passage des benjamines à un groupe commun Benjamines–Minimes en karaté. », « Écart de poids estimé avec ses adversaires : 7 kg maximum. », « Merci d'indiquer son poids en kg pour vérifier que l'écart réel ne dépasse pas 5 kg. », « Groupe mixte filles et garçons. », « Passage de la session Matin à la session Après-midi. »). Tester au moins une phrase par type.
+- [ ] **Step 3:** Implémenter `authorizationRequests` `roundGap` et `gapText` dans `src/domain/authorizations.ts` ; textes `current` / `proposed` / `bullet` en français dans l'esprit de la skill (« Passage des benjamines à un groupe commun Benjamines–Minimes en karaté. », « Écart de poids estimé avec ses adversaires : 7 kg maximum. », « Merci d'indiquer son poids en kg pour vérifier que l'écart réel ne dépasse pas 5 kg. », « Groupe mixte filles et garçons. », « Passage de la session Matin à la session Après-midi. »). Tester au moins une phrase par type.
 - [ ] **Step 4:** `npx vitest run tests/domain/authorizations.test.ts` → PASS ; `npm run typecheck` → 0 erreur.
 - [ ] **Step 5:** Commit `feat(autorisations): calcul des demandes aux coachs (domaine)`.
 

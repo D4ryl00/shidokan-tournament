@@ -96,7 +96,7 @@ Règles de calcul (reprises de la skill et de sa référence) :
 Chaque demande porte :
 - **Ce qui est demandé** (texte), et la **situation** à laquelle elle répond :
   - `age` : sa tranche → tranches plus âgées présentes (ex. « Benjamins → groupe Benjamins–Minimes ») ;
-  - `weight` : catégorie d'origine, catégorie la plus lourde en face, écart maximal estimé (arrondi au dixième) ;
+  - `weight` : catégorie d'origine, catégorie la plus lourde en face, écart maximal estimé (arrondi au dixième selon la règle mathématique, puis comparé à 5 kg : 5,04 → 5 → rien) ;
   - `discipline` : discipline/règlement d'origine → actuels ;
   - `mixite` : présence de l'autre sexe dans le groupe ;
   - `session` : session d'origine → session actuelle.
@@ -240,6 +240,8 @@ Choix du rédacteur (à corriger si besoin) :
 - les réponses ne gardent que « Accordée » (un refus défait, rien à garder) ;
 - l'historique garde la vue enregistrée au moment de l'action, pas recalculée (§7.5).
 
-Laissé au constructeur : arrondis près de 5 kg (afficher au dixième, comparer sur la valeur exacte), mise en forme exacte du
+Arrondi (décision de l'organisateur) : écart arrondi au dixième selon la règle mathématique, et c'est la valeur arrondie qui est comparée à 5 kg et affichée (5,04 → « 5 kg », pas de demande).
+
+Laissé au constructeur : mise en forme exacte du
 texte copié (dans l'esprit de la skill), placement exact de la barre épinglée, détails de synchronisation et de versions de
 lignes, découpage du calcul des horaires entre domaine et serveur.
