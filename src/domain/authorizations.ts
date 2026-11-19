@@ -125,12 +125,16 @@ const waveName = (state: State, id: string) => state.waves.find((w) => w.id === 
 
 // --- Calcul ------------------------------------------------------------------------------------------------------
 
-/** Session de la catégorie d'origine : choix individuel de la catégorie qui porte cette clé, sinon les règles. */
+/**
+ * Session de la catégorie d'origine : choix individuel d'une catégorie dont la clé est exactement la clé d'origine (non
+ * fusionnée), sinon les règles. Le choix d'un groupe fusionné (clé d'origine dans `aliasKeys` seulement) est sa session
+ * actuelle, pas celle d'origine.
+ */
 function originWave(state: State, m: Member): string | null {
   const o = originOf(m);
   const key = naturalKey(o, m);
   const ks = keyString(key);
-  const cat = state.categories.find((c) => keyString(c.key) === ks || c.aliasKeys.includes(ks));
+  const cat = state.categories.find((c) => keyString(c.key) === ks);
   return waveOfCategory({ key, waveOverride: cat?.waveOverride ?? null }, state.waves, state.grid);
 }
 
