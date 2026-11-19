@@ -167,3 +167,34 @@ test('autorisations : sans déplacement à défaire, « Déplacer à la main ↗
   expect(text).toContain('Voici les points à valider pour vos combattants :');
   expect(text).toContain('1. LEGERE Léa\n   - Écart de poids estimé avec ses adversaires : 8 kg maximum.');
 });
+
+test('autorisations : ⏳ sur la puce du combattant (planche, galaxie, liste) tant que la demande est en attente', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe autorisations pastilles');
+  const { karate, boxing } = await seed(request, id);
+  const cats = await categories(request, id);
+  const minimesK = cats.find((c) => c.registrationIds.includes(karate))!;
+  const chip = (pageOrCard: Page, reg: string) => pageOrCard.locator(`[data-testid="planche-chip-wrap"]:has([data-entrant="${reg}"])`).getByTestId('auth-pending');
+
+  await page.goto(`/competitions/${id}/tableaux?vue=planche`);
+  await expect(chip(page, karate)).toHaveText('⏳');
+  await expect(chip(page, karate)).toHaveAttribute('title', /Passage des benjamines à un groupe commun Benjamines–Minimes en karaté\./);
+  // Les minimes n'ont rien à demander : une seule puce ⏳ par carte, et le décompte sur la carte.
+  const card = page.locator(`[data-testid="planche-card"][data-category="${minimesK.id}"]`);
+  await expect(card.getByTestId('auth-pending')).toHaveCount(1);
+  await expect(card.getByTestId('auth-pending-count')).toHaveText('1 autorisation en attente');
+
+  // Liste : la case du combattant porte aussi ⏳.
+  await page.goto(`/competitions/${id}/tableaux?vue=liste&categorie=${minimesK.id}`);
+  await expect(page.locator(`[data-testid="bracket-entrant"][data-entrant="${karate}"]`).getByTestId('auth-pending').first()).toHaveText('⏳');
+
+  // Galaxie : la carte compacte aussi.
+  await page.goto(`/competitions/${id}/tableaux?vue=galaxie&categorie=${minimesK.id}`);
+  await expect(page.getByTestId('auth-pending').first()).toBeVisible();
+
+  // « Accordée » : ⏳ disparaît (karaté seulement ; shido-boxing reste en attente).
+  expect((await request.post(`/api/competitions/${id}/authorizations/grant`, { data: { registrationId: karate, kind: 'age' } })).ok()).toBeTruthy();
+  await page.goto(`/competitions/${id}/tableaux?vue=planche`);
+  await expect(chip(page, boxing)).toHaveText('⏳');
+  await expect(chip(page, karate)).toHaveCount(0);
+  await expect(card.getByTestId('auth-pending-count')).toHaveCount(0);
+});

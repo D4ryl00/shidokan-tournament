@@ -16,6 +16,7 @@ import type { Category } from '../../domain/categories.js';
 import type { ProposalType } from '../../domain/replacement/index.js';
 import type { RecasementEntry } from '../api.js';
 import { ReplacementBadge } from './ReplacementBadge.js';
+import { PendingAuthMark } from './PendingAuthMark.js';
 import { FighterInfoButton } from './FighterInfoButton.js';
 import '../bracket.css';
 
@@ -76,6 +77,8 @@ interface Props {
   badges?: Map<string, ProposalType>;
   /** Détail des recasements validés (clic sur un badge). */
   badgeDetails?: Map<string, RecasementEntry>;
+  /** Autorisations en attente (textes) par inscription : ⏳ à côté du nom. */
+  pendingAuth?: Map<string, string[]>;
   /** Saisie : clic sur un combat jouable. */
   onMatchClick?: (match: ResolvedMatch) => void;
   /** Combats dont le résultat saisi est ignoré (à revoir). */
@@ -138,6 +141,7 @@ function EntrantLine({ id, fallback, info, props, winner, inline }: { id: string
           <Text size={props.printable ? 'md' : 'sm'} fw={winner ? 800 : props.printable ? 400 : 500} td={winner && props.printable ? 'underline' : undefined} lh={1.2}>
             {info.name}
             {!props.printable && id && props.badges?.get(id) && <> <ReplacementBadge type={props.badges.get(id)!} size="xs" detail={props.badgeDetails?.get(id)} /></>}
+            {!props.printable && id && props.pendingAuth?.get(id) && <> <PendingAuthMark texts={props.pendingAuth.get(id)!} /></>}
           </Text>
           <Text size="xs" c={props.printable ? undefined : sameClub ? 'orange' : 'dimmed'} fw={sameClub ? 600 : undefined} lh={1.2} data-testid={sameClub ? 'same-club' : undefined}>{info.club}</Text>
         </>

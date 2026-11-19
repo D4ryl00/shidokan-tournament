@@ -20,7 +20,7 @@ import { JumpLinks } from '../ui/JumpLinks.js';
 export interface SeeRequest { ids: string[]; n: number }
 
 /** La planche : toutes les catégories de la session en cartes, groupées, avec le bac « Sans adversaire ». */
-export function Planche({ competitionId, categories, waves, waveId, scope, onScope, readOnly, entrants, badges, badgeDetails, cases, aside, historyCount, onHistory, seeRequest, onConsumed, onOpenList }: {
+export function Planche({ competitionId, categories, waves, waveId, scope, onScope, readOnly, entrants, badges, badgeDetails, pendingAuth, cases, aside, historyCount, onHistory, seeRequest, onConsumed, onOpenList }: {
   competitionId: string;
   categories: Category[];
   waves: Wave[];
@@ -31,6 +31,7 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
   entrants: Map<string, EntrantInfo>;
   badges: Map<string, ProposalType>;
   badgeDetails: Map<string, RecasementEntry>;
+  pendingAuth: Map<string, string[]>;
   cases: Map<string, number>;
   aside: Map<string, number>;
   historyCount: number;
@@ -109,7 +110,7 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
       <Grid gutter="md">
         <Grid.Col span={{ base: 12, md: 3 }}>
           <Box style={{ position: 'sticky', top: 8 }}>
-            <LoneTray competitionId={competitionId} items={loneItems} entrants={entrants} badges={badges} badgeDetails={badgeDetails} chipProps={readOnly ? undefined : chipProps} selectedChip={drag.selected} />
+            <LoneTray competitionId={competitionId} items={loneItems} entrants={entrants} badges={badges} badgeDetails={badgeDetails} pendingAuth={pendingAuth} chipProps={readOnly ? undefined : chipProps} selectedChip={drag.selected} />
           </Box>
         </Grid.Col>
         <Grid.Col span={{ base: 12, md: 9 }}>
@@ -130,7 +131,7 @@ export function Planche({ competitionId, categories, waves, waveId, scope, onSco
                       <CategoryCard key={c.id} competitionId={competitionId} category={c} title={grid ? cardTitle(c, grid) : c.label}
                         subtitle={sort === 'zone' && !free ? [DISCIPLINES[c.key.discipline].label, c.key.ruleset ? RULESETS[c.key.ruleset].label.split(' ')[0] : null].filter(Boolean).join(' · ') : undefined}
                         zoneName={sort === 'categorie' ? zone?.name ?? null : null} passages={passages} zones={zones} entrants={entrants}
-                        badges={badges} badgeDetails={badgeDetails} cases={cases.get(c.id) ?? 0} aside={aside.get(c.id) ?? 0} readOnly={readOnly}
+                        badges={badges} badgeDetails={badgeDetails} pendingAuth={pendingAuth} cases={cases.get(c.id) ?? 0} aside={aside.get(c.id) ?? 0} readOnly={readOnly}
                         expanded={open.has(c.id)} onToggle={() => toggle(c.id)} onOpenList={() => onOpenList(c.id)} words={words} ring={ring}
                         cardProps={readOnly ? undefined : cardProps(c)} chipProps={readOnly ? undefined : chipProps} selectedChip={drag.selected} />
                     );

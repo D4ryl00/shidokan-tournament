@@ -35,6 +35,8 @@ export interface CardProps {
   entrants: Map<string, EntrantInfo>;
   badges: Map<string, ProposalType>;
   badgeDetails: Map<string, RecasementEntry>;
+  /** Autorisations en attente (textes) par inscription. */
+  pendingAuth: Map<string, string[]>;
   cases: number;
   aside: number;
   readOnly: boolean;
@@ -89,11 +91,12 @@ export function CategoryCard(p: CardProps) {
   const sameIds = new Set(pairs.flat());
   const sameClubName = pairs[0] ? p.entrants.get(pairs[0][0])?.club : undefined;
   const sections = cardSections(c);
+  const pendingCount = c.registrationIds.filter((x) => p.pendingAuth.has(x)).length;
   const ringColor = p.ring === 'undo' ? 'var(--mantine-color-orange-6)' : p.ring === 'see' ? 'var(--sk-accent)' : undefined;
   const kata = kataPassageText(p.passages, p.zones);
   const matched = (id: string) => p.words.length > 0 && p.words.some((w) => normalizeName(p.entrants.get(id)?.name ?? '').includes(w));
   const chip = (id: string) => (
-    <FighterChip key={id} id={id} info={p.entrants.get(id)} badge={p.badges.get(id)} badgeDetail={p.badgeDetails.get(id)}
+    <FighterChip key={id} id={id} info={p.entrants.get(id)} badge={p.badges.get(id)} badgeDetail={p.badgeDetails.get(id)} pendingAuth={p.pendingAuth.get(id)}
       sameClub={sameIds.has(id)} matched={matched(id)} locked={locked || p.readOnly} selected={p.selectedChip === id}
       extra={p.chipProps?.(id, c)} compact={p.compact} competitionId={p.competitionId} />
   );
@@ -130,6 +133,7 @@ export function CategoryCard(p: CardProps) {
               {p.cases} cas à traiter{p.aside ? ` (dont ${p.aside} de côté)` : ''}
             </Badge>
           )}
+          {pendingCount > 0 && <Badge size="sm" variant="outline" color="orange" data-testid="auth-pending-count">{pendingCount} {pendingCount > 1 ? 'autorisations' : 'autorisation'} en attente</Badge>}
           {c.format && !p.compact && <StatusBadge tone="neutral" size="sm" data-testid="card-format">{ALL_FORMAT_LABELS[c.format]}</StatusBadge>}
           {pairs.length > 0 && !p.compact && <Badge size="sm" variant="outline" color="orange" data-testid="card-same-club" title={sameClubName}>Même club</Badge>}
           {kata && !p.compact && <StatusBadge tone="neutral" size="sm">{kata}</StatusBadge>}
@@ -156,7 +160,7 @@ export function CategoryCard(p: CardProps) {
         )}
         {p.expanded && (
           <BracketView category={c} entrants={p.entrants} numbers={p.passages.numbers} noRest={p.passages.noRest}
-            matchZones={movedMatchZones(p.passages, p.zones, c.bracket)} badges={p.badges} badgeDetails={p.badgeDetails} fighterInfo={p.competitionId}
+            matchZones={movedMatchZones(p.passages, p.zones, c.bracket)} badges={p.badges} badgeDetails={p.badgeDetails} pendingAuth={p.pendingAuth} fighterInfo={p.competitionId}
             selected={p.selectedChip} entrantProps={locked ? undefined : p.chipProps && ((id) => p.chipProps!(id, c))} />
         )}
         {drop === 'ok' && (

@@ -4,17 +4,20 @@ import type { ProposalType } from '../../../domain/replacement/index.js';
 import type { RecasementEntry } from '../../api.js';
 import type { EntrantInfo } from '../BracketView.js';
 import { FighterInfoButton } from '../FighterInfoButton.js';
+import { PendingAuthMark } from '../PendingAuthMark.js';
 import { ReplacementBadge } from '../ReplacementBadge.js';
 
 /**
  * Pastille d'un combattant (nom, club, badge de réaffectation dont « Placé à la main »). Le club est en orange quand le combattant
  * rencontre un coéquipier au 1er tour. `extra` : attributs ajoutés par l'appelant (glisser-déposer, clic).
  */
-export function FighterChip({ id, info, badge, badgeDetail, sameClub = false, matched = false, selected = false, locked = false, compact = false, competitionId, extra }: {
+export function FighterChip({ id, info, badge, badgeDetail, pendingAuth, sameClub = false, matched = false, selected = false, locked = false, compact = false, competitionId, extra }: {
   id: string;
   info?: EntrantInfo;
   badge?: ProposalType;
   badgeDetail?: RecasementEntry;
+  /** Textes des autorisations en attente de ce combattant : pastille ⏳. */
+  pendingAuth?: string[];
   sameClub?: boolean;
   /** Trouvé par la recherche. */
   matched?: boolean;
@@ -41,7 +44,12 @@ export function FighterChip({ id, info, badge, badgeDetail, sameClub = false, ma
         }}>
         <Group gap={2} wrap="wrap" justify="space-between" align="flex-start">
           <Text size="sm" fw={matched ? 700 : 500} lh={1.25} style={{ overflowWrap: 'anywhere', minWidth: 0 }}>{info?.name ?? '?'}</Text>
-          {badge && <ReplacementBadge type={badge} size="xs" detail={badgeDetail} />}
+          {(badge || pendingAuth?.length) && (
+            <Group gap={2} wrap="nowrap">
+              {badge && <ReplacementBadge type={badge} size="xs" detail={badgeDetail} />}
+              {pendingAuth?.length ? <PendingAuthMark texts={pendingAuth} /> : null}
+            </Group>
+          )}
         </Group>
         {!compact && <Text size="xs" lh={1.2} c={sameClub ? 'orange' : 'dimmed'} fw={sameClub ? 600 : undefined} data-testid={sameClub ? 'same-club' : undefined} className="sk-ellipsis">
           {info?.club ?? ''}

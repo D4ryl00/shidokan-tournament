@@ -56,7 +56,7 @@ function linkLabelOf(settings: CompetitionSettings | null) {
 
 export function GalaxyView(p: {
   competitionId: string; categories: Category[]; waves: Wave[]; waveId: string | null; scope: Scope; onScope: (v: string) => void;
-  readOnly: boolean; entrants: Map<string, EntrantInfo>; badges: Map<string, ProposalType>; badgeDetails: Map<string, RecasementEntry>;
+  readOnly: boolean; entrants: Map<string, EntrantInfo>; badges: Map<string, ProposalType>; badgeDetails: Map<string, RecasementEntry>; pendingAuth: Map<string, string[]>;
   cases: Map<string, number>; aside: Map<string, number>; historyCount: number; onHistory?: () => void;
   /** Catégorie à sélectionner à l'ouverture (lien de la Réaffectation). */
   initialCategoryId: string | null;
@@ -245,7 +245,7 @@ export function GalaxyView(p: {
       )}
       <CategoryCard competitionId={competitionId} category={c} title={title} subtitle={sub}
         sessionName={sessionLabel(c, waves, waveId)} passages={categoryPassages(plan, c.id)} zones={zones} entrants={entrants}
-        badges={p.badges} badgeDetails={p.badgeDetails} cases={n} aside={p.aside.get(c.id) ?? 0} readOnly={readOnly}
+        badges={p.badges} badgeDetails={p.badgeDetails} pendingAuth={p.pendingAuth} cases={n} aside={p.aside.get(c.id) ?? 0} readOnly={readOnly}
         expanded={false} onToggle={() => undefined} onOpenList={() => undefined} words={words} ring={undo.categories.has(c.id) ? 'undo' : null}
         cardProps={readOnly ? undefined : cardProps(c)} chipProps={readOnly ? undefined : chipProps} selectedChip={drag.selected}
         compact onTitleClick={isSel ? undefined : () => setSelectedId(c.id)}

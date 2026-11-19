@@ -9,7 +9,7 @@ import { activeEntrantCount, type Category, type CategoryStatus } from '../../do
 import { newSameClubSentences } from '../../domain/brackets/same-club.js';
 import { normalizeName } from '../../domain/names.js';
 import { plural } from '../../domain/plural.js';
-import { useCategories, useHistory, usePassages, useRedraw, useRegenerate, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
+import { useAuthorizations, useCategories, useHistory, usePassages, useRedraw, useRegenerate, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
 import { categoryPassages, kataPassageText, movedMatchZones } from '../passages.js';
 import { useSelectedWave, withSession } from '../useSelectedWave.js';
 import { usePoste } from '../poste.js';
@@ -111,6 +111,15 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   const { data: registrations = [] } = useRegistrations(id);
   const badges = useMemo(() => new Map(registrations.filter((r) => r.recasementType).map((r) => [r.id, r.recasementType!])), [registrations]);
   const badgeDetails = useRecasementDetails(id);
+  // ⏳ : textes des demandes en attente, par inscription (une requête pour toute la page ; rien, et pas de requête, sur un poste de Zone).
+  const { data: authorizations } = useAuthorizations(id, null, !readOnlyPoste);
+  const pendingAuth = useMemo(() => {
+    const out = new Map<string, string[]>();
+    for (const club of authorizations?.clubs ?? []) {
+      for (const r of club.requests) if (r.status === 'pending') out.set(r.registrationId, [...(out.get(r.registrationId) ?? []), r.bullet]);
+    }
+    return out;
+  }, [authorizations]);
   const { data: replacement } = useReplacement(id);
   const casesByCategory = useMemo(() => {
     const out = new Map<string, number>();
@@ -189,12 +198,12 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
     {view !== 'galaxie' && <Group justify="flex-end">{viewSwitch}</Group>}
     {view === 'planche' && (
       <Planche competitionId={id} categories={categories} waves={waves} waveId={waveId} scope={scope} onScope={onSelectScope} readOnly={readOnlyPoste}
-        entrants={entrants} badges={badges} badgeDetails={badgeDetails} cases={casesByCategory} aside={asideByCategory} historyCount={historyCount}
+        entrants={entrants} badges={badges} badgeDetails={badgeDetails} pendingAuth={pendingAuth} cases={casesByCategory} aside={asideByCategory} historyCount={historyCount}
         onHistory={() => setHistoryOpen((o) => !o)} seeRequest={seeRequest} onConsumed={() => setSeeRequest(null)} onOpenList={openInList} />
     )}
     {view === 'galaxie' && (
       <GalaxyView competitionId={id} categories={categories} waves={waves} waveId={waveId} scope={scope} onScope={onSelectScope} readOnly={readOnlyPoste}
-        entrants={entrants} badges={badges} badgeDetails={badgeDetails} cases={casesByCategory} aside={asideByCategory} historyCount={historyCount}
+        entrants={entrants} badges={badges} badgeDetails={badgeDetails} pendingAuth={pendingAuth} cases={casesByCategory} aside={asideByCategory} historyCount={historyCount}
         onHistory={() => setHistoryOpen((o) => !o)} initialCategoryId={galaxyStart} onSeeInPlanche={(cid) => onSee([cid])} viewSwitch={viewSwitch} />
     )}
     {view === 'liste' && (
@@ -337,7 +346,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
             )}
             <CategoryDurations key={selected.id} competitionId={id} category={selected} readOnly={readOnlyPoste} />
             <ApiErrorAlert error={update.error ?? redraw.error ?? swap.error ?? regenerate.error} />
-            <BracketView category={selected} entrants={entrants} numbers={passages?.numbers} noRest={passages?.noRest} matchZones={movedMatchZones(passages, zones, selected.bracket)} selected={swapFrom} onSelect={locked || readOnlyPoste ? undefined : onSelectEntrant} badges={badges} badgeDetails={badgeDetails} fighterInfo={id} />
+            <BracketView category={selected} entrants={entrants} numbers={passages?.numbers} noRest={passages?.noRest} matchZones={movedMatchZones(passages, zones, selected.bracket)} selected={swapFrom} onSelect={locked || readOnlyPoste ? undefined : onSelectEntrant} badges={badges} badgeDetails={badgeDetails} pendingAuth={pendingAuth} fighterInfo={id} />
             {swapFrom && !locked && !readOnlyPoste && selected.bracket && selected.registrationIds.includes(swapFrom) && (
               <MoveEntrantPanel key={swapFrom} competitionId={id} registrationId={swapFrom} name={entrants.get(swapFrom)?.name ?? ''} manual={badges.get(swapFrom) === 'M'} onDone={() => setSwapFrom(null)} />
             )}

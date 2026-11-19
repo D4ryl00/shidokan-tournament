@@ -536,10 +536,11 @@ export interface AuthorizationsData {
 /**
  * Autorisations à demander dans la session `waveId` (null : toutes). Calculées depuis les groupes actuels : la clé `[…, id, …]`
  * est relue avec les données du jour (`useInvalidateDay`) après chaque réaffectation, annulation par l'historique ou pesée, et
- * par les changements des autres postes (`refreshDataLive`).
+ * par les changements des autres postes (`refreshDataLive`). `enabled` faux : pas de requête (poste de Zone).
  */
-export function useAuthorizations(id: string, waveId?: string | null) {
+export function useAuthorizations(id: string, waveId?: string | null, enabled = true) {
   return useQuery({
+    enabled,
     queryKey: ['authorizations', id, waveId ?? null],
     queryFn: () => api<AuthorizationsData>('GET', `/api/competitions/${id}/authorizations${waveId ? `?vague=${encodeURIComponent(waveId)}` : ''}`),
   });
