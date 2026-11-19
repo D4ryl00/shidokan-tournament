@@ -1,5 +1,6 @@
 import { Box, Button, Group, Text } from '@mantine/core';
 import { useState } from 'react';
+import { gapText } from '../../../domain/authorizations.js';
 import { entryHeadline } from '../../../domain/history/text.js';
 import { HISTORY_KIND_LABELS, type HistoryEntryView } from '../../../domain/history/types.js';
 import { plural } from '../../../domain/plural.js';
@@ -27,6 +28,8 @@ export function useHoverTargets(targets: string[]) {
 }
 
 const kg = (x: number) => String(Math.round(x * 100) / 100).replace('.', ',');
+/** « · écart 7,3 kg (max 5) » : l'écart au dixième, comme dans les autorisations (`gapText`). */
+export const recordedGap = (gap: { kg: number; max: number }) => ` · écart ${gapText(gap.kg)} (max ${kg(gap.max)})`;
 
 /** Situation enregistrée au moment de l'action (jamais recalculée) : adversaires, écart, restants au départ. */
 function RecordedDetails({ view }: { view: MoveView }) {
@@ -34,7 +37,7 @@ function RecordedDetails({ view }: { view: MoveView }) {
     <Box data-testid="history-details" mt={4} style={{ fontSize: 'var(--mantine-font-size-sm)' }}>
       <Text size="sm">
         {view.opponents.length === 0 ? 'Aucun adversaire dans la catégorie d’arrivée' : `Adversaires : ${view.opponents.join(', ')}`}
-        {view.gap ? ` · écart ${kg(view.gap.kg)} kg (max ${kg(view.gap.max)})` : ''}
+        {view.gap ? recordedGap(view.gap) : ''}
       </Text>
       {view.from && (
         <Text size="sm" c="dimmed">
