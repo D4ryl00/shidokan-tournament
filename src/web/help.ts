@@ -475,7 +475,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         '« Chevauche la session précédente de 25 min (Zone 2) » : la session est prévue avant la fin estimée de la précédente sur cette zone (changement compris).',
         '« Décaler une session qui commence avant la fin de la précédente » (cochée par défaut, gardée sur ce poste) : sur chaque zone, la session attend la fin de la précédente et le changement. Décochée, elle commence à son heure prévue. Cette case ne change que l’estimation, pas les heures montrées aux spectateurs.',
       ],
-      'Durées des combats : les mêmes que dans Réglages. « Enregistrer les durées » les enregistre pour toute la compétition et l’estimation se recalcule. Les catégories qui ont leur propre durée (onglet Tableaux) sont listées, avec un lien vers chacune.',
+      '« Modifier les durées » (en bas, replié) : les durées des combats, les mêmes que dans Réglages (poste Organisation seulement). « Enregistrer les durées » les enregistre pour toute la compétition ; la nouvelle fin estimée s’affiche à côté du bouton. Les catégories qui ont leur propre durée (onglet Tableaux) y sont listées, avec un lien vers chacune.',
     ],
   },
   finales: {

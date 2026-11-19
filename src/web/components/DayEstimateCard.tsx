@@ -1,4 +1,4 @@
-import { Alert, Anchor, Box, Button, Checkbox, Group, Loader, Stack, Text } from '@mantine/core';
+import { Alert, Anchor, Box, Button, Checkbox, Collapse, Group, Loader, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -7,8 +7,9 @@ import { secondsToClock, secondsToDuration } from '../../domain/schedule/clock.j
 import { isEmptyDurations, type ScheduleSettings } from '../../domain/schedule/durations.js';
 import type { DayEstimateView } from '../../domain/schedule/estimate.js';
 import type { CompetitionSettings } from '../../domain/settings.js';
-import { useCategories, useCompetition, useDayEstimate, useUpdateCompetition } from '../api.js';
+import { isOrganiser, useAuthMe, useCategories, useCompetition, useDayEstimate, useUpdateCompetition } from '../api.js';
 import { HELP } from '../help.js';
+import { usePoste } from '../poste.js';
 import { settingsPatch } from '../settingsPatch.js';
 import { useUnsaved } from '../unsaved.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
@@ -28,19 +29,25 @@ function writeShift(shift: boolean): void {
 }
 
 /**
- * Horaires estimés de la journée (spec §7.7), dans l'onglet Sessions : la fin estimée, les durées de combat modifiables sur place
- * (les mêmes que dans Réglages, enregistrées pareil), puis, par session, chaque zone et les chevauchements.
+ * Horaires estimés de la journée (spec §7.7), dans l'onglet Sessions : la fin estimée, par session chaque zone et les
+ * chevauchements, puis « Modifier les durées » (les mêmes que dans Réglages, enregistrées pareil), replié par défaut.
  */
 export function DayEstimateCard({ competitionId }: { competitionId: string }) {
   const [shift, setShift] = useState(readShift);
   const { data: estimate, error } = useDayEstimate(competitionId, shift);
+  // Les durées s'enregistrent dans les réglages de la compétition : poste Organisation et compte organisateur seulement (le rôle
+  // doit être connu, sinon un compte Table centrale recevrait un refus).
+  const me = useAuthMe().data;
+  const [poste] = usePoste(competitionId);
+  const canEditDurations = !!me && isOrganiser(me) && poste.kind === 'organisation';
   const at = (sec: number) => (estimate?.relative ? `+ ${secondsToDuration(sec)}` : secondsToClock(sec));
+  const endText = estimate ? `Fin estimée de la journée : ${at(estimate.end)}` : null;
   return (
     <SectionCard data-testid="day-estimate" title={HELP['sessions.horaires'].title} help="sessions.horaires">
       <Stack gap="md">
         {estimate ? (
           <Stack gap={4}>
-            <Text fw={700} size="lg" className="num" data-testid="day-estimate-end">Fin estimée de la journée : {at(estimate.end)}</Text>
+            <Text fw={700} size="lg" className="num" data-testid="day-estimate-end">{endText}</Text>
             {estimate.relative && (
               <Text size="sm" c="dimmed" data-testid="day-estimate-relative">
                 Saisissez le « Début prévu » de la première session (onglet Combats) pour avoir des heures. En attendant, les durées
@@ -51,8 +58,8 @@ export function DayEstimateCard({ competitionId }: { competitionId: string }) {
         ) : error ? <ApiErrorAlert error={error} /> : <Loader size="sm" />}
         <Checkbox data-testid="day-estimate-shift" checked={shift} label="Décaler une session qui commence avant la fin de la précédente"
           onChange={(e) => { const v = e.currentTarget.checked; setShift(v); writeShift(v); }} />
-        <DurationsEditor competitionId={competitionId} />
         {estimate && <Stack gap="md">{estimate.waves.map((w) => <WaveEstimate key={w.key} wave={w} view={estimate} at={at} />)}</Stack>}
+        {canEditDurations && <DurationsEditor competitionId={competitionId} endText={endText} />}
       </Stack>
     </SectionCard>
   );
@@ -98,10 +105,13 @@ function WaveEstimate({ wave: w, view, at }: { wave: DayEstimateView['waves'][nu
 }
 
 /**
- * Durées des combats de la compétition, comme dans Réglages : formulaire parti des réglages chargés, enregistrement de ce qui a
- * changé seulement (`settingsPatch`), saisie en cours signalée (mise à jour automatique en attente, confirmation pour quitter).
+ * « Modifier les durées » (replié par défaut) : les durées des combats de la compétition, comme dans Réglages — formulaire parti
+ * des réglages chargés, enregistrement de ce qui a changé seulement (`settingsPatch`), saisie en cours signalée (aussi dans
+ * l'en-tête replié ; mise à jour automatique en attente, confirmation pour quitter). Près du bouton, la fin estimée actuelle,
+ * pour lire l'effet sans remonter.
  */
-function DurationsEditor({ competitionId }: { competitionId: string }) {
+function DurationsEditor({ competitionId, endText }: { competitionId: string; endText: string | null }) {
+  const [opened, setOpened] = useState(false);
   const { data: competition } = useCompetition(competitionId);
   const { data: categories = [] } = useCategories(competitionId);
   const update = useUpdateCompetition(competitionId);
@@ -130,34 +140,41 @@ function DurationsEditor({ competitionId }: { competitionId: string }) {
   };
   return (
     <Stack gap="sm" p="md" data-testid="day-estimate-durations" style={{ border: '1px solid var(--sk-line)', borderRadius: 'var(--mantine-radius-md)' }}>
-      <Group gap={4} wrap="nowrap">
-        <Text fw={600}>{HELP['reglages.durees'].title}</Text>
-        <HelpButton topic="reglages.durees" />
-      </Group>
-      <ScheduleDurationsFields schedule={schedule} triathlonRounds={base.settings.triathlonRounds} field={durationFields.field} onChange={setSchedule} />
-      {own.length > 0 && (
-        <Alert color="blue" p="xs" data-testid="day-estimate-own">
-          <Text size="sm">
-            {own.length === 1 ? '1 catégorie a sa propre durée' : `${own.length} catégories ont leur propre durée`} (onglet Tableaux) :{' '}
-            {own.map((c, i) => (
-              <span key={c.id}>
-                {i > 0 && ', '}
-                <Anchor component={Link} to={`/competitions/${competitionId}/tableaux?vue=liste&categorie=${c.id}`} size="sm">{c.label}</Anchor>
-              </span>
-            ))}
-            .
-          </Text>
-        </Alert>
-      )}
-      <ApiErrorAlert error={update.error} />
-      <Group justify="space-between" gap="xs" wrap="wrap">
-        {durationFields.invalid ? <Text size="sm" c="red" data-testid="day-estimate-invalid">Une durée est mal saisie : corrigez-la pour enregistrer.</Text>
-          : dirty ? <StatusBadge tone="warn" data-testid="day-estimate-unsaved">Durées non enregistrées</StatusBadge>
-            : <Text size="sm" c="dimmed">L’estimation suit les durées enregistrées.</Text>}
-        <Button data-testid="day-estimate-save" onClick={save} loading={update.isPending} disabled={durationFields.invalid || !dirty}>
-          Enregistrer les durées
+      <Group gap="xs" wrap="wrap">
+        <Button variant="subtle" color="gray" size="compact-md" data-testid="day-estimate-durations-toggle" aria-expanded={opened}
+          onClick={() => setOpened((o) => !o)}>
+          {opened ? '▾' : '▸'} Modifier les durées
         </Button>
+        <HelpButton topic="reglages.durees" />
+        {dirty && <StatusBadge tone="warn" data-testid="day-estimate-unsaved">Durées non enregistrées</StatusBadge>}
       </Group>
+      <Collapse in={opened}>
+        <Stack gap="sm" pt="xs">
+          <ScheduleDurationsFields schedule={schedule} triathlonRounds={base.settings.triathlonRounds} field={durationFields.field} onChange={setSchedule} />
+          {own.length > 0 && (
+            <Alert color="blue" p="xs" data-testid="day-estimate-own">
+              <Text size="sm">
+                {own.length === 1 ? '1 catégorie a sa propre durée' : `${own.length} catégories ont leur propre durée`} (onglet Tableaux) :{' '}
+                {own.map((c, i) => (
+                  <span key={c.id}>
+                    {i > 0 && ', '}
+                    <Anchor component={Link} to={`/competitions/${competitionId}/tableaux?vue=liste&categorie=${c.id}`} size="sm">{c.label}</Anchor>
+                  </span>
+                ))}
+                .
+              </Text>
+            </Alert>
+          )}
+          <ApiErrorAlert error={update.error} />
+          {durationFields.invalid && <Text size="sm" c="red" data-testid="day-estimate-invalid">Une durée est mal saisie : corrigez-la pour enregistrer.</Text>}
+          <Group justify="space-between" gap="xs" wrap="wrap">
+            <Text size="sm" fw={600} className="num" data-testid="day-estimate-durations-end">{endText}</Text>
+            <Button data-testid="day-estimate-save" onClick={save} loading={update.isPending} disabled={durationFields.invalid || !dirty}>
+              Enregistrer les durées
+            </Button>
+          </Group>
+        </Stack>
+      </Collapse>
     </Stack>
   );
 }

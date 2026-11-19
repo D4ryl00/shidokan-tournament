@@ -65,13 +65,22 @@ test('sessions : horaires estimés, durées raccourcies sur place, décalage des
   await expect(waves.nth(1).getByTestId('day-estimate-wave-times')).not.toContainText('9:05 →');
   const before = await endMinutes(page);
 
-  // Raccourcir les combats des adultes (round de 2 min → 1 min) : enregistré comme dans Réglages, la fin avance.
+  // Raccourcir les combats des adultes (round de 2 min → 1 min), dans « Modifier les durées » (replié, après les sessions) :
+  // enregistré comme dans Réglages, la fin avance, lue aussi à côté du bouton.
+  await expect(estimate.getByTestId('durations-adults')).toBeHidden();
+  await page.getByTestId('day-estimate-durations-toggle').click();
   const round = estimate.getByTestId('durations-adults').getByLabel('Round', { exact: true });
   await expect(round).toHaveValue('2:00');
+  await expect(page.getByTestId('day-estimate-durations-end')).toHaveText(await page.getByTestId('day-estimate-end').innerText());
   await round.fill('1:5');
   await expect(page.getByTestId('day-estimate-save')).toBeDisabled();
   await round.fill('1:00');
   await expect(page.getByTestId('day-estimate-unsaved')).toBeVisible();
+  // Replié, la saisie en cours reste signalée dans l'en-tête.
+  await page.getByTestId('day-estimate-durations-toggle').click();
+  await expect(round).toBeHidden();
+  await expect(page.getByTestId('day-estimate-unsaved')).toBeVisible();
+  await page.getByTestId('day-estimate-durations-toggle').click();
   // Quitter l'onglet avec une durée non enregistrée demande confirmation, comme ailleurs.
   await page.getByRole('tab', { name: 'Finales', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
@@ -83,6 +92,8 @@ test('sessions : horaires estimés, durées raccourcies sur place, décalage des
   await expect(page.getByTestId('day-estimate-unsaved')).toHaveCount(0);
   await expect.poll(() => endMinutes(page)).toBeLessThan(before);
   const shortened = await endMinutes(page);
+  const h = Math.floor(shortened / 60);
+  await expect(page.getByTestId('day-estimate-durations-end')).toHaveText(`Fin estimée de la journée : ${h}:${String(shortened - h * 60).padStart(2, '0')}`);
   const settings = (await (await request.get(`/api/competitions/${id}`)).json()).settings;
   expect(settings.schedule.groups.adults.roundSec).toBe(60);
   expect(settings.schedule.groups.youth.roundSec).toBe(120);
@@ -94,6 +105,7 @@ test('sessions : horaires estimés, durées raccourcies sur place, décalage des
   await expect(waves.nth(1).getByTestId('day-estimate-wave-times')).toContainText('9:05 →');
   await page.reload();
   await expect(page.getByTestId('day-estimate-shift')).not.toBeChecked();
+  await page.getByTestId('day-estimate-durations-toggle').click();
   await expect(page.getByTestId('durations-adults').getByLabel('Round', { exact: true })).toHaveValue('1:00');
 
   // Une catégorie avec sa propre durée (onglet Tableaux) : signalée, avec son lien ; la zone des finales du matin est donnée.
