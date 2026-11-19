@@ -57,6 +57,16 @@ const replacement = async () => (await call('GET', '/replacement')).json() as Re
 type Cat = { id: string; label: string; registrationIds: string[]; bracket: { entrants: { registrationId: string }[] } | null };
 const categories = async () => (await call('GET', '/categories')).json() as Cat[];
 
+test('pesée : par club dans l’ordre alphabétique, les combattants sans club en dernier', async () => {
+  const zebre = (await call('POST', '/clubs', { name: 'Zèbre Dojo' })).json().id as string;
+  const abeille = (await call('POST', '/clubs', { name: 'Abeille Karaté' })).json().id as string;
+  await reg({ lastName: 'SANS' });
+  await reg({ lastName: 'ZED', clubId: zebre });
+  await reg({ lastName: 'ABE', clubId: abeille });
+  const w = (await call('GET', '/weigh-in')).json() as { fighters: { label: string; club: string }[] };
+  expect(w.fighters.map((f) => [f.club, f.label])).toEqual([['Abeille Karaté', 'ABE x'], ['Zèbre Dojo', 'ZED x'], ['', 'SANS x']]);
+});
+
 test('pesée : chaque inscription porte son règlement et son poids déclaré', async () => {
   const a = await reg({ approxWeightKg: 38.5 });
   const k = await reg({ discipline: 'kata', ruleset: null, weightClassId: null });

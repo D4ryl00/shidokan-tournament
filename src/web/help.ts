@@ -508,7 +508,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     details: [
       [
         'Cherchez le combattant par son nom ou son club.',
-        '« Ordre : Club | Nom » : par club (un en-tête par club, pratique pour peser les élèves d’un même dojo ensemble) ou par nom ; le choix est gardé sur ce poste. La touche Entrée passe au combattant suivant dans l’ordre affiché.',
+        '« Ordre : Club | Nom » : par club (un en-tête par club, « Sans club » en dernier, pratique pour peser les élèves d’un même dojo ensemble) ou par nom ; le choix est gardé sur ce poste. La touche Entrée passe au combattant suivant dans l’ordre affiché.',
         'Tapez le poids (virgule acceptée, par exemple 54,3) puis Entrée.',
         'Un combattant qui ne vient pas : cliquez « Absent ».',
         'Le kata n’a pas de pesée : pointez seulement la présence.',

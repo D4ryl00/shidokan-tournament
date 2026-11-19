@@ -1012,7 +1012,8 @@ export async function weighInList(db: AppDb, competitionId: string, waveId?: str
             };
           }),
       }))
-      .sort((a, b) => a.club.localeCompare(b.club, 'fr') || a.label.localeCompare(b.label, 'fr')),
+      // Par club (ordre alphabétique français), les combattants sans club en dernier, comme ailleurs dans l'application.
+      .sort((a, b) => Number(a.club === '') - Number(b.club === '') || a.club.localeCompare(b.club, 'fr') || a.label.localeCompare(b.label, 'fr')),
   };
 }
 
