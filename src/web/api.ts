@@ -25,7 +25,7 @@ import type { AppSettingsPatch, PublicAppSettings } from '../domain/app-settings
 import type { GoogleContactsView, SyncApply } from '../domain/google-contacts.js';
 import type { Zone, ZoneInput } from '../domain/zones.js';
 import type { HistoryEntryView } from '../domain/history/types.js';
-import type { AnswerableKind, AuthorizationClub } from '../domain/authorizations.js';
+import type { AnswerableKind, AuthorizationClub, AuthorizationSituation } from '../domain/authorizations.js';
 import type { JournalEntryView, JournalType } from '../domain/journal/types.js';
 import type { PassagePlan } from '../domain/passages/index.js';
 import type { WaveSchedule } from '../domain/schedule/types.js';
@@ -548,17 +548,19 @@ export function useAuthorizations(id: string, waveId?: string | null, enabled = 
   });
 }
 /** « Accordée » ou son retrait : seules les listes d'autorisations (et le journal) changent ; relues aussi en cas d'erreur (demande disparue). */
-function useAuthorizationAnswer(id: string, path: 'grant' | 'ungrant') {
+function useAuthorizationAnswer<B extends { registrationId: string; kind: AnswerableKind }>(id: string, path: 'grant' | 'ungrant') {
   const qc = useQueryClient();
   const invalidate = () => Promise.all([qc.invalidateQueries({ queryKey: ['authorizations', id] }), qc.invalidateQueries({ queryKey: ['journal', id] })]);
   return useMutation({
-    mutationFn: (body: { registrationId: string; kind: AnswerableKind }) => api<{ ok: true }>('POST', `/api/competitions/${id}/authorizations/${path}`, body),
+    mutationFn: (body: B) => api<{ ok: true }>('POST', `/api/competitions/${id}/authorizations/${path}`, body),
     onSuccess: invalidate,
     onError: invalidate,
   });
 }
-export const useGrantAuthorization = (id: string) => useAuthorizationAnswer(id, 'grant');
-export const useUngrantAuthorization = (id: string) => useAuthorizationAnswer(id, 'ungrant');
+/** `situation` : celle affichée (lue au coach) ; le serveur refuse (409) si elle a changé depuis, et enregistre la sienne. */
+export const useGrantAuthorization = (id: string) =>
+  useAuthorizationAnswer<{ registrationId: string; kind: AnswerableKind; situation: AuthorizationSituation }>(id, 'grant');
+export const useUngrantAuthorization = (id: string) => useAuthorizationAnswer<{ registrationId: string; kind: AnswerableKind }>(id, 'ungrant');
 
 export type { HistoryEntryView };
 

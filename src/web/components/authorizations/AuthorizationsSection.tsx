@@ -40,7 +40,7 @@ function Authorizations({ competitionId, waveId }: { competitionId: string; wave
   const clubs = data?.clubs ?? [];
   const toCopy = clubs.map((c) => ({ ...messageClub(c), rows: messageRows(c.requests) }));
   const answer = (r: AuthorizationRow) => ({ registrationId: r.registrationId, kind: r.situation.kind as AnswerableKind });
-  const busy = (m: typeof grant, r: AuthorizationRow) => m.isPending && m.variables?.registrationId === r.registrationId && m.variables.kind === r.situation.kind;
+  const busy = (m: { isPending: boolean; variables?: { registrationId: string; kind: AnswerableKind } }, r: AuthorizationRow) => m.isPending && m.variables?.registrationId === r.registrationId && m.variables.kind === r.situation.kind;
 
   const request = (r: AuthorizationRow) => (
     <Group key={r.id} data-testid="auth-request" data-status={r.status} justify="space-between" align="flex-start" wrap="wrap" gap="xs" pl="md">
@@ -57,7 +57,7 @@ function Authorizations({ competitionId, waveId }: { competitionId: string; wave
       </Stack>
       {r.status === 'pending' && (
         <Group gap={4} wrap="wrap">
-          <Button size="compact-sm" color="green" variant="light" data-testid="auth-grant" loading={busy(grant, r)} onClick={() => grant.mutate(answer(r))}>
+          <Button size="compact-sm" color="green" variant="light" data-testid="auth-grant" loading={busy(grant, r)} onClick={() => grant.mutate({ ...answer(r), situation: r.situation })}>
             Accordée
           </Button>
           {r.blame.length > 0 ? (

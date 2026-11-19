@@ -86,7 +86,12 @@ describe('routes des autorisations', () => {
     return res.json() as List;
   };
   const rows = async (vague?: string): Promise<Row[]> => (await list(vague)).clubs.flatMap((c) => c.requests);
-  const grant = (registrationId: string, kind: string) => call('POST', '/authorizations/grant', { registrationId, kind });
+  /** « Accordée » avec la situation affichée (par défaut celle de la liste actuelle ; aucune demande : une situation quelconque). */
+  const grant = async (registrationId: string, kind: string, situation?: object) =>
+    call('POST', '/authorizations/grant', {
+      registrationId, kind,
+      situation: situation ?? (await rows()).find((r) => r.registrationId === registrationId && r.situation.kind === kind)?.situation ?? { kind: 'mixite' },
+    });
   const ungrant = (registrationId: string, kind: string) => call('POST', '/authorizations/ungrant', { registrationId, kind });
   const read = <T>(sql: string, ...params: unknown[]): T[] => {
     const ro = new Database(dbPath, { readonly: true });
@@ -143,8 +148,9 @@ describe('routes des autorisations', () => {
   test('« Accordée » enregistre la situation recalculée par le serveur, et le journal le note', async () => {
     const { light } = await weightCase();
     const before = journal().length;
-    // Une situation envoyée par le client est refusée (corps strict) : seule la demande actuelle compte.
+    // Une situation incomplète ou sans situation : corps refusé.
     expect((await call('POST', '/authorizations/grant', { registrationId: light.id, kind: 'weight', situation: { kind: 'weight', gapKg: 99 } })).statusCode).toBe(400);
+    expect((await call('POST', '/authorizations/grant', { registrationId: light.id, kind: 'weight' })).statusCode).toBe(400);
     expect((await grant(light.id, 'weight')).statusCode).toBe(200);
     const stored = read<{ situation_json: string }>('select situation_json from authorization_answers where registration_id = ?', light.id);
     expect(JSON.parse(stored[0]!.situation_json)).toEqual({ kind: 'weight', ownClassId: 'cadet:F:-47', heaviestClassId: 'cadet:F:-54', gapKg: 6 });
@@ -152,6 +158,26 @@ describe('routes des autorisations', () => {
     expect(added).toEqual([
       { type: 'autorisation', action: 'accordee', data: { subject: 'LEGERE x', detail: 'Poids · Écart de poids estimé avec ses adversaires : 6 kg maximum.' } },
     ]);
+  });
+
+  test('« Accordée » sur une situation qui a changé depuis l’affichage (pesée entre-temps) : 409, rien d’enregistré', async () => {
+    const { light, heavy } = await weightCase();
+    const shown = (await rows())[0]!.situation;
+    expect(shown).toMatchObject({ gapKg: 6 });
+    const before = journal().length;
+    // Pesée de LOURDE à 52 kg sur un autre poste : l'écart passe de 6 à 8 kg avant le clic.
+    expect((await call('PUT', `/weigh-in/${heavy.fighterId}`, { weighInKg: 52 })).statusCode).toBe(204);
+    const res = await grant(light.id, 'weight', shown);
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({ error: 'La situation a changé : relisez la demande.' });
+    expect(answers()).toEqual([]);
+    expect(journal().slice(before).filter((e) => e.type === 'autorisation')).toEqual([]);
+    // Relue (écart 8 kg), la demande s'accorde ; le serveur garde sa propre situation, clés dans un autre ordre comprises.
+    const reread = (await rows())[0]!.situation as { gapKg: number; heaviestClassId: string; ownClassId: string };
+    const { gapKg, heaviestClassId, ownClassId } = reread;
+    expect((await grant(light.id, 'weight', { gapKg, heaviestClassId, ownClassId, kind: 'weight' })).statusCode).toBe(200);
+    const stored = read<{ situation_json: string }>('select situation_json from authorization_answers where registration_id = ?', light.id);
+    expect(JSON.parse(stored[0]!.situation_json)).toEqual({ kind: 'weight', ownClassId: 'cadet:F:-47', heaviestClassId: 'cadet:F:-54', gapKg: 8 });
   });
 
   test('« annuler » : la réponse est retirée, la demande revient en attente ; journal « retiree » ; rien à retirer : rien de noté', async () => {

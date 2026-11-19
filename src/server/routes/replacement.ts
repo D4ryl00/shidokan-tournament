@@ -38,6 +38,7 @@ import { moveDetails } from '../repositories/move-details.js';
 import { exchangeEntrants, exchangePreview, sameClubPreview } from '../repositories/exchange.js';
 import { NotFoundError } from '../repositories/registrations.js';
 import { authorizationList, grantAuthorization, ungrantAuthorization } from '../repositories/authorizations.js';
+import type { AuthorizationSituation } from '../../domain/authorizations.js';
 
 type P = { Params: { id: string } };
 /** Plan d'ensemble en flux : une ligne JSON par événement (progression, puis résultat ou erreur). */
@@ -48,8 +49,18 @@ const planChoice = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('refuse'), proposalId: z.string(), registrationId: z.string(), reason: z.string().max(500), fromCategoryId: z.string().nullable().optional() }).strict(),
 ]);
 const choices = z.array(planChoice).max(500);
-/** Réponse d'un coach : la situation acceptée est recalculée par le serveur, jamais reçue du client. */
+/** Réponse d'un coach : la situation enregistrée est recalculée par le serveur, jamais reçue du client. */
 const answerBody = z.object({ registrationId: z.string(), kind: z.enum(['age', 'weight', 'discipline', 'mixite', 'session']) }).strict();
+const destination = z.object({ discipline: z.string(), ruleset: z.enum(['jiyu', 'shobu']).nullable() }).strict();
+/** Situation affichée au clic : comparée à la situation actuelle, elle n'est jamais enregistrée. */
+const shownSituation = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('age'), ownBand: z.string(), strongerBands: z.array(z.string()).max(50) }).strict(),
+  z.object({ kind: z.literal('weight'), ownClassId: z.string(), heaviestClassId: z.string(), gapKg: z.number() }).strict(),
+  z.object({ kind: z.literal('discipline'), from: destination, to: destination }).strict(),
+  z.object({ kind: z.literal('mixite') }).strict(),
+  z.object({ kind: z.literal('session'), from: z.string().nullable(), to: z.string().nullable() }).strict(),
+]);
+const grantBody = answerBody.extend({ situation: shownSituation }).strict();
 
 export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppDb }) {
   app.addHook('preHandler', async (req, reply) => {
@@ -285,10 +296,10 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
   /** Autorisations à demander aux coachs (session du combattant), par club, avec leur réponse et leurs déplacements en cause. */
   app.get<P & { Querystring: { vague?: string } }>('/api/competitions/:id/authorizations', async (req) => authorizationList(db, req.params.id, req.query.vague || undefined));
 
-  /** « Accordée » : enregistre la situation actuelle de la demande (409 si elle n'existe plus). */
+  /** « Accordée » : enregistre la situation actuelle de la demande (409 si elle n'existe plus ou diffère de celle affichée). */
   app.post<P>('/api/competitions/:id/authorizations/grant', async (req) => {
-    const { registrationId, kind } = answerBody.parse(req.body);
-    await grantAuthorization(db, req.params.id, registrationId, kind);
+    const { registrationId, kind, situation } = grantBody.parse(req.body);
+    await grantAuthorization(db, req.params.id, registrationId, kind, situation as AuthorizationSituation);
     return { ok: true };
   });
 

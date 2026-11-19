@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { and, eq, inArray } from 'drizzle-orm';
 import {
   AUTHORIZATION_KIND_LABELS,
@@ -24,6 +25,8 @@ import { knownWave, loadState, StaleProposalError } from './replacement.js';
 
 /** « Accordée » sur une demande que le calcul ne trouve plus (situation changée par un autre poste, une pesée…). */
 export const AUTHORIZATION_GONE = 'Cette demande n’existe plus : la liste est mise à jour.';
+/** « Accordée » sur une situation qui n'est plus celle affichée (pesée, déplacement entre l'affichage et le clic). */
+export const AUTHORIZATION_CHANGED = 'La situation a changé : relisez la demande.';
 const NO_CLUB = 'Sans club';
 /** Actions de l'historique qui déplacent des combattants : elles seules peuvent être « en cause » d'une demande. */
 const MOVE_KINDS: HistoryKind[] = ['plan', 'reaffectation', 'manual', 'exchange'];
@@ -110,14 +113,17 @@ function journalSubject(db: AppDb, competitionId: string, registrationId: string
 }
 
 /**
- * « Accordée » : enregistre la situation de la demande actuelle, recalculée ici (jamais celle d'un client) ; demande introuvable
- * (situation changée depuis l'affichage) : 409, rien d'enregistré.
+ * « Accordée » : enregistre la situation de la demande actuelle, recalculée ici (jamais celle d'un client) ; demande introuvable,
+ * ou situation différente de `shown` (celle que l'organisateur a lue au coach) : 409, rien d'enregistré.
  */
-export async function grantAuthorization(db: AppDb, competitionId: string, registrationId: string, kind: AnswerableKind): Promise<void> {
+export async function grantAuthorization(
+  db: AppDb, competitionId: string, registrationId: string, kind: AnswerableKind, shown: AuthorizationSituation,
+): Promise<void> {
   await atomically(db, async () => {
     const state = await loadState(db, competitionId);
     const request = currentRequest(state, registrationId, kind);
     if (!request) throw new StaleProposalError(AUTHORIZATION_GONE);
+    if (!isDeepStrictEqual(request.situation, shown)) throw new StaleProposalError(AUTHORIZATION_CHANGED);
     grantAnswer(db, competitionId, registrationId, kind, request.situation);
     recordJournal(db, competitionId, {
       type: 'autorisation', action: 'accordee',

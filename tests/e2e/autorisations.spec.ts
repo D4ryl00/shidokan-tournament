@@ -197,7 +197,9 @@ test('autorisations : ⏳ sur la puce du combattant (planche, galaxie, liste) ta
   await expect(page.getByTestId('auth-pending').first()).toBeVisible();
 
   // « Accordée » : ⏳ disparaît (karaté seulement ; shido-boxing reste en attente).
-  expect((await request.post(`/api/competitions/${id}/authorizations/grant`, { data: { registrationId: karate, kind: 'age' } })).ok()).toBeTruthy();
+  const listed = (await (await request.get(`/api/competitions/${id}/authorizations`)).json()) as { clubs: { requests: { registrationId: string; situation: { kind: string } }[] }[] };
+  const situation = listed.clubs.flatMap((c) => c.requests).find((r) => r.registrationId === karate && r.situation.kind === 'age')!.situation;
+  expect((await request.post(`/api/competitions/${id}/authorizations/grant`, { data: { registrationId: karate, kind: 'age', situation } })).ok()).toBeTruthy();
   await page.goto(`/competitions/${id}/tableaux?vue=planche`);
   await expect(chip(page, boxing)).toHaveText('⏳');
   await expect(chip(page, karate)).toHaveCount(0);

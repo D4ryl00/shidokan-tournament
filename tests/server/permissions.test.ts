@@ -125,11 +125,11 @@ test('autorisations des coachs : Table centrale lit et répond, un compte Zone n
   const registrationId = ((await table('GET', `${base}/registrations`)).json() as { id: string }[])[0]!.id;
   expect((await table('GET', `${base}/authorizations`)).statusCode).toBe(200);
   // Pas de demande pour cette inscription : refusée par le serveur (409), pas par les droits.
-  expect((await table('POST', `${base}/authorizations/grant`, { registrationId, kind: 'weight' })).statusCode).toBe(409);
+  expect((await table('POST', `${base}/authorizations/grant`, { registrationId, kind: 'weight', situation: { kind: 'mixite' } })).statusCode).toBe(409);
   expect((await table('POST', `${base}/authorizations/ungrant`, { registrationId, kind: 'weight' })).statusCode).toBe(200);
   for (const [method, url, payload] of [
     ['GET', `${base}/authorizations`, undefined],
-    ['POST', `${base}/authorizations/grant`, { registrationId, kind: 'weight' }],
+    ['POST', `${base}/authorizations/grant`, { registrationId, kind: 'weight', situation: { kind: 'mixite' } }],
     ['POST', `${base}/authorizations/ungrant`, { registrationId, kind: 'weight' }],
   ] as const) {
     const denied = await zone1(method, url, payload);
