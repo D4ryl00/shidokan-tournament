@@ -1054,6 +1054,18 @@ export function useSaveWaves(id: string) {
   });
 }
 
+/** Figer ou ne plus figer les sessions : change les sessions des catégories, le journal et les plans de réaffectation. */
+function useSessionsFreezing(id: string, action: 'freeze' | 'unfreeze') {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<{ frozenAt: string; count: number } | undefined>('POST', `/api/competitions/${id}/waves/${action}`),
+    onSuccess: () =>
+      Promise.all(['competitions', 'categories', 'waves', 'replacement', 'journal', 'weigh-in', 'schedule'].map((k) => qc.invalidateQueries({ queryKey: [k, id] }))),
+  });
+}
+export const useFreezeSessions = (id: string) => useSessionsFreezing(id, 'freeze');
+export const useUnfreezeSessions = (id: string) => useSessionsFreezing(id, 'unfreeze');
+
 export function useZones(id: string, enabled = true) {
   return useQuery({ queryKey: ['zones', id], enabled: enabled && !!id, queryFn: () => api<Zone[]>('GET', `/api/competitions/${id}/zones`) });
 }

@@ -6,7 +6,7 @@ import { activeEntrantCount, type Category } from '../../domain/categories.js';
 import { DISCIPLINES } from '../../domain/disciplines.js';
 import type { DisciplineId } from '../../domain/types.js';
 import { validateWaves, WAVE_MAX, WAVE_NONE, waveConflicts, waveOfCategory, type Wave, type WaveRules } from '../../domain/waves.js';
-import { useCategories, useGrid, useSaveWaves, useUpdateCategory, useWaves } from '../api.js';
+import { useCategories, useCompetition, useFreezeSessions, useGrid, useSaveWaves, useUnfreezeSessions, useUpdateCategory, useWaves } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { DayEstimateCard } from '../components/DayEstimateCard.js';
 import { IconArrowDown, IconArrowUp, IconTrash } from '../components/ui/icons.js';
@@ -20,6 +20,13 @@ import { useUnsaved } from '../unsaved.js';
 interface Draft { key: string; id?: string; name: string; rules: WaveRules }
 
 const DISCIPLINE_LIST = Object.entries(DISCIPLINES) as [DisciplineId, { label: string }][];
+/** « 20 novembre à 14 h 05 » (heure de Paris), comme le récapitulatif des clubs. */
+function frozenWhen(iso: string): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(iso)).map((p) => [p.type, p.value]),
+  );
+  return `${parts.day} ${parts.month} à ${Number(parts.hour)} h ${parts.minute}`;
+}
 const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
 /** « Tout cocher » / « Tout décocher » d'une liste de cases. */
@@ -36,7 +43,11 @@ export function WavesPage() {
   const { data: grid } = useGrid(id);
   const { data: saved } = useWaves(id);
   const { data: categories = [] } = useCategories(id);
+  const { data: competition } = useCompetition(id);
   const save = useSaveWaves(id);
+  const freeze = useFreezeSessions(id);
+  const unfreeze = useUnfreezeSessions(id);
+  const [confirming, setConfirming] = useState<'freeze' | 'unfreeze' | null>(null);
   const updateCategory = useUpdateCategory(id);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
@@ -77,6 +88,7 @@ export function WavesPage() {
   const waiting = listed.filter((c) => waveOf(c) === null);
   const savedWaves = saved ?? [];
   const nameOf = (waveId: string) => editing.find((w) => w.id === waveId)?.name ?? '';
+  const frozenAt = competition?.sessionsFrozenAt ?? null;
   const override = (c: Category, waveOverride: string | null) => updateCategory.mutate({ cid: c.id, waveOverride });
 
   const doSave = () => {
@@ -183,14 +195,24 @@ export function WavesPage() {
       <Group justify="space-between" className="no-print"
         style={{ position: 'sticky', bottom: 0, zIndex: 50, padding: 'var(--mantine-spacing-sm) var(--mantine-spacing-md)', background: 'var(--sk-bar)', border: '1px solid var(--sk-card-line)', borderRadius: 'var(--mantine-radius-lg)' }}>
         {dirty ? <StatusBadge tone="warn" data-testid="waves-unsaved">Modifications non enregistrées</StatusBadge> : <Text size="sm" c="dimmed">Aucune modification en cours</Text>}
-        <Button data-testid="wave-save" onClick={doSave} loading={save.isPending}>Enregistrer les sessions</Button>
+        <Group gap="sm">
+          {frozenAt ? (
+            <>
+              <Text size="sm" data-testid="sessions-frozen-at">Sessions figées le {frozenWhen(frozenAt)}</Text>
+              <Button variant="default" data-testid="sessions-unfreeze" onClick={() => setConfirming('unfreeze')}>Ne plus figer</Button>
+            </>
+          ) : drafts.length > 0 && (
+            <Button variant="default" data-testid="sessions-freeze" disabled={dirty} onClick={() => setConfirming('freeze')}>Figer les sessions</Button>
+          )}
+          <Button data-testid="wave-save" onClick={doSave} loading={save.isPending}>Enregistrer les sessions</Button>
+        </Group>
       </Group>
       {errors.length > 0 && (
         <Alert color="red" title="Sessions" data-testid="wave-errors">
           <List size="sm">{errors.map((e) => <List.Item key={e}>{e}</List.Item>)}</List>
         </Alert>
       )}
-      <ApiErrorAlert error={save.error ?? updateCategory.error} />
+      <ApiErrorAlert error={save.error ?? updateCategory.error ?? freeze.error ?? unfreeze.error} />
 
       <SectionCard data-testid="waves-waiting" title={`${HELP['vagues.en-attente'].title} (${waiting.length})`} help="vagues.en-attente">
         {waiting.length === 0 ? (
@@ -216,6 +238,25 @@ export function WavesPage() {
       </SectionCard>
 
       <DayEstimateCard competitionId={id} />
+
+      <Modal opened={confirming === 'freeze'} onClose={() => setConfirming(null)} title="Figer les sessions ?">
+        <Stack data-testid="sessions-freeze-confirm">
+          <Text size="sm">Chaque catégorie garde sa session actuelle. Les nouvelles inscriptions et les recasements ne la changeront plus. Vous pourrez toujours changer une catégorie de session à la main.</Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setConfirming(null)}>Annuler</Button>
+            <Button data-testid="sessions-freeze-go" loading={freeze.isPending} onClick={() => freeze.mutate(undefined, { onSuccess: () => setConfirming(null) })}>Figer les sessions</Button>
+          </Group>
+        </Stack>
+      </Modal>
+      <Modal opened={confirming === 'unfreeze'} onClose={() => setConfirming(null)} title="Ne plus figer les sessions ?">
+        <Stack data-testid="sessions-unfreeze-confirm">
+          <Text size="sm">Les catégories reprennent la session de la majorité de leurs combattants ; certaines peuvent changer de session.</Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setConfirming(null)}>Annuler</Button>
+            <Button data-testid="sessions-unfreeze-go" loading={unfreeze.isPending} onClick={() => unfreeze.mutate(undefined, { onSuccess: () => setConfirming(null) })}>Ne plus figer</Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <Modal opened={deleting !== null} onClose={() => setDeleting(null)} title={`Supprimer la session « ${deletingDraft?.name ?? ''} » ?`}>
         <Stack data-testid="wave-delete-confirm">

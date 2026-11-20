@@ -456,7 +456,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Une session a sa propre pesée et sa propre réaffectation ; pendant qu’une session combat, la suivante peut déjà se peser.',
       [
         '« Ajouter une session », nommez-la, puis cochez les tranches d’âge (et, si besoin, les disciplines) qu’elle prend. « Tout cocher » prend d’un coup toutes les tranches (ou toutes les disciplines).',
-        'Une catégorie suit la plus jeune tranche d’âge de ses combattants ; un combattant réaffecté depuis une autre tranche ne la fait pas changer de session. Une catégorie créée plus tard (inscription sur place) rejoint d’office la session qui lui correspond.',
+        'Une catégorie va dans la session de la majorité de ses combattants (réaffectés et absents compris) ; à égalité, celle des plus jeunes. Le jour de la compétition, « Figer les sessions » garde chaque catégorie dans sa session : les nouvelles inscriptions et les réaffectations ne la changent plus. Un choix à la main reste toujours possible.',
         'Si une catégorie correspond à deux sessions, elle va dans la première (dans l’ordre des cartes) et une alerte l’indique.',
         '« Retirer » met une catégorie en attente ; « Ajouter à… » la place à la main dans une session (marquée « ajoutée à la main ») ; « Revenir aux règles » annule ce choix.',
         '« Enregistrer les sessions » enregistre les noms, l’ordre et les règles ; les retraits et ajouts à la main s’appliquent tout de suite.',
