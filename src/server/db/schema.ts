@@ -140,6 +140,7 @@ export const mailLog = sqliteTable('mail_log', {
   sentAt: text('sent_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
   status: text('status', { enum: ['sent', 'error'] }).notNull(),
   error: text('error'),
+  kind: text('kind', { enum: ['invitation', 'recap'] }).notNull().default('invitation'),
   ...rowMeta(),
 });
 

@@ -204,3 +204,14 @@ test('saisie d’une inscription : fiches de l’annuaire proposées, club cré�
   expect(rows.find((r) => r.clubName === 'Tani Dojo')).toMatchObject({ invited: false });
   expect((await app.inject({ method: 'POST', url: `${base}/clubs/from-directory`, payload: { directoryId: 'inconnu' } })).statusCode).toBe(404);
 });
+
+test("un mail de récapitulatif n'est pas le dernier mail d'invitation", async () => {
+  await invite([await entry('Club R')]);
+  const db = new Database(dbPath);
+  const club = db.prepare('select id, competition_id from clubs limit 1').get() as { id: string; competition_id: string };
+  db.prepare("INSERT INTO mail_log (id, competition_id, club_id, email, status, kind) VALUES ('r1', ?, ?, 'a@b.fr', 'sent', 'recap')").run(club.competition_id, club.id);
+  db.close();
+  const rows = (await app.inject({ method: 'GET', url: `${base}/invitations` })).json() as { lastMail: unknown }[];
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.lastMail).toBeNull();
+});

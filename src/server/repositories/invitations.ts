@@ -89,7 +89,7 @@ export function listInvitations(db: AppDb, competitionId: string): ClubInvitatio
     .map((c) => {
       const links = activeLinks(db, competitionId, c.id);
       const n = db.select({ n: count() }).from(fighters).where(eq(fighters.clubId, c.id)).get()!.n;
-      const mail = db.select().from(mailLog).where(eq(mailLog.clubId, c.id)).orderBy(desc(mailLog.sentAt)).get();
+      const mail = db.select().from(mailLog).where(and(eq(mailLog.clubId, c.id), eq(mailLog.kind, 'invitation'))).orderBy(desc(mailLog.sentAt)).get();
       return {
         clubId: c.id, clubName: c.name, directoryClubId: c.directoryClubId, coachEmails: c.coachEmails,
         // Un lien actif vaut invitation, même si la date manque (club revenu d'un paquet qui ne la portait pas).

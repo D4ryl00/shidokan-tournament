@@ -1,0 +1,1 @@
+ALTER TABLE `mail_log` ADD `kind` text DEFAULT 'invitation' NOT NULL;
