@@ -37,6 +37,10 @@ export function PodiumsPage() {
           <Text size="sm" c="dimmed">Podiums :</Text>
           <Button.Group>{exportButton('podiums.xlsx', '.xlsx', 'export-podiums-xlsx')}{exportButton('podiums.ods', '.ods')}</Button.Group>
         </Group>
+        <Group gap="xs">
+          <Text size="sm" c="dimmed">Export FFK :</Text>
+          {exportButton('ffk.xlsx', '.xlsx', 'export-ffk')}
+        </Group>
       </Group>
       {!data ? null : total === 0 ? (
         <EmptyState title="Aucune catégorie à disputer" text="Les podiums apparaissent ici au fil des combats, catégorie par catégorie." />

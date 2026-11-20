@@ -720,6 +720,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         '« Imprimer les podiums » : une feuille pour la remise des médailles.',
         '« Feuilles de résultats » : les tableaux remplis, à archiver.',
         'Exports .ods ou .xlsx des podiums et de tous les résultats.',
+        'Export FFK (.xlsx) : le fichier au format de l’export FFK, avec la situation finale de chaque combattant (catégorie où il combat, désistés retirés), pour que la FFK voie les changements.',
       ],
     ],
   },

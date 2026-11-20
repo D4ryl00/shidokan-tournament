@@ -4,6 +4,7 @@ import type { AppDb } from '../db/client.js';
 import { checkRev, kataRev, resultRev, tieBreakRev } from '../revisions.js';
 import { getCompetition } from '../repositories/competitions.js';
 import { estimateFor } from '../repositories/estimate.js';
+import { exportFfk } from '../repositories/ffk-export.js';
 import { passagePlan } from '../repositories/passages.js';
 import { deleteResult, exportPodiums, exportResults, getResults, podiums, putKataNotes, putResult, putTieBreak, schedule } from '../repositories/results.js';
 
@@ -52,6 +53,9 @@ export async function resultRoutes(app: FastifyInstance, { db }: { db: AppDb }) 
     const { categories, medals } = await podiums(db, req.params.id);
     return { categories, medals };
   });
+  app.get<{ Params: { id: string } }>('/api/competitions/:id/exports/ffk.xlsx', async (req, reply) =>
+    reply.header('Content-Type', MIME.xlsx).header('Content-Disposition', 'attachment; filename="export-ffk.xlsx"').send(await exportFfk(db, req.params.id)),
+  );
   for (const type of ['xlsx', 'ods'] as const) {
     app.get<{ Params: { id: string } }>(`/api/competitions/:id/exports/results.${type}`, async (req, reply) =>
       reply.header('Content-Type', MIME[type]).header('Content-Disposition', `attachment; filename="resultats.${type}"`).send(await exportResults(db, req.params.id, type)),
