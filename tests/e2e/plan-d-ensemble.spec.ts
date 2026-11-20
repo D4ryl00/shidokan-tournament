@@ -733,6 +733,9 @@ test('« Modifier » : seulement les catégories de la session choisie', async (
   await expect(page.getByRole('option', { name: /Minimes/ })).toHaveCount(0);
   // Sur la carte, le déplacement manuel garde toutes les catégories (avec leur session).
   const card = page.getByTestId('replacement-case').filter({ hasText: 'SEULE' });
+  // Le motif de la carte vient avant le rappel du combattant.
+  await expect(card.getByTestId('case-detail')).toBeVisible();
+  await expect(card.locator('[data-testid="case-detail"] ~ [data-testid="case-fighter"]')).toHaveCount(1);
   await page.keyboard.press('Escape');
   await card.getByTestId('manual-move-all').click({ force: true });
   await card.getByTestId('manual-move-select').click();

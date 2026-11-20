@@ -78,7 +78,7 @@ function FighterDetail({ f, grid }: { f: CaseFighter | undefined; grid: Category
     ...(f.otherDisciplines.length ? [`accepte : ${prefsLabel(f.otherDisciplines)}`] : []),
     ...(f.ruleset === 'shobu' && f.acceptsJiyuFirst ? ['accepte le jiyu en priorité'] : []),
   ];
-  return <Text size="sm" data-testid="case-fighter">{parts.join(' · ')}</Text>;
+  return <Text size="sm" c="dimmed" data-testid="case-fighter">{parts.join(' · ')}</Text>;
 }
 
 /** Compteur du tableau de bord ; `tone` : à traiter (attention), réglé (succès) ou bloquant (erreur). */
@@ -318,11 +318,12 @@ export function ReplacementPage() {
         <Group justify="space-between" align="flex-start" mb="sm" wrap="nowrap">
           <div style={{ minWidth: 0 }}>
             <Text fw={700} size="lg" data-testid="case-name">{name(c.registrationId)}</Text>
+            <Text size="sm" fw={600} c={c.kind === 'return' ? undefined : 'var(--sk-warn-text)'} data-testid="case-detail">{c.detail}</Text>
+            {(() => {
+              const cat = c.categoryId ? categories.find((x) => x.id === c.categoryId) : undefined;
+              return cat ? <Text size="sm">Catégorie actuelle : {cat.label}</Text> : null;
+            })()}
             <FighterDetail f={data.fighters[c.registrationId]} grid={grid} />
-            <Text size="sm" c="dimmed">
-              {c.detail}
-              {c.categoryId && categories.find((x) => x.id === c.categoryId) ? ` · catégorie actuelle : ${categories.find((x) => x.id === c.categoryId)!.label}` : ''}
-            </Text>
           </div>
           <Stack gap={4} align="flex-end">
             <StatusBadge tone={c.kind === 'return' ? 'neutral' : 'warn'} size="lg">{CASE_KINDS[c.kind]}</StatusBadge>
