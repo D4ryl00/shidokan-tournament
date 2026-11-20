@@ -50,7 +50,7 @@ Session d'une catégorie, dans l'ordre :
 1. le choix manuel (`waveOverride`, y compris `none`), qui garde la priorité ;
 2. sinon, la session figée (§3) ;
 3. sinon, une catégorie libre (`key.free`) n'a pas de session (comme aujourd'hui) ;
-4. sinon, le **comptage** : chaque combattant de la catégorie (absents compris, recasés compris, retirés exclus puisqu'ils n'ont plus de catégorie) vote pour la session que les règles donnent à sa propre tranche et à la discipline de la catégorie (la première session dont la règle les prend, même ordre qu'aujourd'hui). Un combattant dont la tranche n'est prise par aucune session ne vote pas. La session qui a le plus de voix l'emporte. En cas d'égalité, c'est la session de la tranche la plus jeune parmi les ex-aequo (ordre des tranches de la grille), puis l'ordre des sessions si deux tranches de même rang donnent deux sessions ;
+4. sinon, le **comptage** : chaque combattant de la catégorie (recasés compris, retirés exclus puisqu'ils n'ont plus de catégorie ; absents compris tant que les sessions ne sont pas figées, exclus une fois figées — ce qui ne joue que pour une catégorie créée après le gel) vote pour la session que les règles donnent à sa propre tranche et à la discipline de la catégorie (la première session dont la règle les prend, même ordre qu'aujourd'hui). Un combattant dont la tranche n'est prise par aucune session ne vote pas. La session qui a le plus de voix l'emporte. En cas d'égalité, c'est la session de la tranche la plus jeune parmi les ex-aequo (ordre des tranches de la grille), puis l'ordre des sessions si deux tranches de même rang donnent deux sessions ;
 5. sans aucun vote (catégorie vide ou aucune tranche prise), la clé décide, comme aujourd'hui : la tranche la plus jeune de `key.ageBandCodes`.
 
 Conséquences :
@@ -99,6 +99,7 @@ Conséquences :
 - Le motif en évidence sur la carte, le rappel grisé.
 - La majorité numérique décide de la session ; en cas d'égalité, les plus jeunes.
 - Les recasés comptent.
+- Les absents comptent tant que les sessions ne sont pas figées ; une fois figées, ils ne comptent plus. Après « Ne plus figer », ils comptent de nouveau.
 - Le jour J, rien ne bouge tout seul ; on corrige à la main avec la page Sessions.
 - Le gel est déclenché par un bouton (B) et stocké à part du choix manuel, de façon réversible (1).
 - Le récapitulatif dit « Déplacé dans la session {nom} », sans horaire, dès que la session diffère de celle du protocole envoyé aux clubs (règles des sessions appliquées à la tranche du combattant).
@@ -106,7 +107,6 @@ Conséquences :
 
 ## Mes choix (à corriger si besoin)
 
-- Les absents comptent, pour qu'une absence ne fasse pas basculer une catégorie avant le gel.
 - Comptage par session plutôt que par tranche.
 - Le récapitulatif ne montre la session que lorsqu'elle diffère de celle du protocole.
 - `waveConflicts` (catégories prises par plusieurs sessions) : sous le vote, une catégorie est en conflit si le vote gagnant d'une de ses tranches est ambigu (tranche prise par plusieurs règles), comme aujourd'hui pour sa tranche décisive.
