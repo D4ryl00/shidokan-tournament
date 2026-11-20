@@ -217,8 +217,9 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     if (!current) return reply.status(404).send(NOT_FOUND);
     const patch = competitionPatchSchema.parse(req.body);
     // Sur un PC, le message aux clubs ne change pas, comme dans les réglages de l'application ; les autres réglages restent modifiables.
-    const mail = (patch.settings as { invitationMail?: unknown } | null | undefined)?.invitationMail;
-    if (!clubServices && mail !== undefined && !sameMailTemplate(mail, current.settings.invitationMail)) return reply.status(403).send({ error: SERVER_ONLY });
+    const sent = patch.settings as { invitationMail?: unknown; recapMail?: unknown } | null | undefined;
+    if (!clubServices && sent?.invitationMail !== undefined && !sameMailTemplate(sent.invitationMail, current.settings.invitationMail)) return reply.status(403).send({ error: SERVER_ONLY });
+    if (!clubServices && sent?.recapMail !== undefined && !sameMailTemplate(sent.recapMail, current.settings.recapMail)) return reply.status(403).send({ error: SERVER_ONLY });
     return await updateCompetition(db, req.params.id, patch);
   });
 

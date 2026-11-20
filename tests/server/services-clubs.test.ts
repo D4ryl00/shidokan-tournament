@@ -115,6 +115,8 @@ test('PC : le message d’une compétition ne change pas ; les autres réglages 
   }
   expect((await patch({ repechage: true })).statusCode).toBe(200);
   expect((await patch({ invitationMail: null })).statusCode).toBe(200);
+  expect((await patch({ recapMail: { subject: 'S', body: 'B' } })).json()).toEqual({ error: SERVER_ONLY });
+  expect((await patch({ recapMail: null })).statusCode).toBe(200);
   // Un message arrivé avec la compétition : le renvoyer tel quel passe, le retirer ou le changer non.
   const mail = { subject: 'S', body: '<p>Arrivé</p>', format: 'html' };
   const raw = new Database(dbPath);

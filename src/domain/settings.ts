@@ -59,6 +59,8 @@ export const competitionSettingsSchema = z
     schedule: scheduleSettingsSchema,
     /** Message envoyé aux clubs pour cette compétition (null : celui des réglages de l'application). */
     invitationMail: mailTemplateSchema.nullable(),
+    /** Message du récapitulatif envoyé à chaque club avec son PDF (null : texte de départ). */
+    recapMail: mailTemplateSchema.nullable(),
     /** Fiches club jointes au mail aux clubs (décochées : non jointes, mais toujours téléchargeables). */
     clubFormAttachments: z.object({ pdf: z.boolean(), ods: z.boolean() }).strict(),
     /** Liste ordonnée des règles du plan d'ensemble, interrupteurs propres et ligne de coupure. */
@@ -91,6 +93,7 @@ export function defaultSettings(): CompetitionSettings {
     passageOrder: 'rounds',
     schedule: defaultSchedule(),
     invitationMail: null,
+    recapMail: null,
     clubFormAttachments: { pdf: true, ods: true },
     replacementRules: { order: [...RULE_IDS], off: [], cutAfter: 'discipline' },
   };
@@ -130,5 +133,6 @@ export function readStoredSettings(raw: unknown): CompetitionSettings {
 export function mergeSettings(partial: unknown, base: CompetitionSettings = defaultSettings()): CompetitionSettings {
   const merged = deepMerge(base, partial ?? {}) as Record<string, unknown>;
   if (isPlainObject(partial) && partial.invitationMail !== undefined) merged.invitationMail = partial.invitationMail;
+  if (isPlainObject(partial) && partial.recapMail !== undefined) merged.recapMail = partial.recapMail;
   return competitionSettingsSchema.parse(merged);
 }

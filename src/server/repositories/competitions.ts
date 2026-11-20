@@ -110,6 +110,9 @@ export async function updateCompetition(
     if (settings.invitationMail && !sameMailTemplate(settings.invitationMail, current.settings.invitationMail)) {
       settings = { ...settings, invitationMail: cleanTemplate(settings.invitationMail) };
     }
+    if (settings.recapMail && !sameMailTemplate(settings.recapMail, current.settings.recapMail)) {
+      settings = { ...settings, recapMail: cleanTemplate(settings.recapMail) };
+    }
   }
   if (patch.settings !== undefined) {
     const codes = new Set((await getGrid(db, id)).ageBands.map((b) => b.code));

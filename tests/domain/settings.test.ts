@@ -20,6 +20,7 @@ test('réglages par défaut (spec §9.2, §8, §11.1, §12, §4.1)', () => {
     passageOrder: 'rounds',
     schedule: defaultSchedule(),
     invitationMail: null,
+    recapMail: null,
     clubFormAttachments: { pdf: true, ods: true },
     replacementRules: { order: [...RULE_IDS], off: [], cutAfter: 'discipline' },
   });
@@ -70,4 +71,11 @@ test('zone des finales : plus dans les réglages (par session, onglet Finales)',
   expect(stored).not.toHaveProperty('kataFinalsOnFinalsZone');
   expect(stored.repechage).toBe(true);
   expect(() => mergeSettings({ finalsZoneId: 'z2' })).toThrow(ZodError);
+});
+
+test('recapMail : null par défaut, remplacé en entier', () => {
+  expect(defaultSettings().recapMail).toBeNull();
+  const html = mergeSettings({ recapMail: { subject: 'S', body: '<p>B</p>', format: 'html' } });
+  expect(mergeSettings({ recapMail: { subject: 'T', body: 'texte' } }, html).recapMail).toEqual({ subject: 'T', body: 'texte' });
+  expect(mergeSettings({ recapMail: null }, html).recapMail).toBeNull();
 });
