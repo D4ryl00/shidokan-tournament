@@ -1548,7 +1548,7 @@ export function useGoogleDisconnect() {
 export interface SendTarget { clubId: string; emails?: string[] }
 export interface SendResult { clubId: string; clubName: string; email: string | null; status: 'sent' | 'error'; error: string | null }
 /** Envoi groupé fait en tâche de fond par le serveur : `results` grandit club par club jusqu'à `finished`. */
-export interface SendJob { id: string; startedAt: string; total: number; results: SendResult[]; finished: boolean; error: string | null }
+export interface SendJob { id: string; kind: 'invitation' | 'recap'; startedAt: string; total: number; results: SendResult[]; finished: boolean; error: string | null }
 /** Lance l'envoi (un refus arrive tout de suite, rien ne part) ; l'avancement se lit ensuite par `useSendJob`. */
 export function useSendInvitations(id: string) {
   const qc = useQueryClient();
@@ -1563,6 +1563,32 @@ export const useSendJob = (id: string) =>
     queryKey: ['invitation-send', id],
     queryFn: () => api<{ job: SendJob | null }>('GET', `/api/competitions/${id}/invitations/send`),
     refetchInterval: (q) => (q.state.data?.job && !q.state.data.job.finished ? 1000 : false),
+  });
+// Envoi du récapitulatif PDF aux clubs (serveur en ligne seulement).
+/** Envoie le récapitulatif d'un club : le refus d'avant envoi arrive en erreur, un échec d'envoi dans le résultat. */
+export const useSendRecap = (id: string) =>
+  useMutation({ mutationFn: ({ clubId }: { clubId: string }) => api<SendResult>('POST', `/api/competitions/${id}/invitations/${clubId}/recap`) });
+export function useSendRecaps(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (clubIds: string[]) => api<SendJob>('POST', `/api/competitions/${id}/invitations/recaps/send`, { clubIds }),
+    onSuccess: (job) => qc.setQueryData(['recap-send', id], { job }),
+  });
+}
+/** Dernier envoi groupé des récapitulatifs, relu chaque seconde tant qu'il n'est pas fini. */
+export const useRecapSendJob = (id: string, enabled = true) =>
+  useQuery({
+    queryKey: ['recap-send', id],
+    enabled,
+    queryFn: () => api<{ job: SendJob | null }>('GET', `/api/competitions/${id}/invitations/recaps/send`),
+    refetchInterval: (q) => (q.state.data?.job && !q.state.data.job.finished ? 1000 : false),
+  });
+export const useRecapPreview = (id: string, clubId: string | null, version: string) =>
+  useQuery({
+    queryKey: ['recap-preview', id, clubId, version],
+    queryFn: () => api<{ subject: string; body: string; html: string }>('GET', `/api/competitions/${id}/invitations/recaps/preview?clubId=${clubId}`),
+    enabled: !!clubId,
+    placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[2] === clubId ? previous : undefined),
   });
 /** Après chaque club traité : la liste des clubs (dernier mail, liens) est relue. */
 export function useRefreshInvitations(id: string) {

@@ -14,6 +14,7 @@ export type HelpTopicId =
   | 'impression'
   | 'inscriptions'
   | 'clubs'
+  | 'clubs.recap'
   | 'fiche-club'
   | 'import-ffk'
   | 'sessions'
@@ -280,6 +281,20 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         '« Masquer le nom sur la page publique » remplace le nom du combattant par « Combattant masqué » pour le public (son club reste affiché). Le réglage vaut pour toutes ses lignes ; un badge « nom masqué en ligne » le rappelle dans la liste.',
       ],
       'La colonne « Origine » indique d’où vient la ligne : fiche club, export FFK ou saisie.',
+    ],
+  },
+  'clubs.recap': {
+    title: 'Récapitulatif par mail',
+    short: 'Envoyez à chaque club le récapitulatif PDF de ses inscriptions, avec un message que vous pouvez modifier.',
+    details: [
+      'Disponible sur le serveur en ligne seulement, pour les clubs qui ont au moins une inscription et une adresse e-mail.',
+      [
+        'L’enveloppe d’une ligne envoie le récapitulatif à ce club, après une confirmation qui montre les adresses et l’objet. Grisée, elle dit pourquoi (aucune inscription, pas d’e-mail).',
+        '« Envoyer les récapitulatifs à tous les clubs » envoie à tous ceux qui peuvent le recevoir ; la confirmation liste les clubs sautés et pourquoi. L’envoi continue sur le serveur si vous quittez la page.',
+        '« Message du récapitulatif » règle l’objet et le texte, avec un aperçu pour un club. « Revenir au texte de départ » rend le texte d’origine.',
+        'Le récapitulatif PDF du club est joint automatiquement, tel qu’il est au moment de l’envoi.',
+        'On peut renvoyer autant de fois qu’il faut : après une correction d’inscription, un nouvel envoi joint le récapitulatif à jour.',
+      ],
     ],
   },
   clubs: {

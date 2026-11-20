@@ -44,6 +44,9 @@ export const IconLink = ({ size = 16 }: { size?: number }) => (
 export const IconPlus = ({ size = 16 }: { size?: number }) => (
   <Svg size={size}><path d="M12 5v14M5 12h14" /></Svg>
 );
+export const IconMail = ({ size = 16 }: { size?: number }) => (
+  <Svg size={size}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 7l9 6 9-6" /></Svg>
+);
 export const IconDownload = ({ size = 16 }: { size?: number }) => (
   <Svg size={size}><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></Svg>
 );

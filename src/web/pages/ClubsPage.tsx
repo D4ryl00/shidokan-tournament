@@ -4,11 +4,12 @@ import { notifications } from '@mantine/notifications';
 import { useParams } from 'react-router';
 import { ofName, plural } from '../../domain/plural.js';
 import type { Club } from '../../domain/registration.js';
-import { useClubChanges, useClubs, useFetchClubChanges, useRegistrations, useUpdateClub } from '../api.js';
+import { useAuthMe, useClubChanges, useClubs, useFetchClubChanges, useRegistrations, useUpdateClub } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { ClubChangePill } from '../components/club-changes/ClubChangeBanners.js';
 import { useClubChangeDialog } from '../components/club-changes/ClubChangeModal.js';
 import { EmailsInput, EmailsList } from '../components/EmailsInput.js';
+import { RecapMessage, RecapSendAll, RecapSendOne, recapBlocked } from '../components/RecapMail.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { IconDownload, IconEdit } from '../components/ui/icons.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
@@ -62,6 +63,8 @@ export function ClubsPage() {
   const { data: clubs = [], isLoading } = useClubs(id);
   const { data: rows = [] } = useRegistrations(id);
   const update = useUpdateClub(id);
+  // L'envoi des mails se fait depuis le serveur en ligne seulement.
+  const online = useAuthMe().data?.role === 'serveur';
   const { data: changes = [] } = useClubChanges(id);
   const fetchChanges = useFetchClubChanges(id);
   const comparison = useClubChangeDialog(changes);
@@ -93,8 +96,12 @@ export function ClubsPage() {
     <Stack gap="md">
       <PageHeader title={plural(clubs.length, 'club')} summary={clubs.length > 0 ? `${plural(preApproved, 'club')} avec pré-accord du coach` : undefined}
         actions={clubs.length > 0 && (
-          <Button component="a" href={`/api/competitions/${id}/exports/club-recaps.zip`} download variant="default" data-testid="club-recaps-zip">Tous les récapitulatifs (.zip)</Button>
+          <Group gap="sm">
+            <Button component="a" href={`/api/competitions/${id}/exports/club-recaps.zip`} download variant="default" data-testid="club-recaps-zip">Tous les récapitulatifs (.zip)</Button>
+            {online && <RecapSendAll competitionId={id} clubs={clubs.map((c) => ({ id: c.id, name: c.name, coachEmails: c.coachEmails, registrations: count(c.id) }))} />}
+          </Group>
         )} />
+      {online && clubs.length > 0 && <RecapMessage competitionId={id} previewClubId={clubs.find((c) => recapBlocked(c, count(c.id)) === null)?.id ?? null} />}
       {isLoading ? null : clubs.length === 0 ? (
         <EmptyState title="Aucun club pour l’instant" text="Les clubs sont créés par les inscriptions : en ligne, par l’import des fiches ou de l’export FFK, ou à la saisie d’une inscription." />
       ) : (
@@ -128,6 +135,7 @@ export function ClubsPage() {
                   <Table.Td ta="right">
                     <ActionIcon variant="subtle" color="gray" aria-label={`Récapitulatif ${ofName(c.name)}`} title="Récapitulatif (PDF)" data-testid="club-recap"
                       {...(count(c.id) === 0 ? { disabled: true } : { component: 'a', href: `/api/competitions/${id}/clubs/${c.id}/recap.pdf`, download: true })}><IconDownload /></ActionIcon>
+                    {online && <RecapSendOne competitionId={id} club={c} registrations={count(c.id)} />}
                     <ActionIcon variant="subtle" color="gray" aria-label={`Modifier ${c.name}`} title="Modifier" data-testid="club-edit" onClick={() => setEditing(c)}><IconEdit /></ActionIcon>
                   </Table.Td>
                 </Table.Tr>
