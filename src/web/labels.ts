@@ -22,6 +22,12 @@ export function weightLabel(grid: CategoryGrid | undefined, id: string | null): 
 export function kgLabel(kg: number): string {
   return `${kg.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} kg`;
 }
+/** Poids affiché sur une pastille : pesé, sinon « ≈ déclaré », sinon rien (jamais en kata). */
+export function entrantWeight(r: { discipline: DisciplineId; weighInKg: number | null; approxWeightKg: number | null }): string | null {
+  if (!DISCIPLINES[r.discipline].hasWeight) return null;
+  if (r.weighInKg !== null) return kgLabel(r.weighInKg);
+  return r.approxWeightKg !== null ? `≈ ${kgLabel(r.approxWeightKg)}` : null;
+}
 export function prefsLabel(prefs: DisciplineId[]): string {
   return prefs.length ? prefs.map((d) => DISCIPLINES[d].label).join(' › ') : '—';
 }

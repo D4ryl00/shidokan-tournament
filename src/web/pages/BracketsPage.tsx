@@ -26,6 +26,7 @@ import { BracketView, type EntrantInfo } from '../components/BracketView.js';
 import { useRecasementDetails } from '../components/ReplacementBadge.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { StatusBadge, type Tone } from '../components/ui/StatusBadge.js';
+import { entrantWeight } from '../labels.js';
 import { ALL_FORMAT_LABELS } from '../../domain/brackets/format-labels.js';
 
 export const STATUS_LABELS: Record<CategoryStatus, string> = { provisional: 'Provisoire', ready: 'Prête', started: 'Lancée', finished: 'Terminée' };
@@ -43,7 +44,7 @@ function storedView(): View {
 export function useEntrantInfo(competitionId: string): Map<string, EntrantInfo> {
   const { data: rows = [] } = useRegistrations(competitionId);
   return useMemo(
-    () => new Map(rows.map((r) => [r.id, { name: `${r.fighter.lastName} ${r.fighter.firstName}`.trim(), club: r.club?.name ?? 'Sans club', grade: r.fighter.grade }])),
+    () => new Map(rows.map((r) => [r.id, { name: `${r.fighter.lastName} ${r.fighter.firstName}`.trim(), club: r.club?.name ?? 'Sans club', grade: r.fighter.grade, weight: entrantWeight(r) }])),
     [rows],
   );
 }

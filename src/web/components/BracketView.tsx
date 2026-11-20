@@ -25,6 +25,8 @@ export interface EntrantInfo {
   club: string;
   /** Grade (kata), pour informer les arbitres. */
   grade?: string | null;
+  /** Poids pesé (« 68,5 kg ») ou déclaré (« ≈ 68 kg »), pour les pastilles ; absent en kata. */
+  weight?: string | null;
 }
 
 export const METHOD_SHORT: Record<MatchResult['method'], string> = {

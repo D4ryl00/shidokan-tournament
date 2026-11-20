@@ -34,7 +34,7 @@ export function FighterChip({ id, info, badge, badgeDetail, pendingAuth, sameClu
     // Enveloppe non interactive : ⓘ est le frère de la pastille (qui a role="button"), pas son descendant. Hauteur inchangée :
     // ⓘ est posé en haut à droite, dans la bordure.
     <Box data-testid="planche-chip-wrap" style={{ position: 'relative', minWidth: 0 }}>
-      <Box data-testid="planche-chip" data-entrant={id} data-locked={locked || undefined} title={compact ? info?.club : undefined} {...extra}
+      <Box data-testid="planche-chip" data-entrant={id} data-locked={locked || undefined} title={compact ? [info?.club, info?.weight].filter(Boolean).join(' · ') || undefined : undefined} {...extra}
         style={{
           border: `1px solid ${selected ? 'var(--sk-accent)' : 'var(--sk-card-line)'}`,
           outline: selected ? '2px solid var(--sk-accent)' : undefined,
@@ -43,7 +43,10 @@ export function FighterChip({ id, info, badge, badgeDetail, pendingAuth, sameClu
           cursor: locked ? 'default' : 'grab', ...extra?.style,
         }}>
         <Group gap={2} wrap="wrap" justify="space-between" align="flex-start">
-          <Text size="sm" fw={matched ? 700 : 500} lh={1.25} style={{ overflowWrap: 'anywhere', minWidth: 0 }}>{info?.name ?? '?'}</Text>
+          <Group gap={4} wrap="wrap" align="baseline" style={{ minWidth: 0 }}>
+            <Text size="sm" fw={matched ? 700 : 500} lh={1.25} style={{ overflowWrap: 'anywhere', minWidth: 0 }}>{info?.name ?? '?'}</Text>
+            {compact && info?.weight && <Text size="xs" c="dimmed" className="num" data-testid="chip-weight">{info.weight}</Text>}
+          </Group>
           {(badge || pendingAuth?.length) && (
             <Group gap={2} wrap="nowrap">
               {badge && <ReplacementBadge type={badge} size="xs" detail={badgeDetail} />}
@@ -51,9 +54,14 @@ export function FighterChip({ id, info, badge, badgeDetail, pendingAuth, sameClu
             </Group>
           )}
         </Group>
-        {!compact && <Text size="xs" lh={1.2} c={sameClub ? 'orange' : 'dimmed'} fw={sameClub ? 600 : undefined} data-testid={sameClub ? 'same-club' : undefined} className="sk-ellipsis">
-          {info?.club ?? ''}
-        </Text>}
+        {!compact && (
+          <Group gap={4} wrap="nowrap" justify="space-between" align="baseline">
+            <Text size="xs" lh={1.2} c={sameClub ? 'orange' : 'dimmed'} fw={sameClub ? 600 : undefined} data-testid={sameClub ? 'same-club' : undefined} className="sk-ellipsis" style={{ minWidth: 0 }}>
+              {info?.club ?? ''}
+            </Text>
+            {info?.weight && <Text size="xs" lh={1.2} c="dimmed" className="num" data-testid="chip-weight" style={{ flexShrink: 0 }}>{info.weight}</Text>}
+          </Group>
+        )}
       </Box>
       {withInfo && <FighterInfoButton competitionId={competitionId!} registrationId={id} name={info!.name} club={info!.club} style={{ position: 'absolute', top: 1, right: 1 }} />}
     </Box>
