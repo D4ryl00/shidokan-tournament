@@ -67,10 +67,11 @@ describe('GET /finals', () => {
       plan.zones
         .map((z) => {
           const mine = z.passages.filter((p) => p.waveId === s.matin);
-          // Finale des -54 en fin de session ; les deux places de la finale du kata, dès que prête.
+          // Finale des -54 en fin de session ; la finale du kata (une finale, ses deux passages), dès que prête.
           const end = mine.filter((p) => p.matchId === 'w2-0').length;
-          const ready = mine.filter((p) => p.matchId?.startsWith('kata:finale:')).length;
-          return { zoneId: z.zoneId, ownPassages: mine.length - end - ready, ready, end };
+          const ready = mine.filter((p) => p.matchId === 'kata:finale:1').length;
+          const second = mine.filter((p) => p.matchId === 'kata:finale:2').length;
+          return { zoneId: z.zoneId, ownPassages: mine.length - end - ready - second, ready, end };
         })
         .filter((t) => t.ownPassages + t.ready + t.end > 0),
     );
@@ -86,8 +87,8 @@ describe('GET /finals', () => {
     expect(row(s.b61)).toMatchObject({ fixed: 'finals-zone', where: 'finals' });
     expect(row(s.a54)).toMatchObject({ fixed: null, where: 'finals', when: 'end' });
     expect(row(s.kata)).toMatchObject({ where: 'finals', kataSplit: true });
-    // Finale des -54 et les deux passages de la finale du kata.
-    expect(v.summary.find((t) => t.zoneId === s.t2)).toMatchObject({ ready: 0, end: 3 });
+    // Finale des -54 et celle du kata (une finale pour ses deux passages).
+    expect(v.summary.find((t) => t.zoneId === s.t2)).toMatchObject({ ready: 0, end: 2 });
   });
 });
 

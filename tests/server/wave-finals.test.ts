@@ -9,7 +9,7 @@ import { finalMatchIds } from '../../src/domain/passages/index.js';
 import type { CombatBracket } from '../../src/domain/brackets/index.js';
 import { passagePlan, planInput } from '../../src/server/repositories/passages.js';
 import { RegistrationValidationError } from '../../src/server/repositories/registrations.js';
-import { assertFinalsEditable, listWaveFinals, setCategoryFinals, setFinalsZone } from '../../src/server/repositories/wave-finals.js';
+import { assertFinalsEditable, finalsView, listWaveFinals, setCategoryFinals, setFinalsZone } from '../../src/server/repositories/wave-finals.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
@@ -110,6 +110,17 @@ describe('finales par session', () => {
     expect((await call('PUT', '/zones', [{ id: s.t1, name: 'Tatami 1' }])).statusCode).toBe(200);
     expect(waveOf(s.matin)?.finalsZoneId).toBeNull();
     await expect(passagePlan(db, id)).resolves.toMatchObject({ impossible: [] });
+  });
+});
+
+describe('résumé par zone', () => {
+  test('kata non séparé : son tour 1 en passages, sa finale compte pour une finale (deux passages)', async () => {
+    const s = await setup();
+    await call('PATCH', `/categories/${s.a54}`, { zoneId: s.t1 });
+    await call('PATCH', `/categories/${s.kata}`, { zoneId: s.t2 });
+    const v = await finalsView(db, id, s.matin);
+    expect(v.rows.find((r) => r.categoryId === s.kata)).toMatchObject({ kataSplit: false, when: 'ready' });
+    expect(v.summary.find((t) => t.zoneId === s.t2)).toEqual({ zoneId: s.t2, ownPassages: 3, ready: 1, end: 0 });
   });
 });
 

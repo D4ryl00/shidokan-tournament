@@ -1,4 +1,4 @@
-import { isFinalPassage, planPassages, waveKey } from '../../domain/passages/index.js';
+import { isFinalPassage, opensKataRound, planPassages, waveKey } from '../../domain/passages/index.js';
 import { clockToSeconds } from '../../domain/schedule/clock.js';
 import { estimateDay, type DayEstimateView, type EstimateItem } from '../../domain/schedule/estimate.js';
 import { isClock } from '../../domain/schedule/types.js';
@@ -33,7 +33,8 @@ export async function estimateFor(db: AppDb, competitionId: string, shift: boole
   const finalsZone = new Map((input.waveFinals ?? []).map((w) => [w.waveKey, w.finalsZoneId]));
 
   // Passages comme les files du mode spectateur : catégories jouables, finales (« Quand ») et attente d'une finale « Dès que
-  // finie » jouée hors de la zone de sa catégorie ; durée sans le changement (compté par la ligne de temps).
+  // finie » jouée hors de la zone de sa catégorie ; durée sans le changement (compté par la ligne de temps). Un kataka après
+  // le premier de son tour n'en porte pas : il suit le précédent sans changement.
   const byId = new Map(input.categories.map((c) => [c.id, c]));
   const keyOf = (p: { categoryId: string; matchId: string }) => `${p.categoryId}:${p.matchId}`;
   const passages = plan.zones.map((z) => ({
@@ -62,12 +63,15 @@ export async function estimateFor(db: AppDb, competitionId: string, shift: boole
       items: z.passages.map((p): EstimateItem => {
         const finals = finalKeys.has(keyOf(p)) ? (plan.finals[p.categoryId]?.when ?? null) : null;
         const away = finals === 'ready' && plan.categories[p.categoryId]?.zoneId !== z.zoneId;
+        const bracket = byId.get(p.categoryId)!.bracket;
+        const changeover = bracket?.kind !== 'kata' || opensKataRound(bracket, p.matchId);
         return {
           key: keyOf(p),
           waveKey: waveKey(p.waveId),
-          durationSec: input.durationSec!(p.categoryId, p.matchId) - changeoverSec,
+          durationSec: input.durationSec!(p.categoryId, p.matchId) - (changeover ? changeoverSec : 0),
           finals,
           ...(away ? { waitsFor: nonFinals.get(p.categoryId) ?? [] } : {}),
+          ...(changeover ? {} : { changeoverBefore: false }),
         };
       }),
     })),

@@ -1,7 +1,13 @@
 import type { FastifyInstance } from 'fastify';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
-import type { DayEstimateView } from '../../src/domain/schedule/estimate.js';
+import { estimateDay, type DayEstimateView } from '../../src/domain/schedule/estimate.js';
+
+// Entrée de l'estimation observée (durées de chaque passage), le calcul reste le vrai.
+vi.mock('../../src/domain/schedule/estimate.js', async (original) => {
+  const m = await original<typeof import('../../src/domain/schedule/estimate.js')>();
+  return { ...m, estimateDay: vi.fn(m.estimateDay) };
+});
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
@@ -85,6 +91,17 @@ describe('horaires estimés de la journée', () => {
     const { zoneId, matin } = await twoSessions();
     expect((await call('PUT', '/finals/zone', { waveId: matin, finalsZoneId: zoneId })).statusCode).toBe(200);
     expect((await estimate()).waves.map((w) => w.finalsZoneId)).toEqual([zoneId, null]);
+  });
+
+  test('passage de kata plus court que le changement : durées exactes, jamais négatives, changement au début de chaque tour seulement', async () => {
+    expect((await app.inject({ method: 'PATCH', url: base, payload: { settings: { schedule: { kataPassageSec: 30, changeoverSec: 60 } } } })).statusCode).toBe(200);
+    await many(3);
+    const e = await estimate();
+    // 5 passages de 30 s, un changement (1 min) entre le tour 1 et la finale.
+    expect(e.waves[0]).toMatchObject({ start: 0, end: 5 * 30 + 60 });
+    const items = vi.mocked(estimateDay).mock.calls.at(-1)![0].zones.flatMap((z) => z.items);
+    expect(items.map((i) => i.durationSec)).toEqual([30, 30, 30, 30, 30]);
+    expect(items.map((i) => i.changeoverBefore ?? true)).toEqual([true, false, false, true, false]);
   });
 
   test('sans session ni début prévu : relatif, depuis 0', async () => {

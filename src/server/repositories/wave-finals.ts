@@ -1,5 +1,5 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import { defaultFinalsChoice, finalMatchIds, isFinalPassage, planPassages, resolveFinals, waveKey, type FinalsWhen, type FinalsWhere, type WaveFinals } from '../../domain/passages/index.js';
+import { defaultFinalsChoice, finalMatchIds, isFinalPassage, kataFinaleKey, planPassages, resolveFinals, waveKey, type FinalsWhen, type FinalsWhere, type WaveFinals } from '../../domain/passages/index.js';
 import type { DisciplineId } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
 import { categories, waveFinals } from '../db/schema.js';
@@ -188,6 +188,8 @@ export async function finalsView(db: AppDb, competitionId: string, waveId: strin
       for (const passage of z.passages.filter((x) => x.waveId === waveId)) {
         const bracket = byId.get(passage.categoryId)?.bracket;
         if (!isFinalPassage(bracket ?? null, passage.matchId)) tally.ownPassages++;
+        // Une finale de kata (deux passages) compte pour une finale : sa place 1.
+        else if (passage.matchId === kataFinaleKey(2)) continue;
         else if (plan.finals[passage.categoryId]?.when === 'ready') tally.ready++;
         else tally.end++;
       }

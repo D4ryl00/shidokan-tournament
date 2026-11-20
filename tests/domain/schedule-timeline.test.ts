@@ -20,6 +20,16 @@ test('planned start drives the first wave', () => {
   expect(t.waveStarts.get('s1')).toBeNull();
 });
 
+test('passage sans changement (kataka après le premier de son tour) : suit le précédent sans changement', () => {
+  const k = (key: string, endedAt: number | null = null): TimelineItem => ({ ...item(key, 's1', 30, endedAt), changeoverBefore: false });
+  const t = buildTimeline(input({ waves: [wave('s1', h(9, 0))], zones: [{ zoneId: 'z', items: [item('a', 's1', 30), k('b'), k('c'), item('f', 's1', 30), k('g')] }] }));
+  expect(['a', 'b', 'c', 'f', 'g'].map((x) => t.starts.get(x)! - h(9, 0))).toEqual([0, 30, 60, 150, 180]);
+  // Après un passage joué aussi ; premier passage de la session : à l'heure prévue.
+  const played = buildTimeline(input({ waves: [wave('s1', h(9, 0))], zones: [{ zoneId: 'z', items: [item('b', 's1', 30, h(9, 2)), k('c')] }] }));
+  expect(played.starts.get('c')).toBe(h(9, 2));
+  expect(buildTimeline(input({ waves: [wave('s1', h(9, 0))], zones: [{ zoneId: 'z', items: [k('a')] }] })).starts.get('a')).toBe(h(9, 0));
+});
+
 test('actual start beats planned', () => {
   const t = buildTimeline(input({ now: null, waves: [wave('s1', h(9, 30), h(9, 41))], zones: [{ zoneId: 'z', items: [item('a', 's1', 300)] }] }));
   expect(t.starts.get('a')).toBe(h(9, 41));

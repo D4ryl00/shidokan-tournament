@@ -19,6 +19,12 @@ export function parseKataKey(matchId: string): KataKey | null {
   return null;
 }
 
+/** Passage qui ouvre un tour (premier kataka du tirage, place 1 de la finale) : le seul du tour qui porte un changement. */
+export function opensKataRound(bracket: KataBracket, matchId: string): boolean {
+  const first = bracket.order[0];
+  return (first !== undefined && matchId === kataTour1Key(first)) || matchId === kataFinaleKey(1);
+}
+
 /**
  * Passages d'un kata, dans l'ordre : tour 1 dans l'ordre du tirage (absents tardifs compris), seulement au-delà de deux
  * katakas ; puis la finale, une place par finaliste (deux au plus).

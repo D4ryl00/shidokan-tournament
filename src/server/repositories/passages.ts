@@ -3,7 +3,7 @@ import type { Bracket } from '../../domain/brackets/index.js';
 import { resolveKata, type KataScores } from '../../domain/brackets/kata.js';
 import { activeEntrantCount, type Category } from '../../domain/categories.js';
 import type { StoredFinals } from '../../domain/passages/finals-choice.js';
-import { finalMatchIds, kataFinaleKey, kataTour1Key, planPassages, type FrozenPassage, type PassagePlan, type PlanInput } from '../../domain/passages/index.js';
+import { finalMatchIds, kataFinaleKey, kataTour1Key, opensKataRound, planPassages, type FrozenPassage, type PassagePlan, type PlanInput } from '../../domain/passages/index.js';
 import { ageGroupOf, combatTiming, fightSeconds } from '../../domain/schedule/durations.js';
 import type { AppDb } from '../db/client.js';
 import { categories as categoryTable, frozenPassages, kataScores, matchResults, registrations, tieBreaks } from '../db/schema.js';
@@ -109,11 +109,7 @@ export async function planInput(db: AppDb, competitionId: string, cats?: Categor
   const durationSec = (categoryId: string, matchId: string): number => {
     const c = byId.get(categoryId);
     if (!c) return settings.schedule.changeoverSec;
-    if (c.bracket?.kind === 'kata') {
-      const first = c.bracket.order[0];
-      const opensRound = (first !== undefined && matchId === kataTour1Key(first)) || matchId === kataFinaleKey(1);
-      return settings.schedule.kataPassageSec + (opensRound ? settings.schedule.changeoverSec : 0);
-    }
+    if (c.bracket?.kind === 'kata') return settings.schedule.kataPassageSec + (opensKataRound(c.bracket, matchId) ? settings.schedule.changeoverSec : 0);
     let ids = finalIds.get(c.id);
     if (!ids) finalIds.set(c.id, (ids = new Set(c.bracket?.kind === 'combat' ? finalMatchIds(c.bracket) : [])));
     const isFinal = ids.has(matchId);

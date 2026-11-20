@@ -14,6 +14,8 @@ export interface TimelineItem {
    * catégorie. Elle ne part pas avant la plus tardive de leurs fins estimées.
    */
   waitsFor?: string[];
+  /** false : suit le passage précédent de sa zone sans changement (kataka après le premier de son tour). Par défaut : changement. */
+  changeoverBefore?: boolean;
 }
 
 export interface TimelineInput {
@@ -83,6 +85,8 @@ export function buildTimeline(input: TimelineInput): Timeline {
 
     // État par zone : curseur (null : pas d'heures) et fin la plus tardive des passages joués.
     const cursor = new Map<string, number | null>();
+    // Zones dont le curseur suit la fin d'un passage (fin + changement), et non le départ de la session.
+    const afterItem = new Set<string>();
     const lastEnd = new Map<string, number | null>();
     const lines = input.zones.map((z) => ({ zoneId: z.zoneId, items: z.items.filter((i) => i.waveKey === w.key) }));
     // Sur chaque zone, trois règles autour du dernier passage joué dans l'ordre de la session :
@@ -116,15 +120,18 @@ export function buildTimeline(input: TimelineInput): Timeline {
         lastEnd.set(zoneId, end);
         // Finale jouée en avance : les passages qui la précèdent sont déjà placés après elle, le curseur ne recule pas.
         cursor.set(zoneId, early.has(it.key) ? Math.max(cursor.get(zoneId) ?? -Infinity, end + changeoverSec) : end + changeoverSec);
+        afterItem.add(zoneId);
         starts.set(it.key, start);
         return start;
       }
-      const c = cursor.get(zoneId) ?? null;
-      if (c === null || late.has(it.key)) return null;
+      const next = cursor.get(zoneId) ?? null;
+      if (next === null || late.has(it.key)) return null;
+      const c = it.changeoverBefore === false && afterItem.has(zoneId) ? next - changeoverSec : next;
       const from = Math.max(c, floor.get(it.key) ?? -Infinity, wait ?? -Infinity);
       // Passage en cours : départ ≥ maintenant − durée ; les suivants s'enchaînent (fin du précédent + changement).
       const start = inProgress.has(it.key) ? Math.max(from, now! - it.durationSec) : from;
       cursor.set(zoneId, start + it.durationSec + changeoverSec);
+      afterItem.add(zoneId);
       starts.set(it.key, start);
       return start;
     };

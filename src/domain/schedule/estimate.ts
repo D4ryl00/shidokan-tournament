@@ -13,6 +13,8 @@ export interface EstimateItem {
   finals: FinalsWhen | null;
   /** Finale « Dès que finie » jouée hors de la zone de sa catégorie : passages non finaux de sa catégorie (voir `TimelineItem`). */
   waitsFor?: string[];
+  /** false : suit le passage précédent de sa zone sans changement (voir `TimelineItem`). */
+  changeoverBefore?: boolean;
 }
 
 export interface EstimateInput {
