@@ -1,9 +1,9 @@
-import { asc, eq, getTableColumns, sql } from 'drizzle-orm';
+import { and, asc, eq, getTableColumns, sql } from 'drizzle-orm';
 import { CHANGED_REASON, compositionChanged, lockedReason, undoSet, type CascadeEntry } from '../../domain/history/cascade.js';
-import type { HistoryEntryView, HistoryKind, HistorySummary } from '../../domain/history/types.js';
+import { IGNORE_RETURNED, type HistoryEntryView, type HistoryKind, type HistorySummary } from '../../domain/history/types.js';
 import { atomically } from '../db/atomic.js';
 import type { AppDb } from '../db/client.js';
-import { categories, fighters, historyEntries, recasements, registrations, zones } from '../db/schema.js';
+import { categories, fighters, historyEntries, ignoredCases, recasements, registrations, zones } from '../db/schema.js';
 import { CategoryLockedError, syncCategories } from './categories.js';
 import { launchedCategoryIds } from './launch-state.js';
 import { NotFoundError } from './registrations.js';
@@ -217,7 +217,15 @@ export function entryOfRecasement(db: AppDb, competitionId: string, recasementId
  * toutes). La cascade et les blocages sont calculés sur toutes les entrées.
  */
 export async function listHistory(db: AppDb, competitionId: string, waveId: string | null): Promise<{ entries: HistoryEntryView[] }> {
-  const ctx = await blockContext(db, competitionId);
+  const state = await loadState(db, competitionId);
+  const ctx = await blockContext(db, competitionId, state);
+  // Cartes encore ignorées (d'après l'état : une copie en lecture seule garde les marques périmées sans les compter).
+  const stillIgnored = new Set(state.ignored);
+  const ignoreMarks = new Set(
+    db.select().from(ignoredCases).where(eq(ignoredCases.competitionId, competitionId)).all()
+      .filter((m) => stillIgnored.has(m.caseId))
+      .map((m) => m.historyEntryId),
+  );
   const all = loadEntries(db, competitionId);
   const names = new Map(
     db
@@ -246,7 +254,8 @@ export async function listHistory(db: AppDb, competitionId: string, waveId: stri
         summary: e.summary,
         categoryIds: e.categoryIds,
         afterMembers: e.afterMembers,
-        blocked: e.active ? blockReason(set, ctx) : null,
+        // Une carte ignorée déjà revenue (situation changée, problème disparu) : plus rien à annuler.
+        blocked: !e.active ? null : e.kind === 'ignore' && !ignoreMarks.has(e.id) ? IGNORE_RETURNED : blockReason(set, ctx),
         cascade: set.filter((x) => x.id !== e.id).map((x) => x.id),
       };
     });
@@ -279,6 +288,8 @@ function undoEntry(t: AppDb, e: Loaded, undoneAt: string): void {
       .where(eq(registrations.id, r.id))
       .run();
   }
+  // Carte ignorée : sa marque est effacée, la carte revient.
+  if (e.kind === 'ignore') t.delete(ignoredCases).where(and(eq(ignoredCases.competitionId, e.row.competitionId), eq(ignoredCases.historyEntryId, e.id))).run();
   t.update(historyEntries).set({ status: 'undone', undoneAt }).where(eq(historyEntries.id, e.id)).run();
 }
 

@@ -31,6 +31,9 @@ import {
   setAsideCase,
   resumeCase,
   setAsideNotes,
+  ignoreCase,
+  unignoreCase,
+  ignoredNotes,
   weighInList, fighterPresence } from '../repositories/replacement.js';
 import { PlanAbortedError, runPlanJob } from '../plan/runner.js';
 import { rememberDisplayedPlan } from '../plan/displayed.js';
@@ -131,9 +134,10 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
       }),
     );
     const moveTargets = Object.fromEntries(cases.map((c) => [c.id, moveTargetsFor(state, c.registrationId)]));
-    // Les compteurs ne comptent que les cartes à traiter (pas celles mises de côté).
+    // Les compteurs ne comptent que les cartes à traiter (ni mises de côté, ni ignorées).
     const aside = new Set(state.setAside);
-    const active = cases.filter((c) => !aside.has(c.id));
+    const ignored = new Set(state.ignored);
+    const active = cases.filter((c) => !aside.has(c.id) && !ignored.has(c.id));
     return {
       cases,
       fighters,
@@ -141,12 +145,14 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
       // Chaque proposition avec sa vue (pourquoi, départ, arrivée) : la carte la présente en « De ➜ Vers ».
       proposals: Object.fromEntries([...shown].map(([caseId, ps]) => [caseId, ps.map((p) => ({ ...p, view: moveView(state, p) }))])),
       setAside: setAsideNotes(db, req.params.id, cases.filter((c) => aside.has(c.id)).map((c) => c.id)),
+      ignored: ignoredNotes(db, req.params.id, cases.filter((c) => ignored.has(c.id)).map((c) => c.id)),
       summary: {
         present: presence.filter((p) => p === 'present').length,
         absent: presence.filter((p) => p === 'absent').length,
         unknown: presence.filter((p) => p === 'unknown').length,
         cases: active.length,
-        setAside: cases.length - active.length,
+        setAside: cases.filter((c) => aside.has(c.id)).length,
+        ignored: cases.filter((c) => ignored.has(c.id)).length,
         closed: active.filter((c) => c.kind === 'closed').length,
         alone: active.filter((c) => c.kind === 'alone').length,
         withoutProposal: active.filter((c) => (proposals.get(c.id) ?? []).length === 0).length,
@@ -261,6 +267,18 @@ export async function replacementRoutes(app: FastifyInstance, { db }: { db: AppD
   app.post<P>('/api/competitions/:id/replacement/resume', async (req) => {
     const { caseId } = z.object({ caseId: z.string() }).strict().parse(req.body);
     await resumeCase(db, req.params.id, caseId);
+    return { ok: true };
+  });
+
+  app.post<P>('/api/competitions/:id/replacement/ignore', async (req) => {
+    const { caseId, note } = z.object({ caseId: z.string(), note: z.string().max(80).optional() }).strict().parse(req.body);
+    const { historyId } = await ignoreCase(db, req.params.id, caseId, note ?? '');
+    return { ok: true, historyId };
+  });
+
+  app.post<P>('/api/competitions/:id/replacement/unignore', async (req) => {
+    const { caseId } = z.object({ caseId: z.string() }).strict().parse(req.body);
+    await unignoreCase(db, req.params.id, caseId);
     return { ok: true };
   });
 

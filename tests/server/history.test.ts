@@ -124,6 +124,20 @@ test('déplacement manuel journalisé', async () => {
   expect(e!.summary.view).toMatchObject({ why: { kind: expect.any(String) }, from: expect.any(Object), to: expect.any(Object), sex: 'F' });
 });
 
+test('ignorer : ne bloque pas l’annulation d’une autre action et n’est pas emporté par sa cascade', async () => {
+  const { a, x } = await threeGroups();
+  const seule = await reg({ lastName: 'SEULE', ageBandCode: 'junior', weightClassId: 'junior:F:-53' });
+  const h = await move(a.id, x.id);
+  const res = await call('POST', '/replacement/ignore', { caseId: `alone:${seule.id}` });
+  expect(res.statusCode, res.body).toBe(200);
+  const ignored = (res.json() as { historyId: string }).historyId;
+  expect(await entry(ignored)).toMatchObject({ kind: 'ignore', categoryIds: [], blocked: null, cascade: [] });
+  expect(await entry(h)).toMatchObject({ blocked: null, cascade: [] });
+  expect((await undo([h], [h])).statusCode).toBe(200);
+  expect(await entry(ignored)).toMatchObject({ status: 'active', blocked: null });
+  expect((await call('GET', '/replacement')).json().ignored).toEqual({ [`alone:${seule.id}`]: expect.any(Object) });
+});
+
 test('une entrée sans vue (ancienne) se lit toujours', async () => {
   const { a, x } = await threeGroups();
   const h = await move(a.id, x.id);

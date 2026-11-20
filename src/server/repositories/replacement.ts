@@ -28,11 +28,12 @@ import {
   waveMoves,
 } from '../../domain/replacement/index.js';
 import { manualProposal as domainManualProposal } from '../../domain/replacement/manual.js';
+import { caseFingerprint } from '../../domain/replacement/ignore.js';
 import { atomically, dryRun } from '../db/atomic.js';
 import type { AppDb } from '../db/client.js';
 import { categorySeed } from './category-seed.js';
 import { withoutRowMeta } from '../db/row-versions.js';
-import { categories, clubs, competitions, fighters, historyEntries, recasements, refusals, registrations, setAsideCases, waves } from '../db/schema.js';
+import { categories, clubs, competitions, fighters, historyEntries, ignoredCases, recasements, refusals, registrations, setAsideCases, waves } from '../db/schema.js';
 import { listWaves } from './waves.js';
 import { kgText } from '../../domain/club-form.js';
 import { subjectOf } from '../../domain/journal/fighter-diff.js';
@@ -42,7 +43,7 @@ import { recordJournal, withJournalGroup } from '../journal/write.js';
 import { launchedCategoryIds, launchedWaveKeys } from './launch-state.js';
 import type { Wave } from '../../domain/waves.js';
 import { CategoryLockedError, listCategories, markArranged, syncCategories } from './categories.js';
-import { HISTORY_STALE, loadEntries, recorded, undoEntries, type EntrySpec, type Loaded } from './history.js';
+import { HISTORY_STALE, loadEntries, recorded, undoEntries, undoHistory, type EntrySpec, type Loaded } from './history.js';
 import { closedSet } from './closed-categories.js';
 import { removeAnswersOf } from './authorizations.js';
 import { getManagement } from '../sync/ownership.js';
@@ -132,12 +133,22 @@ export async function loadState(db: AppDb, competitionId: string, opts: { sync?:
   }
   // Cartes mises de côté : seulement celles dont le cas existe encore ; les autres sont oubliées (un cas qui revient revient en tête).
   const marks = db.select().from(setAsideCases).where(eq(setAsideCases.competitionId, competitionId)).all();
-  if (marks.length) {
-    const existing = new Set(detectCases(state).map((c) => c.id));
-    const gone = marks.filter((m) => !existing.has(m.caseId)).map((m) => m.caseId);
+  // Cartes ignorées : oubliées aussi quand la situation a changé (empreinte différente) ; la carte revient alors.
+  const ignoredMarks = db.select().from(ignoredCases).where(eq(ignoredCases.competitionId, competitionId)).all();
+  if (marks.length || ignoredMarks.length) {
+    const existing = new Map(detectCases(state).map((c) => [c.id, c]));
     // Copie en lecture seule (main ailleurs) : on ne fait que filtrer, sa version doit rester celle reçue.
-    if (gone.length && getManagement(db, competitionId).managedHere) db.delete(setAsideCases).where(and(eq(setAsideCases.competitionId, competitionId), inArray(setAsideCases.caseId, gone))).run();
+    const managedHere = getManagement(db, competitionId).managedHere;
+    const gone = marks.filter((m) => !existing.has(m.caseId)).map((m) => m.caseId);
+    if (gone.length && managedHere) db.delete(setAsideCases).where(and(eq(setAsideCases.competitionId, competitionId), inArray(setAsideCases.caseId, gone))).run();
     state.setAside = marks.filter((m) => existing.has(m.caseId)).map((m) => m.caseId);
+    const kept = ignoredMarks.filter((m) => {
+      const c = existing.get(m.caseId);
+      return c !== undefined && caseFingerprint(state, c) === m.fingerprint;
+    });
+    const stale = ignoredMarks.filter((m) => !kept.includes(m)).map((m) => m.caseId);
+    if (stale.length && managedHere) db.delete(ignoredCases).where(and(eq(ignoredCases.competitionId, competitionId), inArray(ignoredCases.caseId, stale))).run();
+    state.ignored = kept.map((m) => m.caseId);
   }
   return state;
 }
@@ -162,6 +173,59 @@ export async function setAsideCase(db: AppDb, competitionId: string, caseId: str
 /** Reprend une carte mise de côté. */
 export async function resumeCase(db: AppDb, competitionId: string, caseId: string): Promise<void> {
   db.delete(setAsideCases).where(and(eq(setAsideCases.competitionId, competitionId), eq(setAsideCases.caseId, caseId))).run();
+}
+
+/** Cartes ignorées de la compétition parmi `caseIds` (encore ignorées), avec leur note et leur entrée d'Historique. */
+export function ignoredNotes(db: AppDb, competitionId: string, caseIds: string[]): Record<string, { note: string; createdAt: string; historyEntryId: string }> {
+  const wanted = new Set(caseIds);
+  return Object.fromEntries(
+    db.select().from(ignoredCases).where(eq(ignoredCases.competitionId, competitionId)).all()
+      .filter((m) => wanted.has(m.caseId))
+      .map((m) => [m.caseId, { note: m.note, createdAt: m.createdAt, historyEntryId: m.historyEntryId }]),
+  );
+}
+
+/**
+ * Ignore une carte (« réglé, on laisse comme ça », note facultative) : elle ne compte plus dans les cas à traiter tant que sa
+ * situation ne change pas. L'action entre à l'Historique (`ignore`, sans catégorie touchée) ; une mise de côté de la carte est retirée.
+ */
+export async function ignoreCase(db: AppDb, competitionId: string, caseId: string, note: string): Promise<{ historyId: string }> {
+  return atomically(db, async () => {
+    const state = await loadState(db, competitionId);
+    const c = detectCases(state).find((x) => x.id === caseId);
+    if (!c) throw new StaleProposalError('Cette carte n’existe plus : rechargez.');
+    if (state.ignored.includes(caseId)) throw new StaleProposalError('Cette carte est déjà ignorée : rechargez.');
+    const cat = state.categories.find((x) => x.id === c.categoryId);
+    const reason = note.trim();
+    const waveId = actionWave(state, caseId, caseId);
+    const historyId = crypto.randomUUID();
+    db.insert(historyEntries)
+      .values({
+        id: historyId,
+        competitionId,
+        kind: 'ignore',
+        waveId,
+        summaryJson: JSON.stringify({ registrationIds: [c.registrationId], fromLabel: cat ? categoryLabel(cat.key, state.grid) : undefined, detail: c.detail, reason: reason || undefined }),
+        recasementIds: '[]',
+        categoryIds: '[]',
+      })
+      .run();
+    db.insert(ignoredCases).values({ competitionId, caseId, fingerprint: caseFingerprint(state, c), note: reason, waveId, historyEntryId: historyId }).run();
+    db.delete(setAsideCases).where(and(eq(setAsideCases.competitionId, competitionId), eq(setAsideCases.caseId, caseId))).run();
+    return { historyId };
+  });
+}
+
+/** Reprend une carte ignorée : son entrée d'Historique est annulée (ce qui efface la marque). */
+export async function unignoreCase(db: AppDb, competitionId: string, caseId: string): Promise<void> {
+  await atomically(db, async () => {
+    const state = await loadState(db, competitionId);
+    const mark = state.ignored.includes(caseId)
+      ? db.select().from(ignoredCases).where(and(eq(ignoredCases.competitionId, competitionId), eq(ignoredCases.caseId, caseId))).get()
+      : undefined;
+    if (!mark) throw new StaleProposalError('Cette carte n’est plus ignorée : rechargez.');
+    await undoHistory(db, competitionId, [mark.historyEntryId], null);
+  });
 }
 
 export function allProposals(state: State, cases = detectCases(state)): Map<string, Proposal[]> {

@@ -40,7 +40,7 @@ const insertResult = (d: AppDb) =>
 
 test('versionedTables : liste exacte', () => {
   expect(versionedTables(freshDb())).toEqual([
-    'age_bands', 'age_links', 'authorization_answers', 'categories', 'closed_categories', 'club_changes', 'club_directory', 'club_invitations', 'clubs', 'competitions', 'fighters', 'frozen_passages', 'history_entries', 'journal_entries', 'kata_scores',
+    'age_bands', 'age_links', 'authorization_answers', 'categories', 'closed_categories', 'club_changes', 'club_directory', 'club_invitations', 'clubs', 'competitions', 'fighters', 'frozen_passages', 'history_entries', 'ignored_cases', 'journal_entries', 'kata_scores',
     'mail_attachments', 'mail_log', 'match_results', 'recasements', 'received_copies', 'refusals', 'registrations', 'set_aside_cases', 'tie_breaks', 'wave_finals', 'wave_launches', 'wave_schedules', 'waves', 'weight_classes', 'zone_entries', 'zone_journal', 'zones',
   ]);
 });

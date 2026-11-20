@@ -608,6 +608,28 @@ export const setAsideCases = sqliteTable(
   (t) => [primaryKey({ columns: [t.competitionId, t.caseId] })],
 );
 
+/**
+ * Cartes de Réaffectation ignorées (« réglé, on laisse comme ça »), avec l'empreinte de leur situation : la marque est
+ * oubliée quand l'empreinte change (nouvel élément) ou que le cas disparaît. Chacune a son entrée d'Historique (`ignore`).
+ */
+export const ignoredCases = sqliteTable(
+  'ignored_cases',
+  {
+    competitionId: text('competition_id')
+      .notNull()
+      .references(() => competitions.id, { onDelete: 'cascade' }),
+    caseId: text('case_id').notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    note: text('note').notNull().default(''),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+    /** Session d'où la carte a été ignorée (nulle sans sessions). */
+    waveId: text('wave_id'),
+    historyEntryId: text('history_entry_id').notNull(),
+    ...rowMeta(),
+  },
+  (t) => [primaryKey({ columns: [t.competitionId, t.caseId] })],
+);
+
 /** Résultats saisis (avec les deux combattants du combat au moment de la saisie). */
 export const matchResults = sqliteTable(
   'match_results',

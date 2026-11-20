@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
 import { rulesView } from '../../src/domain/replacement/rules.js';
 import { defaultSettings } from '../../src/domain/settings.js';
-import { resetAsShown, undoRecasement } from '../helpers/history-undo.js';
+import { IGNORE_RETURNED } from '../../src/domain/history/types.js';
+import { resetAsShown, undoEntry, undoRecasement } from '../helpers/history-undo.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
@@ -1001,6 +1002,146 @@ test("mise de côté d'une carte qui n'existe plus : 409", async () => {
   expect(res.body).toContain('Cette carte n’existe plus : rechargez.');
 });
 
+describe('ignorer une carte', () => {
+  type WithIgnored = Replacement & { ignored: Record<string, { note: string; createdAt: string; historyEntryId: string }>; setAside: Record<string, { note: string }> };
+  type HistoryEntry = { id: string; kind: string; status: string; names: string[]; summary: { registrationIds: string[]; fromLabel?: string; detail?: string; reason?: string }; categoryIds: string[]; blocked: string | null };
+  const view = async () => (await call('GET', '/replacement')).json() as WithIgnored;
+  const historyEntry = async (id: string) => ((await call('GET', '/history')).json() as { entries: HistoryEntry[] }).entries.find((e) => e.id === id);
+  const ignore = async (caseId: string, note?: string) => {
+    const res = await call('POST', '/replacement/ignore', note === undefined ? { caseId } : { caseId, note });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json() as { ok: boolean; historyId: string };
+    expect(body).toEqual({ ok: true, historyId: expect.any(String) });
+    return body.historyId;
+  };
+  const marks = () => {
+    const raw = new Database(dbPath, { readonly: true });
+    try {
+      return raw.prepare('select case_id, fingerprint, note, history_entry_id from ignored_cases').all() as { case_id: string; fingerprint: string; note: string; history_entry_id: string }[];
+    } finally {
+      raw.close();
+    }
+  };
+
+  test("ignorer : la carte sort des cas, entre à l'Historique (kind ignore), summary.ignored = 1", async () => {
+    const a = await reg();
+    const caseId = `alone:${a.id}`;
+    const { detail } = ((await view()).cases as unknown as { id: string; detail: string }[]).find((c) => c.id === caseId)!;
+    const historyId = await ignore(caseId, 'réglé avec le coach');
+    const r = await view();
+    expect(r.summary.cases).toBe(0);
+    expect(r.summary.ignored).toBe(1);
+    expect(r.summary.setAside).toBe(0);
+    expect(r.cases.map((c) => c.id)).toEqual([caseId]);
+    expect(r.ignored).toEqual({ [caseId]: { note: 'réglé avec le coach', createdAt: expect.any(String), historyEntryId: historyId } });
+    const e = (await historyEntry(historyId))!;
+    expect(e).toMatchObject({ kind: 'ignore', status: 'active', names: [`NOM${n} x`], categoryIds: [], blocked: null });
+    expect(e.summary).toMatchObject({ registrationIds: [a.id], detail, reason: 'réglé avec le coach' });
+    expect(e.summary.fromLabel).toBe('Karaté · Jiyu · Cadets F · -54 kg');
+    expect(marks()).toEqual([{ case_id: caseId, fingerprint: expect.any(String), note: 'réglé avec le coach', history_entry_id: historyId }]);
+  });
+
+  test('ignorer une carte mise de côté : la mise de côté disparaît', async () => {
+    const a = await reg();
+    const caseId = `alone:${a.id}`;
+    await call('POST', '/replacement/set-aside', { caseId, note: 'plus tard' });
+    expect((await view()).summary.setAside).toBe(1);
+    await ignore(caseId);
+    const r = await view();
+    expect(r.summary).toMatchObject({ cases: 0, setAside: 0, ignored: 1 });
+    expect(r.setAside).toEqual({});
+    expect(r.ignored[caseId]!.note).toBe('');
+  });
+
+  test("nouvel élément : un adversaire pesé → la carte revient, la marque est effacée, l'entrée d'Historique a blocked = IGNORE_RETURNED", async () => {
+    const light = await reg({ approxWeightKg: 44 });
+    const heavy = await reg({ approxWeightKg: 53 });
+    const caseId = `weight_gap:${light.id}`;
+    expect((await view()).cases.map((c) => c.id)).toEqual([caseId]);
+    const historyId = await ignore(caseId);
+    expect((await view()).summary).toMatchObject({ cases: 0, ignored: 1 });
+    // Le même poids que déclaré : seul l'élément nouveau (la pesée) change la situation.
+    expect((await call('PUT', `/weigh-in/${heavy.fighterId}`, { weighInKg: 53 })).statusCode).toBe(204);
+    const r = await view();
+    expect(r.cases.map((c) => c.id)).toEqual([caseId]);
+    expect(r.summary).toMatchObject({ cases: 1, ignored: 0 });
+    expect(r.ignored).toEqual({});
+    expect(marks()).toEqual([]);
+    expect(await historyEntry(historyId)).toMatchObject({ status: 'active', blocked: IGNORE_RETURNED });
+  });
+
+  test('problème disparu : marque effacée', async () => {
+    const a = await reg();
+    const caseId = `alone:${a.id}`;
+    const historyId = await ignore(caseId);
+    const b = await reg();
+    expect((await view()).cases).toEqual([]);
+    expect(marks()).toEqual([]);
+    expect((await historyEntry(historyId))!.blocked).toBe(IGNORE_RETURNED);
+    // Le problème revient : la carte revient dans la liste principale.
+    expect((await app.inject({ method: 'DELETE', url: `${base}/registrations/${b.id}` })).statusCode).toBe(204);
+    expect((await view()).summary).toMatchObject({ cases: 1, ignored: 0 });
+  });
+
+  test("unignore : la carte revient, l'entrée passe à undone", async () => {
+    const a = await reg();
+    const caseId = `alone:${a.id}`;
+    const historyId = await ignore(caseId);
+    const res = await call('POST', '/replacement/unignore', { caseId });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json()).toEqual({ ok: true });
+    const r = await view();
+    expect(r.summary).toMatchObject({ cases: 1, ignored: 0 });
+    expect(r.ignored).toEqual({});
+    expect(marks()).toEqual([]);
+    expect((await historyEntry(historyId))!.status).toBe('undone');
+    const again = await call('POST', '/replacement/unignore', { caseId });
+    expect(again.statusCode).toBe(409);
+    expect(again.body).toContain('Cette carte n’est plus ignorée : rechargez.');
+  });
+
+  test("annuler l'entrée depuis l'Historique : la carte revient", async () => {
+    const a = await reg();
+    const caseId = `alone:${a.id}`;
+    const historyId = await ignore(caseId);
+    expect((await undoEntry(call, historyId)).statusCode).toBe(200);
+    expect((await view()).summary).toMatchObject({ cases: 1, ignored: 0 });
+    expect(marks()).toEqual([]);
+    expect((await historyEntry(historyId))!.status).toBe('undone');
+  });
+
+  test('carte inconnue : 409 (StaleProposalError)', async () => {
+    const res = await call('POST', '/replacement/ignore', { caseId: 'alone:inconnu' });
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toContain('Cette carte n’existe plus : rechargez.');
+    expect(marks()).toEqual([]);
+  });
+
+  test("copie en lecture seule : une marque périmée n'est pas effacée en lisant, mais ne compte plus", async () => {
+    const a = await reg();
+    const historyId = await ignore(`alone:${a.id}`);
+    await reg(); // le cas disparaît
+    const id = base.split('/').pop()!;
+    const owner = (v: string | null) => {
+      const raw = new Database(dbPath);
+      raw.prepare('update competitions set owner_instance_id = ?, owner_name = ? where id = ?').run(v, v, id);
+      raw.close();
+    };
+    owner('autre');
+    expect((await view()).summary.ignored).toBe(0);
+    expect(marks()).toHaveLength(1);
+    expect((await historyEntry(historyId))!.blocked).toBe(IGNORE_RETURNED);
+    owner(null);
+    await view();
+    expect(marks()).toHaveLength(0);
+  });
+
+  test('note de plus de 80 caractères : 400', async () => {
+    const a = await reg();
+    expect((await call('POST', '/replacement/ignore', { caseId: `alone:${a.id}`, note: 'x'.repeat(81) })).statusCode).toBe(400);
+  });
+});
+
 // --- Relecture finale de l'étape 23 ---
 
 const cadetInput = (over: object = {}) => ({
@@ -1368,6 +1509,22 @@ describe('repartir de zéro par session', () => {
     const after = (await call('GET', `/replacement?vague=${aprem}`)).json() as Replacement;
     expect(after.proposals[cCase.id]!.some((p) => p.refused)).toBe(true);
     expect((await call('GET', `/replacement?vague=${matin}`)).json().summary.setAside).toBe(0);
+  });
+
+  test('Repartir de zéro (session A) : la carte ignorée en A revient, celle ignorée en B reste', async () => {
+    const { m1, c1, matin, aprem } = await setup();
+    const ignore = async (caseId: string) => (await call('POST', '/replacement/ignore', { caseId })).json() as { historyId: string };
+    const inMatin = await ignore(`alone:${m1.id}`);
+    const inAprem = await ignore(`alone:${c1.id}`);
+    const summary = async (wave: string) => (await call('GET', `/replacement?vague=${wave}`)).json().summary as Record<string, number>;
+    expect(await summary(matin)).toMatchObject({ cases: 1, ignored: 1 });
+    expect(await summary(aprem)).toMatchObject({ cases: 1, ignored: 1 });
+    expect(await preview(matin)).toMatchObject({ undo: 0, history: 1, lot: [inMatin.historyId] });
+    expect((await reset(matin)).statusCode).toBe(200);
+    expect(await summary(matin)).toMatchObject({ cases: 2, ignored: 0 });
+    expect(await summary(aprem)).toMatchObject({ cases: 1, ignored: 1 });
+    const ids = ((await call('GET', '/history')).json() as { entries: { id: string; status: string }[] }).entries.map((e) => [e.id, e.status]);
+    expect(ids).toEqual([[inAprem.historyId, 'active']]);
   });
 
   test('un combattant placé dans une session lancée reste en place, le reste est annulé', async () => {

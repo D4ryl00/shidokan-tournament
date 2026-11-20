@@ -35,6 +35,7 @@ async function seeded(): Promise<{ db: AppDb; dbPath: string; id: string }> {
     INSERT INTO refusals (competition_id, proposal_id) VALUES ('${id}', 'p2');
     INSERT INTO closed_categories (competition_id, age_band_code, sex, discipline, ruleset) VALUES ('${id}', 'senior', 'F', 'kata', '');
     INSERT INTO set_aside_cases (competition_id, case_id, note) VALUES ('${id}', 'alone:x', 'on attend');
+    INSERT INTO ignored_cases (competition_id, case_id, fingerprint, note, history_entry_id) VALUES ('${id}', 'alone:y', '[]', 'réglé', 'h-${id}');
     INSERT INTO authorization_answers (competition_id, registration_id, kind, situation_json, answered_at) VALUES ('${id}', '${reg.id}', 'mixite', '{"kind":"mixite"}', '2026-11-20T10:00:00.000Z');
   `);
   return { db, dbPath, id };

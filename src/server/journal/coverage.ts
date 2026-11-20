@@ -82,6 +82,8 @@ export const JOURNAL_PENDING = keys(
   `POST ${C}/replacement/withdraw`,
   `POST ${C}/replacement/set-aside`,
   `POST ${C}/replacement/resume`,
+  `POST ${C}/replacement/ignore`,
+  `POST ${C}/replacement/unignore`,
   `POST ${C}/replacement/reset`,
   `PUT ${C}/replacement/rules`,
   `POST ${C}/replacement/rules/reset`,
