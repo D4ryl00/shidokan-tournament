@@ -1,4 +1,5 @@
 import type { Bracket, CombatBracket } from '../brackets/index.js';
+import { parseKataKey } from './kata-keys.js';
 
 /**
  * Combat(s) pour la 1re place d'un tableau, ceux qui passent sur la zone des finales : finale du tableau, grande finale,
@@ -21,7 +22,7 @@ export function finalMatchIds(bracket: CombatBracket): string[] {
   }
 }
 
-/** Passage de finale : bloc de finale d'un kata, ou combat pour la 1re place ; un bloc de kata entier n'en est pas une à part. */
-export function isFinalPassage(bracket: Bracket | null, matchId: string | null): boolean {
-  return matchId === 'kata:finale' || (bracket?.kind === 'combat' && matchId !== null && finalMatchIds(bracket).includes(matchId));
+/** Passage de finale : une place de la finale d'un kata (`kata:finale:1|2`), ou combat pour la 1re place. */
+export function isFinalPassage(bracket: Bracket | null, matchId: string): boolean {
+  return parseKataKey(matchId)?.round === 'finale' || (bracket?.kind === 'combat' && finalMatchIds(bracket).includes(matchId));
 }

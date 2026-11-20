@@ -1,21 +1,29 @@
 import { describe, expect, test } from 'vitest';
-import { generateBracket, type Bracket, type CombatBracket } from '../../../src/domain/brackets/index.js';
-import { matchNodes, planPassages, zoneOrder, type OrderCategory, type PlanCategory } from '../../../src/domain/passages/index.js';
+import { generateBracket, type Bracket, type CombatBracket, type KataBracket } from '../../../src/domain/brackets/index.js';
+import { kataKeys, matchNodes, planPassages, zoneOrder, type OrderCategory, type PlanCategory } from '../../../src/domain/passages/index.js';
 import { defaultSettings, readStoredSettings } from '../../../src/domain/settings.js';
 
 let seq = 0;
 const entrants = (n: number) => Array.from({ length: n }, () => ({ registrationId: `e${++seq}`, clubId: null, label: `E${seq}` }));
 const options = { repechage: false, thirdPlace: false, kataBronzeCount: 2 as const };
 const combat = (n: number, format: 'single_elimination' | 'single_match' = 'single_elimination') => generateBracket(format, entrants(n), options, 1) as CombatBracket;
-const kata = (n: number) => generateBracket('kata_two_rounds', entrants(n), options, 1);
+const kata = (n: number) => generateBracket('kata_two_rounds', entrants(n), options, 1) as KataBracket;
 const cat = (id: string, rank: number, b: Bracket): OrderCategory =>
-  b.kind === 'kata' ? { id, rank, kataEntrants: b.entrants.length, nodes: [] } : { id, rank, kataEntrants: null, nodes: matchNodes(b) };
-const seqOf = (ps: ReturnType<typeof zoneOrder>) => ps.map((p) => `${p.number}:${p.categoryId}:${p.matchId ?? 'kata'}${p.noRest ? '!' : ''}`);
+  b.kind === 'kata' ? { id, rank, kataKeys: kataKeys(b, 'whole'), nodes: [] } : { id, rank, kataKeys: null, nodes: matchNodes(b) };
+const seqOf = (ps: ReturnType<typeof zoneOrder>) => ps.map((p) => `${p.number}:${p.categoryId}:${p.matchId}${p.noRest ? '!' : ''}`);
 
 describe('ordre de passage d’une zone', () => {
-  test('kata d’abord : bloc n° 1, puis les combats à partir de 2 ; zone sans kata : combats dès 1', () => {
-    expect(seqOf(zoneOrder([cat('A', 0, combat(2, 'single_match')), cat('K', 1, kata(3))], 'rounds', 1))).toEqual(['1:K:kata', '2:A:w1-0']);
+  test('kata d’abord : un numéro par passage de kata (tour 1 puis finale), puis les combats ; zone sans kata : combats dès 1', () => {
+    const k = kata(5);
+    const ps = zoneOrder([cat('A', 0, combat(4)), cat('K', 1, k)], 'rounds', 1);
+    const keys = [...k.order.map((id) => `kata:tour1:${id}`), 'kata:finale:1', 'kata:finale:2'];
+    expect(seqOf(ps.slice(0, 7))).toEqual(keys.map((key, i) => `${i + 1}:K:${key}`));
+    expect(seqOf(ps.slice(7))).toEqual(['8:A:w1-0', '9:A:w1-1', '10:A:w2-0!']);
     expect(seqOf(zoneOrder([cat('A', 0, combat(2, 'single_match'))], 'rounds', 5))).toEqual(['5:A:w1-0']);
+  });
+
+  test('kata à deux : les deux passages de finale seulement', () => {
+    expect(seqOf(zoneOrder([cat('K', 0, kata(2))], 'rounds', 3))).toEqual(['3:K:kata:finale:1', '4:K:kata:finale:2']);
   });
 
   test('tour par tour : deux catégories de 8 alternées, tour après tour ; le combat unique avec les finales', () => {
@@ -57,7 +65,9 @@ describe('plan de passage', () => {
       mode: 'rounds',
     });
     const t1 = plan.zones.find((z) => z.zoneId === 't1')!.passages;
-    expect(t1.map((p) => `${p.number}:${p.categoryId}:${p.waveId}`)).toEqual(['1:A:w1', '2:A:w1', '3:A:w1', '4:K:w2', '5:B:w2', '6:B:w2', '7:B:w2']);
+    expect(t1.map((p) => `${p.number}:${p.categoryId}:${p.waveId}`)).toEqual([
+      '1:A:w1', '2:A:w1', '3:A:w1', '4:K:w2', '5:K:w2', '6:K:w2', '7:K:w2', '8:K:w2', '9:B:w2', '10:B:w2', '11:B:w2',
+    ]);
     expect(plan.categories.N).toEqual({ zoneId: null, auto: false });
   });
 

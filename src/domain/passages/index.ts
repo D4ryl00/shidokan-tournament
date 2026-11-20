@@ -5,3 +5,4 @@ export * from './plan.js';
 export * from './finals.js';
 export * from './finals-choice.js';
 export * from './kata-lineup.js';
+export * from './kata-keys.js';

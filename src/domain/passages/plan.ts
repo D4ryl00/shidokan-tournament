@@ -5,6 +5,7 @@ import { distributeZones, type ZoneSpec } from './distribute.js';
 import { finalMatchIds } from './finals.js';
 import { resolveFinals, type ResolvedFinals, type StoredFinals, type WaveFinals } from './finals-choice.js';
 import { matchNodes, type MatchNode } from './graph.js';
+import { kataKeys, parseKataKey } from './kata-keys.js';
 import { zoneOrder, type OrderCategory, type Passage, type PlacedMatch } from './order.js';
 
 export interface PlanCategory {
@@ -30,7 +31,8 @@ export interface FrozenPassage {
   zoneId: string;
   number: number;
   categoryId: string;
-  matchId: string | null;
+  /** Combat ou passage de kata (voir `Passage.matchId`) ; une ancienne clé de bloc de kata rend la catégorie « à numéroter ». */
+  matchId: string;
   noRest: boolean;
   /**
    * Signature du choix des finales de la catégorie au figeage (`ResolvedFinals.signature`) ; null ou absente : figé avant
@@ -51,11 +53,15 @@ export interface PlanInput {
   /** Zone des finales et derniers « Tout… » de chaque session (clé `waveKey`) ; absente : aucune. */
   waveFinals?: WaveFinals[];
   /**
-   * Durée estimée d'un passage, changement compris (`matchId` null / 'kata:tour1' / 'kata:finale' : bloc de kata) : range les
-   * finales « dès que finie » de la zone des finales par fin estimée de leur catégorie. Absente : dans l'ordre des catégories.
+   * Durée estimée d'un passage, changement compris (`matchId` : combat, ou passage de kata `kata:tour1:<inscription>` /
+   * `kata:finale:1|2`) : range les finales « dès que finie » de la zone des finales par fin estimée de leur catégorie.
+   * Absente : dans l'ordre des catégories.
    */
-  durationSec?: (categoryId: string, matchId: string | null) => number;
-  /** Passages joués (clé `${categoryId}:${matchId ?? 'kata'}`) : ils gardent numéro et zone, même après un déplacement. */
+  durationSec?: (categoryId: string, matchId: string) => number;
+  /**
+   * Passages joués (clé `${categoryId}:${matchId}`) : ils gardent numéro et zone, même après un déplacement. Un absent tardif
+   * de kata y figure (sa clé du tour 1) : jamais renuméroté ni déplacé.
+   */
   played?: Set<string>;
 }
 
@@ -123,7 +129,7 @@ function finalsChoice(c: PlanCategory, zoneId: string | null, ctx: Context): Res
 }
 
 /** Fin estimée (secondes depuis le début de la session) du dernier passage de chaque catégorie dans ces files. */
-function estimatedEnds(queues: Passage[][], durationSec: (categoryId: string, matchId: string | null) => number): Map<string, number> {
+function estimatedEnds(queues: Passage[][], durationSec: (categoryId: string, matchId: string) => number): Map<string, number> {
   const ends = new Map<string, number>();
   for (const queue of queues) {
     let t = 0;
@@ -135,26 +141,27 @@ function estimatedEnds(queues: Passage[][], durationSec: (categoryId: string, ma
   return ends;
 }
 
-const sameKeys = (a: (string | null)[], b: (string | null)[]) => a.length === b.length && a.every((k) => b.includes(k));
+const sameKeys = (a: string[], b: string[]) => a.length === b.length && a.every((k) => b.includes(k));
 
 /**
- * Des numéros figés sont-ils encore à jour ? Mêmes combats (ou un bloc de kata, entier ou séparé : le réglage des finales
- * peut avoir changé depuis le lancement) et chacun sur la zone de la catégorie, sauf une finale (zone des finales).
+ * Des numéros figés sont-ils encore à jour ? Mêmes combats (ou mêmes passages de kata, tour 1 et finale, que le kata soit en
+ * un bloc ou séparé : le réglage des finales peut avoir changé depuis le lancement) et chacun sur la zone de la catégorie,
+ * sauf une finale (zone des finales). Une ancienne clé de bloc de kata (`kata`, `kata:tour1`, `kata:finale`) : à numéroter.
  */
 function stillValid(c: PlanCategory, rows: FrozenPassage[], zoneId: string | null, ctx: Context, played: Set<string>): boolean {
   const keys = rows.map((r) => r.matchId);
   let shape: boolean;
-  let finals: (string | null)[];
-  if (isKata(c)) {
-    const split: (string | null)[] = c.bracket!.entrants.length > 2 ? ['kata:tour1', 'kata:finale'] : ['kata:finale'];
-    shape = sameKeys(keys, [null]) || sameKeys(keys, split);
-    finals = ['kata:finale'];
+  let isFinal: (matchId: string) => boolean;
+  if (c.bracket?.kind === 'kata') {
+    shape = sameKeys(keys, kataKeys(c.bracket, 'whole'));
+    isFinal = (matchId) => parseKataKey(matchId)?.round === 'finale';
   } else {
     shape = sameKeys(keys, ctx.nodes.get(c.id)!.map((n) => n.matchId));
-    finals = c.bracket?.kind === 'combat' ? finalMatchIds(c.bracket) : [];
+    const finals = c.bracket?.kind === 'combat' ? finalMatchIds(c.bracket) : [];
+    isFinal = (matchId) => finals.includes(matchId);
   }
   // Un passage joué reste sur sa zone (catégorie déplacée en cours de compétition).
-  return shape && rows.every((r) => r.zoneId === zoneId || finals.includes(r.matchId) || played.has(`${r.categoryId}:${r.matchId ?? 'kata'}`));
+  return shape && rows.every((r) => r.zoneId === zoneId || isFinal(r.matchId) || played.has(`${r.categoryId}:${r.matchId}`));
 }
 
 /**
@@ -174,9 +181,13 @@ function orderWave(
   opts: { keep?: Set<string>; zones?: Set<string> } = {},
 ): (PlannedPassage & { zoneId: string })[] {
   // Passages gardés (joués) : ni émis ni renumérotés ; `zones` : seulement ces zones.
-  const kept = (c: PlanCategory, matchId: string | null) => opts.keep?.has(`${c.id}:${matchId ?? 'kata'}`) ?? false;
-  const kataEntry = (c: PlanCategory, block: string | null): OrderCategory[] =>
-    kept(c, block) ? [] : [{ id: c.id, rank: c.rank, kataEntrants: c.bracket!.entrants.length, kataBlock: block, nodes: [] }];
+  const kept = (c: PlanCategory, matchId: string) => opts.keep?.has(`${c.id}:${matchId}`) ?? false;
+  // Passages de kata non gardés (`part` : tous, tour 1 ou finale) ; aucun : pas d'entrée.
+  const kataEntry = (c: PlanCategory, part: 'whole' | 'tour1' | 'finale'): OrderCategory[] => {
+    if (c.bracket?.kind !== 'kata') return [];
+    const keys = kataKeys(c.bracket, part).filter((k) => !kept(c, k));
+    return keys.length > 0 ? [{ id: c.id, rank: c.rank, kataKeys: keys, nodes: [] }] : [];
+  };
   const finalsZone = ctx.waveFinals.get(waveKey(waveId))?.finalsZoneId ?? null;
 
   const own = new Map(ctx.zones.map((z) => [z.id, [] as OrderCategory[]]));
@@ -188,16 +199,17 @@ function orderWave(
     const r = finalsChoice(c, zoneId, ctx);
     let finals: OrderCategory[];
     if (isKata(c)) {
+      // Bloc unique : tour 1 puis finale, à la suite ; séparé : tour 1 sur la zone (au-delà de deux katakas), finale à part.
       if (!r.kataSplit) {
-        own.get(zoneId)!.push(...kataEntry(c, null));
+        own.get(zoneId)!.push(...kataEntry(c, 'whole'));
         continue;
       }
-      if (c.bracket!.entrants.length > 2) own.get(zoneId)!.push(...kataEntry(c, 'kata:tour1'));
-      finals = kataEntry(c, 'kata:finale');
+      own.get(zoneId)!.push(...kataEntry(c, 'tour1'));
+      finals = kataEntry(c, 'finale');
     } else {
       const ids = c.bracket?.kind === 'combat' ? finalMatchIds(c.bracket) : [];
       const nodes = ctx.nodes.get(c.id)!.filter((x) => !kept(c, x.matchId));
-      const entry = (list: MatchNode[]): OrderCategory => ({ id: c.id, rank: c.rank, kataEntrants: null, nodes: list });
+      const entry = (list: MatchNode[]): OrderCategory => ({ id: c.id, rank: c.rank, kataKeys: null, nodes: list });
       const rounds = nodes.filter((x) => !ids.includes(x.matchId));
       const last = nodes.filter((x) => ids.includes(x.matchId));
       if (!r.onFinalsZone && r.when === 'ready') {
@@ -226,7 +238,7 @@ function orderWave(
     const ends = ctx.durationSec ? estimatedEnds([...queues.values()], ctx.durationSec) : new Map<string, number>();
     // Sans passage dans les files (kata à deux, sans tour 1 ; tout le reste joué) : prête d'emblée, donc en tête.
     const end = (c: OrderCategory) => ends.get(c.id) ?? 0;
-    // Une à une : un bloc de kata ne passe pas devant une finale de combat finie avant lui.
+    // Une à une : une finale de kata (ses deux passages à la suite) ne passe pas devant une finale de combat finie avant elle.
     for (const c of [...ready].sort((a, b) => end(a) - end(b) || a.rank - b.rank)) append(queues.get(finalsZone)!, [c], ctx.mode);
   }
   for (const z of ctx.zones) append(queues.get(z.id)!, atEnd.get(z.id)!, ctx.mode);
@@ -377,7 +389,7 @@ export function reshuffleZone(input: PlanInput, zoneId: string, waveId: string |
   const played = opts.played ?? input.played ?? new Set<string>();
   const keep = new Set([...played, ...(opts.pinned ?? [])]);
   // Départ : après le plus grand numéro réellement joué de la zone.
-  const kept = (input.frozen ?? []).filter((f) => segment.includes(f.waveKey) && f.zoneId === zoneId && played.has(`${f.categoryId}:${f.matchId ?? 'kata'}`));
+  const kept = (input.frozen ?? []).filter((f) => segment.includes(f.waveKey) && f.zoneId === zoneId && played.has(`${f.categoryId}:${f.matchId}`));
   const next = new Map(ctx.zones.map((z) => [z.id, 1]));
   next.set(zoneId, 1 + Math.max(0, ...kept.map((f) => f.number)));
   const pending = new Set(plan.pending.map((p) => p.categoryId).filter((id) => !extra.includes(id)));

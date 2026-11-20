@@ -2,24 +2,23 @@ import type { MatchPhase } from '../brackets/index.js';
 import type { PassageOrderMode } from '../settings.js';
 import type { MatchNode } from './graph.js';
 
-/** Catégorie d'une zone : bloc de kata (`kataEntrants` non null) ou combats numérotés. */
+/** Catégorie d'une zone : passages de kata (`kataKeys` non null) ou combats numérotés. */
 export interface OrderCategory {
   id: string;
   rank: number;
-  kataEntrants: number | null;
-  /** Bloc de kata émis (`matchId` du passage) : null = catégorie entière, sinon 'kata:tour1' ou 'kata:finale'. */
-  kataBlock?: string | null;
+  /** Kata : clés des passages à émettre, dans l'ordre (voir `kataKeys`) ; null : combats. */
+  kataKeys: string[] | null;
   nodes: MatchNode[];
   /** Finales à placer juste après le dernier combat de `nodes` (sans combat dans `nodes` : ordre normal, sauf `finalsFirst`). */
   finalsAfter?: MatchNode[];
   /** Ses combats non finaux sont déjà joués : ses `finalsAfter` sont prêtes et passent en tête des combats. */
   finalsFirst?: boolean;
 }
-/** Numéro de passage : un combat, ou un bloc de kata (`matchId` null : entier ; 'kata:tour1' / 'kata:finale'). */
+/** Numéro de passage : un combat (son id), ou un passage de kata (`kata:tour1:<inscription>`, `kata:finale:1|2`). */
 export interface Passage {
   number: number;
   categoryId: string;
-  matchId: string | null;
+  matchId: string;
   /** Aucun combat entre ce combat et le précédent d'un même combattant : prévoir une pause. */
   noRest: boolean;
 }
@@ -35,18 +34,18 @@ export interface PlacedMatch {
 const shares = (x: PlacedMatch, y: PlacedMatch) => x.categoryId === y.categoryId && (x.node.feeds.includes(y.node.matchId) || y.node.feeds.includes(x.node.matchId));
 
 /**
- * File d'une zone pour une vague, numérotée à partir de `first` : blocs de kata, puis combats groupés par distance à la fin
+ * File d'une zone pour une vague, numérotée à partir de `first` : passages de kata (un numéro par clé), puis combats groupés par distance à la fin
  * (« tour par tour » : catégories alternées ; « catégorie par catégorie » : chacune en entier). Dans un groupe, on prend le premier
  * combat qui laisse au moins deux combats de repos, sinon un, sinon le premier (signalé « pas de repos »). Les `finalsAfter`
  * d'une catégorie passent juste après son dernier combat ; celles d'une catégorie `finalsFirst`, en tête des combats.
  * `previous` : dernier combat de la zone avant cette file, pour le seul signal « pas de repos » du premier combat (sans effet
- * sur l'ordre, ni si la file commence par un bloc de kata).
+ * sur l'ordre, ni si la file commence par un passage de kata).
  */
 export function zoneOrder(cats: OrderCategory[], mode: PassageOrderMode, first: number, previous?: PlacedMatch): Passage[] {
   const sorted = [...cats].sort((a, b) => a.rank - b.rank);
   const out: Passage[] = [];
   let number = first;
-  for (const c of sorted) if (c.kataEntrants !== null) out.push({ number: number++, categoryId: c.id, matchId: c.kataBlock ?? null, noRest: false });
+  for (const c of sorted) for (const matchId of c.kataKeys ?? []) out.push({ number: number++, categoryId: c.id, matchId, noRest: false });
 
   // Catégorie sans combat avant ses finales (combat unique, meilleur des trois) : ses finales dans l'ordre normal.
   const nodesOf = (c: OrderCategory) => (c.nodes.length > 0 ? c.nodes : (c.finalsAfter ?? []));
@@ -77,7 +76,7 @@ export function zoneOrder(cats: OrderCategory[], mode: PassageOrderMode, first: 
   for (const c of sorted.filter((x) => x.finalsFirst && x.nodes.length === 0)) {
     for (const d of distancesOf(c.finalsAfter ?? [])) place(at(c.finalsAfter!, d).map((node) => ({ categoryId: c.id, node })));
   }
-  const combats = sorted.filter((c) => c.kataEntrants === null && !(c.finalsFirst && c.nodes.length === 0) && nodesOf(c).length > 0);
+  const combats = sorted.filter((c) => c.kataKeys === null && !(c.finalsFirst && c.nodes.length === 0) && nodesOf(c).length > 0);
 
   if (mode === 'categories') {
     for (const c of combats) for (const d of distancesOf(nodesOf(c))) place(at(nodesOf(c), d).map((node) => ({ categoryId: c.id, node })));

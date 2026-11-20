@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { generateBracket, type Bracket, type BracketFormat } from '../../../src/domain/brackets/index.js';
-import { appendPassages, finalMatchIds, planPassages, reshuffleZone, type FrozenPassage, type PlanCategory, type PlanInput, type WaveFinals } from '../../../src/domain/passages/index.js';
-import type { CombatBracket } from '../../../src/domain/brackets/index.js';
+import { appendPassages, finalMatchIds, kataKeys, planPassages, reshuffleZone, type FrozenPassage, type PlanCategory, type PlanInput, type WaveFinals } from '../../../src/domain/passages/index.js';
+import type { CombatBracket, KataBracket } from '../../../src/domain/brackets/index.js';
+import { kataBracket } from '../../../src/domain/brackets/kata.js';
 
 let seq = 0;
 const entrants = (n: number) => Array.from({ length: n }, () => ({ registrationId: `e${++seq}`, clubId: null, label: `E${seq}` }));
@@ -16,7 +17,11 @@ const ring = { id: 'ring', order: 1, disciplines: null };
 const finalsOn = (finalsZoneId: string | null): WaveFinals[] => [{ waveKey: '', finalsZoneId, whereDefault: null, whenDefault: null }];
 /** Kata en bloc unique sur sa zone (« Sa zone » + « Dès que finie »). */
 const whole = { finals: { where: 'own' as const, when: 'ready' as const } };
-const seqOf = (input: PlanInput, zone = 't1') => planPassages(input).zones.find((z) => z.zoneId === zone)!.passages.map((p) => `${p.number}:${p.categoryId}:${p.matchId ?? 'kata'}`);
+const seqOf = (input: PlanInput, zone = 't1') => planPassages(input).zones.find((z) => z.zoneId === zone)!.passages.map((p) => `${p.number}:${p.categoryId}:${p.matchId}`);
+/** Passages de kata de la catégorie `id` (`categorie:clé`). */
+const keysOf = (id: string, b: Bracket, part: 'whole' | 'tour1' | 'finale') => kataKeys(b as KataBracket, part).map((k) => `${id}:${k}`);
+/** Numérotés à partir de `first`. */
+const numbered = (list: string[], first = 1) => list.map((k, i) => `${first + i}:${k}`);
 const freeze = (input: PlanInput, wave: string | null = null): FrozenPassage[] => {
   const plan = planPassages(input);
   return plan.zones.flatMap((z) => z.passages.filter((p) => p.waveId === wave).map((p) => ({ waveKey: wave ?? '', zoneId: z.zoneId, number: p.number, categoryId: p.categoryId, matchId: p.matchId, noRest: p.noRest, finalsChoice: plan.finals[p.categoryId]?.signature ?? null })));
@@ -85,12 +90,15 @@ describe('finales sur une zone', () => {
   });
 
   test('kata : sa zone dès que finie, bloc entier ; par défaut, tour 1 sur sa zone et finale sur le Ring ; kata à 2 : seulement la finale', () => {
-    const cats = [pc('K', br(5, 'kata_two_rounds')), pc('L', br(2, 'kata_two_rounds'), { rank: 1 })];
+    const K = br(5, 'kata_two_rounds');
+    const L = br(2, 'kata_two_rounds');
+    const cats = [pc('K', K), pc('L', L, { rank: 1 })];
     const input: PlanInput = { categories: cats.map((c) => ({ ...c, ...whole })), zones: [t1, ring], waves: [], mode: 'rounds', waveFinals: finalsOn('ring') };
-    expect(seqOf(input)).toEqual(['1:K:kata', '2:L:kata']);
+    expect(seqOf(input)).toEqual(numbered([...keysOf('K', K, 'whole'), ...keysOf('L', L, 'whole')]));
+    expect(seqOf(input)).toHaveLength(9);
     const on = { ...input, categories: cats };
-    expect(seqOf(on)).toEqual(['1:K:kata:tour1']);
-    expect(seqOf(on, 'ring')).toEqual(['1:K:kata:finale', '2:L:kata:finale']);
+    expect(seqOf(on)).toEqual(numbered(keysOf('K', K, 'tour1')));
+    expect(seqOf(on, 'ring')).toEqual(numbered(['K:kata:finale:1', 'K:kata:finale:2', 'L:kata:finale:1', 'L:kata:finale:2']));
   });
 });
 
@@ -208,6 +216,42 @@ describe('numéros figés (relecture)', () => {
     const input: PlanInput = { categories: [pc('B', br(4), { discipline: 'shido-boxing', pinnedZoneId: 'ring' }), pc('K', br(5, 'kata_two_rounds'))], zones: [t1, { ...ring, disciplines: ['shido-boxing' as const] }, tatami2], waves: [], mode: 'rounds', waveFinals: finalsOn('t2') };
     expect(seqOf(input, 'ring')).toEqual(['1:B:w1-0', '2:B:w1-1', '3:B:w2-0']);
     const noKata: PlanInput = { ...input, zones: [t1, ring, { ...tatami2, disciplines: ['karate' as const] }] };
-    expect(seqOf(noKata)).toEqual(['1:K:kata']);
+    expect(seqOf(noKata)).toEqual(numbered(keysOf('K', input.categories[1]!.bracket!, 'whole')));
+  });
+});
+
+describe('numéros figés d’un kata, kataka par kataka', () => {
+  const ids = ['r1', 'r2', 'r3', 'r4', 'r5'];
+  const people = (list: string[]) => list.map((registrationId) => ({ registrationId, clubId: null, label: registrationId }));
+  const K = (list = ids) => kataBracket(people(list), 2, 1, people(list));
+  const base = (b: Bracket = K()): PlanInput => ({ categories: [pc('K', b, whole)], zones: [t1, ring], waves: [], mode: 'rounds' });
+  const row = (number: number, matchId: string): FrozenPassage => ({ waveKey: '', zoneId: 't1', number, categoryId: 'K', matchId, noRest: false, finalsChoice: null });
+
+  test('anciennes clés de bloc (« kata », « kata:tour1 » / « kata:finale ») : à numéroter', () => {
+    for (const frozen of [[row(1, 'kata')], [row(1, 'kata:tour1'), row(2, 'kata:finale')]]) {
+      const plan = planPassages({ ...base(), frozen });
+      expect(plan.pending).toEqual([{ waveId: null, categoryId: 'K', reason: 'shape' }]);
+      expect(plan.zones[0]!.passages).toEqual([]);
+    }
+  });
+
+  test('nouvelles clés figées : numéros repris, rien à numéroter (bloc entier ou séparé)', () => {
+    const input = base();
+    const frozen = freeze(input);
+    expect(frozen.map((f) => f.matchId)).toEqual([...ids.map((id) => `kata:tour1:${id}`), 'kata:finale:1', 'kata:finale:2']);
+    const plan = planPassages({ ...input, frozen });
+    expect(plan.pending).toEqual([]);
+    expect(seqOf({ ...input, frozen })).toEqual(numbered(keysOf('K', K(), 'whole')));
+    // Figé séparé (tour 1 sur t1, finale sur le Ring) : mêmes clés, toujours à jour.
+    const split: PlanInput = { ...input, categories: [pc('K', K())], waveFinals: finalsOn('ring') };
+    expect(planPassages({ ...split, frozen: freeze(split) }).pending).toEqual([]);
+  });
+
+  test('inscrit retiré : sa clé du tour 1, figée et non jouée, rend le kata à numéroter', () => {
+    const frozen = freeze(base());
+    const fewer = base(K(['r1', 'r3', 'r4', 'r5']));
+    expect(planPassages({ ...fewer, frozen }).pending).toEqual([{ waveId: null, categoryId: 'K', reason: 'shape' }]);
+    // Absent tardif (resté dans le tableau, sa clé « jouée ») : rien ne change.
+    expect(planPassages({ ...base(), frozen, played: new Set(['K:kata:tour1:r2']) }).pending).toEqual([]);
   });
 });

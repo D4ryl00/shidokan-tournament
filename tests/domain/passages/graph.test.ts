@@ -77,7 +77,7 @@ describe('ordre de passage jouable (relecture)', () => {
   const playInOrder = (b: CombatBracket, mode: 'rounds' | 'categories') => {
     const results: Record<string, MatchResult> = {};
     const problems: string[] = [];
-    for (const p of zoneOrder([{ id: 'c', rank: 0, kataEntrants: null, nodes: matchNodes(b) }], mode, 1)) {
+    for (const p of zoneOrder([{ id: 'c', rank: 0, kataKeys: null, nodes: matchNodes(b) }], mode, 1)) {
       const m = resolveBracket(b, results).matches.find((x) => x.id === p.matchId)!;
       if (m.bye || (m.optional && !m.playable)) continue;
       if (!m.playable) {
