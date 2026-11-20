@@ -3,10 +3,12 @@ import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
 import JSZip from 'jszip';
 import { PDFDocument } from 'pdf-lib';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { entryKey } from '../../src/domain/closed-categories.js';
 import { buildApp } from '../../src/server/app.js';
 import { buildClubRecapPdf } from '../../src/server/club-recap-pdf.js';
+import { closeDb, openDb } from '../../src/server/db/client.js';
+import { clubRecapLines } from '../../src/server/repositories/club-recap.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
@@ -19,7 +21,7 @@ beforeEach(async () => {
 });
 afterEach(async () => app.close());
 
-const call = (method: 'GET' | 'POST' | 'PUT', url: string, payload?: object) => app.inject({ method, url: `${base}${url}`, payload });
+const call = (method: 'GET' | 'POST' | 'PUT' | 'PATCH', url: string, payload?: object) => app.inject({ method, url: `${base}${url}`, payload });
 const newClub = async (name: string) => (await call('POST', '/clubs', { name })).json().id as string;
 let n = 0;
 async function reg(clubId: string | null, over: object = {}) {
@@ -97,13 +99,13 @@ test('précédence : retiré ET absent → « Ne combat pas » ; sans catégorie
 test('caractères hors WinAnsi : pas d’exception', async () => {
   const pdf = await buildClubRecapPdf({
     competition: { name: 'Coupe Łódź', date: '2026-11-22' }, club: 'Đặng Club', generatedAt: new Date(),
-    lines: [{ fighter: 'ĐẶNG Łukasz', registered: 'Karaté', final: 'Karaté', changed: false, reason: null }],
+    lines: [{ fighter: 'ĐẶNG Łukasz', registered: 'Karaté', final: 'Karaté', changed: false, reason: null, session: null }],
   });
   expect((await PDFDocument.load(pdf)).getPageCount()).toBe(1);
 });
 
 test('un gros club tient sur plusieurs pages', async () => {
-  const lines = Array.from({ length: 80 }, (_, i) => ({ fighter: `NOM${i} x`, registered: 'Karaté · Jiyu · Cadets · -54 kg', final: 'Karaté Jiyu Cadets F -54', changed: i % 2 === 0, reason: 'catégorie de poids voisine' }));
+  const lines = Array.from({ length: 80 }, (_, i) => ({ fighter: `NOM${i} x`, registered: 'Karaté · Jiyu · Cadets · -54 kg', final: 'Karaté Jiyu Cadets F -54', changed: i % 2 === 0, reason: 'catégorie de poids voisine', session: null }));
   const pdf = await buildClubRecapPdf({ competition: { name: 'Coupe', date: '2026-11-22' }, club: 'Gros', generatedAt: new Date(), lines });
   expect((await PDFDocument.load(pdf)).getPageCount()).toBeGreaterThan(1);
   // L'en-tête du tableau est répété à chaque page.
@@ -115,7 +117,7 @@ test('une ligne plus haute qu’une page est tronquée avec « … » et reste s
   const long = Array.from({ length: 600 }, (_, i) => `mot${i}`).join(' ');
   const pdf = await buildClubRecapPdf({
     competition: { name: 'Coupe', date: '2026-11-22' }, club: 'Long', generatedAt: new Date(),
-    lines: [{ fighter: 'A b', registered: long, final: long, changed: true, reason: long }],
+    lines: [{ fighter: 'A b', registered: long, final: long, changed: true, reason: long, session: null }],
   });
   const doc = await PDFDocument.load(pdf);
   // En-tête seul sur la première page : la ligne passe à la suivante, où elle tient en entier.
@@ -152,7 +154,7 @@ function pdfStreams(pdf: Uint8Array): string {
 test('une ligne changée a un fond gris et « Changé » dans une police différente du reste', async () => {
   const make = (changed: boolean) => buildClubRecapPdf({
     competition: { name: 'Coupe', date: '2026-11-22' }, club: 'C', generatedAt: new Date(),
-    lines: [{ fighter: 'A b', registered: 'Karaté', final: 'Karaté', changed, reason: changed ? 'autre discipline' : null }],
+    lines: [{ fighter: 'A b', registered: 'Karaté', final: 'Karaté', changed, reason: changed ? 'autre discipline' : null, session: null }],
   });
   const grey = (s: string) => s.split('0.95 0.95 0.95 rg').length - 1;
   const [plain, changed] = [pdfStreams(await make(false)), pdfStreams(await make(true))];
@@ -165,4 +167,48 @@ test('une ligne changée a un fond gris et « Changé » dans une police différ
   };
   expect(fontOf(changed, 'Changé')).toBe(true);
   expect(fontOf(changed, 'Karaté')).toBe(false);
+});
+
+describe('session finale du récapitulatif', () => {
+  type Cat = { id: string; waveId: string | null; registrationIds: string[] };
+  const wavesOf = async () => (await call('PUT', '/waves', [
+    { name: 'Juniors', rules: { ageBandCodes: ['junior'], disciplines: [] } },
+    { name: 'Seniors', rules: { ageBandCodes: ['senior'], disciplines: [] } },
+    { name: 'Cadets', rules: { ageBandCodes: ['cadet'], disciplines: [] } },
+  ])).json() as { id: string; name: string }[];
+  const kata = (ageBandCode: string, over: object = {}) => ({ ageBandCode, discipline: 'kata', ruleset: null, weightClassId: null, ...over });
+  const sessionOf = async (club: string, lastName: string) => {
+    const db = openDb(dbPath);
+    try { return (await clubRecapLines(db, base.split('/').pop()!, club)).lines.find((l) => l.fighter.startsWith(lastName))!; } finally { closeDb(db); }
+  };
+
+  test('regroupement juniors / seniors : la junior porte la mention', async () => {
+    await wavesOf();
+    const club = await newClub('Club R');
+    await reg(club, kata('senior', { lastName: 'SENA' }));
+    await reg(club, kata('senior', { lastName: 'SENB' }));
+    const junior = await reg(club, kata('junior', { lastName: 'JUNA' }));
+    const cs = (await call('GET', '/categories')).json() as Cat[];
+    const target = cs.find((c) => c.registrationIds.length === 2)!;
+    expect((await call('POST', '/replacement/move', { registrationId: junior.id, categoryId: target.id })).statusCode).toBe(200);
+    expect(await sessionOf(club, 'JUNA')).toMatchObject({ session: 'Seniors' });
+    expect((await sessionOf(club, 'SENA')).session).toBeNull();
+    expect((await sessionOf(club, 'SENB')).session).toBeNull();
+  });
+
+  test('choix manuel : la ligne n’est pas changée mais porte la session', async () => {
+    const [, seniors] = await wavesOf();
+    const club = await newClub('Club M');
+    const cadette = await reg(club, kata('cadet', { lastName: 'CADA' }));
+    const cat = ((await call('GET', '/categories')).json() as Cat[]).find((c) => c.registrationIds.includes(cadette.id))!;
+    const res = await app.inject({ method: 'PATCH', url: `${base}/categories/${cat.id}`, payload: { waveOverride: seniors!.id } });
+    expect(res.statusCode).toBe(200);
+    expect(await sessionOf(club, 'CADA')).toMatchObject({ changed: false, session: 'Seniors' });
+  });
+
+  test('sans sessions : aucune mention', async () => {
+    const club = await newClub('Club S');
+    await reg(club, kata('senior', { lastName: 'SENA' }));
+    expect((await sessionOf(club, 'SENA')).session).toBeNull();
+  });
 });

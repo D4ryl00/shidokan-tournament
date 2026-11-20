@@ -1,20 +1,25 @@
 import { and, eq } from 'drizzle-orm';
+import { naturalKey } from '../../domain/categories.js';
+import { waveOfCategory } from '../../domain/waves.js';
 import { recapLines, type RecapLine, type RecapRegistration } from '../../domain/club-recap.js';
 import type { AppDb } from '../db/client.js';
 import { categories, clubs, fighters, registrations } from '../db/schema.js';
-import { syncCategories } from './categories.js';
+import { readCategories, syncCategories } from './categories.js';
 import { getGrid } from './competitions.js';
 import { getCompetitionClub } from './registrations.js';
+import { listWaves } from './waves.js';
 
 /** Tout ce qu'il faut pour lire les récapitulatifs de la compétition : catégories à jour, grille, catégories par identifiant. */
 async function context(db: AppDb, competitionId: string) {
   await syncCategories(db, competitionId);
   const grid = await getGrid(db, competitionId);
   const cats = new Map(db.select().from(categories).where(eq(categories.competitionId, competitionId)).all().map((c) => [c.id, c]));
-  return { grid, cats };
+  const waves = await listWaves(db, competitionId);
+  const waveOf = new Map((await readCategories(db, competitionId)).map((c) => [c.id, c.waveId]));
+  return { grid, cats, waves, waveOf };
 }
 
-function linesOf(db: AppDb, competitionId: string, clubId: string, { grid, cats }: Awaited<ReturnType<typeof context>>): RecapLine[] {
+function linesOf(db: AppDb, competitionId: string, clubId: string, { grid, cats, waves, waveOf }: Awaited<ReturnType<typeof context>>): RecapLine[] {
   const regs: RecapRegistration[] = db
     .select({ r: registrations, f: fighters })
     .from(registrations)
@@ -28,12 +33,19 @@ function linesOf(db: AppDb, competitionId: string, clubId: string, { grid, cats 
         : r.presence === 'absent' ? { kind: 'absent' }
         : cat ? { kind: 'category', label: cat.label, keyString: cat.keyString }
         : { kind: 'unplaced' };
+      const registered = original
+        ? { discipline: original.discipline, ruleset: original.ruleset ?? null, weightClassId: original.weightClassId ?? null }
+        : { discipline: r.discipline, ruleset: r.ruleset, weightClassId: r.weightClassId };
+      const name = (id: string | null | undefined) => waves.find((w) => w.id === id)?.name ?? null;
+      const sessions = waves.length === 0 ? undefined : {
+        announced: name(waveOfCategory({ key: naturalKey(registered, f), waveOverride: null, frozenWave: null, bandCounts: { [f.ageBandCode]: 1 } }, waves, grid)),
+        final: r.categoryId ? name(waveOf.get(r.categoryId)) : null,
+      };
       return {
         lastName: f.lastName, firstName: f.firstName, sex: f.sex, ageBandCode: f.ageBandCode,
-        registered: original
-          ? { discipline: original.discipline, ruleset: original.ruleset ?? null, weightClassId: original.weightClassId ?? null }
-          : { discipline: r.discipline, ruleset: r.ruleset, weightClassId: r.weightClassId },
+        registered,
         final,
+        sessions,
         recasementType: r.recasementType as RecapRegistration['recasementType'],
       };
     });

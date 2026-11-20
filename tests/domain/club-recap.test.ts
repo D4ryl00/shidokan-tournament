@@ -16,7 +16,7 @@ const reg = (over: Partial<RecapRegistration> = {}): RecapRegistration => ({
 
 test('non déplacé', () => {
   expect(recapLines([reg()], grid)).toEqual([
-    { fighter: 'MARTIN Léa', registered: 'Karaté · Jiyu · Cadettes · -54 kg', final: 'Karaté · Jiyu · Cadets F · -54 kg', changed: false, reason: null },
+    { fighter: 'MARTIN Léa', registered: 'Karaté · Jiyu · Cadettes · -54 kg', final: 'Karaté · Jiyu · Cadets F · -54 kg', changed: false, reason: null, session: null },
   ]);
 });
 
@@ -67,4 +67,19 @@ test('pas de motif de déplacement pour un désisté ou un non-combattant', () =
 
 test('pas de motif quand la catégorie finale est la catégorie inscrite', () => {
   expect(recapLines([reg({ recasementType: 'A' })], grid)[0]).toMatchObject({ changed: false, reason: null });
+});
+
+const placed = (sessions: RecapRegistration['sessions'], over: Partial<RecapRegistration> = {}) =>
+  recapLines([reg({ sessions, ...over })], grid)[0]!;
+test('session différente du protocole, catégorie inchangée : mention', () => {
+  expect(placed({ announced: 'Poussins - Pupilles', final: 'Benjamins - Minimes' })).toMatchObject({ changed: false, session: 'Benjamins - Minimes' });
+});
+test('même session, sans sessions, session finale en attente : pas de mention', () => {
+  expect(placed({ announced: 'A', final: 'A' }).session).toBeNull();
+  expect(placed(undefined).session).toBeNull();
+  expect(placed({ announced: 'A', final: null }).session).toBeNull();
+});
+test('absent, ne combat pas : pas de mention', () => {
+  expect(placed({ announced: 'A', final: 'B' }, { final: { kind: 'absent' } }).session).toBeNull();
+  expect(placed({ announced: 'A', final: 'B' }, { final: { kind: 'withdrawn' } }).session).toBeNull();
 });

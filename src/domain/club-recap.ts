@@ -9,8 +9,12 @@ export interface RecapRegistration {
   registered: { discipline: DisciplineId; ruleset: Ruleset | null; weightClassId: string | null };
   final: { kind: 'category'; label: string; keyString: string } | { kind: 'absent' } | { kind: 'withdrawn' } | { kind: 'unplaced' };
   recasementType: ProposalType | null;
+  /** Noms des sessions : celle du protocole (inscription d'origine) et la finale (null : en attente). Absent sans sessions. */
+  sessions?: { announced: string | null; final: string | null };
 }
-export interface RecapLine { fighter: string; registered: string; final: string; changed: boolean; reason: string | null }
+export interface RecapLine { fighter: string; registered: string; final: string; changed: boolean; reason: string | null;
+  /** Session finale, seulement si elle diffère de celle du protocole. */
+  session: string | null }
 
 export const RECAP_REASONS: Partial<Record<ProposalType, string>> = {
   A: 'catégorie de poids voisine',
@@ -52,6 +56,7 @@ export function recapLines(regs: RecapRegistration[], grid: CategoryGrid): Recap
     const changed = r.final.kind !== 'category' || r.final.keyString !== keyString(naturalKey(r.registered, r));
     const moved = r.recasementType ? RECAP_REASONS[r.recasementType] : undefined;
     const reason = changed && r.final.kind === 'category' ? (moved ?? 'catégorie regroupée') : null;
-    return { fighter: `${r.lastName.toLocaleUpperCase('fr')} ${r.firstName}`, registered: registeredText(r, grid), final: finalText(r.final), changed, reason };
+    const session = r.final.kind === 'category' && r.sessions?.final && r.sessions.final !== r.sessions.announced ? r.sessions.final : null;
+    return { fighter: `${r.lastName.toLocaleUpperCase('fr')} ${r.firstName}`, registered: registeredText(r, grid), final: finalText(r.final), changed, reason, session };
   });
 }
