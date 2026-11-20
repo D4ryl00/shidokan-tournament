@@ -834,14 +834,7 @@ const categoryRevOf = (qc: QC, id: string, cid: string) => qc.getQueryData<Categ
 const registrationRevOf = (qc: QC, id: string, rid: string) => qc.getQueryData<RegistrationRow[]>(['registrations', id])?.find((r) => r.id === rid)?.rev;
 const resultsOf = (qc: QC, id: string, cid: string) => qc.getQueryData<CategoryResultsData>(['results', id, cid]);
 
-/** Passage de la file d'une zone : un combat, ou un bloc de kata (`matchId` null). */
-/** Kataka d'un bloc de kata de la file : `done` noté dans ce tour, `absent` absent tardif (affiché, jamais appelé). */
-export interface QueueKataka {
-  name: string;
-  club: string;
-  done: boolean;
-  absent: boolean;
-}
+/** Passage de la file d'une zone : un combat, ou un kataka (`matchId` = clé `kata:…` du passage). */
 export interface QueueItem {
   number: number;
   categoryId: string;
@@ -854,10 +847,10 @@ export interface QueueItem {
   bClub: string | null;
   /** Durée du combat en texte long ; null pour un kata. */
   timing: string | null;
-  katakas: number | null;
+  /** Passage de kata : 'tour1' ou 'finale' ; null pour un combat. */
   kataPart: 'tour1' | 'finale' | null;
-  /** Bloc de kata : katakas présents du tour joué, dans l'ordre de passage ; null pour un combat ou une finale aux finalistes inconnus. */
-  lineup: { round: 'tour1' | 'finale'; list: QueueKataka[] } | null;
+  /** Kataka du passage : `name`/`club` null tant que le finaliste n'est pas connu ; `position` = rang parmi les présents du tour (finale : 1 ou 2), `total` = présents du tour 1 (finale : 2). */
+  kata: { name: string | null; club: string | null; position: number; total: number } | null;
   noRest: boolean;
   /** Une saisie d'une zone autonome est à trancher dans cette catégorie. */
   held: boolean;

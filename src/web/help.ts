@@ -507,7 +507,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Quand : « Dès que finie » (juste après le dernier combat de la catégorie) ou « Fin de session » (à la fin de la file de la zone, dans l’ordre des catégories).',
         '« Tout sur … », « Tout sur sa zone », « Tout dès que finie » et « Tout en fin de session » changent d’un coup toutes les catégories de la session ; une catégorie qui y arrive ensuite prend ce choix.',
         'Sur la zone des finales : d’abord tous ses propres combats, puis les finales « Dès que finie » dans l’ordre où leurs catégories se terminent, puis les finales « Fin de session ».',
-        'Kata : la finale est le tour 2. « Sa zone » et « Dès que finie » gardent un seul numéro (tour 1 et finale d’affilée) ; tout autre choix sépare le tour 1 et la finale.',
+        'Kata : la finale est le tour 2. « Sa zone » et « Dès que finie » gardent les numéros du tour 1 et de la finale d’affilée ; tout autre choix sépare le tour 1 et la finale.',
         '« pas de finale (poule) » : une poule unique n’a pas de finale, ses choix sont sans effet.',
       ],
       'Le résumé sous le tableau dit ce que chaque zone jouera pour la session.',
@@ -687,10 +687,10 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     title: 'Prochains combats de la zone',
     short: 'Les combats à appeler sur cette zone, dans l’ordre des numéros imprimés sur les tableaux.',
     details: [
-      'Cliquez « Saisir » pour entrer le résultat d’un combat, « Noter » pour un kata (« n° 14 — Kata… » : toute la catégorie de kata sous un seul numéro). La liste avance au fur et à mesure.',
+      'Cliquez « Saisir » pour entrer le résultat d’un combat, « Noter » pour un kata. Chaque kataka a son propre numéro ; la liste avance au fur et à mesure.',
       '« pas de repos : prévoir une pause » : un combattant de ce combat sort juste du précédent ; laissez-lui le temps de souffler.',
       'Le club de chaque combattant est écrit à côté de son nom, pour l’appel.',
-      'Kata à l’appel : « Se présente » est le kataka à appeler sur le tatami, « Se prépare » le suivant à prévenir ; la carte passe au suivant dès que ses notes sont enregistrées (les absents sont sautés). Plus bas dans la liste, un kata montre tous ses katakas dans l’ordre de passage.',
+      'Kata : « À l’appel » montre le kataka qui passe (nom, club, « kataka 2 sur 5 ») ; le suivant est la première ligne de « Ensuite ». La carte passe au suivant dès que ses notes sont enregistrées ; les absents sont sautés. En finale, « Finaliste 1 » et « Finaliste 2 » prennent leur nom dès que les finalistes sont connus.',
     ],
   },
   'combats.resultat': {
@@ -820,7 +820,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       [
         'Tour par tour : les tours sont alignés à partir de la fin (toutes les demies ensemble…) ; on passe un tour de toutes les catégories de la zone avant le suivant. Les combattants ont ainsi le plus de repos possible.',
         'Catégorie par catégorie : une catégorie va jusqu’à son dernier combat, puis la suivante (dans l’ordre saisi dans l’onglet Combats, sinon celui de la grille).',
-        'Chaque catégorie de kata forme un seul numéro (tour 1 et finale d’affilée), avant les combats de sa session, sauf si sa finale est placée ailleurs ou en fin de session.',
+        'Chaque kataka a son numéro (le tour 1 dans l’ordre du tirage, puis les deux places de la finale), avant les combats de sa session, sauf si la finale est placée ailleurs ou en fin de session.',
         'Les numéros se suivent d’une session à l’autre sur une même zone. Une exemption n’a pas de numéro.',
         'Quand un combattant enchaîne deux combats sans repos, le combat porte « pas de repos : prévoir une pause ».',
         'Les finales se règlent session par session dans l’onglet Finales : sur leur zone ou sur une zone des finales, dès que leur catégorie est finie ou en fin de session (le tableau imprimé indique la zone des finales). Les combats pour la 3e place et les repêchages restent sur leur zone.',

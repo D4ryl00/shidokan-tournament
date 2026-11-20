@@ -1,8 +1,7 @@
 import { Box, Button, Card, Group, Stack, Text, Title } from '@mantine/core';
 import { plural } from '../../domain/plural.js';
 import type { Zone } from '../../domain/zones.js';
-import type { QueueItem, QueueKataka } from '../api.js';
-import { kataCall } from '../kataCall.js';
+import type { QueueItem } from '../api.js';
 import { HelpButton } from './Help.js';
 import { StatusBadge } from './ui/StatusBadge.js';
 
@@ -19,32 +18,17 @@ const EarlyBadge = () => (
 
 /** Libellé de catégorie sans « kg » isolé en début de ligne (espace insécable). */
 const label = (q: QueueItem) => q.categoryLabel.replace(/ kg\b/g, '\u00a0kg');
-/** Tour du bloc : celui du passage séparé, sinon celui en cours (tour 1 puis finale d'un bloc entier). */
-const kataTitle = (q: QueueItem) => {
-  const round = q.kataPart ?? q.lineup?.round ?? null;
-  return `${label(q)}${round === 'tour1' ? ' (tour 1)' : round === 'finale' ? ' (finale)' : ''}`;
-};
-
-/** Nombre de katakas du bloc : ceux du tour joué sans les absents tardifs (la finale : 2), sinon tous les inscrits. */
-const katakaCount = (q: QueueItem) => plural(q.lineup ? q.lineup.list.filter((k) => !k.absent).length : (q.katakas ?? 0), 'kataka');
+/** Catégorie et tour du passage de kata (« Kata Filles (tour 1) »). */
+const kataTitle = (q: QueueItem) => `${label(q)}${q.kataPart === 'tour1' ? ' (tour 1)' : q.kataPart === 'finale' ? ' (finale)' : ''}`;
 
 /** « NOM Prénom · Club » : le club en plus discret. */
 const Who = ({ name, club, c }: { name: string | null; club: string | null; c: string }) => (
   <>{name}{club && <Text span fw={400} c={c} style={{ fontSize: '0.8em' }}> · {club}</Text>}</>
 );
 
-/** Kataka appelé (« Se présente ») ou prévenu (« Se prépare ») d'un bloc de kata à l'appel. */
-const Called = ({ k, what, big }: { k: QueueKataka; what: string; big?: boolean }) => (
-  <Box data-testid={big ? 'kata-current' : 'kata-next'}>
-    <Text size="xs" c="var(--sk-hero-sub)">{what}</Text>
-    <Text fz={big ? 'xl' : 'md'} fw={big ? 700 : 600} lh={1.2}><Who name={k.name} club={k.club} c="var(--sk-hero-sub)" /></Text>
-  </Box>
-);
-
 /** Premier passage de la file : en grand, lisible de loin. */
 function OnCall({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem) => void; onScore: (q: QueueItem) => void }) {
-  const kata = q.matchId === null;
-  const call = q.lineup ? kataCall(q.lineup.list) : null;
+  const kata = q.kataPart !== null;
   return (
     <Box data-testid={kata ? 'next-kata' : 'next-match'} data-number={q.number} p="md"
       style={{ background: 'var(--sk-hero)', borderRadius: 'var(--mantine-radius-md)', border: '1px solid var(--sk-card-line)' }}>
@@ -57,12 +41,13 @@ function OnCall({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem)
           <Text size="xs" fw={700} c="var(--sk-hero-text)" tt="uppercase" style={{ letterSpacing: 0.6 }}>À l’appel</Text>
           {kata ? (
             <>
-              <Text fz="xl" fw={700} lh={1.2}>{kataTitle(q)}</Text>
-              <Text size="sm" c="var(--sk-hero-sub)">
-                {call?.current ? `kataka ${call.position} sur ${call.total}` : katakaCount(q)}
-              </Text>
-              {call?.current && <Called k={call.current} what="Se présente :" big />}
-              {call?.next && <Called k={call.next} what="Se prépare :" />}
+              <Text size="sm" c="var(--sk-hero-sub)">{kataTitle(q)}</Text>
+              <Box data-testid="kata-current">
+                {q.kata?.name
+                  ? <Text fz="xl" fw={700} lh={1.2}><Who name={q.kata.name} club={q.kata.club} c="var(--sk-hero-sub)" /></Text>
+                  : <Text fz="xl" fw={700} lh={1.2}>Finaliste {q.kata?.position}</Text>}
+              </Box>
+              {q.kataPart === 'tour1' && q.kata && <Text size="sm" c="var(--sk-hero-sub)">kataka {q.kata.position} sur {q.kata.total}</Text>}
             </>
           ) : (
             <>
@@ -89,7 +74,7 @@ function OnCall({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem)
 
 /** Passage suivant de la file : une ligne compacte, avec son propre bouton (aucun clic de plus). */
 function Next({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem) => void; onScore: (q: QueueItem) => void }) {
-  const kata = q.matchId === null;
+  const kata = q.kataPart !== null;
   return (
     <Group data-testid={kata ? 'next-kata' : 'next-match'} data-number={q.number} justify="space-between" wrap="nowrap" gap="sm" py={8}
       style={{ borderTop: '1px solid var(--sk-line)' }}>
@@ -98,16 +83,10 @@ function Next({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem) =
         <Stack gap={0} style={{ minWidth: 0 }}>
           {kata ? (
             <>
-              <Text size="sm" fw={600}>{kataTitle(q)} <Text span size="sm" c="dimmed" fw={400} style={{ whiteSpace: 'nowrap' }}>· {katakaCount(q)}</Text></Text>
-              {q.lineup && (
-                <Box component="ol" data-testid="kata-lineup" m={0} pl={20}>
-                  {q.lineup.list.map((k, i) => (
-                    <Text component="li" key={i} size="sm" fw={600} c={k.absent ? 'dimmed' : undefined} td={k.done ? 'line-through' : undefined}>
-                      <Who name={k.name} club={k.club} c="dimmed" />{k.absent && <Text span size="xs" c="dimmed" fw={400}> · absent</Text>}
-                    </Text>
-                  ))}
-                </Box>
-              )}
+              <Text size="sm" fw={600}>
+                {q.kata?.name ? <Who name={q.kata.name} club={q.kata.club} c="dimmed" /> : `Finaliste ${q.kata?.position}`}
+              </Text>
+              <Text size="xs" c="dimmed">{kataTitle(q)}</Text>
             </>
           ) : (
             <>
@@ -161,7 +140,7 @@ export function ZoneQueueCard({ zone, queue, waitingOtherZones, autonomous, onEn
             {rest.length > 0 && (
               <Stack gap={0}>
                 <Text size="xs" fw={600} c="dimmed" tt="uppercase" style={{ letterSpacing: 0.6 }} mb={2}>Ensuite</Text>
-                {rest.map((q) => <Next key={`${q.categoryId}-${q.matchId ?? 'kata'}-${q.number}`} q={q} onEnter={onEnter} onScore={onScore} />)}
+                {rest.map((q) => <Next key={`${q.categoryId}-${q.matchId}-${q.number}`} q={q} onEnter={onEnter} onScore={onScore} />)}
               </Stack>
             )}
           </>

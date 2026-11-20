@@ -192,7 +192,7 @@ test('finale prête avant son tour : signalée même au-delà des 6 premiers ; s
 type QItem = {
   number: number; categoryId: string; matchId: string | null; kataPart: string | null; early: boolean;
   a: string | null; aClub: string | null; bClub: string | null; timing: string | null;
-  lineup: { round: string; list: { name: string; club: string; done: boolean; absent: boolean }[] } | null;
+  kata: { name: string | null; club: string | null; position: number; total: number } | null;
 };
 const queueOf = async (zoneId: string) =>
   ((await call('GET', '/schedule')).json() as { zones: { zone: { id: string }; queue: QItem[] }[] }).zones.find((t) => t.zone.id === zoneId)?.queue ?? [];
@@ -214,10 +214,8 @@ test('finale de kata prête avant son tour : early', async () => {
   await call('PUT', '/finals/categories', { waveId: null, categoryIds: [kata.id], where: 'own', when: 'end' });
   // Tour 1 pas encore noté : finalistes inconnus, la finale n'est pas prête.
   const waiting = (await queueOf(t1!.id)).find((x) => x.categoryId === kata.id && x.kataPart === 'finale');
-  expect(waiting).toMatchObject({ early: false, lineup: null });
-  const tour1 = (await queueOf(t1!.id)).find((x) => x.categoryId === kata.id && x.kataPart === 'tour1')!;
-  expect(tour1.lineup!.round).toBe('tour1');
-  expect(tour1.lineup!.list).toHaveLength(3);
+  expect(waiting).toMatchObject({ early: false, kata: { name: null, club: null, position: 1, total: 2 } });
+  expect((await queueOf(t1!.id)).filter((x) => x.categoryId === kata.id && x.kataPart === 'tour1')).toHaveLength(3);
   for (const [i, r] of k.entries()) await call('PUT', `/categories/${kata.id}/kata/${r.id}/round1`, { notes: [9 - i, 9 - i, 9 - i] });
   const q = await queueOf(t1!.id);
   const fin = (await queueOf(t2!.id)).concat(q).find((x) => x.categoryId === kata.id && x.kataPart === 'finale');
@@ -232,7 +230,7 @@ test('file des zones : club de chaque combattant', async () => {
   const q = (await queueOf(t1!.id))[0]!;
   expect(q.aClub).toMatch(/^Club [AB]$/);
   expect(q.bClub).toMatch(/^Club [AB]$/);
-  expect(q.lineup).toBeNull();
+  expect(q.kata).toBeNull();
 });
 
 test('file des zones : durée de chaque combat, exception d’un combat comprise', async () => {
@@ -246,87 +244,102 @@ test('file des zones : durée de chaque combat, exception d’un combat comprise
   expect(after.find((q) => q.matchId === second!.matchId)!.timing).toBe('1 round de 1 min 30');
 });
 
-test('file des zones : bloc de kata, liste ordonnée qui avance, puis finale', async () => {
+const kataRegs = async (n: number) => {
+  const out: { id: string; fighterId: string }[] = [];
+  for (let i = 0; i < n; i++) out.push((await reg({ discipline: 'kata', ruleset: null, weightClassId: null })) as { id: string; fighterId: string });
+  return out;
+};
+const kataCatOf = async (id: string) => (await cats()).find((c) => c.registrationIds.includes(id))! as Cat & { bracket: { order: string[] } };
+const lastNames = async () => {
+  const names = (await call('GET', '/registrations')).json() as { id: string; fighter: { lastName: string } }[];
+  return (id: string) => names.find((r) => r.id === id)!.fighter.lastName;
+};
+const katas = async (zoneId: string, categoryId: string) => (await queueOf(zoneId)).filter((x) => x.categoryId === categoryId);
+
+test('file des zones : un élément par kataka, dans l’ordre du tirage, puis la finale', async () => {
   const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
-  const k = [await reg({ discipline: 'kata', ruleset: null, weightClassId: null }), await reg({ discipline: 'kata', ruleset: null, weightClassId: null }), await reg({ discipline: 'kata', ruleset: null, weightClassId: null })];
-  const kata = (await cats()).find((c) => c.registrationIds.includes(k[0]!.id))! as Cat & { bracket: { order: string[] } };
+  const k = await kataRegs(3);
+  const kata = await kataCatOf(k[0]!.id);
   await call('PATCH', `/categories/${kata.id}`, { zoneId: t1!.id });
   const order = kata.bracket.order;
-  const names = (await call('GET', '/registrations')).json() as { id: string; fighter: { lastName: string } }[];
-  const nameOf = (id: string) => names.find((r) => r.id === id)!.fighter.lastName;
-  const block = async () => (await queueOf(t1!.id)).find((x) => x.categoryId === kata.id)!;
-  let b = await block();
-  expect(b.aClub).toBeNull();
-  expect(b.timing).toBeNull();
-  expect(b.lineup!.round).toBe('tour1');
-  expect(b.lineup!.list.map((x) => x.name.split(' ')[0])).toEqual(order.map(nameOf));
-  expect(b.lineup!.list.every((x) => !x.done && /^Club [AB]$/.test(x.club))).toBe(true);
+  const nameOf = await lastNames();
+  let q = await katas(t1!.id, kata.id);
+  const first = (x: QItem) => x.kata?.name?.split(' ')[0];
+  expect(q.map((i) => [i.kataPart, i.kata?.name ? first(i) : null, i.kata?.position, i.kata?.total])).toEqual([
+    ['tour1', nameOf(order[0]!), 1, 3], ['tour1', nameOf(order[1]!), 2, 3], ['tour1', nameOf(order[2]!), 3, 3], ['finale', null, 1, 2], ['finale', null, 2, 2],
+  ]);
+  expect(new Set(q.map((i) => i.number)).size).toBe(5);
+  expect(q.every((i) => i.aClub === null && i.timing === null && i.matchId!.startsWith('kata:'))).toBe(true);
+  expect(/^Club [AB]$/.test(q[0]!.kata!.club!)).toBe(true);
   await call('PUT', `/categories/${kata.id}/kata/${order[0]}/round1`, { notes: [9, 9, 9] });
-  b = await block();
-  expect(b.lineup!.list.map((x) => x.done)).toEqual([true, false, false]);
+  q = await katas(t1!.id, kata.id);
+  expect(first(q[0]!)).toBe(nameOf(order[1]!));
+  expect(q[0]!.kata!.position).toBe(2);
+  expect(q).toHaveLength(4);
   await call('PUT', `/categories/${kata.id}/kata/${order[1]}/round1`, { notes: [8, 8, 8] });
   await call('PUT', `/categories/${kata.id}/kata/${order[2]}/round1`, { notes: [7, 7, 7] });
-  b = await block();
-  expect(b.lineup!.round).toBe('finale');
-  expect(b.lineup!.list.map((x) => x.name.split(' ')[0])).toEqual([nameOf(order[0]!), nameOf(order[1]!)]);
-  expect(b.lineup!.list.every((x) => !x.done)).toBe(true);
+  q = await katas(t1!.id, kata.id);
+  expect(q.map((i) => [i.kataPart, first(i), i.kata?.position, i.kata?.total])).toEqual([
+    ['finale', nameOf(order[0]!), 1, 2], ['finale', nameOf(order[1]!), 2, 2],
+  ]);
+  // La finale 1 jouée, la place 2 reste seule.
+  await call('PUT', `/categories/${kata.id}/kata/${order[0]}/final`, { notes: [9, 9, 9] });
+  q = await katas(t1!.id, kata.id);
+  expect(q.map((i) => i.kata?.position)).toEqual([2]);
 });
 
-test('file des zones : égalité pour la 2e place de finale, pas de liste tant qu’elle n’est pas départagée', async () => {
+test('file des zones : égalité pour la 2e place de finale, « Finaliste 1/2 » sans nom tant qu’elle n’est pas départagée', async () => {
   const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
-  const k = [await reg({ discipline: 'kata', ruleset: null, weightClassId: null }), await reg({ discipline: 'kata', ruleset: null, weightClassId: null }), await reg({ discipline: 'kata', ruleset: null, weightClassId: null })];
-  const kata = (await cats()).find((c) => c.registrationIds.includes(k[0]!.id))!;
+  const k = await kataRegs(3);
+  const kata = await kataCatOf(k[0]!.id);
   await call('PATCH', `/categories/${kata.id}`, { zoneId: t1!.id });
-  const names = (await call('GET', '/registrations')).json() as { id: string; fighter: { lastName: string } }[];
-  const nameOf = (id: string) => names.find((r) => r.id === id)!.fighter.lastName;
+  const nameOf = await lastNames();
   await call('PUT', `/categories/${kata.id}/kata/${k[0]!.id}/round1`, { notes: [9, 9, 9] });
   await call('PUT', `/categories/${kata.id}/kata/${k[1]!.id}/round1`, { notes: [8, 8, 8] });
   await call('PUT', `/categories/${kata.id}/kata/${k[2]!.id}/round1`, { notes: [8, 8, 8] });
-  const block = async () => (await queueOf(t1!.id)).find((x) => x.categoryId === kata.id)!;
-  expect((await block()).lineup).toBeNull();
+  expect((await katas(t1!.id, kata.id)).map((i) => [i.kataPart, i.kata!.name, i.kata!.position])).toEqual([['finale', null, 1], ['finale', null, 2]]);
   await call('PUT', `/categories/${kata.id}/tie-break`, { scope: 'kata', order: [k[2]!.id, k[1]!.id] });
-  const b = await block();
-  expect(b.lineup!.round).toBe('finale');
-  expect(b.lineup!.list.map((x) => x.name.split(' ')[0]).sort()).toEqual([nameOf(k[0]!.id), nameOf(k[2]!.id)].sort());
+  const q = await katas(t1!.id, kata.id);
+  expect(q.map((i) => i.kata!.name!.split(' ')[0]).sort()).toEqual([nameOf(k[0]!.id), nameOf(k[2]!.id)].sort());
 });
 
-test('file des zones : kata à 2, la finale d’emblée dans l’ordre du tirage', async () => {
+test('file des zones : kata à 2, deux passages de finale nommés d’emblée dans l’ordre du tirage', async () => {
   const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
-  const k = [await reg({ discipline: 'kata', ruleset: null, weightClassId: null }), await reg({ discipline: 'kata', ruleset: null, weightClassId: null })];
-  const kata = (await cats()).find((c) => c.registrationIds.includes(k[0]!.id))! as Cat & { bracket: { order: string[] } };
+  const k = await kataRegs(2);
+  const kata = await kataCatOf(k[0]!.id);
   await call('PATCH', `/categories/${kata.id}`, { zoneId: t1!.id });
-  const names = (await call('GET', '/registrations')).json() as { id: string; fighter: { lastName: string } }[];
-  const b = (await queueOf(t1!.id)).find((x) => x.categoryId === kata.id)!;
-  expect(b.lineup!.round).toBe('finale');
-  expect(b.lineup!.list.map((x) => x.name.split(' ')[0])).toEqual(kata.bracket.order.map((id) => names.find((r) => r.id === id)!.fighter.lastName));
+  const nameOf = await lastNames();
+  const q = await katas(t1!.id, kata.id);
+  expect(q.map((i) => [i.kataPart, i.kata!.name!.split(' ')[0], i.kata!.position, i.kata!.total])).toEqual(
+    kata.bracket.order.map((id, i) => ['finale', nameOf(id), i + 1, 2]),
+  );
 });
 
-test('file des zones : absent tardif d’un kata commencé, signalé, et la finale attend ses notes comme la feuille de notation', async () => {
+test('file des zones : absent tardif jamais appelé, son numéro sauté, et la finale attend ses notes comme la feuille de notation', async () => {
   const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
-  const k: { id: string; fighterId: string }[] = [];
-  for (let i = 0; i < 3; i++) k.push(await reg({ discipline: 'kata', ruleset: null, weightClassId: null }) as { id: string; fighterId: string });
-  const kata = (await cats()).find((c) => c.registrationIds.includes(k[0]!.id))! as Cat & { bracket: { order: string[] } };
+  const k = await kataRegs(3);
+  const kata = await kataCatOf(k[0]!.id);
   await call('PATCH', `/categories/${kata.id}`, { zoneId: t1!.id });
   const [first, gone, last] = kata.bracket.order;
+  const before = await katas(t1!.id, kata.id);
   await call('PUT', `/categories/${kata.id}/kata/${first}/round1`, { notes: [9, 9, 9] });
   expect((await call('PUT', `/weigh-in/${k.find((r) => r.id === gone)!.fighterId}`, { presence: 'absent' })).statusCode).toBe(204);
-  const block = async () => (await queueOf(t1!.id)).find((x) => x.categoryId === kata.id)!;
-  let b = await block();
-  expect(b.lineup!.round).toBe('tour1');
-  expect(b.lineup!.list.map((x) => x.absent)).toEqual([false, true, false]);
+  let q = await katas(t1!.id, kata.id);
+  expect(q.filter((i) => i.kataPart === 'tour1').map((i) => [i.matchId, i.kata!.position, i.kata!.total])).toEqual([[`kata:tour1:${last}`, 2, 2]]);
+  // Les numéros des autres passages ne changent pas.
+  expect(q.map((i) => i.number)).toEqual(before.filter((i) => i.matchId !== `kata:tour1:${first}` && i.matchId !== `kata:tour1:${gone}`).map((i) => i.number));
   await call('PUT', `/categories/${kata.id}/kata/${last}/round1`, { notes: [8, 8, 8] });
-  b = await block();
-  expect(b.lineup!.round).toBe('tour1'); // la feuille n'ouvre pas la finale tant que l'absent n'a pas de notes
+  q = await katas(t1!.id, kata.id);
+  expect(q.map((i) => i.kataPart)).toEqual(['finale', 'finale']);
+  expect(q.every((i) => i.kata!.name === null)).toBe(true); // la finale attend les notes de l'absent
   await call('PUT', `/categories/${kata.id}/kata/${gone}/round1`, { notes: [0, 0, 0] });
-  b = await block();
-  expect(b.lineup!.round).toBe('finale');
-  expect(b.lineup!.list).toHaveLength(2);
+  q = await katas(t1!.id, kata.id);
+  expect(q.every((i) => i.kataPart === 'finale' && i.kata!.name !== null)).toBe(true);
 });
 
-test('kata lancé : un absent qui arrive entre au tableau en déverrouillant, les notes déjà saisies restent, la carte l’appelle', async () => {
+test('kata lancé : un absent qui arrive entre au tableau en déverrouillant, les notes déjà saisies restent, son passage est à l’appel', async () => {
   const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
-  const k: { id: string; fighterId: string }[] = [];
-  for (let i = 0; i < 4; i++) k.push(await reg({ discipline: 'kata', ruleset: null, weightClassId: null }) as { id: string; fighterId: string });
+  const k = await kataRegs(4);
   const late = k[3]!;
   await call('PUT', `/weigh-in/${late.fighterId}`, { presence: 'absent' });
   type KataCat = Cat & { status: string; bracket: { order: string[] } };
@@ -338,7 +351,6 @@ test('kata lancé : un absent qui arrive entre au tableau en déverrouillant, le
   await call('PUT', `/categories/${c.id}/kata/${p1}/round1`, { notes: [9, 9, 9] });
   await call('PUT', `/categories/${c.id}/kata/${p2}/round1`, { notes: [8, 8, 8] });
   expect((await kataCat()).status).toBe('started');
-  // Arrivée : sans déverrouiller, le tableau lancé ne bouge pas.
   await call('PUT', `/weigh-in/${late.fighterId}`, { presence: 'present' });
   expect((await kataCat()).bracket.order).not.toContain(late.id);
   expect((await call('PATCH', `/categories/${c.id}`, { status: 'ready', unlock: true })).statusCode).toBe(200);
@@ -346,13 +358,13 @@ test('kata lancé : un absent qui arrive entre au tableau en déverrouillant, le
   expect(c.bracket.order).toContain(late.id);
   const res = (await results(c.id)) as Res & { kataScores: { round1: Record<string, number[]> } };
   expect(res.kataScores.round1).toEqual({ [p1!]: [9, 9, 9], [p2!]: [8, 8, 8] });
-  // La carte : le premier kataka sans notes dans le nouvel ordre se présente ; l'arrivant n'est pas marqué absent.
-  const names = (await call('GET', '/registrations')).json() as { id: string; fighter: { lastName: string } }[];
-  const nameOf = (id: string) => names.find((r) => r.id === id)!.fighter.lastName;
-  const b = (await queueOf(t1!.id)).find((x) => x.categoryId === c.id)!;
-  expect(b.lineup!.list.map((x) => [x.name.split(' ')[0], x.done, x.absent])).toEqual(
-    c.bracket.order.map((id) => [nameOf(id), id === p1 || id === p2, false]),
-  );
+  // La carte : les katakas sans notes du nouvel ordre, l'arrivant n'est pas écarté.
+  const nameOf = await lastNames();
+  const q = (await katas(t1!.id, c.id)).filter((i) => i.kataPart === 'tour1');
+  const todo = c.bracket.order.filter((id) => id !== p1 && id !== p2);
+  expect(q.map((i) => i.kata!.name!.split(' ')[0])).toEqual(todo.map(nameOf));
+  expect(q.map((i) => i.kata!.position)).toEqual(todo.map((id) => c.bracket.order.indexOf(id) + 1));
+  expect(q.every((i) => i.kata!.total === 4)).toBe(true);
   expect((await call('PUT', `/categories/${c.id}/kata/${late.id}/round1`, { notes: [7, 7, 7] })).statusCode).toBe(204);
   expect((await kataCat()).status).toBe('started');
 });
