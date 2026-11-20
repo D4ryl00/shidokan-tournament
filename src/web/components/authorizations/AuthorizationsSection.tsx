@@ -133,7 +133,7 @@ function Authorizations({ competitionId, waveId }: { competitionId: string; wave
       actions={(
         <Group gap="xs" wrap="wrap">
           {waveId !== null && (
-            <SegmentedControl size="xs" data-testid="auth-scope" value={allSessions ? 'all' : 'one'} onChange={(v) => setAllSessions(v === 'all')}
+            <SegmentedControl size="xs" aria-label="Sessions des autorisations" data-testid="auth-scope" value={allSessions ? 'all' : 'one'} onChange={(v) => setAllSessions(v === 'all')}
               data={[{ value: 'one', label: 'Cette session' }, { value: 'all', label: 'Toutes les sessions' }]} />
           )}
           <Checkbox size="sm" label="Seulement en attente" data-testid="auth-only-pending" checked={onlyPending} onChange={(e) => setOnlyPending(e.currentTarget.checked)} />

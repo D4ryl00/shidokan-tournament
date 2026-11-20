@@ -44,7 +44,7 @@ export async function exportFfk(db: AppDb, competitionId: string): Promise<Buffe
     const letters = 'ABCDEFGHI'.split('');
     const last = Math.max(-1, ...Object.keys(s.widths).map((l) => letters.indexOf(l)));
     if (last >= 0) ws['!cols'] = letters.slice(0, last + 1).map((l) => (s.widths[l] ? { width: s.widths[l] } : {}));
-    // La catégorie (colonne H) en texte, comme dans le modèle : « -35 » ne devient pas un nombre.
+    // La catégorie (colonne H) en texte, comme dans le modèle : la cellule reste un nombre, au format texte « @ » (affichage « -35 »).
     for (let r = 1; r < s.rows.length; r++) {
       const cell = ws[`H${r + 1}`];
       if (cell) cell.z = '@';

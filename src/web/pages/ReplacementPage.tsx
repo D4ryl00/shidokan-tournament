@@ -545,7 +545,7 @@ export function ReplacementPage() {
                           {mark.note && <Text size="sm" c="dimmed">« {mark.note} »</Text>}
                           <Text size="xs" c="dimmed" className="num">{new Date(mark.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</Text>
                         </Group>
-                        <Button size="xs" variant="default" data-testid="case-unignore" loading={unignore.isPending} onClick={(e) => { e.stopPropagation(); unignore.mutate({ caseId: c.id }); }}>Reprendre</Button>
+                        <Button size="xs" variant="default" data-testid="case-unignore" loading={unignore.isPending && unignore.variables?.caseId === c.id} onClick={(e) => { e.stopPropagation(); unignore.mutate({ caseId: c.id }); }}>Reprendre</Button>
                       </Group>
                       {expanded[c.id] && caseCard(c)}
                     </Stack>

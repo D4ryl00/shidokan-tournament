@@ -124,7 +124,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   const { data: replacement } = useReplacement(id);
   const casesByCategory = useMemo(() => {
     const out = new Map<string, number>();
-    for (const c of replacement?.cases ?? []) if (c.categoryId) out.set(c.categoryId, (out.get(c.categoryId) ?? 0) + 1);
+    for (const c of replacement?.cases ?? []) if (c.categoryId && !replacement?.ignored[c.id]) out.set(c.categoryId, (out.get(c.categoryId) ?? 0) + 1);
     return out;
   }, [replacement]);
   // Dont mises de côté.

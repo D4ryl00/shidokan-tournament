@@ -171,5 +171,8 @@ test('tableaux : barre épinglée, la recherche ne filtre pas, elle passe d’un
 
 test('cartes ignorées : le sujet existe et se distingue de « Mettre de côté »', () => {
   expect(HELP['recasement.ignorees'].title).toBe('Cartes ignorées');
+  const details = HELP['recasement.ignorees'].details.join(' ');
+  expect(details).toContain('Historique');
+  expect(details).toContain('Repartir de zéro');
   expect(HELP['recasement.de-cote'].details.join(' ')).toContain('Ignorer');
 });

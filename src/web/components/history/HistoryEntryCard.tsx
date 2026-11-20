@@ -103,7 +103,7 @@ export function HistoryEntryCard({ competitionId, entry, all, nested = false, on
           {entry.blocked
             ? <Text size="xs" c="red" data-testid="history-blocked" style={{ overflowWrap: 'anywhere', flex: '1 1 100%' }}>{entry.blocked}</Text>
             : cascade.length > 0 && <Text size="xs" style={{ color: 'var(--sk-warn-text)', overflowWrap: 'anywhere', flex: '1 1 100%' }} data-testid="history-also">{alsoText(cascade)}</Text>}
-          {onSee && <Button size="compact-sm" variant="subtle" data-testid="history-see" onClick={() => onSee(entry.categoryIds)}>Voir</Button>}
+          {onSee && entry.categoryIds.length > 0 && <Button size="compact-sm" variant="subtle" data-testid="history-see" onClick={() => onSee(entry.categoryIds)}>Voir</Button>}
           <Button size="compact-sm" variant="light" color="red" data-testid="history-undo" disabled={entry.blocked !== null} {...hover}
             onClick={() => requestUndoDialog([entry.id])}>
             Annuler…

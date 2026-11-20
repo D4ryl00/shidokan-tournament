@@ -30,6 +30,13 @@ test('un nouvel arrivant dans la catégorie : empreinte différente', () => {
   expect(caseFingerprint(s2, caseOf(s1, a))).not.toBe(fp(s1, a));
 });
 
+test('marquer présent (unknown → present) : même empreinte', () => {
+  const a = kg('cadet:F:-54');
+  const b = kg('cadet:F:-54', { presence: 'unknown' });
+  const c = caseOf(makeState([a, b]), a);
+  expect(caseFingerprint(makeState([a, { ...b, presence: 'present' }]), c)).toBe(caseFingerprint(makeState([a, b]), c));
+});
+
 test('un adversaire absent : empreinte différente', () => {
   const a = kg('cadet:F:-54');
   const b = kg('cadet:F:-54');

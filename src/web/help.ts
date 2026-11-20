@@ -576,7 +576,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         '« Refusée… » ouvre la fenêtre d’annulation de l’historique sur les déplacements qui créent la demande, avec ce qui part avec eux ; confirmer les défait, et leurs propositions sont refusées (grisées sur leur carte en ②, avec « Rétablir ») : le plan d’ensemble ne les repropose plus. Impossible quand une session est lancée ou une catégorie commencée : le motif est écrit sous la ligne.',
         'Sans déplacement à défaire (le groupe existait déjà), « Déplacer à la main ↗ » ouvre le combattant dans les Tableaux.',
       ],
-      '« Seulement en attente », cochée, cache les demandes accordées. Le compteur ⏳ du titre compte les demandes en attente de la session.',
+      '« Seulement en attente », cochée, cache les demandes accordées. Le compteur ⏳ du titre compte les demandes en attente de la vue choisie (cette session ou toutes).',
     ],
   },
   'recasement.de-cote': {

@@ -45,6 +45,6 @@ test('types', () => {
 
 test('ignorer', () => {
   const e = view({ kind: 'ignore', names: ['DUPONT Léa'], summary: { registrationIds: ['r1'], fromLabel: 'Cadettes · -54 kg', detail: 'Seule dans sa catégorie' } });
-  expect(entryHeadline(e)).toEqual({ what: 'DUPONT Léa', detail: 'ignoré : Seule dans sa catégorie' });
+  expect(entryHeadline(e)).toEqual({ what: 'DUPONT Léa', detail: 'ignoré (Cadettes · -54 kg) : Seule dans sa catégorie' });
   expect(undoEffect(e)).toBe('La carte de DUPONT Léa revient dans les cas à traiter.');
 });

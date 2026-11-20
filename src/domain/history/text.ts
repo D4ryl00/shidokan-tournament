@@ -18,7 +18,7 @@ export function entryHeadline(e: HistoryEntryView): { what: string; detail: stri
     case 'withdraw':
       return { what: e.names.join(', '), detail: `ne combat pas${s.fromLabel ? ` (${s.fromLabel})` : ''}${s.reason ? ` : ${s.reason}` : ''}` };
     case 'ignore':
-      return { what: e.names.join(', '), detail: `ignoré : ${s.detail ?? ''}` };
+      return { what: e.names.join(', '), detail: `ignoré${s.fromLabel ? ` (${s.fromLabel})` : ''} : ${s.detail ?? ''}` };
     case 'exchange':
       return { what: e.names.join(' ↔ '), detail: s.fromLabel || s.toLabel ? `${s.fromLabel ?? ''} ↔ ${s.toLabel ?? ''}` : '' };
     default:

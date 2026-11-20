@@ -1,13 +1,13 @@
 import { originalCategory } from './detect.js';
 import type { Case, State } from './types.js';
 
-/** Membres actifs (non absents) d'une catégorie : [inscription, présence, poids pesé, poids déclaré], triés. */
-function activeMembers(state: State, categoryId: string | null | undefined): [string, string, number | null, number | null][] {
+/** Membres actifs (non absents) d'une catégorie : [inscription, poids pesé, poids déclaré] ; la présence n'en fait pas partie, triés. */
+function activeMembers(state: State, categoryId: string | null | undefined): [string, number | null, number | null][] {
   if (!categoryId) return [];
   return state.members
     .filter((m) => m.categoryId === categoryId && m.presence !== 'absent')
     .sort((a, b) => a.registrationId.localeCompare(b.registrationId))
-    .map((m) => [m.registrationId, m.presence, m.weighInKg, m.approxWeightKg]);
+    .map((m) => [m.registrationId, m.weighInKg, m.approxWeightKg]);
 }
 
 /**
