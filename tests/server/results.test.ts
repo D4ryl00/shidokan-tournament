@@ -221,6 +221,19 @@ test('finale de kata prête avant son tour : early', async () => {
   const fin = (await queueOf(t2!.id)).concat(q).find((x) => x.categoryId === kata.id && x.kataPart === 'finale');
   expect(fin, JSON.stringify([q, await queueOf(t2!.id)])).toBeDefined();
   expect(fin!.early).toBe(true);
+  // Un combat d'une autre catégorie non joué précède les deux places : les deux peuvent passer plus tôt.
+  const finales = (await queueOf(t2!.id)).concat(q).filter((x) => x.categoryId === kata.id && x.kataPart === 'finale');
+  expect(finales.map((x) => [x.kata!.position, x.early])).toEqual([[1, true], [2, true]]);
+});
+
+test('finale de kata à la suite de son tour 1 : jamais « early » à cause d’un passage de la même catégorie', async () => {
+  const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
+  const k = await kataRegs(3);
+  const kata = await kataCatOf(k[0]!.id);
+  await call('PATCH', `/categories/${kata.id}`, { zoneId: t1!.id });
+  for (const [i, r] of k.entries()) await call('PUT', `/categories/${kata.id}/kata/${r.id}/round1`, { notes: [9 - i, 9 - i, 9 - i] });
+  const q = await katas(t1!.id, kata.id);
+  expect(q.map((i) => [i.kata!.position, i.early])).toEqual([[1, false], [2, false]]);
 });
 
 test('file des zones : club de chaque combattant', async () => {

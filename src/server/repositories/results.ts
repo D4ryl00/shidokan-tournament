@@ -348,7 +348,7 @@ export async function schedule(db: AppDb, competitionId: string, waveId?: string
     // Combat : il est dans la file, donc jouable (finalistes connus) ; finale de kata : finalistes connus (tour 1 noté).
     const readyFinal = (q: QueueItem) => q.kataPart !== null ? q.kataPart === 'finale' && state.get(q.categoryId)!.finalistsKnown : !!finalIds.get(q.categoryId)?.has(q.matchId!);
     const marked = items.map(({ p, q }, i) =>
-      i === 0 || !readyFinal(q) ? q : { ...q, early: passages.some((o) => o.number < p.number && o.waveId === p.waveId && unplayed(o)) });
+      i === 0 || !readyFinal(q) ? q : { ...q, early: passages.some((o) => o.categoryId !== p.categoryId && o.number < p.number && o.waveId === p.waveId && unplayed(o)) });
     return [...marked.slice(0, 6), ...marked.slice(6).filter((q) => q.early)];
   };
   // Combats de la zone qui attendent les résultats d'une autre zone (finales sur la zone des finales, par exemple).
