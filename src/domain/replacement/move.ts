@@ -13,21 +13,26 @@ export function recompute(state: State, cat: CategoryState): void {
   if (isFreeKey(cat.key)) return;
   const all = state.members.filter((m) => m.categoryId === cat.id);
   if (all.length === 0) return;
+  const key = membersKey(all);
+  cat.key = key;
+  const own = keyString(key);
+  cat.aliasKeys = uniqSorted(
+    all.filter((m) => !m.placementLocked).map((m) => keyString(naturalKey(m, m))).filter((k) => k !== own),
+  );
+}
+
+/** Clé d'une catégorie (non libre) d'après ses membres (`all`, au moins un) : les présents, ou tous si tous sont absents. */
+export function membersKey(all: Member[]): CategoryKey {
   const present = all.filter((m) => m.presence !== 'absent');
   const members = present.length > 0 ? present : all;
   const sexes = new Set(members.map((m) => m.sex));
-  const key: CategoryKey = {
+  return {
     discipline: members[0]!.discipline,
     ruleset: members[0]!.ruleset,
     sex: sexes.size === 1 ? members[0]!.sex : 'X',
     ageBandCodes: uniqSorted(members.map((m) => m.ageBandCode)),
     weightClassIds: uniqSorted(members.map((m) => m.weightClassId).filter((w): w is string => w !== null)),
   };
-  cat.key = key;
-  const own = keyString(key);
-  cat.aliasKeys = uniqSorted(
-    all.filter((m) => !m.placementLocked).map((m) => keyString(naturalKey(m, m))).filter((k) => k !== own),
-  );
 }
 
 /** Ce dont a besoin l'application d'une proposition. */
@@ -98,6 +103,6 @@ export function applyProposal(state: State, p: Move): State {
   return next;
 }
 
-function pickDefined(changes: Proposal['changes']): Partial<Member> {
+export function pickDefined(changes: Proposal['changes']): Partial<Member> {
   return Object.fromEntries(Object.entries(changes).filter(([, v]) => v !== undefined)) as Partial<Member>;
 }

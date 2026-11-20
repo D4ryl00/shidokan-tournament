@@ -3,8 +3,9 @@ import { detectCases } from '../../../src/domain/replacement/detect.js';
 import { proposalsFor } from '../../../src/domain/replacement/propose.js';
 import { applyProposal, stateFingerprint } from '../../../src/domain/replacement/apply.js';
 import { computePlan } from '../../../src/domain/replacement/plan.js';
-import { casesOfWave, categoryWave, memberWave, waveMoves } from '../../../src/domain/replacement/waves.js';
-import type { State } from '../../../src/domain/replacement/types.js';
+import { casesOfWave, categoryWave, mayMoveOthers, memberWave, waveEffects, waveMoves } from '../../../src/domain/replacement/waves.js';
+import type { Move } from '../../../src/domain/replacement/move.js';
+import type { Member, State } from '../../../src/domain/replacement/types.js';
 import { WAVE_NONE, type Wave } from '../../../src/domain/waves.js';
 import { makeState, member } from './fixtures.js';
 
@@ -118,24 +119,113 @@ describe('réaffectation par session', () => {
   });
 
   test('changement de session entraîné : la catégorie qui perd sa majorité change de session avec ses autres combattants', () => {
-    const { s, mini, cadet } = minimeAlone();
+    const { mini, cadet, s: s0 } = minimeAlone();
+    // Une troisième cadette dans la catégorie de la cible.
+    const c0 = member({ weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
+    const s = makeState([...s0.members, c0], { waves, categories: s0.categories });
     const s1 = applyProposal(s, props(s, mini.registrationId)[0]!);
-    // Deux cadettes et une minime recasée : la majorité garde l'Après-midi.
+    // Trois cadettes et une minime recasée : la majorité garde l'Après-midi.
     expect(categoryWave(s1, s1.categories.find((c) => c.id === cadet.categoryId)!)).toBe('aprem');
-    // Les deux cadettes pèsent 52 kg : hors catégorie, vers les -54.
-    const [c1, c2] = s1.members.filter((m) => m.categoryId === cadet.categoryId && m.registrationId !== mini.registrationId);
-    for (const c of [c1!, c2!]) Object.assign(c, { weighInKg: 52, presence: 'present' });
-    // Une cadette part : une cadette contre une minime, l'égalité va à la tranche la plus jeune → la catégorie passe au
+    // Les trois cadettes pèsent 52 kg : hors catégorie, vers les -54.
+    const [c1, c2, c3] = s1.members.filter((m) => m.categoryId === cadet.categoryId && m.registrationId !== mini.registrationId);
+    for (const c of [c1!, c2!, c3!]) Object.assign(c, { weighInKg: 52, presence: 'present' });
+    // Une cadette part : deux cadettes contre une minime, la catégorie garde l'Après-midi.
+    const p0 = props(s1, c1!.registrationId)[0]!;
+    expect(p0).toMatchObject({ type: 'A', waveChange: null, waveShifts: [] });
+    const s2 = applyProposal(s1, p0);
+    // Une deuxième part : une cadette contre une minime, l'égalité va à la tranche la plus jeune → la catégorie passe au
     // Matin et emmène la minime et l'autre cadette.
-    const p1 = props(s1, c1!.registrationId)[0]!;
-    const shifted = [{ registrationId: mini.registrationId, from: 'aprem', to: 'matin' }, { registrationId: c2!.registrationId, from: 'aprem', to: 'matin' }];
-    expect(p1).toMatchObject({ type: 'A', waveChange: null, preApproved: false, waveShifts: shifted.map((x, i) => ({ ...x, label: [mini.label, c2!.label][i] })) });
-    expect(waveMoves(s1, applyProposal(s1, p1))).toEqual(shifted);
-    const s2 = applyProposal(s1, p1);
+    const p1 = props(s2, c2!.registrationId)[0]!;
+    const shifted = [{ registrationId: mini.registrationId, from: 'aprem', to: 'matin' }, { registrationId: c3!.registrationId, from: 'aprem', to: 'matin' }];
+    expect(p1).toMatchObject({ type: 'A', waveChange: null, preApproved: false, waveShifts: shifted.map((x, i) => ({ ...x, label: [mini.label, c3!.label][i] })) });
+    expect(waveMoves(s2, applyProposal(s2, p1))).toEqual(shifted);
+    const s3 = applyProposal(s2, p1);
     // La dernière cadette part à son tour : elle quitte le Matin, la minime y reste.
-    const p2 = props(s2, c2!.registrationId)[0]!;
+    const p2 = props(s3, c3!.registrationId)[0]!;
     expect(p2).toMatchObject({ type: 'A', waveChange: { from: 'matin', to: 'aprem' }, waveShifts: [] });
-    // La validation globale ne prend aucun des deux départs : chacun emmène d'autres combattants.
-    expect(planOf(s1, 'aprem', true).moves.map((x) => x.registrationId)).toEqual([]);
+    // La validation globale prend un premier départ, pas le suivant : il emmènerait d'autres combattants.
+    expect(planOf(s1, 'aprem', true).moves.map((x) => x.registrationId)).toEqual([c1!.registrationId]);
+  });
+});
+
+describe('bascules de session à la majorité', () => {
+  const J: Wave = { id: 'J', name: 'Juniors', order: 0, rules: { ageBandCodes: ['junior'], disciplines: [] }, weighInClosed: false };
+  const S: Wave = { id: 'S', name: 'Seniors', order: 1, rules: { ageBandCodes: ['senior'], disciplines: [] }, weighInClosed: false };
+  const senior = (weightClassId = 'senior:F:-61') => member({ ageBandCode: 'senior', weightClassId });
+  const junior = (weightClassId = 'junior:F:-59') => member({ ageBandCode: 'junior', weightClassId });
+  const moveTo = (m: Member, categoryId: string): Move => ({ caseId: `alone:${m.registrationId}`, type: 'M', registrationId: m.registrationId, target: { categoryId }, changes: {} });
+  const shifts = (e: ReturnType<typeof waveEffects>) => e.waveShifts.map((x) => [x.registrationId, x.from, x.to]);
+  /** État où `guests` sont déjà recasés dans la catégorie de `host`. */
+  function stateWith(members: Member[], host: Member, guests: Member[]): State {
+    const s = makeState(members, { waves: [J, S] });
+    for (const g of guests) g.categoryId = host.categoryId;
+    s.categories = s.categories.filter((c) => s.members.some((m) => m.categoryId === c.id));
+    return s;
+  }
+
+  test('arrivée qui bascule : la catégorie d’arrivée change de session et emmène ses combattants', () => {
+    // Un senior seul : le premier junior qui arrive fait égalité, la tranche la plus jeune l'emporte.
+    const s0 = senior();
+    const j0 = junior();
+    const t = makeState([s0, j0], { waves: [J, S] });
+    const e0 = waveEffects(t, moveTo(j0, s0.categoryId!));
+    expect(e0.waveChange).toBeNull();
+    expect(shifts(e0)).toEqual([[s0.registrationId, 'S', 'J']]);
+
+    // Deux seniors : le premier junior ne change rien à la majorité, le second fait égalité et la catégorie bascule.
+    const [s1, s2, j1, j2] = [senior(), senior(), junior(), junior()];
+    const s = makeState([s1, s2, j1, j2], { waves: [J, S] });
+    const first = moveTo(j1, s1.categoryId!);
+    expect(waveEffects(s, first)).toEqual({ waveChange: { from: 'J', to: 'S' }, waveShifts: [] });
+    const after = applyProposal(s, first);
+    const e = waveEffects(after, moveTo(j2, s1.categoryId!));
+    expect(e.waveChange).toBeNull();
+    expect(shifts(e)).toEqual([[s1.registrationId, 'S', 'J'], [s2.registrationId, 'S', 'J'], [j1.registrationId, 'S', 'J']]);
+  });
+
+  test('départ qui bascule : la catégorie de départ perd sa majorité et emmène ses autres combattants', () => {
+    // Deux seniors et une junior (session S) ; un senior part vers une autre catégorie senior.
+    const [s1, s2, j1, s3] = [senior(), senior(), junior(), senior('senior:F:-68')];
+    const s = stateWith([s1, s2, j1, s3], s1, [j1]);
+    expect(categoryWave(s, s.categories.find((c) => c.id === s1.categoryId)!)).toBe('S');
+    const p = moveTo(s1, s3.categoryId!);
+    expect(mayMoveOthers(s, s1, p)).toBe(true);
+    const e = waveEffects(s, p);
+    expect(e.waveChange).toBeNull();
+    expect(shifts(e)).toEqual([[s2.registrationId, 'S', 'J'], [j1.registrationId, 'S', 'J']]);
+  });
+
+  test('départ sans bascule : la majorité ne change pas', () => {
+    // Deux juniors et un senior (session J) ; un junior part, il reste un contre un : toujours J.
+    const [j1, j2, s1, j3] = [junior(), junior(), senior(), junior('junior:F:-66')];
+    const s = stateWith([j1, j2, s1, j3], j1, [s1]);
+    const p = moveTo(j1, j3.categoryId!);
+    expect(waveEffects(s, p)).toEqual({ waveChange: null, waveShifts: [] });
+  });
+
+  test('figée : pas de bascule', () => {
+    const [s1, s2, j1, j2] = [senior(), senior(), junior(), junior()];
+    const s = makeState([s1, s2, j1, j2], { waves: [J, S] });
+    s.categories.find((c) => c.id === s1.categoryId)!.frozenWave = 'S';
+    const after = applyProposal(s, moveTo(j1, s1.categoryId!));
+    const p = moveTo(j2, s1.categoryId!);
+    expect(mayMoveOthers(after, j2, p)).toBe(false);
+    expect(waveEffects(after, p)).toEqual({ waveChange: { from: 'J', to: 'S' }, waveShifts: [] });
+    // Session figée d'une session supprimée : sans effet, la catégorie bascule.
+    after.categories.find((c) => c.id === s1.categoryId)!.frozenWave = 'disparue';
+    expect(shifts(waveEffects(after, p))).toHaveLength(3);
+  });
+
+  test('pas d’applyProposal sans bascule : le filtre écarte un déplacement qui ne change aucune majorité', () => {
+    // Départ : deux juniors et un senior (J) → un junior et un senior (J). Arrivée : un junior (J) → deux juniors (J).
+    const [j1, j2, s1, j3] = [junior(), junior(), senior(), junior('junior:F:-66')];
+    const s = stateWith([j1, j2, s1, j3], j1, [s1]);
+    expect(mayMoveOthers(s, j1, moveTo(j1, j3.categoryId!))).toBe(false);
+    // Un senior seul (S) qui rejoint un junior seul (J) : l'arrivée fait égalité et reste J, le départ n'a personne.
+    const [s4, j4] = [senior('senior:F:-55'), junior('junior:F:-53')];
+    const t = makeState([s4, j4], { waves: [J, S] });
+    expect(mayMoveOthers(t, s4, moveTo(s4, j4.categoryId!))).toBe(false);
+    // Le junior qui rejoint le senior seul fait basculer la catégorie : il faut vérifier.
+    expect(mayMoveOthers(t, j4, moveTo(j4, s4.categoryId!))).toBe(true);
   });
 });

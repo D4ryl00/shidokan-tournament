@@ -95,6 +95,10 @@ function votedWave(c: WaveSubject, ordered: Wave[], grid: CategoryGrid): Wave | 
 const fixedChoice = (choice: string | null | undefined, waves: Wave[]) =>
   choice === WAVE_NONE || (!!choice && waves.some((w) => w.id === choice)) ? choice : undefined;
 
+/** Session choisie à la main ou figée : elle ne suit pas ses combattants. */
+export const hasFixedWave = (c: { waveOverride: string | null; frozenWave?: string | null }, waves: Wave[]) =>
+  fixedChoice(c.waveOverride, waves) !== undefined || fixedChoice(c.frozenWave, waves) !== undefined;
+
 /**
  * Session d'une catégorie : le choix individuel (`waveOverride`), sinon la session figée (`frozenWave`), sinon aucune
  * pour un tableau libre, sinon la majorité de ses combattants, sinon (aucune voix) la tranche la plus jeune de sa clé.
@@ -124,7 +128,7 @@ export function waveConflicts(
   const takers = (key: CategoryKey, bands?: string[]) => ordered.filter((w) => ruleMatches(w.rules, key, grid, bands));
   return cats
     .filter((c) => c.key.free === undefined)
-    .filter((c) => fixedChoice(c.waveOverride, waves) === undefined && fixedChoice(c.frozenWave, waves) === undefined)
+    .filter((c) => !hasFixedWave(c, waves))
     .map((c) => {
       const voting = votingBands(c).map(([band]) => takers(c.key, [band])).filter((ws) => ws.length > 0);
       const disputed = (voting.length > 0 ? voting : [takers(c.key)]).filter((ws) => ws.length > 1).flat();
