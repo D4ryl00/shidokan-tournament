@@ -5,6 +5,9 @@ import { clubFormFileNames } from '../../domain/mail-attachments.js';
 import { NotAClubFormError, parseClubForm, parseClubFormLines } from '../../domain/club-form.js';
 import { buildClubFormTemplate } from '../club-form-template.js';
 import { buildClubFormPdf } from '../club-form-pdf.js';
+import JSZip from 'jszip';
+import { buildClubRecapPdf } from '../club-recap-pdf.js';
+import { clubRecapLines } from '../repositories/club-recap.js';
 import type { CompetitionSettings } from '../../domain/settings.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
@@ -192,6 +195,38 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
       .header('Content-Type', 'application/pdf')
       .header('Content-Disposition', `attachment; filename="${clubFormFileNames(competition.date).pdf}"`)
       .send(pdf);
+  });
+
+  /** « etoile-sportive » : le nom du club sans accents, pour un nom de fichier. */
+  const recapFileName = (club: string) =>
+    `recapitulatif-${club.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'club'}.pdf`;
+  const recapPdf = async (competitionId: string, club: string, lines: Awaited<ReturnType<typeof clubRecapLines>>['lines']) =>
+    buildClubRecapPdf({ competition: (await getCompetition(db, competitionId))!, club, generatedAt: new Date(), lines });
+
+  app.get<{ Params: { id: string; clubId: string } }>('/api/competitions/:id/clubs/:clubId/recap.pdf', async (req, reply) => {
+    const { club, lines } = await clubRecapLines(db, req.params.id, req.params.clubId);
+    if (lines.length === 0) return reply.status(404).send({ error: 'Ce club n’a aucune inscription.' });
+    return reply
+      .header('Content-Type', 'application/pdf')
+      .header('Content-Disposition', `attachment; filename="${recapFileName(club)}"`)
+      .send(Buffer.from(await recapPdf(req.params.id, club, lines)));
+  });
+
+  app.get<P>('/api/competitions/:id/exports/club-recaps.zip', async (req, reply) => {
+    const zip = new JSZip();
+    const used = new Set<string>();
+    for (const c of await listClubs(db, req.params.id)) {
+      const { club, lines } = await clubRecapLines(db, req.params.id, c.id);
+      if (lines.length === 0) continue;
+      let name = recapFileName(club);
+      for (let i = 2; used.has(name); i++) name = recapFileName(club).replace(/\.pdf$/, `-${i}.pdf`);
+      used.add(name);
+      zip.file(name, await recapPdf(req.params.id, club, lines));
+    }
+    return reply
+      .header('Content-Type', 'application/zip')
+      .header('Content-Disposition', 'attachment; filename="recapitulatifs-clubs.zip"')
+      .send(await zip.generateAsync({ type: 'nodebuffer' }));
   });
 
   app.get<P>('/api/competitions/:id/club-form.ods', async (req, reply) => {

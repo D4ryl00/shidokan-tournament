@@ -287,6 +287,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Les clubs, leur coach et leur pré-accord pour les réaffectations.',
     details: [
       'Les clubs sont créés par l’import des fiches club, par l’import FFK ou par la saisie des inscriptions.',
+      'Récapitulatif : pour chaque combattant du club, ce qui était inscrit et ce qu’il fait au final (catégorie, désisté, ne combat pas). Le fichier dit son heure : refaites-le après un changement.',
       [
         'Coach : nom, téléphone et adresses e-mail (une ou plusieurs), pour le joindre le jour J.',
         'Le club est une copie de sa fiche d’annuaire, faite à l’invitation. Vos changements ici n’écrivent pas dans l’annuaire : s’ils diffèrent de la fiche, une notification propose « Comparer » juste après « Modifier ». La pastille sur la ligne du club rappelle seulement l’origine du changement, et le bandeau en tête de la fiche club propose « Comparer ». Sur un PC, cela vaut pour les compétitions gérées ici.',

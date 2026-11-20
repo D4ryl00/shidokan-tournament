@@ -1,0 +1,86 @@
+import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from 'pdf-lib';
+import type { RecapLine } from '../domain/club-recap.js';
+import { safe, wrap } from './club-form-pdf.js';
+
+/* Récapitulatif d'un club : A4 portrait, tableau Combattant / Inscrit / Au final. Origine pdf-lib en bas à gauche. */
+const MM = 72 / 25.4;
+const PAGE = { w: 210 * MM, h: 297 * MM };
+const MARGIN = 15 * MM;
+const BLACK = rgb(0, 0, 0);
+const GREY_LINE = rgb(0.47, 0.47, 0.47);
+const GREY_FILL = rgb(0.95, 0.95, 0.95);
+const COLUMNS = [0.3, 0.35, 0.35];
+const SIZE = 9;
+const LEADING = 11;
+const PAD = 1.5 * MM;
+
+const frDate = (iso: string) =>
+  new Date(`${iso}T12:00:00Z`).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+export interface ClubRecapInput { competition: { name: string; date: string }; club: string; generatedAt: Date; lines: RecapLine[] }
+
+export async function buildClubRecapPdf({ competition, club, generatedAt, lines }: ClubRecapInput): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  doc.setTitle(safe(await doc.embedFont(StandardFonts.Helvetica), `Récapitulatif des inscriptions — ${club}`));
+  const regular = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const width = PAGE.w - 2 * MARGIN;
+  const xs = [MARGIN];
+  for (const c of COLUMNS) xs.push(xs[xs.length - 1]! + width * c);
+  const textW = (i: number) => xs[i + 1]! - xs[i]! - 2 * PAD;
+
+  let page: PDFPage = doc.addPage([PAGE.w, PAGE.h]);
+  let top = PAGE.h - MARGIN;
+  const text = (t: string, x: number, y: number, font: PDFFont, size = SIZE) => page.drawText(safe(font, t), { x, y, size, font, color: BLACK });
+
+  const tableHead = () => {
+    const h = 7 * MM;
+    ['Combattant', 'Inscrit', 'Au final'].forEach((label, i) => {
+      page.drawRectangle({ x: xs[i]!, y: top - h, width: xs[i + 1]! - xs[i]!, height: h, borderWidth: 0.7, borderColor: GREY_LINE, color: GREY_FILL });
+      text(label, xs[i]! + PAD, top - h / 2 - 3, bold);
+    });
+    top -= h;
+  };
+
+  // En-tête du document, une seule fois.
+  text('Récapitulatif des inscriptions', MARGIN, top - 16, bold, 16);
+  top -= 16 + 6;
+  const subtitle = `${competition.name} — ${frDate(competition.date)}`;
+  for (const l of wrap(regular, 10, safe(regular, subtitle), width)) { text(l, MARGIN, top - 10, regular, 10); top -= 13; }
+  for (const l of wrap(bold, 12, safe(bold, club), width)) { text(l, MARGIN, top - 12, bold, 12); top -= 15; }
+  const date = generatedAt.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Paris' });
+  const time = generatedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
+  text(`Créé le ${date} à ${time.replace(':', ' h ')}`, MARGIN, top - 9, regular, 9);
+  top -= 9 + 8 * MM / 2;
+  tableHead();
+
+  for (const line of lines) {
+    const name = wrap(regular, SIZE, safe(regular, line.fighter), textW(0));
+    const reg = wrap(regular, SIZE, safe(regular, line.registered), textW(1));
+    const fin = wrap(regular, SIZE, safe(regular, line.final), textW(2));
+    // « Changé » en gras, puis le motif entre parenthèses (replié sur le reste de la ligne).
+    const note = line.changed ? ['Changé', ...(line.reason ? wrap(regular, SIZE, safe(regular, `(${line.reason})`), textW(2) - bold.widthOfTextAtSize('Changé ', SIZE)) : [])] : [];
+    const rows = Math.max(name.length, reg.length, fin.length + note.length);
+    const h = rows * LEADING + 2 * PAD;
+    if (top - h < MARGIN) {
+      page = doc.addPage([PAGE.w, PAGE.h]);
+      top = PAGE.h - MARGIN;
+      tableHead();
+    }
+    for (let i = 0; i < 3; i++) {
+      page.drawRectangle({ x: xs[i]!, y: top - h, width: xs[i + 1]! - xs[i]!, height: h, borderWidth: 0.5, borderColor: GREY_LINE, ...(line.changed ? { color: GREY_FILL } : {}) });
+    }
+    const draw = (lines: string[], i: number, font: PDFFont, from = 0) =>
+      lines.forEach((l, k) => text(l, xs[i]! + PAD, top - PAD - SIZE - (from + k) * LEADING + 2, font));
+    draw(name, 0, regular);
+    draw(reg, 1, regular);
+    draw(fin, 2, regular);
+    if (note.length) {
+      const y = (k: number) => top - PAD - SIZE - (fin.length + k) * LEADING + 2;
+      text('Changé', xs[2]! + PAD, y(0), bold);
+      note.slice(1).forEach((l, k) => text(l, xs[2]! + PAD + (k === 0 ? bold.widthOfTextAtSize('Changé ', SIZE) : 0), y(k), regular));
+    }
+    top -= h;
+  }
+  return doc.save();
+}

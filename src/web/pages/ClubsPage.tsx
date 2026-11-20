@@ -10,7 +10,7 @@ import { ClubChangePill } from '../components/club-changes/ClubChangeBanners.js'
 import { useClubChangeDialog } from '../components/club-changes/ClubChangeModal.js';
 import { EmailsInput, EmailsList } from '../components/EmailsInput.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
-import { IconEdit } from '../components/ui/icons.js';
+import { IconDownload, IconEdit } from '../components/ui/icons.js';
 import { PageHeader } from '../components/ui/PageHeader.js';
 import { TableCard } from '../components/ui/TableCard.js';
 
@@ -91,7 +91,10 @@ export function ClubsPage() {
 
   return (
     <Stack gap="md">
-      <PageHeader title={plural(clubs.length, 'club')} summary={clubs.length > 0 ? `${plural(preApproved, 'club')} avec pré-accord du coach` : undefined} />
+      <PageHeader title={plural(clubs.length, 'club')} summary={clubs.length > 0 ? `${plural(preApproved, 'club')} avec pré-accord du coach` : undefined}
+        actions={clubs.length > 0 && (
+          <Button component="a" href={`/api/competitions/${id}/exports/club-recaps.zip`} download variant="default" data-testid="club-recaps-zip">Tous les récapitulatifs (.zip)</Button>
+        )} />
       {isLoading ? null : clubs.length === 0 ? (
         <EmptyState title="Aucun club pour l’instant" text="Les clubs sont créés par les inscriptions : en ligne, par l’import des fiches ou de l’export FFK, ou à la saisie d’une inscription." />
       ) : (
@@ -123,6 +126,8 @@ export function ClubsPage() {
                   </Table.Td>
                   <Table.Td ta="right" className="num">{count(c.id)}</Table.Td>
                   <Table.Td ta="right">
+                    <ActionIcon variant="subtle" color="gray" aria-label={`Récapitulatif ${ofName(c.name)}`} title="Récapitulatif (PDF)" data-testid="club-recap"
+                      {...(count(c.id) === 0 ? { disabled: true } : { component: 'a', href: `/api/competitions/${id}/clubs/${c.id}/recap.pdf`, download: true })}><IconDownload /></ActionIcon>
                     <ActionIcon variant="subtle" color="gray" aria-label={`Modifier ${c.name}`} title="Modifier" data-testid="club-edit" onClick={() => setEditing(c)}><IconEdit /></ActionIcon>
                   </Table.Td>
                 </Table.Tr>

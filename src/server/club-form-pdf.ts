@@ -30,13 +30,13 @@ const frDate = (iso: string) =>
 interface Fonts { regular: PDFFont; bold: PDFFont; italic: PDFFont }
 
 /** Texte encodable par les polices standard (WinAnsi) : un caractère hors jeu devient « ? ». */
-function safe(font: PDFFont, s: string): string {
+export function safe(font: PDFFont, s: string): string {
   const ok = new Set(font.getCharacterSet());
   return [...s].map((c) => (ok.has(c.codePointAt(0)!) ? c : '?')).join('');
 }
 
 /** Découpe un texte en lignes de largeur maximale `width`. */
-function wrap(font: PDFFont, size: number, text: string, width: number): string[] {
+export function wrap(font: PDFFont, size: number, text: string, width: number): string[] {
   const lines: string[] = [];
   let line = '';
   for (const word of text.split(' ')) {
