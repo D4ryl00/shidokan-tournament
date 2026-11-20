@@ -123,7 +123,7 @@ Conséquences :
 ## Vérification
 
 TDD :
-- domaine du vote : majorité, égalité vers les plus jeunes, recasés et absents comptés, tranche hors session, catégorie vide, choix manuel prioritaire, gel prioritaire ;
+- domaine du vote : majorité, égalité vers les plus jeunes, recasés comptés, absents comptés avant le gel et ignorés après (catégorie créée après le gel), tranche hors session, catégorie vide, choix manuel prioritaire, gel prioritaire ;
 - `waveEffects` : bascule de la catégorie d'arrivée qui emmène ses membres ; pas de bascule une fois figée ;
 - routes figer / ne plus figer, Journal, catégorie créée après le gel, suppression d'une session figée ;
 - lignes et PDF du récapitulatif (mention, regroupement juniors / seniors, sans sessions, ligne longue) ;
