@@ -192,6 +192,7 @@ describe('session finale du récapitulatif', () => {
     const target = cs.find((c) => c.registrationIds.length === 2)!;
     expect((await call('POST', '/replacement/move', { registrationId: junior.id, categoryId: target.id })).statusCode).toBe(200);
     expect(await sessionOf(club, 'JUNA')).toMatchObject({ session: 'Seniors' });
+    expect(pdfText((await call('GET', `/clubs/${club}/recap.pdf`)).rawPayload)).toContain('Déplacé dans la session Seniors');
     expect((await sessionOf(club, 'SENA')).session).toBeNull();
     expect((await sessionOf(club, 'SENB')).session).toBeNull();
   });
@@ -206,9 +207,48 @@ describe('session finale du récapitulatif', () => {
     expect(await sessionOf(club, 'CADA')).toMatchObject({ changed: false, session: 'Seniors' });
   });
 
+  test('valeurs d’origine : la session annoncée suit originalJson', async () => {
+    await call('PUT', '/waves', [
+      { name: 'Kata', rules: { ageBandCodes: [], disciplines: ['kata'] } },
+      { name: 'Combat', rules: { ageBandCodes: [], disciplines: ['karate'] } },
+    ]);
+    const club = await newClub('Club O');
+    const o = await reg(club, kata('cadet', { lastName: 'ORIG' }));
+    await reg(club, kata('cadet', { lastName: 'PLAIN' }));
+    await call('GET', '/categories');
+    const raw = new Database(dbPath);
+    raw.prepare('UPDATE registrations SET original_json = ? WHERE id = ?').run(JSON.stringify({ discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54' }), o.id);
+    raw.close();
+    // Annoncée selon l'origine (Combat), finale Kata : mention. Sans originalJson : aucune.
+    expect((await sessionOf(club, 'ORIG')).session).toBe('Kata');
+    expect((await sessionOf(club, 'PLAIN')).session).toBeNull();
+  });
+
   test('sans sessions : aucune mention', async () => {
     const club = await newClub('Club S');
     await reg(club, kata('senior', { lastName: 'SENA' }));
     expect((await sessionOf(club, 'SENA')).session).toBeNull();
+  });
+});
+
+describe('PDF : mention de session', () => {
+  const make = (line: object) => buildClubRecapPdf({
+    competition: { name: 'Coupe', date: '2026-11-22' }, club: 'C', generatedAt: new Date(),
+    lines: [{ fighter: 'A b', registered: 'Karaté', final: 'Karaté', changed: false, reason: null, session: null, ...line }],
+  });
+  test('mention sur une ligne changée', async () => {
+    // La mention est repliée sur la largeur de la colonne : on compare le texte à plat.
+    const text = pdfText(await make({ changed: true, reason: 'tranche d’âge voisine', session: 'Poussins - Pupilles' })).replace(/\n/g, ' ');
+    for (const s of ['Changé', '(tranche d’âge voisine)', 'Déplacé dans la session Poussins - Pupilles']) expect(text).toContain(s);
+  });
+  test('mention seule sur une ligne non changée', async () => {
+    const text = pdfText(await make({ session: 'S2' }));
+    expect(text).toContain('Déplacé dans la session S2');
+    expect(text).not.toContain('Changé');
+  });
+  test('ligne très longue', async () => {
+    const pdf = await make({ final: 'x'.repeat(400), session: 'y'.repeat(200) });
+    expect((await PDFDocument.load(pdf)).getPageCount()).toBe(1);
+    expect(pdfText(pdf)).toContain('Déplacé');
   });
 });

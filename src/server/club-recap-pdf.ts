@@ -70,7 +70,12 @@ export async function buildClubRecapPdf({ competition, club, generatedAt, lines 
     const reason = line.changed && line.reason ? wrap(regular, SIZE, safe(regular, `(${line.reason})`), textW(2) - bold.widthOfTextAtSize('Changé ', SIZE)) : [];
     // Une ligne ne dépasse jamais une page : au-delà, chaque colonne est tronquée et finit par « … ».
     const maxRows = Math.floor((PAGE.h - 2 * MARGIN - HEAD_H - 2 * PAD) / LEADING);
-    const noteRows = line.changed ? Math.min(Math.max(1, reason.length), maxRows - 1) : 0;
+    const moved = line.session ? wrap(bold, SIZE, safe(bold, `Déplacé dans la session ${line.session}`), textW(2)) : [];
+    // Au plus maxRows - 1 lignes de note (il reste toujours une ligne de « final ») ; la mention garde au moins une ligne.
+    const budget = maxRows - 1;
+    const reasonRows = line.changed ? Math.min(Math.max(1, reason.length), Math.max(1, budget - (moved.length ? 1 : 0))) : 0;
+    const movedRows = Math.min(moved.length, Math.max(0, budget - reasonRows));
+    const noteRows = reasonRows + movedRows;
     const name = clip(wrap(regular, SIZE, safe(regular, line.fighter), textW(0)), maxRows, regular, textW(0));
     const reg = clip(wrap(regular, SIZE, safe(regular, line.registered), textW(1)), maxRows, regular, textW(1));
     const fin = clip(wrap(regular, SIZE, safe(regular, line.final), textW(2)), Math.max(1, maxRows - noteRows), regular, textW(2));
@@ -82,7 +87,7 @@ export async function buildClubRecapPdf({ competition, club, generatedAt, lines 
       tableHead();
     }
     for (let i = 0; i < 3; i++) {
-      page.drawRectangle({ x: xs[i]!, y: top - h, width: xs[i + 1]! - xs[i]!, height: h, borderWidth: 0.5, borderColor: GREY_LINE, ...(line.changed ? { color: GREY_FILL } : {}) });
+      page.drawRectangle({ x: xs[i]!, y: top - h, width: xs[i + 1]! - xs[i]!, height: h, borderWidth: 0.5, borderColor: GREY_LINE, ...(line.changed || line.session ? { color: GREY_FILL } : {}) });
     }
     const draw = (lines: string[], i: number, font: PDFFont, from = 0) =>
       lines.forEach((l, k) => text(l, xs[i]! + PAD, top - PAD - SIZE - (from + k) * LEADING + 2, font));
@@ -91,11 +96,12 @@ export async function buildClubRecapPdf({ competition, club, generatedAt, lines 
     draw(fin, 2, regular);
     if (line.changed) {
       const y = (k: number) => top - PAD - SIZE - (fin.length + k) * LEADING + 2;
-      const room = Math.max(1, maxRows - fin.length);
       text('Changé', xs[2]! + PAD, y(0), bold);
-      clip(reason, room, regular, textW(2) - bold.widthOfTextAtSize('Changé ', SIZE)).forEach((l, k) =>
+      clip(reason, reasonRows, regular, textW(2) - bold.widthOfTextAtSize('Changé ', SIZE)).forEach((l, k) =>
         text(l, xs[2]! + PAD + bold.widthOfTextAtSize('Changé ', SIZE), y(k), regular));
     }
+    clip(moved, movedRows, bold, textW(2)).forEach((l, k) =>
+      text(l, xs[2]! + PAD, top - PAD - SIZE - (fin.length + reasonRows + k) * LEADING + 2, bold));
     top -= h;
   }
   return doc.save();
