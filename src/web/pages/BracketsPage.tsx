@@ -8,7 +8,8 @@ import { compatibleFormats, type BracketFormat } from '../../domain/brackets/ind
 import { activeEntrantCount, type Category, type CategoryStatus } from '../../domain/categories.js';
 import { newSameClubSentences } from '../../domain/brackets/same-club.js';
 import { plural } from '../../domain/plural.js';
-import { useAuthorizations, useCategories, useHistory, usePassages, useRedraw, useRegenerate, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
+import { matchTimings } from '../matchTimings.js';
+import { useAuthorizations, useCompetition, useGrid, useCategories, useHistory, usePassages, useRedraw, useRegenerate, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
 import { categoryPassages, kataPassageText, movedMatchZones } from '../passages.js';
 import { useSelectedWave, withSession } from '../useSelectedWave.js';
 import { usePoste } from '../poste.js';
@@ -177,6 +178,12 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   const selected: Category | undefined = categories.find((c) => c.id === selectedId) ?? filtered[0];
   const locked = selected?.status === 'started' || selected?.status === 'finished';
   const passages = useMemo(() => (selected ? categoryPassages(plan, selected.id) : null), [plan, selected]);
+  const { data: competition } = useCompetition(id);
+  const { data: grid } = useGrid(id);
+  const timings = useMemo(
+    () => (selected && competition && grid ? matchTimings(selected, competition.settings, grid) : undefined),
+    [selected, competition, grid],
+  );
   const alone = shown.filter((c) => activeCount(c) === 1).length;
   const absentOnly = shown.filter(allAbsent).length;
 
@@ -396,7 +403,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
             )}
             <CategoryDurations key={selected.id} competitionId={id} category={selected} readOnly={readOnlyPoste} />
             <ApiErrorAlert error={update.error ?? redraw.error ?? swap.error ?? regenerate.error} />
-            <BracketView category={selected} entrants={entrants} numbers={passages?.numbers} noRest={passages?.noRest} matchZones={movedMatchZones(passages, zones, selected.bracket)} selected={swapFrom} onSelect={locked || readOnlyPoste ? undefined : onSelectEntrant} badges={badges} badgeDetails={badgeDetails} pendingAuth={pendingAuth} fighterInfo={id} />
+            <BracketView category={selected} entrants={entrants} numbers={passages?.numbers} noRest={passages?.noRest} matchZones={movedMatchZones(passages, zones, selected.bracket)} timings={timings} selected={swapFrom} onSelect={locked || readOnlyPoste ? undefined : onSelectEntrant} badges={badges} badgeDetails={badgeDetails} pendingAuth={pendingAuth} fighterInfo={id} />
             {swapFrom && !locked && !readOnlyPoste && selected.bracket && selected.registrationIds.includes(swapFrom) && (
               <MoveEntrantPanel key={swapFrom} competitionId={id} registrationId={swapFrom} name={entrants.get(swapFrom)?.name ?? ''} manual={badges.get(swapFrom) === 'M'} onDone={() => setSwapFrom(null)} />
             )}

@@ -65,6 +65,8 @@ interface Props {
   noRest?: Set<string>;
   /** Combats sur une autre zone que la catégorie : libellé (« Zone des finales : Ring », « Joué sur : Tatami 1 »). */
   matchZones?: Map<string, string>;
+  /** Durée de chaque combat (texte long), sous son en-tête ; jamais à l'impression. */
+  timings?: Map<string, string>;
   results?: Record<string, MatchResult>;
   kataScores?: KataScores;
   printable?: boolean;
@@ -214,6 +216,7 @@ function CombatView(props: Props & { bracket: CombatBracket }) {
           </Text>
         </div>
         {props.matchZones?.get(m.id) && <Text size="xs" fw={700} px={6} data-testid="match-zone">{props.matchZones.get(m.id)}</Text>}
+        {!props.printable && !m.bye && props.timings?.get(m.id) && <Text size="xs" c="dimmed" px={6} data-testid="match-timing">{props.timings.get(m.id)}</Text>}
         {m.bye ? row(m.entrantA ?? m.entrantB, m.a, false) : (
           <>
             {row(m.entrantA, m.a, m.result?.winner === 'a')}
