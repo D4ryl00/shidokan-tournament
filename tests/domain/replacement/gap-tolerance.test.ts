@@ -33,7 +33,7 @@ describe('écart toléré par la largeur de la catégorie', () => {
   test('catégorie fusionnée -54 + -61 : seuil 5 inchangé', () => {
     const base = duo('cadet:F:-54', 50, 50);
     const key = { ...naturalKey(base[0]!, base[0]!), weightClassIds: ['cadet:F:-54', 'cadet:F:-61'] };
-    const cat: CategoryState = { id: 'cat:merged', key, status: 'provisional', aliasKeys: [], waveOverride: null };
+    const cat: CategoryState = { id: 'cat:merged', key, status: 'provisional', aliasKeys: [], waveOverride: null, frozenWave: null };
     const ms = [member({ weightClassId: 'cadet:F:-54', approxWeightKg: 50, categoryId: cat.id }), member({ weightClassId: 'cadet:F:-61', approxWeightKg: 57, categoryId: cat.id })];
     const s = makeState(ms, { categories: [cat] });
     expect(keyString(cat.key)).toContain('-61');

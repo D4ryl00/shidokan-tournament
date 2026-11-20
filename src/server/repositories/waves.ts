@@ -18,7 +18,7 @@ export async function listWaves(db: AppDb, competitionId: string): Promise<Wave[
 
 /**
  * Remplace la liste des vagues : les vagues gardées conservent leur identifiant, les nouvelles sont créées,
- * celles qui disparaissent sont supprimées et les choix individuels qui les visaient sont effacés (retour aux règles).
+ * celles qui disparaissent sont supprimées et les choix individuels (et sessions figées) qui les visaient sont effacés (retour aux règles).
  * `knownIds` : vagues que l'écran connaissait ; si elles ont changé entre-temps (autre onglet), refus.
  */
 export async function replaceWaves(db: AppDb, competitionId: string, input: WaveInput[], knownIds?: string[]): Promise<Wave[]> {
@@ -53,6 +53,8 @@ export async function replaceWaves(db: AppDb, competitionId: string, input: Wave
     const t = tx as unknown as AppDb;
     if (removed.length) {
       t.update(categories).set({ waveOverride: null }).where(and(eq(categories.competitionId, competitionId), inArray(categories.waveOverride, removed))).run();
+      // Session figée supprimée : la catégorie repasse au calcul (refigée à la prochaine synchronisation si les sessions sont figées).
+      t.update(categories).set({ frozenWave: null }).where(and(eq(categories.competitionId, competitionId), inArray(categories.frozenWave, removed))).run();
       t.delete(waveSchedules).where(and(eq(waveSchedules.competitionId, competitionId), inArray(waveSchedules.waveKey, removed))).run();
       t.delete(waveFinals).where(and(eq(waveFinals.competitionId, competitionId), inArray(waveFinals.waveKey, removed))).run();
       t.delete(waves).where(and(eq(waves.competitionId, competitionId), keptIds.length ? notInArray(waves.id, keptIds) : undefined)).run();

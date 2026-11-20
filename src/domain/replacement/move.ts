@@ -1,4 +1,5 @@
 import { isFreeKey, keyString, naturalKey, type CategoryKey } from '../categories.js';
+import { bandCounts, WAVE_NONE, waveOfCategory } from '../waves.js';
 import type { CaseKind, CategoryState, Member, Proposal, State } from './types.js';
 
 const uniqSorted = (xs: string[]) => [...new Set(xs)].sort();
@@ -60,12 +61,16 @@ export function applyProposal(state: State, p: Move): State {
   const from = m.categoryId;
 
   let target: CategoryState;
+  let created = false;
   if ('categoryId' in p.target) {
     target = next.categories.find((c) => c.id === (p.target as { categoryId: string }).categoryId)!;
   } else {
     const ks = keyString(p.target.newKey);
-    target = next.categories.find((c) => keyString(c.key) === ks) ?? { id: `new:${ks}`, key: p.target.newKey, status: 'provisional', aliasKeys: [], waveOverride: null };
-    if (!next.categories.includes(target)) next.categories.push(target);
+    target = next.categories.find((c) => keyString(c.key) === ks) ?? { id: `new:${ks}`, key: p.target.newKey, status: 'provisional', aliasKeys: [], waveOverride: null, frozenWave: null };
+    if (!next.categories.includes(target)) {
+      next.categories.push(target);
+      created = true;
+    }
   }
 
   const isWeightCorrection = p.type === 'A' && p.changes.weightClassId !== undefined;
@@ -95,12 +100,21 @@ export function applyProposal(state: State, p: Move): State {
     const cat: CategoryState = { ...next.categories[i]! };
     next.categories[i] = cat;
     recompute(next, cat);
+    // Sessions figées : une catégorie qui naît reçoit la session calculée à sa création (absents exclus), puis ne bouge plus.
+    if (created && cat.id === target.id) cat.frozenWave = frozenWaveAtCreation(next, cat);
   }
   next.categories = next.categories.filter(
     // Un tableau libre vide reste : l'organisateur l'a créé pour le remplir à la main.
     (c) => c.status === 'started' || c.status === 'finished' || isFreeKey(c.key) || next.members.some((x) => x.categoryId === c.id),
   );
   return next;
+}
+
+/** Session figée d'une catégorie qui naît (comme `syncCategories` côté serveur) ; null sans gel, sans session ou pour un tableau libre. */
+function frozenWaveAtCreation(state: State, cat: CategoryState): string | null {
+  if (!state.sessionsFrozen || state.waves.length === 0 || isFreeKey(cat.key)) return null;
+  const counts = bandCounts(state.members.filter((m) => m.categoryId === cat.id), true);
+  return waveOfCategory({ key: cat.key, waveOverride: null, frozenWave: null, bandCounts: counts }, state.waves, state.grid) ?? WAVE_NONE;
 }
 
 export function pickDefined(changes: Proposal['changes']): Partial<Member> {

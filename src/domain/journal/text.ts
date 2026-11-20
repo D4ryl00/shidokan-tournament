@@ -56,6 +56,13 @@ export function journalText(e: Pick<JournalEntryView, 'action' | 'data'>): { tit
     case 'retiree':
       title = `${subject} · autorisation retirée`;
       break;
+    case 'sessions-frozen':
+      title = 'Sessions figées';
+      if (d.count !== undefined) detail = plural(d.count, 'catégorie figée', 'catégories figées');
+      break;
+    case 'sessions-unfrozen':
+      title = 'Sessions défigées';
+      break;
     case 'raw':
       title = `Opération non détaillée : ${[d.method, d.route].filter(Boolean).join(' ')}`;
       break;

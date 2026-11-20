@@ -5,9 +5,12 @@ import type { Case, CategoryState, Member, Proposal, State } from './types.js';
 
 const uniq = (xs: string[]) => [...new Set(xs)];
 
-/** Voix des combattants d'une catégorie (recasés compris, sauf `except`), comme dans l'app ; sessions pas encore figées. */
+/** Voix des combattants d'une catégorie (recasés compris, sauf `except`), comme dans l'app ; absents exclus une fois figées. */
 const originBands = (state: State, categoryId: string, except?: string): BandCounts =>
-  bandCounts(state.members.filter((m) => m.categoryId === categoryId && m.registrationId !== except), false);
+  bandCounts(state.members.filter((m) => m.categoryId === categoryId && m.registrationId !== except), state.sessionsFrozen);
+
+/** Voix du combattant déplacé dans sa cible (recasé ou non) : aucune s'il est absent et que les sessions sont figées. */
+const ownVote = (state: State, m: Member): BandCounts => bandCounts([m], state.sessionsFrozen);
 
 /** Vague d'une catégorie, calculée comme dans l'app (null : en attente, ou pas de vague). */
 export function categoryWave(state: State, cat: CategoryState): string | null {
@@ -52,12 +55,12 @@ export function waveChangeOf(state: State, p: Pick<Proposal, 'type' | 'registrat
     target = state.categories.find((c) => keyString(c.key) === ks);
   }
   // Le combattant déplacé vote dans la cible, recasé ou non.
-  const own: BandCounts = { [m.ageBandCode]: 1 };
+  const own = ownVote(state, m);
   let to: string | null;
   if (!target) to = 'newKey' in p.target ? waveOfCategory({ key: p.target.newKey, waveOverride: null, bandCounts: own }, state.waves, state.grid) : null;
   else {
     const counts = originBands(state, target.id, m.registrationId);
-    counts[m.ageBandCode] = (counts[m.ageBandCode] ?? 0) + 1;
+    for (const [band, n] of Object.entries(own)) counts[band] = (counts[band] ?? 0) + n;
     // Sans voix, la clé (élargie à sa tranche, comme la recalcule applyProposal) décide.
     const key = { ...target.key, ageBandCodes: uniq([...target.key.ageBandCodes, m.ageBandCode]) };
     to = waveOfCategory({ key, waveOverride: target.waveOverride, frozenWave: target.frozenWave, bandCounts: counts }, state.waves, state.grid);
@@ -80,7 +83,7 @@ export function categoryWaves(state: State): Map<string, string | null> {
       state.waves.length === 0
         ? null
         : waveOfCategory(
-            { key: c.key, waveOverride: c.waveOverride, frozenWave: c.frozenWave, bandCounts: bandCounts(members.get(c.id) ?? [], false) },
+            { key: c.key, waveOverride: c.waveOverride, frozenWave: c.frozenWave, bandCounts: bandCounts(members.get(c.id) ?? [], state.sessionsFrozen) },
             state.waves,
             state.grid,
           ),
@@ -138,7 +141,7 @@ export function mayMoveOthers(state: State, m: Member, p: Pick<Proposal, 'type' 
     // Personne d'autre : rien à emmener.
     if (!others) return false;
     const wave = (key: CategoryKey, members: Member[]) =>
-      waveOfCategory({ key, waveOverride: cat.waveOverride, frozenWave: cat.frozenWave, bandCounts: bandCounts(members, false) }, state.waves, state.grid);
+      waveOfCategory({ key, waveOverride: cat.waveOverride, frozenWave: cat.frozenWave, bandCounts: bandCounts(members, state.sessionsFrozen) }, state.waves, state.grid);
     return wave(cat.key, before) !== wave(isFreeKey(cat.key) ? cat.key : membersKey(after), after);
   };
   return shifts(m.categoryId) || (targetId !== m.categoryId && shifts(targetId));

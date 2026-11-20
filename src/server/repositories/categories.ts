@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { entryKey } from '../../domain/closed-categories.js';
 import {
   compatibleFormats,
@@ -57,8 +57,10 @@ interface Context {
   entrants: Map<string, Entrant>;
   waves: Wave[];
   grid: CategoryGrid;
-  /** Voix des combattants (recasés compris) de chaque catégorie, par tranche. */
+  /** Voix des combattants (recasés compris ; absents exclus une fois les sessions figées) de chaque catégorie, par tranche. */
   bandCounts: Map<string, BandCounts>;
+  /** Sessions figées (`competitions.sessions_frozen_at`). */
+  sessionsFrozen: boolean;
   /** Catégories numérotées dans une vague lancée. */
   launched: Set<string>;
 }
@@ -82,7 +84,8 @@ async function loadContext(db: AppDb, competitionId: string): Promise<Context> {
   }
   return {
     settings: competition.settings, members, active, entrants, waves: await listWaves(db, competitionId), grid: await getGrid(db, competitionId),
-    bandCounts: new Map([...voters].map(([k, v]) => [k, bandCounts(v, false)])),
+    bandCounts: new Map([...voters].map(([k, v]) => [k, bandCounts(v, competition.sessionsFrozenAt !== null)])),
+    sessionsFrozen: competition.sessionsFrozenAt !== null,
     launched: launchedCategoryIds(db, competitionId),
   };
 }
@@ -207,6 +210,7 @@ export async function syncCategories(db: AppDb, competitionId: string, opts: { r
           arranged: false,
           zoneId: null,
           waveOverride: null,
+          frozenWave: null,
           sortOrder: 0,
           numbersUpdatedAt: null,
           durationsJson: null,
@@ -262,7 +266,36 @@ export async function syncCategories(db: AppDb, competitionId: string, opts: { r
         t.update(categories).set({ label }).where(eq(categories.id, row.id)).run();
       }
     }
+    // Sessions figées : une catégorie qui n'a pas (ou plus) de session figée la reçoit maintenant (créée après le gel, ou sa
+    // session figée a été supprimée), avec la session calculée à cet instant (absents exclus).
+    if (ctx.sessionsFrozen && ctx.waves.length > 0) {
+      for (const row of t.select().from(categories).where(and(eq(categories.competitionId, competitionId), isNull(categories.frozenWave))).all()) {
+        const frozenWave = currentWave(row, ctx);
+        if (frozenWave !== null) t.update(categories).set({ frozenWave }).where(eq(categories.id, row.id)).run();
+      }
+    }
   });
+}
+
+/**
+ * Session que le gel donne à une catégorie : la session calculée sans choix manuel ni session figée, `WAVE_NONE` si elle
+ * est en attente ; null pour un tableau libre (jamais figé).
+ */
+function currentWave(row: Row, ctx: Pick<Context, 'bandCounts' | 'waves' | 'grid'>): string | null {
+  const key = JSON.parse(row.keyJson) as CategoryKey;
+  if (isFreeKey(key)) return null;
+  return waveOfCategory({ key, waveOverride: null, frozenWave: null, bandCounts: ctx.bandCounts.get(row.id) ?? {} }, ctx.waves, ctx.grid) ?? WAVE_NONE;
+}
+
+/** Session que le gel donnerait maintenant à chaque catégorie non libre (`WAVE_NONE` : en attente), sans synchronisation. */
+export async function wavesToFreeze(db: AppDb, competitionId: string): Promise<Map<string, string>> {
+  const ctx = await loadContext(db, competitionId);
+  const out = new Map<string, string>();
+  for (const row of db.select().from(categories).where(eq(categories.competitionId, competitionId)).all()) {
+    const wave = currentWave(row, ctx);
+    if (wave !== null) out.set(row.id, wave);
+  }
+  return out;
 }
 
 /**
@@ -299,10 +332,10 @@ function toCategory(row: Row, ctx: Context): Category {
     seed: row.seed,
     bracket: withCurrentLabels(row.bracketJson ? (JSON.parse(row.bracketJson) as Bracket) : null, ctx),
     zoneId: row.zoneId,
-    waveId: waveOfCategory({ key, waveOverride: row.waveOverride, frozenWave: null, bandCounts: ctx.bandCounts.get(row.id) ?? {} }, ctx.waves, ctx.grid),
+    waveId: waveOfCategory({ key, waveOverride: row.waveOverride, frozenWave: row.frozenWave, bandCounts: ctx.bandCounts.get(row.id) ?? {} }, ctx.waves, ctx.grid),
     waveOverride: row.waveOverride,
     bandCounts: ctx.bandCounts.get(row.id) ?? {},
-    frozenWave: null,
+    frozenWave: row.frozenWave,
     order: row.sortOrder,
     registrationIds: [...ids].sort(),
     absentIds: ids.filter((id) => !(ctx.active.get(row.id) ?? []).includes(id)).sort(),

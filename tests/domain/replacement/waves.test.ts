@@ -7,7 +7,10 @@ import { casesOfWave, categoryWave, mayMoveOthers, memberWave, waveEffects, wave
 import type { Move } from '../../../src/domain/replacement/move.js';
 import type { Member, State } from '../../../src/domain/replacement/types.js';
 import { WAVE_NONE, type Wave } from '../../../src/domain/waves.js';
+import { naturalKey } from '../../../src/domain/categories.js';
+import { weightClassesFor } from '../../../src/domain/grid.js';
 import { makeState, member } from './fixtures.js';
+import { randomState } from './random-state.js';
 
 const matin: Wave = { id: 'matin', name: 'Matin', order: 0, rules: { ageBandCodes: ['poussin', 'pupille', 'benjamin', 'minime'], disciplines: [] }, weighInClosed: false };
 const aprem: Wave = { id: 'aprem', name: 'Après-midi', order: 1, rules: { ageBandCodes: ['cadet', 'junior', 'espoir', 'senior'], disciplines: [] }, weighInClosed: false };
@@ -228,4 +231,119 @@ describe('bascules de session à la majorité', () => {
     // Le junior qui rejoint le senior seul fait basculer la catégorie : il faut vérifier.
     expect(mayMoveOthers(t, j4, moveTo(j4, s4.categoryId!))).toBe(true);
   });
+});
+
+describe('sessions figées', () => {
+  const J: Wave = { id: 'J', name: 'Juniors', order: 0, rules: { ageBandCodes: ['junior'], disciplines: [] }, weighInClosed: false };
+  const S: Wave = { id: 'S', name: 'Seniors', order: 1, rules: { ageBandCodes: ['senior'], disciplines: [] }, weighInClosed: false };
+  const moveTo = (m: Member, categoryId: string): Move => ({ caseId: `alone:${m.registrationId}`, type: 'M', registrationId: m.registrationId, target: { categoryId }, changes: {} });
+
+  test('absents : ils votent avant le gel, plus après (catégorie non figée)', () => {
+    // Deux juniors absentes et une senior dans une catégorie regroupée, non figée.
+    const [s1, j1, j2] = [member({ ageBandCode: 'senior', weightClassId: 'senior:F:-61' }), member({ ageBandCode: 'junior', weightClassId: 'junior:F:-59', presence: 'absent' }), member({ ageBandCode: 'junior', weightClassId: 'junior:F:-59', presence: 'absent' })];
+    const s = makeState([s1, j1, j2], { waves: [J, S] });
+    j1.categoryId = s1.categoryId;
+    j2.categoryId = s1.categoryId;
+    s.categories = s.categories.filter((c) => c.id === s1.categoryId);
+    const cat = s.categories[0]!;
+    expect(categoryWave(s, cat)).toBe('J');
+    const frozen = { ...s, sessionsFrozen: true };
+    expect(categoryWave(frozen, cat)).toBe('S');
+    expect(memberWave(frozen, j1)).toBe('S');
+  });
+
+  test('catégorie nouvelle simulée après le gel : figée à sa création, puis ne bouge plus', () => {
+    const [s1, j1, j2] = [member({ ageBandCode: 'senior', weightClassId: 'senior:F:-61' }), member({ ageBandCode: 'junior', weightClassId: 'junior:F:-59' }), member({ ageBandCode: 'junior', weightClassId: 'junior:F:-59' })];
+    const s = { ...makeState([s1, j1, j2], { waves: [J, S] }), sessionsFrozen: true };
+    for (const c of s.categories) c.frozenWave = categoryWave(s, c) ?? WAVE_NONE;
+    // Le senior part vers une catégorie qui n'existe pas encore (senior -68) : elle naît en S et y reste.
+    const newKey = { discipline: 'karate' as const, ruleset: 'jiyu' as const, sex: 'F' as const, ageBandCodes: ['senior'], weightClassIds: ['senior:F:-68'] };
+    const s2 = applyProposal(s, { caseId: `alone:${s1.registrationId}`, type: 'A', registrationId: s1.registrationId, target: { newKey }, changes: { weightClassId: 'senior:F:-68' } });
+    const created = s2.categories.find((c) => c.id.startsWith('new:'))!;
+    expect(created.frozenWave).toBe('S');
+    // Deux juniors y arrivent : la majorité change, la session non.
+    const s3 = applyProposal(applyProposal(s2, moveTo(j1, created.id)), moveTo(j2, created.id));
+    expect(categoryWave(s3, s3.categories.find((c) => c.id === created.id)!)).toBe('S');
+    // Sans gel, la catégorie nouvelle n'est pas figée.
+    const loose = applyProposal({ ...s, sessionsFrozen: false }, { caseId: `alone:${s1.registrationId}`, type: 'A', registrationId: s1.registrationId, target: { newKey }, changes: { weightClassId: 'senior:F:-68' } });
+    expect(loose.categories.find((c) => c.id.startsWith('new:'))!.frozenWave).toBeNull();
+  });
+
+  test('empreinte : change avec le gel et avec la session figée d’une catégorie', () => {
+    const [s1] = [member({ ageBandCode: 'senior', weightClassId: 'senior:F:-61' })];
+    const s = makeState([s1], { waves: [J, S] });
+    const base = stateFingerprint(s);
+    expect(stateFingerprint({ ...s, sessionsFrozen: true })).not.toBe(base);
+    const s2 = structuredClone(s);
+    s2.categories[0]!.frozenWave = 'S';
+    expect(stateFingerprint(s2)).not.toBe(base);
+  });
+});
+
+describe('mayMoveOthers reflète applyProposal (propriété bornée)', () => {
+  const young: Wave = { id: 'jeunes', name: 'Jeunes', order: 0, rules: { ageBandCodes: ['benjamin', 'minime', 'cadet'], disciplines: [] }, weighInClosed: false };
+  const adults: Wave = { id: 'adultes', name: 'Adultes', order: 1, rules: { ageBandCodes: ['junior', 'senior', 'v1'], disciplines: [] }, weighInClosed: false };
+  const DISCIPLINES = ['karate', 'shido-boxing', 'shido-mix'] as const;
+
+  /** Générateur reproductible (LCG). */
+  const lcg = (seed: number) => () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 2 ** 32);
+
+  /** État aléatoire, regroupé par quelques déplacements manuels (catégories à plusieurs tranches). */
+  function grouped(frozen: boolean): State {
+    const rnd = lcg(7);
+    let s: State = { ...randomState(11, 90), waves: [young, adults], sessionsFrozen: frozen };
+    for (let i = 0; i < 40; i++) {
+      const m = s.members[Math.floor(rnd() * s.members.length)]!;
+      const c = s.categories[Math.floor(rnd() * s.categories.length)]!;
+      if (c.id === m.categoryId) continue;
+      s = applyProposal(s, { caseId: `alone:${m.registrationId}`, type: 'M', registrationId: m.registrationId, target: { categoryId: c.id }, changes: {} });
+    }
+    if (frozen) {
+      // Une catégorie sur trois figée : sa session, l'autre, ou « en attente ».
+      s = { ...s, categories: s.categories.map((c, i) => (i % 3 === 0 ? { ...c, frozenWave: [young.id, adults.id, WAVE_NONE][i % 9 / 3]! } : c)) };
+    }
+    return s;
+  }
+
+  /** Quelques centaines de déplacements candidats : M, R, corrections de poids sur place, nouvelles clés, changements de discipline. */
+  function candidates(s: State): { m: Member; mv: Move }[] {
+    const rnd = lcg(3);
+    const out: { m: Member; mv: Move }[] = [];
+    const pick = <T>(xs: readonly T[]) => xs[Math.floor(rnd() * xs.length)]!;
+    for (let i = 0; i < 300; i++) {
+      const m = pick(s.members);
+      const base = { caseId: `alone:${m.registrationId}`, registrationId: m.registrationId };
+      const kind = i % 5;
+      if (kind === 0) out.push({ m, mv: { ...base, type: 'M', target: { categoryId: pick(s.categories).id }, changes: {} } });
+      else if (kind === 1) out.push({ m, mv: { ...base, type: 'R', target: { categoryId: pick(s.categories).id }, changes: { discipline: m.discipline, ruleset: m.ruleset, weightClassId: m.weightClassId } } });
+      else if (kind === 2 && m.categoryId) {
+        const wc = pick(weightClassesFor(s.grid, m.ageBandCode, m.sex)).id;
+        out.push({ m, mv: { ...base, type: 'A', target: { categoryId: m.categoryId }, changes: { weightClassId: wc } } });
+      } else if (kind === 3) {
+        const wc = pick(weightClassesFor(s.grid, m.ageBandCode, m.sex)).id;
+        const key = naturalKey({ discipline: m.discipline, ruleset: m.ruleset, weightClassId: wc }, m);
+        out.push({ m, mv: { ...base, type: 'A', target: { newKey: key }, changes: { weightClassId: wc } } });
+      } else {
+        const discipline = pick(DISCIPLINES.filter((d) => d !== m.discipline));
+        const key = naturalKey({ discipline, ruleset: m.ruleset, weightClassId: m.weightClassId }, m);
+        out.push({ m, mv: { ...base, type: 'B', target: rnd() < 0.5 ? { newKey: key } : { categoryId: pick(s.categories).id }, changes: { discipline } } });
+      }
+    }
+    return out;
+  }
+
+  for (const frozen of [false, true]) {
+    test(frozen ? 'sessions figées, catégories figées en partie' : 'sessions non figées', () => {
+      const s = grouped(frozen);
+      expect(s.categories.some((c) => c.key.ageBandCodes.length > 1)).toBe(true);
+      let shifted = 0;
+      for (const { m, mv } of candidates(s)) {
+        const real = waveMoves(s, applyProposal(s, mv)).some((x) => x.registrationId !== mv.registrationId);
+        if (real) shifted++;
+        expect(mayMoveOthers(s, m, mv), `${mv.type} ${mv.registrationId} → ${JSON.stringify(mv.target)}`).toBe(real);
+      }
+      // Le jeu de déplacements contient des bascules réelles, sinon la propriété ne prouve rien.
+      expect(shifted).toBeGreaterThan(0);
+    });
+  }
 });

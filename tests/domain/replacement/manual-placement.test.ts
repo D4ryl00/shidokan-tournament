@@ -16,7 +16,7 @@ const manual = (over: Partial<Member> = {}): Partial<Member> => ({
   placementLocked: true, recasementType: 'M', original: { discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-47', reason: 'manual' }, ...over,
 });
 const freeCategory = (id: string, name: string, discipline: CategoryState['key']['discipline'] = 'karate', ruleset: CategoryState['key']['ruleset'] = 'jiyu'): CategoryState => ({
-  id, key: freeKey(name, discipline, ruleset), status: 'provisional', aliasKeys: [], waveOverride: null,
+  id, key: freeKey(name, discipline, ruleset), status: 'provisional', aliasKeys: [], waveOverride: null, frozenWave: null,
 });
 const allTargets = (s: State) => [...allProposals(s).values()].flat();
 

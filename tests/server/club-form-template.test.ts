@@ -9,7 +9,7 @@ import { buildClubFormTemplate } from '../../src/server/club-form-template.js';
 
 const competition = (multiple: boolean): Competition => ({
   id: 'c1', name: 'Coupe', date: '2026-11-22', location: null,
-  settings: { ...defaultSettings(), multipleCombatDisciplinesPerDay: multiple }, visibility: 'private', createdAt: '2026-10-21T00:00:00Z',
+  settings: { ...defaultSettings(), multipleCombatDisciplinesPerDay: multiple }, visibility: 'private', createdAt: '2026-10-21T00:00:00Z', sessionsFrozenAt: null,
 });
 /** Colonnes du modèle : celles de la lecture, plus la licence juste après Prénom. */
 const WITH_LICENCE = [CLUB_FORM_COLUMNS[0], CLUB_FORM_COLUMNS[1], CLUB_FORM_LICENCE_COLUMN, ...CLUB_FORM_COLUMNS.slice(2)];

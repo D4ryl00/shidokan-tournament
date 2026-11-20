@@ -91,13 +91,17 @@ export type JournalAction =
   | 'fighter-changed' | 'weigh-in' | 'presence' | 'weigh-in-closed' | 'raw'
   | 'ffk-import' | 'weight-class-added' | 'club-linked' | 'ffk-unconfirmed'
   // Autorisation d'un coach (réaffectation) : « Accordée » enregistrée, puis retirée.
-  | 'accordee' | 'retiree';
+  | 'accordee' | 'retiree'
+  // Gel des sessions (page Sessions) : « Figer les sessions », puis « Ne plus figer ».
+  | 'sessions-frozen' | 'sessions-unfrozen';
 
 export interface JournalData {
   subject?: string;
   /** Sexe du combattant, recopié pour accorder les lignes de détail. */
   sex?: 'F' | 'M';
   detail?: string;
+  /** Nombre d'éléments touchés (catégories figées par le gel des sessions). */
+  count?: number;
   changes?: JournalChange[];
   route?: string;
   method?: string;

@@ -40,7 +40,7 @@ test('cible multi-tranches à moitié ouverte : proposée', () => {
   const y = member({ ageBandCode: 'junior', weightClassId: 'junior:F:-53', categoryId: 'merged' });
   const m = member({ weightClassId: 'cadet:F:-54' });
   const merged = {
-    id: 'merged', status: 'provisional' as const, aliasKeys: [], waveOverride: null,
+    id: 'merged', status: 'provisional' as const, aliasKeys: [], waveOverride: null, frozenWave: null,
     key: { discipline: 'karate' as const, ruleset: 'jiyu' as const, sex: 'F' as const, ageBandCodes: ['cadet', 'junior'], weightClassIds: ['cadet:F:-54', 'junior:F:-53'] },
   };
   const s = makeState([x, y, m], { categories: [merged], closedEntries: ['cadet|F|karate|jiyu'] });

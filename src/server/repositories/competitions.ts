@@ -44,6 +44,7 @@ function toCompetition(row: Row): Competition {
     settings: readStoredSettings(stored),
     visibility: row.visibility,
     createdAt: row.createdAt,
+    sessionsFrozenAt: row.sessionsFrozenAt,
   };
 }
 

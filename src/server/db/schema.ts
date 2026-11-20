@@ -31,6 +31,8 @@ export const competitions = sqliteTable('competitions', {
   rescueSince: text('rescue_since'),
   /** Mode spectateur : une compétition publique a sa page ouverte à tous, sans compte. Privée par défaut. */
   visibility: text('visibility', { enum: ['private', 'public'] }).notNull().default('private'),
+  /** Heure du gel des sessions (ISO) : chaque catégorie garde sa session figée (`categories.frozen_wave`) ; null : pas figées. */
+  sessionsFrozenAt: text('sessions_frozen_at'),
   ...rowMeta(),
 });
 
@@ -423,6 +425,8 @@ export const categories = sqliteTable('categories', {
   zoneId: text('zone_id').references(() => zones.id, { onDelete: 'set null' }),
   /** Choix individuel de vague : id d'une vague, « none » (en attente) ou null (règles des vagues). */
   waveOverride: text('wave_override'),
+  /** Session figée : id d'une vague, « none » (en attente figée) ou null (pas figée) ; le choix individuel reste prioritaire. */
+  frozenWave: text('frozen_wave'),
   sortOrder: integer('sort_order').notNull().default(0),
   /** Heure de la dernière renumérotation après le lancement de sa vague (imprimée « mis à jour à HH:MM »). */
   numbersUpdatedAt: text('numbers_updated_at'),

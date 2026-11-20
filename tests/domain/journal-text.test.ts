@@ -29,6 +29,12 @@ test('autorisation d’un coach : accordée, retirée', () => {
   expect(journalText({ action: 'accordee', data })).toEqual({ title: 'DUPONT Léa (Shidokan Lyon) · autorisation accordée', detail: data.detail, changes: [] });
   expect(journalText({ action: 'retiree', data }).title).toBe('DUPONT Léa (Shidokan Lyon) · autorisation retirée');
 });
+test('sessions figées, défigées : le nombre de catégories figées vient des données', () => {
+  expect(journalText({ action: 'sessions-frozen', data: { count: 3 } })).toEqual({ title: 'Sessions figées', detail: '3 catégories figées', changes: [] });
+  expect(journalText({ action: 'sessions-frozen', data: { count: 1 } }).detail).toBe('1 catégorie figée');
+  expect(journalText({ action: 'sessions-unfrozen', data: {} })).toEqual({ title: 'Sessions défigées', detail: null, changes: [] });
+  expect(journalSearchText({ action: 'sessions-frozen', data: { count: 2 }, actor: { kind: 'app' }, via: 'sessions' })).toContain('SESSIONS FIGEES 2 CATEGORIES FIGEES');
+});
 test('qui', () => {
   expect(actorLabel({ kind: 'poste', poste: 'zone', zoneName: 'Zone 2' })).toBe('poste Zone 2');
   expect(actorLabel({ kind: 'poste', poste: 'table' })).toBe('poste Table centrale');

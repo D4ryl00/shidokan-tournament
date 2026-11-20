@@ -288,6 +288,13 @@
       "when": 1795168510791,
       "tag": "0040_cartes_ignorees",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1795191936416,
+      "tag": "0041_gel_des_sessions",
+      "breakpoints": true
     }
   ]
 }

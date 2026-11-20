@@ -114,9 +114,10 @@ export async function loadState(db: AppDb, competitionId: string, opts: { sync?:
       .from(categories)
       .where(eq(categories.competitionId, competitionId))
       .all()
-      .map((c) => ({ id: c.id, key: JSON.parse(c.keyJson), status: c.status, aliasKeys: JSON.parse(c.aliasKeys), waveOverride: c.waveOverride })),
+      .map((c) => ({ id: c.id, key: JSON.parse(c.keyJson), status: c.status, aliasKeys: JSON.parse(c.aliasKeys), waveOverride: c.waveOverride, frozenWave: c.frozenWave })),
     members,
     waves: await listWaves(db, competitionId),
+    sessionsFrozen: competition.sessionsFrozenAt !== null,
     refused: db.select().from(refusals).where(eq(refusals.competitionId, competitionId)).all().map((r) => r.proposalId),
     closedEntries: [...closedSet(db, competitionId)],
     setAside: [],
@@ -264,7 +265,8 @@ function persist(db: AppDb, competitionId: string, before: State, after: State, 
       if (!row) {
         const id = crypto.randomUUID();
         idMap.set(c.id, id);
-        t.insert(categories).values({ id, competitionId, status: 'provisional', seed: categorySeed(competitionId, ks), ...values }).run();
+        // Sessions figées : la catégorie naît avec la session calculée à sa création (comme dans `applyProposal`).
+        t.insert(categories).values({ id, competitionId, status: 'provisional', seed: categorySeed(competitionId, ks), frozenWave: c.frozenWave, ...values }).run();
       } else if (row.keyString !== ks || row.aliasKeys !== values.aliasKeys) {
         snapshotCategories.push({ id: row.id, keyString: row.keyString, keyJson: row.keyJson, aliasKeys: row.aliasKeys, label: row.label });
         t.update(categories).set(values).where(eq(categories.id, c.id)).run();

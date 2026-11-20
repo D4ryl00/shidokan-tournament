@@ -9,6 +9,8 @@ export interface Competition {
   /** Privée (défaut) ou publique : une compétition publique a une page ouverte à tous, sans compte. */
   visibility: 'private' | 'public';
   createdAt: string;
+  /** Heure du gel des sessions (ISO) ; null : sessions non figées. */
+  sessionsFrozenAt: string | null;
 }
 
 export interface CompetitionInput {

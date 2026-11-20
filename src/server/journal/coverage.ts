@@ -27,6 +27,8 @@ export const JOURNAL_COVERED = keys(
   `POST ${C}/ffk-imports/:uploadId/commit`,
   `POST ${C}/authorizations/grant`,
   `POST ${C}/authorizations/ungrant`,
+  `POST ${C}/waves/freeze`,
+  `POST ${C}/waves/unfreeze`,
 );
 
 export const JOURNAL_EXEMPT = keys(

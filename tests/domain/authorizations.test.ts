@@ -13,7 +13,7 @@ function groups(gs: Member[][], over: Partial<State> = {}): State {
   const categories: CategoryState[] = gs.map((g, i) => {
     const id = `g${i}`;
     for (const m of g) m.categoryId = id;
-    return { id, key: naturalKey(g[0]!, g[0]!), status: 'provisional', aliasKeys: [], waveOverride: null };
+    return { id, key: naturalKey(g[0]!, g[0]!), status: 'provisional', aliasKeys: [], waveOverride: null, frozenWave: null };
   });
   const s = makeState(gs.flat(), { ...over, categories });
   for (const c of s.categories) recompute(s, c);

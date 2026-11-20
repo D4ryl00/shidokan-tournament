@@ -119,7 +119,7 @@ describe('propositions', () => {
     const b = member({ weightClassId: 'cadet:F:-54' });
     const s = makeState([a, b], { settings: { ...defaultSettings(), replacementRules: { ...defaultSettings().replacementRules, off: ['weight'] } } });
     // Une seconde catégorie de la même classe (tableau dédoublé) : même poids, aucune règle de la liste en jeu.
-    const twin = { id: 'cat:twin', key: s.categories.find((c) => c.id === b.categoryId)!.key, status: 'provisional' as const, aliasKeys: [], waveOverride: null };
+    const twin = { id: 'cat:twin', key: s.categories.find((c) => c.id === b.categoryId)!.key, status: 'provisional' as const, aliasKeys: [], waveOverride: null, frozenWave: null };
     const s2 = { ...s, categories: [...s.categories, twin] };
     expect(moveViolations(s2, a, twin).some((w) => w.includes('Catégorie de poids voisine'))).toBe(false);
     // Vers la classe voisine (poids proches : pas d'écart de poids), l'avertissement reste.

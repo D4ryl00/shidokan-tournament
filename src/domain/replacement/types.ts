@@ -45,8 +45,8 @@ export interface CategoryState {
   aliasKeys: string[];
   /** Choix individuel de vague (`WAVE_NONE` = en attente), sinon les règles des vagues décident. */
   waveOverride: string | null;
-  /** Session figée (`WAVE_NONE` = en attente figée), null ou absente : pas figée. Comme un choix individuel, elle ne bascule jamais. */
-  frozenWave?: string | null;
+  /** Session figée (`WAVE_NONE` = en attente figée), null : pas figée. Comme un choix individuel, elle ne bascule jamais. */
+  frozenWave: string | null;
   /** Catégorie d'une vague lancée : fermée au recasement (ni départ ni arrivée). */
   frozen?: boolean;
 }
@@ -58,6 +58,8 @@ export interface State {
   members: Member[];
   /** Vagues de la compétition (vide : une seule vague implicite, comme avant). */
   waves: Wave[];
+  /** Sessions figées : les absents ne votent plus, et une catégorie créée reçoit sa session figée à sa création. */
+  sessionsFrozen: boolean;
   /** Identifiants de propositions refusées. */
   refused: string[];
   /** Cases fermées du tableau « Catégories ouvertes » (`entryKey`) : leurs inscrits sont des cas, et jamais des cibles. */

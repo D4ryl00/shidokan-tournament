@@ -71,7 +71,7 @@ export const OWNER_COLUMNS = ['owner_instance_id', 'owner_name', 'owner_since', 
  */
 const REFERENCES: [table: string, column: string, target: string][] = [
   ['registrations', 'fighter_id', 'fighters'], ['registrations', 'category_id', 'categories'], ['fighters', 'club_id', 'clubs'],
-  ['categories', 'zone_id', 'zones'], ['categories', 'wave_override', 'waves'], ['frozen_passages', 'zone_id', 'zones'],
+  ['categories', 'zone_id', 'zones'], ['categories', 'wave_override', 'waves'], ['categories', 'frozen_wave', 'waves'], ['frozen_passages', 'zone_id', 'zones'],
   ['frozen_passages', 'category_id', 'categories'], ['match_results', 'category_id', 'categories'], ['match_results', 'entrant_a', 'registrations'],
   ['match_results', 'entrant_b', 'registrations'], ['kata_scores', 'category_id', 'categories'], ['kata_scores', 'registration_id', 'registrations'],
   ['tie_breaks', 'category_id', 'categories'], ['recasements', 'registration_id', 'registrations'], ['authorization_answers', 'registration_id', 'registrations'], ['ignored_cases', 'history_entry_id', 'history_entries'], ['history_entries', 'wave_id', 'waves'], ['wave_launches', 'wave_key', 'waves'], ['wave_schedules', 'wave_key', 'waves'],
