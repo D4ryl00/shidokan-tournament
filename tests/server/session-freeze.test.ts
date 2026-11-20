@@ -136,6 +136,45 @@ describe('figer les sessions', () => {
     expect(frozenWave()).toBe(J.id);
   });
 
+  /** Sessions J et S, une junior seule et un senior seul (kata F) ; figées ; la junior rejoint le senior (sa catégorie, figée J, disparaît). */
+  async function frozenThenMoved() {
+    const [J, S] = (await call('PUT', '/waves', [
+      { name: 'Juniors', rules: { ageBandCodes: ['junior'], disciplines: [] } },
+      { name: 'Seniors', rules: { ageBandCodes: ['senior'], disciplines: [] } },
+    ])).json() as Wave[];
+    const senior = await reg('senior');
+    const junior = await reg('junior');
+    const juniorCat = await catOf(junior.id);
+    expect((await freeze()).statusCode).toBe(200);
+    expect((await cats()).find((c) => c.id === juniorCat.id)!.frozenWave).toBe(J!.id);
+    const moved = await call('POST', '/replacement/move', { registrationId: junior.id, categoryId: (await catOf(senior.id)).id });
+    expect(moved.statusCode).toBe(200);
+    const historyId = (moved.json() as { historyId: string }).historyId;
+    expect((await cats()).some((c) => c.id === juniorCat.id)).toBe(false);
+    return { J: J!, S: S!, juniorCatId: juniorCat.id, historyId };
+  }
+  const undo = (historyId: string) => call('POST', '/history/undo', { ids: [historyId], expect: [historyId] });
+
+  test('annulation après « Ne plus figer » : la catégorie revenue n’a pas de session figée', async () => {
+    const { J, juniorCatId, historyId } = await frozenThenMoved();
+    expect((await unfreeze()).statusCode).toBe(204);
+    const res = await undo(historyId);
+    expect(res.statusCode, res.body).toBe(200);
+    const back = (await cats()).find((c) => c.id === juniorCatId)!;
+    expect(back).toMatchObject({ frozenWave: null, waveId: J.id });
+    expect((raw().$client.prepare('select count(*) as n from categories where competition_id = ? and frozen_wave is not null').get(id) as { n: number }).n).toBe(0);
+  });
+
+  test('annulation pendant le gel : une session figée supprimée entre-temps est refigée', async () => {
+    const { J, S, juniorCatId, historyId } = await frozenThenMoved();
+    // La session J disparaît ; S prend juniors et seniors.
+    const put = await call('PUT', '/waves', { waves: [{ id: S.id, name: 'Seniors', rules: { ageBandCodes: ['junior', 'senior'], disciplines: [] } }], knownIds: [J.id, S.id] });
+    expect(put.statusCode).toBe(200);
+    const res = await undo(historyId);
+    expect(res.statusCode, res.body).toBe(200);
+    expect((await cats()).find((c) => c.id === juniorCatId)).toMatchObject({ frozenWave: S.id, waveId: S.id });
+  });
+
   test('journal : Sessions figées / défigées', async () => {
     await setup();
     await reg('cadet');

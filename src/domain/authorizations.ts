@@ -154,8 +154,8 @@ const waveName = (state: State, id: string) => state.waves.find((w) => w.id === 
 // --- Calcul ------------------------------------------------------------------------------------------------------
 
 /**
- * Session de la catégorie d'origine : choix individuel d'une catégorie dont la clé est exactement la clé d'origine (non
- * fusionnée), sinon les règles. Le choix d'un groupe fusionné (clé d'origine dans `aliasKeys` seulement) est sa session
+ * Session de la catégorie d'origine : choix individuel ou session figée d'une catégorie dont la clé est exactement la clé
+ * d'origine (non fusionnée), sinon les règles. Le choix d'un groupe fusionné (clé d'origine dans `aliasKeys` seulement) est sa session
  * actuelle, pas celle d'origine.
  */
 function originWave(state: State, m: Member): string | null {
@@ -163,7 +163,7 @@ function originWave(state: State, m: Member): string | null {
   const key = naturalKey(o, m);
   const ks = keyString(key);
   const cat = state.categories.find((c) => keyString(c.key) === ks);
-  return waveOfCategory({ key, waveOverride: cat?.waveOverride ?? null }, state.waves, state.grid);
+  return waveOfCategory({ key, waveOverride: cat?.waveOverride ?? null, frozenWave: cat?.frozenWave ?? null }, state.waves, state.grid);
 }
 
 interface Draft {

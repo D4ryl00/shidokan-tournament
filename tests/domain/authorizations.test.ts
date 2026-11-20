@@ -275,6 +275,21 @@ describe('mixité, présence, session', () => {
     expect(kinds(rs, benj)).toEqual(['age']);
   });
 
+  test('session : la session figée de la catégorie d’origine compte', () => {
+    // Les règles ont changé après le gel : la catégorie des benjamines et le groupe des minimes sont tous deux figés en
+    // Après-midi. La benjamine passée chez les minimes ne change pas de session.
+    const benj = moved({ ageBandCode: 'benjamin', weightClassId: 'benjamin:F:-50', approxWeightKg: 49 });
+    const benj2 = member({ ageBandCode: 'benjamin', weightClassId: 'benjamin:F:-50', approxWeightKg: 49 });
+    const stay = member({ ageBandCode: 'minime', weightClassId: 'minime:F:-50', approxWeightKg: 48 });
+    const s = groups([[benj2], [stay, benj]], { waves: [matin, aprem], sessionsFrozen: true });
+    for (const c of s.categories) c.frozenWave = 'aprem';
+    expect(keyString(s.categories[0]!.key)).toBe(keyString(naturalKey(benj, benj)));
+    expect(kinds(authorizationRequests(s, []), benj)).toEqual(['age']);
+    // Catégorie d'origine figée en Matin : le passage en Après-midi est un vrai changement.
+    s.categories[0]!.frozenWave = 'matin';
+    expect(one(authorizationRequests(s, []), benj, 'session').situation).toEqual({ kind: 'session', from: 'matin', to: 'aprem' });
+  });
+
   test('sans session : aucune demande de session', () => {
     const benj = moved({ ageBandCode: 'benjamin', weightClassId: 'benjamin:F:-50', approxWeightKg: 49 });
     const stay = member({ ageBandCode: 'minime', weightClassId: 'minime:F:-50', approxWeightKg: 48 });

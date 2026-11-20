@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import { entryKey } from '../../domain/closed-categories.js';
 import {
   compatibleFormats,
@@ -266,12 +266,17 @@ export async function syncCategories(db: AppDb, competitionId: string, opts: { r
         t.update(categories).set({ label }).where(eq(categories.id, row.id)).run();
       }
     }
-    // Sessions figées : une catégorie qui n'a pas (ou plus) de session figée la reçoit maintenant (créée après le gel, ou sa
-    // session figée a été supprimée), avec la session calculée à cet instant (absents exclus).
-    if (ctx.sessionsFrozen && ctx.waves.length > 0) {
-      for (const row of t.select().from(categories).where(and(eq(categories.competitionId, competitionId), isNull(categories.frozenWave))).all()) {
+    if (!ctx.sessionsFrozen) {
+      // Sessions non figées : aucune session figée ne reste (une catégorie rendue par une annulation peut en ramener une).
+      t.update(categories).set({ frozenWave: null }).where(and(eq(categories.competitionId, competitionId), isNotNull(categories.frozenWave))).run();
+    } else if (ctx.waves.length > 0) {
+      // Sessions figées : une catégorie qui n'a pas (ou plus) de session figée valable la reçoit maintenant (créée après le
+      // gel, session figée supprimée, ou ramenée par une annulation), avec la session calculée à cet instant (absents exclus).
+      const valid = new Set([WAVE_NONE, ...ctx.waves.map((w) => w.id)]);
+      for (const row of t.select().from(categories).where(eq(categories.competitionId, competitionId)).all()) {
+        if (row.frozenWave !== null && valid.has(row.frozenWave)) continue;
         const frozenWave = currentWave(row, ctx);
-        if (frozenWave !== null) t.update(categories).set({ frozenWave }).where(eq(categories.id, row.id)).run();
+        if (frozenWave !== row.frozenWave) t.update(categories).set({ frozenWave }).where(eq(categories.id, row.id)).run();
       }
     }
   });
