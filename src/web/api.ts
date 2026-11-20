@@ -1060,7 +1060,7 @@ function useSessionsFreezing(id: string, action: 'freeze' | 'unfreeze') {
   return useMutation({
     mutationFn: () => api<{ frozenAt: string; count: number } | undefined>('POST', `/api/competitions/${id}/waves/${action}`),
     onSuccess: () =>
-      Promise.all(['competitions', 'categories', 'waves', 'replacement', 'journal', 'weigh-in', 'schedule'].map((k) => qc.invalidateQueries({ queryKey: [k, id] }))),
+      Promise.all(['competitions', 'categories', 'waves', 'replacement', 'journal', 'weigh-in', 'schedule', 'authorizations', 'finals'].map((k) => qc.invalidateQueries({ queryKey: [k, id] }))),
   });
 }
 export const useFreezeSessions = (id: string) => useSessionsFreezing(id, 'freeze');

@@ -50,3 +50,14 @@ test('figé sans aucune session : « Ne plus figer » reste possible', async ({ 
   await page.getByTestId('sessions-unfreeze-go').click();
   await expect(page.getByTestId('sessions-frozen-at')).toHaveCount(0);
 });
+
+test('échec du figeage : l’erreur s’affiche dans la fenêtre, qui reste ouverte', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe gel erreur');
+  await seed(request, id);
+  await page.goto(`/competitions/${id}/sessions`);
+  await page.route(`**/api/competitions/${id}/waves/freeze`, (route) => route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Sessions déjà figées' }) }));
+  await page.getByTestId('sessions-freeze').click();
+  await page.getByTestId('sessions-freeze-go').click();
+  await expect(page.getByTestId('sessions-freeze-confirm')).toContainText('Sessions déjà figées');
+  await expect(page.getByTestId('sessions-freeze-go')).toBeVisible();
+});

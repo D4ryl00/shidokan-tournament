@@ -121,6 +121,48 @@ describe('figer les sessions', () => {
     expect((await cats()).find((c) => c.id === 'regroupee')!.waveId).toBe(S.id);
   });
 
+  test('recasement vers une catégorie à clé neuve (plan appliqué) : frozenWave inséré, égal à la session de la catégorie', async () => {
+    const [C] = (await call('PUT', '/waves', [
+      { name: 'Cadets', rules: { ageBandCodes: ['cadet'], disciplines: [] } },
+      { name: 'Seniors', rules: { ageBandCodes: ['senior'], disciplines: [] } },
+    ])).json() as Wave[];
+    const cadet = (over: object = {}) => reg('cadet', { discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54', approxWeightKg: 52, ...over });
+    const x = await cadet();
+    await cadet();
+    await cadet();
+    await cadet({ weightClassId: 'cadet:F:+61', approxWeightKg: 62 });
+    expect((await freeze()).statusCode).toBe(200);
+    expect((await call('PUT', `/weigh-in/${x.fighterId}`, { weighInKg: 58, waveId: C!.id })).statusCode).toBe(204);
+    const r = (await call('GET', '/replacement')).json() as { cases: { id: string; kind: string; registrationId: string }[]; proposals: Record<string, { id: string; target: object }[]> };
+    const c = r.cases.find((k) => k.kind === 'weight_out' && k.registrationId === x.id)!;
+    const toNew = r.proposals[c.id]!.find((p) => 'newKey' in p.target)!;
+    const choices = [{ kind: 'validate', proposalId: toNew.id, caseId: c.id }];
+    const before = new Set((await cats()).map((k) => k.id));
+    const planRes = await call('POST', '/replacement/plan', { choices, forApply: true, waveId: C!.id });
+    expect(planRes.statusCode, planRes.body).toBe(200);
+    const p = planRes.json() as { fingerprint: string; plan: { hash: string } };
+    const res = await call('POST', '/replacement/plan/apply', { choices, fingerprint: p.fingerprint, hash: p.plan.hash, waveId: C!.id });
+    expect(res.statusCode, res.body).toBe(200);
+    // Lecture brute juste après l'application : la valeur vient de l'insertion, pas d'une resynchronisation.
+    const rows = raw().$client.prepare('select id, frozen_wave from categories where competition_id = ?').all(id) as { id: string; frozen_wave: string | null }[];
+    const created = rows.filter((k) => !before.has(k.id));
+    expect(created.length).toBeGreaterThan(0);
+    for (const k of created) expect(k.frozen_wave).toBe(C!.id);
+    for (const k of (await cats()).filter((k) => !before.has(k.id))) expect(k).toMatchObject({ frozenWave: C!.id, waveId: C!.id });
+  });
+
+  test('vote : une inscription retirée encore rattachée à la catégorie ne vote pas', async () => {
+    const { J, S, senior, groupedId } = await setup();
+    const senior2 = await reg('senior');
+    expect((await call('POST', '/replacement/move', { registrationId: senior2.id, categoryId: groupedId })).statusCode).toBe(200);
+    // Deux seniors contre un junior : S l'emporte.
+    expect((await cats()).find((c) => c.id === groupedId)!.waveId).toBe(S.id);
+    raw().$client.prepare("update registrations set withdrawn_reason = 'closed_category' where id = ?").run(senior2.id);
+    // Retirée : égalité 1 contre 1, les plus jeunes (J) l'emportent, comme dans la réaffectation.
+    expect((await cats()).find((c) => c.id === groupedId)!.waveId).toBe(J.id);
+    expect(senior.id).toBeTruthy();
+  });
+
   test('session supprimée : frozenWave effacé, puis refigé au calcul suivant', async () => {
     const { J, S } = await setup();
     const senior = await reg('senior', { sex: 'M' });

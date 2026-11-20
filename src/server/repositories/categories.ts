@@ -78,7 +78,7 @@ async function loadContext(db: AppDb, competitionId: string): Promise<Context> {
     const f = fs.get(r.fighterId)!;
     entrants.set(r.id, { registrationId: r.id, clubId: f.clubId, label: `${f.lastName} ${f.firstName}`.trim() });
     if (!r.categoryId) continue;
-    voters.set(r.categoryId, [...(voters.get(r.categoryId) ?? []), { ageBandCode: f.ageBandCode, presence: r.presence }]);
+    if (!r.withdrawnReason) voters.set(r.categoryId, [...(voters.get(r.categoryId) ?? []), { ageBandCode: f.ageBandCode, presence: r.presence }]);
     members.set(r.categoryId, [...(members.get(r.categoryId) ?? []), r.id]);
     if (r.presence !== 'absent') active.set(r.categoryId, [...(active.get(r.categoryId) ?? []), r.id]);
   }

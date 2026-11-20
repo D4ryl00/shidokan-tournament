@@ -199,10 +199,10 @@ export function WavesPage() {
           {frozenAt ? (
             <>
               <Text size="sm" data-testid="sessions-frozen-at">Sessions figées le {frozenWhen(frozenAt)}</Text>
-              <Button variant="default" data-testid="sessions-unfreeze" onClick={() => setConfirming('unfreeze')}>Ne plus figer</Button>
+              <Button variant="default" data-testid="sessions-unfreeze" onClick={() => { unfreeze.reset(); setConfirming('unfreeze'); }}>Ne plus figer</Button>
             </>
           ) : drafts.length > 0 && (
-            <Button variant="default" data-testid="sessions-freeze" disabled={dirty} onClick={() => setConfirming('freeze')}>Figer les sessions</Button>
+            <Button variant="default" data-testid="sessions-freeze" disabled={dirty} onClick={() => { freeze.reset(); setConfirming('freeze'); }}>Figer les sessions</Button>
           )}
           <Button data-testid="wave-save" onClick={doSave} loading={save.isPending}>Enregistrer les sessions</Button>
         </Group>
@@ -212,7 +212,7 @@ export function WavesPage() {
           <List size="sm">{errors.map((e) => <List.Item key={e}>{e}</List.Item>)}</List>
         </Alert>
       )}
-      <ApiErrorAlert error={save.error ?? updateCategory.error ?? freeze.error ?? unfreeze.error} />
+      <ApiErrorAlert error={save.error ?? updateCategory.error} />
 
       <SectionCard data-testid="waves-waiting" title={`${HELP['vagues.en-attente'].title} (${waiting.length})`} help="vagues.en-attente">
         {waiting.length === 0 ? (
@@ -241,6 +241,7 @@ export function WavesPage() {
 
       <Modal opened={confirming === 'freeze'} onClose={() => setConfirming(null)} title="Figer les sessions ?">
         <Stack data-testid="sessions-freeze-confirm">
+          <ApiErrorAlert error={freeze.error} />
           <Text size="sm">Chaque catégorie garde sa session actuelle. Les nouvelles inscriptions et les recasements ne la changeront plus. Vous pourrez toujours changer une catégorie de session à la main.</Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setConfirming(null)}>Annuler</Button>
@@ -250,6 +251,7 @@ export function WavesPage() {
       </Modal>
       <Modal opened={confirming === 'unfreeze'} onClose={() => setConfirming(null)} title="Ne plus figer les sessions ?">
         <Stack data-testid="sessions-unfreeze-confirm">
+          <ApiErrorAlert error={unfreeze.error} />
           <Text size="sm">Les catégories reprennent la session de la majorité de leurs combattants ; certaines peuvent changer de session.</Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setConfirming(null)}>Annuler</Button>
