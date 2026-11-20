@@ -103,7 +103,7 @@ const hasWeight = (m: Member) => m.weighInKg !== null || m.approxWeightKg !== nu
 // --- Libellés ----------------------------------------------------------------------------------------------------
 
 /** « Benjamins » → « Benjamines », « Cadets » → « Cadettes » pour les filles. */
-function bandLabel(grid: CategoryGrid, code: string, sex: CategorySex): string {
+export function bandLabel(grid: CategoryGrid, code: string, sex: CategorySex): string {
   const label = grid.ageBands.find((b) => b.code === code)?.label ?? code;
   return sex === 'F' ? label.replace(/ins\b/g, 'ines').replace(/ets\b/g, 'ettes') : label;
 }
