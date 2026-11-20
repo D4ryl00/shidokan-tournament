@@ -1,18 +1,18 @@
 import { keyString, type CategoryKey } from '../categories.js';
-import { waveOfCategory } from '../waves.js';
+import { bandCounts, WAVE_NONE, waveOfCategory, type BandCounts } from '../waves.js';
 import { applyProposal, type Move } from './move.js';
 import type { Case, CategoryState, Member, Proposal, State } from './types.js';
 
 const uniq = (xs: string[]) => [...new Set(xs)];
 
-/** Tranches des combattants d'origine (non recasés) d'une catégorie, comme dans l'app. */
-const originBands = (state: State, categoryId: string, except?: string) =>
-  uniq(state.members.filter((m) => m.categoryId === categoryId && !m.placementLocked && m.registrationId !== except).map((m) => m.ageBandCode));
+/** Voix des combattants d'une catégorie (recasés compris, sauf `except`), comme dans l'app ; sessions pas encore figées. */
+const originBands = (state: State, categoryId: string, except?: string): BandCounts =>
+  bandCounts(state.members.filter((m) => m.categoryId === categoryId && m.registrationId !== except), false);
 
 /** Vague d'une catégorie, calculée comme dans l'app (null : en attente, ou pas de vague). */
 export function categoryWave(state: State, cat: CategoryState): string | null {
   if (state.waves.length === 0) return null;
-  return waveOfCategory({ key: cat.key, waveOverride: cat.waveOverride, waveBands: originBands(state, cat.id) }, state.waves, state.grid);
+  return waveOfCategory({ key: cat.key, waveOverride: cat.waveOverride, bandCounts: originBands(state, cat.id) }, state.waves, state.grid);
 }
 
 /** Vague d'une nouvelle catégorie, d'après sa clé. */
@@ -51,28 +51,35 @@ export function waveChangeOf(state: State, p: Pick<Proposal, 'type' | 'registrat
     const ks = keyString(p.target.newKey);
     target = state.categories.find((c) => keyString(c.key) === ks);
   }
+  // Le combattant déplacé vote dans la cible, recasé ou non.
+  const own: BandCounts = { [m.ageBandCode]: 1 };
   let to: string | null;
-  if (!target) to = 'newKey' in p.target ? keyWave(state, p.target.newKey) : null;
+  if (!target) to = 'newKey' in p.target ? waveOfCategory({ key: p.target.newKey, waveOverride: null, bandCounts: own }, state.waves, state.grid) : null;
   else {
-    // Comme applyProposal : un retour libère le combattant, une correction de poids le laisse tel quel, le reste le fige.
-    const isWeightCorrection = p.type === 'A' && p.changes.weightClassId !== undefined;
-    const unlockedAfter = p.type === 'R' || (isWeightCorrection && !m.placementLocked);
-    const bands = uniq([...originBands(state, target.id, m.registrationId), ...(unlockedAfter ? [m.ageBandCode] : [])]);
-    // Sans combattant d'origine, la clé (élargie à sa tranche) décide.
-    const key = bands.length > 0 ? target.key : { ...target.key, ageBandCodes: uniq([...target.key.ageBandCodes, m.ageBandCode]) };
-    to = waveOfCategory({ key, waveOverride: target.waveOverride, waveBands: bands }, state.waves, state.grid);
+    const counts = originBands(state, target.id, m.registrationId);
+    counts[m.ageBandCode] = (counts[m.ageBandCode] ?? 0) + 1;
+    // Sans voix, la clé (élargie à sa tranche, comme la recalcule applyProposal) décide.
+    const key = { ...target.key, ageBandCodes: uniq([...target.key.ageBandCodes, m.ageBandCode]) };
+    to = waveOfCategory({ key, waveOverride: target.waveOverride, bandCounts: counts }, state.waves, state.grid);
   }
   return from === to ? null : { from, to };
 }
 
 /** Vague de chaque catégorie, en un seul passage sur les inscriptions. */
 export function categoryWaves(state: State): Map<string, string | null> {
-  const bands = new Map<string, Set<string>>();
-  for (const m of state.members) if (m.categoryId && !m.placementLocked) bands.set(m.categoryId, (bands.get(m.categoryId) ?? new Set()).add(m.ageBandCode));
+  const members = new Map<string, Member[]>();
+  for (const m of state.members) {
+    if (!m.categoryId) continue;
+    const list = members.get(m.categoryId);
+    if (list) list.push(m);
+    else members.set(m.categoryId, [m]);
+  }
   return new Map(
     state.categories.map((c) => [
       c.id,
-      state.waves.length === 0 ? null : waveOfCategory({ key: c.key, waveOverride: c.waveOverride, waveBands: [...(bands.get(c.id) ?? [])] }, state.waves, state.grid),
+      state.waves.length === 0
+        ? null
+        : waveOfCategory({ key: c.key, waveOverride: c.waveOverride, bandCounts: bandCounts(members.get(c.id) ?? [], false) }, state.waves, state.grid),
     ]),
   );
 }
@@ -89,18 +96,21 @@ export function waveMoves(before: State, after: State): { registrationId: string
 }
 
 /**
- * Une catégorie change de vague quand ses tranches d'origine changent, ou quand elle n'a que des recasés (sa clé décide) :
- * le déplacement peut alors emmener d'autres combattants. Seuls ces cas, rares, sont vérifiés en appliquant la proposition.
+ * La session d'une catégorie suit la majorité de ses combattants (recasés compris) : le déplacé retire sa voix de sa
+ * catégorie et l'ajoute à la cible, et l'une ou l'autre peut basculer avec ses autres combattants. Seule une catégorie
+ * sans autre combattant, ou dont la session est choisie à la main, ne peut rien emmener ; sinon la proposition est
+ * appliquée pour vérifier.
  */
 function mayMoveOthers(state: State, m: Member, p: Pick<Proposal, 'type' | 'target' | 'changes'>): boolean {
-  const others = (id: string | null) => state.members.filter((x) => x.categoryId === id && x.registrationId !== m.registrationId);
-  const shifts = (rest: Member[], moverUnlocked: boolean) =>
-    rest.length > 0 && (rest.every((x) => x.placementLocked) || (moverUnlocked && !rest.some((x) => !x.placementLocked && x.ageBandCode === m.ageBandCode)));
-  if (shifts(others(m.categoryId), !m.placementLocked)) return true;
+  const canShift = (id: string | null | undefined) => {
+    const cat = id ? state.categories.find((c) => c.id === id) : undefined;
+    if (!cat) return false;
+    if (cat.waveOverride === WAVE_NONE || state.waves.some((w) => w.id === cat.waveOverride)) return false;
+    return state.members.some((x) => x.categoryId === cat.id && x.registrationId !== m.registrationId);
+  };
+  if (canShift(m.categoryId)) return true;
   const target = 'categoryId' in p.target ? p.target.categoryId : state.categories.find((c) => keyString(c.key) === keyString((p.target as { newKey: CategoryKey }).newKey))?.id;
-  if (!target) return false;
-  const isWeightCorrection = p.type === 'A' && p.changes.weightClassId !== undefined;
-  return shifts(others(target), p.type === 'R' || (isWeightCorrection && !m.placementLocked));
+  return canShift(target);
 }
 
 /** Changement de vague du combattant et des autres combattants qu'emmènerait la proposition. */

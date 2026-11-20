@@ -4,6 +4,7 @@ import { normalizeName } from './names.js';
 import type { CategoryDurations } from './schedule/durations.js';
 import type { Fighter, Registration } from './registration.js';
 import type { CategoryGrid, DisciplineId, Ruleset, Sex } from './types.js';
+import type { BandCounts } from './waves.js';
 
 /** X = mixte (recasement). */
 export type CategorySex = Sex | 'X';
@@ -126,8 +127,10 @@ export interface Category {
   waveId: string | null;
   /** Choix individuel : id d'une vague, « none » (en attente) ou null (règles). */
   waveOverride: string | null;
-  /** Tranches des combattants d'origine (non recasés), qui décident de la vague. */
-  waveBands: string[];
+  /** Voix des combattants (recasés compris) par tranche, qui décident de la vague. */
+  bandCounts: BandCounts;
+  /** Session figée (`none` : en attente) ; null : pas figée, la majorité décide. */
+  frozenWave: string | null;
   /** Rang de passage sur la zone. */
   order: number;
   registrationIds: string[];

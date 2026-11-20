@@ -259,16 +259,19 @@ describe('mixité, présence, session', () => {
   });
 
   test('session : le choix individuel d’un groupe fusionné n’est pas la session d’origine', () => {
-    // Minimes −50 (Après-midi par les règles) reçoivent une benjamine (Matin) ; le groupe est ensuite mis à la main en Matin.
+    // Deux minimes −50 (Après-midi par les règles) reçoivent une benjamine (Matin) : la majorité garde le groupe en
+    // Après-midi. Le groupe est ensuite mis à la main en Matin.
     const stay = member({ ageBandCode: 'minime', weightClassId: 'minime:F:-50', approxWeightKg: 48 });
+    const stay2 = member({ ageBandCode: 'minime', weightClassId: 'minime:F:-50', approxWeightKg: 48 });
     const benj = moved({ ageBandCode: 'benjamin', weightClassId: 'benjamin:F:-50', approxWeightKg: 49 });
-    const s = groups([[stay, benj]], { waves: [matin, aprem] });
+    const s = groups([[stay, stay2, benj]], { waves: [matin, aprem] });
     expect(authorizationRequests(s, []).map((r) => r.id)).toEqual([`session:${benj.registrationId}`, `age:${benj.registrationId}`]);
     s.categories[0]!.waveOverride = 'matin';
     const rs = authorizationRequests(s, []);
-    // La minime restée passe vraiment d'Après-midi à Matin ; la benjamine, venue de Matin, y reste.
+    // Les minimes restées passent vraiment d'Après-midi à Matin ; la benjamine, venue de Matin, y reste.
     expect(one(rs, stay, 'session').situation).toEqual({ kind: 'session', from: 'aprem', to: 'matin' });
     expect(kinds(rs, stay)).toEqual(['session']);
+    expect(kinds(rs, stay2)).toEqual(['session']);
     expect(kinds(rs, benj)).toEqual(['age']);
   });
 

@@ -105,8 +105,13 @@ test('refus : même catégorie, absent, catégorie lancée', async () => {
 });
 
 test('aperçu : changements de session des deux combattants', async () => {
-  const minimes = [await reg({ lastName: 'MINI0', ageBandCode: 'minime', weightClassId: 'minime:F:-50' }), await reg({ lastName: 'MINI1', ageBandCode: 'minime', weightClassId: 'minime:F:-50' })];
-  const cadets = [await reg({ lastName: 'CAD0' }), await reg({ lastName: 'CAD1' })];
+  // Trois de chaque : après l'échange, chaque catégorie garde la majorité de sa tranche (et sa session).
+  const minimes = [
+    await reg({ lastName: 'MINI0', ageBandCode: 'minime', weightClassId: 'minime:F:-50' }),
+    await reg({ lastName: 'MINI1', ageBandCode: 'minime', weightClassId: 'minime:F:-50' }),
+    await reg({ lastName: 'MINI2', ageBandCode: 'minime', weightClassId: 'minime:F:-50' }),
+  ];
+  const cadets = [await reg({ lastName: 'CAD0' }), await reg({ lastName: 'CAD1' }), await reg({ lastName: 'CAD2' })];
   const [matin, aprem] = (await call('PUT', '/waves', [
     { name: 'Matin', rules: { ageBandCodes: ['poussin', 'pupille', 'benjamin', 'minime'], disciplines: [] } },
     { name: 'Après-midi', rules: { ageBandCodes: ['cadet', 'junior', 'senior'], disciplines: [] } },

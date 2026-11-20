@@ -5,7 +5,7 @@ import { applyProposal, stateFingerprint } from '../../../src/domain/replacement
 import { computePlan } from '../../../src/domain/replacement/plan.js';
 import { casesOfWave, categoryWave, memberWave, waveMoves } from '../../../src/domain/replacement/waves.js';
 import type { State } from '../../../src/domain/replacement/types.js';
-import type { Wave } from '../../../src/domain/waves.js';
+import { WAVE_NONE, type Wave } from '../../../src/domain/waves.js';
 import { makeState, member } from './fixtures.js';
 
 const matin: Wave = { id: 'matin', name: 'Matin', order: 0, rules: { ageBandCodes: ['poussin', 'pupille', 'benjamin', 'minime'], disciplines: [] }, weighInClosed: false };
@@ -49,8 +49,19 @@ describe('réaffectation par session', () => {
   });
 
   test('catégorie en attente : waveChange vers ou depuis null', () => {
-    const { s, mini } = minimeAlone({ waves: [matin] });
+    // Catégorie cadette mise en attente à la main : du Matin vers aucune session.
+    const { s, mini, cadet } = minimeAlone();
+    s.categories.find((c) => c.id === cadet.categoryId)!.waveOverride = WAVE_NONE;
     expect(props(s, mini.registrationId)[0]!.waveChange).toEqual({ from: 'matin', to: null });
+    // Aucune session ne prend les minimes : la minime ne vote pas, les cadettes gardent l'Après-midi.
+    const t = minimeAlone({ waves: [aprem] });
+    expect(props(t.s, t.mini.registrationId)[0]!.waveChange).toEqual({ from: null, to: 'aprem' });
+    // Aucune session ne prend les cadettes : seule la minime vote, la catégorie l'emmène au Matin avec les cadettes.
+    const u = minimeAlone({ waves: [matin] });
+    const q = props(u.s, u.mini.registrationId)[0]!;
+    expect(q.waveChange).toBeNull();
+    const cadettes = u.s.members.filter((m) => m.categoryId === u.cadet.categoryId).map((m) => m.registrationId);
+    expect(q.waveShifts.map((x) => [x.registrationId, x.from, x.to])).toEqual(cadettes.map((id) => [id, null, 'matin']));
   });
 
   test('catégorie d’arrivée fusionnée : garde sa session', () => {
@@ -106,20 +117,25 @@ describe('réaffectation par session', () => {
     expect(stateFingerprint(s2)).not.toBe(base);
   });
 
-  test('changement de session entraîné : la catégorie qui perd ses derniers combattants d’origine change de session avec ses réaffectés', () => {
+  test('changement de session entraîné : la catégorie qui perd sa majorité change de session avec ses autres combattants', () => {
     const { s, mini, cadet } = minimeAlone();
     const s1 = applyProposal(s, props(s, mini.registrationId)[0]!);
-    // Les deux cadettes d'origine pèsent 52 kg : hors catégorie, vers les -54.
+    // Deux cadettes et une minime recasée : la majorité garde l'Après-midi.
+    expect(categoryWave(s1, s1.categories.find((c) => c.id === cadet.categoryId)!)).toBe('aprem');
+    // Les deux cadettes pèsent 52 kg : hors catégorie, vers les -54.
     const [c1, c2] = s1.members.filter((m) => m.categoryId === cadet.categoryId && m.registrationId !== mini.registrationId);
     for (const c of [c1!, c2!]) Object.assign(c, { weighInKg: 52, presence: 'present' });
+    // Une cadette part : une cadette contre une minime, l'égalité va à la tranche la plus jeune → la catégorie passe au
+    // Matin et emmène la minime et l'autre cadette.
     const p1 = props(s1, c1!.registrationId)[0]!;
-    expect(p1).toMatchObject({ type: 'A', waveChange: null, waveShifts: [] });
+    const shifted = [{ registrationId: mini.registrationId, from: 'aprem', to: 'matin' }, { registrationId: c2!.registrationId, from: 'aprem', to: 'matin' }];
+    expect(p1).toMatchObject({ type: 'A', waveChange: null, preApproved: false, waveShifts: shifted.map((x, i) => ({ ...x, label: [mini.label, c2!.label][i] })) });
+    expect(waveMoves(s1, applyProposal(s1, p1))).toEqual(shifted);
     const s2 = applyProposal(s1, p1);
-    // La dernière cadette d'origine partie, la catégorie redevient « Minimes » : la minime repasse au Matin.
+    // La dernière cadette part à son tour : elle quitte le Matin, la minime y reste.
     const p2 = props(s2, c2!.registrationId)[0]!;
-    expect(p2).toMatchObject({ type: 'A', waveChange: null, preApproved: false, waveShifts: [{ registrationId: mini.registrationId, label: mini.label, from: 'aprem', to: 'matin' }] });
-    expect(waveMoves(s2, applyProposal(s2, p2))).toEqual([{ registrationId: mini.registrationId, from: 'aprem', to: 'matin' }]);
-    // La validation globale ne la prend pas.
-    expect(planOf(s1, 'aprem', true).moves.map((x) => x.registrationId)).toEqual([c1!.registrationId]);
+    expect(p2).toMatchObject({ type: 'A', waveChange: { from: 'matin', to: 'aprem' }, waveShifts: [] });
+    // La validation globale ne prend aucun des deux départs : chacun emmène d'autres combattants.
+    expect(planOf(s1, 'aprem', true).moves.map((x) => x.registrationId)).toEqual([]);
   });
 });

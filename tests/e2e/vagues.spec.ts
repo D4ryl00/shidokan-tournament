@@ -215,7 +215,7 @@ test('réaffectation par session (relecture) : session gardée d’un onglet à 
   await expect(page.getByTestId('replacement-wave').locator(`input[value="${matin!.id}"]`)).toBeChecked();
   const cases = page.getByTestId('replacement-case');
   await expect(cases).toContainText('MINI');
-  // Déplacement manuel vers une catégorie d'une autre vague, puis vers une catégorie en attente.
+  // Déplacement manuel vers une catégorie d'une autre vague, puis vers une catégorie en attente (que sa voix emmène).
   const select = cases.getByTestId('manual-move-select');
   await select.click();
   await page.getByRole('option', { name: /Cadets F.*session Après-midi/ }).click();
@@ -230,7 +230,11 @@ test('réaffectation par session (relecture) : session gardée d’un onglet à 
   await select.click();
   await page.getByRole('option', { name: /Juniors F.*session en attente.*règles? enfreintes?/ }).click();
   await cases.getByTestId('manual-move').click();
-  await expect(page.getByTestId('wave-change-warning')).toContainText('dans aucune session');
+  // Aucune session ne prend les juniors : seule la minime vote, la catégorie passe au Matin et emmène la junior ; la
+  // minime ne change pas de session.
+  const warning = page.getByTestId('wave-change-warning');
+  await expect(warning).toContainText('JUNIOR Léa, dont la catégorie change de session, passera dans la session « Matin » : la pesée de cette session est déjà clôturée');
+  await expect(warning).not.toContainText('MINI Léa passera');
 });
 
 test('sessions : tout cocher les tranches d’âge et les disciplines', async ({ page }) => {

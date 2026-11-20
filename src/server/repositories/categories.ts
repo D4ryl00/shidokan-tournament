@@ -23,8 +23,9 @@ import { categoryDurationsSchema, type CategoryDurations } from '../../domain/sc
 import type { CompetitionSettings } from '../../domain/settings.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import { ALL_FORMAT_LABELS } from '../../domain/brackets/format-labels.js';
+import type { Presence } from '../../domain/replacement/types.js';
 import { categoryWave } from '../../domain/replacement/waves.js';
-import { WAVE_NONE, waveOfCategory, type Wave } from '../../domain/waves.js';
+import { bandCounts, WAVE_NONE, waveOfCategory, type BandCounts, type Wave } from '../../domain/waves.js';
 import type { AppDb } from '../db/client.js';
 import { rowRev } from '../revisions.js';
 import { categories, fighters, registrations, tieBreaks, zones } from '../db/schema.js';
@@ -56,8 +57,8 @@ interface Context {
   entrants: Map<string, Entrant>;
   waves: Wave[];
   grid: CategoryGrid;
-  /** Tranches des combattants d'origine (non recasés) de chaque catégorie. */
-  waveBands: Map<string, string[]>;
+  /** Voix des combattants (recasés compris) de chaque catégorie, par tranche. */
+  bandCounts: Map<string, BandCounts>;
   /** Catégories numérotées dans une vague lancée. */
   launched: Set<string>;
 }
@@ -70,18 +71,18 @@ async function loadContext(db: AppDb, competitionId: string): Promise<Context> {
   const members = new Map<string, string[]>();
   const active = new Map<string, string[]>();
   const entrants = new Map<string, Entrant>();
-  const waveBands = new Map<string, Set<string>>();
+  const voters = new Map<string, { ageBandCode: string; presence: Presence }[]>();
   for (const r of regs) {
     const f = fs.get(r.fighterId)!;
     entrants.set(r.id, { registrationId: r.id, clubId: f.clubId, label: `${f.lastName} ${f.firstName}`.trim() });
     if (!r.categoryId) continue;
-    if (!r.placementLocked) waveBands.set(r.categoryId, (waveBands.get(r.categoryId) ?? new Set()).add(f.ageBandCode));
+    voters.set(r.categoryId, [...(voters.get(r.categoryId) ?? []), { ageBandCode: f.ageBandCode, presence: r.presence }]);
     members.set(r.categoryId, [...(members.get(r.categoryId) ?? []), r.id]);
     if (r.presence !== 'absent') active.set(r.categoryId, [...(active.get(r.categoryId) ?? []), r.id]);
   }
   return {
     settings: competition.settings, members, active, entrants, waves: await listWaves(db, competitionId), grid: await getGrid(db, competitionId),
-    waveBands: new Map([...waveBands].map(([k, v]) => [k, [...v]])),
+    bandCounts: new Map([...voters].map(([k, v]) => [k, bandCounts(v, false)])),
     launched: launchedCategoryIds(db, competitionId),
   };
 }
@@ -298,9 +299,10 @@ function toCategory(row: Row, ctx: Context): Category {
     seed: row.seed,
     bracket: withCurrentLabels(row.bracketJson ? (JSON.parse(row.bracketJson) as Bracket) : null, ctx),
     zoneId: row.zoneId,
-    waveId: waveOfCategory({ key, waveOverride: row.waveOverride, waveBands: ctx.waveBands.get(row.id) ?? [] }, ctx.waves, ctx.grid),
+    waveId: waveOfCategory({ key, waveOverride: row.waveOverride, frozenWave: null, bandCounts: ctx.bandCounts.get(row.id) ?? {} }, ctx.waves, ctx.grid),
     waveOverride: row.waveOverride,
-    waveBands: ctx.waveBands.get(row.id) ?? [],
+    bandCounts: ctx.bandCounts.get(row.id) ?? {},
+    frozenWave: null,
     order: row.sortOrder,
     registrationIds: [...ids].sort(),
     absentIds: ids.filter((id) => !(ctx.active.get(row.id) ?? []).includes(id)).sort(),

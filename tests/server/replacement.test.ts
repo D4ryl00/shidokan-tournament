@@ -861,28 +861,42 @@ describe('réaffectation par session', () => {
     expect((await apply(p2)).statusCode).toBe(409);
   });
 
-  test('changement de session entraîné : les réaffectés qui changent de session avec leur catégorie repassent « non pesé » ; annuler rétablit', async () => {
+  test('changement de session entraîné : ceux qui changent de session avec leur catégorie repassent « non pesé » ; annuler rétablit', async () => {
     const { mini, matin, aprem } = await setup();
     let r = await ofWave(matin);
     await call('POST', '/replacement/apply', { proposalId: r.proposals[r.cases[0]!.id]![0]!.id });
+    // Deux cadettes et la minime recasée : la majorité garde l'Après-midi.
+    expect(await waveOfReg(mini.id)).toBe(aprem);
     const cads = ((await call('GET', '/registrations')).json() as { id: string; fighterId: string; fighter: { lastName: string } }[]).filter((x) => x.fighter.lastName.startsWith('CAD'));
     for (const c of cads) await call('PUT', `/weigh-in/${c.fighterId}`, { weighInKg: 52, waveId: aprem });
     await call('PUT', `/weigh-in/${mini.fighterId}`, { presence: 'present', waveId: aprem });
-    expect((await applyPlan({ waveId: aprem })).json()).toEqual({ applied: 2 }); // CAD0 et SEULE
+    // Le départ d'une cadette laisserait une cadette contre une minime : la catégorie passerait au Matin. Le plan ne
+    // prend que SEULE.
+    expect((await applyPlan({ waveId: aprem })).json()).toEqual({ applied: 1 });
     expect(await waveOfReg(mini.id)).toBe(aprem);
     r = await ofWave(aprem);
-    // Le plan a casé l'une des deux cadettes ; l'autre, dernière d'origine, est encore hors catégorie.
-    const last = r.cases.find((c) => c.kind === 'weight_out' && cads.some((x) => x.id === c.registrationId))!;
-    const p = r.proposals[last.id]![0]!;
-    expect(p.waveShifts).toMatchObject([{ registrationId: mini.id, from: aprem, to: matin }]);
+    const out = r.cases.filter((c) => c.kind === 'weight_out' && cads.some((x) => x.id === c.registrationId));
+    expect(out).toHaveLength(2);
+    const leaving = out[0]!.registrationId;
+    const staying = cads.find((x) => x.id !== leaving)!.id;
+    const p = r.proposals[out[0]!.id]![0]!;
+    expect(p.waveChange).toBeNull();
+    expect(p.waveShifts).toHaveLength(2);
+    expect(p.waveShifts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ registrationId: mini.id, from: aprem, to: matin }),
+      expect.objectContaining({ registrationId: staying, from: aprem, to: matin }),
+    ]));
     await call('POST', '/replacement/apply', { proposalId: p.id });
     expect(await waveOfReg(mini.id)).toBe(matin);
+    expect(await waveOfReg(staying)).toBe(matin);
     expect((await regRow(mini.id)).presence).toBe('unknown');
-    expect((await regRow(last.registrationId)).presence).toBe('present');
-    const entry = (await replacement()).recasements.find((x) => x.registrationId === last.registrationId)!;
+    expect((await regRow(staying)).presence).toBe('unknown');
+    expect((await regRow(leaving)).presence).toBe('present');
+    const entry = (await replacement()).recasements.find((x) => x.registrationId === leaving)!;
     await undoRecasement(call, dbPath, entry.id);
     expect(await waveOfReg(mini.id)).toBe(aprem);
     expect((await regRow(mini.id)).presence).toBe('present');
+    expect((await regRow(staying)).presence).toBe('present');
   });
 
   test('sans session : annuler ne touche pas à la présence (pointée absente après la réaffectation)', async () => {
@@ -1557,6 +1571,8 @@ describe('repartir de zéro par session', () => {
 
   test('réaffecté ensuite depuis une autre session : refus en entier, avec son nom', async () => {
     const { m2, c1, c2, matin } = await setup();
+    // Une seconde cadette avec CARA : MILA y est en minorité, la catégorie reste dans l'après-midi.
+    await reg({ lastName: 'CORA', weightClassId: 'cadet:F:-47', approxWeightKg: 46 });
     const cadets = (await categories()).find((c) => c.registrationIds.includes(c1.id))!;
     await call('POST', '/replacement/move', { registrationId: m2.id, categoryId: cadets.id });
     // MILA est maintenant dans l'après-midi : ce second déplacement est décidé depuis l'après-midi.

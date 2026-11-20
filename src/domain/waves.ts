@@ -1,10 +1,12 @@
 import type { CategoryKey } from './categories.js';
 import { normalizeName } from './names.js';
+import type { Presence } from './replacement/types.js';
 import type { CategoryGrid, DisciplineId } from './types.js';
 
 /**
  * Vague : groupe de catégories qui se pèsent, se recasent et se lancent ensemble (« Samedi matin », « Dimanche »…).
- * La vague d'une catégorie n'est pas enregistrée : elle se déduit des règles et d'un éventuel choix individuel.
+ * La vague d'une catégorie n'est pas enregistrée : elle se déduit des règles, des tranches de ses combattants et d'un
+ * éventuel choix individuel.
  */
 export interface WaveRules {
   ageBandCodes: string[];
@@ -28,26 +30,40 @@ export const WAVE_NONE = 'none';
 export const WAVE_MAX = 20;
 export const WAVE_NAME_MAX = 40;
 
-/** Tranche la plus jeune parmi `codes`. */
-function youngestBand(codes: string[], grid: CategoryGrid): string | undefined {
-  const index = (code: string) => {
-    const i = grid.ageBands.findIndex((b) => b.code === code);
-    return i < 0 ? Number.MAX_SAFE_INTEGER : i;
-  };
-  return [...codes].sort((a, b) => index(a) - index(b))[0];
+/** Rang d'une tranche dans la grille (les inconnues à la fin). */
+function bandIndex(code: string, grid: CategoryGrid): number {
+  const i = grid.ageBands.findIndex((b) => b.code === code);
+  return i < 0 ? Number.MAX_SAFE_INTEGER : i;
 }
 
-/**
- * Tranches qui décident de la vague : celles des combattants d'origine de la catégorie (`waveBands`, sans les recasés),
- * pour qu'une catégorie d'arrivée garde sa vague ; à défaut, celles de sa clé.
- */
-type WaveSubject = { key: CategoryKey; waveBands?: string[] };
-const bandsOf = (c: WaveSubject) => (c.waveBands && c.waveBands.length ? c.waveBands : c.key.ageBandCodes);
+/** Tranche la plus jeune parmi `codes`. */
+function youngestBand(codes: string[], grid: CategoryGrid): string | undefined {
+  return [...codes].sort((a, b) => bandIndex(a, grid) - bandIndex(b, grid))[0];
+}
 
-/** La règle prend la catégorie : tranche et discipline acceptées ; une règle vide ne prend rien. */
-export function ruleMatches(rules: WaveRules, key: CategoryKey, grid: CategoryGrid, waveBands?: string[]): boolean {
+/** Décompte des tranches des combattants d'une catégorie : une voix par combattant. */
+export type BandCounts = Record<string, number>;
+
+/**
+ * Voix des combattants d'une catégorie (recasés compris) : les absents votent tant que les sessions ne sont pas figées,
+ * plus ensuite.
+ */
+export function bandCounts(members: { ageBandCode: string; presence: Presence }[], frozen: boolean): BandCounts {
+  const counts: BandCounts = {};
+  for (const m of members) if (!frozen || m.presence !== 'absent') counts[m.ageBandCode] = (counts[m.ageBandCode] ?? 0) + 1;
+  return counts;
+}
+
+/** Ce qui décide de la session d'une catégorie : sa clé et les voix de ses combattants (`bandCounts`). */
+type WaveSubject = { key: CategoryKey; bandCounts?: BandCounts };
+
+/** Tranches qui ont au moins une voix. */
+const votingBands = (c: WaveSubject) => Object.entries(c.bandCounts ?? {}).filter(([, n]) => n > 0);
+
+/** La règle prend la catégorie : tranche (la plus jeune de `bands`, à défaut de la clé) et discipline acceptées ; une règle vide ne prend rien. */
+export function ruleMatches(rules: WaveRules, key: CategoryKey, grid: CategoryGrid, bands?: string[]): boolean {
   if (rules.ageBandCodes.length === 0 && rules.disciplines.length === 0) return false;
-  const band = youngestBand(bandsOf({ key, waveBands }), grid);
+  const band = youngestBand(bands && bands.length ? bands : key.ageBandCodes, grid);
   const bandOk = rules.ageBandCodes.length === 0 || (band !== undefined && rules.ageBandCodes.includes(band));
   const disciplineOk = rules.disciplines.length === 0 || rules.disciplines.includes(key.discipline);
   return bandOk && disciplineOk;
@@ -55,25 +71,65 @@ export function ruleMatches(rules: WaveRules, key: CategoryKey, grid: CategoryGr
 
 const byOrder = (waves: Wave[]) => [...waves].sort((a, b) => a.order - b.order);
 
-/** Vague d'une catégorie : choix individuel, sinon la première vague dont la règle la prend, sinon aucune (en attente). */
-export function waveOfCategory(c: WaveSubject & { waveOverride: string | null }, waves: Wave[], grid: CategoryGrid): string | null {
-  if (c.waveOverride === WAVE_NONE) return null;
-  if (c.waveOverride && waves.some((w) => w.id === c.waveOverride)) return c.waveOverride;
-  if (c.key.free !== undefined) return null;
-  return byOrder(waves).find((w) => ruleMatches(w.rules, c.key, grid, c.waveBands))?.id ?? null;
+/** Session d'une tranche pour la discipline de la clé : la première (par ordre) dont la règle la prend. */
+const waveOfBand = (ordered: Wave[], key: CategoryKey, grid: CategoryGrid, band: string) => ordered.find((w) => ruleMatches(w.rules, key, grid, [band]));
+
+/**
+ * Session gagnante du vote : le plus de voix ; à égalité, la session de la tranche la plus jeune parmi les ex-aequo, puis
+ * l'ordre des sessions. undefined : aucune voix (aucun combattant, ou aucune tranche prise par une session).
+ */
+function votedWave(c: WaveSubject, ordered: Wave[], grid: CategoryGrid): Wave | undefined {
+  const tally = new Map<Wave, { votes: number; rank: number }>();
+  for (const [band, n] of votingBands(c)) {
+    const w = waveOfBand(ordered, c.key, grid, band);
+    if (!w) continue;
+    const t = tally.get(w) ?? { votes: 0, rank: Number.MAX_SAFE_INTEGER };
+    tally.set(w, { votes: t.votes + n, rank: Math.min(t.rank, bandIndex(band, grid)) });
+  }
+  return [...tally]
+    .sort(([wa, a], [wb, b]) => b.votes - a.votes || a.rank - b.rank || wa.order - wb.order)
+    .map(([w]) => w)[0];
 }
 
-/** Catégories (sans choix individuel) prises par les règles de plusieurs vagues : elles vont dans la première. */
+/** Choix qui ne bougent pas avec les combattants : valeur (`none` compris) seulement si c'est `none` ou une session existante. */
+const fixedChoice = (choice: string | null | undefined, waves: Wave[]) =>
+  choice === WAVE_NONE || (!!choice && waves.some((w) => w.id === choice)) ? choice : undefined;
+
+/**
+ * Session d'une catégorie : le choix individuel (`waveOverride`), sinon la session figée (`frozenWave`), sinon aucune
+ * pour un tableau libre, sinon la majorité de ses combattants, sinon (aucune voix) la tranche la plus jeune de sa clé.
+ */
+export function waveOfCategory(
+  c: WaveSubject & { waveOverride: string | null; frozenWave?: string | null },
+  waves: Wave[],
+  grid: CategoryGrid,
+): string | null {
+  const fixed = fixedChoice(c.waveOverride, waves) ?? fixedChoice(c.frozenWave, waves);
+  if (fixed !== undefined) return fixed === WAVE_NONE ? null : fixed;
+  if (c.key.free !== undefined) return null;
+  const ordered = byOrder(waves);
+  return (votedWave(c, ordered, grid) ?? ordered.find((w) => ruleMatches(w.rules, c.key, grid)))?.id ?? null;
+}
+
+/**
+ * Catégories (ni choisies à la main, ni figées) dont une tranche votante (ou, sans voix, la tranche la plus jeune de la
+ * clé) est prise par plusieurs sessions : cette tranche vote pour la première.
+ */
 export function waveConflicts(
-  cats: (WaveSubject & { id: string; waveOverride: string | null })[],
+  cats: (WaveSubject & { id: string; waveOverride: string | null; frozenWave?: string | null })[],
   waves: Wave[],
   grid: CategoryGrid,
 ): { categoryId: string; waveIds: string[] }[] {
   const ordered = byOrder(waves);
+  const takers = (key: CategoryKey, bands?: string[]) => ordered.filter((w) => ruleMatches(w.rules, key, grid, bands));
   return cats
     .filter((c) => c.key.free === undefined)
-    .filter((c) => !c.waveOverride || (c.waveOverride !== WAVE_NONE && !waves.some((w) => w.id === c.waveOverride)))
-    .map((c) => ({ categoryId: c.id, waveIds: ordered.filter((w) => ruleMatches(w.rules, c.key, grid, c.waveBands)).map((w) => w.id) }))
+    .filter((c) => fixedChoice(c.waveOverride, waves) === undefined && fixedChoice(c.frozenWave, waves) === undefined)
+    .map((c) => {
+      const voting = votingBands(c).map(([band]) => takers(c.key, [band])).filter((ws) => ws.length > 0);
+      const disputed = (voting.length > 0 ? voting : [takers(c.key)]).filter((ws) => ws.length > 1).flat();
+      return { categoryId: c.id, waveIds: ordered.filter((w) => disputed.includes(w)).map((w) => w.id) };
+    })
     .filter((x) => x.waveIds.length > 1);
 }
 
