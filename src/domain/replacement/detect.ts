@@ -2,7 +2,7 @@ import { isFreeKey, keyString, naturalKey, type CategoryKey } from '../categorie
 import { categoryKeyClosed, entryKey } from '../closed-categories.js';
 import { DISCIPLINES } from '../disciplines.js';
 import type { Case, CategoryState, Member, State } from './types.js';
-import { categoryWeightGap, effectiveWeight, gapThreshold, isOverweight } from './weights.js';
+import { categoryGapTolerance, categoryWeightGap, effectiveWeight, isOverweight } from './weights.js';
 
 /** Catégorie lancée, terminée ou d'une vague lancée : ni départ ni arrivée, même pour un déplacement manuel. */
 export const isLockedForManual = (c: CategoryState | undefined): boolean => c !== undefined && (c.status === 'started' || c.status === 'finished' || c.frozen === true);
@@ -96,13 +96,13 @@ export function detectCases(state: State): Case[] {
       cases.push({ id: `alone:${alone.registrationId}`, kind: 'alone', registrationId: alone.registrationId, categoryId: c.id, detail: alone.sex === 'F' ? 'Seule dans sa catégorie' : 'Seul dans sa catégorie' });
     } else if (weighed.length >= 2 && DISCIPLINES[c.key.discipline].hasWeight) {
       const gap = categoryWeightGap(weighed, state.grid);
-      const threshold = gapThreshold(weighed, state);
+      const threshold = categoryGapTolerance(c, weighed, state);
       if (gap > threshold + 1e-9) {
         const weights = weighed.map((m) => effectiveWeight(m, state.grid) ?? 0).sort((a, b) => a - b);
         const median = weights[Math.floor(weights.length / 2)]!;
         const outlier = [...weighed].sort((a, b) => Math.abs((effectiveWeight(b, state.grid) ?? 0) - median) - Math.abs((effectiveWeight(a, state.grid) ?? 0) - median))[0]!;
         if (!withWeightOut.has(outlier.registrationId)) {
-          cases.push({ id: `weight_gap:${outlier.registrationId}`, kind: 'weight_gap', registrationId: outlier.registrationId, categoryId: c.id, detail: `Écart de poids de ${gap.toFixed(1).replace('.', ',')} kg dans la catégorie (max ${threshold} kg)` });
+          cases.push({ id: `weight_gap:${outlier.registrationId}`, kind: 'weight_gap', registrationId: outlier.registrationId, categoryId: c.id, detail: `Écart de poids de ${gap.toFixed(1).replace('.', ',')} kg dans la catégorie (max ${String(threshold).replace('.', ',')} kg)` });
         }
       }
     }
@@ -120,7 +120,7 @@ export function detectCases(state: State): Case[] {
     const home = lookup(keyString(naturalKey({ ...m.original }, m)));
     const homeMembers = home ? activeIn(home.id).filter((x) => x.registrationId !== m.registrationId) : [];
     const back = { ...m, ...m.original };
-    const viable = homeMembers.length > 0 && categoryWeightGap([...homeMembers, back], state.grid) <= gapThreshold([...homeMembers, back], state) + 1e-9;
+    const viable = !!home && homeMembers.length > 0 && categoryWeightGap([...homeMembers, back], state.grid) <= categoryGapTolerance(home, [...homeMembers, back], state) + 1e-9;
     // Une catégorie d'origine fermée n'accueille personne : pas de retour (la proposition serait de toute façon écartée).
     if (home && home.id !== m.categoryId && !isLocked(home) && !isClosedTarget(state, home.key) && viable) {
       cases.push({ id: `return:${m.registrationId}`, kind: 'return', registrationId: m.registrationId, categoryId: m.categoryId, detail: 'Un adversaire est disponible dans la catégorie d’origine' });

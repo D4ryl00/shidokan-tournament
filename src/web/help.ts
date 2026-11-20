@@ -806,7 +806,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Jusqu’où la réaffectation peut aller : écart de poids et mélanges autorisés.',
     details: [
       [
-        'Écart de poids max (enfants et adultes séparément) : jusqu’à cet écart, un déplacement vers un poids voisin est sans risque ; au-delà, il reste proposé mais se valide à la main (badge « ⚖ Poids + »).',
+        'Écart de poids max (enfants et adultes séparément) : jusqu’à cet écart, un déplacement vers un poids voisin est sans risque ; au-delà, il reste proposé mais se valide à la main (badge « ⚖ Poids + »). Dans une catégorie de la grille, l’écart toléré est au moins sa largeur (de −45 à −55 kg : 10 kg) ; une catégorie sans limite (la plus légère, ou « + ») ne donne jamais de carte « Écart de poids ».',
         'Mélange mineurs / adultes, seniors / vétérans, filles / garçons : chaque mélange coché peut être proposé, mais se valide à la main.',
         'Filles / garçons : seulement dans les tranches d’âge cochées.',
         'Passage de shobu à jiyu : désactivé par défaut. Coché, un combattant shobu sans adversaire peut être proposé dans la catégorie jiyu correspondante (validation à la main). Le passage de jiyu à shobu n’est jamais proposé.',

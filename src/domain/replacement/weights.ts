@@ -1,7 +1,7 @@
 import { weightClassesFor } from '../grid.js';
 import type { CategoryGrid, WeightClass } from '../types.js';
 import { weightClassForWeight } from '../weights.js';
-import type { Member, State } from './types.js';
+import type { CategoryState, Member, State } from './types.js';
 
 /** Poids retenu pour comparer : pesée, sinon poids approximatif, sinon limite de la catégorie (ouverte : limite précédente). */
 export function effectiveWeight(m: Member, grid: CategoryGrid): number | null {
@@ -25,6 +25,23 @@ const isMinor = (m: Member, state: State) => state.grid.ageBands.find((b) => b.c
 /** Seuil enfants dès qu'un membre est mineur, sinon seuil adultes. */
 export function gapThreshold(members: Member[], state: State): number {
   return members.some((m) => isMinor(m, state)) ? state.settings.weightGapMaxKg.children : state.settings.weightGapMaxKg.adults;
+}
+
+/**
+ * Écart de poids toléré dans une catégorie : au moins la largeur de sa catégorie de poids (écart imposé par la grille) ;
+ * infini sans limite basse (la plus légère) ou haute (« + »). Catégorie fusionnée ou libre : le seuil des réglages.
+ */
+export function categoryGapTolerance(category: CategoryState, members: Member[], state: State): number {
+  const base = gapThreshold(members, state);
+  if (category.key.weightClassIds.length !== 1) return base;
+  const wc = state.grid.weightClasses.find((w) => w.id === category.key.weightClassIds[0]);
+  if (!wc) return base;
+  if (wc.maxKg === null) return Infinity;
+  const classes = weightClassesFor(state.grid, wc.ageBandCode, wc.sex);
+  const index = classes.findIndex((w) => w.id === wc.id);
+  const previous = index > 0 ? classes[index - 1]!.maxKg : null;
+  if (previous === null) return Infinity;
+  return Math.max(base, wc.maxKg - previous);
 }
 
 /** Catégorie correspondant au poids pesé (tolérance du sexe) ; null si non pesé ou sans poids. */

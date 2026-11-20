@@ -5,7 +5,7 @@ import { applyAll, proposalMoves } from './move.js';
 import { ruleProfile } from './propose.js';
 import { ruleRank } from './rules.js';
 import type { CaseKind, Proposal, State } from './types.js';
-import { activeMembers, categoryWeightGap, gapThreshold } from './weights.js';
+import { activeMembers, categoryGapTolerance, categoryWeightGap, gapThreshold } from './weights.js';
 
 /** Pourquoi un déplacement est proposé (la ligne « Pourquoi » d'une carte ou d'une ligne du plan). */
 export type MoveWhy =
@@ -88,7 +88,7 @@ export function moveView(before: State, p: Proposal, after: State = applyAll(bef
   const to = arrival?.key ?? ('newKey' in p.target ? p.target.newKey : before.categories.find((c) => c.id === (p.target as { categoryId: string }).categoryId)!.key);
   const merged = arrivedIn ? activeMembers(after, arrivedIn) : [];
   const gapKg = Math.round(categoryWeightGap(merged, after.grid) * 100) / 100;
-  const max = gapThreshold(merged, after);
+  const max = p.type === 'R' && arrival ? categoryGapTolerance(arrival, merged, after) : gapThreshold(merged, after);
   return {
     why: whyOf(before, p),
     sex: m?.sex ?? 'M',

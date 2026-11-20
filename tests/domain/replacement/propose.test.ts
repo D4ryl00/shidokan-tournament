@@ -42,7 +42,7 @@ describe('détection', () => {
     expect(detectCases(s).filter((x) => x.registrationId === a.registrationId).map((x) => x.kind)).toEqual(['weight_out']);
   });
   test('écart trop grand dans une catégorie', () => {
-    const ms = [member({ weightClassId: 'cadet:F:-61', approxWeightKg: 54.5 }), member({ weightClassId: 'cadet:F:-61', approxWeightKg: 61 }), member({ weightClassId: 'cadet:F:-61', approxWeightKg: 60 })];
+    const ms = [member({ weightClassId: 'cadet:F:-61', approxWeightKg: 54.5 }), member({ weightClassId: 'cadet:F:-61', approxWeightKg: 62 }), member({ weightClassId: 'cadet:F:-61', approxWeightKg: 60 })];
     const s = makeState(ms);
     const gap = detectCases(s).filter((x) => x.kind === 'weight_gap');
     expect(gap.map((x) => x.registrationId)).toEqual([ms[0]!.registrationId]);
