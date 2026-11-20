@@ -478,7 +478,9 @@ export interface ReplacementData {
   proposals: Record<string, (Proposal & { refused?: true; view: MoveView })[]>;
   /** Cartes mises de côté (de la session affichée), avec leur note. */
   setAside: Record<string, { note: string; createdAt: string }>;
-  summary: { present: number; absent: number; unknown: number; cases: number; setAside: number; closed: number; alone: number; withoutProposal: number; readyCategories: number; startedCategories: number };
+  /** Cartes ignorées (réglées) : elles restent dans `cases`, avec la note et l'entrée d'historique qui les a notées. */
+  ignored: Record<string, { note: string; createdAt: string; historyEntryId: string }>;
+  summary: { present: number; absent: number; unknown: number; cases: number; setAside: number; ignored: number; closed: number; alone: number; withoutProposal: number; readyCategories: number; startedCategories: number };
   fingerprint: string;
   recasements: RecasementEntry[];
   /** Ce que « Repartir de zéro » ferait dans la session affichée. */
@@ -542,6 +544,8 @@ export function useMoveTargets(id: string, registrationId: string | null) {
 export const useManualMove = (id: string) => useReplacementAction<{ registrationId: string; categoryId: string }>(id, 'move');
 export const useSetAsideCase = (id: string) => useReplacementAction<{ caseId: string; note?: string }>(id, 'set-aside');
 export const useResumeCase = (id: string) => useReplacementAction<{ caseId: string }>(id, 'resume');
+export const useIgnoreCase = (id: string) => useReplacementAction<{ caseId: string; note?: string }>(id, 'ignore');
+export const useUnignoreCase = (id: string) => useReplacementAction<{ caseId: string }>(id, 'unignore');
 export const useWithdrawRegistration = (id: string) => useReplacementAction<{ registrationId: string; fingerprint: string }>(id, 'withdraw');
 /** « Repartir de zéro » ; `expect` : le lot de l'aperçu (`reset.lot`), refusé s'il a changé (données rechargées). */
 export const useResetReplacement = (id: string) => useReplacementAction<{ waveId?: string; expect: string[] }>(id, 'reset');

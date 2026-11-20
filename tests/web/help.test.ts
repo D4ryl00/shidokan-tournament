@@ -168,3 +168,8 @@ test('tableaux : barre épinglée, la recherche ne filtre pas, elle passe d’un
   expect(text).toContain('Échap vide la recherche');
   expect(text).not.toContain('Cherchez une catégorie ou un combattant ;');
 });
+
+test('cartes ignorées : le sujet existe et se distingue de « Mettre de côté »', () => {
+  expect(HELP['recasement.ignorees'].title).toBe('Cartes ignorées');
+  expect(HELP['recasement.de-cote'].details.join(' ')).toContain('Ignorer');
+});

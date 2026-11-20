@@ -40,6 +40,7 @@ export type HelpTopicId =
   | 'recasement.valides'
   | 'reaffectation.autorisations'
   | 'recasement.de-cote'
+  | 'recasement.ignorees'
   | 'combats.categories'
   | 'combats.zone'
   | 'combats.resultat'
@@ -584,6 +585,16 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
       'Cliquez une ligne pour voir la carte complète : vous pouvez la traiter sans la reprendre.',
       'Si son problème disparaît (adversaire arrivé, poids corrigé), la carte disparaît aussi ; s’il revient, elle revient dans la liste principale.',
       'Le lancement de la session rappelle les cartes mises de côté.',
+      'Mettre de côté, c’est « à reprendre plus tard » ; Ignorer, c’est « réglé » (voir Cartes ignorées).',
+    ],
+  },
+  'recasement.ignorees': {
+    title: 'Cartes ignorées',
+    short: 'Une carte ignorée est réglée : elle ne revient que si la situation change.',
+    details: [
+      'La carte revient si un combattant de la catégorie arrive ou est déclaré absent, ou si un poids est pesé ou déclaré.',
+      'Pour la reprendre tout de suite : « Reprendre » dans la liste des cartes ignorées, ou « Annuler… » sur la ligne « Ignoré » de l’Historique.',
+      '« Repartir de zéro » reprend aussi les cartes ignorées de la session choisie.',
     ],
   },
   'recasement.valides': {

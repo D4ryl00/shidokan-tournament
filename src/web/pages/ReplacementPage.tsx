@@ -23,6 +23,8 @@ import {
   useWithdrawRegistration,
   useSetAsideCase,
   useResumeCase,
+  useIgnoreCase,
+  useUnignoreCase,
   type CaseFighter,
 } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
@@ -57,6 +59,7 @@ type Dialog =
   | { kind: 'move'; registrationId: string; categoryId: string }
   | { kind: 'withdraw'; registrationId: string; categoryLabel: string }
   | { kind: 'set-aside'; caseId: string }
+  | { kind: 'ignore'; caseId: string }
   | { kind: 'reset' }
   | null;
 
@@ -217,8 +220,11 @@ export function ReplacementPage() {
   const withdraw = useWithdrawRegistration(id);
   const setAside = useSetAsideCase(id);
   const resume = useResumeCase(id);
+  const ignore = useIgnoreCase(id);
+  const unignore = useUnignoreCase(id);
   const [note, setNote] = useState('');
   const [asideOpen, setAsideOpen] = useState(false);
+  const [ignoredOpen, setIgnoredOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   // Dépliants « Détails » ouverts, par proposition (état d'écran, perdu au rechargement).
   const [details, setDetails] = useState<Record<string, boolean>>({});
@@ -300,8 +306,9 @@ export function ReplacementPage() {
     const options = moveOptions(c.id, true, true);
     return options.length > 0 ? options : null;
   };
-  const activeCases = data.cases.filter((c) => !data.setAside[c.id]);
-  const asideCases = data.cases.filter((c) => data.setAside[c.id]);
+  const activeCases = data.cases.filter((c) => !data.setAside[c.id] && !data.ignored[c.id]);
+  const asideCases = data.cases.filter((c) => data.setAside[c.id] && !data.ignored[c.id]);
+  const ignoredCases = data.cases.filter((c) => data.ignored[c.id]);
   /** Une carte de cas : le combattant, ses propositions, le déplacement manuel (et « Ne combat pas » pour une catégorie fermée). */
   const caseCard = (c: Case) => {
     const proposals = data.proposals[c.id] ?? [];
@@ -319,9 +326,14 @@ export function ReplacementPage() {
           </div>
           <Stack gap={4} align="flex-end">
             <StatusBadge tone={c.kind === 'return' ? 'neutral' : 'warn'} size="lg">{CASE_KINDS[c.kind]}</StatusBadge>
-            {!data.setAside[c.id] && (
+            {!data.setAside[c.id] && !data.ignored[c.id] && (
               <Button size="compact-xs" variant="subtle" color="gray" data-testid="case-set-aside" onClick={() => { setNote(''); setDialog({ kind: 'set-aside', caseId: c.id }); }}>
                 Mettre de côté
+              </Button>
+            )}
+            {!data.ignored[c.id] && (
+              <Button size="compact-xs" variant="subtle" color="gray" data-testid="case-ignore" onClick={() => { setNote(''); setDialog({ kind: 'ignore', caseId: c.id }); }}>
+                Ignorer
               </Button>
             )}
             {c.categoryId && (
@@ -458,11 +470,11 @@ export function ReplacementPage() {
         borderColor="var(--sk-warn-text)" data-testid="replacement-step-cards">
         {waves.length > 0 && <Text size="sm" c="dimmed">Les changements de session se valident un par un.</Text>}
         {/* Erreurs des cartes ; celles de l'historique (annuler, repartir de zéro) s'affichent dans leur fenêtre. */}
-        <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error ?? move.error ?? withdraw.error ?? setAside.error ?? resume.error} />
+        <ApiErrorAlert error={apply.error ?? refuse.error ?? unrefuse.error ?? move.error ?? withdraw.error ?? setAside.error ?? resume.error ?? ignore.error ?? unignore.error} />
 
         {activeCases.length === 0 && (
           <EmptyState icon="✓" title="Aucun cas à traiter"
-            text={asideCases.length > 0 ? `${plural(asideCases.length, 'carte mise de côté', 'cartes mises de côté')}, à retrouver plus bas.` : 'Toutes les catégories ont au moins deux combattants et aucun poids n’est hors catégorie.'} />
+            text={asideCases.length > 0 ? `${plural(asideCases.length, 'carte mise de côté', 'cartes mises de côté')}, à retrouver plus bas.` : ignoredCases.length > 0 ? `${plural(ignoredCases.length, 'carte ignorée', 'cartes ignorées')}, à retrouver plus bas.` : 'Toutes les catégories ont au moins deux combattants et aucun poids n’est hors catégorie.'} />
         )}
         {activeCases.length > 0 && (
           <Chip.Group multiple value={kinds} onChange={setKinds}>
@@ -501,6 +513,39 @@ export function ReplacementPage() {
                           <Text size="xs" c="dimmed" className="num">{new Date(mark.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</Text>
                         </Group>
                         <Button size="xs" variant="default" data-testid="case-resume" onClick={(e) => { e.stopPropagation(); resume.mutate({ caseId: c.id }); }}>Reprendre</Button>
+                      </Group>
+                      {expanded[c.id] && caseCard(c)}
+                    </Stack>
+                  );
+                })}
+              </Stack>
+            </Collapse>
+          </Card>
+        )}
+
+        {ignoredCases.length > 0 && (
+          <Card withBorder padding="md" data-testid="ignored-section">
+            <Group gap={4}>
+              <Button variant="subtle" color="gray" size="compact-md" data-testid="ignored-toggle" onClick={() => setIgnoredOpen((o) => !o)}>
+                {ignoredOpen ? '▾' : '▸'} Ignorées ({ignoredCases.length})
+              </Button>
+              <HelpButton topic="recasement.ignorees" />
+            </Group>
+            <Collapse in={ignoredOpen}>
+              <Stack gap="xs" mt="sm">
+                {ignoredCases.map((c) => {
+                  const mark = data.ignored[c.id]!;
+                  return (
+                    <Stack key={c.id} gap="xs">
+                      <Group justify="space-between" wrap="nowrap" data-testid="ignored-row" p="xs" style={{ border: '1px solid var(--sk-line)', borderRadius: 'var(--mantine-radius-md)', cursor: 'pointer' }}
+                        onClick={() => setExpanded((e) => ({ ...e, [c.id]: !e[c.id] }))}>
+                        <Group gap="xs" wrap="wrap" style={{ minWidth: 0 }}>
+                          <Text fw={600} size="sm">{name(c.registrationId)}</Text>
+                          <StatusBadge tone="neutral" size="sm">{CASE_KINDS[c.kind]}</StatusBadge>
+                          {mark.note && <Text size="sm" c="dimmed">« {mark.note} »</Text>}
+                          <Text size="xs" c="dimmed" className="num">{new Date(mark.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</Text>
+                        </Group>
+                        <Button size="xs" variant="default" data-testid="case-unignore" loading={unignore.isPending} onClick={(e) => { e.stopPropagation(); unignore.mutate({ caseId: c.id }); }}>Reprendre</Button>
                       </Group>
                       {expanded[c.id] && caseCard(c)}
                     </Stack>
@@ -569,6 +614,19 @@ export function ReplacementPage() {
             <Button data-testid="case-set-aside-confirm" loading={setAside.isPending}
               onClick={() => dialog?.kind === 'set-aside' && setAside.mutate({ caseId: dialog.caseId, note }, { onSuccess: () => done('Carte mise de côté.') })}>
               Mettre de côté
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+      <Modal opened={dialog?.kind === 'ignore'} onClose={() => setDialog(null)} title="Ignorer cette carte ?">
+        <Stack>
+          <Text size="sm">Elle ne sera plus proposée tant que rien ne change (arrivée ou absence d’un combattant de la catégorie, poids pesé ou déclaré). L’action est notée dans l’Historique, d’où vous pouvez l’annuler.</Text>
+          <TextInput label="Note (facultative)" placeholder="ex. réglé avec le coach" maxLength={80} value={note} onChange={(e) => setNote(e.currentTarget.value)} data-testid="case-ignore-note" />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setDialog(null)}>Annuler</Button>
+            <Button data-testid="case-ignore-confirm" loading={ignore.isPending}
+              onClick={() => dialog?.kind === 'ignore' && ignore.mutate({ caseId: dialog.caseId, note }, { onSuccess: () => done('Carte ignorée.') })}>
+              Ignorer
             </Button>
           </Group>
         </Stack>
