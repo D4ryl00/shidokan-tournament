@@ -119,6 +119,7 @@ export async function loadState(db: AppDb, competitionId: string, opts: { sync?:
     refused: db.select().from(refusals).where(eq(refusals.competitionId, competitionId)).all().map((r) => r.proposalId),
     closedEntries: [...closedSet(db, competitionId)],
     setAside: [],
+    ignored: [],
   };
   // Vague lancée : fermée au recasement (vague implicite '' quand il n'y a pas de vague).
   const launched = launchedWaveKeys(db, competitionId);

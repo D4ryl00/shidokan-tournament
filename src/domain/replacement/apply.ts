@@ -16,6 +16,7 @@ export function stateFingerprint(state: State): string {
     r: [...state.refused].sort(),
     x: [...state.closedEntries].sort(),
     a: [...state.setAside].sort(),
+    i: [...state.ignored].sort(),
     s: state.settings,
     g: state.grid,
   });

@@ -17,6 +17,8 @@ export function entryHeadline(e: HistoryEntryView): { what: string; detail: stri
       return { what: 'Tableau libre', detail: s.detail ?? '' };
     case 'withdraw':
       return { what: e.names.join(', '), detail: `ne combat pas${s.fromLabel ? ` (${s.fromLabel})` : ''}${s.reason ? ` : ${s.reason}` : ''}` };
+    case 'ignore':
+      return { what: e.names.join(', '), detail: `ignoré : ${s.detail ?? ''}` };
     case 'exchange':
       return { what: e.names.join(' ↔ '), detail: s.fromLabel || s.toLabel ? `${s.fromLabel ?? ''} ↔ ${s.toLabel ?? ''}` : '' };
     default:
@@ -39,6 +41,8 @@ export function undoEffect(e: HistoryEntryView): string {
       return `${who} retournent chacun dans leur catégorie d’avant.`;
     case 'withdraw':
       return `${who} combat de nouveau en ${s.fromLabel ?? ''}.`;
+    case 'ignore':
+      return `La carte de ${who} revient dans les cas à traiter.`;
     case 'places':
       return `${who} reprennent leur place d’avant.`;
     case 'redraw':

@@ -1,7 +1,7 @@
 import type { MoveView } from '../replacement/view.js';
 
 /** Types d'actions du journal d'historique de la planche. */
-export type HistoryKind = 'plan' | 'reaffectation' | 'manual' | 'exchange' | 'withdraw' | 'places' | 'redraw' | 'format' | 'free';
+export type HistoryKind = 'plan' | 'reaffectation' | 'manual' | 'exchange' | 'withdraw' | 'places' | 'redraw' | 'format' | 'free' | 'ignore';
 
 export const HISTORY_KIND_LABELS: Record<HistoryKind, string> = {
   plan: 'Plan',
@@ -13,7 +13,10 @@ export const HISTORY_KIND_LABELS: Record<HistoryKind, string> = {
   redraw: 'Tirage',
   format: 'Format',
   free: 'Tableau libre',
+  ignore: 'Ignoré',
 };
+
+export const IGNORE_RETURNED = 'La carte est déjà revenue : la situation a changé.';
 
 export type HistoryFilter = 'all' | 'plan' | 'manual' | 'tab';
 
@@ -22,6 +25,7 @@ export function filterOfKind(k: HistoryKind): Exclude<HistoryFilter, 'all'> {
   switch (k) {
     case 'plan':
     case 'reaffectation':
+    case 'ignore':
       return 'plan';
     case 'manual':
     case 'exchange':
@@ -36,7 +40,7 @@ export function filterOfKind(k: HistoryKind): Exclude<HistoryFilter, 'all'> {
 }
 
 /** Types d'actions emportés par « Repartir de zéro ». */
-export const RESET_KINDS: HistoryKind[] = ['plan', 'reaffectation', 'manual', 'exchange', 'withdraw'];
+export const RESET_KINDS: HistoryKind[] = ['plan', 'reaffectation', 'manual', 'exchange', 'withdraw', 'ignore'];
 
 export interface HistorySummary {
   registrationIds: string[];

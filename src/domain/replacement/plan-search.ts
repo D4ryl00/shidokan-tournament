@@ -64,7 +64,7 @@ const KIND_ORDER: CaseKind[] = ['return', 'weight_out', 'closed', 'alone'];
 export const moversOf = (p: Pick<Proposal, 'registrationId' | 'alsoMoved'>) => [p.registrationId, ...(p.alsoMoved ?? [])];
 
 const isOpen = (s: State, ctx: SearchContext, decided: ReadonlySet<string>) => (c: Case) =>
-  c.kind !== 'weight_gap' && !c.alert && !s.setAside.includes(c.id) && !decided.has(c.registrationId) && !ctx.excluded.has(c.registrationId);
+  c.kind !== 'weight_gap' && !c.alert && !s.setAside.includes(c.id) && !s.ignored.includes(c.id) && !decided.has(c.registrationId) && !ctx.excluded.has(c.registrationId);
 
 /** Cas que le plan traite : ceux de la session, sans les cartes mises de côté, les cartes d'alerte, les écarts de poids ni les inscriptions décidées. */
 export function openCases(s: State, ctx: SearchContext, decided: ReadonlySet<string>): Case[] {
@@ -86,7 +86,7 @@ export function optionsOf(s: State, c: Case, ctx: SearchContext, decided: Readon
     if (p.waveChange || p.waveShifts.length > 0) continue;
     if (moversOf(p).some((r) => r !== c.registrationId && (decided.has(r) || ctx.excluded.has(r)))) continue;
     // Split : jamais un combattant dont la carte est mise de côté (vide quand la coche des décisions des cartes est décochée).
-    if (moversOf(p).some((r) => r !== c.registrationId && s.setAside.some((id) => id.slice(id.indexOf(':') + 1) === r))) continue;
+    if (moversOf(p).some((r) => r !== c.registrationId && [...s.setAside, ...s.ignored].some((id) => id.slice(id.indexOf(':') + 1) === r))) continue;
     // Retour et correction de poids s'imposent : seule la validation compte (pour appliquer, jamais un déplacement à valider).
     const ok = ruleProfile(s, p).forced ? !ctx.forApply || !p.manual : p.rules.every((r) => ctx.allowed.has(r));
     if (!ok) continue;

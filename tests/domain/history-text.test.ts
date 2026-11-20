@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { entryHeadline, undoEffect } from '../../src/domain/history/text.js';
-import { filterOfKind, HISTORY_KIND_LABELS, RESET_KINDS, type HistoryEntryView } from '../../src/domain/history/types.js';
+import { filterOfKind, HISTORY_KIND_LABELS, IGNORE_RETURNED, RESET_KINDS, type HistoryEntryView } from '../../src/domain/history/types.js';
 
 const view = (p: Partial<HistoryEntryView>): HistoryEntryView => ({
   id: 'h', seq: 1, kind: 'manual', groupId: null, status: 'active', createdAt: '', undoneAt: null, waveId: null,
@@ -36,6 +36,15 @@ test('types', () => {
   expect(filterOfKind('reaffectation')).toBe('plan');
   expect(filterOfKind('withdraw')).toBe('manual');
   expect(filterOfKind('format')).toBe('tab');
-  expect(RESET_KINDS).toEqual(['plan', 'reaffectation', 'manual', 'exchange', 'withdraw']);
+  expect(RESET_KINDS).toEqual(['plan', 'reaffectation', 'manual', 'exchange', 'withdraw', 'ignore']);
   expect(HISTORY_KIND_LABELS.withdraw).toBe('Ne combat pas');
+  expect(HISTORY_KIND_LABELS.ignore).toBe('Ignoré');
+  expect(filterOfKind('ignore')).toBe('plan');
+  expect(IGNORE_RETURNED).toBe('La carte est déjà revenue : la situation a changé.');
+});
+
+test('ignorer', () => {
+  const e = view({ kind: 'ignore', names: ['DUPONT Léa'], summary: { registrationIds: ['r1'], fromLabel: 'Cadettes · -54 kg', detail: 'Seule dans sa catégorie' } });
+  expect(entryHeadline(e)).toEqual({ what: 'DUPONT Léa', detail: 'ignoré : Seule dans sa catégorie' });
+  expect(undoEffect(e)).toBe('La carte de DUPONT Léa revient dans les cas à traiter.');
 });

@@ -62,6 +62,8 @@ export interface State {
   closedEntries: string[];
   /** Cartes mises de côté (identifiants de cas) : hors des cas à traiter et du classement automatique. */
   setAside: string[];
+  /** Cartes ignorées (identifiants de cas) : comme les cartes mises de côté, jusqu'à ce que leur situation change. */
+  ignored: string[];
 }
 
 export type CaseKind = 'closed' | 'alone' | 'weight_out' | 'weight_gap' | 'return';

@@ -34,6 +34,7 @@ export function preparePlanState(
       ...state,
       refused: [...new Set([...(cardDecisions ? state.refused : []), ...live.map((c) => c.proposalId)])],
       setAside: cardDecisions ? state.setAside : [],
+      ignored: cardDecisions ? state.ignored : [],
     },
     choices: choices.filter((c) => c.kind !== 'refuse'),
     stale: refusals.filter((c) => !live.includes(c)),
