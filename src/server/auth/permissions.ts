@@ -34,7 +34,7 @@ const TABLE_WRITES = new Set([
   ...ZONE_WRITES,
 ]);
 /** Lectures d'une compétition réservées à l'organisateur (liens des clubs, pièces jointes des mails, copies reçues, export entier). */
-const ORGANISER_GETS = new Set(['/invitations', '/invitations/send', '/invitations/preview', '/invitations/:clubId/links', '/mail-attachments', '/mail-attachments/:attachmentId', '/received-copies', '/export.json', '/journal'].map((p) => `${C}${p}`));
+const ORGANISER_GETS = new Set(['/invitations', '/invitations/send', '/invitations/preview', '/invitations/recaps/send', '/invitations/recaps/preview', '/invitations/:clubId/links', '/mail-attachments', '/mail-attachments/:attachmentId', '/received-copies', '/export.json', '/journal'].map((p) => `${C}${p}`));
 /** Lectures de la Table centrale qu'un compte Zone ne voit pas : demandes aux coachs et leurs réponses. */
 const ZONE_DENIED_GETS = new Set([`${C}/authorizations`]);
 /** Hors d'une compétition : sa liste, la déconnexion et son mot de passe. */

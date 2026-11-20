@@ -1,6 +1,10 @@
 import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from 'pdf-lib';
 import type { RecapLine } from '../domain/club-recap.js';
 import { safe, wrap } from './club-form-pdf.js';
+import type { AppDb } from './db/client.js';
+import { clubRecapLines } from './repositories/club-recap.js';
+import { getCompetition } from './repositories/competitions.js';
+import { NotFoundError } from './repositories/registrations.js';
 
 /* Récapitulatif d'un club : A4 portrait, tableau Combattant / Inscrit / Au final. Origine pdf-lib en bas à gauche. */
 const MM = 72 / 25.4;
@@ -105,4 +109,21 @@ export async function buildClubRecapPdf({ competition, club, generatedAt, lines 
     top -= h;
   }
   return doc.save();
+}
+
+/** « recapitulatif-etoile-sportive.pdf » : le nom du club sans accents, pour un nom de fichier. */
+export const recapFileName = (club: string) =>
+  `recapitulatif-${club.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'club'}.pdf`;
+
+/** Fichier du récapitulatif d'un club dont les lignes sont déjà lues (le .zip de tous les clubs lit les lignes en une fois). */
+export async function recapFile(db: AppDb, competitionId: string, club: string, lines: RecapLine[]): Promise<{ filename: string; content: Buffer }> {
+  const competition = await getCompetition(db, competitionId);
+  if (!competition) throw new NotFoundError('Compétition introuvable');
+  return { filename: recapFileName(club), content: Buffer.from(await buildClubRecapPdf({ competition, club, generatedAt: new Date(), lines })) };
+}
+
+/** Récapitulatif PDF d'un club, à télécharger ou à joindre à un mail ; null si le club n'a aucune inscription. */
+export async function clubRecapFile(db: AppDb, competitionId: string, clubId: string): Promise<{ filename: string; content: Buffer } | null> {
+  const { club, lines } = await clubRecapLines(db, competitionId, clubId);
+  return lines.length ? recapFile(db, competitionId, club, lines) : null;
 }

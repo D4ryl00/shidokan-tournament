@@ -125,6 +125,8 @@ export const JOURNAL_PENDING = keys(
   `DELETE ${C}/invitations/:clubId/links/:linkId`,
   `POST ${C}/invitations/:clubId/mailto`,
   `POST ${C}/invitations/send`,
+  `POST ${C}/invitations/:clubId/recap`,
+  `POST ${C}/invitations/recaps/send`,
   `POST ${C}/mail-attachments`,
   `PATCH ${C}/mail-attachments/:attachmentId`,
   `DELETE ${C}/mail-attachments/:attachmentId`,

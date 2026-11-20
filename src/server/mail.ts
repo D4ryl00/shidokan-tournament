@@ -85,12 +85,12 @@ export interface SendResult {
   error: string | null;
 }
 
-class MailError extends Error {
+export class MailError extends Error {
   readonly statusCode = 400;
 }
 
 /** Expéditeur du mode choisi, ou refus clair s'il manque (ou si Google demande de se reconnecter). */
-function senderOf(db: AppDb): MailSender {
+export function senderOf(db: AppDb): MailSender {
   const { mailMode, smtp, google } = getAppSettings(db);
   if (mailMode === 'google' && google) {
     if (google.status === 'reconnect') throw new MailError(GOOGLE_RECONNECT);
@@ -100,7 +100,7 @@ function senderOf(db: AppDb): MailSender {
   return { kind: 'smtp', smtp };
 }
 // Adresses passées en objets à nodemailer : ni le nom ni l'adresse ne peuvent ajouter d'autres destinataires.
-const fromOf = (sender: MailSender): MailAddress =>
+export const fromOf = (sender: MailSender): MailAddress =>
   sender.kind === 'google' ? { name: sender.google.fromName, address: sender.google.email } : { name: sender.smtp.fromName, address: sender.smtp.fromEmail };
 
 /** Erreurs du serveur d'envoi (codes de nodemailer), en français ; la réponse du serveur (ou le message d'origine) reste en détail. */
@@ -124,9 +124,9 @@ export function mailErrorText(err: unknown): string {
   const detail = typeof response === 'string' && response ? `réponse du serveur : ${response}` : message;
   return `${french} (${detail})`.slice(0, 500);
 }
-const errorText = mailErrorText;
+export const errorText = mailErrorText;
 
-function clubOf(db: AppDb, competitionId: string, clubId: string) {
+export function clubOf(db: AppDb, competitionId: string, clubId: string) {
   const club = db.select().from(clubs).where(and(eq(clubs.id, clubId), eq(clubs.competitionId, competitionId))).get();
   if (!club) throw new NotFoundError('Club introuvable');
   return club;
@@ -166,13 +166,13 @@ export async function invitationMessage(db: AppDb, competitionId: string, clubId
 }
 
 const IMAGE_EXTENSIONS: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif' };
-const imageCid = (id: string) => `image-${id}@shidokan`;
+export const imageCid = (id: string) => `image-${id}@shidokan`;
 
 /**
- * Images du message d'une compétition, jointes en ligne (une seule fois pour tous les clubs). Une image absente de la base
- * (supprimée, ou message importé sans ses images) ou un mail trop lourd : refus, avant tout envoi et tout lien.
+ * Images d'un message aux clubs (invitation, récapitulatif), jointes en ligne (une seule fois pour tous les clubs). Une image absente de la base
+ * (supprimée, ou message importé sans ses images) ou un mail trop lourd avec `others` : refus, avant tout envoi et tout lien.
  */
-async function invitationImages(db: AppDb, template: MailTemplate, others: MailAttachment[]): Promise<MailAttachment[]> {
+export async function messageImages(db: AppDb, template: MailTemplate, others: MailAttachment[]): Promise<MailAttachment[]> {
   if (template.format !== 'html') return [];
   const out: MailAttachment[] = [];
   for (const id of cleanMailHtml(template.body).imageIds) {
@@ -218,7 +218,7 @@ export interface SendTarget {
 }
 
 /** Adresses du club à qui écrire, ou l'erreur à noter pour ce club. */
-function recipientsOf(club: { coachEmails: string[] }, chosen: string[] | undefined): { emails: string[] } | { error: string } {
+export function recipientsOf(club: { coachEmails: string[] }, chosen: string[] | undefined): { emails: string[] } | { error: string } {
   const all = club.coachEmails;
   if (!all.length) return { error: 'Pas d’e-mail pour ce club.' };
   const unknown = (chosen ?? []).find((e) => !all.some((a) => sameEmail(a, e)));
@@ -253,7 +253,7 @@ export async function prepareInvitations(db: AppDb, dbPath: string, transport: M
   const files = await invitationAttachments(db, dbPath, competitionId);
   // Le message et ses images, lus une fois : une image absente ou un mail trop lourd arrête l'envoi avant le moindre lien.
   const template = await templateOf(db, competitionId);
-  const attachments = [...(await invitationImages(db, template, files)), ...files];
+  const attachments = [...(await messageImages(db, template, files)), ...files];
   const mailer = transport(sender);
   try {
     await mailer.verify?.();

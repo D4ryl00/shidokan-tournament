@@ -4,7 +4,8 @@ import { EMAIL_LIMITS } from '../../domain/emails.js';
 import type { AppDb } from '../db/client.js';
 import type { InstanceRole } from '../auth/guard.js';
 import { MAIL_ATTACHMENT_LIMITS } from '../../domain/mail-attachments.js';
-import { invitationMessage, mailtoInvitation, prepareInvitations, type MailTransport } from '../mail.js';
+import { clubOf, invitationMessage, mailtoInvitation, prepareInvitations, type MailTransport } from '../mail.js';
+import { prepareRecaps, recapMessage } from '../recap-mail.js';
 import { SendJobs } from '../send-jobs.js';
 import { addMailAttachment, AttachmentError, deleteMailAttachment, listMailAttachments, readMailAttachment, setMailAttachmentIncluded } from '../repositories/mail-attachments.js';
 import { getCompetition } from '../repositories/competitions.js';
@@ -75,6 +76,7 @@ export async function invitationRoutes(
   });
 
   // Envoi groupé : vérifié tout de suite (un refus répond 400/409, rien ne part), puis fait en tâche de fond ; la page suit l'avancement par GET.
+  // Liens et récapitulatifs partagent `sendJobs` : un seul envoi groupé à la fois par compétition.
   const sendJobs = new SendJobs();
   app.post<P>('/api/competitions/:id/invitations/send', async (req, reply) => {
     const { clubs } = z.object({ clubs: z.array(z.object({ clubId: z.string(), emails: chosenEmails.optional() }).strict()).min(1).max(500) }).strict().parse(req.body);
@@ -82,10 +84,31 @@ export async function invitationRoutes(
     const job = await sendJobs.start(req.params.id, clubs.length, async () => {
       const sending = await prepareInvitations(db, dbPath, mailTransport, req.params.id, base, mailPauseMs);
       return (onResult) => sending(clubs, onResult);
-    });
+    }, 'invitation');
     return reply.status(202).send(job);
   });
-  app.get<P>('/api/competitions/:id/invitations/send', async (req) => ({ job: sendJobs.get(req.params.id) }));
+  app.get<P>('/api/competitions/:id/invitations/send', async (req) => ({ job: sendJobs.get(req.params.id, 'invitation') }));
+
+  // Récapitulatif PDF des inscriptions, par mail : à un club (réponse directe), ou à plusieurs (en tâche de fond, comme les liens).
+  app.post<PC>('/api/competitions/:id/invitations/:clubId/recap', async (req) => {
+    clubOf(db, req.params.id, req.params.clubId);
+    const [result] = await (await prepareRecaps(db, mailTransport, req.params.id, mailPauseMs))([req.params.clubId]);
+    return result!;
+  });
+  app.post<P>('/api/competitions/:id/invitations/recaps/send', async (req, reply) => {
+    const { clubIds } = z.object({ clubIds: z.array(z.string()).min(1).max(500) }).strict().parse(req.body);
+    const job = await sendJobs.start(req.params.id, clubIds.length, async () => {
+      const sending = await prepareRecaps(db, mailTransport, req.params.id, mailPauseMs);
+      return (onResult) => sending(clubIds, onResult);
+    }, 'recap');
+    return reply.status(202).send(job);
+  });
+  app.get<P>('/api/competitions/:id/invitations/recaps/send', async (req) => ({ job: sendJobs.get(req.params.id, 'recap') }));
+  app.get<P & { Querystring: { clubId?: string } }>('/api/competitions/:id/invitations/recaps/preview', async (req) => {
+    const { clubId } = z.object({ clubId: z.string().min(1) }).parse(req.query);
+    const { subject, text, html } = await recapMessage(db, req.params.id, clubId);
+    return { subject, body: text, html };
+  });
   app.post<PC>('/api/competitions/:id/invitations/:clubId/mailto', async (req) => {
     const { emails } = z.object({ emails: chosenEmails.optional() }).strict().parse(req.body ?? {});
     return mailtoInvitation(db, req.params.id, req.params.clubId, baseUrl(req), emails);

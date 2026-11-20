@@ -37,7 +37,7 @@ const TABLE_WRITES = [
 const ZONE_WRITES = [
   'PUT /categories/:cid/results/:matchId', 'DELETE /categories/:cid/results/:matchId', 'PUT /categories/:cid/kata/:rid/:round', 'PUT /categories/:cid/tie-break',
 ].map((r) => r.replace(' ', ' /api/competitions/:id'));
-const DENIED_GETS = ['/invitations', '/invitations/send', '/invitations/preview', '/invitations/:clubId/links', '/mail-attachments', '/mail-attachments/:attachmentId', '/received-copies', '/export.json', '/journal'].map((p) => `/api/competitions/:id${p}`);
+const DENIED_GETS = ['/invitations', '/invitations/send', '/invitations/preview', '/invitations/recaps/send', '/invitations/recaps/preview', '/invitations/:clubId/links', '/mail-attachments', '/mail-attachments/:attachmentId', '/received-copies', '/export.json', '/journal'].map((p) => `/api/competitions/:id${p}`);
 /** Lectures de la Table centrale refusées à un compte Zone (autorisations des coachs). */
 const ZONE_DENIED_GETS = ['/authorizations'].map((p) => `/api/competitions/:id${p}`);
 const COMMON = ['GET /api/competitions', 'POST /api/auth/logout', 'PUT /api/users/me/password'];
