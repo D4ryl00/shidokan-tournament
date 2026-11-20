@@ -181,7 +181,7 @@ describe('trois clubs', () => {
     expect((await call('PATCH', '', { settings: { recapMail: { subject: '{club} / {competition}', body: 'Bonjour {coach}, {date} à {lieu}' } } })).statusCode).toBe(200);
     const p = (await call('GET', `/invitations/recaps/preview?clubId=${a}`)).json();
     expect(p.subject).toBe('Étoile / Coupe 2026');
-    expect(p.body).toBe('Bonjour M. Coach, 22 novembre 2026 à Nice');
+    expect(p.body).toBe('Bonjour M. Coach, 22/11/2026 à Nice');
     await call('POST', `/invitations/${a}/recap`);
     expect(sent.at(-1)!.subject).toBe('Étoile / Coupe 2026');
   });

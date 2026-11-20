@@ -1,6 +1,6 @@
 import { GOOGLE_NOT_SENT, GOOGLE_RECONNECT, type MailTemplate } from '../domain/app-settings.js';
 import { joinEmails } from '../domain/emails.js';
-import { renderTemplate, textToHtml, type MailValues } from '../domain/mail-template.js';
+import { frenchDate, renderTemplate, textToHtml, type MailValues } from '../domain/mail-template.js';
 import { DEFAULT_RECAP_MAIL } from '../domain/recap-mail.js';
 import { clubRecapFile } from './club-recap-pdf.js';
 import type { AppDb } from './db/client.js';
@@ -11,9 +11,6 @@ import { renderMailHtml } from './mail-html.js';
 import { markGoogleRevoked } from './repositories/app-settings.js';
 import { getCompetition } from './repositories/competitions.js';
 import { NotFoundError } from './repositories/registrations.js';
-
-/** « 22 novembre 2026 » : la date en toutes lettres, comme dans une phrase (« la compétition … du {date} »). */
-const longDate = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 
 /** Message du récapitulatif d'une compétition : le sien, sinon le texte de départ. */
 async function recapTemplateOf(db: AppDb, competitionId: string): Promise<MailTemplate> {
@@ -35,7 +32,7 @@ export async function recapMessage(db: AppDb, competitionId: string, clubId: str
     club: club.name,
     coach: club.coachName ?? 'Madame, Monsieur',
     competition: competition.name,
-    date: longDate(competition.date),
+    date: frenchDate(competition.date),
     lieu: competition.location ?? 'lieu à préciser',
     date_limite: '',
     lien: '',
