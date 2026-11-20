@@ -1,6 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { buildApp } from '../../src/server/app.js';
+import { closeDb, openDb } from '../../src/server/db/client.js';
+import { frozenPassages } from '../../src/server/db/schema.js';
 import { undoRecasement } from '../helpers/history-undo.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
@@ -107,6 +110,55 @@ describe('lancer une session', () => {
     expect((await call('POST', '/launch/number', { waveId: null })).json()).toEqual({ changes: [], blocking: [], zonesRedone: [] });
     expect((await status(null)).state).toBe('launched');
     expect((await plan()).zones).toEqual(before.zones);
+  });
+
+  test('kata de 4 : six lignes figées, une par kataka puis les deux places de finale, aux numéros consécutifs ; refigé : mêmes numéros', async () => {
+    await many(4, { discipline: 'kata', ruleset: null, weightClassId: null });
+    await readyAll();
+    expect((await launch(null)).statusCode).toBe(204);
+    const k = (await cats()).find((c) => c.label.includes('Kata'))! as Cat & { bracket: { order: string[] } };
+    const frozen = () => {
+      const db = openDb(dbPath);
+      try {
+        return db.select().from(frozenPassages).where(eq(frozenPassages.categoryId, k.id)).all().sort((a, b) => a.number - b.number).map((r) => [r.number, r.matchId]);
+      } finally {
+        closeDb(db);
+      }
+    };
+    const rows = frozen();
+    const first = rows[0]![0] as number;
+    expect(rows).toEqual([...k.bracket.order.map((rid) => `kata:tour1:${rid}`), 'kata:finale:1', 'kata:finale:2'].map((m, i) => [first + i, m]));
+    expect((await plan()).pending).toEqual([]);
+    expect((await call('POST', '/launch/reopen', { waveId: null })).statusCode).toBe(204);
+    expect((await call('POST', '/launch/number', { waveId: null })).json()).toEqual({ changes: [], blocking: [], zonesRedone: [] });
+    expect(frozen()).toEqual(rows);
+  });
+
+  test('kata : absent tardif puis « mélangés » sur sa zone — l’absent garde son numéro, aucun numéro en double', async () => {
+    const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
+    await call('PUT', '/zones', [{ id: t1!.id, name: 'Tatami 1' }]);
+    const regs = await many(4, { discipline: 'kata', ruleset: null, weightClassId: null });
+    await readyAll();
+    const k = (await cats()).find((c) => c.label.includes('Kata'))! as Cat & { bracket: { order: string[] } };
+    // Rang 10 : une catégorie ajoutée ensuite (rang 0) passe avant elle en « mélangés ».
+    await call('PATCH', `/categories/${k.id}`, { order: 10 });
+    expect((await launch(null)).statusCode).toBe(204);
+    const absent = k.bracket.order[1]!;
+    const numberOf = (p: Plan, matchId: string) => p.zones[0]!.passages.find((x) => x.categoryId === k.id && x.matchId === matchId)?.number;
+    const beforePlan = await plan();
+    const before = numberOf(beforePlan, `kata:tour1:${absent}`);
+    await call('PUT', `/weigh-in/${regs.find((r) => r.id === absent)!.fighterId}`, { presence: 'absent' });
+    // Un nouveau kata (minimes, rang 0) à numéroter sur la même zone, numéroté en « mélangés » : la zone est refaite, le
+    // nouveau kata avant l'ancien ; seul l'absent (passage « joué ») garde son numéro.
+    await many(2, { discipline: 'kata', ruleset: null, weightClassId: null, ageBandCode: 'minime' });
+    await readyAll();
+    const res = await call('POST', '/launch/number', { waveId: null, mode: 'shuffle' });
+    expect(res.statusCode).toBe(200);
+    const after = await plan();
+    expect(numberOf(after, `kata:tour1:${absent}`)).toBe(before);
+    expect(numberOf(after, `kata:tour1:${k.bracket.order[0]}`)).not.toBe(numberOf(beforePlan, `kata:tour1:${k.bracket.order[0]}`));
+    const numbers = after.zones[0]!.passages.map((x) => x.number);
+    expect(new Set(numbers).size).toBe(numbers.length);
   });
 
   test('nouvelle catégorie dans une session lancée : à numéroter, à la suite ; l’aperçu n’écrit rien', async () => {

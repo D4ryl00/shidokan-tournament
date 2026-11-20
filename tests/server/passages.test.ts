@@ -1,13 +1,18 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
+import { closeDb, openDb, type AppDb } from '../../src/server/db/client.js';
+import { getCompetition } from '../../src/server/repositories/competitions.js';
+import { planInput, playedKeys } from '../../src/server/repositories/passages.js';
 import { tmpDbPath } from '../helpers/tmp-db.js';
 
 let app: FastifyInstance;
 let id: string;
 let base: string;
+let dbPath: string;
 beforeEach(async () => {
-  app = await buildApp({ dbPath: tmpDbPath() });
+  dbPath = tmpDbPath();
+  app = await buildApp({ dbPath });
   id = (await app.inject({ method: 'POST', url: '/api/competitions', payload: { name: 'Coupe', date: '2026-11-22' } })).json().id;
   base = `/api/competitions/${id}`;
 });
@@ -20,9 +25,21 @@ async function reg(over: object = {}) {
     clubId: null, lastName: `NOM${++n}`, firstName: 'x', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54', source: 'manual', ...over,
   });
   expect(res.statusCode).toBe(201);
+  return res.json().row as { id: string; fighterId: string };
 }
 const many = async (count: number, over: object = {}) => {
-  for (let i = 0; i < count; i++) await reg(over);
+  const out = [];
+  for (let i = 0; i < count; i++) out.push(await reg(over));
+  return out;
+};
+/** Connexion directe à la base de l'app (fonctions de dépôt). */
+const withDb = async <T>(f: (db: AppDb) => Promise<T> | T): Promise<T> => {
+  const db = openDb(dbPath);
+  try {
+    return await f(db);
+  } finally {
+    closeDb(db);
+  }
 };
 const kata = { discipline: 'kata', ruleset: null, weightClassId: null };
 const boxing = { discipline: 'shido-boxing', ageBandCode: 'senior', weightClassId: 'senior:F:-55' };
@@ -31,7 +48,7 @@ type Plan = {
   zones: { zoneId: string; passages: { number: number; categoryId: string; matchId: string | null; noRest: boolean; waveId: string | null }[] }[];
   impossible: { categoryId: string; discipline: string }[];
 };
-type Cat = { id: string; label: string; zoneId: string | null; status: string; bracket: { matches?: { id: string }[] } };
+type Cat = { id: string; label: string; zoneId: string | null; status: string; bracket: { matches?: { id: string }[]; order?: string[] } };
 const plan = async () => (await call('GET', '/passages')).json() as Plan;
 const cats = async () => (await call('GET', '/categories')).json() as Cat[];
 const catOf = async (label: string) => (await cats()).find((c) => c.label.includes(label))!;
@@ -44,13 +61,54 @@ const oneZone = async () => {
 };
 
 describe('plan de passage', () => {
-  test('kata d’abord et numéros : kata de 3 et cadettes de 4 sur une zone → kata n° 1, combats 2 à 4', async () => {
+  test('kata d’abord et numéros : kata de 3 et cadettes de 4 sur une zone → kata n° 1 à 5 (un par kataka), combats 6 à 8', async () => {
     await many(3, kata);
     await many(4);
     const t1 = await oneZone();
     const k = await catOf('Kata');
+    const [r1, r2, r3] = k.bracket.order!;
     const p = (await plan()).zones.find((z) => z.zoneId === t1)!.passages;
-    expect(p.map((x) => [x.number, x.categoryId === k.id ? 'kata' : x.matchId])).toEqual([[1, 'kata'], [2, 'w1-0'], [3, 'w1-1'], [4, 'w2-0']]);
+    expect(p.map((x) => [x.number, x.matchId])).toEqual([
+      [1, `kata:tour1:${r1}`], [2, `kata:tour1:${r2}`], [3, `kata:tour1:${r3}`], [4, 'kata:finale:1'], [5, 'kata:finale:2'],
+      [6, 'w1-0'], [7, 'w1-1'], [8, 'w2-0'],
+    ]);
+  });
+
+  test('passages joués : par kataka, absent tardif compris, finale par finaliste', async () => {
+    const regs = await many(3, kata);
+    await oneZone();
+    const k = await catOf('Kata');
+    await call('PATCH', `/categories/${k.id}`, { status: 'ready' });
+    expect((await call('POST', '/launch', { waveId: null })).statusCode).toBe(204);
+    const [r1, r2, r3] = k.bracket.order!;
+    expect((await call('PUT', `/categories/${k.id}/kata/${r1}/round1`, { notes: [7, 7, 7] })).statusCode).toBe(204);
+    // r3 absent après le lancement (absent tardif) : son passage du tour 1 ne sera jamais joué.
+    await call('PUT', `/weigh-in/${regs.find((r) => r.id === r3)!.fighterId}`, { presence: 'absent' });
+    let keys = await withDb((db) => playedKeys(db, id));
+    expect(keys.has(`${k.id}:kata:tour1:${r1}`)).toBe(true);
+    expect(keys.has(`${k.id}:kata:tour1:${r2}`)).toBe(false);
+    expect(keys.has(`${k.id}:kata:tour1:${r3}`)).toBe(true);
+    expect(keys.has(`${k.id}:kata:finale:1`)).toBe(false);
+    // r2 premier du tour 1 : finaliste 1 ; sa note de finale joue `kata:finale:1`, pas `kata:finale:2`.
+    expect((await call('PUT', `/categories/${k.id}/kata/${r2}/round1`, { notes: [9, 9, 9] })).statusCode).toBe(204);
+    expect((await call('PUT', `/categories/${k.id}/kata/${r2}/final`, { notes: [9, 9, 9] })).statusCode).toBe(204);
+    keys = await withDb((db) => playedKeys(db, id));
+    expect(keys.has(`${k.id}:kata:tour1:${r2}`)).toBe(true);
+    expect(keys.has(`${k.id}:kata:finale:1`)).toBe(true);
+    expect(keys.has(`${k.id}:kata:finale:2`)).toBe(false);
+    // Plus aucune ancienne clé de bloc.
+    expect([...keys].some((x) => x === `${k.id}:kata` || x === `${k.id}:kata:tour1` || x === `${k.id}:kata:finale`)).toBe(false);
+  });
+
+  test('durée estimée : un changement par tour, pas par kataka', async () => {
+    await many(3, kata);
+    const k = await catOf('Kata');
+    const [first, second] = k.bracket.order!;
+    const { input, kataPassageSec, changeoverSec } = await withDb(async (db) => ({ input: await planInput(db, id), ...(await getCompetition(db, id))!.settings.schedule }));
+    expect(input.durationSec!(k.id, `kata:tour1:${first}`)).toBe(kataPassageSec + changeoverSec);
+    expect(input.durationSec!(k.id, `kata:tour1:${second}`)).toBe(kataPassageSec);
+    expect(input.durationSec!(k.id, 'kata:finale:1')).toBe(kataPassageSec + changeoverSec);
+    expect(input.durationSec!(k.id, 'kata:finale:2')).toBe(kataPassageSec);
   });
 
   test('zone limitée : la boxe sur le Ring ; acceptée nulle part → impossible', async () => {

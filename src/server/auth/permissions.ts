@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { parseKataKey } from '../../domain/passages/index.js';
 import type { AppDb } from '../db/client.js';
 import { passagePlan } from '../repositories/passages.js';
 import { isPublicRoute, type InstanceRole } from './guard.js';
@@ -56,7 +57,7 @@ export function routeAccess(user: SessionUser, method: string, route: string): '
 
 /**
  * Zone(s) où se joue la saisie, d'après le plan de passage des écrans : un combat sur la zone de son passage (sinon celle de sa
- * catégorie) ; des notes de kata sur la zone de leur bloc (tour 1, finale, ou bloc entier) ; un départage sur la zone de la catégorie
+ * catégorie) ; des notes de kata sur une zone qui a un passage du tour visé (tour 1, finale) ; un départage sur la zone de la catégorie
  * ou sur une zone qui a un passage de la catégorie.
  */
 export async function entryZones(
@@ -68,11 +69,13 @@ export async function entryZones(
   const plan = await passagePlan(db, competitionId);
   const passages = plan.zones.flatMap((z) => z.passages.filter((p) => p.categoryId === categoryId).map((p) => ({ zoneId: z.zoneId, matchId: p.matchId })));
   const categoryZone = plan.categories[categoryId]?.zoneId ?? null;
-  const zonesOf = (matchIds: (string | null)[]) => passages.filter((p) => matchIds.includes(p.matchId)).map((p) => p.zoneId);
   let zones: string[];
   if (target === 'tie-break') zones = [...passages.map((p) => p.zoneId), ...(categoryZone ? [categoryZone] : [])];
-  else if ('matchId' in target) zones = zonesOf([target.matchId]);
-  else zones = [target.kataRound === 'round1' ? 'kata:tour1' : 'kata:finale', null].map((m) => zonesOf([m])).find((z) => z.length > 0) ?? [];
+  else if ('matchId' in target) zones = passages.filter((p) => p.matchId === target.matchId).map((p) => p.zoneId);
+  else {
+    const round = target.kataRound === 'round1' ? 'tour1' : 'finale';
+    zones = passages.filter((p) => parseKataKey(p.matchId)?.round === round).map((p) => p.zoneId);
+  }
   if (zones.length === 0 && target !== 'tie-break' && categoryZone) zones = [categoryZone];
   return new Set(zones);
 }

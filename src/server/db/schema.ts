@@ -491,7 +491,7 @@ export const waveFinals = sqliteTable(
   (t) => [primaryKey({ columns: [t.competitionId, t.waveKey] })],
 );
 
-/** Numéros de passage figés au lancement d'une vague (`match_id` 'kata' : bloc de kata entier). */
+/** Numéros de passage figés au lancement d'une vague (`match_id` : combat, ou passage de kata `kata:tour1:<rid>` / `kata:finale:1|2`). */
 export const frozenPassages = sqliteTable(
   'frozen_passages',
   {

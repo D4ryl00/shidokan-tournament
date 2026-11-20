@@ -35,7 +35,7 @@ export async function estimateFor(db: AppDb, competitionId: string, shift: boole
   // Passages comme les files du mode spectateur : catégories jouables, finales (« Quand ») et attente d'une finale « Dès que
   // finie » jouée hors de la zone de sa catégorie ; durée sans le changement (compté par la ligne de temps).
   const byId = new Map(input.categories.map((c) => [c.id, c]));
-  const keyOf = (p: { categoryId: string; matchId: string | null }) => `${p.categoryId}:${p.matchId ?? 'kata'}`;
+  const keyOf = (p: { categoryId: string; matchId: string }) => `${p.categoryId}:${p.matchId}`;
   const passages = plan.zones.map((z) => ({
     zoneId: z.zoneId,
     passages: z.passages

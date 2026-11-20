@@ -1,5 +1,5 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import { defaultFinalsChoice, finalMatchIds, planPassages, resolveFinals, waveKey, type FinalsWhen, type FinalsWhere, type WaveFinals } from '../../domain/passages/index.js';
+import { defaultFinalsChoice, finalMatchIds, isFinalPassage, planPassages, resolveFinals, waveKey, type FinalsWhen, type FinalsWhere, type WaveFinals } from '../../domain/passages/index.js';
 import type { DisciplineId } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
 import { categories, waveFinals } from '../db/schema.js';
@@ -187,8 +187,7 @@ export async function finalsView(db: AppDb, competitionId: string, waveId: strin
       const tally = { zoneId: z.zoneId, ownPassages: 0, ready: 0, end: 0 };
       for (const passage of z.passages.filter((x) => x.waveId === waveId)) {
         const bracket = byId.get(passage.categoryId)?.bracket;
-        const isFinal = passage.matchId === 'kata:finale' || (bracket?.kind === 'combat' && finalMatchIds(bracket).includes(passage.matchId ?? ''));
-        if (!isFinal) tally.ownPassages++;
+        if (!isFinalPassage(bracket ?? null, passage.matchId)) tally.ownPassages++;
         else if (plan.finals[passage.categoryId]?.when === 'ready') tally.ready++;
         else tally.end++;
       }

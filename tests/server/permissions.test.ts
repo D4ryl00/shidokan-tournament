@@ -44,7 +44,7 @@ const COMMON = ['GET /api/competitions', 'POST /api/auth/logout', 'PUT /api/user
 const PUBLIC = [/^\/api\/health$/, /^\/api\/auth\/me$/, /^\/api\/auth\/login$/, /^\/api\/inscription(\/|$)/, /^\/api\/sync\/remote\//, /^\/api\/public\//];
 
 /** Rôle serveur, organisateur ; compétition (Tatami 1 et 2) : -54 et kata sur Tatami 1, -61 sur Tatami 2, lancée ; une autre compétition. */
-async function setup() {
+async function setup(opts: { finalsZone?: boolean } = {}) {
   const dbPath = tmpDbPath();
   const db = openDb(dbPath);
   createUser(db, 'orga@example.org', PASSWORD);
@@ -67,6 +67,8 @@ async function setup() {
   type Cat = { id: string; label: string; bracket?: { entrants?: { registrationId: string }[] } };
   const cats = async () => (await orga('GET', `${base}/categories`)).json() as Cat[];
   for (const c of await cats()) await orga('PATCH', `${base}/categories/${c.id}`, { status: 'ready', zoneId: c.label.includes('-61') ? t2 : t1 });
+  // Tatami 2 zone des finales : la finale du kata y va (kata séparé), son tour 1 reste sur Tatami 1.
+  if (opts.finalsZone) expect((await orga('PUT', `${base}/finals/zone`, { waveId: null, finalsZoneId: t2 })).statusCode).toBe(200);
   expect((await orga('POST', `${base}/launch`, { waveId: null })).statusCode).toBe(204);
   const byLabel = async (s: string) => (await cats()).find((c) => c.label.includes(s))!;
   const [a54, b61, kata] = [await byLabel('-54'), await byLabel('-61'), await byLabel('Kata')];
@@ -220,6 +222,16 @@ test('zone : résultats, notes de kata et départage de sa zone seulement', asyn
   expect(patch.statusCode).toBe(403);
   expect(patch.json().error).toBe(FORBIDDEN);
   expect((await zone1('GET', `${base}/categories`)).statusCode).toBe(200);
+});
+
+test('zone : kata séparé, tour 1 sur sa zone et finale sur la zone des finales — chaque poste note son tour', async () => {
+  const { zone1, zone2, base, kata } = await setup({ finalsZone: true });
+  const rid = kata.bracket!.entrants![0]!.registrationId;
+  const put = (as: typeof zone1, round: 'round1' | 'final') => as('PUT', `${base}/categories/${kata.id}/kata/${rid}/${round}`, { notes: [8, 8, 8] });
+  expect((await put(zone1, 'round1')).statusCode).toBe(204);
+  expect((await put(zone2, 'round1')).statusCode).toBe(403);
+  expect((await put(zone1, 'final')).statusCode).toBe(403);
+  expect((await put(zone2, 'final')).statusCode).toBe(204);
 });
 
 test('tableaux libres et annulation d’un déplacement manuel : Table centrale oui, Zone 403', async () => {

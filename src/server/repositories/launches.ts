@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { activeEntrantCount, type Category } from '../../domain/categories.js';
 import { DISCIPLINES, notAcceptedBy } from '../../domain/disciplines.js';
-import { appendPassages, finalMatchIds, finalsOf, planPassages, reshuffleZone, segmentOf, waveKey, type FrozenPassage, type PlanInput, type ResolvedFinals } from '../../domain/passages/index.js';
+import { appendPassages, finalsOf, isFinalPassage, planPassages, reshuffleZone, segmentOf, waveKey, type FrozenPassage, type PlanInput, type ResolvedFinals } from '../../domain/passages/index.js';
 import type { AppDb } from '../db/client.js';
 import { categories, frozenPassages, waveLaunches } from '../db/schema.js';
 import { CategoryLockedError, listCategories, syncCategories } from './categories.js';
@@ -68,7 +68,7 @@ export async function launchStatus(db: AppDb, competitionId: string, waveId: str
 }
 
 const rowOf = (competitionId: string, f: FrozenPassage) => ({
-  competitionId, waveKey: f.waveKey, zoneId: f.zoneId, number: f.number, categoryId: f.categoryId, matchId: f.matchId ?? 'kata', noRest: f.noRest, finalsChoice: f.finalsChoice ?? null,
+  competitionId, waveKey: f.waveKey, zoneId: f.zoneId, number: f.number, categoryId: f.categoryId, matchId: f.matchId, noRest: f.noRest, finalsChoice: f.finalsChoice ?? null,
 });
 
 /** Fixe l'appartenance (choix de vague) et la zone (épinglage) des catégories d'une vague lancée. */
@@ -190,8 +190,8 @@ export async function regenerateCategory(db: AppDb, competitionId: string, categ
   return result;
 }
 
-const keyOf = (r: { waveKey: string; categoryId: string; matchId: string | null }) => `${r.waveKey}|${r.categoryId}|${r.matchId ?? 'kata'}`;
-const playedKey = (r: { categoryId: string; matchId: string | null }) => `${r.categoryId}:${r.matchId ?? 'kata'}`;
+const keyOf = (r: { waveKey: string; categoryId: string; matchId: string }) => `${r.waveKey}|${r.categoryId}|${r.matchId}`;
+const playedKey = (r: { categoryId: string; matchId: string }) => `${r.categoryId}:${r.matchId}`;
 
 /** Catégories dont un numéro change : `whole` (renumérotées entièrement) et celles dont une ligne prend un autre numéro ou une autre zone. */
 function renumbered(input: PlanInput, rows: FrozenPassage[], whole: string[]): string[] {
@@ -226,7 +226,7 @@ function replaceRows(
     const gone = rewritten.has(keyOf(f)) || (whole.includes(f.categoryId) && !kept) || stale;
     if (!gone) continue;
     t.delete(frozenPassages)
-      .where(and(eq(frozenPassages.competitionId, competitionId), eq(frozenPassages.waveKey, f.waveKey), eq(frozenPassages.categoryId, f.categoryId), eq(frozenPassages.matchId, f.matchId ?? 'kata')))
+      .where(and(eq(frozenPassages.competitionId, competitionId), eq(frozenPassages.waveKey, f.waveKey), eq(frozenPassages.categoryId, f.categoryId), eq(frozenPassages.matchId, f.matchId)))
       .run();
   }
   if (rows.length) t.insert(frozenPassages).values(rows.map((r) => rowOf(competitionId, r))).run();
@@ -238,7 +238,7 @@ function replaceRows(
 }
 
 export interface MoveResult {
-  changes: { categoryId: string; label: string; matchId: string | null; from: { zoneId: string; number: number } | null; to: { zoneId: string; number: number } }[];
+  changes: { categoryId: string; label: string; matchId: string; from: { zoneId: string; number: number } | null; to: { zoneId: string; number: number } }[];
   reprint: { categoryId: string; label: string }[];
 }
 
@@ -265,10 +265,9 @@ export async function moveCategory(db: AppDb, competitionId: string, categoryId:
   }
   // La finale restée sur la zone des finales y reste (sauf si la catégorie y arrive : elle y est renumérotée après ses demies).
   const finalsZone = input.waveFinals?.find((w) => w.waveKey === waveKey(cat.waveId))?.finalsZoneId ?? null;
-  const finals = cat.bracket?.kind === 'combat' ? finalMatchIds(cat.bracket) : [];
   const pinned = new Set(
     (input.frozen ?? [])
-      .filter((f) => f.categoryId === categoryId && f.zoneId === finalsZone && zoneId !== finalsZone && (f.matchId === 'kata:finale' || finals.includes(f.matchId ?? '')))
+      .filter((f) => f.categoryId === categoryId && f.zoneId === finalsZone && zoneId !== finalsZone && isFinalPassage(cat.bracket, f.matchId))
       .map(playedKey),
   );
   const opts = { pinned, zoneOf: { [categoryId]: zoneId } };

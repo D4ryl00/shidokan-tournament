@@ -129,10 +129,11 @@ describe('plan de passage', () => {
     expect(duration(s.a54, 'w1-0')).toBe(2 * 120 + 60 + 60);
     // Durée propre au tableau.
     expect(duration(s.m45, 'w1-0')).toBe(100 + 60);
-    // Kata de 3 : bloc entier (3 passages + finale à 2), tour 1, finale ; 1 min 30 par passage.
-    expect(duration(s.kata, null)).toBe(5 * 90 + 60);
-    expect(duration(s.kata, 'kata:tour1')).toBe(3 * 90 + 60);
-    expect(duration(s.kata, 'kata:finale')).toBe(2 * 90 + 60);
+    // Kata de 3 : 1 min 30 par kataka ; le changement au premier passage de chaque tour seulement.
+    const order = (input.categories.find((c) => c.id === s.kata)!.bracket as { order: string[] }).order;
+    expect(order.map((rid) => duration(s.kata, `kata:tour1:${rid}`))).toEqual([90 + 60, 90, 90]);
+    expect(duration(s.kata, 'kata:finale:1')).toBe(90 + 60);
+    expect(duration(s.kata, 'kata:finale:2')).toBe(90);
   });
 
   test('la finale prend la durée de finale du tableau, sinon de la compétition', async () => {

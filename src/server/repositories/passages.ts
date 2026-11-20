@@ -1,10 +1,12 @@
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
+import type { Bracket } from '../../domain/brackets/index.js';
+import { resolveKata, type KataScores } from '../../domain/brackets/kata.js';
 import { activeEntrantCount, type Category } from '../../domain/categories.js';
 import type { StoredFinals } from '../../domain/passages/finals-choice.js';
-import { finalMatchIds, planPassages, type FrozenPassage, type PassagePlan, type PlanInput } from '../../domain/passages/index.js';
-import { ageGroupOf, combatTiming, fightSeconds, kataPassages } from '../../domain/schedule/durations.js';
+import { finalMatchIds, kataFinaleKey, kataTour1Key, planPassages, type FrozenPassage, type PassagePlan, type PlanInput } from '../../domain/passages/index.js';
+import { ageGroupOf, combatTiming, fightSeconds } from '../../domain/schedule/durations.js';
 import type { AppDb } from '../db/client.js';
-import { categories as categoryTable, frozenPassages, kataScores, matchResults } from '../db/schema.js';
+import { categories as categoryTable, frozenPassages, kataScores, matchResults, registrations, tieBreaks } from '../db/schema.js';
 import { listCategories } from './categories.js';
 import { getCompetition, getGrid } from './competitions.js';
 import { NotFoundError } from './registrations.js';
@@ -13,7 +15,10 @@ import { listZones } from './zones.js';
 import { launchRows } from './launch-state.js';
 import { listWaveFinals } from './wave-finals.js';
 
-/** Numéros figés des vagues lancées au moins une fois (`match_id` 'kata' : bloc de kata entier). */
+/**
+ * Numéros figés des vagues lancées au moins une fois. `match_id` gardé tel quel : une ancienne clé de bloc de kata ('kata',
+ * 'kata:tour1', 'kata:finale') ne correspond plus aux clés par kataka, la catégorie devient « à numéroter ».
+ */
 export function loadFrozen(db: AppDb, competitionId: string): FrozenPassage[] {
   return db
     .select()
@@ -25,26 +30,49 @@ export function loadFrozen(db: AppDb, competitionId: string): FrozenPassage[] {
       zoneId: r.zoneId,
       number: r.number,
       categoryId: r.categoryId,
-      matchId: r.matchId === 'kata' ? null : r.matchId,
+      matchId: r.matchId,
       noRest: r.noRest,
       finalsChoice: r.finalsChoice,
     }));
 }
 
 /**
- * Passages joués (clé `${categoryId}:${matchId ?? 'kata'}`) : combat avec un résultat saisi ; kata avec au moins une note
- * (bloc entier, et le bloc tour 1 ou finale selon la note).
+ * Passages joués (clé `${categoryId}:${matchId}`) : combat avec un résultat saisi ; kataka du tour 1 avec au moins une note
+ * `round1`, ou absent (absent tardif : son passage ne se jouera pas) ; place k de la finale quand le k-ième finaliste
+ * (`resolveKata`, notes et départages lus comme `getResults`) a au moins une note `final`.
  */
 export function playedKeys(db: AppDb, competitionId: string): Set<string> {
   const out = new Set<string>();
-  const cats = db.select({ id: categoryTable.id }).from(categoryTable).where(eq(categoryTable.competitionId, competitionId)).all().map((c) => c.id);
+  const cats = db.select({ id: categoryTable.id, bracketJson: categoryTable.bracketJson }).from(categoryTable).where(eq(categoryTable.competitionId, competitionId)).all();
   if (cats.length === 0) return out;
-  for (const r of db.select({ categoryId: matchResults.categoryId, matchId: matchResults.matchId }).from(matchResults).where(inArray(matchResults.categoryId, cats)).all()) {
+  const ids = cats.map((c) => c.id);
+  for (const r of db.select({ categoryId: matchResults.categoryId, matchId: matchResults.matchId }).from(matchResults).where(inArray(matchResults.categoryId, ids)).all()) {
     out.add(`${r.categoryId}:${r.matchId}`);
   }
-  for (const r of db.select({ categoryId: kataScores.categoryId, round: kataScores.round }).from(kataScores).where(inArray(kataScores.categoryId, cats)).all()) {
-    out.add(`${r.categoryId}:kata`);
-    out.add(`${r.categoryId}:kata:${r.round === 'round1' ? 'tour1' : 'finale'}`);
+  const scores = new Map<string, KataScores>();
+  for (const r of db.select().from(kataScores).where(inArray(kataScores.categoryId, ids)).all()) {
+    if (!scores.has(r.categoryId)) scores.set(r.categoryId, { round1: {}, final: {} });
+    scores.get(r.categoryId)![r.round][r.registrationId] = JSON.parse(r.notesJson) as number[];
+  }
+  const ties = new Map<string, { kata: string[]; kataFinal: string[] }>();
+  for (const t of db.select().from(tieBreaks).where(and(inArray(tieBreaks.categoryId, ids), inArray(tieBreaks.scope, ['kata', 'kata:final']))).all()) {
+    if (!ties.has(t.categoryId)) ties.set(t.categoryId, { kata: [], kataFinal: [] });
+    ties.get(t.categoryId)![t.scope === 'kata' ? 'kata' : 'kataFinal'] = JSON.parse(t.orderJson) as string[];
+  }
+  // Absents de chaque catégorie (même règle que `Category.absentIds` : inscrit de la catégorie marqué absent).
+  const absent = new Set(
+    db.select({ id: registrations.id }).from(registrations).where(and(inArray(registrations.categoryId, ids), eq(registrations.presence, 'absent'))).all().map((r) => r.id),
+  );
+  const noted = (notes: number[] | undefined) => (notes ?? []).length > 0;
+  for (const c of cats) {
+    const bracket = c.bracketJson ? (JSON.parse(c.bracketJson) as Bracket) : null;
+    if (bracket?.kind !== 'kata') continue;
+    const s = scores.get(c.id) ?? { round1: {}, final: {} };
+    for (const rid of bracket.order) if (noted(s.round1[rid]) || absent.has(rid)) out.add(`${c.id}:${kataTour1Key(rid)}`);
+    const tb = ties.get(c.id) ?? { kata: [], kataFinal: [] };
+    resolveKata(bracket, s, tb.kata, tb.kataFinal).finalists.slice(0, 2).forEach((rid, i) => {
+      if (noted(s.final[rid])) out.add(`${c.id}:${kataFinaleKey((i + 1) as 1 | 2)}`);
+    });
   }
   return out;
 }
@@ -75,18 +103,20 @@ export async function planInput(db: AppDb, competitionId: string, cats?: Categor
   const grid = await getGrid(db, competitionId);
   const finals = storedFinals(db, competitionId);
   const byId = new Map(cats.map((c) => [c.id, c]));
-  // Durée d'un passage, changement compris : combat (rounds et repos), ou bloc de kata (nombre de passages).
+  // Durée d'un passage : combat (rounds et repos) changement compris ; kataka, avec le changement seulement au premier
+  // passage de chaque tour (premier du tirage, place 1 de la finale).
   const finalIds = new Map<string, Set<string>>();
-  const durationSec = (categoryId: string, matchId: string | null): number => {
+  const durationSec = (categoryId: string, matchId: string): number => {
     const c = byId.get(categoryId);
     if (!c) return settings.schedule.changeoverSec;
     if (c.bracket?.kind === 'kata') {
-      const block = matchId === 'kata:tour1' ? 'tour1' : matchId === 'kata:finale' ? 'finale' : 'whole';
-      return kataPassages(activeEntrantCount(c), block) * settings.schedule.kataPassageSec + settings.schedule.changeoverSec;
+      const first = c.bracket.order[0];
+      const opensRound = (first !== undefined && matchId === kataTour1Key(first)) || matchId === kataFinaleKey(1);
+      return settings.schedule.kataPassageSec + (opensRound ? settings.schedule.changeoverSec : 0);
     }
     let ids = finalIds.get(c.id);
     if (!ids) finalIds.set(c.id, (ids = new Set(c.bracket?.kind === 'combat' ? finalMatchIds(c.bracket) : [])));
-    const isFinal = matchId !== null && ids.has(matchId);
+    const isFinal = ids.has(matchId);
     return fightSeconds(combatTiming(settings, ageGroupOf(c.key, grid), c.durations, matchId, isFinal)) + settings.schedule.changeoverSec;
   };
   return {
@@ -117,9 +147,9 @@ export async function passagePlan(db: AppDb, competitionId: string, cats?: Categ
   return planPassages(await planInput(db, competitionId, cats, restart));
 }
 
-/** Numéro de passage de chaque combat (clé `${categoryId}:${matchId}`) et de chaque bloc de kata (clé `${categoryId}:kata`, ou ':kata:tour1' / ':kata:finale'). */
+/** Numéro de chaque passage (clé `${categoryId}:${matchId}` : combat, ou `kata:tour1:<rid>` / `kata:finale:1|2`). */
 export function passageNumbers(plan: PassagePlan): Map<string, number> {
-  return new Map(plan.zones.flatMap((z) => z.passages.map((p) => [`${p.categoryId}:${p.matchId ?? 'kata'}`, p.number] as const)));
+  return new Map(plan.zones.flatMap((z) => z.passages.map((p) => [`${p.categoryId}:${p.matchId}`, p.number] as const)));
 }
 
 /**
