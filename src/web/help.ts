@@ -567,7 +567,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
         'Session : il combat dans une autre session que celle de sa catégorie d’origine (son horaire change).',
       ],
       '« pré-accord coché sur la fiche » à côté d’un club est une information : il ne dispense d’aucune demande.',
-      '« 📋 Copier pour le club » copie le message à envoyer (bonjour, combattants numérotés, une puce par demande, demande des accords et des poids) ; « 📋 Copier tout » copie celui de chaque club, l’un après l’autre. Seules les demandes ⏳ en attente et les poids manquants y figurent.',
+      '« Cette session » : « 📋 Copier pour le club » copie seulement les combattants numérotés et leurs demandes, pour les coller à la suite d’une autre session. « Toutes les sessions » : un seul texte par club, avec bonjour, combattants numérotés et demande des accords et des poids. « 📋 Copier tout » suit la même vue. Seules les demandes ⏳ en attente et les poids manquants y figurent.',
       [
         '⏳ en attente : « Accordée » note l’accord du club. L’accord ne vaut que pour la situation acceptée : si elle s’aggrave (pesée qui creuse l’écart, tranche plus âgée arrivée), la demande revient en attente.',
         '✓ accordée à telle heure : « annuler » retire l’accord noté.',

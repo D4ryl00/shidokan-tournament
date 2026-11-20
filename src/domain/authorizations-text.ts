@@ -44,25 +44,35 @@ function closing(rows: MessageRow[]): string {
   return agreement ? 'Merci de nous confirmer votre accord pour ces changements.' : 'Merci de nous indiquer les poids demandés.';
 }
 
+/** Combattants numérotés et leurs puces, sans salutation ni demande finale : à coller à la suite d'un autre envoi. */
+export function fightersText(rows: MessageRow[]): string {
+  return rows.flatMap((r, i) => [`${i + 1}. ${r.label}`, ...r.bullets.map((b) => `   - ${b}`)]).join('\n');
+}
+
 /** Message d'un club (nom vide : sans club, pas nommé) ; rien à demander : texte vide. */
 export function clubMessage(club: { name: string }, rows: MessageRow[]): string {
   if (rows.length === 0) return '';
-  const fighters = rows.flatMap((r, i) => [`${i + 1}. ${r.label}`, ...r.bullets.map((b) => `   - ${b}`)]);
   return [
     'Bonjour,',
     '',
     `Voici les points à valider pour vos combattants${club.name ? ` (${club.name})` : ''} :`,
     '',
-    ...fighters,
+    fightersText(rows),
     '',
     closing(rows),
   ].join('\n');
 }
 
-/** « Copier tout » : le message de chaque club qui a quelque chose à demander, sous son nom. */
-export function allClubsMessage(clubs: { name: string; rows: MessageRow[] }[]): string {
+/** Texte copié pour un club : le message complet, ou seulement les combattants (envoi session par session). */
+export function copyText(club: { name: string }, rows: MessageRow[], greeting: boolean): string {
+  return greeting ? clubMessage(club, rows) : fightersText(rows);
+}
+
+/** « Copier tout » : le texte de chaque club qui a quelque chose à demander, sous son nom. */
+export function allClubsMessage(clubs: { name: string; rows: MessageRow[] }[], opts: { greeting?: boolean } = {}): string {
+  const greeting = opts.greeting ?? true;
   return clubs
     .filter((c) => c.rows.length > 0)
-    .map((c) => `=== ${c.name || 'Sans club'} ===\n${clubMessage(c, c.rows)}`)
+    .map((c) => `=== ${c.name || 'Sans club'} ===\n${copyText(c, c.rows, greeting)}`)
     .join('\n\n\n');
 }

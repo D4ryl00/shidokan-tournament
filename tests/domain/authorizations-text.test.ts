@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { MISSING_WEIGHT_BULLET } from '../../src/domain/authorizations.js';
-import { allClubsMessage, clubMessage, messageRows, type MessageRequest } from '../../src/domain/authorizations-text.js';
+import { allClubsMessage, clubMessage, copyText, fightersText, messageRows, type MessageRequest } from '../../src/domain/authorizations-text.js';
 
 const AGE = 'Passage des benjamines à un groupe commun Benjamines–Minimes en karaté.';
 const WEIGHT = 'Écart de poids estimé avec ses adversaires : 7 kg maximum.';
@@ -86,4 +86,20 @@ describe('allClubsMessage', () => {
     expect(blocks[1]).toBe(`=== Sans club ===\n${clubMessage({ name: '' }, [{ label: 'Y', bullets: [MIX] }])}`);
     expect(text).not.toContain('Beta');
   });
+});
+
+const MISSING_WEIGHT = MISSING_WEIGHT_BULLET;
+test('fightersText : combattants numérotés et puces, sans salutation ni demande finale', () => {
+  expect(fightersText([{ label: 'DUPONT Léa', bullets: [AGE] }, { label: 'MARTIN Hugo', bullets: [MISSING_WEIGHT] }]))
+    .toBe(['1. DUPONT Léa', `   - ${AGE}`, '2. MARTIN Hugo', `   - ${MISSING_WEIGHT}`].join('\n'));
+});
+test('copyText : formule seulement si demandée', () => {
+  const rows = [{ label: 'DUPONT Léa', bullets: [AGE] }];
+  expect(copyText({ name: 'Karaté Lyon' }, rows, true)).toBe(clubMessage({ name: 'Karaté Lyon' }, rows));
+  expect(copyText({ name: 'Karaté Lyon' }, rows, false)).toBe(fightersText(rows));
+  expect(copyText({ name: 'X' }, [], false)).toBe('');
+});
+test('allClubsMessage sans formule : en-têtes de club gardés', () => {
+  expect(allClubsMessage([{ name: 'A', rows: [{ label: 'N P', bullets: [AGE] }] }], { greeting: false }))
+    .toBe(`=== A ===\n1. N P\n   - ${AGE}`);
 });

@@ -1,8 +1,8 @@
-import { Anchor, Button, Card, Checkbox, Group, Loader, Stack, Text } from '@mantine/core';
+import { Anchor, Button, Card, Checkbox, Group, Loader, SegmentedControl, Stack, Text } from '@mantine/core';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { AUTHORIZATION_KIND_LABELS, gapText, type AnswerableKind, type AuthorizationClub, type AuthorizationRow } from '../../../domain/authorizations.js';
-import { allClubsMessage, byFighter, clubMessage, messageRows } from '../../../domain/authorizations-text.js';
+import { allClubsMessage, byFighter, copyText, messageRows } from '../../../domain/authorizations-text.js';
 import { plural } from '../../../domain/plural.js';
 import { useAuthorizations, useGrantAuthorization, useRefuseProposal, useUngrantAuthorization } from '../../api.js';
 import { copyWithNotice } from '../../clipboard.js';
@@ -32,7 +32,10 @@ export function AuthorizationsSection({ competitionId, waveId }: { competitionId
 }
 
 function Authorizations({ competitionId, waveId }: { competitionId: string; waveId: string | null }) {
-  const { data, error } = useAuthorizations(competitionId, waveId);
+  /** Vue « Toutes les sessions » : un texte complet par club ; sinon seulement les combattants, à coller à la suite des autres sessions. */
+  const [allSessions, setAllSessions] = useState(false);
+  const greeting = waveId === null || allSessions;
+  const { data, error } = useAuthorizations(competitionId, allSessions ? null : waveId);
   const grant = useGrantAuthorization(competitionId);
   const ungrant = useUngrantAuthorization(competitionId);
   const { requestUndoDialog } = useUndoDialog();
@@ -95,7 +98,7 @@ function Authorizations({ competitionId, waveId }: { competitionId: string; wave
     if (shown.length === 0) return null;
     // Combattants numérotés dans l'ordre de la liste ; un combattant inscrit dans deux disciplines a un seul numéro.
     const fighters = byFighter(shown);
-    const text = clubMessage(toCopy[i]!, toCopy[i]!.rows);
+    const text = copyText(toCopy[i]!, toCopy[i]!.rows, greeting);
     return (
       <Card key={c.clubId ?? ''} withBorder padding="sm" data-testid="auth-club">
         <Stack gap="xs">
@@ -120,7 +123,7 @@ function Authorizations({ competitionId, waveId }: { competitionId: string; wave
     );
   };
 
-  const all = allClubsMessage(toCopy);
+  const all = allClubsMessage(toCopy, { greeting });
   const pending = data?.pending ?? 0;
   const anyShown = clubs.some((c) => c.requests.some((r) => !onlyPending || r.status !== 'granted'));
   return (
@@ -129,6 +132,10 @@ function Authorizations({ competitionId, waveId }: { competitionId: string; wave
       help="reaffectation.autorisations" borderColor="var(--sk-ok-text)" data-testid="replacement-step-authorizations"
       actions={(
         <Group gap="xs" wrap="wrap">
+          {waveId !== null && (
+            <SegmentedControl size="xs" data-testid="auth-scope" value={allSessions ? 'all' : 'one'} onChange={(v) => setAllSessions(v === 'all')}
+              data={[{ value: 'one', label: 'Cette session' }, { value: 'all', label: 'Toutes les sessions' }]} />
+          )}
           <Checkbox size="sm" label="Seulement en attente" data-testid="auth-only-pending" checked={onlyPending} onChange={(e) => setOnlyPending(e.currentTarget.checked)} />
           <Button size="compact-sm" variant="outline" color="green" data-testid="auth-copy-all" disabled={!all}
             onClick={() => void copyWithNotice(all, `Texte copié pour ${plural(toCopy.filter((c) => c.rows.length > 0).length, 'club', 'clubs')}.`)}>

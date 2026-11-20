@@ -236,3 +236,36 @@ test('autorisations : « Refusée… » sur un déplacement du plan, refusé pou
   await expect(section(page).getByTestId('auth-request')).toHaveCount(0);
   await expect.poll(async () => (await plan()).plan.moves.map((m) => m.id)).not.toContain(move.id);
 });
+
+test('autorisations : avec des sessions, copie sans formule par session, texte complet en « Toutes les sessions »', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe autorisations sessions');
+  await seed(request, id);
+  // Deux sessions : les benjamins et minimes sont dans la première, les seniors dans la seconde.
+  expect((await request.put(`/api/competitions/${id}/waves`, { data: [
+    { name: 'Matin', rules: { ageBandCodes: ['benjamin', 'minime'], disciplines: [] } },
+    { name: 'Soir', rules: { ageBandCodes: ['senior'], disciplines: [] } },
+  ] })).ok()).toBeTruthy();
+  await page.goto(`/competitions/${id}/reaffectation`);
+  const s = section(page);
+  await expect(s.getByTestId('auth-club')).toHaveCount(1);
+  await expect(s.getByTestId('auth-scope')).toBeVisible();
+
+  // Cette session : seulement les combattants numérotés, ni bonjour ni demande finale.
+  await s.getByTestId('auth-copy').click();
+  const one = await page.evaluate(() => navigator.clipboard.readText());
+  expect(one).not.toContain('Bonjour');
+  expect(one).not.toContain('Merci');
+  expect(one).toMatch(/^1\. BENJ Léa\n {3}- /);
+  await s.getByTestId('auth-copy-all').click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/^=== Dojo Accords ===\n1\. BENJ Léa/);
+
+  // Toutes les sessions : le message complet.
+  await s.getByTestId('auth-scope').getByText('Toutes les sessions').click();
+  await expect(s.getByTestId('auth-club')).toHaveCount(1);
+  await s.getByTestId('auth-copy').click();
+  const full = await page.evaluate(() => navigator.clipboard.readText());
+  expect(full).toContain('Bonjour,');
+  expect(full).toContain('Merci de nous confirmer votre accord pour ces changements.');
+  await s.getByTestId('auth-copy-all').click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/^=== Dojo Accords ===\nBonjour,/);
+});
