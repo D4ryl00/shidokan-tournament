@@ -51,7 +51,7 @@ export function recapLines(regs: RecapRegistration[], grid: CategoryGrid): Recap
   return sorted.map((r) => {
     const changed = r.final.kind !== 'category' || r.final.keyString !== keyString(naturalKey(r.registered, r));
     const moved = r.recasementType ? RECAP_REASONS[r.recasementType] : undefined;
-    const reason = moved ?? (changed && r.final.kind === 'category' ? 'catégorie regroupée' : null);
+    const reason = changed && r.final.kind === 'category' ? (moved ?? 'catégorie regroupée') : null;
     return { fighter: `${r.lastName.toLocaleUpperCase('fr')} ${r.firstName}`, registered: registeredText(r, grid), final: finalText(r.final), changed, reason };
   });
 }

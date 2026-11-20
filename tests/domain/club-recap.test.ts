@@ -59,3 +59,12 @@ test('ordre : nom, prénom, discipline', () => {
     'MARTIN Anna|Karaté', 'MARTIN Léa|Karaté', 'MARTIN Léa|Kata', 'ZOLA Léa|Karaté',
   ]);
 });
+
+test('pas de motif de déplacement pour un désisté ou un non-combattant', () => {
+  expect(recapLines([reg({ final: { kind: 'absent' }, recasementType: 'A' })], grid)[0]!.reason).toBeNull();
+  expect(recapLines([reg({ final: { kind: 'withdrawn' }, recasementType: 'A' })], grid)[0]!.reason).toBeNull();
+});
+
+test('pas de motif quand la catégorie finale est la catégorie inscrite', () => {
+  expect(recapLines([reg({ recasementType: 'A' })], grid)[0]).toMatchObject({ changed: false, reason: null });
+});
