@@ -15,7 +15,7 @@ test('« À trancher » : seulement sur un PC (rôle local) qui gère la compét
 });
 
 const item = (number: number, early: boolean): QueueItem => ({
-  number, categoryId: 'c', categoryLabel: 'Cadets -60 kg', matchId: `m${number}`, a: 'A', b: 'B', aClub: 'Club A', bClub: 'Sans club', katakas: null, kataPart: null, lineup: null, noRest: false, held: false, early,
+  number, categoryId: 'c', categoryLabel: 'Cadets -60 kg', matchId: `m${number}`, a: 'A', b: 'B', aClub: 'Club A', bClub: 'Sans club', timing: '2 rounds de 2 min · prolongation 1 min', katakas: null, kataPart: null, lineup: null, noRest: false, held: false, early,
 });
 const render = (queue: QueueItem[]) =>
   renderToStaticMarkup(createElement(MantineProvider, null, createElement(ZoneQueueCard, {
@@ -35,7 +35,7 @@ test('sans ligne early : pas de mention', () => {
 });
 
 const kata = (number: number, list: QueueKataka[], round: 'tour1' | 'finale' = 'tour1'): QueueItem => ({
-  number, categoryId: 'k', categoryLabel: 'Kata Filles', matchId: null, a: null, b: null, aClub: null, bClub: null, katakas: list.length, kataPart: null,
+  number, categoryId: 'k', categoryLabel: 'Kata Filles', matchId: null, a: null, b: null, aClub: null, bClub: null, timing: null, katakas: list.length, kataPart: null,
   lineup: { round, list }, noRest: false, held: false, early: false,
 });
 const k = (name: string, club: string, done = false, absent = false) => ({ name, club, done, absent });
@@ -94,4 +94,11 @@ test('kata : les comptes portent sur les katakas du tour, sans les absents ; un 
 
 test('kata à l’appel, tous notés : le nombre de katakas du tour reste affiché', () => {
   expect(render([{ ...kata(1, [k('DUPONT Léa', 'Shidokan Paris', true), k('MOREAU Inès', 'KC Nantes', true)], 'finale'), katakas: 8 }])).toContain('2 katakas');
+});
+
+test('durée du combat : à l’appel et dans « Ensuite », jamais pour un kata', () => {
+  const html = render([item(1, false), item(2, false)]);
+  expect(html.match(/data-testid="match-timing"/g)).toHaveLength(2);
+  expect(html).toContain('2 rounds de 2 min · prolongation 1 min');
+  expect(render([kata(1, [{ name: 'A', club: 'X', done: false, absent: false }])])).not.toContain('match-timing');
 });

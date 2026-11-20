@@ -191,7 +191,7 @@ test('finale prête avant son tour : signalée même au-delà des 6 premiers ; s
 
 type QItem = {
   number: number; categoryId: string; matchId: string | null; kataPart: string | null; early: boolean;
-  a: string | null; aClub: string | null; bClub: string | null;
+  a: string | null; aClub: string | null; bClub: string | null; timing: string | null;
   lineup: { round: string; list: { name: string; club: string; done: boolean; absent: boolean }[] } | null;
 };
 const queueOf = async (zoneId: string) =>
@@ -235,6 +235,17 @@ test('file des zones : club de chaque combattant', async () => {
   expect(q.lineup).toBeNull();
 });
 
+test('file des zones : durée de chaque combat, exception d’un combat comprise', async () => {
+  const c = await fourInElimination();
+  const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
+  await call('PATCH', `/categories/${c.id}`, { zoneId: t1!.id });
+  const [first, second] = await queueOf(t1!.id);
+  expect(first!.timing).toMatch(/^\d+ rounds? de .+/);
+  await call('PATCH', `/categories/${c.id}`, { durations: { bracket: null, finals: null, matches: { [second!.matchId!]: { rounds: 1, roundSec: 90, restSec: 0, overtimeSec: 0 } } } });
+  const after = await queueOf(t1!.id);
+  expect(after.find((q) => q.matchId === second!.matchId)!.timing).toBe('1 round de 1 min 30');
+});
+
 test('file des zones : bloc de kata, liste ordonnée qui avance, puis finale', async () => {
   const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
   const k = [await reg({ discipline: 'kata', ruleset: null, weightClassId: null }), await reg({ discipline: 'kata', ruleset: null, weightClassId: null }), await reg({ discipline: 'kata', ruleset: null, weightClassId: null })];
@@ -246,6 +257,7 @@ test('file des zones : bloc de kata, liste ordonnée qui avance, puis finale', a
   const block = async () => (await queueOf(t1!.id)).find((x) => x.categoryId === kata.id)!;
   let b = await block();
   expect(b.aClub).toBeNull();
+  expect(b.timing).toBeNull();
   expect(b.lineup!.round).toBe('tour1');
   expect(b.lineup!.list.map((x) => x.name.split(' ')[0])).toEqual(order.map(nameOf));
   expect(b.lineup!.list.every((x) => !x.done && /^Club [AB]$/.test(x.club))).toBe(true);

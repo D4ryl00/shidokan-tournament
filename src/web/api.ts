@@ -852,6 +852,8 @@ export interface QueueItem {
   /** Club de chaque combattant (« Sans club » s'il n'en a pas) ; null pour un kata. */
   aClub: string | null;
   bClub: string | null;
+  /** Durée du combat en texte long ; null pour un kata. */
+  timing: string | null;
   katakas: number | null;
   kataPart: 'tour1' | 'finale' | null;
   /** Bloc de kata : katakas présents du tour joué, dans l'ordre de passage ; null pour un combat ou une finale aux finalistes inconnus. */

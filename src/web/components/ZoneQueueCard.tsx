@@ -72,6 +72,7 @@ function OnCall({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem)
               <Text fz="xl" fw={700} lh={1.2}>{q.b}</Text>
               {q.bClub && <Text size="sm" c="var(--sk-hero-sub)" data-testid="club">{q.bClub}</Text>}
               <Text size="sm" c="var(--sk-hero-sub)" mt={2}>{label(q)}</Text>
+              {q.timing && <Text size="xs" c="var(--sk-hero-sub)" data-testid="match-timing">{q.timing}</Text>}
             </>
           )}
           {q.noRest && <StatusBadge tone="warn" size="sm" data-testid="no-rest">Pas de repos : prévoir une pause</StatusBadge>}
@@ -115,6 +116,7 @@ function Next({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem) =
             </>
           )}
           {!kata && <Text size="xs" c="dimmed">{label(q)}</Text>}
+          {q.timing && <Text size="xs" c="dimmed" data-testid="match-timing">{q.timing}</Text>}
           {q.noRest && <StatusBadge tone="warn" size="sm" mt={2} data-testid="no-rest">Pas de repos : prévoir une pause</StatusBadge>}
           {q.early && <EarlyBadge />}
         </Stack>
