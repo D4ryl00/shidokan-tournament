@@ -7,7 +7,7 @@ import { buildClubFormTemplate } from '../club-form-template.js';
 import { buildClubFormPdf } from '../club-form-pdf.js';
 import JSZip from 'jszip';
 import { buildClubRecapPdf } from '../club-recap-pdf.js';
-import { clubRecapLines } from '../repositories/club-recap.js';
+import { allClubRecaps, clubRecapLines } from '../repositories/club-recap.js';
 import type { CompetitionSettings } from '../../domain/settings.js';
 import type { CategoryGrid } from '../../domain/types.js';
 import type { AppDb } from '../db/client.js';
@@ -215,9 +215,9 @@ export async function registrationRoutes(app: FastifyInstance, { db }: { db: App
   app.get<P>('/api/competitions/:id/exports/club-recaps.zip', async (req, reply) => {
     const zip = new JSZip();
     const used = new Set<string>();
-    for (const c of await listClubs(db, req.params.id)) {
-      const { club, lines } = await clubRecapLines(db, req.params.id, c.id);
-      if (lines.length === 0) continue;
+    const recaps = await allClubRecaps(db, req.params.id);
+    if (recaps.length === 0) return reply.status(404).send({ error: 'Aucun club n’a d’inscription.' });
+    for (const { club, lines } of recaps) {
       let name = recapFileName(club);
       for (let i = 2; used.has(name); i++) name = recapFileName(club).replace(/\.pdf$/, `-${i}.pdf`);
       used.add(name);

@@ -13,9 +13,20 @@ const COLUMNS = [0.3, 0.35, 0.35];
 const SIZE = 9;
 const LEADING = 11;
 const PAD = 1.5 * MM;
+const HEAD_H = 7 * MM;
 
 const frDate = (iso: string) =>
   new Date(`${iso}T12:00:00Z`).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+/** Garde `max` lignes au plus ; la dernière finit par « … » (rognée pour tenir dans `width`) si le texte est coupé. */
+function clip(lines: string[], max: number, font: PDFFont, width: number): string[] {
+  if (lines.length <= max) return lines;
+  const out = lines.slice(0, max);
+  let last = out[max - 1]!;
+  while (last.length > 0 && font.widthOfTextAtSize(`${last}…`, SIZE) > width) last = last.slice(0, -1);
+  out[max - 1] = `${last}…`;
+  return out;
+}
 
 export interface ClubRecapInput { competition: { name: string; date: string }; club: string; generatedAt: Date; lines: RecapLine[] }
 
@@ -34,7 +45,7 @@ export async function buildClubRecapPdf({ competition, club, generatedAt, lines 
   const text = (t: string, x: number, y: number, font: PDFFont, size = SIZE) => page.drawText(safe(font, t), { x, y, size, font, color: BLACK });
 
   const tableHead = () => {
-    const h = 7 * MM;
+    const h = HEAD_H;
     ['Combattant', 'Inscrit', 'Au final'].forEach((label, i) => {
       page.drawRectangle({ x: xs[i]!, y: top - h, width: xs[i + 1]! - xs[i]!, height: h, borderWidth: 0.7, borderColor: GREY_LINE, color: GREY_FILL });
       text(label, xs[i]! + PAD, top - h / 2 - 3, bold);
@@ -55,12 +66,15 @@ export async function buildClubRecapPdf({ competition, club, generatedAt, lines 
   tableHead();
 
   for (const line of lines) {
-    const name = wrap(regular, SIZE, safe(regular, line.fighter), textW(0));
-    const reg = wrap(regular, SIZE, safe(regular, line.registered), textW(1));
-    const fin = wrap(regular, SIZE, safe(regular, line.final), textW(2));
     // « Changé » en gras, puis le motif entre parenthèses (replié sur le reste de la ligne).
-    const note = line.changed ? ['Changé', ...(line.reason ? wrap(regular, SIZE, safe(regular, `(${line.reason})`), textW(2) - bold.widthOfTextAtSize('Changé ', SIZE)) : [])] : [];
-    const rows = Math.max(name.length, reg.length, fin.length + note.length);
+    const reason = line.changed && line.reason ? wrap(regular, SIZE, safe(regular, `(${line.reason})`), textW(2) - bold.widthOfTextAtSize('Changé ', SIZE)) : [];
+    // Une ligne ne dépasse jamais une page : au-delà, chaque colonne est tronquée et finit par « … ».
+    const maxRows = Math.floor((PAGE.h - 2 * MARGIN - HEAD_H - 2 * PAD) / LEADING);
+    const noteRows = line.changed ? Math.min(Math.max(1, reason.length), maxRows - 1) : 0;
+    const name = clip(wrap(regular, SIZE, safe(regular, line.fighter), textW(0)), maxRows, regular, textW(0));
+    const reg = clip(wrap(regular, SIZE, safe(regular, line.registered), textW(1)), maxRows, regular, textW(1));
+    const fin = clip(wrap(regular, SIZE, safe(regular, line.final), textW(2)), Math.max(1, maxRows - noteRows), regular, textW(2));
+    const rows = Math.max(name.length, reg.length, fin.length + noteRows);
     const h = rows * LEADING + 2 * PAD;
     if (top - h < MARGIN) {
       page = doc.addPage([PAGE.w, PAGE.h]);
@@ -75,10 +89,12 @@ export async function buildClubRecapPdf({ competition, club, generatedAt, lines 
     draw(name, 0, regular);
     draw(reg, 1, regular);
     draw(fin, 2, regular);
-    if (note.length) {
+    if (line.changed) {
       const y = (k: number) => top - PAD - SIZE - (fin.length + k) * LEADING + 2;
+      const room = Math.max(1, maxRows - fin.length);
       text('Changé', xs[2]! + PAD, y(0), bold);
-      note.slice(1).forEach((l, k) => text(l, xs[2]! + PAD + (k === 0 ? bold.widthOfTextAtSize('Changé ', SIZE) : 0), y(k), regular));
+      clip(reason, room, regular, textW(2) - bold.widthOfTextAtSize('Changé ', SIZE)).forEach((l, k) =>
+        text(l, xs[2]! + PAD + bold.widthOfTextAtSize('Changé ', SIZE), y(k), regular));
     }
     top -= h;
   }
