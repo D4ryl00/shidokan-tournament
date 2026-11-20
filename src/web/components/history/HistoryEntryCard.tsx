@@ -29,7 +29,7 @@ export function useHoverTargets(targets: string[]) {
 
 const kg = (x: number) => String(Math.round(x * 100) / 100).replace('.', ',');
 /** « · écart 7,3 kg (max 5) » : l'écart au dixième, comme dans les autorisations (`gapText`). */
-export const recordedGap = (gap: { kg: number; max: number }) => ` · écart ${gapText(gap.kg)} (max ${kg(gap.max)})`;
+export const recordedGap = (gap: { kg: number; max: number | null }) => ` · écart ${gapText(gap.kg)}${gap.max === null ? '' : ` (max ${kg(gap.max)})`}`;
 
 /** Situation enregistrée au moment de l'action (jamais recalculée) : adversaires, écart, restants au départ. */
 function RecordedDetails({ view }: { view: MoveView }) {

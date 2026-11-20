@@ -41,7 +41,7 @@ function arrivalLine(view: MoveView): ReactNode {
     return <Text size="sm" fw={600} c="var(--sk-warn-text)">vide : {e} y sera seul{view.sex === 'F' ? 'e' : ''}, à réaffecter ensuite</Text>;
   }
   const who = view.opponents.length <= 2 ? `avec ${view.opponents.join(' et ')}` : plural(view.opponents.length, 'adversaire', 'adversaires');
-  const gap = view.gap ? ` · écart ${kg(view.gap.kg)} kg (max ${kg(view.gap.max)})` : '';
+  const gap = view.gap ? ` · écart ${kg(view.gap.kg)} kg ${view.gap.max === null ? '' : ` (max ${kg(view.gap.max)})`}` : '';
   return <Text size="sm">{who}{gap}</Text>;
 }
 

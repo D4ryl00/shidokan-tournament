@@ -50,7 +50,26 @@ describe('écart toléré par la largeur de la catégorie', () => {
     expect(r).toBeDefined();
     const p = proposalsFor(s, r!).find((x) => x.type === 'R');
     expect(p).toBeDefined();
-    expect(moveView(s, p!).gap?.max).toBe(Infinity);
+    const view = moveView(s, p!);
+    expect(view.gap?.max).toBeNull();
+    const json = JSON.stringify(view);
+    expect(json).not.toContain('Infinity');
+    expect(JSON.parse(json).gap.max).toBeNull();
+    expect(JSON.stringify([...view.details, ...view.movers.flatMap((m) => m.details)])).not.toContain('Infinity');
+  });
+  test('retour vers un -54 (écart 6 entre 5 et 7) : max 7 ; une autre proposition garde le seuil des réglages', () => {
+    const home = member({ label: 'H', weightClassId: 'cadet:F:-54', approxWeightKg: 47.5 });
+    const back = member({
+      label: 'R', weightClassId: 'cadet:F:-61', approxWeightKg: 53.5, placementLocked: true, recasementType: 'R',
+      original: { discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54', reason: 'alone' },
+    });
+    const s = makeState([home, back, member({ weightClassId: 'cadet:F:-61', approxWeightKg: 58 })]);
+    const r = detectCases(s).find((c) => c.kind === 'return' && c.registrationId === back.registrationId)!;
+    const ps = proposalsFor(s, r);
+    const ret = ps.find((x) => x.type === 'R')!;
+    expect(moveView(s, ret).gap).toEqual({ kg: 6, max: 7 });
+    const other = ps.find((x) => x.type !== 'R');
+    if (other) expect(moveView(s, other).gap?.max).toBe(5);
   });
 });
 

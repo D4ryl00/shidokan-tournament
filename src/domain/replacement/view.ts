@@ -30,8 +30,8 @@ export interface MoveView {
   fromRemaining: number;
   /** Actifs de la catégorie d'arrivée, hors ceux qui bougent. */
   opponents: string[];
-  /** Écart de poids de la catégorie d'arrivée et son maximum ; `null` : discipline sans poids. */
-  gap: { kg: number; max: number } | null;
+  /** Écart de poids de la catégorie d'arrivée et son maximum (`max` null : catégorie sans limite) ; `gap` null : discipline sans poids. */
+  gap: { kg: number; max: number | null } | null;
   details: { rule: RuleId; detail: string }[];
   /** Détail des règles pour chaque combattant déplacé (dans l'ordre de `proposalMoves`) : le détail d'âge part de sa propre tranche. */
   movers: { registrationId: string; details: MoveView['details'] }[];
@@ -44,7 +44,7 @@ export interface MoveView {
 const kg = (x: number) => String(Math.round(x * 100) / 100).replace('.', ',');
 
 /** Pastilles : le détail de chaque règle d'un déplacement (« écart 2,5 kg », « Cadets → Juniors »…). */
-export function detailsOf(before: State, p: Proposal, rules: RuleId[], gap: number, threshold: number): MoveView['details'] {
+export function detailsOf(before: State, p: Proposal, rules: RuleId[], gap: number, threshold: number | null): MoveView['details'] {
   const m = before.members.find((x) => x.registrationId === p.registrationId);
   const { ageBands } = before.grid;
   const bandLabel = (code: string) => ageBands.find((b) => b.code === code)?.label ?? code;
@@ -57,7 +57,7 @@ export function detailsOf(before: State, p: Proposal, rules: RuleId[], gap: numb
       case 'split':
         return { rule, detail: `écart ${kg(gap)} kg` };
       case 'weightGap':
-        return { rule, detail: `${kg(gap)} kg (max ${kg(threshold)})` };
+        return { rule, detail: threshold === null ? `${kg(gap)} kg` : `${kg(gap)} kg (max ${kg(threshold)})` };
       case 'ageUp':
       case 'ageDown':
       case 'minorsAdults': {
@@ -88,7 +88,9 @@ export function moveView(before: State, p: Proposal, after: State = applyAll(bef
   const to = arrival?.key ?? ('newKey' in p.target ? p.target.newKey : before.categories.find((c) => c.id === (p.target as { categoryId: string }).categoryId)!.key);
   const merged = arrivedIn ? activeMembers(after, arrivedIn) : [];
   const gapKg = Math.round(categoryWeightGap(merged, after.grid) * 100) / 100;
-  const max = p.type === 'R' && arrival ? categoryGapTolerance(arrival, merged, after) : gapThreshold(merged, after);
+  const tolerance = p.type === 'R' && arrival ? categoryGapTolerance(arrival, merged, after) : gapThreshold(merged, after);
+  // Sans limite (Infinity) : null, pour que la vue reste JSON-sûre (Infinity deviendrait null puis « max 0 »).
+  const max = Number.isFinite(tolerance) ? tolerance : null;
   return {
     why: whyOf(before, p),
     sex: m?.sex ?? 'M',
