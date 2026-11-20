@@ -4,7 +4,7 @@ import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 import { readStoredSettings } from '../../src/domain/settings.js';
 import {
   ageGroupOf, categoryDurationsSchema, combatTiming, defaultSchedule, fightSeconds, isEmptyDurations, kataPassages,
-  minSecText, parseMinSec, timingText,
+  minSecText, parseMinSec, timingLongText, timingText,
 } from '../../src/domain/schedule/durations.js';
 
 const s = { schedule: defaultSchedule(), triathlonRounds: 3 as const };
@@ -109,4 +109,9 @@ test('stored data from before finals stays readable', () => {
 test('empty durations', () => {
   expect(isEmptyDurations({ bracket: null, finals: null, matches: {} })).toBe(true);
   expect(isEmptyDurations({ bracket: null, finals: fin, matches: {} })).toBe(false);
+});
+test('timingLongText : rounds, durée, prolongation', () => {
+  expect(timingLongText({ rounds: 2, roundSec: 120, restSec: 30, overtimeSec: 60 })).toBe('2 rounds de 2 min · prolongation 1 min');
+  expect(timingLongText({ rounds: 1, roundSec: 180, restSec: 0, overtimeSec: 0 })).toBe('1 round de 3 min');
+  expect(timingLongText({ rounds: 3, roundSec: 90, restSec: 30, overtimeSec: 45 })).toBe('3 rounds de 1 min 30 · prolongation 45 s');
 });

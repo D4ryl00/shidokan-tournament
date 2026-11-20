@@ -150,6 +150,13 @@ export function timingText(t: CombatTiming): string {
   return `${t.rounds} × ${minSecText(t.roundSec)}`;
 }
 
+/** « 2 rounds de 2 min · prolongation 1 min » ; « 1 round de 3 min » ; sans prolongation si 0. */
+export function timingLongText(t: CombatTiming): string {
+  const rounds = t.rounds === 1 ? '1 round' : `${t.rounds} rounds`;
+  const base = `${rounds} de ${minSecText(t.roundSec)}`;
+  return t.overtimeSec === 0 ? base : `${base} · prolongation ${minSecText(t.overtimeSec)}`;
+}
+
 /** « m » ou « m:ss » (ss sur deux chiffres, < 60) en secondes ; null si illisible (« 1:5 » compris). */
 export function parseMinSec(text: string): number | null {
   const m = /^\s*(\d{1,3})(?:\s*:\s*(\d{2}))?\s*$/.exec(text);
