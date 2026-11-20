@@ -1,8 +1,8 @@
-# Ignorer une carte, écart de poids des grandes catégories, poids sur les Tableaux, message d'autorisation
+# Ignorer une carte, écart de poids des grandes catégories, poids sur les Tableaux, autorisations, export FFK, récapitulatif club
 
-Date : 2026-11-20 · statut : à approuver
+Date : 2026-11-20 · statut : à approuver (relu par un constructeur)
 
-Quatre retouches avant la compétition du 22 novembre.
+Six changements avant la compétition du 22 novembre.
 
 ## 1. Réaffectation : « Ignorer » une carte
 
@@ -25,6 +25,7 @@ Quatre retouches avant la compétition du 22 novembre.
 - Une section repliée « Ignorées (n) » en bas de la page, comme « Mises de côté », avec « Reprendre ». Sans elle, une carte ignorée ne serait visible que dans l'Historique.
 - Pas de note obligatoire. Note facultative, comme la mise de côté.
 - Stockage : une table `ignored_cases` sur le modèle de `set_aside_cases` (compétition, cas, empreinte, note, session, entrée d'Historique), incluse dans le paquet de synchronisation. Nouveau type d'Historique `ignore` (filtre « Plan »), sans changement des tableaux : rien à remettre en place à l'annulation, à part la carte. Il ne bloque pas l'annulation des autres actions et n'est pas emporté par leur cascade.
+- Une carte « Écart de poids » dépend du combattant le plus éloigné : si ce n'est plus le même, l'ancienne carte a disparu et la nouvelle est un nouveau problème.
 - Le journal couvre les nouvelles routes (`ignore`, `unignore`), et les permissions sont les mêmes que pour `set-aside`.
 
 ## 2. Pas d'alerte d'écart de poids imposé par la catégorie
@@ -39,6 +40,8 @@ Quatre retouches avant la compétition du 22 novembre.
 - Les autorisations « Poids » (face à un adversaire d'une catégorie plus lourde) ne changent pas.
 - Les propositions de déplacement (badges ⚖ Poids / ⚖ Poids +) ne changent pas : un déplacement garde le seuil réglé.
 
+**Précisions.** « Une seule catégorie de poids » = `key.weightClassIds.length === 1` (un déplacement ne change jamais le `weightClassId` du combattant : une fusion se voit toujours à plusieurs catégories). Les « Détails » d'un retour possible montrent la même tolérance que la carte.
+
 **Laissé au constructeur.** La largeur d'une catégorie se lit dans la grille (limite précédente du même âge et sexe → limite de la catégorie). L'aide (`help.ts`, carte « Écart de poids », réglage « Écart de poids max ») dit la nouvelle règle.
 
 ## 3. Poids sur les cartes des Tableaux
@@ -47,13 +50,69 @@ Quatre retouches avant la compétition du 22 novembre.
 - Où : cartes de la Planche, bac des combattants seuls, cartes de la Galaxie (petit texte discret ; dans la Galaxie compacte, sur la ligne du nom s'il tient, sinon au survol avec le club).
 - Source : les inscriptions déjà chargées par `useEntrantInfo` (`weighInKg`, `approxWeightKg`, discipline avec poids).
 
-## 4. Message d'autorisation pour le club
+## 4. Autorisations : copie par session sans formule, et vue « Toutes les sessions »
 
-**Constat.** Le code de « 📋 Copier pour le club » des Autorisations (`clubMessage`, `src/domain/authorizations-text.ts`) produit déjà « Bonjour, / Voici les points à valider pour vos combattants (Club) : … / Merci de nous confirmer votre accord… ». La page, elle, n'affiche que les combattants. Le « 📋 Copier pour le club » de « Détails » (proposition ou ligne du plan) copie seulement une phrase sur le combattant, sans salutation.
+**Pourquoi.** L'organisateur copie le texte session par session pour être complet avec un club : la formule (« Bonjour… », « Merci… ») se retrouve alors en double à chaque collage.
 
-**À faire.** Reproduire sur Chrome ce que copie le bouton qu'utilise l'utilisateur, puis corriger :
-- si c'est celui des Autorisations : trouver pourquoi la salutation se perd et la rétablir ;
-- si c'est celui des Détails : l'entourer de la même salutation et de la même demande d'accord que les Autorisations.
+**Ce qui est décidé (choix « les deux »).**
+- La section ③ Autorisations reçoit son propre choix « Cette session » / « Toutes les sessions » (« Cette session » par défaut ; l'API accepte déjà l'absence de session).
+- **Cette session** : « 📋 Copier pour le club » et « 📋 Copier tout » copient seulement les combattants numérotés et leurs puces, sans « Bonjour », sans phrase d'introduction et sans demande finale. « Copier tout » garde l'en-tête `=== Club ===` entre les clubs.
+- **Toutes les sessions** : un seul texte par club, avec une numérotation continue et la formule une seule fois (le message actuel de `clubMessage`).
+- L'aide (`reaffectation.autorisations`) le dit.
+
+**Laissé au constructeur.** Sans sessions, le choix est masqué. L'ordre des combattants en vue « Toutes les sessions » reste celui de la liste (session puis ordre actuel). Le compteur ⏳ du titre suit la vue choisie.
+
+## 5. Export FFK (modèle `Shidokan.xlsm`)
+
+**Pourquoi.** La FFK a besoin de connaître les changements faits pendant la compétition. Elle les retrouve en comparant ce fichier, au format de son propre export, avec ce qu'elle avait envoyé.
+
+**Le modèle** (copie de `/Users/remi/Downloads/Shidokan.xlsm`, sans macro) : 5 feuilles dans cet ordre, **Karate, Boxe, Mix Martial, Triathlon, Kata**. Ligne 1 : `Prénom | Nom | Numero | Entite rattachement | Genre | Type | Age | Categorie | Technique`. Calibri 11, pas de remplissage, pas de gel des volets, largeurs de colonnes propres à chaque feuille (à recopier). Valeurs observées :
+- Type : `Karate`, `Boxe`, `Kmix`, `Kata` (Triathlon : vide dans le modèle, la cellule A1 contient « Ytiathlon »).
+- Genre : `Féminin` / `Masculin`.
+- Age : la tranche (`Poussin`, `Pupille`, `Benjamin`, `Minime`, `Cadet`, `Junior`, `Vétéran 1`, `Vétéran 2`) ; adultes : `Séniors jiyu ippon kumite` ou `Séniors shobu ippon kumité` selon le règlement.
+- Categorie : nombre négatif pour « -35 » (format de cellule texte `@`), texte `+45` pour une catégorie ouverte ; vide en kata.
+- Entite rattachement : `0060690 ETOILE SPORTIVE…` (l'entité FFK du club, déjà stockée : `ffk_entity`).
+- Technique : toujours vide.
+- Un bloc par catégorie, blocs séparés par des lignes vides ; dans chaque feuille, filles puis garçons, tranches d'âge dans l'ordre, puis poids croissant.
+
+**Ce qui est décidé.**
+- Un bouton « Export FFK (.xlsx) » qui produit ce fichier pour la compétition, avec la **situation finale** : une ligne par inscription, dans la feuille de la discipline où elle combat, avec l'âge et le poids de sa catégorie finale.
+- **Un combattant absent (désisté) est retiré** du fichier.
+- Pas de colonne ajoutée : le modèle est reproduit tel quel.
+
+**Mes choix (à corriger si besoin).**
+- Bouton dans la zone des exports de la page Podiums (à côté des exports .ods/.xlsx des résultats), utilisable à tout moment.
+- Deux lignes vides entre deux catégories (le modèle en a de 1 à 5, sans règle visible).
+- **Catégorie qui n'existe pas dans la grille FFK** (décision de l'utilisateur : « sa catégorie d'inscription ») : une catégorie fusionnée (plusieurs catégories de poids ou plusieurs tranches d'âge), ou une catégorie mixte dont la catégorie de poids n'existe pas pour le sexe du combattant. Le combattant y est écrit avec **sa tranche et sa catégorie de poids d'inscription**. Seul un combattant placé dans une vraie catégorie (une tranche, une catégorie de poids, existant pour son sexe) y est écrit avec cette catégorie. Ainsi des seniors fusionnés avec des Vétérans 1 ne deviennent pas « Vétéran 1 » dans le fichier. Le bloc d'une catégorie fusionnée reste un seul bloc, placé à la position de sa catégorie la plus légère et la plus jeune.
+- Discipline ou règlement changés : la feuille et le libellé d'âge (jiyu ou shobu) suivent la catégorie finale, s'ils existent pour le combattant.
+- Tableau libre : ses combattants gardent leur catégorie d'inscription (le tableau libre n'a pas d'équivalent FFK).
+- Combattant « ne combat pas » (inscription retirée, par exemple catégorie fermée) : retiré, comme un absent.
+- Club sans entité FFK : numéro d'affiliation et nom du club, sinon le nom seul.
+- Feuille Triathlon : remplie comme les autres s'il y a des inscriptions en triathlon ; sinon recopiée telle quelle (« Ytiathlon » en A1).
+- Libellés absents du modèle (Mini-poussins, Espoirs, Vétérans 3 à 5) : ceux que l'import FFK de l'application reconnaît (`ageBandFromLabel`) ; Type de la feuille Triathlon : `Triathlon`.
+- Noms et prénoms en majuscules, comme dans le fichier FFK.
+- Écrit avec la bibliothèque `xlsx` déjà utilisée pour les exports, en .xlsx (pas de macro à conserver : le .xlsm du modèle n'en contient pas).
+
+## 6. Récapitulatif par club (PDF)
+
+**Pourquoi.** Dire à chaque club, combattant par combattant, ce qui avait été inscrit et ce qu'il fait finalement, désistements compris.
+
+**Ce qui est décidé.**
+- Un PDF par club, une ligne par inscription : le combattant ; **inscrit** (discipline, règlement, catégorie d'âge, catégorie de poids) ; **au final** (la catégorie où il combat, ou « Absent (désisté) » pour un absent à la pesée).
+- Un bouton par club dans la page Clubs, et « Tous les récapitulatifs » qui télécharge un .zip avec un PDF par club.
+
+**Mes choix (à corriger si besoin).**
+- « Inscrit » = les valeurs d'origine de l'inscription quand elle a été déplacée, sinon ses valeurs actuelles.
+- En-tête : nom et date de la compétition, nom du club. Combattants par ordre alphabétique, ses inscriptions regroupées.
+- Une ligne changée est mise en évidence (fond léger et mot « Changé »), avec le motif en clair quand il existe (« catégorie de poids voisine », « tranche d'âge voisine », « règlement changé »…, comme les badges de réaffectation).
+- « Ne combat pas » pour une inscription retirée (catégorie fermée), et « Pas encore placé » pour une inscription sans catégorie.
+- Situation au moment du téléchargement : on peut le refaire à tout moment, il dit son heure de création.
+- Généré avec `pdf-lib` (déjà utilisé pour la fiche club PDF), le .zip avec `jszip`.
+- Un club sans inscription n'a pas de récapitulatif (bouton désactivé, absent du .zip).
+
+## Calendrier
+
+Tout doit être en place avant la compétition du dimanche 22 novembre (décision de l'utilisateur). Ordre de construction, du moins risqué au plus risqué, avec une mise en service possible après chaque point : 4 (copie des autorisations), 3 (poids sur les Tableaux), 2 (écart de poids), 1 (Ignorer, seule migration de base : table `ignored_cases`), puis 5 (export FFK) et 6 (récapitulatif club). Avant la migration, une sauvegarde du serveur ; le conteneur est arrêté proprement (`docker stop`) avant d'être remplacé.
 
 ## Hors champ
 
@@ -62,4 +121,4 @@ Quatre retouches avant la compétition du 22 novembre.
 
 ## Tests
 
-TDD : détection (empreinte, retour sur nouvel élément, tolérance des catégories larges ou ouvertes, retour possible), routes `ignore`/`unignore` + Historique + Repartir de zéro, rendu du poids sur la pastille. Vérification de chaque changement visible sur Chrome (et au téléphone dans le simulateur pour la Planche).
+TDD : détection (empreinte, retour sur nouvel élément, tolérance des catégories larges ou ouvertes, retour possible), routes `ignore`/`unignore` + Historique + Repartir de zéro, rendu du poids sur la pastille, texte copié avec et sans formule, contenu de l'export FFK (relu par l'import FFK de l'application : chaque ligne doit être reconnue), lignes du récapitulatif club. Vérification de chaque changement visible sur Chrome (et au téléphone dans le simulateur pour la Planche).
