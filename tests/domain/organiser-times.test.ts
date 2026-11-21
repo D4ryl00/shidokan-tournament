@@ -94,12 +94,28 @@ describe('organiserTimes', () => {
     expect(t.passage('k', 'kata:tour1:r9')).toBeNull();
   });
 
+  test('session lancée : présente et lancée dans la vue des heures ; session implicite = waveKey(null)', () => {
+    const waves = [
+      { id: 'w1', name: 'Matin', launched: true, plannedStart: '10:30', actualStart: null, finalsStart: null },
+      { id: 'w2', name: 'Après-midi', launched: false, plannedStart: '14:00', actualStart: null, finalsStart: null },
+    ];
+    const t = organiserTimes(made(undefined, { waves }), null, h(10, 20));
+    expect(t.waveLaunched('w1')).toBe(true);
+    expect(t.waveLaunched('w2')).toBe(false);
+    expect(t.waveLaunched('inconnue')).toBe(false);
+    expect(t.waveLaunched(null)).toBe(false);
+    const implicit = organiserTimes(made(undefined, { waves: [{ ...waves[0]!, id: null, name: 'Session unique' }] }), null, h(10, 20));
+    expect(implicit.waveLaunched(null)).toBe(true);
+    expect(implicit.waveLaunched('w1')).toBe(false);
+  });
+
   test('compétition passée : tout est null', () => {
     const t = organiserTimes(made(undefined, { phase: 'past' }), { 'A:w1-0': '15:10' }, h(10, 20));
     expect(t.passage('A', 'w1-0')).toBeNull();
     expect(t.onCall('A', 'w1-0')).toBeNull();
     expect(t.category({ id: 'A', bracket: A().bracket })).toBeNull();
     expect(t.drift('z1')).toBeNull();
+    expect(t.waveLaunched('w1')).toBe(false);
     expect(organiserTimes(null, null, null).passage('A', 'w1-0')).toBeNull();
   });
 });

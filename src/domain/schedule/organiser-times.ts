@@ -22,9 +22,11 @@ export interface OrganiserTimes {
   category(c: { id: string; bracket: Bracket | null }): CategoryTimes | null;
   /** Avance (négatif) ou retard (positif) d'une zone, en minutes ; null hors compétition lancée. */
   drift(zoneId: string): number | null;
+  /** Session présente et lancée dans la vue des heures (session implicite : `waveId` null). */
+  waveLaunched(waveId: string | null): boolean;
 }
 
-const NONE: OrganiserTimes = { passage: () => null, onCall: () => null, category: () => null, drift: () => null };
+const NONE: OrganiserTimes = { passage: () => null, onCall: () => null, category: () => null, drift: () => null, waveLaunched: () => false };
 
 /**
  * Heures présumées côté organisation : celles de la page publique pour les sessions lancées (jamais une heure passée, sauf
@@ -86,5 +88,6 @@ export function organiserTimes(pub: PublicCompetition | null, planned: Record<st
       return { first: own.every((i) => i.endedAt === null), next, final };
     },
     drift: (zoneId) => times.drift(zoneId),
+    waveLaunched: (waveId) => order.has(waveKey(waveId)),
   };
 }

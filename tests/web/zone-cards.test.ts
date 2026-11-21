@@ -18,7 +18,7 @@ test('« À trancher » : seulement sur un PC (rôle local) qui gère la compét
 const item = (number: number, early: boolean): QueueItem => ({
   number, categoryId: 'c', categoryLabel: 'Cadets -60 kg', matchId: `m${number}`, a: 'A', b: 'B', aClub: 'Club A', bClub: 'Sans club', timing: '2 rounds de 2 min · prolongation 1 min', kataPart: null, kata: null, noRest: false, held: false, early,
 });
-const NO_TIMES: OrganiserTimes = { passage: () => null, onCall: () => null, category: () => null, drift: () => null };
+const NO_TIMES: OrganiserTimes = { passage: () => null, onCall: () => null, category: () => null, drift: () => null, waveLaunched: () => false };
 const render = (queue: QueueItem[], times: OrganiserTimes = NO_TIMES, launched = true) =>
   renderToStaticMarkup(createElement(MantineProvider, null, createElement(ZoneQueueCard, {
     zone: { id: 'z', name: 'Tatami 1' } as Zone, queue, waitingOtherZones: 0, autonomous: false, times, launched, onEnter: () => {}, onScore: () => {},
