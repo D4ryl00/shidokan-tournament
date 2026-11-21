@@ -213,7 +213,7 @@ function CombatView(props: Props & { bracket: CombatBracket }) {
         style={{ breakInside: 'avoid', overflow: 'visible', cursor: clickable ? 'pointer' : undefined, opacity: m.bye ? 0.6 : undefined, borderColor: stale ? 'var(--mantine-color-orange-6)' : undefined }}
         onClick={() => clickable && props.onMatchClick!(m)}>
         <div className="bracket-card-head">
-          <Text size="xs" fw={700} style={{ whiteSpace: 'nowrap' }}>{m.bye ? 'Exempt' : `Combat ${numbers.get(m.id)}${m.optional ? ' (si 1-1)' : ''}`}</Text>
+          <Text size="xs" fw={700} style={props.printable ? undefined : { whiteSpace: 'nowrap' }}>{m.bye ? 'Exempt' : `Combat ${numbers.get(m.id)}${m.optional ? ' (si 1-1)' : ''}`}</Text>
           <Text size="xs" c="dimmed" ta="right">
             {resultText(m) || (!props.printable && !m.bye && <PassageTimeLabel t={props.times?.(m.id) ?? null} />)}
             {stale ? ' · à revoir' : ''}
@@ -405,14 +405,17 @@ export function KataView(props: Props & { bracket: KataBracket }) {
   const finaleNumbers = ([1, 2] as const).flatMap((slot) => props.numbers?.get(kataFinaleKey(slot)) ?? []);
   // Colonne « Heure » (écran) : la note d'un kataka noté, sinon l'heure présumée de son passage (tour 1, ou sa place en finale
   // à deux katakas) ; elle remplace la colonne des notes.
-  const times = props.printable ? undefined : props.times;
+  // Sans aucune heure ni note (session pas encore estimée…), le tableau garde sa forme habituelle.
   const tour1 = bracket.order.length > 2;
+  const scoreOf = (id: string) => kataScore((tour1 ? kataScores?.round1[id] : kataScores?.final[id]) ?? []);
+  const timeOf = (id: string, i: number) => props.times?.(tour1 ? kataTour1Key(id) : kataFinaleKey((i + 1) as 1 | 2)) ?? null;
+  const times = !props.printable && props.times && bracket.order.some((id, i) => scoreOf(id) !== null || timeOf(id, i) !== null) ? props.times : undefined;
   const timeCell = (id: string, i: number) => {
-    const score = kataScore((tour1 ? kataScores?.round1[id] : kataScores?.final[id]) ?? []);
+    const score = scoreOf(id);
     if (score !== null) return <Text span size="xs" c="dimmed">noté {score.toLocaleString('fr-FR')}</Text>;
-    return <PassageTimeLabel t={times!(tour1 ? kataTour1Key(id) : kataFinaleKey((i + 1) as 1 | 2))} />;
+    return <PassageTimeLabel t={timeOf(id, i)} />;
   };
-  const finaleTime = times ? (times(kataFinaleKey(1)) ?? times(kataFinaleKey(2))) : null;
+  const finaleTime = !props.printable && props.times ? (props.times(kataFinaleKey(1)) ?? props.times(kataFinaleKey(2))) : null;
   return (
     <Stack data-testid="bracket-view">
       <Title order={5}>Ordre de passage{tour1 ? ' — tour 1' : ' — finale'}</Title>
