@@ -2,6 +2,7 @@ import { MantineProvider } from '@mantine/core';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, test } from 'vitest';
+import type { OrganiserTimes } from '../../src/domain/schedule/organiser-times.js';
 import type { Zone } from '../../src/domain/zones.js';
 import type { QueueItem } from '../../src/web/api.js';
 import { ZoneQueueCard } from '../../src/web/components/ZoneQueueCard.js';
@@ -17,10 +18,35 @@ test('« À trancher » : seulement sur un PC (rôle local) qui gère la compét
 const item = (number: number, early: boolean): QueueItem => ({
   number, categoryId: 'c', categoryLabel: 'Cadets -60 kg', matchId: `m${number}`, a: 'A', b: 'B', aClub: 'Club A', bClub: 'Sans club', timing: '2 rounds de 2 min · prolongation 1 min', kataPart: null, kata: null, noRest: false, held: false, early,
 });
-const render = (queue: QueueItem[]) =>
+const NO_TIMES: OrganiserTimes = { passage: () => null, onCall: () => null, category: () => null, drift: () => null };
+const render = (queue: QueueItem[], times: OrganiserTimes = NO_TIMES, launched = true) =>
   renderToStaticMarkup(createElement(MantineProvider, null, createElement(ZoneQueueCard, {
-    zone: { id: 'z', name: 'Tatami 1' } as Zone, queue, waitingOtherZones: 0, autonomous: false, onEnter: () => {}, onScore: () => {},
+    zone: { id: 'z', name: 'Tatami 1' } as Zone, queue, waitingOtherZones: 0, autonomous: false, times, launched, onEnter: () => {}, onScore: () => {},
   })));
+
+test('heures : « vers » sur l’appel (heure brute) et sur chaque ligne suivante', () => {
+  const times: OrganiserTimes = {
+    ...NO_TIMES,
+    onCall: (_c, m) => (m === 'm1' ? '9:58' : null),
+    passage: (_c, m) => (m === 'm2' ? { kind: 'at', clock: '10:06', planned: false } : null),
+  };
+  const html = render([item(1, false), item(2, false)], times);
+  expect(html).toMatch(/data-testid="oncall-time"[^>]*>vers\u00a09:58</);
+  expect(html).toMatch(/data-testid="passage-time" data-planned="false"[^>]*>vers\u00a010:06</);
+});
+
+test('session pas encore lancée : heure prévue estompée sur l’appel', () => {
+  const times: OrganiserTimes = { ...NO_TIMES, passage: () => ({ kind: 'at', clock: '15:10', planned: true }) };
+  expect(render([item(1, false)], times, false)).toMatch(/data-testid="oncall-time" data-planned="true"[^>]*>vers\u00a015:10</);
+});
+
+test('avance / retard de la zone : seulement pour une session lancée, rien à l’heure', () => {
+  const drift = (d: number): OrganiserTimes => ({ ...NO_TIMES, drift: () => d });
+  expect(render([item(1, false)], drift(8))).toContain('en retard de 8 min');
+  expect(render([item(1, false)], drift(-5))).toContain('en avance de 5 min');
+  expect(render([item(1, false)], drift(2))).not.toContain('zone-drift');
+  expect(render([item(1, false)], drift(8), false)).not.toContain('zone-drift');
+});
 
 test('« Prête · peut passer plus tôt » : sur une ligne early, jamais sur la première', () => {
   const html = render([item(1, true), item(2, false), item(3, true)]);

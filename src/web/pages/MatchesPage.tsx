@@ -4,7 +4,10 @@ import { useParams } from 'react-router';
 import { resolveBracket, type ResolvedMatch } from '../../domain/brackets/index.js';
 import { activeEntrantCount } from '../../domain/categories.js';
 import { validResults } from '../../domain/results.js';
-import { type QueueItem, useAuthMe, useCategories, useCategoryResults, useDeleteResult, usePassages, useSchedule, useUpdateCategory, useZoneLink, useZones } from '../api.js';
+import { waveKey } from '../../domain/passages/index.js';
+import { type QueueItem, useAuthMe, useCategories, useCategoryResults, useDeleteResult, usePassages, useSchedule, useScheduleTimes, useUpdateCategory, useZoneLink, useZones } from '../api.js';
+import { useOrganiserTimes } from '../useOrganiserTimes.js';
+import { categoryTimesText } from '../components/PassageTimeText.js';
 import { ZonesImpossibleAlert } from '../components/ZonesImpossibleAlert.js';
 import { WaveLaunchPanel } from '../components/WaveLaunchPanel.js';
 import { MoveDialog } from '../components/MoveDialog.js';
@@ -37,6 +40,9 @@ export function MatchesPage() {
     return busy?.id ?? null;
   });
   const { data: schedule } = useSchedule(id, waveId, ready);
+  // Heures présumées ; avance / retard des zones seulement pour une session lancée (présente dans la vue des heures).
+  const times = useOrganiserTimes(id);
+  const waveLaunched = !!useScheduleTimes(id).data?.waves.some((w) => w.launched && waveKey(w.id) === waveKey(waveId));
   const { data: zones = [] } = useZones(id);
   const zoneName = (zid: string | null) => zones.find((z) => z.id === zid)?.name ?? null;
   const update = useUpdateCategory(id);
@@ -108,7 +114,7 @@ export function MatchesPage() {
     <Box data-testid="zone-grid"
       style={{ display: 'grid', gap: 'var(--mantine-spacing-md)', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', maxWidth: shownZones.length === 1 ? 640 : undefined }}>
       {shownZones.map((t) => (
-        <ZoneQueueCard key={t.zone.id} zone={t.zone} queue={t.queue} waitingOtherZones={t.waitingOtherZones} autonomous={autonomous} onEnter={enter} onScore={score} />
+        <ZoneQueueCard key={t.zone.id} zone={t.zone} queue={t.queue} waitingOtherZones={t.waitingOtherZones} autonomous={autonomous} times={times} launched={waveLaunched} onEnter={enter} onScore={score} />
       ))}
       {!zoneOnly && (schedule?.unassigned.length ?? 0) > 0 && (
         <Card withBorder padding="md">
@@ -159,6 +165,8 @@ export function MatchesPage() {
                   {playable.length === 0 && <Text size="sm" c="dimmed" ta="center" py="md">Aucune catégorie à disputer.</Text>}
                   {playable.map((c) => {
                     const active = c.id === selected?.id;
+                    const ct = times.category(c);
+                    const planned = [ct?.next, ct?.final].some((t) => t?.kind === 'at' && t.planned);
                     return (
                       <Card key={c.id} withBorder padding="xs" px="sm" data-testid="schedule-category"
                         style={active ? { borderColor: 'var(--sk-accent)', backgroundColor: 'var(--sk-chip)', boxShadow: 'inset 3px 0 0 var(--sk-accent)' } : undefined}>
@@ -172,6 +180,11 @@ export function MatchesPage() {
                               onChange={(v) => (c.launchLocked ? v && v !== c.zoneId && setMoving({ category: c, zoneId: v }) : update.mutate({ cid: c.id, zoneId: v || null }))} />
                           )}
                         </Group>
+                        {ct && (
+                          <Text size="xs" mt={4} data-testid="category-times" c={planned ? 'dimmed' : undefined} fs={planned ? 'italic' : undefined}>
+                            {categoryTimesText(zoneName(plan?.categories[c.id]?.zoneId ?? c.zoneId), ct, c.bracket?.kind === 'kata')}
+                          </Text>
+                        )}
                       </Card>
                     );
                   })}
@@ -234,7 +247,7 @@ export function MatchesPage() {
                 </Alert>
               )}
               {selected.bracket?.kind === 'kata' ? (
-                <KataScoring competitionId={id} categoryId={selected.id} bracket={selected.bracket} scores={res.kataScores} tieBreak={res.tieBreaks.kata} finalTieBreak={res.tieBreaks.kataFinal} entrants={entrants} />
+                <KataScoring competitionId={id} categoryId={selected.id} bracket={selected.bracket} scores={res.kataScores} tieBreak={res.tieBreaks.kata} finalTieBreak={res.tieBreaks.kataFinal} entrants={entrants} times={times} />
               ) : (
                 view && (
                   <BracketView category={selected} entrants={entrants} results={view.results} stale={view.stale} tieBreaks={res.tieBreaks.pools}

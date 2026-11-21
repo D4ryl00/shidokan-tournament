@@ -1,8 +1,11 @@
 import { Box, Button, Card, Group, Stack, Text, Title } from '@mantine/core';
 import { plural } from '../../domain/plural.js';
+import type { OrganiserTimes } from '../../domain/schedule/organiser-times.js';
 import type { Zone } from '../../domain/zones.js';
 import type { QueueItem } from '../api.js';
 import { HelpButton } from './Help.js';
+import { PassageTimeLabel } from './PassageTimeText.js';
+import { driftText, versText } from './public/zoneRows.js';
 import { StatusBadge } from './ui/StatusBadge.js';
 
 /** Passage d'une catégorie qui a une saisie de zone autonome à trancher : il ne se joue pas encore (et n'a pas de bouton). */
@@ -26,8 +29,20 @@ const Who = ({ name, club, c }: { name: string | null; club: string | null; c: s
   <>{name}{club && <Text span fw={400} c={c} style={{ fontSize: '0.8em' }}> · {club}</Text>}</>
 );
 
+/** Heure du passage à l'appel : l'heure brute (même dépassée) d'une session lancée, sinon l'heure prévue (estompée). */
+function OnCallTime({ q, times }: { q: QueueItem; times: OrganiserTimes }) {
+  if (q.matchId === null) return null;
+  const raw = times.onCall(q.categoryId, q.matchId);
+  if (raw !== null) {
+    return <Text span fz="sm" fw={700} style={{ color: 'var(--sk-accent)', whiteSpace: 'nowrap' }} data-testid="oncall-time" data-planned="false">{versText(raw)}</Text>;
+  }
+  const t = times.passage(q.categoryId, q.matchId);
+  if (t?.kind !== 'at' || !t.planned) return null;
+  return <Text span fz="sm" c="dimmed" fs="italic" style={{ whiteSpace: 'nowrap' }} data-testid="oncall-time" data-planned="true">{versText(t.clock)}</Text>;
+}
+
 /** Premier passage de la file : en grand, lisible de loin. */
-function OnCall({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem) => void; onScore: (q: QueueItem) => void }) {
+function OnCall({ q, times, onEnter, onScore }: { q: QueueItem; times: OrganiserTimes; onEnter: (q: QueueItem) => void; onScore: (q: QueueItem) => void }) {
   const kata = q.kataPart !== null;
   return (
     <Box data-testid={kata ? 'next-kata' : 'next-match'} data-number={q.number} p="md"
@@ -38,7 +53,10 @@ function OnCall({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem)
           <Text fz={44} fw={800} lh={1} c="var(--sk-hero-text)" className="num">{q.number}</Text>
         </Stack>
         <Stack gap={4} style={{ minWidth: 0, flex: 1 }}>
-          <Text size="xs" fw={700} c="var(--sk-hero-text)" tt="uppercase" style={{ letterSpacing: 0.6 }}>À l’appel</Text>
+          <Group justify="space-between" align="baseline" wrap="nowrap" gap="xs">
+            <Text size="xs" fw={700} c="var(--sk-hero-text)" tt="uppercase" style={{ letterSpacing: 0.6 }}>À l’appel</Text>
+            <OnCallTime q={q} times={times} />
+          </Group>
           {kata ? (
             <>
               <Text size="sm" c="var(--sk-hero-sub)">{kataTitle(q)}</Text>
@@ -73,7 +91,7 @@ function OnCall({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem)
 }
 
 /** Passage suivant de la file : une ligne compacte, avec son propre bouton (aucun clic de plus). */
-function Next({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem) => void; onScore: (q: QueueItem) => void }) {
+function Next({ q, times, onEnter, onScore }: { q: QueueItem; times: OrganiserTimes; onEnter: (q: QueueItem) => void; onScore: (q: QueueItem) => void }) {
   const kata = q.kataPart !== null;
   return (
     <Group data-testid={kata ? 'next-kata' : 'next-match'} data-number={q.number} justify="space-between" wrap="nowrap" gap="sm" py={8}
@@ -100,24 +118,28 @@ function Next({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem) =
           {q.early && <EarlyBadge />}
         </Stack>
       </Group>
-      <Box style={{ flexShrink: 0, maxWidth: '50%' }}>
+      <Stack gap={4} align="flex-end" style={{ flexShrink: 0, maxWidth: '50%' }}>
+        {q.matchId !== null && <PassageTimeLabel t={times.passage(q.categoryId, q.matchId)} />}
         {q.held ? <HeldBadge /> : kata
           ? <Button size="xs" variant="light" onClick={() => onScore(q)}>Noter</Button>
           : <Button size="xs" variant="light" onClick={() => onEnter(q)}>Saisir</Button>}
-      </Box>
+      </Stack>
     </Group>
   );
 }
 
 /**
  * Carte d'une zone, jour J : le premier passage de la file « à l'appel » en grand, puis les suivants dans l'ordre (l'ordre affiché
- * ne change jamais, un passage en attente d'une décision reste à sa place, sans bouton).
+ * ne change jamais, un passage en attente d'une décision reste à sa place, sans bouton). Heures présumées de chaque passage
+ * (`times`) ; avance / retard de la zone seulement pour une session lancée (`launched`), rien quand elle est à l'heure.
  */
-export function ZoneQueueCard({ zone, queue, waitingOtherZones, autonomous, onEnter, onScore }: {
-  zone: Zone; queue: QueueItem[]; waitingOtherZones: number; autonomous: boolean;
+export function ZoneQueueCard({ zone, queue, waitingOtherZones, autonomous, times, launched, onEnter, onScore }: {
+  zone: Zone; queue: QueueItem[]; waitingOtherZones: number; autonomous: boolean; times: OrganiserTimes; launched: boolean;
   onEnter: (q: QueueItem) => void; onScore: (q: QueueItem) => void;
 }) {
   const [first, ...rest] = queue;
+  const drift = launched ? times.drift(zone.id) : null;
+  const driftLabel = drift === null ? null : driftText(drift);
   return (
     <Card withBorder padding="md" data-testid="zone-card" style={{ minWidth: 0 }}>
       <Stack gap="sm">
@@ -126,6 +148,9 @@ export function ZoneQueueCard({ zone, queue, waitingOtherZones, autonomous, onEn
             <Title order={3} fz="lg" className="sk-ellipsis" title={zone.name}>{zone.name}</Title>
             <HelpButton topic="combats.zone" />
           </Group>
+          {drift !== null && driftLabel !== 'à l’heure' && (
+            <StatusBadge tone={drift > 0 ? 'warn' : 'ok'} size="md" data-testid="zone-drift">{driftLabel}</StatusBadge>
+          )}
         </Group>
         {autonomous && waitingOtherZones > 0 && (
           <StatusBadge tone="warn" wrap data-testid="waiting-other-zones">
@@ -136,11 +161,11 @@ export function ZoneQueueCard({ zone, queue, waitingOtherZones, autonomous, onEn
           <Text size="sm" c="dimmed" py="md" ta="center">Aucun combat en attente.</Text>
         ) : (
           <>
-            <OnCall q={first} onEnter={onEnter} onScore={onScore} />
+            <OnCall q={first} times={times} onEnter={onEnter} onScore={onScore} />
             {rest.length > 0 && (
               <Stack gap={0}>
                 <Text size="xs" fw={600} c="dimmed" tt="uppercase" style={{ letterSpacing: 0.6 }} mb={2}>Ensuite</Text>
-                {rest.map((q) => <Next key={`${q.categoryId}-${q.matchId}-${q.number}`} q={q} onEnter={onEnter} onScore={onScore} />)}
+                {rest.map((q) => <Next key={`${q.categoryId}-${q.matchId}-${q.number}`} q={q} times={times} onEnter={onEnter} onScore={onScore} />)}
               </Stack>
             )}
           </>

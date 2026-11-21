@@ -2,11 +2,14 @@ import { ActionIcon, Group, NumberInput, Select, Stack, Table, Text, Title } fro
 import { StatusBadge } from './ui/StatusBadge.js';
 import { useEffect, useState } from 'react';
 import { kataScore, resolveKata, type KataBracket, type KataScores } from '../../domain/brackets/kata.js';
+import { kataFinaleKey, kataTour1Key } from '../../domain/passages/kata-keys.js';
+import type { OrganiserTimes, PassageTime } from '../../domain/schedule/organiser-times.js';
 import { usePutKataNotes } from '../api.js';
+import { PassageTimeLabel } from './PassageTimeText.js';
 import type { EntrantInfo } from './BracketView.js';
 import { SectionHeader } from './Help.js';
 
-function NotesRow({ label, club, grade, judges, notes, onSave, finalist }: { label: string; club: string; grade?: string | null; judges: number; notes: number[]; onSave: (n: number[]) => void; finalist?: boolean }) {
+function NotesRow({ label, club, grade, judges, notes, onSave, finalist, time }: { label: string; club: string; grade?: string | null; judges: number; notes: number[]; onSave: (n: number[]) => void; finalist?: boolean; time?: PassageTime | null }) {
   const [values, setValues] = useState<(number | '')[]>([]);
   // Ne réinitialise la ligne que si ses notes enregistrées changent vraiment (pas à chaque rechargement des autres lignes).
   const saved = JSON.stringify(notes);
@@ -17,6 +20,7 @@ function NotesRow({ label, club, grade, judges, notes, onSave, finalist }: { lab
     <Table.Tr data-testid="kata-row">
       <Table.Td>
         <Text fw={500}>{label} {finalist && <StatusBadge tone="accent" size="sm">Finale</StatusBadge>}</Text>
+        {notes.length === 0 && time && <div style={{ whiteSpace: 'nowrap' }}><PassageTimeLabel t={time} /></div>}
         <Text size="xs" c="dimmed">{club}{grade ? ` · Grade : ${grade}` : ''}</Text>
       </Table.Td>
       {values.map((v, i) => (
@@ -34,8 +38,11 @@ function NotesRow({ label, club, grade, judges, notes, onSave, finalist }: { lab
   );
 }
 
-/** Notation des katas : tour 1 pour tous, puis finale des deux meilleurs (moyenne simple sous 5 arbitres). */
-export function KataScoring({ competitionId, categoryId, bracket, scores, tieBreak, finalTieBreak, entrants }: { competitionId: string; categoryId: string; bracket: KataBracket; scores: KataScores; tieBreak: string[]; finalTieBreak: string[]; entrants: Map<string, EntrantInfo> }) {
+/**
+ * Notation des katas : tour 1 pour tous, puis finale des deux meilleurs (moyenne simple sous 5 arbitres). `times` : heure
+ * présumée de passage sous chaque kataka pas encore noté.
+ */
+export function KataScoring({ competitionId, categoryId, bracket, scores, tieBreak, finalTieBreak, entrants, times }: { competitionId: string; categoryId: string; bracket: KataBracket; scores: KataScores; tieBreak: string[]; finalTieBreak: string[]; entrants: Map<string, EntrantInfo>; times?: OrganiserTimes }) {
   const put = usePutKataNotes(competitionId);
   const used = Math.max(0, ...Object.values(scores.round1).map((n) => n.length), ...Object.values(scores.final).map((n) => n.length));
   const [chosen, setJudges] = useState(used || 5);
@@ -68,7 +75,7 @@ export function KataScoring({ competitionId, categoryId, bracket, scores, tieBre
             {header}
             <Table.Tbody>
               {bracket.order.map((id) => (
-                <NotesRow key={id} label={info(id).name} club={info(id).club} grade={info(id).grade} judges={judges} notes={scores.round1[id] ?? []} finalist={round1Complete && finalists.includes(id)}
+                <NotesRow key={id} label={info(id).name} club={info(id).club} grade={info(id).grade} judges={judges} notes={scores.round1[id] ?? []} finalist={round1Complete && finalists.includes(id)} time={times?.passage(categoryId, kataTour1Key(id))}
                   onSave={(notes) => put.mutate({ cid: categoryId, rid: id, round: 'round1', notes })} />
               ))}
             </Table.Tbody>
@@ -80,8 +87,9 @@ export function KataScoring({ competitionId, categoryId, bracket, scores, tieBre
         <Table>
           {header}
           <Table.Tbody>
-            {finalists.map((id) => (
+            {finalists.map((id, index) => (
               <NotesRow key={id} label={info(id).name} club={info(id).club} grade={info(id).grade} judges={judges} notes={scores.final[id] ?? []}
+                time={times?.passage(categoryId, kataFinaleKey((index + 1) as 1 | 2))}
                 onSave={(notes) => put.mutate({ cid: categoryId, rid: id, round: 'final', notes })} />
             ))}
           </Table.Tbody>
