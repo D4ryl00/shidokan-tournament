@@ -23,8 +23,11 @@ chaque combat (« vers H:MM »). Ce sont les mêmes heures que celles du mode sp
     zone est à l'heure.
   - Carte « À l'appel » : « vers H:MM » en haut à droite, sur la ligne « À l'appel » (le numéro garde le coin gauche).
     **Elle reste affichée même une fois dépassée** (décision de l'utilisateur).
-  - Lignes « Ensuite » : « vers H:MM » en haut à droite, au-dessus du bouton « Saisir ». Ligne des finales « fin de
-    session » : même heure à droite. La ligne des rounds reste sous la catégorie.
+  - Lignes « Ensuite » : « vers H:MM » en haut à droite, au-dessus du bouton « Saisir ». La ligne des rounds reste sous la
+    catégorie.
+  - Finales repérées dans la file (demande de l'utilisateur, 2026-11-21) : pas de ligne « Finales fin de session » à part ;
+    chaque passage de finale (combat de finale, série au meilleur des trois, place de la finale du kata) porte un badge
+    « Finale », à l'appel comme dans « Ensuite », et sa ligne « Ensuite » a un liseré violet à gauche.
   - Liste des catégories (quand elle est ouverte) : même ligne que dans Tableaux → Liste.
 - **Kata : une heure par kataka** (décision de l'utilisateur)
   - Tableau du kata (Tableaux → Liste) : colonne « Heure » (noté : sa note ; en cours : « sur le tatami » ; à venir :
