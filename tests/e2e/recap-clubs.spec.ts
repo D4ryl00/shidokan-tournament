@@ -66,7 +66,7 @@ test('onglet Clubs : volet du message, enveloppes (grisée avec sa raison), conf
   await expect(confirm.getByTestId('recap-send-addresses')).toHaveText('coach@pret.fr, pres@pret.fr');
   await expect(confirm).toContainText('Objet : Récapitulatif');
   await confirm.getByTestId('recap-send-go').click();
-  await expect(page.getByText(`Récapitulatif envoyé d’${names.ok}.`).or(page.getByText(`Récapitulatif envoyé de ${names.ok}.`))).toBeVisible();
+  await expect(page.getByText(`Récapitulatif envoyé à ${names.ok}.`)).toBeVisible();
   expect(sentTo).toEqual([clubIds.ok]);
 
   // Tous les clubs : un seul club part, les deux autres sont sautés avec leur raison.

@@ -4,7 +4,7 @@ import { notifications } from '@mantine/notifications';
 import { useParams } from 'react-router';
 import { ofName, plural } from '../../domain/plural.js';
 import type { Club } from '../../domain/registration.js';
-import { useAuthMe, useClubChanges, useClubs, useFetchClubChanges, useRegistrations, useUpdateClub } from '../api.js';
+import { isOrganiser, useAuthMe, useClubChanges, useClubs, useFetchClubChanges, useRegistrations, useUpdateClub } from '../api.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { ClubChangePill } from '../components/club-changes/ClubChangeBanners.js';
 import { useClubChangeDialog } from '../components/club-changes/ClubChangeModal.js';
@@ -64,7 +64,8 @@ export function ClubsPage() {
   const { data: rows = [] } = useRegistrations(id);
   const update = useUpdateClub(id);
   // L'envoi des mails se fait depuis le serveur en ligne seulement.
-  const online = useAuthMe().data?.role === 'serveur';
+  const me = useAuthMe().data;
+  const online = me?.role === 'serveur' && isOrganiser(me);
   const { data: changes = [] } = useClubChanges(id);
   const fetchChanges = useFetchClubChanges(id);
   const comparison = useClubChangeDialog(changes);
@@ -74,6 +75,7 @@ export function ClubsPage() {
   useEffect(() => { const keys = shownKeys.current; return () => keys.forEach((k) => notifications.hide(k)); }, []);
   const changeOf = (clubId: string) => changes.find((x) => x.clubId === clubId);
   const count = (clubId: string) => rows.filter((r) => r.club?.id === clubId).length;
+  const previewClub = clubs.find((c) => recapBlocked(c, count(c.id)) === null);
   // Après un enregistrement : si le club diffère maintenant de l'annuaire, l'organisateur peut comparer tout de suite.
   const afterSave = async (clubId: string) => {
     const change = (await fetchChanges().catch(() => [])).find((c) => c.clubId === clubId);
@@ -101,7 +103,7 @@ export function ClubsPage() {
             {online && <RecapSendAll competitionId={id} clubs={clubs.map((c) => ({ id: c.id, name: c.name, coachEmails: c.coachEmails, registrations: count(c.id) }))} />}
           </Group>
         )} />
-      {online && clubs.length > 0 && <RecapMessage competitionId={id} previewClubId={clubs.find((c) => recapBlocked(c, count(c.id)) === null)?.id ?? null} />}
+      {online && clubs.length > 0 && <RecapMessage competitionId={id} previewClubId={previewClub?.id ?? null} previewClubName={previewClub?.name ?? null} />}
       {isLoading ? null : clubs.length === 0 ? (
         <EmptyState title="Aucun club pour l’instant" text="Les clubs sont créés par les inscriptions : en ligne, par l’import des fiches ou de l’export FFK, ou à la saisie d’une inscription." />
       ) : (

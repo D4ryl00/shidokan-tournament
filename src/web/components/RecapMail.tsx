@@ -3,7 +3,7 @@ import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
 import { DEFAULT_RECAP_MAIL, RECAP_VARIABLES } from '../../domain/recap-mail.js';
 import { ofName, plural } from '../../domain/plural.js';
-import { useCompetition, useRecapPreview, useRecapSendJob, useSendRecap, useSendRecaps, useUpdateCompetition, type SendJob } from '../api.js';
+import { useClubEntrySettings, useCompetition, useRecapPreview, useRecapSendJob, useSendRecap, useSendRecaps, useUpdateCompetition, type SendJob } from '../api.js';
 import { ApiErrorAlert } from './ApiErrorAlert.js';
 import { HelpButton } from './Help.js';
 import { MailMessageEditor } from './mail-editor/index.js';
@@ -28,7 +28,7 @@ function sameHtml(a: string, b: string): boolean {
 }
 
 /** Volet « Message du récapitulatif » : objet et texte du mail (sinon le texte de départ), avec un aperçu. */
-export function RecapMessage({ competitionId, previewClubId }: { competitionId: string; previewClubId: string | null }) {
+export function RecapMessage({ competitionId, previewClubId, previewClubName }: { competitionId: string; previewClubId: string | null; previewClubName: string | null }) {
   const { data: competition } = useCompetition(competitionId);
   const update = useUpdateCompetition(competitionId);
   const own = competition?.settings.recapMail ?? null;
@@ -40,6 +40,9 @@ export function RecapMessage({ competitionId, previewClubId }: { competitionId: 
   const [saveBlock, setSaveBlock] = useState<string | null>(null);
   useUnsaved('message-recapitulatif', form !== null || saveBlock !== null);
   const preview = useRecapPreview(competitionId, previewClubId, JSON.stringify(current));
+  const { data: entry } = useClubEntrySettings(competitionId);
+  // Compétition tenue ailleurs : le message s'y règle, pas ici.
+  const readOnly = entry?.managedHere === false;
   const { checking, noticeThenSave } = useRemovedNotice();
   if (!competition) return null;
   const save = (recapMail: Template | null) =>
@@ -63,19 +66,19 @@ export function RecapMessage({ competitionId, previewClubId }: { competitionId: 
               <Text size="sm" c="dimmed">Variables : {RECAP_VARIABLES}. Le récapitulatif PDF du club est joint automatiquement.</Text>
               <HelpButton topic="clubs.recap" />
             </Group>
-            <TextInput label="Objet" data-testid="recap-subject" value={shown.subject} onChange={(e) => setForm({ ...shown, subject: e.currentTarget.value })} />
+            <TextInput label="Objet" data-testid="recap-subject" value={shown.subject} readOnly={readOnly} onChange={(e) => setForm({ ...shown, subject: e.currentTarget.value })} />
             <Input.Wrapper label="Texte">
-              <MailMessageEditor key={editorKey} value={shown} onChange={(v) => setForm({ ...shown, ...v })} onSaveBlockChange={setSaveBlock} />
+              <MailMessageEditor key={editorKey} value={shown} readOnly={readOnly} onChange={(v) => setForm({ ...shown, ...v })} onSaveBlockChange={setSaveBlock} />
             </Input.Wrapper>
             <Group>
-              <Button size="xs" data-testid="recap-save" disabled={!form || !!saveBlock} loading={update.isPending || checking} onClick={() => form && noticeThenSave(form, () => save(form))}>Enregistrer</Button>
-              {own && <Button size="xs" variant="subtle" data-testid="recap-reset" disabled={!!saveBlock} onClick={() => save(null)}>Revenir au texte de départ</Button>}
+              <Button size="xs" data-testid="recap-save" disabled={!form || readOnly || !!saveBlock} loading={update.isPending || checking} onClick={() => form && noticeThenSave(form, () => save(form))}>Enregistrer</Button>
+              {own && <Button size="xs" variant="subtle" data-testid="recap-reset" disabled={readOnly || !!saveBlock} onClick={() => save(null)}>Revenir au texte de départ</Button>}
             </Group>
             {saveBlock && <Text size="sm" c="dimmed">{saveBlock}</Text>}
             <ApiErrorAlert error={update.error} />
             {preview.data && (
               <Stack gap={4}>
-                <Text size="sm" fw={600}>Aperçu pour {previewClubId ? 'le premier club de la liste' : 'un club'}</Text>
+                <Text size="sm" fw={600}>Aperçu pour {previewClubName ?? 'un club'}</Text>
                 <Text size="sm" data-testid="recap-preview-subject">Objet : {preview.data.subject}</Text>
                 {/* Le HTML est filtré par le serveur ; fond blanc et texte sombre dans les deux thèmes. */}
                 <div data-testid="recap-preview" style={{ background: '#ffffff', color: '#222222', padding: 12, borderRadius: 4, overflowX: 'auto' }} onClick={(e) => e.preventDefault()} dangerouslySetInnerHTML={{ __html: preview.data.html }} />
@@ -94,7 +97,9 @@ export interface RecapClub { id: string; name: string; coachEmails: string[]; re
 export function RecapSendOne({ competitionId, club, registrations }: { competitionId: string; club: { id: string; name: string; coachEmails: string[] }; registrations: number }) {
   const [opened, setOpened] = useState(false);
   const send = useSendRecap(competitionId);
-  const blocked = recapBlocked(club, registrations);
+  const { data: entry } = useClubEntrySettings(competitionId);
+  const elsewhere = entry?.managedHere === false;
+  const blocked = elsewhere ? 'Compétition gérée ailleurs' : recapBlocked(club, registrations);
   const { data: competition } = useCompetition(competitionId);
   const version = JSON.stringify(competition?.settings.recapMail ?? null);
   const preview = useRecapPreview(competitionId, opened ? club.id : null, version);
@@ -114,8 +119,8 @@ export function RecapSendOne({ competitionId, club, registrations }: { competiti
             <Button data-testid="recap-send-go" loading={send.isPending}
               onClick={() => send.mutate({ clubId: club.id }, {
                 onSuccess: (r) => {
-                  if (r.status === 'sent') notifications.show({ color: 'green', message: `Récapitulatif envoyé ${ofName(club.name)}.` });
-                  else notifications.show({ color: 'red', message: `Récapitulatif non envoyé ${ofName(club.name)} : ${r.error}` });
+                  if (r.status === 'sent') notifications.show({ color: 'green', message: `Récapitulatif envoyé à ${club.name}.` });
+                  else notifications.show({ color: 'red', message: `Récapitulatif non envoyé à ${club.name} : ${r.error}` });
                   close();
                 },
               })}>
@@ -177,6 +182,7 @@ export function RecapSendAll({ competitionId, clubs }: { competitionId: string; 
   const [progressOpen, setProgressOpen] = useState(false);
   const [dismissedJobId, setDismissedJobId] = useState<string | null>(null);
   const sending = job !== null && !job.finished;
+  const elsewhere = useClubEntrySettings(competitionId).data?.managedHere === false;
   // Un envoi trouvé en cours (page rechargée) se suit aussi ; fermer la fenêtre ne l'arrête pas.
   useEffect(() => {
     if (sending && job.id !== dismissedJobId) setProgressOpen(true);
@@ -185,7 +191,7 @@ export function RecapSendAll({ competitionId, clubs }: { competitionId: string; 
   const skipped = clubs.flatMap((c) => { const why = recapBlocked(c, c.registrations); return why ? [{ club: c, why }] : []; });
   return (
     <>
-      <Button variant="default" data-testid="recap-send-all" loading={sending} disabled={sendable.length === 0} onClick={() => setConfirm(true)}>
+      <Button variant="default" data-testid="recap-send-all" loading={sending} disabled={elsewhere || sendable.length === 0} onClick={() => setConfirm(true)}>
         Envoyer les récapitulatifs à tous les clubs
       </Button>
       <Modal opened={confirm} onClose={() => setConfirm(false)} title="Envoyer les récapitulatifs">
