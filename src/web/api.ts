@@ -850,7 +850,7 @@ export interface QueueItem {
   /** Passage de kata : 'tour1' ou 'finale' ; null pour un combat. */
   kataPart: 'tour1' | 'finale' | null;
   /** Kataka du passage : `name`/`club` null tant que le finaliste n'est pas connu ; `position` = rang parmi les présents du tour (finale : 1 ou 2), `total` = présents du tour 1 (finale : 2). */
-  kata: { name: string | null; club: string | null; position: number; total: number } | null;
+  kata: { name: string | null; club: string | null; position: number; total: number; absent: boolean } | null;
   noRest: boolean;
   /** Une saisie d'une zone autonome est à trancher dans cette catégorie. */
   held: boolean;
@@ -952,7 +952,7 @@ export const useLaunch = (id: string) => useLaunchAction<{ waveId: string | null
 export const useReopen = (id: string) => useLaunchAction<{ waveId: string | null }>(id, 'POST', () => '/launch/reopen', (a) => a);
 export type RenumberMode = 'append' | 'shuffle';
 export interface MoveResult {
-  changes: { categoryId: string; label: string; matchId: string | null; from: { zoneId: string; number: number } | null; to: { zoneId: string; number: number } }[];
+  changes: { categoryId: string; label: string; matchId: string; from: { zoneId: string; number: number } | null; to: { zoneId: string; number: number } }[];
   reprint: { categoryId: string; label: string }[];
 }
 export const useMoveCategory = (id: string) =>

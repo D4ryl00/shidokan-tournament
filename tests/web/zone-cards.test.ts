@@ -47,8 +47,8 @@ test('combat : le club de chaque combattant, à l’appel et sur les lignes suiv
 
 test('kata à l’appel : une seule personne, pas de « Se prépare »', () => {
   const html = render([
-    kataItem(1, 'tour1', { name: 'DURAND Léa', club: 'Club A', position: 1, total: 3 }),
-    kataItem(2, 'tour1', { name: 'MARTIN Zoé', club: 'Club B', position: 2, total: 3 }),
+    kataItem(1, 'tour1', { name: 'DURAND Léa', club: 'Club A', position: 1, total: 3, absent: false }),
+    kataItem(2, 'tour1', { name: 'MARTIN Zoé', club: 'Club B', position: 2, total: 3, absent: false }),
   ]);
   expect(html.match(/data-testid="kata-current"/g)).toHaveLength(1);
   expect(html).not.toContain('Se prépare');
@@ -60,8 +60,19 @@ test('kata à l’appel : une seule personne, pas de « Se prépare »', () => {
   expect(html.indexOf('DURAND Léa')).toBeLessThan(html.indexOf('Ensuite'));
 });
 
+test('finaliste absent tardif : « · absent » à l’appel et dans « Ensuite », passage conservé', () => {
+  const html = render([
+    kataItem(4, 'finale', { name: 'DURAND Léa', club: 'Club A', position: 1, total: 2, absent: true }),
+    kataItem(5, 'finale', { name: 'MARTIN Zoé', club: 'Club B', position: 2, total: 2, absent: true }),
+  ]);
+  expect(html.match(/data-testid="kata-absent"/g)).toHaveLength(2);
+  expect(html.slice(0, html.indexOf('Ensuite'))).toContain('absent');
+  expect(html.slice(html.indexOf('Ensuite'))).toContain('absent');
+  expect(render([kataItem(4, 'finale', { name: 'DURAND Léa', club: 'Club A', position: 1, total: 2, absent: false })])).not.toContain('absent');
+});
+
 test('finale aux finalistes inconnus : « Finaliste 1 », sans « kataka i sur n »', () => {
-  const html = render([kataItem(4, 'finale', { name: null, club: null, position: 1, total: 2 }), kataItem(5, 'finale', { name: null, club: null, position: 2, total: 2 })]);
+  const html = render([kataItem(4, 'finale', { name: null, club: null, position: 1, total: 2, absent: false }), kataItem(5, 'finale', { name: null, club: null, position: 2, total: 2, absent: false })]);
   expect(html).toContain('Finaliste 1');
   expect(html.slice(html.indexOf('Ensuite'))).toContain('Finaliste 2');
   expect(html).toContain('Kata Filles (finale)');
@@ -69,7 +80,7 @@ test('finale aux finalistes inconnus : « Finaliste 1 », sans « kataka i sur n
 });
 
 test('finale aux finalistes connus : nom et club, kataka suivant dans « Ensuite »', () => {
-  const html = render([item(1, false), kataItem(2, 'finale', { name: 'DURAND Léa', club: 'Club A', position: 1, total: 2 })]);
+  const html = render([item(1, false), kataItem(2, 'finale', { name: 'DURAND Léa', club: 'Club A', position: 1, total: 2, absent: false })]);
   const next = html.slice(html.indexOf('Ensuite'));
   expect(next).toContain('DURAND Léa');
   expect(next).toContain('Club A');
@@ -80,5 +91,5 @@ test('durée du combat : à l’appel et dans « Ensuite », jamais pour un kata
   const html = render([item(1, false), item(2, false)]);
   expect(html.match(/data-testid="match-timing"/g)).toHaveLength(2);
   expect(html).toContain('2 rounds de 2 min · prolongation 1 min');
-  expect(render([kataItem(1, 'tour1', { name: 'A', club: 'X', position: 1, total: 3 })])).not.toContain('match-timing');
+  expect(render([kataItem(1, 'tour1', { name: 'A', club: 'X', position: 1, total: 3, absent: false })])).not.toContain('match-timing');
 });

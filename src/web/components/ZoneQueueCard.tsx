@@ -44,7 +44,7 @@ function OnCall({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem)
               <Text size="sm" c="var(--sk-hero-sub)">{kataTitle(q)}</Text>
               <Box data-testid="kata-current">
                 {q.kata?.name
-                  ? <Text fz="xl" fw={700} lh={1.2}><Who name={q.kata.name} club={q.kata.club} c="var(--sk-hero-sub)" /></Text>
+                  ? <Text fz="xl" fw={700} lh={1.2}><Who name={q.kata.name} club={q.kata.club} c="var(--sk-hero-sub)" />{q.kata.absent && <Text span fz="sm" fw={400} c="var(--sk-hero-sub)" data-testid="kata-absent"> · absent</Text>}</Text>
                   : <Text fz="xl" fw={700} lh={1.2}>Finaliste {q.kata?.position}</Text>}
               </Box>
               {q.kataPart === 'tour1' && q.kata && <Text size="sm" c="var(--sk-hero-sub)">kataka {q.kata.position} sur {q.kata.total}</Text>}
@@ -84,7 +84,7 @@ function Next({ q, onEnter, onScore }: { q: QueueItem; onEnter: (q: QueueItem) =
           {kata ? (
             <>
               <Text size="sm" fw={600}>
-                {q.kata?.name ? <Who name={q.kata.name} club={q.kata.club} c="dimmed" /> : `Finaliste ${q.kata?.position}`}
+                {q.kata?.name ? <><Who name={q.kata.name} club={q.kata.club} c="dimmed" />{q.kata.absent && <Text span size="xs" fw={400} c="dimmed" data-testid="kata-absent"> · absent</Text>}</> : `Finaliste ${q.kata?.position}`}
               </Text>
               <Text size="xs" c="dimmed">{kataTitle(q)}</Text>
             </>

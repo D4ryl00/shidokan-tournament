@@ -242,7 +242,7 @@ export interface QueueItem {
   /** Passage de kata : 'tour1' (un kataka du tour 1) ou 'finale' (une place de finale) ; null pour un combat. */
   kataPart: 'tour1' | 'finale' | null;
   /** Kataka du passage : `name`/`club` null tant que le finaliste n'est pas connu ; `position` = rang parmi les présents du tour (finale : 1 ou 2), `total` = présents du tour 1 (finale : 2). Null pour un combat. */
-  kata: { name: string | null; club: string | null; position: number; total: number } | null;
+  kata: { name: string | null; club: string | null; position: number; total: number; absent: boolean } | null;
   noRest: boolean;
   /** Une saisie d'une zone autonome est à trancher dans cette catégorie : en attente d'une décision à la table centrale. */
   held: boolean;
@@ -335,18 +335,18 @@ export async function schedule(db: AppDb, competitionId: string, waveId?: string
             // Absent tardif : son passage est « joué », donc déjà écarté ; position et total comptent les présents du tour 1.
             const present = c.bracket.order.filter((id) => !c.absentIds.includes(id));
             const position = present.indexOf(key.registrationId) + 1;
-            return position > 0 ? [q('tour1', { name: name(key.registrationId), club: club(key.registrationId), position, total: present.length })] : [];
+            return position > 0 ? [q('tour1', { name: name(key.registrationId), club: club(key.registrationId), position, total: present.length, absent: false })] : [];
           }
           const rid = st.finalistsKnown ? (st.finalists[key.slot - 1] ?? null) : null;
-          return [q('finale', { name: name(rid), club: club(rid), position: key.slot, total: 2 })];
+          return [q('finale', { name: name(rid), club: club(rid), position: key.slot, total: 2, absent: !!rid && c.absentIds.includes(rid) })];
         }
         const m = st.matches.find((x) => x.id === p.matchId);
         const c = cats.find((x) => x.id === p.categoryId)!;
         return m && m.playable && !m.result ? [{ p, q: { ...base, matchId: m.id, a: name(m.entrantA), b: name(m.entrantB), aClub: club(m.entrantA), bClub: club(m.entrantB), timing: timingLongText(combatTiming(settings, ageGroupOf(c.key, grid), c.durations, m.id, finalIds.get(c.id)!.has(m.id))), kataPart: null, kata: null } }] : [];
       });
     // Une finale prête derrière un passage non joué de sa session est signalée, même au-delà des 6 premiers (jamais le premier de la file).
-    // Combat : il est dans la file, donc jouable (finalistes connus) ; finale de kata : finalistes connus (tour 1 noté).
-    const readyFinal = (q: QueueItem) => q.kataPart !== null ? q.kataPart === 'finale' && state.get(q.categoryId)!.finalistsKnown : !!finalIds.get(q.categoryId)?.has(q.matchId!);
+    // Combat : il est dans la file, donc jouable (finalistes connus) ; finale de kata : finalistes connus (tour 1 noté) et finales placées à part (un kata non séparé n'est jamais « early »).
+    const readyFinal = (q: QueueItem) => q.kataPart !== null ? q.kataPart === 'finale' && state.get(q.categoryId)!.finalistsKnown && !!plan.finals[q.categoryId]?.kataSplit : !!finalIds.get(q.categoryId)?.has(q.matchId!);
     const marked = items.map(({ p, q }, i) =>
       i === 0 || !readyFinal(q) ? q : { ...q, early: passages.some((o) => o.categoryId !== p.categoryId && o.number < p.number && o.waveId === p.waveId && unplayed(o)) });
     return [...marked.slice(0, 6), ...marked.slice(6).filter((q) => q.early)];
