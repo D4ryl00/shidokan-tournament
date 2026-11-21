@@ -878,9 +878,10 @@ export function useSchedule(id: string, waveId?: string | null, enabled = true) 
  * Horaires estimés de la journée (toutes les sessions, lancées ou non) ; `shift` : « Décaler une session qui commence avant
  * la fin de la précédente ». Sous « schedule » : relue avec les files (catégories, durées, sessions, pesée, autres postes).
  */
-export function useDayEstimate(id: string, shift: boolean) {
+export function useDayEstimate(id: string, shift: boolean, opts: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ['schedule', id, 'estimate', shift],
+    enabled: opts.enabled ?? true,
     queryFn: () => api<DayEstimateView>('GET', `/api/competitions/${id}/schedule/estimate?decaler=${shift ? 1 : 0}`),
     // Case « Décaler… » changée : l'estimation affichée reste en place jusqu'à la suivante.
     placeholderData: (previous) => previous,

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { todayInParis } from '../../domain/public/view.js';
 import type { AppDb } from '../db/client.js';
 import { onAnyCompetitionChange, onCompetitionChange } from '../events.js';
-import { isPublicCompetition, loadPublicCompetition, loadPublicList } from './load.js';
+import { competitionExists, isPublicCompetition, loadPublicCompetition, loadPublicList } from './load.js';
 
 /** Réponse publique prête à envoyer : corps JSON et son empreinte. */
 export interface CachedBody {
@@ -21,6 +21,8 @@ interface Entry extends CachedBody {
  */
 interface State {
   details: Map<string, Entry>;
+  /** Vue des heures pour l'organisation (quelle que soit la visibilité) : à part des fiches publiques, mêmes changements. */
+  organiser: Map<string, Entry>;
   versions: Map<string, number>;
   watched: Map<string, () => void>;
   list: Entry | null;
@@ -33,7 +35,7 @@ const states = new WeakMap<AppDb, State>();
 function stateOf(db: AppDb): State {
   let s = states.get(db);
   if (!s) {
-    const state: State = { details: new Map(), versions: new Map(), watched: new Map(), list: null, listVersion: 0, offAny: () => {} };
+    const state: State = { details: new Map(), organiser: new Map(), versions: new Map(), watched: new Map(), list: null, listVersion: 0, offAny: () => {} };
     // La liste dépend de toutes les compétitions.
     state.offAny = onAnyCompetitionChange(() => {
       state.list = null;
@@ -52,6 +54,7 @@ function watch(s: State, id: string): void {
     id,
     onCompetitionChange(id, () => {
       s.details.delete(id);
+      s.organiser.delete(id);
       s.versions.set(id, (s.versions.get(id) ?? 0) + 1);
     }),
   );
@@ -79,6 +82,26 @@ export async function publicCompetition(db: AppDb, id: string, now = new Date())
   if (!view) return null;
   const e = entry(view, day);
   if ((s.versions.get(id) ?? 0) === version) s.details.set(id, e);
+  return e;
+}
+
+/**
+ * Vue des heures pour l'organisation (`/schedule/times`) : la vue publique quelle que soit la visibilité, gardée comme la
+ * fiche publique (calculée au premier appel du jour, effacée à chaque changement de la compétition) ; null si elle est inconnue.
+ */
+export async function organiserTimesView(db: AppDb, id: string, now = new Date()): Promise<CachedBody | null> {
+  // Rien n'est gardé ni suivi pour un identifiant inconnu.
+  if (!competitionExists(db, id)) return null;
+  const s = stateOf(db);
+  const day = todayInParis(now);
+  const cached = s.organiser.get(id);
+  if (cached && cached.day === day) return cached;
+  watch(s, id);
+  const version = s.versions.get(id) ?? 0;
+  const view = await loadPublicCompetition(db, id, now, { anyVisibility: true });
+  if (!view) return null;
+  const e = entry(view, day);
+  if ((s.versions.get(id) ?? 0) === version) s.organiser.set(id, e);
   return e;
 }
 

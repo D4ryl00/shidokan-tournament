@@ -31,6 +31,33 @@ describe('vue des heures pour l’organisation', () => {
     expect(view.queues.some((q) => q.items.length > 0)).toBe(true);
   });
 
+  test('gardée en mémoire : 304 sur la même empreinte, nouvelle empreinte après un résultat', async () => {
+    for (let i = 0; i < 4; i++) {
+      const res = await call('POST', '/registrations', {
+        clubId: null, lastName: `NOM${i}`, firstName: 'x', sex: 'F', ageBandCode: 'cadet', discipline: 'karate', ruleset: 'jiyu', weightClassId: 'cadet:F:-54', source: 'manual',
+      });
+      expect(res.statusCode).toBe(201);
+    }
+    const [cat] = (await call('GET', '/categories')).json() as { id: string }[];
+    await call('PATCH', `/categories/${cat!.id}`, { status: 'ready' });
+    expect((await call('POST', '/launch', { waveId: null, restart: false })).statusCode).toBe(204);
+    const first = await call('GET', '/schedule/times');
+    expect(first.statusCode).toBe(200);
+    expect(first.headers['cache-control']).toBe('no-cache');
+    const etag = String(first.headers.etag);
+    expect(etag).toMatch(/^"[0-9a-f]{40}"$/);
+    const again = await app.inject({ method: 'GET', url: `${base}/schedule/times`, headers: { 'if-none-match': etag } });
+    expect(again.statusCode).toBe(304);
+    expect(again.body).toBe('');
+    expect((await call('PUT', `/categories/${cat!.id}/results/w1-0`, { winner: 'a', method: 'points' })).statusCode).toBe(200);
+    const after = await app.inject({ method: 'GET', url: `${base}/schedule/times`, headers: { 'if-none-match': etag } });
+    expect(after.statusCode).toBe(200);
+    expect(after.headers.etag).not.toBe(etag);
+    const view = after.json() as PublicCompetition;
+    expect(view.categories.find((c) => c.id === cat!.id)).toMatchObject({ results: { 'w1-0': { winner: 'a', method: 'points' } } });
+    expect(view.queues.flatMap((q) => q.items).find((i) => i.categoryId === cat!.id && i.matchId === 'w1-0')?.endedAt).not.toBeNull();
+  });
+
   test('compétition inconnue : 404', async () => {
     expect((await app.inject({ method: 'GET', url: '/api/competitions/inconnue/schedule/times' })).statusCode).toBe(404);
   });

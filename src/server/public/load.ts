@@ -16,6 +16,11 @@ import { listWaves } from '../repositories/waves.js';
 import { listZones } from '../repositories/zones.js';
 
 /** Vrai seulement pour une compétition qui existe et qui est publique. */
+/** La compétition existe-t-elle (quelle que soit sa visibilité) ? */
+export function competitionExists(db: AppDb, id: string): boolean {
+  return db.select({ id: competitions.id }).from(competitions).where(eq(competitions.id, id)).get() !== undefined;
+}
+
 export function isPublicCompetition(db: AppDb, id: string): boolean {
   return db.select({ visibility: competitions.visibility }).from(competitions).where(eq(competitions.id, id)).get()?.visibility === 'public';
 }

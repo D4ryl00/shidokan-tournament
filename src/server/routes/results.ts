@@ -5,8 +5,9 @@ import { checkRev, kataRev, resultRev, tieBreakRev } from '../revisions.js';
 import { getCompetition } from '../repositories/competitions.js';
 import { estimateFor } from '../repositories/estimate.js';
 import { exportFfk } from '../repositories/ffk-export.js';
-import { loadPublicCompetition } from '../public/load.js';
+import { organiserTimesView } from '../public/cache.js';
 import { passagePlan } from '../repositories/passages.js';
+import { sendCached } from './public.js';
 import { deleteResult, exportPodiums, exportResults, getResults, podiums, putKataNotes, putResult, putTieBreak, schedule } from '../repositories/results.js';
 
 type P = { Params: { id: string; cid: string } };
@@ -49,10 +50,11 @@ export async function resultRoutes(app: FastifyInstance, { db }: { db: AppDb }) 
   app.get<{ Params: { id: string }; Querystring: { decaler?: string } }>('/api/competitions/:id/schedule/estimate', async (req) =>
     estimateFor(db, req.params.id, z.enum(['0', '1']).default('1').parse(req.query.decaler) === '1'),
   );
-  // Vue des heures pour l'organisation : la vue publique, quelle que soit la visibilité ; jamais mise en cache.
+  // Vue des heures pour l'organisation : la vue publique, quelle que soit la visibilité ; gardée en mémoire jusqu'au prochain
+  // changement et revalidée par empreinte (304), comme la fiche publique.
   app.get<{ Params: { id: string } }>('/api/competitions/:id/schedule/times', async (req, reply) => {
-    const view = await loadPublicCompetition(db, req.params.id, new Date(), { anyVisibility: true });
-    return view ?? reply.status(404).send({ error: 'Compétition introuvable' });
+    const cached = await organiserTimesView(db, req.params.id);
+    return cached ? sendCached(req, reply, cached) : reply.status(404).send({ error: 'Compétition introuvable' });
   });
   app.get<{ Params: { id: string } }>('/api/competitions/:id/passages', async (req) => passagePlan(db, req.params.id));
   app.get<{ Params: { id: string } }>('/api/competitions/:id/podiums', async (req) => {

@@ -17,7 +17,7 @@ function matches(header: string | undefined, etag: string): boolean {
 }
 
 /** Réponse en cache : 304 sans corps si le navigateur a déjà cette version, sinon le JSON. Toujours revalidée. */
-function sendCached(req: FastifyRequest, reply: FastifyReply, cached: CachedBody) {
+export function sendCached(req: FastifyRequest, reply: FastifyReply, cached: CachedBody) {
   reply.header('ETag', cached.etag).header('Cache-Control', 'no-cache');
   if (matches(req.headers['if-none-match'], cached.etag)) return reply.status(304).send();
   return reply.type('application/json; charset=utf-8').send(cached.body);
