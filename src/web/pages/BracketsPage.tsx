@@ -8,11 +8,15 @@ import { compatibleFormats, type BracketFormat } from '../../domain/brackets/ind
 import { activeEntrantCount, type Category, type CategoryStatus } from '../../domain/categories.js';
 import { newSameClubSentences } from '../../domain/brackets/same-club.js';
 import { plural } from '../../domain/plural.js';
+import { IMPLICIT_WAVE } from '../../domain/public/view.js';
+import { validResults } from '../../domain/results.js';
 import { matchTimings } from '../matchTimings.js';
-import { useAuthorizations, useCompetition, useGrid, useCategories, useHistory, usePassages, useRedraw, useRegenerate, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
+import { useAuthorizations, useCategoryResults, useCompetition, useGrid, useCategories, useHistory, usePassages, useRedraw, useRegenerate, useRegistrations, useReplacement, useSwap, useUpdateCategory, useZones } from '../api.js';
 import { categoryPassages, kataPassageText, movedMatchZones } from '../passages.js';
 import { useSelectedWave, withSession } from '../useSelectedWave.js';
 import { usePoste } from '../poste.js';
+import { useOrganiserTimes } from '../useOrganiserTimes.js';
+import { CategoryTimesLine, plannedCategory, ZoneDriftBadge } from '../components/PassageTimeText.js';
 import { ApiErrorAlert } from '../components/ApiErrorAlert.js';
 import { useUndoToast } from '../components/history/undoToast.js';
 import { HistoryPanel, HISTORY_DRAWER_WIDTH } from '../components/history/HistoryPanel.js';
@@ -178,6 +182,16 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
   const selected: Category | undefined = categories.find((c) => c.id === selectedId) ?? filtered[0];
   const locked = selected?.status === 'started' || selected?.status === 'finished';
   const passages = useMemo(() => (selected ? categoryPassages(plan, selected.id) : null), [plan, selected]);
+  // Heures présumées ; résultats de la catégorie choisie (lancée) : un combat joué montre son résultat, un kataka noté sa note.
+  const times = useOrganiserTimes(id);
+  const zoneName = (zid: string | null) => zones.find((z) => z.id === zid)?.name ?? null;
+  const { data: res } = useCategoryResults(id, selected?.bracket && locked ? selected.id : null);
+  const results = useMemo(
+    () => (res && selected?.bracket?.kind === 'combat' ? validResults(selected.bracket, res.records, res.tieBreaks.pools).results : undefined),
+    [res, selected],
+  );
+  const launched = selected ? times.waveLaunched(selected.waveId) : false;
+  const plannedSession = !!selected && !launched && plannedCategory(times.category(selected));
   const { data: competition } = useCompetition(id);
   const { data: grid } = useGrid(id);
   const timings = useMemo(
@@ -314,6 +328,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
                         )}
                         {c.stale && <StatusBadge tone="warn" size="sm">Inscrits modifiés</StatusBadge>}
                       </Group>
+                      <CategoryTimesLine category={c} times={times} zone={zoneName(plan?.categories[c.id]?.zoneId ?? c.zoneId)} />
                     </Card>
                   </UnstyledButton>
                 );
@@ -337,6 +352,7 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
                   {zones.find((z) => z.id === passages?.zoneId) && (
                     <StatusBadge tone="accent" size="lg" data-testid="category-zone">{zones.find((z) => z.id === passages?.zoneId)!.name}{passages?.auto ? ' (auto)' : ''}</StatusBadge>
                   )}
+                  {passages?.zoneId && <ZoneDriftBadge drift={launched ? times.drift(passages.zoneId) : null} size="lg" />}
                   {passages && kataPassageText(passages, zones) && (
                     <StatusBadge tone="neutral" size="lg" data-testid="category-kata-passage">{kataPassageText(passages, zones)}</StatusBadge>
                   )}
@@ -350,6 +366,13 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
                 Imprimer
               </Button>
             </Group>
+            {plannedSession && (
+              <Text size="sm" px="sm" py="xs" data-testid="planned-notice"
+                style={{ background: 'var(--sk-row)', border: '1px solid var(--sk-card-line)', borderRadius: 'var(--mantine-radius-sm)' }}>
+                Session « {waves.find((w) => w.id === selected.waveId)?.name ?? IMPLICIT_WAVE} » pas encore lancée : heures prévues d’après l’heure de début de
+                la session et les durées, sans les résultats. Elles peuvent encore changer.
+              </Text>
+            )}
             {!readOnlyPoste && (
             <Card withBorder padding="sm" data-testid="category-actions">
             <Stack gap="sm">
@@ -403,7 +426,8 @@ export function BracketsPage({ settingsRepechage = false, settingsThird = false 
             )}
             <CategoryDurations key={selected.id} competitionId={id} category={selected} readOnly={readOnlyPoste} />
             <ApiErrorAlert error={update.error ?? redraw.error ?? swap.error ?? regenerate.error} />
-            <BracketView category={selected} entrants={entrants} numbers={passages?.numbers} noRest={passages?.noRest} matchZones={movedMatchZones(passages, zones, selected.bracket)} timings={timings} selected={swapFrom} onSelect={locked || readOnlyPoste ? undefined : onSelectEntrant} badges={badges} badgeDetails={badgeDetails} pendingAuth={pendingAuth} fighterInfo={id} />
+            <BracketView category={selected} entrants={entrants} results={results} tieBreaks={res?.tieBreaks.pools} kataScores={res?.kataScores} kataTieBreak={res?.tieBreaks.kata}
+              times={(mid) => times.passage(selected.id, mid)} numbers={passages?.numbers} noRest={passages?.noRest} matchZones={movedMatchZones(passages, zones, selected.bracket)} timings={timings} selected={swapFrom} onSelect={locked || readOnlyPoste ? undefined : onSelectEntrant} badges={badges} badgeDetails={badgeDetails} pendingAuth={pendingAuth} fighterInfo={id} />
             {swapFrom && !locked && !readOnlyPoste && selected.bracket && selected.registrationIds.includes(swapFrom) && (
               <MoveEntrantPanel key={swapFrom} competitionId={id} registrationId={swapFrom} name={entrants.get(swapFrom)?.name ?? ''} manual={badges.get(swapFrom) === 'M'} onDone={() => setSwapFrom(null)} />
             )}

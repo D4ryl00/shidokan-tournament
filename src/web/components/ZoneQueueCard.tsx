@@ -4,8 +4,8 @@ import type { OrganiserTimes } from '../../domain/schedule/organiser-times.js';
 import type { Zone } from '../../domain/zones.js';
 import type { QueueItem } from '../api.js';
 import { HelpButton } from './Help.js';
-import { PassageTimeLabel } from './PassageTimeText.js';
-import { driftText, versText } from './public/zoneRows.js';
+import { PassageTimeLabel, ZoneDriftBadge } from './PassageTimeText.js';
+import { versText } from './public/zoneRows.js';
 import { StatusBadge } from './ui/StatusBadge.js';
 
 /** Passage d'une catégorie qui a une saisie de zone autonome à trancher : il ne se joue pas encore (et n'a pas de bouton). */
@@ -138,8 +138,6 @@ export function ZoneQueueCard({ zone, queue, waitingOtherZones, autonomous, time
   onEnter: (q: QueueItem) => void; onScore: (q: QueueItem) => void;
 }) {
   const [first, ...rest] = queue;
-  const drift = launched ? times.drift(zone.id) : null;
-  const driftLabel = drift === null ? null : driftText(drift);
   return (
     <Card withBorder padding="md" data-testid="zone-card" style={{ minWidth: 0 }}>
       <Stack gap="sm">
@@ -148,9 +146,7 @@ export function ZoneQueueCard({ zone, queue, waitingOtherZones, autonomous, time
             <Title order={3} fz="lg" className="sk-ellipsis" title={zone.name}>{zone.name}</Title>
             <HelpButton topic="combats.zone" />
           </Group>
-          {drift !== null && driftLabel !== 'à l’heure' && (
-            <StatusBadge tone={drift > 0 ? 'warn' : 'ok'} size="md" data-testid="zone-drift">{driftLabel}</StatusBadge>
-          )}
+          <ZoneDriftBadge drift={launched ? times.drift(zone.id) : null} size="md" />
         </Group>
         {autonomous && waitingOtherZones > 0 && (
           <StatusBadge tone="warn" wrap data-testid="waiting-other-zones">

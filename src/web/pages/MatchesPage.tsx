@@ -4,10 +4,9 @@ import { useParams } from 'react-router';
 import { resolveBracket, type ResolvedMatch } from '../../domain/brackets/index.js';
 import { activeEntrantCount } from '../../domain/categories.js';
 import { validResults } from '../../domain/results.js';
-import { waveKey } from '../../domain/passages/index.js';
-import { type QueueItem, useAuthMe, useCategories, useCategoryResults, useDeleteResult, usePassages, useSchedule, useScheduleTimes, useUpdateCategory, useZoneLink, useZones } from '../api.js';
+import { type QueueItem, useAuthMe, useCategories, useCategoryResults, useDeleteResult, usePassages, useSchedule, useUpdateCategory, useZoneLink, useZones } from '../api.js';
 import { useOrganiserTimes } from '../useOrganiserTimes.js';
-import { categoryTimesText } from '../components/PassageTimeText.js';
+import { CategoryTimesLine } from '../components/PassageTimeText.js';
 import { ZonesImpossibleAlert } from '../components/ZonesImpossibleAlert.js';
 import { WaveLaunchPanel } from '../components/WaveLaunchPanel.js';
 import { MoveDialog } from '../components/MoveDialog.js';
@@ -42,7 +41,7 @@ export function MatchesPage() {
   const { data: schedule } = useSchedule(id, waveId, ready);
   // Heures présumées ; avance / retard des zones seulement pour une session lancée (présente dans la vue des heures).
   const times = useOrganiserTimes(id);
-  const waveLaunched = !!useScheduleTimes(id).data?.waves.some((w) => w.launched && waveKey(w.id) === waveKey(waveId));
+  const waveLaunched = times.waveLaunched(waveId);
   const { data: zones = [] } = useZones(id);
   const zoneName = (zid: string | null) => zones.find((z) => z.id === zid)?.name ?? null;
   const update = useUpdateCategory(id);
@@ -165,8 +164,6 @@ export function MatchesPage() {
                   {playable.length === 0 && <Text size="sm" c="dimmed" ta="center" py="md">Aucune catégorie à disputer.</Text>}
                   {playable.map((c) => {
                     const active = c.id === selected?.id;
-                    const ct = times.category(c);
-                    const planned = [ct?.next, ct?.final].some((t) => t?.kind === 'at' && t.planned);
                     return (
                       <Card key={c.id} withBorder padding="xs" px="sm" data-testid="schedule-category"
                         style={active ? { borderColor: 'var(--sk-accent)', backgroundColor: 'var(--sk-chip)', boxShadow: 'inset 3px 0 0 var(--sk-accent)' } : undefined}>
@@ -180,11 +177,7 @@ export function MatchesPage() {
                               onChange={(v) => (c.launchLocked ? v && v !== c.zoneId && setMoving({ category: c, zoneId: v }) : update.mutate({ cid: c.id, zoneId: v || null }))} />
                           )}
                         </Group>
-                        {ct && (
-                          <Text size="xs" mt={4} data-testid="category-times" c={planned ? 'dimmed' : undefined} fs={planned ? 'italic' : undefined}>
-                            {categoryTimesText(zoneName(plan?.categories[c.id]?.zoneId ?? c.zoneId), ct, c.bracket?.kind === 'kata')}
-                          </Text>
-                        )}
+                        <CategoryTimesLine category={c} times={times} zone={zoneName(plan?.categories[c.id]?.zoneId ?? c.zoneId)} />
                       </Card>
                     );
                   })}
@@ -252,7 +245,7 @@ export function MatchesPage() {
                 view && (
                   <BracketView category={selected} entrants={entrants} results={view.results} stale={view.stale} tieBreaks={res.tieBreaks.pools}
                     numbers={passages?.numbers} noRest={passages?.noRest} matchZones={movedMatchZones(passages, zones, selected.bracket)}
-                    onMatchClick={(m) => setDialogMatchId(m.id)} />
+                    times={(mid) => times.passage(selected.id, mid)} onMatchClick={(m) => setDialogMatchId(m.id)} />
                 )
               )}
               {selected.bracket?.kind === 'kata' && res.progress.podium.complete && (

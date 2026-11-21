@@ -56,7 +56,8 @@ export interface PublicSource {
 
 export const HIDDEN_NAME = 'Combattant masqué';
 const NO_CLUB = 'Sans club';
-const IMPLICIT_WAVE = 'Session unique';
+/** Nom de la session d'une compétition sans sessions. */
+export const IMPLICIT_WAVE = 'Session unique';
 
 /** Le jour de la compétition (ou une vague lancée en avance) : aujourd'hui ; date passée : historique. */
 export function publicPhase(date: string, today: string, anyWaveLaunched: boolean): PublicPhase {

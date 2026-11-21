@@ -12,13 +12,15 @@ import {
   type SlotSource,
 } from '../../domain/brackets/index.js';
 import { kataFinaleKey, kataTour1Key } from '../../domain/passages/kata-keys.js';
-import { resolveKata } from '../../domain/brackets/kata.js';
+import { kataScore, resolveKata } from '../../domain/brackets/kata.js';
 import type { Category } from '../../domain/categories.js';
 import type { ProposalType } from '../../domain/replacement/index.js';
+import type { PassageTime } from '../../domain/schedule/organiser-times.js';
 import type { RecasementEntry } from '../api.js';
 import { ReplacementBadge } from './ReplacementBadge.js';
 import { PendingAuthMark } from './PendingAuthMark.js';
 import { FighterInfoButton } from './FighterInfoButton.js';
+import { PassageTimeLabel } from './PassageTimeText.js';
 import '../bracket.css';
 
 export interface EntrantInfo {
@@ -68,6 +70,8 @@ interface Props {
   matchZones?: Map<string, string>;
   /** Durée de chaque combat (texte long), sous son en-tête ; jamais à l'impression. */
   timings?: Map<string, string>;
+  /** Heure présumée de chaque passage (combat, ou clé de kata) ; jamais à l'impression. */
+  times?: (matchId: string) => PassageTime | null;
   results?: Record<string, MatchResult>;
   kataScores?: KataScores;
   printable?: boolean;
@@ -209,9 +213,9 @@ function CombatView(props: Props & { bracket: CombatBracket }) {
         style={{ breakInside: 'avoid', overflow: 'visible', cursor: clickable ? 'pointer' : undefined, opacity: m.bye ? 0.6 : undefined, borderColor: stale ? 'var(--mantine-color-orange-6)' : undefined }}
         onClick={() => clickable && props.onMatchClick!(m)}>
         <div className="bracket-card-head">
-          <Text size="xs" fw={700}>{m.bye ? 'Exempt' : `Combat ${numbers.get(m.id)}${m.optional ? ' (si 1-1)' : ''}`}</Text>
+          <Text size="xs" fw={700} style={{ whiteSpace: 'nowrap' }}>{m.bye ? 'Exempt' : `Combat ${numbers.get(m.id)}${m.optional ? ' (si 1-1)' : ''}`}</Text>
           <Text size="xs" c="dimmed" ta="right">
-            {resultText(m)}
+            {resultText(m) || (!props.printable && !m.bye && <PassageTimeLabel t={props.times?.(m.id) ?? null} />)}
             {stale ? ' · à revoir' : ''}
             {!props.printable && props.noRest?.has(m.id) ? ' · pas de repos : prévoir une pause' : ''}
           </Text>
@@ -399,10 +403,29 @@ export function KataView(props: Props & { bracket: KataBracket }) {
   const { bracket, entrants, kataScores } = props;
   const resolved = kataScores ? resolveKata(bracket, kataScores, props.kataTieBreak ?? []) : null;
   const finaleNumbers = ([1, 2] as const).flatMap((slot) => props.numbers?.get(kataFinaleKey(slot)) ?? []);
+  // Colonne « Heure » (écran) : la note d'un kataka noté, sinon l'heure présumée de son passage (tour 1, ou sa place en finale
+  // à deux katakas) ; elle remplace la colonne des notes.
+  const times = props.printable ? undefined : props.times;
+  const tour1 = bracket.order.length > 2;
+  const timeCell = (id: string, i: number) => {
+    const score = kataScore((tour1 ? kataScores?.round1[id] : kataScores?.final[id]) ?? []);
+    if (score !== null) return <Text span size="xs" c="dimmed">noté {score.toLocaleString('fr-FR')}</Text>;
+    return <PassageTimeLabel t={times!(tour1 ? kataTour1Key(id) : kataFinaleKey((i + 1) as 1 | 2))} />;
+  };
+  const finaleTime = times ? (times(kataFinaleKey(1)) ?? times(kataFinaleKey(2))) : null;
   return (
     <Stack data-testid="bracket-view">
-      <Title order={5}>Ordre de passage{bracket.order.length > 2 ? ' — tour 1' : ' — finale'}</Title>
+      <Title order={5}>Ordre de passage{tour1 ? ' — tour 1' : ' — finale'}</Title>
       <Table withTableBorder>
+        {times && (
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>n°</Table.Th>
+              <Table.Th>Kataka</Table.Th>
+              <Table.Th>Heure</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+        )}
         <Table.Tbody>
           {bracket.order.map((id, i) => (
             <Table.Tr key={id} data-testid="bracket-match">
@@ -411,12 +434,18 @@ export function KataView(props: Props & { bracket: KataBracket }) {
                 <EntrantLine id={id} fallback="" info={entrants.get(id)} props={props} />
                 {entrants.get(id)?.grade && <Text size="xs" px={4} data-testid="kata-grade">Grade : {entrants.get(id)!.grade}</Text>}
               </Table.Td>
-              {resolved && <Table.Td>{resolved.round1Ranking.find((r) => r.registrationId === id)?.score ?? ''}</Table.Td>}
+              {times ? <Table.Td style={{ whiteSpace: 'nowrap' }}>{timeCell(id, i)}</Table.Td>
+                : resolved && <Table.Td>{resolved.round1Ranking.find((r) => r.registrationId === id)?.score ?? ''}</Table.Td>}
             </Table.Tr>
           ))}
         </Table.Tbody>
       </Table>
-      {finaleNumbers.length > 0 && <Text size="sm" fw={700} data-testid="kata-finale-numbers">Finale : {finaleNumbers.length === 2 ? `n° ${finaleNumbers[0]} et ${finaleNumbers[1]}` : `n° ${finaleNumbers[0]}`}</Text>}
+      {finaleNumbers.length > 0 && (
+        <Text size="sm" fw={700} data-testid="kata-finale-numbers">
+          Finale : {finaleNumbers.length === 2 ? `n° ${finaleNumbers[0]} et ${finaleNumbers[1]}` : `n° ${finaleNumbers[0]}`}
+          {finaleTime && <> · <PassageTimeLabel t={finaleTime} size="sm" /></>}
+        </Text>
+      )}
       {bracket.order.length > 2 && (
         <Group gap="xs">
           {!props.printable && <Badge variant="light">Finale</Badge>}
