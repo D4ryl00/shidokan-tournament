@@ -94,7 +94,7 @@ function OnCall({ q, times, onEnter, onScore }: { q: QueueItem; times: Organiser
 function Next({ q, times, onEnter, onScore }: { q: QueueItem; times: OrganiserTimes; onEnter: (q: QueueItem) => void; onScore: (q: QueueItem) => void }) {
   const kata = q.kataPart !== null;
   return (
-    <Group data-testid={kata ? 'next-kata' : 'next-match'} data-number={q.number} justify="space-between" wrap="nowrap" gap="sm" py={8}
+    <Group data-testid={kata ? 'next-kata' : 'next-match'} data-number={q.number} justify="space-between" align="flex-start" wrap="nowrap" gap="sm" py={8}
       style={{ borderTop: '1px solid var(--sk-line)' }}>
       <Group gap="sm" wrap="nowrap" align="flex-start" style={{ minWidth: 0 }}>
         <Text fw={700} className="num" w={32} ta="right" style={{ flexShrink: 0 }}>{q.number}</Text>
