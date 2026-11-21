@@ -410,3 +410,19 @@ test('public view uses the finals duration for the final', async () => {
   expect(after.find((i) => i.matchId === finalId)!.durationSec).toBe(3 * 120 + 2 * 60);
   expect(after.find((i) => i.matchId === other.matchId)!.durationSec).toBe(other.durationSec);
 });
+
+test('kata : un passage par kataka, joué à l’heure de sa note', async () => {
+  const { orga, visit, base, pub, launch, byLabel } = await setup();
+  await launch();
+  const kata = await byLabel('Kata');
+  const full = (await orga('GET', `${base}/categories`)).json() as { id: string; bracket: { order: string[] } }[];
+  const order = full.find((c) => c.id === kata.id)!.bracket.order;
+  expect((await orga('PUT', `${base}/categories/${kata.id}/kata/${order[0]}/round1`, { notes: [8, 8, 8] })).statusCode).toBe(204);
+  const items = ((await visit(pub)).json() as PublicCompetition).queues.flatMap((q) => q.items).filter((i) => i.categoryId === kata.id);
+  expect(items.map((i) => [i.matchId, i.a, i.state])).toEqual([
+    ...order.map((rid, k) => [`kata:tour1:${rid}`, rid, k === 0 ? 'played' : 'ready']),
+    ['kata:finale:1', null, 'waiting'], ['kata:finale:2', null, 'waiting'],
+  ]);
+  expect(items[0]!.endedAt).toMatch(/^\d{4}-\d\d-\d\dT/);
+  expect(items.slice(1).map((i) => i.endedAt)).toEqual([null, null, null, null]);
+});

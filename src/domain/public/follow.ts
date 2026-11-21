@@ -87,9 +87,9 @@ function line(pub: PublicCompetition, c: PublicCategory, rid: string): FighterLi
       if (!won) lost = true;
       played.push({ number: c.numbers[m.id] ?? null, opponent: other ? (pub.entrants[other]?.name ?? '?') : '?', won });
     }
-    candidates = here.filter((l) => l.item.matchId !== null && (l.item.a === rid || l.item.b === rid));
+    candidates = here.filter((l) => l.item.a === rid || l.item.b === rid);
   } else {
-    // Finale de kata : seulement pour un finaliste connu (tour 1 noté, ou deux katakas).
+    // Passages du kataka : le sien au tour 1, puis sa place de finale une fois les finalistes connus (`a` de la vue).
     const scores = c.kataScores ?? { round1: {}, final: {} };
     const twoOnly = c.bracket.order.length <= 2;
     const resolved = twoOnly ? null : resolveKata(c.bracket, scores, c.tieBreaks.kata, c.tieBreaks.kataFinal);
@@ -102,7 +102,7 @@ function line(pub: PublicCompetition, c: PublicCategory, rid: string): FighterLi
     kata = { round1: round1Score, place: round1Done && round1Score !== null ? ranking.findIndex((r) => r.score === round1Score) + 1 : null, final };
     const tied = c.podium.ties.some((t) => t.includes(rid));
     kataOut = round1Done && !finalists.includes(rid) && !tied;
-    candidates = kataOut ? [] : here.filter((l) => l.item.kataPart !== 'finale' || (l.item.state === 'ready' && finalists.includes(rid)));
+    candidates = kataOut ? [] : here.filter((l) => l.item.a === rid);
   }
   if (c.absentIds.includes(rid)) candidates = [];
   // Un combat jouable d'abord, puis sur la zone de la catégorie (les finales viennent à la fin de la zone des finales).
@@ -115,8 +115,9 @@ function line(pub: PublicCompetition, c: PublicCategory, rid: string): FighterLi
   if (best) {
     const { item } = best;
     const mineA = item.a === rid;
-    const other = item.matchId === null ? null : mineA ? item.b : item.a;
-    const from = item.matchId === null ? null : mineA ? item.bFrom : item.aFrom;
+    const kataItem = item.kataPart !== null;
+    const other = kataItem ? null : mineA ? item.b : item.a;
+    const from = kataItem ? null : mineA ? item.bFrom : item.aFrom;
     const entrant = other ? pub.entrants[other] : undefined;
     next = {
       key: passageKey(item),

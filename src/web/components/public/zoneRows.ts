@@ -1,4 +1,4 @@
-import { waveKey } from '../../../domain/passages/index.js';
+import { parseKataKey, waveKey } from '../../../domain/passages/index.js';
 import { zoneQueue } from '../../../domain/public/follow.js';
 import type { PublicCompetition, PublicQueueItem } from '../../../domain/public/types.js';
 import type { PublicTimes } from '../../../domain/public/times.js';
@@ -14,11 +14,20 @@ export function sideText(pub: PublicCompetition, reg: string | null, from: Publi
   return 'à déterminer';
 }
 
-/** Le passage concerne-t-il un combattant suivi ? Bloc de kata : tous les inscrits de la catégorie. */
+/** Place de la finale d'un kata, tant que son kataka n'est pas connu : « Finaliste 1 ». */
+export function finalistText(item: PublicQueueItem): string {
+  const key = parseKataKey(item.matchId);
+  return `Finaliste ${key?.round === 'finale' ? key.slot : ''}`.trim();
+}
+
+/** Kataka d'un passage de kata : nom court, ou « Finaliste 1 / 2 » tant que la finale n'est pas connue. */
+export function kataSideText(pub: PublicCompetition, item: PublicQueueItem): string {
+  return item.a !== null ? (pub.entrants[item.a]?.shortName ?? 'à déterminer') : finalistText(item);
+}
+
+/** Le passage concerne-t-il un combattant suivi ? Kata : son kataka (personne tant qu'un finaliste n'est pas connu). */
 export function involvesFollowed(pub: PublicCompetition, item: PublicQueueItem, followed: Set<string>): boolean {
-  const regs = item.matchId === null
-    ? pub.categories.find((c) => c.id === item.categoryId)?.registrationIds ?? []
-    : [item.a, item.b].filter((r): r is string => r !== null);
+  const regs = [item.a, item.b].filter((r): r is string => r !== null);
   return regs.some((r) => {
     const f = pub.entrants[r]?.fighterId;
     return f != null && followed.has(f);

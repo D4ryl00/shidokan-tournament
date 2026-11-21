@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { toPublicCompetition } from '../../src/domain/public/view.js';
 import type { PublicTimes } from '../../src/domain/public/times.js';
-import { currentWave, driftText, finalBadge, finalsLabel, finalsMarkers, involvesFollowed, sideText, versText, waitingWaves, waveHeaderText, zoneViews } from '../../src/web/components/public/zoneRows.js';
+import { currentWave, driftText, finalBadge, finalsLabel, finalsMarkers, involvesFollowed, kataSideText, sideText, versText, waitingWaves, waveHeaderText, zoneViews } from '../../src/web/components/public/zoneRows.js';
 import { source } from '../domain/public-fixtures.js';
 
 const pub = toPublicCompetition(source());
@@ -39,7 +39,7 @@ describe('zoneViews', () => {
 
 describe('sideText', () => {
   const m12 = item('z1', 12);
-  const final = item('z2', 5);
+  const final = item('z2', 6);
   it('nom court, ou origine du côté inconnu', () => {
     expect(sideText(pub, m12.a, m12.aFrom, 'z1')).toBe(pub.entrants[m12.a!]!.shortName);
     expect(sideText(pub, final.a, final.aFrom, 'z2')).toBe('le vainqueur du n° 12, Tatami 1');
@@ -56,11 +56,21 @@ describe('involvesFollowed', () => {
     expect(involvesFollowed(pub, m12, new Set(['f999']))).toBe(false);
   });
 
-  it('bloc de kata : tous les inscrits de la catégorie', () => {
+  it('kata : le kataka du passage seulement ; finaliste pas encore connu : personne', () => {
     const kata = item('z2', 1);
-    expect(kata.matchId).toBeNull();
-    expect(involvesFollowed(pub, kata, new Set(['f2']))).toBe(true);
-    expect(involvesFollowed(pub, kata, new Set(['f14']))).toBe(false);
+    expect(kata.matchId).toBe('kata:tour1:r5');
+    expect(involvesFollowed(pub, kata, new Set(['f1']))).toBe(true);
+    expect(involvesFollowed(pub, kata, new Set(['f2']))).toBe(false);
+    expect(involvesFollowed(pub, item('z2', 4), new Set(['f1', 'f2', 'f4']))).toBe(false);
+  });
+});
+
+describe('kataSideText', () => {
+  it('nom court du kataka, ou « Finaliste 1 / 2 » tant que la finale n’est pas connue', () => {
+    expect(kataSideText(pub, item('z2', 1))).toBe('MARTIN L.');
+    expect(kataSideText(pub, item('z2', 4))).toBe('Finaliste 1');
+    expect(kataSideText(pub, item('z2', 5))).toBe('Finaliste 2');
+    expect(kataSideText(pub, { ...item('z2', 5), a: 'r6' })).toBe('BONNET C.');
   });
 });
 
@@ -119,7 +129,7 @@ describe('finales dans la file', () => {
   // Ring (z2) : zone des finales de la session Matin ; file : passage non final, finale « Dès que finie », deux « Fin de session ».
   const d = structuredClone(pub);
   d.finalsZones = { w1: 'z2', w2: null };
-  const base = item('z2', 5);
+  const base = item('z2', 6);
   const items = [
     { ...base, number: 1, finals: null },
     { ...base, number: 2, finals: 'ready' as const },

@@ -3,7 +3,7 @@ import { freeKey, type CategoryKey } from '../../src/domain/categories.js';
 import { ffkDefaultGrid } from '../../src/domain/grid-ffk.js';
 import { readStoredSettings } from '../../src/domain/settings.js';
 import {
-  ageGroupOf, categoryDurationsSchema, combatTiming, defaultSchedule, fightSeconds, isEmptyDurations, kataPassages,
+  ageGroupOf, categoryDurationsSchema, combatTiming, defaultSchedule, fightSeconds, isEmptyDurations,
   minSecText, parseMinSec, timingLongText, timingText,
 } from '../../src/domain/schedule/durations.js';
 
@@ -65,13 +65,6 @@ test('fight seconds and texts', () => {
   expect(parseMinSec('1:05')).toBe(65);
   expect(parseMinSec('1:50')).toBe(110);
   expect(parseMinSec('1:7x')).toBeNull();
-});
-test('kata passages', () => {
-  expect(kataPassages(5, 'whole')).toBe(7); // tour 1 (5) + finale (2)
-  expect(kataPassages(2, 'whole')).toBe(2); // deux katakas : finale seule
-  expect(kataPassages(5, 'tour1')).toBe(5);
-  expect(kataPassages(5, 'finale')).toBe(2);
-  expect(kataPassages(1, 'finale')).toBe(1);
 });
 test('stored settings without schedule fall back to defaults', () => {
   expect(readStoredSettings({}).schedule).toEqual(defaultSchedule());

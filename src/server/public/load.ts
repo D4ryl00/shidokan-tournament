@@ -38,16 +38,19 @@ function lastResultAt(db: AppDb, competitionId: string): Record<string, string> 
   return Object.fromEntries(rows.map((r) => [r.c, r.t]));
 }
 
-/** Heures de fin : par combat (`match_results.created_at`), par tour de kata (dernière note), pour les catégories données. */
+/**
+ * Heures de fin, pour les catégories données : par combat (`match_results.created_at`) ; par note de kata
+ * (`kata_scores.updated_at`, clé `round1:<inscription>` ou `final:<inscription>`).
+ */
 function endedAtOf(db: AppDb, competitionId: string, categoryIds: Set<string>): PublicSource['endedAt'] {
   const out: PublicSource['endedAt'] = {};
-  const of = (c: string) => (out[c] ??= { matches: {}, round1: null, final: null });
+  const of = (c: string) => (out[c] ??= { matches: {}, kata: {} });
   const matches = db.$client.prepare('select category_id as c, match_id as m, created_at as t from match_results where competition_id = ?').all(competitionId) as { c: string; m: string; t: string }[];
   for (const r of matches) if (categoryIds.has(r.c)) of(r.c).matches[r.m] = r.t;
   const kata = db.$client
-    .prepare('select category_id as c, round as r, max(updated_at) as t from kata_scores where competition_id = ? group by category_id, round')
-    .all(competitionId) as { c: string; r: 'round1' | 'final'; t: string | null }[];
-  for (const r of kata) if (categoryIds.has(r.c) && r.t) of(r.c)[r.r] = r.t;
+    .prepare('select category_id as c, registration_id as rid, round as r, updated_at as t from kata_scores where competition_id = ?')
+    .all(competitionId) as { c: string; rid: string; r: 'round1' | 'final'; t: string | null }[];
+  for (const r of kata) if (categoryIds.has(r.c) && r.t) of(r.c).kata[`${r.r}:${r.rid}`] = r.t;
   return out;
 }
 

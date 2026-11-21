@@ -34,14 +34,13 @@ function StarButton({ on, locked, name, onClick }: { on: boolean; locked?: boole
   );
 }
 
-/** « Durée prévue : 2 × 1 min 30 » ; kata : « 3 passages · 1 min 30 chacun » ; rien si la durée n'est pas connue. */
+/** « Durée prévue : 2 × 1 min 30 » ; kata : la durée de son passage, « Durée prévue : 1 min 30 » ; rien si la durée n'est pas connue. */
 function durationText(pub: PublicCompetition, line: FighterLine): string | null {
   const n = line.next;
   if (!n || pub.phase === 'past') return null;
   if (line.discipline === 'kata') {
-    if (n.kataPassages === null || n.kataPassages <= 0) return null;
-    const each = pub.categories.find((c) => c.id === line.categoryId)?.kataPassageSec ?? Math.round(n.durationSec / n.kataPassages);
-    return `Durée prévue : ${plural(n.kataPassages, 'passage', 'passages')} · ${minSecText(each)} chacun`;
+    const each = pub.categories.find((c) => c.id === line.categoryId)?.kataPassageSec ?? n.durationSec;
+    return each > 0 ? `Durée prévue : ${minSecText(each)}` : null;
   }
   return n.timing ? `Durée prévue : ${timingText(n.timing)}` : null;
 }
@@ -73,7 +72,7 @@ function LineView({ line, pub, times }: { line: FighterLine; pub: PublicCompetit
         <Box data-testid="public-follow-next">
           <Group gap="md" align="baseline" wrap="wrap">
             <Text span size="sm">{zone(n.zoneId)}</Text>
-            <Text span size="sm">{kata ? 'Bloc n° ' : 'n° '}<Text span fz={26} fw={800} inherit className="num" style={{ fontSize: 26 }}>{n.number}</Text></Text>
+            <Text span size="sm">n° <Text span fz={26} fw={800} inherit className="num" style={{ fontSize: 26 }}>{n.number}</Text></Text>
             {at && <Text span fz={20} fw={700} data-testid="public-follow-at">{versText(at)}</Text>}
           </Group>
           <Text size="sm" c="dimmed">

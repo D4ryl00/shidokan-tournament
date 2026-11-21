@@ -1,8 +1,8 @@
-import { finalMatchIds, waveKey } from '../passages/index.js';
+import { finalMatchIds, opensKataRound, waveKey } from '../passages/index.js';
 import { clockToSeconds, isoToDaySeconds, secondsToClock } from '../schedule/clock.js';
 import { buildTimeline, zoneDrift, type TimelineInput } from '../schedule/timeline.js';
 import { isClock } from '../schedule/types.js';
-import { passageKey, type PublicCompetition } from './types.js';
+import { passageKey, type PublicCategory, type PublicCompetition, type PublicQueueItem } from './types.js';
 
 /** Heures calculées d'une vue publique (spec §5.3). Tout est null pour une compétition passée. */
 export interface PublicTimes {
@@ -17,8 +17,9 @@ export interface PublicTimes {
   /** Départ estimé des finales « Fin de session » de la zone des finales d'une session, « H:MM » : seulement s'il est après maintenant. */
   finalsAt(waveId: string | null): string | null;
   /**
-   * Heure estimée de la finale d'une catégorie (bloc de finale d'un kata, ou bloc entier) : le premier passage de finale pas
-   * encore joué (au meilleur des trois : le premier combat de la série restant) ; null une fois la finale jouée ou sur le tatami.
+   * Heure estimée de la finale d'une catégorie : le premier passage de finale pas encore joué (kata : la première place de la
+   * finale restante ; au meilleur des trois : le premier combat de la série restant) ; null une fois la finale jouée ou sur le
+   * tatami.
    */
   categoryFinalAt(categoryId: string): string | null;
   /** Avance (négatif) ou retard (positif) d'une zone, en minutes arrondies. */
@@ -30,6 +31,16 @@ const NONE: PublicTimes = { at: () => null, waveStart: () => null, finalsAt: () 
 /** Heure d'une session en secondes ; absente ou illisible (pas HH:MM) : null, jamais « NaN:NaN ». */
 const orNull = (hhmm: string | null) => (hhmm !== null && isClock(hhmm) ? clockToSeconds(hhmm) : null);
 
+/**
+ * Passage de kata qui suit le précédent de sa zone sans changement : tout kataka sauf celui qui ouvre son tour (premier
+ * kataka présent du tirage — un absent tardif n'a pas de ligne —, place 1 de la finale). Combat : toujours un changement.
+ */
+function followsWithoutChangeover(c: PublicCategory | undefined, i: PublicQueueItem): boolean {
+  if (i.kataPart === null || c?.bracket.kind !== 'kata') return false;
+  const present = { ...c.bracket, order: c.bracket.order.filter((id) => !c.absentIds.includes(id)) };
+  return !opensKataRound(present, i.matchId);
+}
+
 /** `now` : secondes depuis minuit le jour de la compétition (`nowOnDay`), null hors de ce jour. */
 export function publicTimes(pub: PublicCompetition, now: number | null): PublicTimes {
   if (pub.phase === 'past') return NONE;
@@ -37,6 +48,7 @@ export function publicTimes(pub: PublicCompetition, now: number | null): PublicT
   const order = new Map(launched.map((w, i) => [waveKey(w.id), i]));
   // Une finale « Dès que finie » jouée hors de la zone de sa catégorie attend la fin des passages non finaux de celle-ci.
   const zoneOf = new Map(pub.categories.map((c) => [c.id, c.zoneId]));
+  const catOf = new Map(pub.categories.map((c) => [c.id, c]));
   const nonFinals = new Map<string, string[]>();
   for (const i of pub.queues.flatMap((q) => q.items)) if (i.finals === null) nonFinals.set(i.categoryId, [...(nonFinals.get(i.categoryId) ?? []), passageKey(i)]);
   const input: TimelineInput = {
@@ -63,6 +75,7 @@ export function publicTimes(pub: PublicCompetition, now: number | null): PublicT
           endedAt: i.endedAt === null ? null : isoToDaySeconds(i.endedAt, pub.date),
           finals: i.finals,
           ...(i.finals === 'ready' && zoneOf.get(i.categoryId) !== q.zoneId ? { waitsFor: nonFinals.get(i.categoryId) ?? [] } : {}),
+          ...(followsWithoutChangeover(catOf.get(i.categoryId), i) ? { changeoverBefore: false } : {}),
         })),
     })),
   };
@@ -77,19 +90,12 @@ export function publicTimes(pub: PublicCompetition, now: number | null): PublicT
     },
     finalsAt: (waveId) => shown(timeline.finalsStarts.get(waveKey(waveId))),
     categoryFinalAt: (categoryId) => {
-      const c = pub.categories.find((x) => x.id === categoryId);
+      const c = catOf.get(categoryId);
       if (!c) return null;
       const items = pub.queues.flatMap((q) => q.items).filter((i) => i.categoryId === categoryId);
-      const unplayed = (list: typeof items) => list.filter((i) => i.endedAt === null);
-      let wanted: typeof items;
-      if (c.bracket.kind === 'combat') {
-        const finals = finalMatchIds(c.bracket);
-        wanted = items.filter((i) => i.matchId !== null && finals.includes(i.matchId));
-      } else {
-        const finale = items.filter((i) => i.kataPart === 'finale');
-        wanted = finale.length > 0 ? finale : items.filter((i) => i.kataPart === null);
-      }
-      const starts = unplayed(wanted).map((i) => timeline.starts.get(passageKey(i))).filter((s): s is number => s !== undefined);
+      const finals = c.bracket.kind === 'combat' ? finalMatchIds(c.bracket) : [];
+      const wanted = items.filter((i) => (c.bracket.kind === 'combat' ? finals.includes(i.matchId) : i.kataPart === 'finale'));
+      const starts = wanted.filter((i) => i.endedAt === null).map((i) => timeline.starts.get(passageKey(i))).filter((s): s is number => s !== undefined);
       return starts.length > 0 ? shown(Math.min(...starts)) : null;
     },
     drift: (zoneId) => {

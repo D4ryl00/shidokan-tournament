@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'vitest';
+import { kataBracket } from '../../src/domain/brackets/kata.js';
 import { publicPhase, todayInParis, toPublicCompetition } from '../../src/domain/public/view.js';
-import { source } from './public-fixtures.js';
+import { source, srcKataDe3 } from './public-fixtures.js';
+
+const buildPublicView = toPublicCompetition;
 
 describe('publicPhase', () => {
   test('jour même, passé, à venir, lancée en avance', () => {
@@ -92,28 +95,36 @@ describe('toPublicCompetition', () => {
     expect(z1.find((i) => i.number === 12)).toEqual({ number: 12, categoryId: 'A', matchId: 'w1-0', kataPart: null, a: 'r2', b: 'r3', aFrom: null, bFrom: null, state: 'ready', waveId: 'w1', finals: null, durationSec: 210, timing: { rounds: 2, roundSec: 90, restSec: 30, overtimeSec: 60 }, kataPassages: null, endedAt: null });
     const z2 = view.queues.find((q) => q.zoneId === 'z2')!.items;
     expect(z2).toEqual([
-      { number: 1, categoryId: 'B', matchId: null, kataPart: null, a: null, b: null, aFrom: null, bFrom: null, state: 'ready', waveId: 'w1', finals: null, durationSec: 5 * 90, timing: null, kataPassages: 5, endedAt: null },
-      { number: 5, categoryId: 'A', matchId: 'w2-0', kataPart: null, a: null, b: 'r1', aFrom: { kind: 'winner', number: 12, zoneId: 'z1' }, bFrom: null, state: 'waiting', waveId: 'w1', finals: null, durationSec: 210, timing: { rounds: 2, roundSec: 90, restSec: 30, overtimeSec: 60 }, kataPassages: null, endedAt: null },
+      ...(['r5', 'r6', 'r7'] as const).map((rid, i) => (
+        { number: i + 1, categoryId: 'B', matchId: `kata:tour1:${rid}`, kataPart: 'tour1', a: rid, b: null, aFrom: null, bFrom: null, state: 'ready', waveId: 'w1', finals: null, durationSec: 90, timing: null, kataPassages: 1, endedAt: null }
+      )),
+      ...[1, 2].map((slot) => (
+        { number: 3 + slot, categoryId: 'B', matchId: `kata:finale:${slot}`, kataPart: 'finale', a: null, b: null, aFrom: null, bFrom: null, state: 'waiting', waveId: 'w1', finals: null, durationSec: 90, timing: null, kataPassages: 1, endedAt: null }
+      )),
+      { number: 6, categoryId: 'A', matchId: 'w2-0', kataPart: null, a: null, b: 'r1', aFrom: { kind: 'winner', number: 12, zoneId: 'z1' }, bFrom: null, state: 'waiting', waveId: 'w1', finals: null, durationSec: 210, timing: { rounds: 2, roundSec: 90, restSec: 30, overtimeSec: 60 }, kataPassages: null, endedAt: null },
     ]);
   });
 
-  test('final passages carry when their final is played (plan), whole kata blocks and other passages none', () => {
+  test('final passages carry when their final is played (plan), other passages none', () => {
     const base = source();
     const resolved = (when: 'ready' | 'end') => ({ finalZoneId: 'z2', when, onFinalsZone: true, kataSplit: true, fixed: null, signature: `z2|${when}` });
     const plan = {
       ...base.plan,
       finals: { A: resolved('ready'), B: resolved('end'), F: { ...resolved('end'), finalZoneId: 'z3', onFinalsZone: false } },
       zones: [...base.plan.zones.filter((z) => z.zoneId !== 'z2'), { zoneId: 'z2', passages: [
-        { number: 1, categoryId: 'B', matchId: 'kata:tour1', noRest: false, waveId: 'w1' },
+        { number: 1, categoryId: 'B', matchId: 'kata:tour1:r5', noRest: false, waveId: 'w1' },
+        { number: 2, categoryId: 'B', matchId: 'kata:tour1:r6', noRest: false, waveId: 'w1' },
+        { number: 3, categoryId: 'B', matchId: 'kata:tour1:r7', noRest: false, waveId: 'w1' },
         { number: 5, categoryId: 'A', matchId: 'w2-0', noRest: false, waveId: 'w1' },
-        { number: 6, categoryId: 'B', matchId: 'kata:finale', noRest: false, waveId: 'w1' },
+        { number: 6, categoryId: 'B', matchId: 'kata:finale:1', noRest: false, waveId: 'w1' },
+        { number: 7, categoryId: 'B', matchId: 'kata:finale:2', noRest: false, waveId: 'w1' },
       ] }],
     };
     const flags = (v: ReturnType<typeof toPublicCompetition>) => v.queues.map((q) => [q.zoneId, q.items.filter((i) => i.finals !== null).map((i) => [i.number, i.finals])]);
-    // Partout, pas seulement sur la zone des finales : seuls les combats pour la 1re place (pas la petite finale) et le bloc de finale du kata.
-    expect(flags(toPublicCompetition(source({ plan })))).toEqual([['z1', []], ['z2', [[5, 'ready'], [6, 'end']]], ['z3', [[4, 'end']]]]);
-    // Bloc de kata entier : pas une finale à part.
-    expect(flags(toPublicCompetition(source({ plan: { ...base.plan, finals: { B: resolved('ready') } } })))).toEqual([['z1', []], ['z2', []], ['z3', []]]);
+    // Partout, pas seulement sur la zone des finales : seuls les combats pour la 1re place (pas la petite finale) et les passages de finale du kata.
+    expect(flags(toPublicCompetition(source({ plan })))).toEqual([['z1', []], ['z2', [[5, 'ready'], [6, 'end'], [7, 'end']]], ['z3', [[4, 'end']]]]);
+    // Kata non séparé : ses passages de finale aussi, jamais ceux du tour 1.
+    expect(flags(toPublicCompetition(source({ plan: { ...base.plan, finals: { B: resolved('ready') } } })))).toEqual([['z1', []], ['z2', [[4, 'ready'], [5, 'ready']]], ['z3', []]]);
     // Choix inconnu (catégorie absente de `plan.finals`) : pas marquée.
     expect(flags(toPublicCompetition(source()))).toEqual([['z1', []], ['z2', []], ['z3', []]]);
   });
@@ -133,11 +144,12 @@ describe('toPublicCompetition', () => {
     const view = toPublicCompetition(source());
     const a = view.categories.find((c) => c.id === 'A')!;
     expect(a).toMatchObject({ label: 'Karaté -45 kg', discipline: 'karate', waveId: 'w1', zoneId: 'z1', status: 'started', finishedAt: null, kataScores: null });
-    expect(a.numbers).toEqual({ 'w1-1': 11, 'w1-0': 12, 'w2-0': 5 });
+    expect(a.numbers).toEqual({ 'w1-1': 11, 'w1-0': 12, 'w2-0': 6 });
     expect(a.matchZones).toEqual({ 'w2-0': 'Zone des finales : Ring' });
     expect(a.results).toEqual({ 'w1-1': { winner: 'a', method: 'points' } });
     const b = view.categories.find((c) => c.id === 'B')!;
-    expect(b).toMatchObject({ status: 'upcoming', numbers: { kata: 1 }, kataScores: { round1: {}, final: {} } });
+    expect(b).toMatchObject({ status: 'upcoming', kataScores: { round1: {}, final: {} } });
+    expect(b.numbers).toEqual({ 'kata:tour1:r5': 1, 'kata:tour1:r6': 2, 'kata:tour1:r7': 3, 'kata:finale:1': 4, 'kata:finale:2': 5 });
     expect(b.bracket.kind === 'kata' && b.bracket.order).toEqual(['r5', 'r6', 'r7']);
     const d = view.categories.find((c) => c.id === 'D')!;
     expect(d).toMatchObject({ status: 'finished', finishedAt: '2026-11-22T10:00:00.000Z' });
@@ -153,16 +165,22 @@ describe('toPublicCompetition', () => {
     const plan = {
       ...base.plan,
       zones: [
-        { zoneId: 'z1', passages: [{ number: 3, categoryId: 'B', matchId: 'kata:tour1', noRest: false, waveId: 'w1' }] },
-        { zoneId: 'z2', passages: [{ number: 9, categoryId: 'B', matchId: 'kata:finale', noRest: false, waveId: 'w1' }] },
+        { zoneId: 'z1', passages: ['r5', 'r6', 'r7'].map((rid, i) => ({ number: 3 + i, categoryId: 'B', matchId: `kata:tour1:${rid}`, noRest: false, waveId: 'w1' })) },
+        { zoneId: 'z2', passages: [1, 2].map((slot) => ({ number: 8 + slot, categoryId: 'B', matchId: `kata:finale:${slot}`, noRest: false, waveId: 'w1' })) },
       ],
     };
     const before = toPublicCompetition(source({ plan }));
-    expect(before.queues.map((q) => q.items.map((i) => [i.number, i.kataPart, i.state]))).toEqual([[[3, 'tour1', 'ready']], [[9, 'finale', 'waiting']]]);
-    expect(before.categories.find((c) => c.id === 'B')!.numbers).toEqual({ 'kata:tour1': 3, 'kata:finale': 9 });
+    expect(before.queues.map((q) => q.items.map((i) => [i.number, i.kataPart, i.state]))).toEqual([
+      [[3, 'tour1', 'ready'], [4, 'tour1', 'ready'], [5, 'tour1', 'ready']],
+      [[9, 'finale', 'waiting'], [10, 'finale', 'waiting']],
+    ]);
+    expect(before.categories.find((c) => c.id === 'B')!.numbers).toEqual({ 'kata:tour1:r5': 3, 'kata:tour1:r6': 4, 'kata:tour1:r7': 5, 'kata:finale:1': 9, 'kata:finale:2': 10 });
     const scores = { round1: { r5: [8], r6: [7], r7: [6] }, final: {} };
     const after = toPublicCompetition(source({ plan, results: { ...base.results, B: { records: [], kataScores: scores, tieBreaks: { pools: {}, kata: [], kataFinal: [] } } } }));
-    expect(after.queues.map((q) => q.items.map((i) => [i.number, i.state]))).toEqual([[[3, 'played']], [[9, 'ready']]]);
+    expect(after.queues.map((q) => q.items.map((i) => [i.number, i.a, i.state]))).toEqual([
+      [[3, 'r5', 'played'], [4, 'r6', 'played'], [5, 'r7', 'played']],
+      [[9, 'r5', 'ready'], [10, 'r6', 'ready']],
+    ]);
     expect(after.categories.find((c) => c.id === 'B')).toMatchObject({ status: 'started', kataScores: scores });
   });
 
@@ -185,6 +203,56 @@ describe('toPublicCompetition', () => {
     expect(view.categories.find((c) => c.id === 'D')).toMatchObject({ status: 'upcoming', results: {} });
   });
 
+  test('vue publique : un passage par kataka, nom public, heure de fin à sa note', () => {
+    const view = buildPublicView(srcKataDe3({ scored: { r1: '2026-11-22T09:01:00Z' } }));
+    const items = view.queues[0]!.items.filter((i) => i.categoryId === 'k');
+    expect(items.map((i) => [i.matchId, i.a, i.state])).toEqual([
+      ['kata:tour1:r1', 'r1', 'played'], ['kata:tour1:r2', 'r2', 'ready'], ['kata:tour1:r3', 'r3', 'ready'],
+      ['kata:finale:1', null, 'waiting'], ['kata:finale:2', null, 'waiting'],
+    ]);
+    expect(items[0]!.endedAt).toBe('2026-11-22T09:01:00Z');
+    expect(view.categories.find((c) => c.id === 'k')!.numbers['kata:tour1:r2']).toBe(items[1]!.number);
+  });
+
+  test('kata : finalistes connus une fois le tour 1 noté, chaque place de finale jouée à sa note', () => {
+    const scored = { r1: '2026-11-22T09:01:00Z', r2: '2026-11-22T09:03:00Z', r3: '2026-11-22T09:05:00Z' };
+    const round1 = buildPublicView(srcKataDe3({ scored })).queues[0]!.items;
+    expect(round1.map((i) => [i.matchId, i.a, i.state, i.endedAt])).toEqual([
+      ['kata:tour1:r1', 'r1', 'played', scored.r1], ['kata:tour1:r2', 'r2', 'played', scored.r2], ['kata:tour1:r3', 'r3', 'played', scored.r3],
+      ['kata:finale:1', 'r1', 'ready', null], ['kata:finale:2', 'r2', 'ready', null],
+    ]);
+    // Le 2e finaliste passe d'abord : seule sa place est jouée.
+    const final = buildPublicView(srcKataDe3({ scored, final: { r2: '2026-11-22T09:10:00Z' } })).queues[0]!.items.slice(3);
+    expect(final.map((i) => [i.matchId, i.a, i.state, i.endedAt])).toEqual([
+      ['kata:finale:1', 'r1', 'ready', null], ['kata:finale:2', 'r2', 'played', '2026-11-22T09:10:00Z'],
+    ]);
+  });
+
+  test('kata : égalité du tour 1 entre un finaliste et un non-finaliste, « Finaliste 1 / 2 » en attente', () => {
+    const scored = { r1: '2026-11-22T09:01:00Z', r2: '2026-11-22T09:03:00Z', r3: '2026-11-22T09:05:00Z' };
+    const items = buildPublicView(srcKataDe3({ scored, notes: { r3: 7 } })).queues[0]!.items.slice(3);
+    expect(items.map((i) => [i.matchId, i.a, i.state])).toEqual([['kata:finale:1', null, 'waiting'], ['kata:finale:2', null, 'waiting']]);
+  });
+
+  test('kata : un absent tardif n’a pas de ligne, son numéro n’est jamais appelé', () => {
+    const view = buildPublicView(srcKataDe3({ absent: ['r2'] }));
+    expect(view.queues[0]!.items.map((i) => [i.number, i.matchId])).toEqual([
+      [1, 'kata:tour1:r1'], [3, 'kata:tour1:r3'], [4, 'kata:finale:1'], [5, 'kata:finale:2'],
+    ]);
+  });
+
+  test('kata à deux : la finale seule, katakas connus d’emblée', () => {
+    const base = srcKataDe3();
+    const two = kataBracket(base.categories[0]!.bracket!.entrants.slice(0, 2), 1, 1);
+    const view = buildPublicView({
+      ...base,
+      categories: [{ ...base.categories[0]!, bracket: two, registrationIds: ['r1', 'r2'] }],
+      plan: { ...base.plan, zones: [{ zoneId: 'z1', passages: [1, 2].map((slot) => ({ number: slot, categoryId: 'k', matchId: `kata:finale:${slot}`, noRest: false, waveId: 'w1' })) }] },
+    });
+    const order = two.order;
+    expect(view.queues[0]!.items.map((i) => [i.matchId, i.a, i.state])).toEqual([['kata:finale:1', order[0], 'ready'], ['kata:finale:2', order[1], 'ready']]);
+  });
+
   test('competition without waves: implicit session', () => {
     const base = source();
     const view = toPublicCompetition(
@@ -205,7 +273,7 @@ describe('durées et heures (lot 2)', () => {
   const items = (view: ReturnType<typeof toPublicCompetition>) => view.queues.flatMap((q) => q.items);
 
   test('queue items carry duration and end time', () => {
-    const view = toPublicCompetition(source({ endedAt: { A: { matches: { 'w1-1': '2026-11-22T09:20:00.000Z' }, round1: null, final: null } } }));
+    const view = toPublicCompetition(source({ endedAt: { A: { matches: { 'w1-1': '2026-11-22T09:20:00.000Z' }, kata: {} } } }));
     const played = items(view).find((i) => i.categoryId === 'A' && i.matchId === 'w1-1')!;
     expect(played.state).toBe('played');
     expect(played.durationSec).toBe(210);
@@ -216,17 +284,13 @@ describe('durées et heures (lot 2)', () => {
     expect(waiting.endedAt).toBeNull();
   });
 
-  test('kata blocks carry passages', () => {
+  test('kata : chaque passage dure un passage de kata', () => {
     const base = source();
-    const b = base.categories.find((c) => c.id === 'B')!;
-    const five = ['r5', 'r6', 'r7', 'r40', 'r41'].map((registrationId) => ({ registrationId, clubId: null, label: registrationId }));
-    const kata = { ...b, registrationIds: five.map((e) => e.registrationId), bracket: { ...b.bracket!, entrants: five, order: five.map((e) => e.registrationId) } as never };
-    const view = toPublicCompetition({ ...base, categories: base.categories.map((c) => (c.id === 'B' ? kata : c)) });
-    const block = items(view).find((i) => i.categoryId === 'B')!;
-    expect(block.kataPassages).toBe(7);
-    expect(block.durationSec).toBe(7 * 90);
-    expect(block.timing).toBeNull();
-    const cat = view.categories.find((c) => c.id === 'B')!;
+    const view = toPublicCompetition({ ...base, schedule: { ...base.schedule, kataPassageSec: 75 } });
+    const kata = items(view).filter((i) => i.categoryId === 'B');
+    expect(kata).toHaveLength(5);
+    for (const i of kata) expect([i.kataPassages, i.durationSec, i.timing]).toEqual([1, 75, null]);
+    const cat = toPublicCompetition(base).categories.find((c) => c.id === 'B')!;
     expect(cat.timing).toBeNull();
     expect(cat.kataPassageSec).toBe(90);
   });

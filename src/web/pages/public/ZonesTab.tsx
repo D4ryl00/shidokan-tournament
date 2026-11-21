@@ -3,13 +3,11 @@ import { Fragment, useState } from 'react';
 import { Link } from 'react-router';
 import type { PublicCompetition, PublicQueueItem } from '../../../domain/public/types.js';
 import { categoryText } from '../../components/public/bracketsModel.js';
-import { currentWave, driftText, finalBadge, finalsMarkers, involvesFollowed, sideText, versText, waitingWaves, waveHeaderText, zoneViews, type ZoneView } from '../../components/public/zoneRows.js';
+import { currentWave, driftText, finalBadge, finalsMarkers, involvesFollowed, kataSideText, sideText, versText, waitingWaves, waveHeaderText, zoneViews, type ZoneView } from '../../components/public/zoneRows.js';
 import type { PublicTimes } from '../../../domain/public/times.js';
 import { passageKey } from '../../../domain/public/types.js';
 import { StatusBadge } from '../../components/ui/StatusBadge.js';
 import type { PublicTabProps } from './tabProps.js';
-
-const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
 
 const cardStyle = { background: 'var(--sk-card)', border: '1px solid var(--sk-card-line)', borderRadius: 'var(--mantine-radius-md)' } as const;
 
@@ -17,13 +15,11 @@ function PassageRow({ pub, times, item, zoneId, followed, big }: { pub: PublicCo
   // Pas d'heure une fois le passage sur le tatami (`at` ne rend jamais une heure passée).
   const at = times.at(passageKey(item));
   const cat = pub.categories.find((c) => c.id === item.categoryId);
-  const kata = item.matchId === null;
   const star = involvesFollowed(pub, item, followed);
   const final = finalBadge(pub, item, zoneId);
-  const katas = cat?.bracket.entrants.length ?? 0;
-  const text = kata
-    ? `${cat ? categoryText(cat.label, cat.discipline) : 'Kata'}${item.kataPart === 'finale' ? ' · finale' : ` · ${plural(katas, 'passage', 'passages')}`}`
-    : `${sideText(pub, item.a, item.aFrom, zoneId)} / ${sideText(pub, item.b, item.bFrom, zoneId)}`;
+  // Kata : un kataka par passage (« Finaliste 1 » tant que la finale n'est pas connue), puis la catégorie et le tour.
+  const text = item.kataPart !== null ? kataSideText(pub, item) : `${sideText(pub, item.a, item.aFrom, zoneId)} / ${sideText(pub, item.b, item.bFrom, zoneId)}`;
+  const round = item.kataPart === 'tour1' ? ' · tour 1' : item.kataPart === 'finale' ? ' · finale' : '';
   return (
     <UnstyledButton component={Link} to={`?onglet=tableaux&categorie=${encodeURIComponent(item.categoryId)}`}
       data-testid="public-zone-passage" style={{ display: 'block', width: '100%' }}>
@@ -38,7 +34,7 @@ function PassageRow({ pub, times, item, zoneId, followed, big }: { pub: PublicCo
           )}
           {at && <Text size="xs" fw={700} data-testid="public-zone-at">{versText(at)}</Text>}
           <Text size={big ? 'md' : 'sm'} fw={big ? 700 : 400} style={{ overflowWrap: 'anywhere' }}>{text}</Text>
-          {!kata && cat && <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{categoryText(cat.label, cat.discipline)}</Text>}
+          {cat && <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{categoryText(cat.label, cat.discipline)}{round}</Text>}
         </Box>
         {star && <Text span aria-label="Combattant suivi" style={{ color: 'var(--sk-accent)', fontSize: 20, flexShrink: 0 }}>★</Text>}
       </Group>
@@ -74,7 +70,7 @@ function ZoneCard({ pub, times, view, followed }: { pub: PublicCompetition; time
           {markers.has(0) && <FinalsMarker text={markers.get(0)!} />}
           <PassageRow pub={pub} times={times} item={next} zoneId={zoneId} followed={followed} big />
           {shown.map((i, k) => (
-            <Fragment key={`${i.categoryId}:${i.number}:${i.kataPart ?? ''}`}>
+            <Fragment key={`${i.categoryId}:${i.number}:${i.matchId}`}>
               {markers.has(k + 1) && <FinalsMarker text={markers.get(k + 1)!} />}
               <PassageRow pub={pub} times={times} item={i} zoneId={zoneId} followed={followed} />
             </Fragment>

@@ -11,8 +11,8 @@ import type { DisciplineId } from '../../src/domain/types.js';
 /**
  * Compétition de démonstration, construite à la main (sans base) :
  * - A « Karaté -45 kg » (session Matin, Tatami 1) : élimination directe à 4, MARTIN bat FAURE (n° 11),
- *   BONNET contre le masqué SECRET (n° 12), finale sur le Ring (n° 5) contre le vainqueur du n° 12 ;
- * - B « Kata minimes » (Matin, Ring) : bloc de kata entier n° 1, rien de noté ;
+ *   BONNET contre le masqué SECRET (n° 12), finale sur le Ring (n° 6) contre le vainqueur du n° 12 ;
+ * - B « Kata minimes » (Matin, Ring) : un passage par kataka, tour 1 n° 1 à 3 (r5, r6, r7), finale n° 4 et 5, rien de noté ;
  * - C « Karaté -60 kg » (session Après-midi, non lancée) : jamais publique ;
  * - D « Karaté -50 kg » (Matin, Tatami 1) : combat unique n° 10 joué, ROUX bat LEROY ;
  * - E « Karaté -55 kg » (Matin, Tatami 1) : poule de 3, DUPONT a joué ses deux combats (n° 13, 14), reste le n° 15 ;
@@ -143,7 +143,7 @@ const E_RECORDS = withR10.map((m) => {
   return record(m.id, a === 'r10' ? 'a' : 'b', a, b);
 });
 
-const passage = (number: number, categoryId: string, matchId: string | null, waveId = 'w1'): PlannedPassage => ({ number, categoryId, matchId, noRest: false, waveId });
+const passage = (number: number, categoryId: string, matchId: string, waveId = 'w1'): PlannedPassage => ({ number, categoryId, matchId, noRest: false, waveId });
 
 export const PLAN: PassagePlan = {
   categories: { A: { zoneId: 'z1', auto: true }, B: { zoneId: 'z2', auto: true }, C: { zoneId: 'z1', auto: true }, D: { zoneId: 'z1', auto: false }, E: { zoneId: 'z1', auto: true }, F: { zoneId: 'z3', auto: true } },
@@ -160,7 +160,17 @@ export const PLAN: PassagePlan = {
         passage(15, 'E', withoutR10.id),
       ],
     },
-    { zoneId: 'z2', passages: [passage(1, 'B', null), passage(5, 'A', 'w2-0')] },
+    {
+      zoneId: 'z2',
+      passages: [
+        passage(1, 'B', 'kata:tour1:r5'),
+        passage(2, 'B', 'kata:tour1:r6'),
+        passage(3, 'B', 'kata:tour1:r7'),
+        passage(4, 'B', 'kata:finale:1'),
+        passage(5, 'B', 'kata:finale:2'),
+        passage(6, 'A', 'w2-0'),
+      ],
+    },
     { zoneId: 'z3', passages: [passage(1, 'F', 'w1-0'), passage(2, 'F', 'w1-1'), passage(3, 'F', 'third'), passage(4, 'F', 'w2-0')] },
   ],
   impossible: [],
@@ -218,4 +228,25 @@ export function source(over: Partial<PublicSource> = {}): PublicSource {
     endedAt: {},
     ...over,
   };
+}
+
+/**
+ * Kata « k » de trois katakas (r1, r2, r3 ; r3 masqué), seul sur Tatami 1 : tour 1 n° 1 à 3, finale n° 4 et 5. `scored` : note
+ * du tour 1 de chaque kataka noté (r1 8, r2 7, r3 6, sauf `notes`) et l'heure de cette note ; `final` : de même pour la finale.
+ */
+export function srcKataDe3(o: { scored?: Record<string, string>; final?: Record<string, string>; absent?: string[]; notes?: Record<string, number> } = {}): PublicSource {
+  const rids = ['r1', 'r2', 'r3'];
+  const note: Record<string, number> = { r1: 8, r2: 7, r3: 6, ...o.notes };
+  const notes = (stamps: Record<string, string> = {}) => Object.fromEntries(Object.keys(stamps).map((rid) => [rid, [note[rid]!]]));
+  const bracket = kataBracket(rids.map(entrant), 1, 1, rids.map(entrant));
+  const keys = ['kata:tour1:r1', 'kata:tour1:r2', 'kata:tour1:r3', 'kata:finale:1', 'kata:finale:2'];
+  const stamps = { ...Object.fromEntries(Object.entries(o.scored ?? {}).map(([rid, t]) => [`round1:${rid}`, t])), ...Object.fromEntries(Object.entries(o.final ?? {}).map(([rid, t]) => [`final:${rid}`, t])) };
+  return source({
+    categories: [{ ...category('k', 'Kata minimes', 'kata', 'w1', bracket), absentIds: o.absent ?? [] }],
+    plan: { ...PLAN, categories: { k: { zoneId: 'z1', auto: true } }, zones: [{ zoneId: 'z1', passages: keys.map((k, i) => passage(i + 1, 'k', k)) }], finals: {} },
+    launchedCategoryIds: ['k'],
+    results: { k: { records: [], kataScores: { round1: notes(o.scored), final: notes(o.final) }, tieBreaks: { pools: {}, kata: [], kataFinal: [] } } },
+    lastResultAt: {},
+    endedAt: { k: { matches: {}, kata: stamps } },
+  });
 }

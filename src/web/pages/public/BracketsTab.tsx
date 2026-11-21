@@ -43,7 +43,7 @@ function Passages({ pub, c }: { pub: PublicCompetition; c: PublicCategory }) {
           <Text span className="num" fw={700} style={{ flexShrink: 0, minWidth: 40 }}>n° {r.number}</Text>
           <Box style={{ minWidth: 0, flex: 1 }}>
             <Text size="sm" style={{ overflowWrap: 'anywhere' }}>
-              {r.kata ? `Kata · ${r.result}` : `${r.a ?? 'à déterminer'} contre ${r.b ?? 'à déterminer'}`}
+              {r.kata ? `${r.a} · ${r.result}` : `${r.a ?? 'à déterminer'} contre ${r.b ?? 'à déterminer'}`}
             </Text>
             <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{[r.zone, !r.kata && r.result ? r.result : r.kata && r.played ? 'passé' : ''].filter(Boolean).join(' · ')}</Text>
           </Box>

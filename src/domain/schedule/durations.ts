@@ -130,13 +130,6 @@ export function fightSeconds(t: CombatTiming): number {
   return t.rounds * t.roundSec + (t.rounds - 1) * t.restSec;
 }
 
-/** Nombre de passages de kata : tour 1 puis finale à deux ; à deux katakas ou moins, la finale seule. */
-export function kataPassages(activeEntrants: number, block: 'whole' | 'tour1' | 'finale'): number {
-  if (block === 'tour1') return activeEntrants;
-  if (block === 'finale') return Math.min(activeEntrants, 2);
-  return activeEntrants <= 2 ? activeEntrants : activeEntrants + 2;
-}
-
 /** 30 → « 30 s », 65 → « 1 min 05 », 120 → « 2 min ». */
 export function minSecText(sec: number): string {
   const m = Math.floor(sec / 60);

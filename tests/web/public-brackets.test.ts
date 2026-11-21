@@ -41,6 +41,26 @@ test('categoryPassages : numéro, zone, noms et résultat', () => {
   expect(rows[1]).toMatchObject({ b: null, result: '' });
 });
 
+test('categoryPassages : kata, une ligne par kataka (nom, ou « Finaliste k »), son tour', () => {
+  const c = cat('K', { discipline: 'kata' });
+  const pub = {
+    zones: [{ id: 'z1', name: 'Tatami 1' }],
+    entrants: { r1: { name: 'MARTIN Léa' } },
+    queues: [{ zoneId: 'z1', items: [
+      { number: 1, categoryId: 'K', matchId: 'kata:tour1:r1', kataPart: 'tour1', a: 'r1', b: null, state: 'played' },
+      { number: 2, categoryId: 'K', matchId: 'kata:finale:1', kataPart: 'finale', a: null, b: null, state: 'waiting' },
+      { number: 3, categoryId: 'K', matchId: 'kata:finale:2', kataPart: 'finale', a: 'r1', b: null, state: 'ready' },
+    ] }],
+  } as unknown as PublicCompetition;
+  const rows = categoryPassages(pub, c);
+  expect(rows.map((r) => [r.number, r.kata, r.a, r.result, r.played])).toEqual([
+    [1, true, 'MARTIN Léa', 'Tour 1', true],
+    [2, true, 'Finaliste 1', 'Finale', false],
+    [3, true, 'MARTIN Léa', 'Finale', false],
+  ]);
+  expect(new Set(rows.map((r) => r.key)).size).toBe(3);
+});
+
 test('categoryText : la discipline n’est pas répétée après un libellé qui la contient déjà', () => {
   expect(categoryText('Kata · Minimes M', 'kata')).toBe('Kata · Minimes M');
   expect(categoryText('Karaté · Jiyu · Cadets F · -54 kg', 'karate')).toBe('Karaté · Jiyu · Cadets F · -54 kg');

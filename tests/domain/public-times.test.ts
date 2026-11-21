@@ -10,6 +10,17 @@ const item = (over: Partial<PublicQueueItem>): PublicQueueItem => ({
   finals: null, durationSec: 210, timing, kataPassages: null, endedAt: null, ...over,
 });
 
+/**
+ * File de kata de B (r5, r6, r7) sur le Ring, passages de 2 min ; `before` : un combat de 2 min avant (9:30 → 9:32).
+ */
+function kataQueue(keys: string[], o: { categories?: PublicCompetition['categories']; before?: boolean } = {}): PublicCompetition {
+  const kata = keys.map((matchId, i) => item({
+    number: i + 1, categoryId: 'B', matchId, kataPart: matchId.startsWith('kata:finale') ? 'finale' : 'tour1', timing: null, kataPassages: 1, durationSec: 120,
+  }));
+  const fight = item({ number: 0, matchId: 'w1-0', durationSec: 120 });
+  return made({ ...(o.categories ? { categories: o.categories } : {}), queues: [{ zoneId: 'z2', items: o.before ? [fight, ...kata] : kata }] });
+}
+
 /** Vue fabriquée : une zone, deux combats de la session Matin (prévue 9:30). */
 function made(over: Partial<PublicCompetition> = {}): PublicCompetition {
   const base = toPublicCompetition(source());
@@ -47,14 +58,30 @@ describe('publicTimes', () => {
     // La finale de A est sur la zone des finales : elle part après les autres passages de la session.
     expect(t.categoryFinalAt('A')).not.toBeNull();
     expect(t.categoryFinalAt('A')).toBe(t.at(passageKey(pub.queues[1]!.items[0]!)));
-    // Kata : le bloc de finale, sinon le bloc entier.
-    const kata = (parts: ('tour1' | 'finale' | null)[]): PublicCompetition =>
-      made({ queues: [{ zoneId: 'z2', items: parts.map((kataPart, i) => item({ number: i + 1, categoryId: 'B', matchId: null, kataPart, timing: null, kataPassages: 3, durationSec: 270 })) }] });
-    const split = kata(['tour1', 'finale']);
-    const ts = publicTimes(split, null);
-    expect(ts.categoryFinalAt('B')).toBe(ts.at(passageKey(split.queues[0]!.items[1]!)));
-    const whole = kata([null]);
-    expect(publicTimes(whole, null).categoryFinalAt('B')).toBe('9:30');
+  });
+
+  test('heure estimée de la finale d’un kata : premier passage de finale non joué', () => {
+    const ended = `${made().date}T08:40:00Z`;
+    const none = kataQueue(['kata:tour1:r5', 'kata:tour1:r6', 'kata:tour1:r7', 'kata:finale:1', 'kata:finale:2']);
+    const t = publicTimes(none, null);
+    expect(t.categoryFinalAt('B')).not.toBeNull();
+    expect(t.categoryFinalAt('B')).toBe(t.at('B:kata:finale:1'));
+    // La 1re place jouée : la 2e ; les deux : plus d'heure.
+    const one = made({ queues: [{ zoneId: 'z2', items: none.queues[0]!.items.map((i) => (i.matchId === 'kata:finale:1' ? { ...i, endedAt: ended, state: 'played' as const } : i)) }] });
+    expect(publicTimes(one, null).categoryFinalAt('B')).toBe(publicTimes(one, null).at('B:kata:finale:2'));
+    const both = made({ queues: [{ zoneId: 'z2', items: none.queues[0]!.items.map((i) => (i.kataPart === 'finale' ? { ...i, endedAt: ended, state: 'played' as const } : i)) }] });
+    expect(publicTimes(both, null).categoryFinalAt('B')).toBeNull();
+  });
+
+  test('kata : les katakas d’un tour s’enchaînent sans changement, un changement avant chaque tour', () => {
+    const pub = kataQueue(['kata:tour1:r5', 'kata:tour1:r6', 'kata:tour1:r7', 'kata:finale:1', 'kata:finale:2']);
+    const t = publicTimes(pub, null);
+    // Passages de 2 min, changement 1 min : tour 1 9:30, 9:32, 9:34 ; finale 9:37 (après un changement), 9:39.
+    expect(pub.queues[0]!.items.map((i) => t.at(passageKey(i)))).toEqual(['9:30', '9:32', '9:34', '9:37', '9:39']);
+    // Premier kataka du tirage absent (pas de ligne) : le premier présent ouvre le tour, après un changement.
+    const base = made();
+    const absent = kataQueue(['kata:tour1:r6', 'kata:tour1:r7'], { categories: base.categories.map((c) => (c.id === 'B' ? { ...c, absentIds: ['r5'] } : c)), before: true });
+    expect(absent.queues[0]!.items.map((i) => publicTimes(absent, null).at(passageKey(i)))).toEqual(['9:30', '9:33', '9:35']);
   });
 
   test('category final time: earliest unplayed final, none once played', () => {
@@ -137,7 +164,7 @@ describe('publicTimes', () => {
         categories: base.categories,
         queues: [
           { zoneId: 'z1', items: [item({ number: 1, matchId: 'w1-0' }), item({ number: 2, matchId: 'w1-1' })] },
-          { zoneId: 'z2', items: [item({ number: 1, categoryId: 'B', matchId: null, timing: null, kataPassages: 1, durationSec: 60 }), item({ number: 5, matchId: 'w2-0', finals })] },
+          { zoneId: 'z2', items: [item({ number: 1, categoryId: 'B', matchId: 'kata:tour1:r5', kataPart: 'tour1', timing: null, kataPassages: 1, durationSec: 60 }), item({ number: 5, matchId: 'w2-0', finals })] },
         ],
         ...over,
       });

@@ -44,10 +44,11 @@ export type SideSource = { kind: 'winner' | 'loser'; number: number | null; zone
 export interface PublicQueueItem {
   number: number;
   categoryId: string;
-  /** null : bloc de kata. */
-  matchId: string | null;
+  /** Combat, ou clé du passage d'un kata (`kata:tour1:<inscription>`, `kata:finale:1|2`). */
+  matchId: string;
+  /** Tour du passage d'un kata ; null : combat. */
   kataPart: 'tour1' | 'finale' | null;
-  /** Inscriptions connues. */
+  /** Inscriptions connues. Kata : `a` est le kataka (null : finaliste pas encore connu), `b` toujours null. */
   a: string | null;
   b: string | null;
   /** « vainqueur du n° 12 » (côté encore inconnu). */
@@ -56,24 +57,24 @@ export interface PublicQueueItem {
   state: 'played' | 'ready' | 'waiting';
   waveId: string | null;
   /**
-   * Passage de finale (combat pour la 1re place, bloc de finale d'un kata) : quand se joue la finale de sa catégorie, « Dès que
+   * Passage de finale (combat pour la 1re place, place de la finale d'un kata) : quand se joue la finale de sa catégorie, « Dès que
    * finie » ou « Fin de session » ; null : pas une finale. La ligne « Finales de la session … » se place avant la première
    * « Fin de session » de la zone des finales de sa session.
    */
   finals: FinalsWhen | null;
   /** Durée du passage, sans le temps de changement. */
   durationSec: number;
-  /** Durée retenue du combat ; null : bloc de kata. */
+  /** Durée retenue du combat ; null : kata. */
   timing: CombatTiming | null;
-  /** Bloc de kata : nombre de passages ; null : combat. */
+  /** Kata : 1 (un kataka par passage) ; null : combat. */
   kataPassages: number | null;
   /** Heure de fin (ISO), seulement pour un passage joué. */
   endedAt: string | null;
 }
 
 /** Clé d'un passage, commune à la vue et à la ligne de temps. */
-export function passageKey(item: { categoryId: string; matchId: string | null; kataPart: 'tour1' | 'finale' | null }): string {
-  return `${item.categoryId}:${item.matchId ?? (item.kataPart ? `kata:${item.kataPart}` : 'kata')}`;
+export function passageKey(item: { categoryId: string; matchId: string }): string {
+  return `${item.categoryId}:${item.matchId}`;
 }
 
 export interface PublicCategory {
@@ -92,7 +93,7 @@ export interface PublicCategory {
   results: Record<string, MatchResult>;
   kataScores: KataScores | null;
   tieBreaks: { pools: Record<number, string[]>; kata: string[]; kataFinal: string[] };
-  /** matchId (ou 'kata', 'kata:tour1', 'kata:finale') → numéro. */
+  /** Clé de passage (matchId d'un combat, `kata:tour1:<inscription>`, `kata:finale:1|2`) → numéro. */
   numbers: Record<string, number>;
   /** Combat joué sur une autre zone → « Zone des finales : Ring ». */
   matchZones: Record<string, string>;

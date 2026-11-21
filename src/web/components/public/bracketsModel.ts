@@ -3,6 +3,7 @@ import type { FighterLine, PublicCategory, PublicCompetition } from '../../../do
 import type { DisciplineId } from '../../../domain/types.js';
 import { DISCIPLINES } from '../../../domain/disciplines.js';
 import type { EntrantInfo } from '../BracketView.js';
+import { finalistText } from './zoneRows.js';
 
 /**
  * Libellé d'une catégorie avec sa discipline, sans la répéter : un libellé de la grille commence déjà par elle
@@ -71,7 +72,7 @@ export interface PassageRow {
   number: number;
   zone: string;
   kata: boolean;
-  /** Noms des deux côtés ; null : pas encore connu. */
+  /** Noms des deux côtés ; null : pas encore connu. Kata : le kataka, ou « Finaliste 1 / 2 » ; `b` null. */
   a: string | null;
   b: string | null;
   /** « A bat B » / texte du résultat, vide tant que le combat n'est pas joué. */
@@ -89,9 +90,9 @@ export function categoryPassages(pub: PublicCompetition, c: PublicCategory): Pas
       .filter((i) => i.categoryId === c.id)
       .map((i): PassageRow => {
         const zone = pub.zones.find((z) => z.id === q.zoneId)?.name ?? 'Zone';
-        const key = `${q.zoneId}:${i.number}:${i.kataPart ?? ''}`;
-        if (i.matchId === null) {
-          return { key, number: i.number, zone, kata: true, a: null, b: null, result: i.kataPart === 'finale' ? 'Finale' : 'Tour 1', played: i.state === 'played' };
+        const key = `${q.zoneId}:${i.number}:${i.matchId}`;
+        if (i.kataPart !== null) {
+          return { key, number: i.number, zone, kata: true, a: name(i.a) ?? finalistText(i), b: null, result: i.kataPart === 'finale' ? 'Finale' : 'Tour 1', played: i.state === 'played' };
         }
         const r = c.results[i.matchId];
         const w = r ? (r.winner === 'a' ? name(i.a) : name(i.b)) : null;
