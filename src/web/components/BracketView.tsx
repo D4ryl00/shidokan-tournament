@@ -11,6 +11,7 @@ import {
   type ResolvedMatch,
   type SlotSource,
 } from '../../domain/brackets/index.js';
+import { kataFinaleKey, kataTour1Key } from '../../domain/passages/kata-keys.js';
 import { resolveKata } from '../../domain/brackets/kata.js';
 import type { Category } from '../../domain/categories.js';
 import type { ProposalType } from '../../domain/replacement/index.js';
@@ -394,9 +395,10 @@ function PodiumView({ podium, entrants }: { podium: { first: string | null; seco
   );
 }
 
-function KataView(props: Props & { bracket: KataBracket }) {
+export function KataView(props: Props & { bracket: KataBracket }) {
   const { bracket, entrants, kataScores } = props;
   const resolved = kataScores ? resolveKata(bracket, kataScores, props.kataTieBreak ?? []) : null;
+  const finaleNumbers = ([1, 2] as const).flatMap((slot) => props.numbers?.get(kataFinaleKey(slot)) ?? []);
   return (
     <Stack data-testid="bracket-view">
       <Title order={5}>Ordre de passage{bracket.order.length > 2 ? ' — tour 1' : ' — finale'}</Title>
@@ -404,7 +406,7 @@ function KataView(props: Props & { bracket: KataBracket }) {
         <Table.Tbody>
           {bracket.order.map((id, i) => (
             <Table.Tr key={id} data-testid="bracket-match">
-              <Table.Td w={40}>{i + 1}</Table.Td>
+              <Table.Td w={40} data-testid="kata-number">{props.numbers?.has(kataTour1Key(id)) ? `n° ${props.numbers.get(kataTour1Key(id))}` : i + 1}</Table.Td>
               <Table.Td>
                 <EntrantLine id={id} fallback="" info={entrants.get(id)} props={props} />
                 {entrants.get(id)?.grade && <Text size="xs" px={4} data-testid="kata-grade">Grade : {entrants.get(id)!.grade}</Text>}
@@ -414,6 +416,7 @@ function KataView(props: Props & { bracket: KataBracket }) {
           ))}
         </Table.Tbody>
       </Table>
+      {finaleNumbers.length > 0 && <Text size="sm" fw={700} data-testid="kata-finale-numbers">Finale : {finaleNumbers.length === 2 ? `n° ${finaleNumbers[0]} et ${finaleNumbers[1]}` : `n° ${finaleNumbers[0]}`}</Text>}
       {bracket.order.length > 2 && (
         <Group gap="xs">
           {!props.printable && <Badge variant="light">Finale</Badge>}
