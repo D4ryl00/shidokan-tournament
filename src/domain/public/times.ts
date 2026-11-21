@@ -12,6 +12,8 @@ export interface PublicTimes {
    * d'heure dépassée à l'écran.
    */
   at(key: string): string | null;
+  /** Départ estimé d'un passage, « H:MM », sans le filtre « après maintenant » (peut être dépassé) ; null si inconnu. */
+  rawAt(key: string): string | null;
   /** Démarrage d'une session : saisi, ou estimé d'après le premier résultat ; null sinon. */
   waveStart(waveId: string | null): { clock: string; estimated: boolean } | null;
   /** Départ estimé des finales « Fin de session » de la zone des finales d'une session, « H:MM » : seulement s'il est après maintenant. */
@@ -26,7 +28,7 @@ export interface PublicTimes {
   drift(zoneId: string): number | null;
 }
 
-const NONE: PublicTimes = { at: () => null, waveStart: () => null, finalsAt: () => null, categoryFinalAt: () => null, drift: () => null };
+const NONE: PublicTimes = { at: () => null, rawAt: () => null, waveStart: () => null, finalsAt: () => null, categoryFinalAt: () => null, drift: () => null };
 
 /** Heure d'une session en secondes ; absente ou illisible (pas HH:MM) : null, jamais « NaN:NaN ». */
 const orNull = (hhmm: string | null) => (hhmm !== null && isClock(hhmm) ? clockToSeconds(hhmm) : null);
@@ -84,6 +86,10 @@ export function publicTimes(pub: PublicCompetition, now: number | null): PublicT
   const shown = (s: number | undefined) => (s === undefined || (now !== null && s <= now) ? null : secondsToClock(s));
   return {
     at: (key) => shown(timeline.starts.get(key)),
+    rawAt: (key) => {
+      const s = timeline.starts.get(key);
+      return s === undefined ? null : secondsToClock(s);
+    },
     waveStart: (waveId) => {
       const w = timeline.waveStarts.get(waveKey(waveId));
       return w ? { clock: secondsToClock(w.at), estimated: w.estimated } : null;

@@ -130,6 +130,16 @@ describe('publicTimes', () => {
     expect(publicTimes(pub, null).at(passageKey(first!))).toBe('9:30');
   });
 
+  test('rawAt rend une heure déjà passée', () => {
+    const pub = made({ waves: [{ id: 'w1', name: 'Matin', launched: true, plannedStart: '09:30', actualStart: '09:30', finalsStart: null }] });
+    const first = passageKey(pub.queues[0]!.items[0]!);
+    const t = publicTimes(pub, 9 * 3600 + 32 * 60);
+    expect(t.at(first)).toBeNull();
+    expect(t.rawAt(first)).toBe('9:30');
+    expect(t.rawAt('A:inconnu')).toBeNull();
+    expect(publicTimes(made({ phase: 'past' }), null).rawAt(first)).toBeNull();
+  });
+
   test('final of a category already on the tatami shows no time', () => {
     const pub = made({
       waves: [{ id: 'w1', name: 'Matin', launched: true, plannedStart: '09:30', actualStart: '09:30', finalsStart: null }],
