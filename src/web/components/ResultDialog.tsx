@@ -9,8 +9,8 @@ import { HelpButton, HelpText } from './Help.js';
 import type { EntrantInfo } from './BracketView.js';
 
 const METHODS: { value: MatchMethod; label: string }[] = [
-  { value: 'points', label: 'Points' },
   { value: 'decision', label: 'Décision des arbitres' },
+  { value: 'points', label: 'Points' },
   { value: 'ko', label: 'KO' },
   { value: 'abandon', label: 'Abandon' },
   { value: 'disqualification', label: 'Disqualification' },
@@ -39,7 +39,7 @@ export function ResultDialog({ competitionId, categoryId, bracket, ruleset, matc
   const del = useDeleteResult(competitionId);
   const existing = match ? records.find((r) => r.matchId === match.id) : undefined;
   const [winner, setWinner] = useState<'a' | 'b' | null>(null);
-  const [method, setMethod] = useState<MatchMethod>('points');
+  const [method, setMethod] = useState<MatchMethod>('decision');
   const [score, setScore] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -48,7 +48,7 @@ export function ResultDialog({ competitionId, categoryId, bracket, ruleset, matc
   useEffect(() => {
     setOpenRev(existing ? (existing.rev ?? undefined) : null);
     setWinner(match?.result?.winner ?? null);
-    setMethod(match?.result?.method ?? 'points');
+    setMethod(match?.result?.method ?? 'decision');
     setScore(match?.result?.score ?? '');
     setConfirmDelete(false);
     put.reset();

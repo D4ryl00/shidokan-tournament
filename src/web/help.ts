@@ -698,7 +698,7 @@ export const HELP: Record<HelpTopicId, HelpTopic> = {
     short: 'Cliquez le vainqueur, choisissez la méthode, puis « Enregistrer ».',
     details: [
       [
-        'Méthode : points, décision, KO (shobu seulement), abandon, disqualification ou forfait.',
+        'Méthode : décision des arbitres (choisie d’office), points, KO (shobu seulement), abandon, disqualification ou forfait.',
         'Le score est facultatif (par exemple 3-1).',
         'Pour corriger : rouvrez le combat et choisissez l’autre vainqueur. Les combats suivants déjà joués deviennent « à revoir ».',
         '« Effacer le résultat » remet le combat à disputer (une confirmation est demandée).',
