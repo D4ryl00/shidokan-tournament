@@ -7,11 +7,15 @@ import { clockToSeconds } from './clock.js';
 /** Heure d'un passage côté organisation : sur le tatami, ou « vers H:MM » (`planned` : estimation d'une session pas encore lancée). */
 export type PassageTime = { kind: 'onTatami' } | { kind: 'at'; clock: string; planned: boolean };
 
-/** Heures d'une catégorie : `first` = aucun de ses passages n'est joué ; prochain passage et prochaine finale à venir. */
+/**
+ * Heures d'une catégorie : `first` = aucun de ses passages n'est joué ; prochain passage et prochaine finale à venir ;
+ * `nextIsFinal` : le prochain passage est la finale elle-même (alors `final` = `next`).
+ */
 export interface CategoryTimes {
   first: boolean;
   next: PassageTime | null;
   final: PassageTime | null;
+  nextIsFinal: boolean;
 }
 
 export interface OrganiserTimes {
@@ -26,21 +30,39 @@ export interface OrganiserTimes {
   waveLaunched(waveId: string | null): boolean;
 }
 
-const NONE: OrganiserTimes = { passage: () => null, onCall: () => null, category: () => null, drift: () => null, waveLaunched: () => false };
+/** Aucune heure (compétition passée, vue pas encore lue, ou calcul impossible). */
+export const NO_ORGANISER_TIMES: OrganiserTimes = { passage: () => null, onCall: () => null, category: () => null, drift: () => null, waveLaunched: () => false };
 
 /**
  * Heures présumées côté organisation : celles de la page publique pour les sessions lancées (jamais une heure passée, sauf
  * `onCall`), les heures prévues (`planned`, clé `passageKey`) pour les autres.
  */
 export function organiserTimes(pub: PublicCompetition | null, planned: Record<string, string> | null, now: number | null): OrganiserTimes {
-  if (!pub || pub.phase === 'past') return NONE;
+  if (!pub || pub.phase === 'past') return NO_ORGANISER_TIMES;
   const times = publicTimes(pub, now);
   const plan = planned ?? {};
   // Sessions lancées : même ordre que publicTimes (ordre des sessions puis de la file).
   const launched = pub.waves.filter((w) => w.launched);
   const order = new Map(launched.map((w, i) => [waveKey(w.id), i]));
   const items: PublicQueueItem[] = pub.queues.flatMap((q) => q.items.filter((i) => order.has(waveKey(i.waveId))));
-  const inQueue = new Set(items.map(passageKey));
+  // Index construits une fois : passage par clé, passages de la file et passages prévus (hors file) de chaque catégorie.
+  const byKey = new Map(items.map((i) => [passageKey(i), i]));
+  const queuedOf = new Map<string, PublicQueueItem[]>();
+  for (const i of items) {
+    const list = queuedOf.get(i.categoryId);
+    if (list) list.push(i);
+    else queuedOf.set(i.categoryId, [i]);
+  }
+  const plannedOf = new Map<string, string[]>();
+  for (const key of Object.keys(plan)) {
+    if (byKey.has(key)) continue;
+    const sep = key.indexOf(':');
+    if (sep < 0) continue;
+    const categoryId = key.slice(0, sep);
+    const list = plannedOf.get(categoryId);
+    if (list) list.push(key.slice(sep + 1));
+    else plannedOf.set(categoryId, [key.slice(sep + 1)]);
+  }
   // Premier passage sans résultat de chaque zone : celui qui est sur le tatami.
   const onTatami = new Set<string>();
   for (const q of pub.queues) {
@@ -53,7 +75,7 @@ export function organiserTimes(pub: PublicCompetition | null, planned: Record<st
 
   const passage = (categoryId: string, matchId: string): PassageTime | null => {
     const key = `${categoryId}:${matchId}`;
-    const item = items.find((i) => passageKey(i) === key);
+    const item = byKey.get(key);
     if (item) {
       if (item.endedAt !== null) return null;
       if (onTatami.has(key)) return { kind: 'onTatami' };
@@ -61,31 +83,33 @@ export function organiserTimes(pub: PublicCompetition | null, planned: Record<st
       return clock === null ? null : { kind: 'at', clock, planned: false };
     }
     const clock = plan[key];
-    return inQueue.has(key) || clock === undefined ? null : { kind: 'at', clock, planned: true };
+    return clock === undefined ? null : { kind: 'at', clock, planned: true };
   };
 
   /** Rang d'un passage à venir dans l'ordre des heures (le brut pour une session lancée, même dépassé). */
   const rank = (key: string): number => {
-    const clock = inQueue.has(key) ? times.rawAt(key) : (plan[key] ?? null);
+    const clock = byKey.has(key) ? times.rawAt(key) : (plan[key] ?? null);
     return clock === null ? Infinity : clockToSeconds(clock);
   };
+  /** Ordre croissant des rangs ; deux rangs inconnus (Infinity) sont égaux (jamais NaN). */
+  const byRank = (a: number, b: number): number => (a === b ? 0 : a < b ? -1 : 1);
 
   return {
     passage,
     onCall: (categoryId, matchId) => times.rawAt(`${categoryId}:${matchId}`),
     category: (c) => {
       const prefix = `${c.id}:`;
-      const own = items.filter((i) => i.categoryId === c.id);
-      const keys = [
-        ...own.filter((i) => i.endedAt === null).map((i) => i.matchId),
-        ...Object.keys(plan).filter((k) => k.startsWith(prefix) && !inQueue.has(k)).map((k) => k.slice(prefix.length)),
-      ].sort((a, b) => rank(prefix + a) - rank(prefix + b));
+      const own = queuedOf.get(c.id) ?? [];
+      const keys = [...own.filter((i) => i.endedAt === null).map((i) => i.matchId), ...(plannedOf.get(c.id) ?? [])]
+        .map((matchId) => ({ matchId, rank: rank(prefix + matchId) }))
+        .sort((a, b) => byRank(a.rank, b.rank))
+        .map((k) => k.matchId);
       const upcoming = keys.map((matchId) => ({ matchId, time: passage(c.id, matchId) })).filter((p) => p.time !== null);
       const finals = c.bracket === null ? [] : c.bracket.kind === 'combat' ? finalMatchIds(c.bracket) : [kataFinaleKey(1), kataFinaleKey(2)];
-      const next = upcoming[0]?.time ?? null;
+      const next = upcoming[0] ?? null;
       const final = upcoming.find((p) => finals.includes(p.matchId))?.time ?? null;
       if (next === null && final === null) return null;
-      return { first: own.every((i) => i.endedAt === null), next, final };
+      return { first: own.every((i) => i.endedAt === null), next: next?.time ?? null, final, nextIsFinal: next !== null && finals.includes(next.matchId) };
     },
     drift: (zoneId) => times.drift(zoneId),
     waveLaunched: (waveId) => order.has(waveKey(waveId)),

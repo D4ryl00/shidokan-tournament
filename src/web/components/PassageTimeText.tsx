@@ -9,8 +9,15 @@ export function passageTimeText(t: PassageTime): string {
   return t.kind === 'onTatami' ? 'sur le tatami' : versText(t.clock);
 }
 
-/** « Zone · prochain vers H:MM · finale vers H:MM » (« 1er combat » / kata « tour 1 » tant que rien n'est joué) ; parties absentes omises. */
+/**
+ * « Zone · prochain vers H:MM · finale vers H:MM » (« 1er combat » / kata « tour 1 » tant que rien n'est joué) ; parties absentes
+ * omises. Prochain passage = la finale : « Zone · finale vers H:MM » (« Zone · sur le tatami » quand elle y est).
+ */
 export function categoryTimesText(zone: string | null, t: CategoryTimes, kata: boolean): string {
+  if (t.nextIsFinal && t.next !== null) {
+    const final = t.next.kind === 'onTatami' ? passageTimeText(t.next) : `finale ${passageTimeText(t.next)}`;
+    return [zone, final].filter((p): p is string => !!p).join(' · ');
+  }
   const first = kata ? 'tour 1' : '1er combat';
   const next = t.next === null ? null
     : t.next.kind === 'onTatami' ? passageTimeText(t.next)

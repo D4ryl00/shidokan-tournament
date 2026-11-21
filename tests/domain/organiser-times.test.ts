@@ -67,18 +67,19 @@ describe('organiserTimes', () => {
     const ended = `${made().date}T09:36:00Z`;
     const items = [item({ categoryId: 'D', matchId: 'w1-0' }), item({ number: 2, matchId: 'w1-1' }), item({ number: 3, matchId: 'w2-0' })];
     const c = { id: 'A', bracket: A().bracket };
-    expect(organiserTimes(made(items), null, h(10, 20)).category(c)).toEqual({ first: true, next: at('10:35'), final: at('10:40') });
+    expect(organiserTimes(made(items), null, h(10, 20)).category(c)).toEqual({ first: true, next: at('10:35'), final: at('10:40'), nextIsFinal: false });
     const played = items.map((i) => (i.matchId === 'w1-1' ? { ...i, endedAt: ended } : i));
     const after = organiserTimes(made(played), null, h(10, 36) + 30).category(c)!;
     expect(after.first).toBe(false);
     expect(after.next).toEqual(after.final);
     expect(after.next).toMatchObject({ kind: 'at', planned: false });
+    expect(after.nextIsFinal).toBe(true);
   });
 
   test('catégorie d\'une session non lancée : heures prévues', () => {
     const c = { id: 'C', bracket: A().bracket };
     const t = organiserTimes(made(), { 'C:w1-0': '15:10', 'C:w2-0': '15:30' }, h(10, 32));
-    expect(t.category(c)).toEqual({ first: true, next: at('15:10', true), final: at('15:30', true) });
+    expect(t.category(c)).toEqual({ first: true, next: at('15:10', true), final: at('15:30', true), nextIsFinal: false });
     expect(t.category({ id: 'Z', bracket: null })).toBeNull();
   });
 
@@ -90,8 +91,17 @@ describe('organiserTimes', () => {
     const t = organiserTimes(pub, null, h(10, 20));
     expect(t.passage('k', 'kata:finale:1')).toEqual(at('10:35'));
     expect(t.passage('k', 'kata:finale:2')).toEqual(at('10:38'));
-    expect(t.category({ id: 'k', bracket })).toEqual({ first: true, next: at('10:35'), final: at('10:35') });
+    expect(t.category({ id: 'k', bracket })).toEqual({ first: true, next: at('10:35'), final: at('10:35'), nextIsFinal: true });
     expect(t.passage('k', 'kata:tour1:r9')).toBeNull();
+  });
+
+  test('catégorie : passages sans heure connue triés sans erreur ; finale prévue seule = nextIsFinal', () => {
+    // Session non lancée : seule la finale a une heure prévue, les autres clés prévues n'existent pas.
+    const t = organiserTimes(made(), { 'C:w2-0': '15:30' }, h(10, 32));
+    expect(t.category({ id: 'C', bracket: A().bracket })).toEqual({ first: true, next: at('15:30', true), final: at('15:30', true), nextIsFinal: true });
+    // Passages de la file sans heure (tous dépassés, aucun sur le tatami sauf le premier) : comparateur sûr (rangs Infinity).
+    const noClock = organiserTimes(made([item({ number: 1, matchId: 'w1-0' }), item({ number: 2, matchId: 'w1-1' }), item({ number: 3, matchId: 'w2-0' })], { waves: [{ id: 'w1', name: 'Matin', launched: true, plannedStart: null, actualStart: null, finalsStart: null }] }), null, null);
+    expect(() => noClock.category({ id: 'A', bracket: A().bracket })).not.toThrow();
   });
 
   test('session lancée : présente et lancée dans la vue des heures ; session implicite = waveKey(null)', () => {
