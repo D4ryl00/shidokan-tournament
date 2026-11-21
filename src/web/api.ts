@@ -856,7 +856,8 @@ export interface QueueItem {
   /** Une saisie d'une zone autonome est à trancher dans cette catégorie. */
   held: boolean;
   /** Finale prête qui peut passer avant des passages non joués de sa zone. */
-  early: boolean;
+  early: boolean;  /** Passage de finale (combat de finale, série au meilleur des trois, place de la finale du kata). */
+  final: boolean;
 }
 export interface ScheduleData {
   /** `waitingOtherZones` : combats de la zone qui attendent les résultats d'une autre zone. */

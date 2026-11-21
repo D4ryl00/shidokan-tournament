@@ -15,6 +15,11 @@ const HeldBadge = () => (
   </StatusBadge>
 );
 
+/** Passage de finale : repéré d'un coup d'œil dans la file (l'organisation la distingue des autres combats). */
+const FinalBadge = ({ mt }: { mt?: number }) => (
+  <StatusBadge tone="accent" size="sm" mt={mt} data-testid="queue-final">Finale</StatusBadge>
+);
+
 const EarlyBadge = () => (
   <StatusBadge tone="ok" size="sm" mt={2} data-testid="queue-early">Prête · peut passer plus tôt</StatusBadge>
 );
@@ -78,6 +83,7 @@ function OnCall({ q, times, onEnter, onScore }: { q: QueueItem; times: Organiser
               {q.timing && <Text size="xs" c="var(--sk-hero-sub)" data-testid="match-timing">{q.timing}</Text>}
             </>
           )}
+          {q.final && <FinalBadge />}
           {q.noRest && <StatusBadge tone="warn" size="sm" data-testid="no-rest">Pas de repos : prévoir une pause</StatusBadge>}
         </Stack>
       </Group>
@@ -95,7 +101,7 @@ function Next({ q, times, onEnter, onScore }: { q: QueueItem; times: OrganiserTi
   const kata = q.kataPart !== null;
   return (
     <Group data-testid={kata ? 'next-kata' : 'next-match'} data-number={q.number} justify="space-between" align="flex-start" wrap="nowrap" gap="sm" py={8}
-      style={{ borderTop: '1px solid var(--sk-line)' }}>
+      style={{ borderTop: '1px solid var(--sk-line)', ...(q.final ? { boxShadow: 'inset 3px 0 0 var(--sk-accent)' } : {}) }}>
       <Group gap="sm" wrap="nowrap" align="flex-start" style={{ minWidth: 0 }}>
         <Text fw={700} className="num" w={32} ta="right" style={{ flexShrink: 0 }}>{q.number}</Text>
         <Stack gap={0} style={{ minWidth: 0 }}>
@@ -114,6 +120,7 @@ function Next({ q, times, onEnter, onScore }: { q: QueueItem; times: OrganiserTi
           )}
           {!kata && <Text size="xs" c="dimmed">{label(q)}</Text>}
           {q.timing && <Text size="xs" c="dimmed" data-testid="match-timing">{q.timing}</Text>}
+          {q.final && <FinalBadge mt={2} />}
           {q.noRest && <StatusBadge tone="warn" size="sm" mt={2} data-testid="no-rest">Pas de repos : prévoir une pause</StatusBadge>}
           {q.early && <EarlyBadge />}
         </Stack>

@@ -165,6 +165,18 @@ test('programme : la zone des finales, sans catégorie à elle, apparaît avec l
   expect(finals?.queue.map((q) => q.matchId)).toEqual(['w2-0']);
 });
 
+test('file d’une zone : les passages de finale sont marqués comme tels, les autres non', async () => {
+  const c = await fourInElimination();
+  const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
+  await call('PATCH', `/categories/${c.id}`, { zoneId: t1!.id });
+  const queue = async () =>
+    ((await call('GET', '/schedule')).json() as { zones: { zone: { id: string }; queue: { matchId: string | null; final: boolean }[] }[] }).zones.find((t) => t.zone.id === t1!.id)!.queue;
+  expect((await queue()).map((q) => [q.matchId, q.final])).toEqual([['w1-0', false], ['w1-1', false]]);
+  await put(c.id, 'w1-0', 'a');
+  await put(c.id, 'w1-1', 'a');
+  expect((await queue()).map((q) => [q.matchId, q.final])).toEqual([['w2-0', true]]);
+});
+
 test('finale prête avant son tour : signalée même au-delà des 6 premiers ; son résultat se saisit hors ordre', async () => {
   const [t1] = (await call('GET', '/zones')).json() as { id: string }[];
   for (let i = 0; i < 4; i++) await reg();

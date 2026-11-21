@@ -16,7 +16,7 @@ test('« À trancher » : seulement sur un PC (rôle local) qui gère la compét
 });
 
 const item = (number: number, early: boolean): QueueItem => ({
-  number, categoryId: 'c', categoryLabel: 'Cadets -60 kg', matchId: `m${number}`, a: 'A', b: 'B', aClub: 'Club A', bClub: 'Sans club', timing: '2 rounds de 2 min · prolongation 1 min', kataPart: null, kata: null, noRest: false, held: false, early,
+  number, categoryId: 'c', categoryLabel: 'Cadets -60 kg', matchId: `m${number}`, a: 'A', b: 'B', aClub: 'Club A', bClub: 'Sans club', timing: '2 rounds de 2 min · prolongation 1 min', kataPart: null, kata: null, noRest: false, held: false, early, final: false,
 });
 const NO_TIMES: OrganiserTimes = { passage: () => null, onCall: () => null, category: () => null, drift: () => null, waveLaunched: () => false };
 const render = (queue: QueueItem[], times: OrganiserTimes = NO_TIMES, launched = true) =>
@@ -56,13 +56,22 @@ test('« Prête · peut passer plus tôt » : sur une ligne early, jamais sur la
   expect(html.indexOf('data-number="2"')).toBeLessThan(html.indexOf('data-number="3"'));
 });
 
+test('finales : badge « Finale » à l’appel et sur les lignes suivantes, jamais sur les autres passages', () => {
+  const final = (n: number): QueueItem => ({ ...item(n, false), final: true });
+  const html = render([final(1), item(2, false), final(3)]);
+  expect(html.match(/data-testid="queue-final"/g)).toHaveLength(2);
+  expect(html.indexOf('data-number="2"')).toBeLessThan(html.lastIndexOf('queue-final'));
+  expect(html.indexOf('data-number="3"')).toBeLessThan(html.lastIndexOf('queue-final'));
+  expect(render([item(1, false), item(2, false)])).not.toContain('queue-final');
+});
+
 test('sans ligne early : pas de mention', () => {
   expect(render([item(1, false), item(2, false)])).not.toContain('queue-early');
 });
 
 const kataItem = (number: number, kataPart: 'tour1' | 'finale', kata: NonNullable<QueueItem['kata']>): QueueItem => ({
   number, categoryId: 'k', categoryLabel: 'Kata Filles', matchId: kataPart === 'tour1' ? `kata:tour1:r${number}` : `kata:finale:${kata.position}`, a: null, b: null, aClub: null, bClub: null, timing: null, kataPart, kata,
-  noRest: false, held: false, early: false,
+  noRest: false, held: false, early: false, final: kataPart === 'finale',
 });
 
 test('combat : le club de chaque combattant, à l’appel et sur les lignes suivantes', () => {
