@@ -21,7 +21,7 @@ import { StatusBadge } from './ui/StatusBadge.js';
 
 /** Case « Décaler… » gardée sur le poste (cochée par défaut) ; le stockage peut être absent ou refusé. */
 const SHIFT_KEY = 'horaires-decaler';
-function readShift(): boolean {
+export function readShift(): boolean {
   try { return localStorage.getItem(SHIFT_KEY) !== '0'; } catch { return true; }
 }
 function writeShift(shift: boolean): void {

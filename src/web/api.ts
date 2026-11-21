@@ -31,6 +31,7 @@ import type { PassagePlan } from '../domain/passages/index.js';
 import type { WaveSchedule } from '../domain/schedule/types.js';
 import type { CategoryDurations } from '../domain/schedule/durations.js';
 import type { DayEstimateView } from '../domain/schedule/estimate.js';
+import type { PublicCompetition } from '../domain/public/types.js';
 
 import { ApiError, TAB_ID } from './apiError.js';
 import { posteHeader } from './poste.js';
@@ -883,6 +884,14 @@ export function useDayEstimate(id: string, shift: boolean) {
     queryFn: () => api<DayEstimateView>('GET', `/api/competitions/${id}/schedule/estimate?decaler=${shift ? 1 : 0}`),
     // Case « Décaler… » changée : l'estimation affichée reste en place jusqu'à la suivante.
     placeholderData: (previous) => previous,
+  });
+}
+
+/** Vue publique de la compétition (sessions lancées, files) lue côté organisation pour les heures présumées. */
+export function useScheduleTimes(id: string) {
+  return useQuery({
+    queryKey: ['schedule', id, 'times'],
+    queryFn: () => api<PublicCompetition>('GET', `/api/competitions/${id}/schedule/times`),
   });
 }
 
