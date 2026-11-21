@@ -406,7 +406,7 @@ export function KataView(props: Props & { bracket: KataBracket }) {
         <Table.Tbody>
           {bracket.order.map((id, i) => (
             <Table.Tr key={id} data-testid="bracket-match">
-              <Table.Td w={40} data-testid="kata-number">{props.numbers?.has(kataTour1Key(id)) ? `n° ${props.numbers.get(kataTour1Key(id))}` : i + 1}</Table.Td>
+              <Table.Td w={56} style={{ whiteSpace: 'nowrap' }} data-testid="kata-number">{props.numbers?.has(kataTour1Key(id)) ? `n° ${props.numbers.get(kataTour1Key(id))}` : i + 1}</Table.Td>
               <Table.Td>
                 <EntrantLine id={id} fallback="" info={entrants.get(id)} props={props} />
                 {entrants.get(id)?.grade && <Text size="xs" px={4} data-testid="kata-grade">Grade : {entrants.get(id)!.grade}</Text>}
