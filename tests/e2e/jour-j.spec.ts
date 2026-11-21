@@ -44,7 +44,7 @@ test('journée complète : tatamis, résultats, correction, poule, kata, podiums
   await page.reload();
   await expect(page.getByTestId('zone-card')).toHaveCount(2);
   await expect(page.getByTestId('zone-card').first()).toContainText('Tatami 1');
-  await expect(page.getByTestId('zone-card').first().getByTestId('next-match')).toHaveCount(2);
+  await expect(page.getByTestId('zone-card').first().getByTestId('next-match')).toHaveCount(1); // la file montre 6 passages : les 5 du kata, puis 1 combat
 
   // Élimination directe : demies puis finale
   await page.getByTestId('schedule-category').filter({ hasText: elim.label }).getByRole('button').first().click();
@@ -148,4 +148,54 @@ test('journée complète : tatamis, résultats, correction, poule, kata, podiums
   // … et sur le tableau de kata imprimé
   await page.goto(`/competitions/${id}/impression`);
   await expect(page.getByTestId('kata-grade').filter({ hasText: '1er dan' })).toHaveCount(1);
+});
+
+test('kata par kataka : à l’appel, notation, finalistes nommés, combats numérotés après les 5 passages', async ({ page, request }) => {
+  const id = await createCompetition(page, 'Coupe kata par kataka');
+  const cats = await seed(request, id);
+  const kata = cats.find((c) => c.label.startsWith('Kata'))!;
+  const elim = cats.find((c) => c.label.includes('Cadets'))!;
+  const zones = (await (await request.get(`/api/competitions/${id}/zones`)).json()) as { id: string }[];
+  // Kata et cadettes sur le même tatami.
+  for (const c of [kata, elim]) await request.patch(`/api/competitions/${id}/categories/${c.id}`, { data: { zoneId: zones[0]!.id } });
+  for (const c of cats) await request.patch(`/api/competitions/${id}/categories/${c.id}`, { data: { status: 'ready' } });
+  expect((await request.put(`/api/competitions/${id}/waves`, { data: { waves: [{ name: 'Matin', rules: { ageBandCodes: ['cadet', 'senior'], disciplines: [] } }], knownIds: [] } })).ok()).toBe(true);
+  const waves = (await (await request.get(`/api/competitions/${id}/waves`)).json()) as { id: string }[];
+  const launch = await request.post(`/api/competitions/${id}/launch`, { data: { waveId: waves[0]!.id } });
+  expect(launch.ok(), await launch.text()).toBe(true);
+
+  const catsAfter = (await (await request.get(`/api/competitions/${id}/categories`)).json()) as Cat[];
+  const order = catsAfter.find((c) => c.id === kata.id)!.bracket.order!;
+  expect(order).toHaveLength(3);
+  const zoneCard = () => page.getByTestId('zone-card').first();
+  const note = (rid: string, round: 'round1' | 'final', v: number) =>
+    request.put(`/api/competitions/${id}/categories/${kata.id}/kata/${rid}/${round}`, { data: { notes: [v, v, v, v, v] } });
+
+  await page.goto(`/competitions/${id}/combats`);
+  // Le 1er kataka est à l'appel (n° 1), les deux autres sont « Ensuite », un par ligne.
+  await expect(zoneCard().getByTestId('next-kata').first()).toHaveAttribute('data-number', '1');
+  await expect(zoneCard().getByTestId('kata-current')).toContainText('NOM');
+  await expect(zoneCard().getByText('kataka 1 sur 3')).toBeVisible();
+  const first = (await zoneCard().getByTestId('kata-current').innerText()).split('\n')[0]!;
+
+  // Note du 1er : le 2e passe à l'appel (n° 2).
+  expect((await note(order[0]!, 'round1', 9)).ok()).toBe(true);
+  await page.reload();
+  await expect(zoneCard().getByTestId('next-kata').first()).toHaveAttribute('data-number', '2');
+  await expect(zoneCard().getByText('kataka 2 sur 3')).toBeVisible();
+  await expect(zoneCard().getByTestId('kata-current')).not.toContainText(first);
+
+  // Tout le tour 1 noté : les finalistes sont nommés (n° 4 et 5).
+  expect((await note(order[1]!, 'round1', 8)).ok()).toBe(true);
+  expect((await note(order[2]!, 'round1', 7)).ok()).toBe(true);
+  await page.reload();
+  await expect(zoneCard().getByTestId('next-kata').first()).toHaveAttribute('data-number', '4');
+  await expect(zoneCard().getByTestId('kata-current')).toContainText('NOM');
+  await expect(zoneCard().getByTestId('kata-current')).not.toContainText('Finaliste');
+
+  // Les combats viennent après les 5 passages du kata.
+  const sched = (await (await request.get(`/api/competitions/${id}/schedule`)).json()) as { zones: { queue: { number: number; kataPart: string | null }[] }[] };
+  const combats = sched.zones.filter((z) => z.queue.some((q) => q.kataPart !== null)).flatMap((z) => z.queue).filter((q) => q.kataPart === null).map((q) => q.number);
+  expect(combats.length).toBeGreaterThan(0);
+  expect(Math.min(...combats)).toBe(6);
 });
