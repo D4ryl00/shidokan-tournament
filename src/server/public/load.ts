@@ -55,17 +55,18 @@ function endedAtOf(db: AppDb, competitionId: string, categoryIds: Set<string>): 
 }
 
 /**
- * Données d'une compétition publique, lues champ par champ pour la vue publique ; null si elle est inconnue ou privée.
+ * Données d'une compétition publique, lues champ par champ pour la vue publique ; null si elle est inconnue ou privée
+ * (`anyVisibility` : privée aussi, pour l'organisation).
  * Seules les catégories numérotées dans une vague lancée ont leurs résultats chargés. Rien n'est écrit (pas de
  * synchronisation des catégories) : une lecture publique ne change pas l'empreinte de la compétition.
  */
-export async function loadPublicSource(db: AppDb, id: string, now: Date): Promise<PublicSource | null> {
+export async function loadPublicSource(db: AppDb, id: string, now: Date, opts: { anyVisibility?: boolean } = {}): Promise<PublicSource | null> {
   const competition = db
     .select({ id: competitions.id, name: competitions.name, date: competitions.date, location: competitions.location, visibility: competitions.visibility })
     .from(competitions)
     .where(eq(competitions.id, id))
     .get();
-  if (!competition || competition.visibility !== 'public') return null;
+  if (!competition || (competition.visibility !== 'public' && !opts.anyVisibility)) return null;
   // Lecture seule : aucune écriture sans session (les catégories d'une vague lancée sont figées de toute façon).
   const categories = await readCategories(db, id);
   const launched = launchedCategoryIds(db, id);
@@ -104,8 +105,8 @@ export async function loadPublicSource(db: AppDb, id: string, now: Date): Promis
 }
 
 /** Vue publique d'une compétition ; null si elle est inconnue ou privée. */
-export async function loadPublicCompetition(db: AppDb, id: string, now: Date): Promise<PublicCompetition | null> {
-  const src = await loadPublicSource(db, id, now);
+export async function loadPublicCompetition(db: AppDb, id: string, now: Date, opts: { anyVisibility?: boolean } = {}): Promise<PublicCompetition | null> {
+  const src = await loadPublicSource(db, id, now, opts);
   return src ? toPublicCompetition(src) : null;
 }
 

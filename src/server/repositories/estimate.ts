@@ -1,9 +1,10 @@
 import { isFinalPassage, opensKataRound, planPassages, waveKey } from '../../domain/passages/index.js';
-import { clockToSeconds } from '../../domain/schedule/clock.js';
+import { clockToSeconds, secondsToClock } from '../../domain/schedule/clock.js';
 import { estimateDay, type DayEstimateView, type EstimateItem } from '../../domain/schedule/estimate.js';
 import { isClock } from '../../domain/schedule/types.js';
 import type { AppDb } from '../db/client.js';
 import { getCompetition } from './competitions.js';
+import { launchedWaveKeys } from './launch-state.js';
 import { planInput } from './passages.js';
 import { NotFoundError } from './registrations.js';
 import { listWaveSchedules } from './wave-schedules.js';
@@ -78,8 +79,17 @@ export async function estimateFor(db: AppDb, competitionId: string, shift: boole
   });
   const names = new Map(sessions.map((s) => [s.key, s.name]));
   const finalsZoneOf = new Map(estimateWaves.map((w) => [w.key, w.finalsZoneId]));
+  // Heures prévues par passage : seulement les sessions non lancées (les autres ont leurs heures réelles) ; aucune si relatif.
+  const launched = launchedWaveKeys(db, competitionId);
+  const sessionOf = new Map(passages.flatMap((z) => z.passages).map((p) => [keyOf(p), waveKey(p.waveId)]));
+  const plannedStarts: Record<string, string> = {};
+  if (!estimate.relative) {
+    for (const [k, s] of Object.entries(estimate.starts)) if (!launched.has(sessionOf.get(k) ?? '')) plannedStarts[k] = secondsToClock(s);
+  }
+  const { starts: _starts, ...day } = estimate;
   return {
-    ...estimate,
+    ...day,
+    plannedStarts,
     zones: zones.map((z) => ({ id: z.id, name: z.name })),
     waves: estimate.waves.map((w) => ({ ...w, name: names.get(w.key) ?? '', finalsZoneId: finalsZoneOf.get(w.key) ?? null })),
   };

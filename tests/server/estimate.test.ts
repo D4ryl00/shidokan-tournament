@@ -111,4 +111,39 @@ describe('horaires estimés de la journée', () => {
     expect(e.waves).toHaveLength(1);
     expect(e.waves[0]).toMatchObject({ key: '', name: 'Session unique', start: 0, end: 510 });
   });
+
+  describe('heures prévues par passage', () => {
+    test('plannedStarts : heure de départ de chaque passage d’une session non lancée', async () => {
+      const { zoneId, matin, aprem } = await twoSessions();
+      await call('PUT', '/wave-schedules', { waveId: matin, plannedStart: '09:00' });
+      const e = await estimate();
+      const times = Object.values(e.plannedStarts);
+      expect(times).toHaveLength(10);
+      const byWave = (id: string) => e.waves.find((w) => w.key === id)!.zones.find((z) => z.zoneId === zoneId)!;
+      const clock = (s: number) => `${Math.floor(s / 3600)}:${String(Math.round((s % 3600) / 60)).padStart(2, '0')}`;
+      expect(times).toContain(clock(byWave(matin).start));
+      expect(times).toContain(clock(byWave(aprem).start));
+      expect(Object.keys(e.plannedStarts).every((k) => /^[^:]+:.+/.test(k))).toBe(true);
+      expect(times.every((t) => /^\d{1,2}:\d{2}$/.test(t))).toBe(true);
+    });
+
+    test('plannedStarts vide pour une session lancée', async () => {
+      const { matin } = await twoSessions();
+      await call('PUT', '/wave-schedules', { waveId: matin, plannedStart: '09:00' });
+      for (const c of (await call('GET', '/categories')).json() as { id: string; waveId: string | null }[]) {
+        if (c.waveId === matin) await call('PATCH', `/categories/${c.id}`, { status: 'ready' });
+      }
+      expect((await call('POST', '/launch', { waveId: matin, restart: false })).statusCode).toBe(204);
+      const e = await estimate();
+      // Seuls les 5 passages de l'après-midi (non lancée) ont une heure prévue.
+      expect(Object.keys(e.plannedStarts)).toHaveLength(5);
+    });
+
+    test('plannedStarts vide quand la première session n’a pas d’heure de début', async () => {
+      await twoSessions();
+      const e = await estimate();
+      expect(e.relative).toBe(true);
+      expect(e.plannedStarts).toEqual({});
+    });
+  });
 });

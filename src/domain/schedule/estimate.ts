@@ -47,10 +47,14 @@ export interface DayEstimate {
     overlap: { zoneId: string; minutes: number }[];
   }[];
   end: number;
+  /** Départ (s) de chaque passage, toutes sessions, par clé de passage. */
+  starts: Record<string, number>;
 }
 
 /** Réponse de l'API : l'estimation, les noms des sessions (et leur zone des finales) et les zones de la compétition. */
-export type DayEstimateView = Omit<DayEstimate, 'waves'> & {
+export type DayEstimateView = Omit<DayEstimate, 'waves' | 'starts'> & {
+  /** Heure prévue (« H:MM ») de chaque passage des sessions non lancées ; vide si l'estimation est relative. */
+  plannedStarts: Record<string, string>;
   zones: { id: string; name: string }[];
   waves: (DayEstimate['waves'][number] & { name: string; finalsZoneId: string | null })[];
 };
@@ -62,6 +66,7 @@ export function estimateDay(input: EstimateInput): DayEstimate {
   /** Fin estimée (sans le changement) de la dernière session jouée sur chaque zone. */
   const zoneEnd = new Map<string, number>();
   const waves: DayEstimate['waves'] = [];
+  const starts: Record<string, number> = {};
   let previousEnd: number | null = null;
   for (const w of input.waves) {
     const start = !relative && w.plannedStart !== null ? w.plannedStart : previousEnd === null ? 0 : previousEnd + changeoverSec;
@@ -89,6 +94,7 @@ export function estimateDay(input: EstimateInput): DayEstimate {
       }],
       zones,
     });
+    for (const [k, s] of timeline.starts) starts[k] = s;
     const rows = zones.map((z) => {
       const placed = z.items.flatMap((i) => {
         const s = timeline.starts.get(i.key);
@@ -106,5 +112,5 @@ export function estimateDay(input: EstimateInput): DayEstimate {
     waves.push({ key: w.key, start, end, finalsStart: timeline.finalsStarts.get(w.key) ?? null, zones: rows, overlap });
     previousEnd = end;
   }
-  return { relative, waves, end: waves.length === 0 ? 0 : Math.max(...waves.map((w) => w.end)) };
+  return { relative, waves, end: waves.length === 0 ? 0 : Math.max(...waves.map((w) => w.end)), starts };
 }
